@@ -63,6 +63,46 @@ void mark_surveyed(GameState& state, PlayerId player, StarId star)
     }
 }
 
+std::uint64_t population_capacity(const Planet& planet)
+{
+    return static_cast<std::uint64_t>(planet.habitability) * 25;
+}
+
+std::uint64_t projected_population_growth(const Planet& planet)
+{
+    if (planet.owner == 0 || planet.population == 0 || planet.habitability == 0) {
+        return 0;
+    }
+
+    const auto capacity = population_capacity(planet);
+    if (capacity == 0 || planet.population >= capacity) {
+        return 0;
+    }
+
+    // Maximum raw growth is 10%/turn on a 100% world. Growth slows as the
+    // colony approaches the carrying capacity supplied by habitability.
+    const auto rawGrowth = std::max<std::uint64_t>(
+        1,
+        planet.population * planet.habitability / 1000);
+    const auto headroom = capacity - planet.population;
+    auto growth = rawGrowth * headroom / capacity;
+    if (growth == 0) {
+        growth = 1;
+    }
+    return std::min(growth, headroom);
+}
+
+std::uint32_t colony_output(const Planet& planet)
+{
+    if (planet.owner == 0) {
+        return 0;
+    }
+
+    // Population provides a small baseline economic contribution while
+    // factories remain a direct infrastructure investment.
+    return planet.industry + static_cast<std::uint32_t>(planet.population / 500);
+}
+
 GameState make_demo_game()
 {
     GameState state;

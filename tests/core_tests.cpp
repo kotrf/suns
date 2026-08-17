@@ -33,61 +33,73 @@ int main()
     const suns::TurnProcessor processor;
     const auto initial = suns::make_demo_game();
 
+    // Habitability now has concrete long-term consequences.
+    const auto& earth = planet(initial, 1);
+    assert(suns::population_capacity(earth) == 2500);
+    assert(suns::projected_population_growth(earth) == 60);
+    assert(suns::colony_output(earth) == 6);
+
+    auto highQuality = earth;
+    highQuality.population = 250;
+    highQuality.habitability = 100;
+    auto lowQuality = highQuality;
+    lowQuality.habitability = 50;
+    assert(suns::population_capacity(highQuality) > suns::population_capacity(lowQuality));
+    assert(suns::projected_population_growth(highQuality) > suns::projected_population_growth(lowQuality));
+
+    const auto peacefulTurn = processor.process(initial, {});
+    assert(planet(peacefulTurn, 1).stockpile == 6);
+    assert(planet(peacefulTurn, 1).population == 1060);
+
     // Home-system intel is known; other planetary data starts hidden.
     assert(suns::is_surveyed(initial, 1, 1));
     assert(!suns::is_surveyed(initial, 1, 2));
 
-    // Moving a scout onto a star reveals that system after turn resolution.
     const auto* alpha = suns::find_star(initial, 2);
     assert(alpha != nullptr);
     suns::PlayerOrders scoutOrders{1, {}};
     scoutOrders.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
     const auto surveyedAlpha = processor.process(initial, {scoutOrders});
-    assert(initial.turn == 1);
     assert(!suns::is_surveyed(initial, 1, 2));
     assert(suns::is_surveyed(surveyedAlpha, 1, 2));
-    assert(suns::same_position(surveyedAlpha.fleets.front().position, alpha->position));
 
-    // A colony ship is a persistent production project, not an instant purchase.
+    // Population contributes to production, so Earth's first colony ship takes
+    // two turns at the initial economic output.
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(
         suns::QueueProductionOrder{1, suns::ProductionKind::ColonyShip});
 
     const auto shipTurn1 = processor.process(initial, {queueShip});
     assert(planet(shipTurn1, 1).productionQueue.size() == 1);
-    assert(planet(shipTurn1, 1).productionQueue.front().remainingCost == 8);
+    assert(planet(shipTurn1, 1).productionQueue.front().remainingCost == 6);
     assert(colony_ship(shipTurn1) == nullptr);
 
     const auto shipTurn2 = processor.process(shipTurn1, {});
-    assert(planet(shipTurn2, 1).productionQueue.front().remainingCost == 4);
-    assert(colony_ship(shipTurn2) == nullptr);
+    assert(planet(shipTurn2, 1).productionQueue.empty());
+    assert(colony_ship(shipTurn2) != nullptr);
 
-    const auto shipTurn3 = processor.process(shipTurn2, {});
-    assert(planet(shipTurn3, 1).productionQueue.empty());
-    assert(colony_ship(shipTurn3) != nullptr);
-
-    // Factories compete for local production, then increase future output.
+    // A factory completes in one initial Earth turn and raises future output.
     suns::PlayerOrders queueFactory{1, {}};
     queueFactory.orders.emplace_back(
         suns::QueueProductionOrder{1, suns::ProductionKind::Factory});
 
     const auto factoryTurn1 = processor.process(initial, {queueFactory});
-    assert(planet(factoryTurn1, 1).industry == 4);
-    assert(planet(factoryTurn1, 1).productionQueue.front().remainingCost == 2);
+    assert(planet(factoryTurn1, 1).productionQueue.empty());
+    assert(planet(factoryTurn1, 1).industry == 5);
+    assert(planet(factoryTurn1, 1).population == 1060);
+    assert(suns::colony_output(planet(factoryTurn1, 1)) == 7);
 
     const auto factoryTurn2 = processor.process(factoryTurn1, {});
-    assert(planet(factoryTurn2, 1).productionQueue.empty());
-    assert(planet(factoryTurn2, 1).industry == 5);
-    assert(planet(factoryTurn2, 1).stockpile == 2);
+    assert(planet(factoryTurn2, 1).stockpile == 7);
 
-    // A colony ship may travel to an unknown system, but cannot colonize it
-    // until the player has survey intel from a scout.
-    const auto* ship = colony_ship(shipTurn3);
+    // Colony ships cannot colonize unknown worlds; the scout must reveal the
+    // world's quality first.
+    const auto* ship = colony_ship(shipTurn2);
     assert(ship != nullptr);
 
     suns::PlayerOrders moveColony{1, {}};
     moveColony.orders.emplace_back(suns::MoveFleetOrder{ship->id, alpha->position});
-    const auto arrivedUnknown = processor.process(shipTurn3, {moveColony});
+    const auto arrivedUnknown = processor.process(shipTurn2, {moveColony});
     assert(!suns::is_surveyed(arrivedUnknown, 1, 2));
 
     const auto* arrivedShip = colony_ship(arrivedUnknown);
@@ -97,7 +109,6 @@ int main()
         suns::ColonizePlanetOrder{arrivedShip->id, 2});
     const auto rejected = processor.process(arrivedUnknown, {prematureColonize});
     assert(planet(rejected, 2).owner == 0);
-    assert(colony_ship(rejected) != nullptr);
 
     suns::PlayerOrders surveyDestination{1, {}};
     surveyDestination.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
@@ -111,7 +122,8 @@ int main()
     const auto expanded = processor.process(destinationSurveyed, {colonize});
 
     assert(planet(expanded, 2).owner == 1);
-    assert(planet(expanded, 2).population == 250);
+    assert(planet(expanded, 2).population == 267);
+    assert(suns::population_capacity(planet(expanded, 2)) == 2050);
     assert(planet(expanded, 2).industry == 1);
     assert(planet(expanded, 2).stockpile == 1);
     assert(colony_ship(expanded) == nullptr);

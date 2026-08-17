@@ -63,14 +63,14 @@ MainWindow::MainWindow(QWidget* parent)
     layout->addWidget(view, 1);
 
     auto* sidePanel = new QWidget(central);
-    sidePanel->setFixedWidth(350);
+    sidePanel->setFixedWidth(365);
     auto* sideLayout = new QVBoxLayout(sidePanel);
 
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Star positions are known, but planetary data is not. Send Scout 1 to an unknown system, "
-        "end the turn, then inspect the newly surveyed world before deciding where to expand.",
+        "Survey unknown systems with Scout 1. Habitability controls population capacity and growth, "
+        "so better worlds become stronger economies over time.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -129,7 +129,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
     rebuildScene();
-    statusBar()->showMessage("Turn 1 — choose the first system to survey");
+    statusBar()->showMessage("Turn 1 — survey worlds and compare their long-term potential");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -201,13 +201,14 @@ void MainWindow::rebuildScene()
             tooltip += "\nUnsurveyed system — planetary data unknown";
             mapLabel += "  [?]";
         } else if (planet) {
-            tooltip += QString("\n%1 — habitability %2%")
+            tooltip += QString("\n%1 — habitability %2% — capacity %3")
                            .arg(QString::fromStdString(planet->name))
-                           .arg(planet->habitability);
+                           .arg(planet->habitability)
+                           .arg(static_cast<qulonglong>(population_capacity(*planet)));
             if (planet->owner == 1) {
                 mapLabel += "  [COLONY]";
-                tooltip += QString("\nIndustry %1 — %2")
-                               .arg(planet->industry)
+                tooltip += QString("\nOutput %1 / turn — %2")
+                               .arg(colony_output(*planet))
                                .arg(productionSummary(*planet));
             }
         }
@@ -245,13 +246,13 @@ void MainWindow::updateControls()
     std::size_t colonies = 0;
     std::uint64_t population = 0;
     std::uint32_t stockpile = 0;
-    std::uint32_t industry = 0;
+    std::uint32_t output = 0;
     for (const auto& candidate : state_.planets) {
         if (candidate.owner == 1) {
             ++colonies;
             population += candidate.population;
             stockpile += candidate.stockpile;
-            industry += candidate.industry;
+            output += colony_output(candidate);
         }
     }
 
@@ -265,12 +266,12 @@ void MainWindow::updateControls()
 
     empireLabel_->setText(
         QString("<b>Terrans</b><br>Surveyed: %1 / %2 &nbsp; Colonies: %3<br>"
-                "Population: %4 &nbsp; Industry: %5 / turn<br>Stored: %6 &nbsp; Colony ships: %7")
+                "Population: %4 &nbsp; Output: %5 / turn<br>Stored: %6 &nbsp; Colony ships: %7")
             .arg(static_cast<qulonglong>(surveyedCount))
             .arg(static_cast<qulonglong>(state_.stars.size()))
             .arg(static_cast<qulonglong>(colonies))
             .arg(static_cast<qulonglong>(population))
-            .arg(industry)
+            .arg(output)
             .arg(stockpile)
             .arg(static_cast<qulonglong>(colonyShips)));
 
@@ -281,16 +282,28 @@ void MainWindow::updateControls()
                 .arg(QString::fromStdString(star->name)));
     } else if (star && planet) {
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
+        QString populationLine;
+        if (planet->owner == 1) {
+            populationLine = QString("Population: %1 / %2 (+%3 next turn)<br>")
+                                 .arg(static_cast<qulonglong>(planet->population))
+                                 .arg(static_cast<qulonglong>(population_capacity(*planet)))
+                                 .arg(static_cast<qulonglong>(projected_population_growth(*planet)));
+        } else {
+            populationLine = QString("Potential population capacity: %1<br>")
+                                 .arg(static_cast<qulonglong>(population_capacity(*planet)));
+        }
+
         selectionLabel_->setText(
-            QString("<hr><b>%1</b><br>%2<br>Habitability: %3%<br>Status: %4<br>"
-                    "Population: %5<br>Industry: %6 / turn<br>Stored production: %7<br>"
-                    "Production: <b>%8</b>")
+            QString("<hr><b>%1</b><br>%2<br>Habitability: <b>%3%</b><br>Status: %4<br>"
+                    "%5Infrastructure: %6<br>Economic output: %7 / turn<br>"
+                    "Stored production: %8<br>Production: <b>%9</b>")
                 .arg(QString::fromStdString(star->name))
                 .arg(QString::fromStdString(planet->name))
                 .arg(planet->habitability)
                 .arg(owner)
-                .arg(static_cast<qulonglong>(planet->population))
+                .arg(populationLine)
                 .arg(planet->industry)
+                .arg(colony_output(*planet))
                 .arg(planet->stockpile)
                 .arg(productionSummary(*planet)));
     } else {
@@ -394,7 +407,7 @@ void MainWindow::endTurn()
     pendingDescriptions_.clear();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — orders resolved, scouting intel and production updated")
+        QString("Turn %1 — economy, population and scouting updated")
             .arg(static_cast<qulonglong>(state_.turn)));
 }
 

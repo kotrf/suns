@@ -40,16 +40,17 @@ ctest --test-dir build --output-on-failure
 
 ## Current playable loop
 
-The desktop app now contains the beginnings of exploration, economy and expansion:
+The desktop app now links exploration, planet quality, economy and expansion:
 
 1. star positions are visible, but non-home planetary data starts unknown;
 2. send **Scout 1** to a system and end the turn to survey it;
-3. inspect the revealed planet and its habitability before choosing an expansion target;
-4. at a colony, queue a **Colony Ship** or invest first in a **Factory**;
-5. local industry advances persistent production queues over multiple turns;
-6. move a completed colony ship to a surveyed system;
-7. colonize the destination and begin managing another local economy.
+3. compare the revealed world's habitability and long-term population capacity;
+4. higher-habitability colonies grow faster and support larger populations;
+5. population contributes to economic output while factories add infrastructure output;
+6. queue a **Colony Ship** or invest first in a **Factory**;
+7. local output advances persistent production queues over multiple turns;
+8. move a completed colony ship to a surveyed system and colonize it.
 
-A colony ship may enter an unsurveyed system, but colonization requires survey intel. This deliberately gives the scout a strategic role rather than making it a decorative first ship.
+A colony ship may enter an unsurveyed system, but colonization requires survey intel. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.

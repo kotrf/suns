@@ -36,7 +36,7 @@ void run_colony_production(GameState& state, Planet& planet)
         return;
     }
 
-    std::uint32_t available = planet.stockpile + planet.industry;
+    std::uint32_t available = planet.stockpile + colony_output(planet);
 
     while (!planet.productionQueue.empty() && available > 0) {
         auto& item = planet.productionQueue.front();
@@ -69,6 +69,13 @@ void update_scout_intel(GameState& state)
                 break;
             }
         }
+    }
+}
+
+void grow_colonies(GameState& state)
+{
+    for (auto& planet : state.planets) {
+        planet.population += projected_population_growth(planet);
     }
 }
 
@@ -151,14 +158,14 @@ GameState TurnProcessor::process(
         }
     }
 
-    // Scout fleets reveal the planetary data of systems they occupy. Intel is
-    // updated after movement, so arriving this turn reveals the system for the
-    // next planning phase.
     update_scout_intel(next);
 
+    // Production uses population at the start of the economic phase. Growth is
+    // then applied for the next planning turn, keeping the phase order stable.
     for (auto& planet : next.planets) {
         run_colony_production(next, planet);
     }
+    grow_colonies(next);
 
     ++next.turn;
     return next;
