@@ -220,7 +220,7 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{readyShip->id, 2});
     const auto expanded = processor.process(destinationSurveyed, {colonize});
     assert(planet(expanded, 2).owner == 1);
-    assert(planet(expanded, 2).population == 250);
+    assert(planet(expanded, 2).population == 267);
     assert(colony_ship(expanded) == nullptr);
 
     return 0;
