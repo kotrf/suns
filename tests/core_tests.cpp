@@ -26,14 +26,67 @@ const suns::Fleet* colony_ship(const suns::GameState& state)
     return nullptr;
 }
 
+void verify_procedural_generation()
+{
+    suns::GalaxyConfig config;
+    config.seed = 424242;
+    config.starCount = 24;
+
+    const auto first = suns::generate_game(config);
+    const auto repeat = suns::generate_game(config);
+
+    assert(first.galaxySeed == config.seed);
+    assert(first.stars.size() == config.starCount);
+    assert(first.planets.size() == config.starCount);
+    assert(first.players.size() == 1);
+    assert(first.players.front().surveyedStars.size() == 1);
+    assert(first.players.front().surveyedStars.front() == 1);
+    assert(first.stars.front().name == "Sol");
+    assert(first.planets.front().name == "Earth");
+    assert(first.planets.front().owner == 1);
+    assert(first.fleets.size() == 1);
+    assert(suns::same_position(first.fleets.front().position, first.stars.front().position));
+
+    for (std::size_t i = 0; i < first.stars.size(); ++i) {
+        const auto& a = first.stars[i];
+        const auto& b = repeat.stars[i];
+        assert(a.id == b.id);
+        assert(a.name == b.name);
+        assert(a.position.x == b.position.x);
+        assert(a.position.y == b.position.y);
+        assert(a.stellarClass == b.stellarClass);
+
+        const auto& pa = first.planets[i];
+        const auto& pb = repeat.planets[i];
+        assert(pa.name == pb.name);
+        assert(pa.habitability == pb.habitability);
+    }
+
+    auto otherConfig = config;
+    otherConfig.seed += 1;
+    const auto other = suns::generate_game(otherConfig);
+    bool differs = false;
+    for (std::size_t i = 1; i < first.stars.size(); ++i) {
+        if (first.stars[i].name != other.stars[i].name
+            || first.stars[i].position.x != other.stars[i].position.x
+            || first.stars[i].position.y != other.stars[i].position.y
+            || first.planets[i].habitability != other.planets[i].habitability) {
+            differs = true;
+            break;
+        }
+    }
+    assert(differs);
+}
+
 } // namespace
 
 int main()
 {
+    verify_procedural_generation();
+
     const suns::TurnProcessor processor;
     const auto initial = suns::make_demo_game();
 
-    // Habitability now has concrete long-term consequences.
     const auto& earth = planet(initial, 1);
     assert(suns::population_capacity(earth) == 2500);
     assert(suns::projected_population_growth(earth) == 60);
@@ -51,7 +104,6 @@ int main()
     assert(planet(peacefulTurn, 1).stockpile == 6);
     assert(planet(peacefulTurn, 1).population == 1060);
 
-    // Home-system intel is known; other planetary data starts hidden.
     assert(suns::is_surveyed(initial, 1, 1));
     assert(!suns::is_surveyed(initial, 1, 2));
 
@@ -63,8 +115,6 @@ int main()
     assert(!suns::is_surveyed(initial, 1, 2));
     assert(suns::is_surveyed(surveyedAlpha, 1, 2));
 
-    // Population contributes to production, so Earth's first colony ship takes
-    // two turns at the initial economic output.
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(
         suns::QueueProductionOrder{1, suns::ProductionKind::ColonyShip});
@@ -78,7 +128,6 @@ int main()
     assert(planet(shipTurn2, 1).productionQueue.empty());
     assert(colony_ship(shipTurn2) != nullptr);
 
-    // A factory completes in one initial Earth turn and raises future output.
     suns::PlayerOrders queueFactory{1, {}};
     queueFactory.orders.emplace_back(
         suns::QueueProductionOrder{1, suns::ProductionKind::Factory});
@@ -92,8 +141,6 @@ int main()
     const auto factoryTurn2 = processor.process(factoryTurn1, {});
     assert(planet(factoryTurn2, 1).stockpile == 7);
 
-    // Colony ships cannot colonize unknown worlds; the scout must reveal the
-    // world's quality first.
     const auto* ship = colony_ship(shipTurn2);
     assert(ship != nullptr);
 
@@ -128,7 +175,6 @@ int main()
     assert(planet(expanded, 2).stockpile == 1);
     assert(colony_ship(expanded) == nullptr);
 
-    // Invalid ownership remains guarded.
     suns::PlayerOrders invalid{2, {}};
     invalid.orders.emplace_back(
         suns::QueueProductionOrder{1, suns::ProductionKind::Factory});
