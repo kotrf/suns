@@ -140,6 +140,29 @@ bool same_position(Position a, Position b)
     return std::abs(a.x - b.x) < epsilon && std::abs(a.y - b.y) < epsilon;
 }
 
+double distance_between(Position a, Position b)
+{
+    return std::hypot(a.x - b.x, a.y - b.y);
+}
+
+double fleet_speed(FleetRole role)
+{
+    return role == FleetRole::Scout ? kScoutTravelSpeed : kColonyShipTravelSpeed;
+}
+
+std::uint32_t travel_turns(Position from, Position to, double speed)
+{
+    if (speed <= 0.0 || same_position(from, to)) {
+        return 0;
+    }
+    return static_cast<std::uint32_t>(std::ceil(distance_between(from, to) / speed));
+}
+
+std::uint32_t fleet_eta(const Fleet& fleet)
+{
+    return fleet.destination ? travel_turns(fleet.position, *fleet.destination, fleet_speed(fleet.role)) : 0;
+}
+
 bool is_surveyed(const GameState& state, PlayerId player, StarId star)
 {
     const auto* knownPlayer = find_player(state, player);

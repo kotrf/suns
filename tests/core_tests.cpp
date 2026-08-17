@@ -2,6 +2,7 @@
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
+#include <cmath>
 
 namespace {
 
@@ -16,11 +17,21 @@ const suns::Planet& planet(const suns::GameState& state, suns::PlanetId id)
     return state.planets.front();
 }
 
+const suns::Fleet* fleet(const suns::GameState& state, suns::FleetId id)
+{
+    for (const auto& candidate : state.fleets) {
+        if (candidate.id == id) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
 const suns::Fleet* colony_ship(const suns::GameState& state)
 {
-    for (const auto& fleet : state.fleets) {
-        if (fleet.owner == 1 && fleet.role == suns::FleetRole::ColonyShip) {
-            return &fleet;
+    for (const auto& candidate : state.fleets) {
+        if (candidate.owner == 1 && candidate.role == suns::FleetRole::ColonyShip) {
+            return &candidate;
         }
     }
     return nullptr;
@@ -46,6 +57,7 @@ void verify_procedural_generation()
     assert(first.planets.front().owner == 1);
     assert(first.fleets.size() == 1);
     assert(suns::same_position(first.fleets.front().position, first.stars.front().position));
+    assert(!first.fleets.front().destination.has_value());
 
     for (std::size_t i = 0; i < first.stars.size(); ++i) {
         const auto& a = first.stars[i];
@@ -78,11 +90,20 @@ void verify_procedural_generation()
     assert(differs);
 }
 
+void verify_travel_math()
+{
+    assert(std::abs(suns::distance_between({0.0, 0.0}, {3.0, 4.0}) - 5.0) < 0.000001);
+    assert(suns::travel_turns({0.0, 0.0}, {3.0, 4.0}, 2.0) == 3);
+    assert(suns::travel_turns({0.0, 0.0}, {0.0, 0.0}, 2.0) == 0);
+    assert(suns::fleet_speed(suns::FleetRole::Scout) > suns::fleet_speed(suns::FleetRole::ColonyShip));
+}
+
 } // namespace
 
 int main()
 {
     verify_procedural_generation();
+    verify_travel_math();
 
     const suns::TurnProcessor processor;
     const auto initial = suns::make_demo_game();
@@ -105,15 +126,30 @@ int main()
     assert(planet(peacefulTurn, 1).population == 1060);
 
     assert(suns::is_surveyed(initial, 1, 1));
-    assert(!suns::is_surveyed(initial, 1, 2));
+    assert(!suns::is_surveyed(initial, 1, 4));
 
-    const auto* alpha = suns::find_star(initial, 2);
-    assert(alpha != nullptr);
+    // A distant scout destination now takes multiple turns. The system is only
+    // surveyed when the scout actually arrives at the star.
+    const auto* vega = suns::find_star(initial, 4);
+    assert(vega != nullptr);
+    assert(suns::travel_turns(initial.fleets.front().position, vega->position, suns::kScoutTravelSpeed) == 2);
+
     suns::PlayerOrders scoutOrders{1, {}};
-    scoutOrders.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
-    const auto surveyedAlpha = processor.process(initial, {scoutOrders});
-    assert(!suns::is_surveyed(initial, 1, 2));
-    assert(suns::is_surveyed(surveyedAlpha, 1, 2));
+    scoutOrders.orders.emplace_back(suns::MoveFleetOrder{1, vega->position});
+    const auto scoutTravel1 = processor.process(initial, {scoutOrders});
+    const auto* travellingScout = fleet(scoutTravel1, 1);
+    assert(travellingScout != nullptr);
+    assert(travellingScout->destination.has_value());
+    assert(suns::fleet_eta(*travellingScout) == 1);
+    assert(!suns::same_position(travellingScout->position, vega->position));
+    assert(!suns::is_surveyed(scoutTravel1, 1, 4));
+
+    const auto scoutArrived = processor.process(scoutTravel1, {});
+    const auto* arrivedScout = fleet(scoutArrived, 1);
+    assert(arrivedScout != nullptr);
+    assert(!arrivedScout->destination.has_value());
+    assert(suns::same_position(arrivedScout->position, vega->position));
+    assert(suns::is_surveyed(scoutArrived, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(
@@ -141,22 +177,36 @@ int main()
     const auto factoryTurn2 = processor.process(factoryTurn1, {});
     assert(planet(factoryTurn2, 1).stockpile == 7);
 
+    const auto* alpha = suns::find_star(initial, 2);
+    assert(alpha != nullptr);
     const auto* ship = colony_ship(shipTurn2);
     assert(ship != nullptr);
+    assert(suns::travel_turns(ship->position, alpha->position, suns::fleet_speed(ship->role)) == 2);
 
+    // Colony ships are slower than scouts. After the first travel turn the ship
+    // is visibly between stars and cannot colonize yet.
     suns::PlayerOrders moveColony{1, {}};
     moveColony.orders.emplace_back(suns::MoveFleetOrder{ship->id, alpha->position});
-    const auto arrivedUnknown = processor.process(shipTurn2, {moveColony});
-    assert(!suns::is_surveyed(arrivedUnknown, 1, 2));
+    const auto colonyTravel1 = processor.process(shipTurn2, {moveColony});
+    const auto* travellingShip = colony_ship(colonyTravel1);
+    assert(travellingShip != nullptr);
+    assert(travellingShip->destination.has_value());
+    assert(suns::fleet_eta(*travellingShip) == 1);
+    assert(!suns::same_position(travellingShip->position, alpha->position));
+    assert(!suns::is_surveyed(colonyTravel1, 1, 2));
 
-    const auto* arrivedShip = colony_ship(arrivedUnknown);
-    assert(arrivedShip != nullptr);
     suns::PlayerOrders prematureColonize{1, {}};
     prematureColonize.orders.emplace_back(
-        suns::ColonizePlanetOrder{arrivedShip->id, 2});
-    const auto rejected = processor.process(arrivedUnknown, {prematureColonize});
+        suns::ColonizePlanetOrder{travellingShip->id, 2});
+    const auto rejected = processor.process(colonyTravel1, {prematureColonize});
     assert(planet(rejected, 2).owner == 0);
+    const auto* arrivedShip = colony_ship(rejected);
+    assert(arrivedShip != nullptr);
+    assert(!arrivedShip->destination.has_value());
+    assert(suns::same_position(arrivedShip->position, alpha->position));
 
+    // The scout can reach Alpha Centauri in one turn and reveals it for the
+    // following planning phase.
     suns::PlayerOrders surveyDestination{1, {}};
     surveyDestination.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
     const auto destinationSurveyed = processor.process(rejected, {surveyDestination});

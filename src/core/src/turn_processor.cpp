@@ -56,6 +56,29 @@ void run_colony_production(GameState& state, Planet& planet)
     planet.stockpile = available;
 }
 
+void advance_fleets(GameState& state)
+{
+    for (auto& fleet : state.fleets) {
+        if (!fleet.destination) {
+            continue;
+        }
+
+        const auto destination = *fleet.destination;
+        const auto remaining = distance_between(fleet.position, destination);
+        const auto speed = fleet_speed(fleet.role);
+
+        if (remaining <= speed || remaining <= 0.000001) {
+            fleet.position = destination;
+            fleet.destination.reset();
+            continue;
+        }
+
+        const auto fraction = speed / remaining;
+        fleet.position.x += (destination.x - fleet.position.x) * fraction;
+        fleet.position.y += (destination.y - fleet.position.y) * fraction;
+    }
+}
+
 void update_scout_intel(GameState& state)
 {
     for (const auto& fleet : state.fleets) {
@@ -101,7 +124,11 @@ GameState TurnProcessor::process(
                                     && candidate.owner == submission.player;
                             });
                         if (fleet != next.fleets.end()) {
-                            fleet->position = concreteOrder.destination;
+                            if (same_position(fleet->position, concreteOrder.destination)) {
+                                fleet->destination.reset();
+                            } else {
+                                fleet->destination = concreteOrder.destination;
+                            }
                         }
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(
@@ -158,10 +185,11 @@ GameState TurnProcessor::process(
         }
     }
 
+    // Movement is a turn phase: newly issued courses advance immediately by one
+    // turn of travel, and fleets already in transit continue automatically.
+    advance_fleets(next);
     update_scout_intel(next);
 
-    // Production uses population at the start of the economic phase. Growth is
-    // then applied for the next planning turn, keeping the phase order stable.
     for (auto& planet : next.planets) {
         run_colony_production(next, planet);
     }

@@ -93,12 +93,43 @@ QString starClassName(StarClass stellarClass)
     return "yellow";
 }
 
+QString turnCount(std::uint32_t turns)
+{
+    return QString("%1 turn%2").arg(turns).arg(turns == 1 ? "" : "s");
+}
+
 const Fleet* findFleet(const GameState& state, FleetId id)
 {
     const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
         return fleet.id == id;
     });
     return it == state.fleets.end() ? nullptr : &*it;
+}
+
+bool hasPendingMove(const PlayerOrders& pending, FleetId fleetId)
+{
+    return std::any_of(pending.orders.begin(), pending.orders.end(), [fleetId](const Order& order) {
+        if (const auto* move = std::get_if<MoveFleetOrder>(&order)) {
+            return move->fleet == fleetId;
+        }
+        return false;
+    });
+}
+
+QColor fleetColor(FleetRole role, int alpha = 255)
+{
+    return role == FleetRole::Scout
+        ? QColor(101, 166, 255, alpha)
+        : QColor(195, 123, 234, alpha);
+}
+
+void addTravelLabel(QGraphicsScene* scene, Position from, Position to, const QString& text, const QColor& color)
+{
+    auto* label = scene->addText(text);
+    label->setPos((from.x + to.x) / 2.0 + 5.0, (from.y + to.y) / 2.0 - 10.0);
+    label->setDefaultTextColor(color);
+    label->setScale(0.72);
+    label->setZValue(-8.0);
 }
 
 void addBackgroundStars(QGraphicsScene* scene, std::uint64_t galaxySeed)
@@ -169,8 +200,8 @@ MainWindow::MainWindow(QWidget* parent)
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Survey an unknown procedural galaxy. The same seed always creates the same stars and worlds, "
-        "so interesting maps can be replayed and shared.",
+        "Explore a seeded galaxy where distance matters. Fleets keep travelling between turns; "
+        "scouts are faster than colony ships, and systems are surveyed only on arrival.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -248,7 +279,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     rebuildScene();
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
-    statusBar()->showMessage("Turn 1 — an unknown galaxy is waiting to be surveyed");
+    statusBar()->showMessage("Turn 1 — choose a system and plot the scout's first course");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -305,6 +336,30 @@ void MainWindow::rebuildScene()
 
     addBackgroundStars(scene_, state_.galaxySeed);
 
+    // Active courses survive End Turn and show the remaining route/ETA. A new
+    // pending move replaces the visualized active course for that fleet.
+    for (const auto& fleet : state_.fleets) {
+        if (!fleet.destination || hasPendingMove(pendingOrders_, fleet.id)) {
+            continue;
+        }
+
+        const auto routeColor = fleetColor(fleet.role, 105);
+        QPen routePen(routeColor);
+        routePen.setWidthF(1.15);
+        routePen.setStyle(Qt::DotLine);
+        auto* route = scene_->addLine(
+            fleet.position.x,
+            fleet.position.y,
+            fleet.destination->x,
+            fleet.destination->y,
+            routePen);
+        route->setZValue(-20.0);
+        addTravelLabel(
+            scene_, fleet.position, *fleet.destination,
+            QString("ETA %1").arg(turnCount(fleet_eta(fleet))),
+            fleetColor(fleet.role, 155));
+    }
+
     for (const auto& order : pendingOrders_.orders) {
         std::visit(
             [&](const auto& concreteOrder) {
@@ -315,11 +370,9 @@ void MainWindow::rebuildScene()
                         return;
                     }
 
-                    const QColor routeColor = fleet->role == FleetRole::Scout
-                        ? QColor(90, 155, 255, 175)
-                        : QColor(190, 115, 235, 175);
+                    const auto routeColor = fleetColor(fleet->role, 190);
                     QPen routePen(routeColor);
-                    routePen.setWidthF(1.35);
+                    routePen.setWidthF(1.45);
                     routePen.setStyle(Qt::DashLine);
                     auto* route = scene_->addLine(
                         fleet->position.x,
@@ -327,7 +380,13 @@ void MainWindow::rebuildScene()
                         concreteOrder.destination.x,
                         concreteOrder.destination.y,
                         routePen);
-                    route->setZValue(-20.0);
+                    route->setZValue(-18.0);
+                    const auto eta = travel_turns(
+                        fleet->position, concreteOrder.destination, fleet_speed(fleet->role));
+                    addTravelLabel(
+                        scene_, fleet->position, concreteOrder.destination,
+                        QString("course: %1").arg(turnCount(eta)),
+                        fleetColor(fleet->role, 210));
                 }
             },
             order);
@@ -380,9 +439,7 @@ void MainWindow::rebuildScene()
     int fleetOffset = 0;
     for (const auto& fleet : state_.fleets) {
         const double y = fleet.position.y + 15.0 + fleetOffset * 13.0;
-        const QColor fleetColor = fleet.role == FleetRole::Scout
-            ? QColor("#65a6ff")
-            : QColor("#c37bea");
+        const auto color = fleetColor(fleet.role);
 
         QPolygonF shape;
         if (fleet.role == FleetRole::Scout) {
@@ -397,15 +454,23 @@ void MainWindow::rebuildScene()
                   << QPointF(fleet.position.x - 5.0, y);
         }
 
-        QPen fleetPen(fleetColor.lighter(135));
+        QPen fleetPen(color.lighter(135));
         fleetPen.setWidthF(1.0);
-        auto* marker = scene_->addPolygon(shape, fleetPen, QBrush(fleetColor));
-        marker->setToolTip(QString::fromStdString(fleet.name));
+        auto* marker = scene_->addPolygon(shape, fleetPen, QBrush(color));
+        QString tooltip = QString::fromStdString(fleet.name);
+        if (fleet.destination) {
+            tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));
+        }
+        marker->setToolTip(tooltip);
         marker->setZValue(10.0);
 
-        auto* label = scene_->addText(QString::fromStdString(fleet.name));
+        QString fleetLabel = QString::fromStdString(fleet.name);
+        if (fleet.destination) {
+            fleetLabel += QString("  [%1]").arg(turnCount(fleet_eta(fleet)));
+        }
+        auto* label = scene_->addText(fleetLabel);
         label->setPos(fleet.position.x + 9.0, y - 8.0);
-        label->setDefaultTextColor(fleetColor.lighter(135));
+        label->setDefaultTextColor(color.lighter(135));
         label->setScale(0.85);
         label->setZValue(11.0);
         ++fleetOffset;
@@ -442,26 +507,47 @@ void MainWindow::updateControls()
         state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
             return fleet.owner == 1 && fleet.role == FleetRole::ColonyShip;
         }));
+    const auto inTransit = static_cast<std::size_t>(std::count_if(
+        state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
+            return fleet.owner == 1 && fleet.destination.has_value();
+        }));
 
     const auto* player = find_player(state_, 1);
     const auto surveyedCount = player ? player->surveyedStars.size() : 0;
 
     empireLabel_->setText(
         QString("<b>Terrans</b><br>Surveyed: %1 / %2 &nbsp; Colonies: %3<br>"
-                "Population: %4 &nbsp; Output: %5 / turn<br>Stored: %6 &nbsp; Colony ships: %7")
+                "Population: %4 &nbsp; Output: %5 / turn<br>"
+                "Stored: %6 &nbsp; Colony ships: %7 &nbsp; In transit: %8")
             .arg(static_cast<qulonglong>(surveyedCount))
             .arg(static_cast<qulonglong>(state_.stars.size()))
             .arg(static_cast<qulonglong>(colonies))
             .arg(static_cast<qulonglong>(population))
             .arg(output)
             .arg(stockpile)
-            .arg(static_cast<qulonglong>(colonyShips)));
+            .arg(static_cast<qulonglong>(colonyShips))
+            .arg(static_cast<qulonglong>(inTransit)));
+
+    const auto* scout = playerScout();
+    const auto* colonyShip = playerColonyShip();
+    const auto scoutEta = star && scout
+        ? travel_turns(scout->position, star->position, fleet_speed(scout->role))
+        : 0;
+    const auto colonyEta = star && colonyShip
+        ? travel_turns(colonyShip->position, star->position, fleet_speed(colonyShip->role))
+        : 0;
 
     if (star && !surveyed) {
+        QString travelLine;
+        if (scout) {
+            travelLine = QString("<br>Scout travel time from current position: <b>%1</b>.")
+                             .arg(turnCount(scoutEta));
+        }
         selectionLabel_->setText(
-            QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.<br>"
-                    "Send Scout 1 here and end the turn to survey this system.")
-                .arg(QString::fromStdString(star->name)));
+            QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.%2<br>"
+                    "Survey intel arrives only when Scout 1 reaches the star.")
+                .arg(QString::fromStdString(star->name))
+                .arg(travelLine));
     } else if (star && planet) {
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
         QString populationLine;
@@ -492,8 +578,16 @@ void MainWindow::updateControls()
         selectionLabel_->setText("<hr>Select a star system.");
     }
 
-    scoutMoveButton_->setEnabled(star != nullptr && playerScout() != nullptr);
-    colonyMoveButton_->setEnabled(star != nullptr && playerColonyShip() != nullptr);
+    scoutMoveButton_->setEnabled(star != nullptr && scout != nullptr);
+    colonyMoveButton_->setEnabled(star != nullptr && colonyShip != nullptr);
+    scoutMoveButton_->setText(
+        star && scout
+            ? QString("Plot Scout 1 course here (%1)").arg(turnCount(scoutEta))
+            : "Plot Scout 1 course here");
+    colonyMoveButton_->setText(
+        star && colonyShip
+            ? QString("Plot Colony Ship course here (%1)").arg(turnCount(colonyEta))
+            : "Plot Colony Ship course here");
 
     const bool ownedColony = surveyed && planet != nullptr && planet->owner == 1;
     buildColonyButton_->setEnabled(ownedColony);
@@ -530,10 +624,12 @@ void MainWindow::queueScoutMove()
         return;
     }
 
+    const auto eta = travel_turns(scout->position, star->position, fleet_speed(scout->role));
     appendPendingOrder(
         MoveFleetOrder{scout->id, star->position},
-        QString("Move Scout 1 to %1 and survey")
-            .arg(QString::fromStdString(star->name)));
+        QString("Plot Scout 1 course to %1 — %2")
+            .arg(QString::fromStdString(star->name))
+            .arg(turnCount(eta)));
 }
 
 void MainWindow::queueColonyShipMove()
@@ -544,11 +640,13 @@ void MainWindow::queueColonyShipMove()
         return;
     }
 
+    const auto eta = travel_turns(ship->position, star->position, fleet_speed(ship->role));
     appendPendingOrder(
         MoveFleetOrder{ship->id, star->position},
-        QString("Move %1 to %2")
+        QString("Plot %1 course to %2 — %3")
             .arg(QString::fromStdString(ship->name))
-            .arg(QString::fromStdString(star->name)));
+            .arg(QString::fromStdString(star->name))
+            .arg(turnCount(eta)));
 }
 
 void MainWindow::queueProduction(ProductionKind kind)
@@ -590,7 +688,7 @@ void MainWindow::endTurn()
     selectedStarId_.reset();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — economy, population and scouting updated")
+        QString("Turn %1 — fleets advanced, economy and scouting updated")
             .arg(static_cast<qulonglong>(state_.turn)));
 }
 
