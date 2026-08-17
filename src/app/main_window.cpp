@@ -145,6 +145,21 @@ bool hasPendingDesignName(const PlayerOrders& pending, const std::string& name)
     });
 }
 
+QString arrivalActionSummary(const FleetArrivalAction& action)
+{
+    switch (action.kind) {
+    case FleetArrivalActionKind::None:
+        return "none";
+    case FleetArrivalActionKind::LoadColonistsToCapacity:
+        return QString("load to capacity, leave %1").arg(static_cast<qulonglong>(action.reservePopulation));
+    case FleetArrivalActionKind::UnloadAllColonists:
+        return "unload all colonists";
+    case FleetArrivalActionKind::Refuel:
+        return "refuel";
+    }
+    return "none";
+}
+
 GameState movementPhasePreviewState(
     const GameState& state,
     const PlayerOrders& pending,
@@ -284,7 +299,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* help = new QLabel(
         "Select a fleet, choose a Warp, then select a star. Design ships from hulls and fitted components, "
-        "load colonists at friendly colonies, and manage fuel before departure.",
+        "load colonists at friendly colonies, manage fuel, or attach a dynamic Load All action to a course.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -326,15 +341,21 @@ MainWindow::MainWindow(QWidget* parent)
     warpSpin_->setValue(kScoutCruiseWarp);
     colonistLoadSpin_ = new QSpinBox(sidePanel);
     colonistLoadSpin_->setRange(0, 0);
+    arrivalReserveSpin_ = new QSpinBox(sidePanel);
+    arrivalReserveSpin_->setRange(1, 1000000000);
+    arrivalReserveSpin_->setValue(100);
     auto* fleetForm = new QFormLayout;
     fleetForm->addRow("Course Warp", warpSpin_);
     fleetForm->addRow("Target colonists", colonistLoadSpin_);
+    fleetForm->addRow("Leave on Load All", arrivalReserveSpin_);
     sideLayout->addLayout(fleetForm);
 
     fleetMoveButton_ = new QPushButton("Plot selected fleet course here", sidePanel);
+    fleetLoadAllButton_ = new QPushButton("Plot course + Load All on arrival", sidePanel);
     loadColonistsButton_ = new QPushButton("Set colonists aboard", sidePanel);
     refuelButton_ = new QPushButton("Refuel selected fleet", sidePanel);
     sideLayout->addWidget(fleetMoveButton_);
+    sideLayout->addWidget(fleetLoadAllButton_);
     sideLayout->addWidget(loadColonistsButton_);
     sideLayout->addWidget(refuelButton_);
 
@@ -382,9 +403,11 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(warpSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
     connect(colonistLoadSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
+    connect(arrivalReserveSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
     connect(shipDesignCombo_, &QComboBox::currentIndexChanged, this, [this](int) { updateControls(); });
     connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
     connect(fleetMoveButton_, &QPushButton::clicked, this, [this] { queueFleetMove(); });
+    connect(fleetLoadAllButton_, &QPushButton::clicked, this, [this] { queueFleetLoadAll(); });
     connect(designShipButton_, &QPushButton::clicked, this, [this] { openShipDesigner(); });
     connect(buildShipButton_, &QPushButton::clicked, this, [this] { queueShipDesign(); });
     connect(buildFactoryButton_, &QPushButton::clicked, this, [this] { queueProduction(ProductionKind::Factory); });
@@ -509,9 +532,9 @@ void MainWindow::rebuildScene()
         auto* route = scene_->addLine(fleet.position.x, fleet.position.y,
             fleet.destination->x, fleet.destination->y, routePen);
         route->setZValue(-20.0);
-        addTravelLabel(scene_, fleet.position, *fleet.destination,
-            QString("W%1 • ETA %2").arg(fleet.warp).arg(turnCount(fleet_eta(fleet))),
-            fleetColor(fleet.role, 155));
+        QString routeText = QString("W%1 • ETA %2").arg(fleet.warp).arg(turnCount(fleet_eta(fleet)));
+        if (fleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*fleet.arrivalAction));
+        addTravelLabel(scene_, fleet.position, *fleet.destination, routeText, fleetColor(fleet.role, 155));
     }
 
     for (const auto& order : pendingOrders_.orders) {
@@ -529,9 +552,11 @@ void MainWindow::rebuildScene()
                 route->setZValue(-18.0);
                 const auto routeWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
                 const auto eta = travel_turns(fleet->position, concreteOrder.destination, warp_distance(routeWarp));
-                addTravelLabel(scene_, fleet->position, concreteOrder.destination,
-                    QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta)),
-                    fleetColor(fleet->role, 210));
+                QString routeText = QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
+                if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
+                    routeText += QString(" • %1").arg(arrivalActionSummary(concreteOrder.arrivalAction));
+                }
+                addTravelLabel(scene_, fleet->position, concreteOrder.destination, routeText, fleetColor(fleet->role, 210));
             }
         }, order);
     }
@@ -621,6 +646,7 @@ void MainWindow::rebuildScene()
             tooltip += QString("\nSensor range %1").arg(range, 0, 'f', 0);
         }
         if (fleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));
+        if (fleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*fleet.arrivalAction));
         marker->setToolTip(tooltip);
         marker->setZValue(10.0);
 
@@ -742,6 +768,14 @@ void MainWindow::updateControls()
         }
     }
 
+    const bool dynamicLoadTarget = surveyed && planet && fleet
+        && planet->owner == fleet->owner && fleet_cargo_capacity(state_, *fleet) > 0.0;
+    const QString dynamicArrivalLine = dynamicLoadTarget
+        ? QString("<br><b>Load All on arrival:</b> fill free cargo from the colony while leaving at least %1. "
+                  "Exact load is dynamic and resolved when the ship actually arrives.")
+              .arg(arrivalReserveSpin_->value())
+        : QString{};
+
     if (star && !surveyed) {
         QString travelLine;
         if (fleet) {
@@ -767,9 +801,9 @@ void MainWindow::updateControls()
         }
         QString travelLine;
         if (fleet) {
-            travelLine = QString("<br><b>Route with %1:</b> Warp %2, %3.%4")
+            travelLine = QString("<br><b>Route with %1:</b> Warp %2, %3.%4%5")
                              .arg(QString::fromStdString(fleet->name)).arg(selectedWarp)
-                             .arg(turnCount(selectedEta)).arg(routeFuelLine);
+                             .arg(turnCount(selectedEta)).arg(routeFuelLine).arg(dynamicArrivalLine);
         }
         selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>Habitability: <b>%3%</b><br>Status: %4<br>"
                                           "%5Infrastructure: %6<br>Economic output: %7 / turn<br>"
@@ -790,6 +824,7 @@ void MainWindow::updateControls()
             status = QString("In transit to %1 — Warp %2, %3 remaining")
                          .arg(destinationStar ? QString::fromStdString(destinationStar->name) : "course target")
                          .arg(fleet->warp).arg(turnCount(fleet_eta(*fleet)));
+            if (fleet->arrivalAction) status += QString("; on arrival: %1").arg(arrivalActionSummary(*fleet->arrivalAction));
         }
 
         const auto sensor = fleet_sensor_range(state_, *fleet);
@@ -838,6 +873,12 @@ void MainWindow::updateControls()
         ? QString("Plot %1 course at Warp %2 (%3)").arg(QString::fromStdString(fleet->name)).arg(selectedWarp).arg(turnCount(selectedEta))
         : "Plot selected fleet course here");
 
+    arrivalReserveSpin_->setEnabled(dynamicLoadTarget);
+    fleetLoadAllButton_->setEnabled(validCourse && dynamicLoadTarget);
+    fleetLoadAllButton_->setText(validCourse && dynamicLoadTarget
+        ? QString("Plot course + Load All (leave %1)").arg(arrivalReserveSpin_->value())
+        : "Plot course + Load All on arrival");
+
     const bool ownedColony = surveyed && planet != nullptr && planet->owner == 1;
     shipDesignCombo_->setEnabled(ownedColony && shipDesignCombo_->count() > 0);
     buildFactoryButton_->setEnabled(ownedColony);
@@ -881,18 +922,23 @@ void MainWindow::appendPendingOrder(Order order, const QString& description)
     statusBar()->showMessage(description);
 }
 
-void MainWindow::replacePendingFleetMove(FleetId fleet, Position destination, std::uint8_t warp, const QString& description)
+void MainWindow::replacePendingFleetMove(
+    FleetId fleet,
+    Position destination,
+    std::uint8_t warp,
+    FleetArrivalAction arrivalAction,
+    const QString& description)
 {
     for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
         if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]); move && move->fleet == fleet) {
-            pendingOrders_.orders[index] = MoveFleetOrder{fleet, destination, warp};
+            pendingOrders_.orders[index] = MoveFleetOrder{fleet, destination, warp, arrivalAction};
             pendingDescriptions_[static_cast<int>(index)] = description;
             rebuildScene();
             statusBar()->showMessage(description);
             return;
         }
     }
-    appendPendingOrder(MoveFleetOrder{fleet, destination, warp}, description);
+    appendPendingOrder(MoveFleetOrder{fleet, destination, warp, arrivalAction}, description);
 }
 
 void MainWindow::openShipDesigner()
@@ -941,10 +987,42 @@ void MainWindow::queueFleetMove()
         fuelText = ", fuel-neutral";
     }
 
-    replacePendingFleetMove(fleet->id, star->position, warp,
+    replacePendingFleetMove(fleet->id, star->position, warp, {},
         QString("Plot %1 course to %2 — W%3, %4%5")
             .arg(QString::fromStdString(fleet->name)).arg(QString::fromStdString(star->name))
             .arg(warp).arg(turnCount(eta)).arg(fuelText));
+}
+
+void MainWindow::queueFleetLoadAll()
+{
+    const auto* star = selectedStar();
+    const auto* planet = selectedPlanet();
+    const auto* fleet = selectedFleet();
+    if (!star || !planet || !fleet || !is_surveyed(state_, 1, star->id)
+        || planet->owner != fleet->owner || fleet_cargo_capacity(state_, *fleet) <= 0.0) {
+        return;
+    }
+
+    const auto warp = static_cast<std::uint8_t>(warpSpin_->value());
+    if (!fleet_warp_valid(state_, *fleet, warp)) return;
+
+    const auto eta = travel_turns(fleet->position, star->position, warp_distance(warp));
+    const FleetArrivalAction action{
+        FleetArrivalActionKind::LoadColonistsToCapacity,
+        static_cast<std::uint64_t>(arrivalReserveSpin_->value()),
+    };
+
+    replacePendingFleetMove(
+        fleet->id,
+        star->position,
+        warp,
+        action,
+        QString("Plot %1 course to %2 — W%3, %4; on arrival load to capacity, leave %5 [DYNAMIC]")
+            .arg(QString::fromStdString(fleet->name))
+            .arg(QString::fromStdString(star->name))
+            .arg(warp)
+            .arg(turnCount(eta))
+            .arg(arrivalReserveSpin_->value()));
 }
 
 void MainWindow::queueShipDesign()
@@ -1033,7 +1111,7 @@ void MainWindow::endTurn()
     logisticsControlFleetId_.reset();
     refreshShipDesignChoices();
     rebuildScene();
-    statusBar()->showMessage(QString("Turn %1 — orders, designs, logistics, Warp travel, sensors and economy resolved")
+    statusBar()->showMessage(QString("Turn %1 — orders, designs, logistics, Warp travel, arrival actions, sensors and economy resolved")
         .arg(static_cast<qulonglong>(state_.turn)));
 }
 
