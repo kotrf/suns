@@ -115,6 +115,56 @@ bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& p
     return star && same_position(star->position, fleet.position);
 }
 
+Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
+{
+    const auto it = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+        return planet.owner == fleet.owner && fleet_at_planet(state, fleet, planet);
+    });
+    return it == state.planets.end() ? nullptr : &*it;
+}
+
+void execute_arrival_action(GameState& state, Fleet& fleet)
+{
+    if (!fleet.arrivalAction) return;
+
+    const auto action = *fleet.arrivalAction;
+    fleet.arrivalAction.reset();
+    if (action.kind == FleetArrivalActionKind::None) return;
+
+    auto* colony = friendly_colony_at_fleet(state, fleet);
+    if (!colony) return;
+
+    switch (action.kind) {
+    case FleetArrivalActionKind::None:
+        break;
+    case FleetArrivalActionKind::LoadColonistsToCapacity: {
+        const auto capacity = fleet_cargo_capacity(state, fleet);
+        const auto capacityColonists = static_cast<std::uint64_t>(
+            std::floor(capacity * kColonistsPerCargoUnit + 0.000001));
+        if (fleet.colonists >= capacityColonists) break;
+
+        // Until explicit colony-abandonment rules exist, dynamic loading always
+        // leaves at least one colonist behind even when the requested reserve is 0.
+        const auto reserve = std::max<std::uint64_t>(1, action.reservePopulation);
+        if (colony->population <= reserve) break;
+
+        const auto available = colony->population - reserve;
+        const auto freeSpace = capacityColonists - fleet.colonists;
+        const auto load = std::min(available, freeSpace);
+        colony->population -= load;
+        fleet.colonists += load;
+        break;
+    }
+    case FleetArrivalActionKind::UnloadAllColonists:
+        colony->population += fleet.colonists;
+        fleet.colonists = 0;
+        break;
+    case FleetArrivalActionKind::Refuel:
+        fleet.fuel = fleet_fuel_capacity(state, fleet);
+        break;
+    }
+}
+
 void generate_fleet_fuel(GameState& state)
 {
     for (auto& fleet : state.fleets) {
@@ -142,6 +192,7 @@ void advance_fleets(GameState& state)
         if (remaining <= epsilon) {
             fleet.position = destination;
             fleet.destination.reset();
+            execute_arrival_action(state, fleet);
             continue;
         }
 
@@ -155,9 +206,11 @@ void advance_fleets(GameState& state)
         const auto capacity = fleet_fuel_capacity(state, fleet);
         fleet.fuel = std::clamp(fleet.fuel - fuelChange, 0.0, capacity);
 
+        bool arrived = false;
         if (travelDistance >= remaining - epsilon) {
             fleet.position = destination;
             fleet.destination.reset();
+            arrived = true;
         } else {
             const auto fraction = travelDistance / remaining;
             fleet.position.x += (destination.x - start.x) * fraction;
@@ -165,6 +218,7 @@ void advance_fleets(GameState& state)
         }
 
         survey_fleet_sweep(state, fleet, start, fleet.position);
+        if (arrived) execute_arrival_action(state, fleet);
     }
 }
 
@@ -199,8 +253,18 @@ GameState TurnProcessor::process(
                         const auto requestedWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
                         if (!fleet_warp_valid(next, *fleet, requestedWarp)) return;
                         fleet->warp = requestedWarp;
-                        if (same_position(fleet->position, concreteOrder.destination)) fleet->destination.reset();
-                        else fleet->destination = concreteOrder.destination;
+                        fleet->arrivalAction = concreteOrder.arrivalAction.kind == FleetArrivalActionKind::None
+                            ? std::optional<FleetArrivalAction>{}
+                            : std::optional<FleetArrivalAction>{concreteOrder.arrivalAction};
+
+                        if (same_position(fleet->position, concreteOrder.destination)) {
+                            // Keep a zero-distance destination only when an arrival
+                            // action must be resolved in the movement phase.
+                            if (fleet->arrivalAction) fleet->destination = concreteOrder.destination;
+                            else fleet->destination.reset();
+                        } else {
+                            fleet->destination = concreteOrder.destination;
+                        }
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(
                             next.planets.begin(), next.planets.end(),
