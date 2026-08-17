@@ -56,6 +56,22 @@ void run_colony_production(GameState& state, Planet& planet)
     planet.stockpile = available;
 }
 
+void update_scout_intel(GameState& state)
+{
+    for (const auto& fleet : state.fleets) {
+        if (fleet.role != FleetRole::Scout) {
+            continue;
+        }
+
+        for (const auto& star : state.stars) {
+            if (same_position(fleet.position, star.position)) {
+                mark_surveyed(state, fleet.owner, star.id);
+                break;
+            }
+        }
+    }
+}
+
 } // namespace
 
 GameState TurnProcessor::process(
@@ -64,8 +80,6 @@ GameState TurnProcessor::process(
 {
     GameState next = current;
 
-    // Orders change intentions/state first. Production then runs for every
-    // colony from the resulting state, keeping the turn pipeline explicit.
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
             std::visit(
@@ -105,6 +119,10 @@ GameState TurnProcessor::process(
                             return;
                         }
 
+                        if (!is_surveyed(next, submission.player, planet->star)) {
+                            return;
+                        }
+
                         const auto fleet = std::find_if(
                             next.fleets.begin(), next.fleets.end(),
                             [&](const Fleet& candidate) {
@@ -132,6 +150,11 @@ GameState TurnProcessor::process(
                 order);
         }
     }
+
+    // Scout fleets reveal the planetary data of systems they occupy. Intel is
+    // updated after movement, so arriving this turn reveals the system for the
+    // next planning phase.
+    update_scout_intel(next);
 
     for (auto& planet : next.planets) {
         run_colony_production(next, planet);

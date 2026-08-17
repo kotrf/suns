@@ -39,7 +39,7 @@ struct Planet {
     PlanetId id{};
     StarId star{};
     std::string name;
-    std::uint32_t habitability{}; // 0..100; informational in the first vertical slice.
+    std::uint32_t habitability{}; // 0..100; becomes known after surveying the system.
     PlayerId owner{};             // 0 means uncolonized.
     std::uint64_t population{};
     std::uint32_t industry{1};
@@ -50,6 +50,7 @@ struct Planet {
 struct Player {
     PlayerId id{};
     std::string name;
+    std::vector<StarId> surveyedStars;
 };
 
 enum class FleetRole {
@@ -76,7 +77,11 @@ struct GameState {
 
 [[nodiscard]] const StarSystem* find_star(const GameState& state, StarId id);
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
+[[nodiscard]] const Player* find_player(const GameState& state, PlayerId id);
 [[nodiscard]] bool same_position(Position a, Position b);
+[[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
+void mark_surveyed(GameState& state, PlayerId player, StarId star);
+
 [[nodiscard]] constexpr std::uint32_t production_cost(ProductionKind kind)
 {
     return kind == ProductionKind::ColonyShip ? kColonyShipCost : kFactoryCost;

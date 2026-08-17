@@ -40,16 +40,16 @@ ctest --test-dir build --output-on-failure
 
 ## Current playable loop
 
-The desktop app now contains the first small strategic economy:
+The desktop app now contains the beginnings of exploration, economy and expansion:
 
-1. select **Sol / Earth**;
-2. queue a **Colony Ship** or invest first in a **Factory**;
-3. end turns while local industry advances the persistent production queue;
-4. factories increase that colony's industry for future turns;
-5. when a colony ship is completed, move it to another system;
-6. colonize the destination world;
-7. manage independent local production queues across the growing empire.
+1. star positions are visible, but non-home planetary data starts unknown;
+2. send **Scout 1** to a system and end the turn to survey it;
+3. inspect the revealed planet and its habitability before choosing an expansion target;
+4. at a colony, queue a **Colony Ship** or invest first in a **Factory**;
+5. local industry advances persistent production queues over multiple turns;
+6. move a completed colony ship to a surveyed system;
+7. colonize the destination and begin managing another local economy.
 
-Multiple player orders can be prepared before ending a turn. Production is local to each colony, deliberately preserving geography as a future strategic constraint.
+A colony ship may enter an unsurveyed system, but colonization requires survey intel. This deliberately gives the scout a strategic role rather than making it a decorative first ship.
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.
