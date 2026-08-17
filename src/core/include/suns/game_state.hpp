@@ -17,6 +17,8 @@ inline constexpr std::uint32_t kColonyShipCost = 12;
 inline constexpr std::uint32_t kFactoryCost = 6;
 inline constexpr double kScoutTravelSpeed = 100.0;
 inline constexpr double kColonyShipTravelSpeed = 70.0;
+inline constexpr double kScoutSensorRange = 90.0;
+inline constexpr double kColonySensorRange = 60.0;
 
 struct Position {
     double x{};
@@ -53,7 +55,7 @@ struct Planet {
     PlanetId id{};
     StarId star{};
     std::string name;
-    std::uint32_t habitability{}; // 0..100; becomes known after surveying the system.
+    std::uint32_t habitability{}; // 0..100; becomes known once covered by friendly survey sensors.
     PlayerId owner{};             // 0 means uncolonized.
     std::uint64_t population{};
     std::uint32_t industry{1};    // Infrastructure contribution; factories increase this.
@@ -105,10 +107,13 @@ struct GalaxyConfig {
 [[nodiscard]] bool same_position(Position a, Position b);
 [[nodiscard]] double distance_between(Position a, Position b);
 [[nodiscard]] double fleet_speed(FleetRole role);
+[[nodiscard]] double fleet_sensor_range(FleetRole role);
+[[nodiscard]] bool within_range(Position source, Position target, double range);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
 [[nodiscard]] std::uint32_t fleet_eta(const Fleet& fleet);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
 void mark_surveyed(GameState& state, PlayerId player, StarId star);
+void refresh_sensor_intel(GameState& state);
 
 [[nodiscard]] constexpr std::uint32_t production_cost(ProductionKind kind)
 {

@@ -150,6 +150,16 @@ double fleet_speed(FleetRole role)
     return role == FleetRole::Scout ? kScoutTravelSpeed : kColonyShipTravelSpeed;
 }
 
+double fleet_sensor_range(FleetRole role)
+{
+    return role == FleetRole::Scout ? kScoutSensorRange : 0.0;
+}
+
+bool within_range(Position source, Position target, double range)
+{
+    return range >= 0.0 && distance_between(source, target) <= range + 0.000001;
+}
+
 std::uint32_t travel_turns(Position from, Position to, double speed)
 {
     if (speed <= 0.0 || same_position(from, to)) {
@@ -188,6 +198,29 @@ void mark_surveyed(GameState& state, PlayerId player, StarId star)
 
     if (std::find(it->surveyedStars.begin(), it->surveyedStars.end(), star) == it->surveyedStars.end()) {
         it->surveyedStars.push_back(star);
+    }
+}
+
+void refresh_sensor_intel(GameState& state)
+{
+    for (const auto& star : state.stars) {
+        for (const auto& planet : state.planets) {
+            if (planet.owner == 0) {
+                continue;
+            }
+
+            const auto* sourceStar = find_star(state, planet.star);
+            if (sourceStar && within_range(sourceStar->position, star.position, kColonySensorRange)) {
+                mark_surveyed(state, planet.owner, star.id);
+            }
+        }
+
+        for (const auto& fleet : state.fleets) {
+            const auto range = fleet_sensor_range(fleet.role);
+            if (range > 0.0 && within_range(fleet.position, star.position, range)) {
+                mark_surveyed(state, fleet.owner, star.id);
+            }
+        }
     }
 }
 
@@ -264,6 +297,7 @@ GameState generate_game(const GalaxyConfig& config)
 
     state.fleets.push_back({1, 1, "Scout 1", FleetRole::Scout, {0.0, 0.0}});
     state.nextFleetId = 2;
+    refresh_sensor_intel(state);
     return state;
 }
 
@@ -297,6 +331,7 @@ GameState make_demo_game()
 
     state.fleets.push_back({1, 1, "Scout 1", FleetRole::Scout, {0.0, 0.0}});
     state.nextFleetId = 2;
+    refresh_sensor_intel(state);
     return state;
 }
 

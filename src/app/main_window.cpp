@@ -2,6 +2,7 @@
 #include "star_item.hpp"
 
 #include <QBrush>
+#include <QCheckBox>
 #include <QColor>
 #include <QFormLayout>
 #include <QGraphicsScene>
@@ -132,6 +133,30 @@ void addTravelLabel(QGraphicsScene* scene, Position from, Position to, const QSt
     label->setZValue(-8.0);
 }
 
+void addSensorRange(
+    QGraphicsScene* scene,
+    Position center,
+    double range,
+    const QColor& outline,
+    const QColor& fill)
+{
+    if (range <= 0.0) {
+        return;
+    }
+
+    QPen pen(outline);
+    pen.setWidthF(0.9);
+    pen.setStyle(Qt::DashLine);
+    auto* circle = scene->addEllipse(
+        center.x - range,
+        center.y - range,
+        range * 2.0,
+        range * 2.0,
+        pen,
+        QBrush(fill));
+    circle->setZValue(-60.0);
+}
+
 void addBackgroundStars(QGraphicsScene* scene, std::uint64_t galaxySeed)
 {
     const auto rect = scene->sceneRect();
@@ -200,8 +225,8 @@ MainWindow::MainWindow(QWidget* parent)
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Explore a seeded galaxy where distance matters. Fleets keep travelling between turns; "
-        "scouts are faster than colony ships, and systems are surveyed only on arrival.",
+        "Explore a seeded galaxy where distance and sensor coverage matter. Scouts reveal every star "
+        "that enters their moving scanner radius, while colonies provide shorter stationary coverage.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -216,12 +241,15 @@ MainWindow::MainWindow(QWidget* parent)
     starCountSpin_->setRange(8, 64);
     starCountSpin_->setValue(static_cast<int>(state_.stars.size()));
     newGalaxyButton_ = new QPushButton("Generate / Restart Galaxy", sidePanel);
+    sensorRangesCheck_ = new QCheckBox("Show sensor ranges", sidePanel);
+    sensorRangesCheck_->setChecked(showSensorRanges_);
 
     auto* galaxyForm = new QFormLayout;
     galaxyForm->addRow("Seed", seedEdit_);
     galaxyForm->addRow("Star systems", starCountSpin_);
     sideLayout->addLayout(galaxyForm);
     sideLayout->addWidget(newGalaxyButton_);
+    sideLayout->addWidget(sensorRangesCheck_);
 
     empireLabel_ = new QLabel(sidePanel);
     empireLabel_->setWordWrap(true);
@@ -265,6 +293,10 @@ MainWindow::MainWindow(QWidget* parent)
         updateControls();
     });
 
+    connect(sensorRangesCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        showSensorRanges_ = checked;
+        rebuildScene();
+    });
     connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
     connect(scoutMoveButton_, &QPushButton::clicked, this, [this] { queueScoutMove(); });
     connect(colonyMoveButton_, &QPushButton::clicked, this, [this] { queueColonyShipMove(); });
@@ -279,7 +311,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     rebuildScene();
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
-    statusBar()->showMessage("Turn 1 — choose a system and plot the scout's first course");
+    statusBar()->showMessage("Turn 1 — plot Scout 1 through unexplored sensor coverage");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -335,6 +367,37 @@ void MainWindow::rebuildScene()
     selectedStarId_ = selectionToRestore;
 
     addBackgroundStars(scene_, state_.galaxySeed);
+
+    if (showSensorRanges_) {
+        for (const auto& planet : state_.planets) {
+            if (planet.owner != 1) {
+                continue;
+            }
+            if (const auto* sourceStar = find_star(state_, planet.star)) {
+                addSensorRange(
+                    scene_,
+                    sourceStar->position,
+                    kColonySensorRange,
+                    QColor(100, 220, 155, 105),
+                    QColor(100, 220, 155, 12));
+            }
+        }
+
+        for (const auto& fleet : state_.fleets) {
+            if (fleet.owner != 1) {
+                continue;
+            }
+            const auto range = fleet_sensor_range(fleet.role);
+            if (range > 0.0) {
+                addSensorRange(
+                    scene_,
+                    fleet.position,
+                    range,
+                    QColor(90, 165, 255, 115),
+                    QColor(90, 165, 255, 10));
+            }
+        }
+    }
 
     // Active courses survive End Turn and show the remaining route/ETA. A new
     // pending move replaces the visualized active course for that fleet.
@@ -412,7 +475,7 @@ void MainWindow::rebuildScene()
         QString mapLabel = QString::fromStdString(star.name);
 
         if (!surveyed) {
-            tooltip += "\nUnsurveyed system — planetary data unknown";
+            tooltip += "\nUnsurveyed system — outside all sensor history";
             mapLabel += "  [?]";
         } else if (planet) {
             tooltip += QString("\n%1 — habitability %2% — capacity %3")
@@ -421,9 +484,10 @@ void MainWindow::rebuildScene()
                            .arg(static_cast<qulonglong>(population_capacity(*planet)));
             if (colony) {
                 mapLabel += "  [COLONY]";
-                tooltip += QString("\nOutput %1 / turn — %2")
+                tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
                                .arg(colony_output(*planet))
-                               .arg(productionSummary(*planet));
+                               .arg(productionSummary(*planet))
+                               .arg(kColonySensorRange, 0, 'f', 0);
             }
         }
         marker->setToolTip(tooltip);
@@ -458,6 +522,9 @@ void MainWindow::rebuildScene()
         fleetPen.setWidthF(1.0);
         auto* marker = scene_->addPolygon(shape, fleetPen, QBrush(color));
         QString tooltip = QString::fromStdString(fleet.name);
+        if (const auto range = fleet_sensor_range(fleet.role); range > 0.0) {
+            tooltip += QString("\nSensor range %1").arg(range, 0, 'f', 0);
+        }
         if (fleet.destination) {
             tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));
         }
@@ -486,9 +553,12 @@ void MainWindow::updateControls()
     const bool surveyed = star && is_surveyed(state_, 1, star->id);
 
     galaxyLabel_->setText(
-        QString("<b>Galaxy seed:</b> %1 &nbsp; <b>Systems:</b> %2")
+        QString("<b>Galaxy seed:</b> %1 &nbsp; <b>Systems:</b> %2<br>"
+                "Scout sensors: %3 &nbsp; Colony sensors: %4")
             .arg(static_cast<qulonglong>(state_.galaxySeed))
-            .arg(static_cast<qulonglong>(state_.stars.size())));
+            .arg(static_cast<qulonglong>(state_.stars.size()))
+            .arg(kScoutSensorRange, 0, 'f', 0)
+            .arg(kColonySensorRange, 0, 'f', 0));
 
     std::size_t colonies = 0;
     std::uint64_t population = 0;
@@ -545,7 +615,7 @@ void MainWindow::updateControls()
         }
         selectionLabel_->setText(
             QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.%2<br>"
-                    "Survey intel arrives only when Scout 1 reaches the star.")
+                    "The system is revealed as soon as the star enters friendly sensor coverage.")
                 .arg(QString::fromStdString(star->name))
                 .arg(travelLine));
     } else if (star && planet) {
@@ -688,7 +758,7 @@ void MainWindow::endTurn()
     selectedStarId_.reset();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — fleets advanced, economy and scouting updated")
+        QString("Turn %1 — fleets advanced, sensors swept, economy updated")
             .arg(static_cast<qulonglong>(state_.turn)));
 }
 

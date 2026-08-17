@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 
@@ -50,8 +51,8 @@ void verify_procedural_generation()
     assert(first.stars.size() == config.starCount);
     assert(first.planets.size() == config.starCount);
     assert(first.players.size() == 1);
-    assert(first.players.front().surveyedStars.size() == 1);
-    assert(first.players.front().surveyedStars.front() == 1);
+    assert(suns::is_surveyed(first, 1, 1));
+    assert(first.players.front().surveyedStars == repeat.players.front().surveyedStars);
     assert(first.stars.front().name == "Sol");
     assert(first.planets.front().name == "Earth");
     assert(first.planets.front().owner == 1);
@@ -90,12 +91,45 @@ void verify_procedural_generation()
     assert(differs);
 }
 
-void verify_travel_math()
+void verify_travel_and_sensor_math()
 {
     assert(std::abs(suns::distance_between({0.0, 0.0}, {3.0, 4.0}) - 5.0) < 0.000001);
     assert(suns::travel_turns({0.0, 0.0}, {3.0, 4.0}, 2.0) == 3);
     assert(suns::travel_turns({0.0, 0.0}, {0.0, 0.0}, 2.0) == 0);
     assert(suns::fleet_speed(suns::FleetRole::Scout) > suns::fleet_speed(suns::FleetRole::ColonyShip));
+    assert(suns::fleet_sensor_range(suns::FleetRole::Scout) == suns::kScoutSensorRange);
+    assert(suns::fleet_sensor_range(suns::FleetRole::ColonyShip) == 0.0);
+    assert(suns::within_range({0.0, 0.0}, {3.0, 4.0}, 5.0));
+    assert(!suns::within_range({0.0, 0.0}, {3.0, 4.0}, 4.9));
+}
+
+void verify_swept_sensor_coverage()
+{
+    suns::GameState state;
+    state.players.push_back({1, "Terrans", {}});
+    state.stars = {
+        {1, "Origin", {0.0, 0.0}, suns::StarClass::Yellow},
+        {2, "Flyby", {50.0, 85.0}, suns::StarClass::White},
+        {3, "Distant", {300.0, 0.0}, suns::StarClass::Red},
+    };
+    state.fleets.push_back({
+        1,
+        1,
+        "Scout 1",
+        suns::FleetRole::Scout,
+        {0.0, 0.0},
+        suns::Position{200.0, 0.0},
+    });
+
+    // Flyby is outside the scanner at both the start and the end of this turn,
+    // but lies inside the moving sensor circle along the travelled segment.
+    assert(!suns::within_range({0.0, 0.0}, {50.0, 85.0}, suns::kScoutSensorRange));
+    assert(!suns::within_range({100.0, 0.0}, {50.0, 85.0}, suns::kScoutSensorRange));
+
+    const suns::TurnProcessor processor;
+    const auto next = processor.process(state, {});
+    assert(suns::is_surveyed(next, 1, 2));
+    assert(!suns::is_surveyed(next, 1, 3));
 }
 
 } // namespace
@@ -103,7 +137,8 @@ void verify_travel_math()
 int main()
 {
     verify_procedural_generation();
-    verify_travel_math();
+    verify_travel_and_sensor_math();
+    verify_swept_sensor_coverage();
 
     const suns::TurnProcessor processor;
     const auto initial = suns::make_demo_game();
@@ -128,8 +163,8 @@ int main()
     assert(suns::is_surveyed(initial, 1, 1));
     assert(!suns::is_surveyed(initial, 1, 4));
 
-    // A distant scout destination now takes multiple turns. The system is only
-    // surveyed when the scout actually arrives at the star.
+    // Vega takes two travel turns, but Scout 1's scanner reaches it after the
+    // first movement phase, before the ship physically arrives.
     const auto* vega = suns::find_star(initial, 4);
     assert(vega != nullptr);
     assert(suns::travel_turns(initial.fleets.front().position, vega->position, suns::kScoutTravelSpeed) == 2);
@@ -142,7 +177,7 @@ int main()
     assert(travellingScout->destination.has_value());
     assert(suns::fleet_eta(*travellingScout) == 1);
     assert(!suns::same_position(travellingScout->position, vega->position));
-    assert(!suns::is_surveyed(scoutTravel1, 1, 4));
+    assert(suns::is_surveyed(scoutTravel1, 1, 4));
 
     const auto scoutArrived = processor.process(scoutTravel1, {});
     const auto* arrivedScout = fleet(scoutArrived, 1);
@@ -183,8 +218,7 @@ int main()
     assert(ship != nullptr);
     assert(suns::travel_turns(ship->position, alpha->position, suns::fleet_speed(ship->role)) == 2);
 
-    // Colony ships are slower than scouts. After the first travel turn the ship
-    // is visibly between stars and cannot colonize yet.
+    // Colony ships are slower and have no survey scanner in the current fit.
     suns::PlayerOrders moveColony{1, {}};
     moveColony.orders.emplace_back(suns::MoveFleetOrder{ship->id, alpha->position});
     const auto colonyTravel1 = processor.process(shipTurn2, {moveColony});
@@ -204,9 +238,10 @@ int main()
     assert(arrivedShip != nullptr);
     assert(!arrivedShip->destination.has_value());
     assert(suns::same_position(arrivedShip->position, alpha->position));
+    assert(!suns::is_surveyed(rejected, 1, 2));
 
-    // The scout can reach Alpha Centauri in one turn and reveals it for the
-    // following planning phase.
+    // Scout 1 reaches Alpha in one turn; the world becomes known through sensor
+    // coverage, then can be colonized by the ship already waiting there.
     suns::PlayerOrders surveyDestination{1, {}};
     surveyDestination.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
     const auto destinationSurveyed = processor.process(rejected, {surveyDestination});

@@ -9,6 +9,7 @@
 
 #include <optional>
 
+class QCheckBox;
 class QGraphicsScene;
 class QGraphicsView;
 class QLabel;
@@ -46,6 +47,7 @@ private:
     PlayerOrders pendingOrders_{1, {}};
     std::optional<StarId> selectedStarId_;
     QStringList pendingDescriptions_;
+    bool showSensorRanges_{true};
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};
@@ -55,6 +57,7 @@ private:
     QLabel* ordersLabel_{};
     QLineEdit* seedEdit_{};
     QSpinBox* starCountSpin_{};
+    QCheckBox* sensorRangesCheck_{};
     QPushButton* newGalaxyButton_{};
     QPushButton* scoutMoveButton_{};
     QPushButton* colonyMoveButton_{};
