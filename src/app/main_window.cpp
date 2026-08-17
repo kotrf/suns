@@ -16,12 +16,41 @@
 
 namespace suns {
 
+namespace {
+
+QString productionName(ProductionKind kind)
+{
+    return kind == ProductionKind::ColonyShip ? "Colony Ship" : "Factory";
+}
+
+QString productionSummary(const Planet& planet)
+{
+    if (planet.productionQueue.empty()) {
+        return "Idle";
+    }
+
+    const auto& item = planet.productionQueue.front();
+    const auto total = production_cost(item.kind);
+    const auto completed = total - item.remainingCost;
+    QString summary = QString("%1: %2/%3")
+                          .arg(productionName(item.kind))
+                          .arg(completed)
+                          .arg(total);
+    if (planet.productionQueue.size() > 1) {
+        summary += QString(" (+%1 queued)")
+                       .arg(static_cast<qulonglong>(planet.productionQueue.size() - 1));
+    }
+    return summary;
+}
+
+} // namespace
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , state_(make_demo_game())
 {
     setWindowTitle("Suns!");
-    resize(1180, 760);
+    resize(1200, 780);
 
     auto* central = new QWidget(this);
     auto* layout = new QHBoxLayout(central);
@@ -34,14 +63,14 @@ MainWindow::MainWindow(QWidget* parent)
     layout->addWidget(view, 1);
 
     auto* sidePanel = new QWidget(central);
-    sidePanel->setFixedWidth(330);
+    sidePanel->setFixedWidth(350);
     auto* sideLayout = new QVBoxLayout(sidePanel);
 
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Select a system. Build a colony ship at Earth, move it to an uncolonized world, "
-        "then colonize that planet. Each owned colony produces locally every turn.",
+        "Colonies generate local production each turn. Queue colony ships to expand, "
+        "or factories to increase future production. Orders are resolved together when the turn ends.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -56,13 +85,16 @@ MainWindow::MainWindow(QWidget* parent)
 
     scoutMoveButton_ = new QPushButton("Send Scout 1 here", sidePanel);
     colonyMoveButton_ = new QPushButton("Send Colony Ship here", sidePanel);
-    buildButton_ = new QPushButton(
-        QString("Build Colony Ship (%1 production)").arg(kColonyShipCost), sidePanel);
+    buildColonyButton_ = new QPushButton(
+        QString("Queue Colony Ship (%1)").arg(kColonyShipCost), sidePanel);
+    buildFactoryButton_ = new QPushButton(
+        QString("Queue Factory (%1)").arg(kFactoryCost), sidePanel);
     colonizeButton_ = new QPushButton("Colonize selected world", sidePanel);
 
     sideLayout->addWidget(scoutMoveButton_);
     sideLayout->addWidget(colonyMoveButton_);
-    sideLayout->addWidget(buildButton_);
+    sideLayout->addWidget(buildColonyButton_);
+    sideLayout->addWidget(buildFactoryButton_);
     sideLayout->addWidget(colonizeButton_);
 
     ordersLabel_ = new QLabel(sidePanel);
@@ -87,12 +119,17 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(scoutMoveButton_, &QPushButton::clicked, this, [this] { queueScoutMove(); });
     connect(colonyMoveButton_, &QPushButton::clicked, this, [this] { queueColonyShipMove(); });
-    connect(buildButton_, &QPushButton::clicked, this, [this] { queueBuildColonyShip(); });
+    connect(buildColonyButton_, &QPushButton::clicked, this, [this] {
+        queueProduction(ProductionKind::ColonyShip);
+    });
+    connect(buildFactoryButton_, &QPushButton::clicked, this, [this] {
+        queueProduction(ProductionKind::Factory);
+    });
     connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
     rebuildScene();
-    statusBar()->showMessage("Turn 1 — Earth can build the first colony ship");
+    statusBar()->showMessage("Turn 1 — choose how Earth should spend its production");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -162,7 +199,12 @@ void MainWindow::rebuildScene()
             tooltip += QString("\n%1 — habitability %2%")
                            .arg(QString::fromStdString(planet->name))
                            .arg(planet->habitability);
-            mapLabel += planet->owner == 1 ? "  [COLONY]" : "";
+            if (planet->owner == 1) {
+                mapLabel += "  [COLONY]";
+                tooltip += QString("\nIndustry %1 — %2")
+                               .arg(planet->industry)
+                               .arg(productionSummary(*planet));
+            }
         }
         marker->setToolTip(tooltip);
 
@@ -197,11 +239,13 @@ void MainWindow::updateControls()
     std::size_t colonies = 0;
     std::uint64_t population = 0;
     std::uint32_t stockpile = 0;
+    std::uint32_t industry = 0;
     for (const auto& candidate : state_.planets) {
         if (candidate.owner == 1) {
             ++colonies;
             population += candidate.population;
             stockpile += candidate.stockpile;
+            industry += candidate.industry;
         }
     }
 
@@ -212,9 +256,10 @@ void MainWindow::updateControls()
 
     empireLabel_->setText(
         QString("<b>Terrans</b><br>Colonies: %1 &nbsp; Population: %2<br>"
-                "Stored production: %3 &nbsp; Colony ships: %4")
+                "Industry: %3 / turn &nbsp; Stored: %4<br>Colony ships: %5")
             .arg(static_cast<qulonglong>(colonies))
             .arg(static_cast<qulonglong>(population))
+            .arg(industry)
             .arg(stockpile)
             .arg(static_cast<qulonglong>(colonyShips)));
 
@@ -222,14 +267,16 @@ void MainWindow::updateControls()
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
         selectionLabel_->setText(
             QString("<hr><b>%1</b><br>%2<br>Habitability: %3%<br>Status: %4<br>"
-                    "Population: %5<br>Industry: %6 / turn<br>Local production: %7")
+                    "Population: %5<br>Industry: %6 / turn<br>Stored production: %7<br>"
+                    "Production: <b>%8</b>")
                 .arg(QString::fromStdString(star->name))
                 .arg(QString::fromStdString(planet->name))
                 .arg(planet->habitability)
                 .arg(owner)
                 .arg(static_cast<qulonglong>(planet->population))
                 .arg(planet->industry)
-                .arg(planet->stockpile));
+                .arg(planet->stockpile)
+                .arg(productionSummary(*planet)));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
     }
@@ -237,27 +284,29 @@ void MainWindow::updateControls()
     scoutMoveButton_->setEnabled(star != nullptr && playerScout() != nullptr);
     colonyMoveButton_->setEnabled(star != nullptr && playerColonyShip() != nullptr);
 
-    const bool canAffordAfterProduction = planet
-        && planet->owner == 1
-        && planet->stockpile + planet->industry >= kColonyShipCost;
-    buildButton_->setEnabled(canAffordAfterProduction);
+    const bool ownedColony = planet != nullptr && planet->owner == 1;
+    buildColonyButton_->setEnabled(ownedColony);
+    buildFactoryButton_->setEnabled(ownedColony);
 
     colonizeButton_->setEnabled(
         planet != nullptr && planet->owner == 0 && colonyShipAtSelectedStar() != nullptr);
 
-    ordersLabel_->setText(
-        pendingOrders_.orders.empty()
-            ? "<b>Pending order:</b> none (ending the turn still produces resources)"
-            : QString("<b>Pending order:</b> %1").arg(pendingDescription_));
+    if (pendingOrders_.orders.empty()) {
+        ordersLabel_->setText("<b>Orders this turn:</b> none");
+    } else {
+        ordersLabel_->setText(
+            QString("<b>Orders this turn (%1):</b><br>%2")
+                .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
+                .arg(pendingDescriptions_.join("<br>")));
+    }
 
     endTurnButton_->setText(QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
 }
 
-void MainWindow::replacePendingOrder(Order order, const QString& description)
+void MainWindow::appendPendingOrder(Order order, const QString& description)
 {
-    pendingOrders_.orders.clear();
     pendingOrders_.orders.push_back(std::move(order));
-    pendingDescription_ = description;
+    pendingDescriptions_.push_back(description);
     updateControls();
     statusBar()->showMessage(description);
 }
@@ -270,7 +319,7 @@ void MainWindow::queueScoutMove()
         return;
     }
 
-    replacePendingOrder(
+    appendPendingOrder(
         MoveFleetOrder{scout->id, star->position},
         QString("Move Scout 1 to %1").arg(QString::fromStdString(star->name)));
 }
@@ -283,23 +332,25 @@ void MainWindow::queueColonyShipMove()
         return;
     }
 
-    replacePendingOrder(
+    appendPendingOrder(
         MoveFleetOrder{ship->id, star->position},
         QString("Move %1 to %2")
             .arg(QString::fromStdString(ship->name))
             .arg(QString::fromStdString(star->name)));
 }
 
-void MainWindow::queueBuildColonyShip()
+void MainWindow::queueProduction(ProductionKind kind)
 {
     const auto* planet = selectedPlanet();
     if (!planet || planet->owner != 1) {
         return;
     }
 
-    replacePendingOrder(
-        BuildColonyShipOrder{planet->id},
-        QString("Build a colony ship at %1").arg(QString::fromStdString(planet->name)));
+    appendPendingOrder(
+        QueueProductionOrder{planet->id, kind},
+        QString("Queue %1 at %2")
+            .arg(productionName(kind))
+            .arg(QString::fromStdString(planet->name)));
 }
 
 void MainWindow::queueColonize()
@@ -310,7 +361,7 @@ void MainWindow::queueColonize()
         return;
     }
 
-    replacePendingOrder(
+    appendPendingOrder(
         ColonizePlanetOrder{ship->id, planet->id},
         QString("Colonize %1 with %2")
             .arg(QString::fromStdString(planet->name))
@@ -321,10 +372,10 @@ void MainWindow::endTurn()
 {
     state_ = processor_.process(state_, {pendingOrders_});
     pendingOrders_.orders.clear();
-    pendingDescription_.clear();
+    pendingDescriptions_.clear();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — orders resolved and colonies produced")
+        QString("Turn %1 — orders resolved, production advanced")
             .arg(static_cast<qulonglong>(state_.turn)));
 }
 

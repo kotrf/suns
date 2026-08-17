@@ -11,7 +11,8 @@ using StarId = std::uint32_t;
 using PlanetId = std::uint32_t;
 using FleetId = std::uint32_t;
 
-inline constexpr std::uint32_t kColonyShipCost = 4;
+inline constexpr std::uint32_t kColonyShipCost = 12;
+inline constexpr std::uint32_t kFactoryCost = 6;
 
 struct Position {
     double x{};
@@ -24,6 +25,16 @@ struct StarSystem {
     Position position;
 };
 
+enum class ProductionKind {
+    ColonyShip,
+    Factory,
+};
+
+struct ProductionItem {
+    ProductionKind kind{ProductionKind::ColonyShip};
+    std::uint32_t remainingCost{};
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -33,6 +44,7 @@ struct Planet {
     std::uint64_t population{};
     std::uint32_t industry{1};
     std::uint32_t stockpile{};
+    std::vector<ProductionItem> productionQueue;
 };
 
 struct Player {
@@ -65,6 +77,10 @@ struct GameState {
 [[nodiscard]] const StarSystem* find_star(const GameState& state, StarId id);
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
 [[nodiscard]] bool same_position(Position a, Position b);
+[[nodiscard]] constexpr std::uint32_t production_cost(ProductionKind kind)
+{
+    return kind == ProductionKind::ColonyShip ? kColonyShipCost : kFactoryCost;
+}
 
 GameState make_demo_game();
 

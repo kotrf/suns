@@ -40,14 +40,16 @@ ctest --test-dir build --output-on-failure
 
 ## Current playable loop
 
-The first expansion loop is now represented directly in the desktop app:
+The desktop app now contains the first small strategic economy:
 
-1. select **Sol / Earth** and queue a colony ship build;
-2. end the turn to resolve production and construction;
-3. select another system and move the colony ship there;
-4. end the turn;
-5. select the destination again and queue colonization;
-6. end the turn to establish the second colony;
-7. subsequent turns produce resources independently at both colonies.
+1. select **Sol / Earth**;
+2. queue a **Colony Ship** or invest first in a **Factory**;
+3. end turns while local industry advances the persistent production queue;
+4. factories increase that colony's industry for future turns;
+5. when a colony ship is completed, move it to another system;
+6. colonize the destination world;
+7. manage independent local production queues across the growing empire.
 
-The numbers are placeholders. At this stage the purpose is to validate the game-state/order/turn architecture and make each new rule usable through the UI immediately.
+Multiple player orders can be prepared before ending a turn. Production is local to each colony, deliberately preserving geography as a future strategic constraint.
+
+The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.

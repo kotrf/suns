@@ -44,14 +44,14 @@ GameState make_demo_game()
     };
 
     state.planets = {
-        {1, 1, "Earth", 100, 1, 1000, 1, kColonyShipCost},
-        {2, 2, "Centauri II", 82, 0, 0, 1, 0},
-        {3, 3, "Sirius III", 48, 0, 0, 1, 0},
-        {4, 4, "Vega II", 71, 0, 0, 1, 0},
-        {5, 5, "Altair IV", 63, 0, 0, 1, 0},
-        {6, 6, "Tau Ceti III", 91, 0, 0, 1, 0},
-        {7, 7, "Eridani II", 56, 0, 0, 1, 0},
-        {8, 8, "Procyon II", 76, 0, 0, 1, 0},
+        {1, 1, "Earth", 100, 1, 1000, 4, 0, {}},
+        {2, 2, "Centauri II", 82, 0, 0, 1, 0, {}},
+        {3, 3, "Sirius III", 48, 0, 0, 1, 0, {}},
+        {4, 4, "Vega II", 71, 0, 0, 1, 0, {}},
+        {5, 5, "Altair IV", 63, 0, 0, 1, 0, {}},
+        {6, 6, "Tau Ceti III", 91, 0, 0, 1, 0, {}},
+        {7, 7, "Eridani II", 56, 0, 0, 1, 0, {}},
+        {8, 8, "Procyon II", 76, 0, 0, 1, 0, {}},
     };
 
     state.fleets.push_back({1, 1, "Scout 1", FleetRole::Scout, {0.0, 0.0}});
