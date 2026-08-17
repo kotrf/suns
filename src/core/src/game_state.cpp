@@ -79,8 +79,6 @@ std::uint64_t projected_population_growth(const Planet& planet)
         return 0;
     }
 
-    // Maximum raw growth is 10%/turn on a 100% world. Growth slows as the
-    // colony approaches the carrying capacity supplied by habitability.
     const auto rawGrowth = std::max<std::uint64_t>(
         1,
         planet.population * planet.habitability / 1000);
@@ -98,8 +96,6 @@ std::uint32_t colony_output(const Planet& planet)
         return 0;
     }
 
-    // Population provides a small baseline economic contribution while
-    // factories remain a direct infrastructure investment.
     return planet.industry + static_cast<std::uint32_t>(planet.population / 500);
 }
 
@@ -109,14 +105,14 @@ GameState make_demo_game()
     state.players.push_back({1, "Terrans", {1}});
 
     state.stars = {
-        {1, "Sol", {0.0, 0.0}},
-        {2, "Alpha Centauri", {86.0, -42.0}},
-        {3, "Sirius", {-118.0, 76.0}},
-        {4, "Vega", {154.0, 96.0}},
-        {5, "Altair", {42.0, 142.0}},
-        {6, "Tau Ceti", {-72.0, -126.0}},
-        {7, "Epsilon Eridani", {142.0, -132.0}},
-        {8, "Procyon", {-168.0, -34.0}},
+        {1, "Sol", {0.0, 0.0}, StarClass::Yellow},
+        {2, "Alpha Centauri", {86.0, -42.0}, StarClass::YellowWhite},
+        {3, "Sirius", {-118.0, 76.0}, StarClass::BlueWhite},
+        {4, "Vega", {154.0, 96.0}, StarClass::BlueWhite},
+        {5, "Altair", {42.0, 142.0}, StarClass::White},
+        {6, "Tau Ceti", {-72.0, -126.0}, StarClass::Yellow},
+        {7, "Epsilon Eridani", {142.0, -132.0}, StarClass::Orange},
+        {8, "Procyon", {-168.0, -34.0}, StarClass::YellowWhite},
     };
 
     state.planets = {

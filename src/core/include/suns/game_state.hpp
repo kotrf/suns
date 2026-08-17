@@ -19,10 +19,20 @@ struct Position {
     double y{};
 };
 
+enum class StarClass {
+    BlueWhite,
+    White,
+    YellowWhite,
+    Yellow,
+    Orange,
+    Red,
+};
+
 struct StarSystem {
     StarId id{};
     std::string name;
     Position position;
+    StarClass stellarClass{StarClass::Yellow};
 };
 
 enum class ProductionKind {
