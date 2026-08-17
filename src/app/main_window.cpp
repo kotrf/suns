@@ -4,6 +4,7 @@
 #include <QBrush>
 #include <QCheckBox>
 #include <QColor>
+#include <QComboBox>
 #include <QCursor>
 #include <QFormLayout>
 #include <QGraphicsItem>
@@ -24,6 +25,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <type_traits>
@@ -46,15 +48,25 @@ QString fleetRoleName(FleetRole role)
     return role == FleetRole::Scout ? "Scout" : "Colony Ship";
 }
 
-QString productionSummary(const Planet& planet)
+QString productionSummary(const GameState& state, const Planet& planet)
 {
     if (planet.productionQueue.empty()) return "Idle";
 
     const auto& item = planet.productionQueue.front();
-    const auto total = production_cost(item.kind);
-    const auto completed = total - item.remainingCost;
+    const auto total = production_item_cost(state, item);
+    const auto completed = total >= item.remainingCost ? total - item.remainingCost : 0;
+
+    QString name;
+    if (item.kind == ProductionKind::Factory) {
+        name = "Factory";
+    } else {
+        const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
+        const auto* design = find_ship_design(state, designId);
+        name = design ? QString::fromStdString(design->name) : "Ship design";
+    }
+
     QString summary = QString("%1: %2/%3")
-                          .arg(productionName(item.kind))
+                          .arg(name)
                           .arg(completed)
                           .arg(total);
     if (planet.productionQueue.size() > 1) {
@@ -212,7 +224,7 @@ MainWindow::MainWindow(QWidget* parent)
     , state_(generate_game(galaxyConfig_))
 {
     setWindowTitle("Suns!");
-    resize(1280, 820);
+    resize(1300, 840);
 
     auto* central = new QWidget(this);
     auto* layout = new QHBoxLayout(central);
@@ -232,14 +244,14 @@ MainWindow::MainWindow(QWidget* parent)
     layout->addWidget(view_, 1);
 
     auto* sidePanel = new QWidget(central);
-    sidePanel->setFixedWidth(405);
+    sidePanel->setFixedWidth(425);
     auto* sideLayout = new QVBoxLayout(sidePanel);
 
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Select a fleet, choose a Warp, then select a star. Distance per turn is Warp²; "
-        "fuel use depends on the fitted engine and gross ship mass.",
+        "Select a fleet, choose a Warp, then select a star. Build exact ship designs, "
+        "load colonists at friendly colonies, and manage fuel before departure.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -279,19 +291,30 @@ MainWindow::MainWindow(QWidget* parent)
     warpSpin_ = new QSpinBox(sidePanel);
     warpSpin_->setRange(1, kMaxWarp);
     warpSpin_->setValue(kScoutCruiseWarp);
-    auto* warpForm = new QFormLayout;
-    warpForm->addRow("Course Warp", warpSpin_);
-    sideLayout->addLayout(warpForm);
+    colonistLoadSpin_ = new QSpinBox(sidePanel);
+    colonistLoadSpin_->setRange(0, 0);
+    auto* fleetForm = new QFormLayout;
+    fleetForm->addRow("Course Warp", warpSpin_);
+    fleetForm->addRow("Target colonists", colonistLoadSpin_);
+    sideLayout->addLayout(fleetForm);
 
     fleetMoveButton_ = new QPushButton("Plot selected fleet course here", sidePanel);
-    buildColonyButton_ = new QPushButton(
-        QString("Queue Colony Ship (%1)").arg(kColonyShipCost), sidePanel);
+    loadColonistsButton_ = new QPushButton("Set colonists aboard", sidePanel);
+    refuelButton_ = new QPushButton("Refuel selected fleet", sidePanel);
+    sideLayout->addWidget(fleetMoveButton_);
+    sideLayout->addWidget(loadColonistsButton_);
+    sideLayout->addWidget(refuelButton_);
+
+    shipDesignCombo_ = new QComboBox(sidePanel);
+    buildShipButton_ = new QPushButton("Queue selected ship design", sidePanel);
     buildFactoryButton_ = new QPushButton(
         QString("Queue Factory (%1)").arg(kFactoryCost), sidePanel);
     colonizeButton_ = new QPushButton("Colonize selected world with selected ship", sidePanel);
 
-    sideLayout->addWidget(fleetMoveButton_);
-    sideLayout->addWidget(buildColonyButton_);
+    auto* productionForm = new QFormLayout;
+    productionForm->addRow("Ship design", shipDesignCombo_);
+    sideLayout->addLayout(productionForm);
+    sideLayout->addWidget(buildShipButton_);
     sideLayout->addWidget(buildFactoryButton_);
     sideLayout->addWidget(colonizeButton_);
 
@@ -305,6 +328,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     layout->addWidget(sidePanel);
     setCentralWidget(central);
+
+    refreshShipDesignChoices();
 
     connect(scene_, &QGraphicsScene::selectionChanged, this, [this] {
         const auto selected = scene_->selectedItems();
@@ -325,14 +350,16 @@ MainWindow::MainWindow(QWidget* parent)
         rebuildScene();
     });
     connect(warpSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
+    connect(colonistLoadSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
+    connect(shipDesignCombo_, &QComboBox::currentIndexChanged, this, [this](int) { updateControls(); });
     connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
     connect(fleetMoveButton_, &QPushButton::clicked, this, [this] { queueFleetMove(); });
-    connect(buildColonyButton_, &QPushButton::clicked, this, [this] {
-        queueProduction(ProductionKind::ColonyShip);
-    });
+    connect(buildShipButton_, &QPushButton::clicked, this, [this] { queueShipDesign(); });
     connect(buildFactoryButton_, &QPushButton::clicked, this, [this] {
         queueProduction(ProductionKind::Factory);
     });
+    connect(loadColonistsButton_, &QPushButton::clicked, this, [this] { queueColonists(); });
+    connect(refuelButton_, &QPushButton::clicked, this, [this] { queueRefuel(); });
     connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
@@ -371,6 +398,41 @@ const Fleet* MainWindow::selectedColonyShipAtSelectedStar() const
         : nullptr;
 }
 
+const Planet* MainWindow::selectedFriendlyColonyForFleet() const
+{
+    const auto* star = selectedStar();
+    const auto* planet = selectedPlanet();
+    const auto* fleet = selectedFleet();
+    if (!star || !planet || !fleet || planet->owner != fleet->owner) return nullptr;
+    return same_position(fleet->position, star->position) ? planet : nullptr;
+}
+
+void MainWindow::refreshShipDesignChoices()
+{
+    if (!shipDesignCombo_) return;
+
+    const auto previous = shipDesignCombo_->currentData().toUInt();
+    const QSignalBlocker blocker(shipDesignCombo_);
+    shipDesignCombo_->clear();
+
+    int restoreIndex = -1;
+    for (const auto& design : state_.shipDesigns) {
+        if (design.owner != 1) continue;
+        const auto index = shipDesignCombo_->count();
+        const auto text = QString("%1 — cost %2, W%3, fuel %4, cargo %5")
+                              .arg(QString::fromStdString(design.name))
+                              .arg(ship_design_cost(design))
+                              .arg(ship_design_max_warp(design))
+                              .arg(ship_design_fuel_capacity(design), 0, 'f', 0)
+                              .arg(ship_design_cargo_capacity(design), 0, 'f', 0);
+        shipDesignCombo_->addItem(text, static_cast<unsigned int>(design.id));
+        if (design.id == previous) restoreIndex = index;
+    }
+
+    if (restoreIndex >= 0) shipDesignCombo_->setCurrentIndex(restoreIndex);
+    else if (shipDesignCombo_->count() > 0) shipDesignCombo_->setCurrentIndex(0);
+}
+
 void MainWindow::rebuildScene()
 {
     const auto selectionToRestore = selectedStarId_;
@@ -383,6 +445,7 @@ void MainWindow::rebuildScene()
             ? std::optional<FleetId>{}
             : std::optional<FleetId>{fallback->id};
         warpControlFleetId_.reset();
+        logisticsControlFleetId_.reset();
     }
 
     const QSignalBlocker blocker(scene_);
@@ -488,7 +551,7 @@ void MainWindow::rebuildScene()
                 mapLabel += "  [COLONY]";
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
                                .arg(colony_output(*planet))
-                               .arg(productionSummary(*planet))
+                               .arg(productionSummary(state_, *planet))
                                .arg(kColonySensorRange, 0, 'f', 0);
             }
         }
@@ -637,9 +700,25 @@ void MainWindow::updateControls()
         }
         warpSpin_->setEnabled(maxWarp > 0);
         selectedWarp = static_cast<std::uint8_t>(warpSpin_->value());
+
+        const auto maxColonists = static_cast<int>(std::floor(
+            fleet_cargo_capacity(state_, *fleet) * kColonistsPerCargoUnit + 0.000001));
+        if (!logisticsControlFleetId_ || *logisticsControlFleetId_ != fleet->id) {
+            const QSignalBlocker blocker(colonistLoadSpin_);
+            colonistLoadSpin_->setRange(0, std::max(0, maxColonists));
+            colonistLoadSpin_->setValue(static_cast<int>(std::min<std::uint64_t>(
+                fleet->colonists, static_cast<std::uint64_t>(std::max(0, maxColonists)))));
+            logisticsControlFleetId_ = fleet->id;
+        } else {
+            const QSignalBlocker blocker(colonistLoadSpin_);
+            colonistLoadSpin_->setMaximum(std::max(0, maxColonists));
+        }
+        colonistLoadSpin_->setEnabled(maxColonists > 0);
     } else {
         warpSpin_->setEnabled(false);
+        colonistLoadSpin_->setEnabled(false);
         warpControlFleetId_.reset();
+        logisticsControlFleetId_.reset();
     }
 
     const auto selectedEta = star && fleet
@@ -719,12 +798,13 @@ void MainWindow::updateControls()
                 .arg(planet->industry)
                 .arg(colony_output(*planet))
                 .arg(planet->stockpile)
-                .arg(productionSummary(*planet))
+                .arg(productionSummary(state_, *planet))
                 .arg(travelLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
     }
 
+    const auto* logisticsColony = selectedFriendlyColonyForFleet();
     if (fleet) {
         const auto* design = fleet_design(state_, *fleet);
         QString status = "Stationary";
@@ -745,13 +825,17 @@ void MainWindow::updateControls()
         if (design && ship_design_radiation_hazard(*design) > 0.0) {
             radiationLine = "<br><b>Radiating drive fitted</b> — colonist effect pending race-tolerance rules.";
         }
+        const QString dockedLine = logisticsColony
+            ? QString("<br>Docked at <b>%1</b>: loading/refuel available.")
+                  .arg(QString::fromStdString(logisticsColony->name))
+            : "<br>Logistics: select the friendly colony under this fleet to load/refuel.";
 
         fleetLabel_->setText(
             QString("<hr><b>Selected fleet:</b> %1<br>Design: %2 &nbsp; Role hint: %3<br>"
                     "Warp now: %4 (max %5) &nbsp; Planned: <b>W%6</b> = %7 ly/turn<br>"
                     "Fuel: %8 / %9 &nbsp; Gross mass: %10 kt<br>"
                     "Colonists: %11 &nbsp; Cargo: %12 / %13<br>"
-                    "Survey sensor: %14<br>Components: %15<br>Status: %16%17")
+                    "Survey sensor: %14<br>Components: %15<br>Status: %16%17%18")
                 .arg(QString::fromStdString(fleet->name))
                 .arg(design ? QString::fromStdString(design->name) : "unknown")
                 .arg(fleetRoleName(fleet->role))
@@ -768,6 +852,7 @@ void MainWindow::updateControls()
                 .arg(sensor > 0.0 ? QString::number(sensor, 'f', 0) : "none")
                 .arg(componentSummary(design))
                 .arg(status)
+                .arg(dockedLine)
                 .arg(radiationLine));
     } else {
         fleetLabel_->setText("<hr><b>Selected fleet:</b> none<br>Click a ship marker on the map.");
@@ -784,8 +869,30 @@ void MainWindow::updateControls()
             : "Plot selected fleet course here");
 
     const bool ownedColony = surveyed && planet != nullptr && planet->owner == 1;
-    buildColonyButton_->setEnabled(ownedColony);
+    shipDesignCombo_->setEnabled(ownedColony && shipDesignCombo_->count() > 0);
     buildFactoryButton_->setEnabled(ownedColony);
+
+    const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
+    const auto* buildDesign = find_ship_design(state_, designId);
+    buildShipButton_->setEnabled(ownedColony && buildDesign != nullptr && buildDesign->owner == 1);
+    buildShipButton_->setText(buildDesign
+        ? QString("Queue %1 (%2)")
+              .arg(QString::fromStdString(buildDesign->name))
+              .arg(ship_design_cost(*buildDesign))
+        : "Queue selected ship design");
+
+    const bool canLoad = logisticsColony && fleet && fleet_cargo_capacity(state_, *fleet) > 0.0;
+    loadColonistsButton_->setEnabled(canLoad && static_cast<std::uint64_t>(colonistLoadSpin_->value()) != fleet->colonists);
+    loadColonistsButton_->setText(canLoad && fleet
+        ? QString("Set colonists aboard to %1").arg(colonistLoadSpin_->value())
+        : "Set colonists aboard");
+
+    const bool canRefuel = logisticsColony && fleet
+        && fleet->fuel + 0.000001 < fleet_fuel_capacity(state_, *fleet);
+    refuelButton_->setEnabled(canRefuel);
+    refuelButton_->setText(canRefuel && fleet
+        ? QString("Refuel to %1").arg(fuelValue(fleet_fuel_capacity(state_, *fleet)))
+        : "Refuel selected fleet");
 
     const auto* colonizer = selectedColonyShipAtSelectedStar();
     colonizeButton_->setEnabled(
@@ -844,6 +951,9 @@ void MainWindow::queueFleetMove()
     const auto eta = travel_turns(fleet->position, star->position, warp_distance(warp));
     auto preview = *fleet;
     preview.warp = warp;
+    // A queued cargo change will be resolved before movement. The route preview
+    // intentionally reflects the current ship; after End Turn the real gross
+    // mass is authoritative for fuel consumption.
     const auto fuelChange = fleet_fuel_change_for_distance(
         state_, preview, distance_between(fleet->position, star->position));
 
@@ -864,6 +974,24 @@ void MainWindow::queueFleetMove()
             .arg(fuelText));
 }
 
+void MainWindow::queueShipDesign()
+{
+    const auto* star = selectedStar();
+    const auto* planet = selectedPlanet();
+    if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 1) return;
+
+    const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
+    const auto* design = find_ship_design(state_, designId);
+    if (!design || design->owner != 1) return;
+
+    appendPendingOrder(
+        QueueShipDesignOrder{planet->id, design->id},
+        QString("Queue %1 at %2 — cost %3")
+            .arg(QString::fromStdString(design->name))
+            .arg(QString::fromStdString(planet->name))
+            .arg(ship_design_cost(*design)));
+}
+
 void MainWindow::queueProduction(ProductionKind kind)
 {
     const auto* star = selectedStar();
@@ -874,6 +1002,34 @@ void MainWindow::queueProduction(ProductionKind kind)
         QueueProductionOrder{planet->id, kind},
         QString("Queue %1 at %2")
             .arg(productionName(kind))
+            .arg(QString::fromStdString(planet->name)));
+}
+
+void MainWindow::queueColonists()
+{
+    const auto* planet = selectedFriendlyColonyForFleet();
+    const auto* fleet = selectedFleet();
+    if (!planet || !fleet) return;
+
+    const auto target = static_cast<std::uint64_t>(colonistLoadSpin_->value());
+    appendPendingOrder(
+        SetFleetColonistsOrder{planet->id, fleet->id, target},
+        QString("Set %1 colonists aboard %2 at %3")
+            .arg(static_cast<qulonglong>(target))
+            .arg(QString::fromStdString(fleet->name))
+            .arg(QString::fromStdString(planet->name)));
+}
+
+void MainWindow::queueRefuel()
+{
+    const auto* planet = selectedFriendlyColonyForFleet();
+    const auto* fleet = selectedFleet();
+    if (!planet || !fleet) return;
+
+    appendPendingOrder(
+        RefuelFleetOrder{planet->id, fleet->id},
+        QString("Refuel %1 at %2")
+            .arg(QString::fromStdString(fleet->name))
             .arg(QString::fromStdString(planet->name)));
 }
 
@@ -901,9 +1057,10 @@ void MainWindow::endTurn()
     pendingOrders_.orders.clear();
     pendingDescriptions_.clear();
     selectedStarId_.reset();
+    logisticsControlFleetId_.reset();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — Warp travel, fuel, sensors and economy resolved")
+        QString("Turn %1 — orders, logistics, Warp travel, sensors and economy resolved")
             .arg(static_cast<qulonglong>(state_.turn)));
 }
 
@@ -934,6 +1091,8 @@ void MainWindow::newGalaxy()
     selectedStarId_.reset();
     selectedFleetId_ = 1;
     warpControlFleetId_.reset();
+    logisticsControlFleetId_.reset();
+    refreshShipDesignChoices();
 
     scene_->setSceneRect(
         -galaxyConfig_.width / 2.0 - 55.0,

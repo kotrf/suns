@@ -101,6 +101,8 @@ struct ShipDesign {
 };
 
 enum class ProductionKind {
+    // ColonyShip remains as a compatibility alias for the old UI/order path.
+    // New code should queue a concrete ShipDesignId.
     ColonyShip,
     Factory,
 };
@@ -108,6 +110,7 @@ enum class ProductionKind {
 struct ProductionItem {
     ProductionKind kind{ProductionKind::ColonyShip};
     std::uint32_t remainingCost{};
+    ShipDesignId shipDesign{}; // 0 for non-ship production / legacy alias.
 };
 
 struct Planet {
@@ -224,6 +227,7 @@ void refresh_sensor_intel(GameState& state);
     return kind == ProductionKind::ColonyShip ? kColonyShipCost : kFactoryCost;
 }
 
+[[nodiscard]] std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item);
 [[nodiscard]] std::uint64_t population_capacity(const Planet& planet);
 [[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
 [[nodiscard]] std::uint32_t colony_output(const Planet& planet);
