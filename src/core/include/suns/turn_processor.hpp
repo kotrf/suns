@@ -3,6 +3,7 @@
 #include "suns/game_state.hpp"
 
 #include <cstdint>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -11,10 +12,7 @@ namespace suns {
 struct MoveFleetOrder {
     FleetId fleet{};
     Position destination;
-
-    // 0 means keep the fleet's current Warp. This preserves compatibility with
-    // existing callers while allowing the UI/server to choose Warp explicitly.
-    std::uint8_t warp{};
+    std::uint8_t warp{}; // 0 means keep current Warp.
 };
 
 struct QueueProductionOrder {
@@ -22,23 +20,23 @@ struct QueueProductionOrder {
     ProductionKind kind{ProductionKind::ColonyShip};
 };
 
+struct CreateShipDesignOrder {
+    std::string name;
+    ShipHullType hull{ShipHullType::Scout};
+    std::vector<ShipComponentType> components;
+};
+
 struct QueueShipDesignOrder {
     PlanetId colony{};
     ShipDesignId design{};
 };
 
-// Set the exact number of colonists carried by a fleet. The processor transfers
-// the difference to/from the specified friendly colony, so repeated planning is
-// deterministic and unloading uses the same command as loading.
 struct SetFleetColonistsOrder {
     PlanetId colony{};
     FleetId fleet{};
     std::uint64_t colonists{};
 };
 
-// Friendly colonies currently provide fuel without a separate fuel economy.
-// Refuelling is nevertheless an explicit order so route logistics are visible
-// and can later be backed by a real planetary fuel stockpile.
 struct RefuelFleetOrder {
     PlanetId colony{};
     FleetId fleet{};
@@ -52,6 +50,7 @@ struct ColonizePlanetOrder {
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
+    CreateShipDesignOrder,
     QueueShipDesignOrder,
     SetFleetColonistsOrder,
     RefuelFleetOrder,

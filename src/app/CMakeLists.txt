@@ -2,6 +2,8 @@ qt_add_executable(suns_app
     main.cpp
     main_window.cpp
     main_window.hpp
+    ship_designer_dialog.cpp
+    ship_designer_dialog.hpp
     star_item.cpp
     star_item.hpp
 )
