@@ -17,7 +17,8 @@ void complete_production(GameState& state, Planet& planet, ProductionKind kind)
     }
 
     const auto* star = find_star(state, planet.star);
-    if (!star) {
+    const auto* design = find_ship_design(state, kColonyShipDesignId);
+    if (!star || !design) {
         return;
     }
 
@@ -27,6 +28,7 @@ void complete_production(GameState& state, Planet& planet, ProductionKind kind)
         planet.owner,
         "Colony Ship " + std::to_string(id),
         FleetRole::ColonyShip,
+        design->id,
         star->position,
     });
 }
@@ -72,15 +74,16 @@ double distance_to_segment(Position point, Position start, Position end)
     return distance_between(point, closest);
 }
 
-void survey_scout_sweep(GameState& state, PlayerId owner, Position start, Position end, double range)
+void survey_fleet_sweep(GameState& state, const Fleet& fleet, Position start, Position end)
 {
+    const auto range = fleet_sensor_range(state, fleet);
     if (range <= 0.0) {
         return;
     }
 
     for (const auto& star : state.stars) {
         if (distance_to_segment(star.position, start, end) <= range + 0.000001) {
-            mark_surveyed(state, owner, star.id);
+            mark_surveyed(state, fleet.owner, star.id);
         }
     }
 }
@@ -95,7 +98,11 @@ void advance_fleets(GameState& state)
         const Position start = fleet.position;
         const auto destination = *fleet.destination;
         const auto remaining = distance_between(fleet.position, destination);
-        const auto speed = fleet_speed(fleet.role);
+        const auto speed = fleet_speed(state, fleet);
+
+        if (speed <= 0.0) {
+            continue;
+        }
 
         if (remaining <= speed || remaining <= 0.000001) {
             fleet.position = destination;
@@ -106,12 +113,7 @@ void advance_fleets(GameState& state)
             fleet.position.y += (destination.y - fleet.position.y) * fraction;
         }
 
-        survey_scout_sweep(
-            state,
-            fleet.owner,
-            start,
-            fleet.position,
-            fleet_sensor_range(fleet.role));
+        survey_fleet_sweep(state, fleet, start, fleet.position);
     }
 }
 
@@ -182,7 +184,7 @@ GameState TurnProcessor::process(
                             [&](const Fleet& candidate) {
                                 return candidate.id == concreteOrder.fleet
                                     && candidate.owner == submission.player
-                                    && candidate.role == FleetRole::ColonyShip;
+                                    && fleet_can_colonize(next, candidate);
                             });
                         if (fleet == next.fleets.end()) {
                             return;
@@ -205,9 +207,6 @@ GameState TurnProcessor::process(
         }
     }
 
-    // Scanner coverage moves with ships. The swept path is sampled continuously
-    // over each turn of travel, then stationary fleet/colony coverage is applied
-    // at the resulting positions. Survey knowledge is permanent once acquired.
     advance_fleets(next);
     refresh_sensor_intel(next);
 
