@@ -38,7 +38,11 @@ private:
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
 
     void appendPendingOrder(Order order, const QString& description);
-    void replacePendingFleetMove(FleetId fleet, Position destination, const QString& description);
+    void replacePendingFleetMove(
+        FleetId fleet,
+        Position destination,
+        std::uint8_t warp,
+        const QString& description);
 
     GalaxyConfig galaxyConfig_;
     GameState state_;
@@ -46,6 +50,7 @@ private:
     PlayerOrders pendingOrders_{1, {}};
     std::optional<StarId> selectedStarId_;
     std::optional<FleetId> selectedFleetId_{1};
+    std::optional<FleetId> warpControlFleetId_;
     QStringList pendingDescriptions_;
     bool showSensorRanges_{true};
 
@@ -58,6 +63,7 @@ private:
     QLabel* ordersLabel_{};
     QLineEdit* seedEdit_{};
     QSpinBox* starCountSpin_{};
+    QSpinBox* warpSpin_{};
     QCheckBox* sensorRangesCheck_{};
     QPushButton* newGalaxyButton_{};
     QPushButton* fleetMoveButton_{};
