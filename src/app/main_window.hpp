@@ -26,8 +26,7 @@ public:
 private:
     void rebuildScene();
     void updateControls();
-    void queueScoutMove();
-    void queueColonyShipMove();
+    void queueFleetMove();
     void queueProduction(ProductionKind kind);
     void queueColonize();
     void endTurn();
@@ -35,17 +34,18 @@ private:
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
-    [[nodiscard]] const Fleet* playerScout() const;
-    [[nodiscard]] const Fleet* playerColonyShip() const;
-    [[nodiscard]] const Fleet* colonyShipAtSelectedStar() const;
+    [[nodiscard]] const Fleet* selectedFleet() const;
+    [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
 
     void appendPendingOrder(Order order, const QString& description);
+    void replacePendingFleetMove(FleetId fleet, Position destination, const QString& description);
 
     GalaxyConfig galaxyConfig_;
     GameState state_;
     TurnProcessor processor_;
     PlayerOrders pendingOrders_{1, {}};
     std::optional<StarId> selectedStarId_;
+    std::optional<FleetId> selectedFleetId_{1};
     QStringList pendingDescriptions_;
     bool showSensorRanges_{true};
 
@@ -53,14 +53,14 @@ private:
     QGraphicsView* view_{};
     QLabel* galaxyLabel_{};
     QLabel* selectionLabel_{};
+    QLabel* fleetLabel_{};
     QLabel* empireLabel_{};
     QLabel* ordersLabel_{};
     QLineEdit* seedEdit_{};
     QSpinBox* starCountSpin_{};
     QCheckBox* sensorRangesCheck_{};
     QPushButton* newGalaxyButton_{};
-    QPushButton* scoutMoveButton_{};
-    QPushButton* colonyMoveButton_{};
+    QPushButton* fleetMoveButton_{};
     QPushButton* buildColonyButton_{};
     QPushButton* buildFactoryButton_{};
     QPushButton* colonizeButton_{};
