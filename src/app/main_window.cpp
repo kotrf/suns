@@ -145,6 +145,30 @@ bool hasPendingDesignName(const PlayerOrders& pending, const std::string& name)
     });
 }
 
+GameState movementPhasePreviewState(
+    const GameState& state,
+    const PlayerOrders& pending,
+    const TurnProcessor& processor)
+{
+    // Let the real TurnProcessor validate and resolve logistics on a disposable
+    // copy. Clearing destinations prevents this preview turn from actually
+    // moving fleets; keeping only logistics orders avoids unrelated actions.
+    // The processor still applies turn-start onboard fuel generation, exactly
+    // as it will before the real orders and movement phase.
+    GameState preview = state;
+    for (auto& fleet : preview.fleets) fleet.destination.reset();
+
+    PlayerOrders logistics{pending.player, {}};
+    for (const auto& order : pending.orders) {
+        if (std::holds_alternative<SetFleetColonistsOrder>(order)
+            || std::holds_alternative<RefuelFleetOrder>(order)) {
+            logistics.orders.push_back(order);
+        }
+    }
+
+    return processor.process(preview, {logistics});
+}
+
 QColor fleetColor(FleetRole role, int alpha = 255)
 {
     return role == FleetRole::Scout
@@ -620,6 +644,9 @@ void MainWindow::updateControls()
     const auto* planet = selectedPlanet();
     const auto* fleet = selectedFleet();
     const bool surveyed = star && is_surveyed(state_, 1, star->id);
+    const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
+    const auto* plannedFleet = fleet ? findFleet(movementPreview, fleet->id) : nullptr;
+    const auto* effectiveFleet = plannedFleet ? plannedFleet : fleet;
 
     galaxyLabel_->setText(QString("<b>Galaxy seed:</b> %1 &nbsp; <b>Systems:</b> %2<br>"
                                   "Map units: light-years &nbsp; Movement: Warp² / turn")
@@ -680,7 +707,8 @@ void MainWindow::updateControls()
         if (!logisticsControlFleetId_ || *logisticsControlFleetId_ != fleet->id) {
             const QSignalBlocker blocker(colonistLoadSpin_);
             colonistLoadSpin_->setRange(0, std::max(0, maxColonists));
-            colonistLoadSpin_->setValue(static_cast<int>(std::min<std::uint64_t>(fleet->colonists,
+            const auto plannedColonists = effectiveFleet ? effectiveFleet->colonists : fleet->colonists;
+            colonistLoadSpin_->setValue(static_cast<int>(std::min<std::uint64_t>(plannedColonists,
                 static_cast<std::uint64_t>(std::max(0, maxColonists)))));
             logisticsControlFleetId_ = fleet->id;
         } else {
@@ -698,15 +726,15 @@ void MainWindow::updateControls()
     const auto selectedEta = star && fleet ? travel_turns(fleet->position, star->position, warp_distance(selectedWarp)) : 0;
 
     QString routeFuelLine;
-    if (star && fleet) {
-        auto preview = *fleet;
+    if (star && fleet && effectiveFleet) {
+        auto preview = *effectiveFleet;
         preview.warp = selectedWarp;
         const auto routeDistance = distance_between(fleet->position, star->position);
         const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, routeDistance);
         if (fuelChange > 0.000001) {
-            routeFuelLine = QString("<br>Direct-route fuel: <b>%1</b>; aboard now: %2.")
-                                .arg(fuelValue(fuelChange)).arg(fuelValue(fleet->fuel));
-            if (fuelChange > fleet->fuel + 0.000001) routeFuelLine += " <b>Insufficient without refuel/generation.</b>";
+            routeFuelLine = QString("<br>Direct-route fuel: <b>%1</b>; fuel at movement phase: %2.")
+                                .arg(fuelValue(fuelChange)).arg(fuelValue(preview.fuel));
+            if (fuelChange > preview.fuel + 0.000001) routeFuelLine += " <b>Insufficient at movement phase.</b>";
         } else if (fuelChange < -0.000001) {
             routeFuelLine = QString("<br>Ram-scoop gain on direct route: <b>+%1</b> fuel.").arg(fuelValue(-fuelChange));
         } else {
@@ -778,11 +806,20 @@ void MainWindow::updateControls()
             ? QString("<br>Docked at <b>%1</b>: loading/refuel available.").arg(QString::fromStdString(logisticsColony->name))
             : "<br>Logistics: select the friendly colony under this fleet to load/refuel.";
 
+        QString movementPlanLine;
+        if (effectiveFleet && (std::abs(effectiveFleet->fuel - fleet->fuel) > 0.000001
+                               || effectiveFleet->colonists != fleet->colonists)) {
+            movementPlanLine = QString("<br><b>Movement-phase plan:</b> fuel %1, colonists %2, gross mass %3 kt.")
+                                   .arg(fuelValue(effectiveFleet->fuel))
+                                   .arg(static_cast<qulonglong>(effectiveFleet->colonists))
+                                   .arg(fleet_gross_mass(state_, *effectiveFleet), 0, 'f', 1);
+        }
+
         fleetLabel_->setText(QString("<hr><b>Selected fleet:</b> %1<br>Design: %2 &nbsp; Hull: %3<br>"
                                      "Warp now: %4 (max %5) &nbsp; Planned: <b>W%6</b> = %7 ly/turn<br>"
                                      "Fuel: %8 / %9 &nbsp; Gross mass: %10 kt<br>"
                                      "Colonists: %11 &nbsp; Cargo: %12 / %13<br>"
-                                     "Survey sensor: %14<br>Components: %15<br>Status: %16%17%18")
+                                     "Survey sensor: %14<br>Components: %15<br>Status: %16%17%18%19")
             .arg(QString::fromStdString(fleet->name))
             .arg(design ? QString::fromStdString(design->name) : "unknown")
             .arg(hullName).arg(fleet->warp).arg(maxWarp).arg(selectedWarp)
@@ -790,7 +827,7 @@ void MainWindow::updateControls()
             .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1).arg(static_cast<qulonglong>(fleet->colonists))
             .arg(cargoUsed, 0, 'f', 1).arg(cargoCapacity, 0, 'f', 1)
             .arg(sensor > 0.0 ? QString::number(sensor, 'f', 0) : "none")
-            .arg(componentSummary(design)).arg(status).arg(dockedLine).arg(radiationLine));
+            .arg(componentSummary(design)).arg(status).arg(dockedLine).arg(movementPlanLine).arg(radiationLine));
     } else {
         fleetLabel_->setText("<hr><b>Selected fleet:</b> none<br>Click a ship marker on the map.");
     }
@@ -813,14 +850,16 @@ void MainWindow::updateControls()
         ? QString("Queue %1 (%2)").arg(QString::fromStdString(buildDesign->name)).arg(ship_design_cost(*buildDesign))
         : "Queue selected ship design");
 
-    const bool canLoad = logisticsColony && fleet && fleet_cargo_capacity(state_, *fleet) > 0.0;
-    loadColonistsButton_->setEnabled(canLoad && static_cast<std::uint64_t>(colonistLoadSpin_->value()) != fleet->colonists);
-    loadColonistsButton_->setText(canLoad && fleet
+    const bool canLoad = logisticsColony && fleet && effectiveFleet && fleet_cargo_capacity(state_, *fleet) > 0.0;
+    loadColonistsButton_->setEnabled(canLoad
+        && static_cast<std::uint64_t>(colonistLoadSpin_->value()) != effectiveFleet->colonists);
+    loadColonistsButton_->setText(canLoad
         ? QString("Set colonists aboard to %1").arg(colonistLoadSpin_->value()) : "Set colonists aboard");
 
-    const bool canRefuel = logisticsColony && fleet && fleet->fuel + 0.000001 < fleet_fuel_capacity(state_, *fleet);
+    const bool canRefuel = logisticsColony && fleet && effectiveFleet
+        && effectiveFleet->fuel + 0.000001 < fleet_fuel_capacity(state_, *fleet);
     refuelButton_->setEnabled(canRefuel);
-    refuelButton_->setText(canRefuel && fleet
+    refuelButton_->setText(canRefuel
         ? QString("Refuel to %1").arg(fuelValue(fleet_fuel_capacity(state_, *fleet))) : "Refuel selected fleet");
 
     const auto* colonizer = selectedColonyShipAtSelectedStar();
@@ -886,14 +925,21 @@ void MainWindow::queueFleetMove()
     if (!fleet_warp_valid(state_, *fleet, warp)) return;
 
     const auto eta = travel_turns(fleet->position, star->position, warp_distance(warp));
-    auto preview = *fleet;
+    const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
+    const auto* plannedFleet = findFleet(movementPreview, fleet->id);
+    auto preview = plannedFleet ? *plannedFleet : *fleet;
     preview.warp = warp;
     const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, distance_between(fleet->position, star->position));
 
     QString fuelText;
-    if (fuelChange > 0.000001) fuelText = QString(", fuel %1").arg(fuelValue(fuelChange));
-    else if (fuelChange < -0.000001) fuelText = QString(", scoop +%1 fuel").arg(fuelValue(-fuelChange));
-    else fuelText = ", fuel-neutral";
+    if (fuelChange > 0.000001) {
+        fuelText = QString(", fuel %1, available %2").arg(fuelValue(fuelChange)).arg(fuelValue(preview.fuel));
+        if (fuelChange > preview.fuel + 0.000001) fuelText += " [INSUFFICIENT]";
+    } else if (fuelChange < -0.000001) {
+        fuelText = QString(", scoop +%1 fuel").arg(fuelValue(-fuelChange));
+    } else {
+        fuelText = ", fuel-neutral";
+    }
 
     replacePendingFleetMove(fleet->id, star->position, warp,
         QString("Plot %1 course to %2 — W%3, %4%5")
@@ -933,9 +979,26 @@ void MainWindow::queueColonists()
     if (!planet || !fleet) return;
 
     const auto target = static_cast<std::uint64_t>(colonistLoadSpin_->value());
-    appendPendingOrder(SetFleetColonistsOrder{planet->id, fleet->id, target},
-        QString("Set %1 colonists aboard %2 at %3")
-            .arg(static_cast<qulonglong>(target)).arg(QString::fromStdString(fleet->name)).arg(QString::fromStdString(planet->name)));
+    const auto description = QString("Set %1 colonists aboard %2 at %3")
+                                 .arg(static_cast<qulonglong>(target))
+                                 .arg(QString::fromStdString(fleet->name))
+                                 .arg(QString::fromStdString(planet->name));
+
+    // A fleet can have only one final cargo target for the turn. Replacing the
+    // previous order avoids artificial load-then-unload sequences and makes the
+    // preview represent the player's latest intent.
+    for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
+        if (const auto* load = std::get_if<SetFleetColonistsOrder>(&pendingOrders_.orders[index]);
+            load && load->fleet == fleet->id) {
+            pendingOrders_.orders[index] = SetFleetColonistsOrder{planet->id, fleet->id, target};
+            pendingDescriptions_[static_cast<int>(index)] = description;
+            rebuildScene();
+            statusBar()->showMessage(description);
+            return;
+        }
+    }
+
+    appendPendingOrder(SetFleetColonistsOrder{planet->id, fleet->id, target}, description);
 }
 
 void MainWindow::queueRefuel()
