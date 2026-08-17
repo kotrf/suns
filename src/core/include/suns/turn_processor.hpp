@@ -13,6 +13,7 @@ struct MoveFleetOrder {
     FleetId fleet{};
     Position destination;
     std::uint8_t warp{}; // 0 means keep current Warp.
+    FleetArrivalAction arrivalAction{};
 };
 
 struct QueueProductionOrder {
