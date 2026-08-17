@@ -4,7 +4,9 @@
 #include <QBrush>
 #include <QCheckBox>
 #include <QColor>
+#include <QCursor>
 #include <QFormLayout>
+#include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
@@ -31,9 +33,17 @@ namespace suns {
 
 namespace {
 
+constexpr int kMapItemStar = 1;
+constexpr int kMapItemFleet = 2;
+
 QString productionName(ProductionKind kind)
 {
     return kind == ProductionKind::ColonyShip ? "Colony Ship" : "Factory";
+}
+
+QString fleetRoleName(FleetRole role)
+{
+    return role == FleetRole::Scout ? "Scout" : "Colony Ship";
 }
 
 QString productionSummary(const Planet& planet)
@@ -105,6 +115,14 @@ const Fleet* findFleet(const GameState& state, FleetId id)
         return fleet.id == id;
     });
     return it == state.fleets.end() ? nullptr : &*it;
+}
+
+const StarSystem* findStarAtPosition(const GameState& state, Position position)
+{
+    const auto it = std::find_if(state.stars.begin(), state.stars.end(), [&](const StarSystem& star) {
+        return same_position(star.position, position);
+    });
+    return it == state.stars.end() ? nullptr : &*it;
 }
 
 bool hasPendingMove(const PlayerOrders& pending, FleetId fleetId)
@@ -219,14 +237,14 @@ MainWindow::MainWindow(QWidget* parent)
     layout->addWidget(view_, 1);
 
     auto* sidePanel = new QWidget(central);
-    sidePanel->setFixedWidth(380);
+    sidePanel->setFixedWidth(390);
     auto* sideLayout = new QVBoxLayout(sidePanel);
 
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Explore a seeded galaxy where distance and sensor coverage matter. Scouts reveal every star "
-        "that enters their moving scanner radius, while colonies provide shorter stationary coverage.",
+        "Select a fleet marker, then select a star to plot a course for that exact ship. "
+        "Sensor coverage moves with scanner-equipped fleets and permanently reveals worlds.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -259,16 +277,18 @@ MainWindow::MainWindow(QWidget* parent)
     selectionLabel_->setWordWrap(true);
     sideLayout->addWidget(selectionLabel_);
 
-    scoutMoveButton_ = new QPushButton("Send Scout 1 here", sidePanel);
-    colonyMoveButton_ = new QPushButton("Send Colony Ship here", sidePanel);
+    fleetLabel_ = new QLabel(sidePanel);
+    fleetLabel_->setWordWrap(true);
+    sideLayout->addWidget(fleetLabel_);
+
+    fleetMoveButton_ = new QPushButton("Plot selected fleet course here", sidePanel);
     buildColonyButton_ = new QPushButton(
         QString("Queue Colony Ship (%1)").arg(kColonyShipCost), sidePanel);
     buildFactoryButton_ = new QPushButton(
         QString("Queue Factory (%1)").arg(kFactoryCost), sidePanel);
-    colonizeButton_ = new QPushButton("Colonize selected world", sidePanel);
+    colonizeButton_ = new QPushButton("Colonize selected world with selected ship", sidePanel);
 
-    sideLayout->addWidget(scoutMoveButton_);
-    sideLayout->addWidget(colonyMoveButton_);
+    sideLayout->addWidget(fleetMoveButton_);
     sideLayout->addWidget(buildColonyButton_);
     sideLayout->addWidget(buildFactoryButton_);
     sideLayout->addWidget(colonizeButton_);
@@ -285,12 +305,19 @@ MainWindow::MainWindow(QWidget* parent)
     setCentralWidget(central);
 
     connect(scene_, &QGraphicsScene::selectionChanged, this, [this] {
-        selectedStarId_.reset();
         const auto selected = scene_->selectedItems();
-        if (!selected.isEmpty()) {
-            selectedStarId_ = static_cast<StarId>(selected.front()->data(0).toUInt());
+        if (selected.isEmpty()) {
+            return;
         }
-        updateControls();
+
+        auto* item = selected.front();
+        const auto kind = item->data(1).toInt();
+        if (kind == kMapItemStar) {
+            selectedStarId_ = static_cast<StarId>(item->data(0).toUInt());
+        } else if (kind == kMapItemFleet) {
+            selectedFleetId_ = static_cast<FleetId>(item->data(0).toUInt());
+        }
+        rebuildScene();
     });
 
     connect(sensorRangesCheck_, &QCheckBox::toggled, this, [this](bool checked) {
@@ -298,8 +325,7 @@ MainWindow::MainWindow(QWidget* parent)
         rebuildScene();
     });
     connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
-    connect(scoutMoveButton_, &QPushButton::clicked, this, [this] { queueScoutMove(); });
-    connect(colonyMoveButton_, &QPushButton::clicked, this, [this] { queueColonyShipMove(); });
+    connect(fleetMoveButton_, &QPushButton::clicked, this, [this] { queueFleetMove(); });
     connect(buildColonyButton_, &QPushButton::clicked, this, [this] {
         queueProduction(ProductionKind::ColonyShip);
     });
@@ -311,7 +337,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     rebuildScene();
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
-    statusBar()->showMessage("Turn 1 — plot Scout 1 through unexplored sensor coverage");
+    statusBar()->showMessage("Turn 1 — Scout 1 is selected; choose a star and plot a course");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -328,40 +354,41 @@ const Planet* MainWindow::selectedPlanet() const
     return star ? find_planet_at_star(state_, star->id) : nullptr;
 }
 
-const Fleet* MainWindow::playerScout() const
+const Fleet* MainWindow::selectedFleet() const
 {
-    const auto it = std::find_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
-        return fleet.owner == 1 && fleet.role == FleetRole::Scout;
-    });
-    return it == state_.fleets.end() ? nullptr : &*it;
+    if (!selectedFleetId_) {
+        return nullptr;
+    }
+    const auto* fleet = findFleet(state_, *selectedFleetId_);
+    return fleet && fleet->owner == 1 ? fleet : nullptr;
 }
 
-const Fleet* MainWindow::playerColonyShip() const
-{
-    const auto it = std::find_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
-        return fleet.owner == 1 && fleet.role == FleetRole::ColonyShip;
-    });
-    return it == state_.fleets.end() ? nullptr : &*it;
-}
-
-const Fleet* MainWindow::colonyShipAtSelectedStar() const
+const Fleet* MainWindow::selectedColonyShipAtSelectedStar() const
 {
     const auto* star = selectedStar();
-    if (!star) {
+    const auto* fleet = selectedFleet();
+    if (!star || !fleet) {
         return nullptr;
     }
 
-    const auto it = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& fleet) {
-        return fleet.owner == 1
-            && fleet.role == FleetRole::ColonyShip
-            && same_position(fleet.position, star->position);
-    });
-    return it == state_.fleets.end() ? nullptr : &*it;
+    return fleet->role == FleetRole::ColonyShip && same_position(fleet->position, star->position)
+        ? fleet
+        : nullptr;
 }
 
 void MainWindow::rebuildScene()
 {
     const auto selectionToRestore = selectedStarId_;
+
+    if (!selectedFleet()) {
+        const auto fallback = std::find_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
+            return fleet.owner == 1;
+        });
+        selectedFleetId_ = fallback == state_.fleets.end()
+            ? std::optional<FleetId>{}
+            : std::optional<FleetId>{fallback->id};
+    }
+
     const QSignalBlocker blocker(scene_);
     scene_->clear();
     selectedStarId_ = selectionToRestore;
@@ -399,8 +426,6 @@ void MainWindow::rebuildScene()
         }
     }
 
-    // Active courses survive End Turn and show the remaining route/ETA. A new
-    // pending move replaces the visualized active course for that fleet.
     for (const auto& fleet : state_.fleets) {
         if (!fleet.destination || hasPendingMove(pendingOrders_, fleet.id)) {
             continue;
@@ -461,6 +486,7 @@ void MainWindow::rebuildScene()
         const bool colony = planet && planet->owner == 1;
 
         auto* marker = new StarItem(star.id, starColor(star.stellarClass), surveyed, colony);
+        marker->setData(1, kMapItemStar);
         marker->setPos(star.position.x, star.position.y);
         marker->setZValue(0.0);
         scene_->addItem(marker);
@@ -504,6 +530,7 @@ void MainWindow::rebuildScene()
     for (const auto& fleet : state_.fleets) {
         const double y = fleet.position.y + 15.0 + fleetOffset * 13.0;
         const auto color = fleetColor(fleet.role);
+        const bool selected = selectedFleetId_ && *selectedFleetId_ == fleet.id;
 
         QPolygonF shape;
         if (fleet.role == FleetRole::Scout) {
@@ -518,10 +545,30 @@ void MainWindow::rebuildScene()
                   << QPointF(fleet.position.x - 5.0, y);
         }
 
-        QPen fleetPen(color.lighter(135));
-        fleetPen.setWidthF(1.0);
+        if (selected) {
+            QPen selectionPen(color.lighter(150));
+            selectionPen.setWidthF(1.4);
+            auto* ring = scene_->addEllipse(
+                fleet.position.x - 9.0,
+                y - 9.0,
+                18.0,
+                18.0,
+                selectionPen,
+                Qt::NoBrush);
+            ring->setZValue(9.0);
+        }
+
+        QPen fleetPen(selected ? color.lighter(160) : color.lighter(135));
+        fleetPen.setWidthF(selected ? 2.0 : 1.0);
         auto* marker = scene_->addPolygon(shape, fleetPen, QBrush(color));
+        marker->setFlag(QGraphicsItem::ItemIsSelectable);
+        marker->setData(0, static_cast<unsigned int>(fleet.id));
+        marker->setData(1, kMapItemFleet);
+        marker->setCursor(QCursor(Qt::PointingHandCursor));
         QString tooltip = QString::fromStdString(fleet.name);
+        tooltip += QString("\n%1 — speed %2")
+                       .arg(fleetRoleName(fleet.role))
+                       .arg(fleet_speed(fleet.role), 0, 'f', 0);
         if (const auto range = fleet_sensor_range(fleet.role); range > 0.0) {
             tooltip += QString("\nSensor range %1").arg(range, 0, 'f', 0);
         }
@@ -531,13 +578,16 @@ void MainWindow::rebuildScene()
         marker->setToolTip(tooltip);
         marker->setZValue(10.0);
 
-        QString fleetLabel = QString::fromStdString(fleet.name);
-        if (fleet.destination) {
-            fleetLabel += QString("  [%1]").arg(turnCount(fleet_eta(fleet)));
+        QString fleetText = QString::fromStdString(fleet.name);
+        if (selected) {
+            fleetText = QString("▶ %1").arg(fleetText);
         }
-        auto* label = scene_->addText(fleetLabel);
+        if (fleet.destination) {
+            fleetText += QString("  [%1]").arg(turnCount(fleet_eta(fleet)));
+        }
+        auto* label = scene_->addText(fleetText);
         label->setPos(fleet.position.x + 9.0, y - 8.0);
-        label->setDefaultTextColor(color.lighter(135));
+        label->setDefaultTextColor(selected ? color.lighter(165) : color.lighter(135));
         label->setScale(0.85);
         label->setZValue(11.0);
         ++fleetOffset;
@@ -550,6 +600,7 @@ void MainWindow::updateControls()
 {
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
+    const auto* fleet = selectedFleet();
     const bool surveyed = star && is_surveyed(state_, 1, star->id);
 
     galaxyLabel_->setText(
@@ -574,12 +625,12 @@ void MainWindow::updateControls()
     }
 
     const auto colonyShips = static_cast<std::size_t>(std::count_if(
-        state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
-            return fleet.owner == 1 && fleet.role == FleetRole::ColonyShip;
+        state_.fleets.begin(), state_.fleets.end(), [](const Fleet& candidate) {
+            return candidate.owner == 1 && candidate.role == FleetRole::ColonyShip;
         }));
     const auto inTransit = static_cast<std::size_t>(std::count_if(
-        state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
-            return fleet.owner == 1 && fleet.destination.has_value();
+        state_.fleets.begin(), state_.fleets.end(), [](const Fleet& candidate) {
+            return candidate.owner == 1 && candidate.destination.has_value();
         }));
 
     const auto* player = find_player(state_, 1);
@@ -598,20 +649,19 @@ void MainWindow::updateControls()
             .arg(static_cast<qulonglong>(colonyShips))
             .arg(static_cast<qulonglong>(inTransit)));
 
-    const auto* scout = playerScout();
-    const auto* colonyShip = playerColonyShip();
-    const auto scoutEta = star && scout
-        ? travel_turns(scout->position, star->position, fleet_speed(scout->role))
-        : 0;
-    const auto colonyEta = star && colonyShip
-        ? travel_turns(colonyShip->position, star->position, fleet_speed(colonyShip->role))
+    const auto selectedEta = star && fleet
+        ? travel_turns(fleet->position, star->position, fleet_speed(fleet->role))
         : 0;
 
     if (star && !surveyed) {
         QString travelLine;
-        if (scout) {
-            travelLine = QString("<br>Scout travel time from current position: <b>%1</b>.")
-                             .arg(turnCount(scoutEta));
+        if (fleet) {
+            travelLine = QString("<br>%1 travel time from current position: <b>%2</b>.")
+                             .arg(QString::fromStdString(fleet->name))
+                             .arg(turnCount(selectedEta));
+            if (fleet_sensor_range(fleet->role) <= 0.0) {
+                travelLine += " This ship has no survey scanner.";
+            }
         }
         selectionLabel_->setText(
             QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.%2<br>"
@@ -648,23 +698,42 @@ void MainWindow::updateControls()
         selectionLabel_->setText("<hr>Select a star system.");
     }
 
-    scoutMoveButton_->setEnabled(star != nullptr && scout != nullptr);
-    colonyMoveButton_->setEnabled(star != nullptr && colonyShip != nullptr);
-    scoutMoveButton_->setText(
-        star && scout
-            ? QString("Plot Scout 1 course here (%1)").arg(turnCount(scoutEta))
-            : "Plot Scout 1 course here");
-    colonyMoveButton_->setText(
-        star && colonyShip
-            ? QString("Plot Colony Ship course here (%1)").arg(turnCount(colonyEta))
-            : "Plot Colony Ship course here");
+    if (fleet) {
+        QString status = "Stationary";
+        if (fleet->destination) {
+            const auto* destinationStar = findStarAtPosition(state_, *fleet->destination);
+            status = QString("In transit to %1 — %2 remaining")
+                         .arg(destinationStar ? QString::fromStdString(destinationStar->name) : "course target")
+                         .arg(turnCount(fleet_eta(*fleet)));
+        }
+        const auto sensor = fleet_sensor_range(fleet->role);
+        fleetLabel_->setText(
+            QString("<hr><b>Selected fleet:</b> %1<br>Role: %2 &nbsp; Speed: %3<br>"
+                    "Survey sensor: %4<br>Status: %5")
+                .arg(QString::fromStdString(fleet->name))
+                .arg(fleetRoleName(fleet->role))
+                .arg(fleet_speed(fleet->role), 0, 'f', 0)
+                .arg(sensor > 0.0 ? QString::number(sensor, 'f', 0) : "none")
+                .arg(status));
+    } else {
+        fleetLabel_->setText("<hr><b>Selected fleet:</b> none<br>Click a ship marker on the map.");
+    }
+
+    fleetMoveButton_->setEnabled(star != nullptr && fleet != nullptr);
+    fleetMoveButton_->setText(
+        star && fleet
+            ? QString("Plot %1 course here (%2)")
+                  .arg(QString::fromStdString(fleet->name))
+                  .arg(turnCount(selectedEta))
+            : "Plot selected fleet course here");
 
     const bool ownedColony = surveyed && planet != nullptr && planet->owner == 1;
     buildColonyButton_->setEnabled(ownedColony);
     buildFactoryButton_->setEnabled(ownedColony);
 
+    const auto* colonizer = selectedColonyShipAtSelectedStar();
     colonizeButton_->setEnabled(
-        surveyed && planet != nullptr && planet->owner == 0 && colonyShipAtSelectedStar() != nullptr);
+        surveyed && planet != nullptr && planet->owner == 0 && colonizer != nullptr);
 
     if (pendingOrders_.orders.empty()) {
         ordersLabel_->setText("<b>Orders this turn:</b> none");
@@ -686,35 +755,36 @@ void MainWindow::appendPendingOrder(Order order, const QString& description)
     statusBar()->showMessage(description);
 }
 
-void MainWindow::queueScoutMove()
+void MainWindow::replacePendingFleetMove(FleetId fleet, Position destination, const QString& description)
 {
-    const auto* star = selectedStar();
-    const auto* scout = playerScout();
-    if (!star || !scout) {
-        return;
+    for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
+        if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
+            move && move->fleet == fleet) {
+            pendingOrders_.orders[index] = MoveFleetOrder{fleet, destination};
+            pendingDescriptions_[static_cast<int>(index)] = description;
+            rebuildScene();
+            statusBar()->showMessage(description);
+            return;
+        }
     }
 
-    const auto eta = travel_turns(scout->position, star->position, fleet_speed(scout->role));
-    appendPendingOrder(
-        MoveFleetOrder{scout->id, star->position},
-        QString("Plot Scout 1 course to %1 — %2")
-            .arg(QString::fromStdString(star->name))
-            .arg(turnCount(eta)));
+    appendPendingOrder(MoveFleetOrder{fleet, destination}, description);
 }
 
-void MainWindow::queueColonyShipMove()
+void MainWindow::queueFleetMove()
 {
     const auto* star = selectedStar();
-    const auto* ship = playerColonyShip();
-    if (!star || !ship) {
+    const auto* fleet = selectedFleet();
+    if (!star || !fleet) {
         return;
     }
 
-    const auto eta = travel_turns(ship->position, star->position, fleet_speed(ship->role));
-    appendPendingOrder(
-        MoveFleetOrder{ship->id, star->position},
+    const auto eta = travel_turns(fleet->position, star->position, fleet_speed(fleet->role));
+    replacePendingFleetMove(
+        fleet->id,
+        star->position,
         QString("Plot %1 course to %2 — %3")
-            .arg(QString::fromStdString(ship->name))
+            .arg(QString::fromStdString(fleet->name))
             .arg(QString::fromStdString(star->name))
             .arg(turnCount(eta)));
 }
@@ -738,7 +808,7 @@ void MainWindow::queueColonize()
 {
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    const auto* ship = colonyShipAtSelectedStar();
+    const auto* ship = selectedColonyShipAtSelectedStar();
     if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 0 || !ship) {
         return;
     }
@@ -787,6 +857,7 @@ void MainWindow::newGalaxy()
     pendingOrders_ = PlayerOrders{1, {}};
     pendingDescriptions_.clear();
     selectedStarId_.reset();
+    selectedFleetId_ = 1;
 
     scene_->setSceneRect(
         -galaxyConfig_.width / 2.0 - 55.0,
@@ -797,7 +868,7 @@ void MainWindow::newGalaxy()
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 
     statusBar()->showMessage(
-        QString("New galaxy: seed %1, %2 systems")
+        QString("New galaxy: seed %1, %2 systems — Scout 1 selected")
             .arg(static_cast<qulonglong>(state_.galaxySeed))
             .arg(static_cast<qulonglong>(state_.stars.size())));
 }
