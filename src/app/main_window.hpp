@@ -30,6 +30,7 @@ private:
     void refreshShipDesignChoices();
     void openShipDesigner();
     void queueFleetMove();
+    void queueFleetLoadAll();
     void queueShipDesign();
     void queueProduction(ProductionKind kind);
     void queueColonists();
@@ -49,6 +50,7 @@ private:
         FleetId fleet,
         Position destination,
         std::uint8_t warp,
+        FleetArrivalAction arrivalAction,
         const QString& description);
 
     GalaxyConfig galaxyConfig_;
@@ -73,10 +75,12 @@ private:
     QSpinBox* starCountSpin_{};
     QSpinBox* warpSpin_{};
     QSpinBox* colonistLoadSpin_{};
+    QSpinBox* arrivalReserveSpin_{};
     QComboBox* shipDesignCombo_{};
     QCheckBox* sensorRangesCheck_{};
     QPushButton* newGalaxyButton_{};
     QPushButton* fleetMoveButton_{};
+    QPushButton* fleetLoadAllButton_{};
     QPushButton* designShipButton_{};
     QPushButton* buildShipButton_{};
     QPushButton* buildFactoryButton_{};
