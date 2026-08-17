@@ -30,6 +30,7 @@ struct Player {
 struct Fleet {
     FleetId id{};
     PlayerId owner{};
+    std::string name;
     Position position;
 };
 
