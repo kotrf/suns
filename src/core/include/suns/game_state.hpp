@@ -42,7 +42,7 @@ struct Planet {
     std::uint32_t habitability{}; // 0..100; becomes known after surveying the system.
     PlayerId owner{};             // 0 means uncolonized.
     std::uint64_t population{};
-    std::uint32_t industry{1};
+    std::uint32_t industry{1};    // Infrastructure contribution; factories increase this.
     std::uint32_t stockpile{};
     std::vector<ProductionItem> productionQueue;
 };
@@ -86,6 +86,10 @@ void mark_surveyed(GameState& state, PlayerId player, StarId star);
 {
     return kind == ProductionKind::ColonyShip ? kColonyShipCost : kFactoryCost;
 }
+
+[[nodiscard]] std::uint64_t population_capacity(const Planet& planet);
+[[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
+[[nodiscard]] std::uint32_t colony_output(const Planet& planet);
 
 GameState make_demo_game();
 
