@@ -21,16 +21,52 @@ const Planet* find_planet_at_star(const GameState& state, StarId star)
     return it == state.planets.end() ? nullptr : &*it;
 }
 
+const Player* find_player(const GameState& state, PlayerId id)
+{
+    const auto it = std::find_if(state.players.begin(), state.players.end(), [id](const Player& player) {
+        return player.id == id;
+    });
+    return it == state.players.end() ? nullptr : &*it;
+}
+
 bool same_position(Position a, Position b)
 {
     constexpr double epsilon = 0.000001;
     return std::abs(a.x - b.x) < epsilon && std::abs(a.y - b.y) < epsilon;
 }
 
+bool is_surveyed(const GameState& state, PlayerId player, StarId star)
+{
+    const auto* knownPlayer = find_player(state, player);
+    if (!knownPlayer) {
+        return false;
+    }
+
+    return std::find(
+               knownPlayer->surveyedStars.begin(),
+               knownPlayer->surveyedStars.end(),
+               star)
+        != knownPlayer->surveyedStars.end();
+}
+
+void mark_surveyed(GameState& state, PlayerId player, StarId star)
+{
+    const auto it = std::find_if(state.players.begin(), state.players.end(), [player](const Player& candidate) {
+        return candidate.id == player;
+    });
+    if (it == state.players.end()) {
+        return;
+    }
+
+    if (std::find(it->surveyedStars.begin(), it->surveyedStars.end(), star) == it->surveyedStars.end()) {
+        it->surveyedStars.push_back(star);
+    }
+}
+
 GameState make_demo_game()
 {
     GameState state;
-    state.players.push_back({1, "Terrans"});
+    state.players.push_back({1, "Terrans", {1}});
 
     state.stars = {
         {1, "Sol", {0.0, 0.0}},

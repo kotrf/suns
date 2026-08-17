@@ -69,8 +69,8 @@ MainWindow::MainWindow(QWidget* parent)
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Colonies generate local production each turn. Queue colony ships to expand, "
-        "or factories to increase future production. Orders are resolved together when the turn ends.",
+        "Star positions are known, but planetary data is not. Send Scout 1 to an unknown system, "
+        "end the turn, then inspect the newly surveyed world before deciding where to expand.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
@@ -129,7 +129,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
     rebuildScene();
-    statusBar()->showMessage("Turn 1 — choose how Earth should spend its production");
+    statusBar()->showMessage("Turn 1 — choose the first system to survey");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -192,10 +192,15 @@ void MainWindow::rebuildScene()
         marker->setFlag(QGraphicsItem::ItemIsSelectable);
         marker->setData(0, static_cast<unsigned int>(star.id));
 
+        const bool surveyed = is_surveyed(state_, 1, star.id);
         const auto* planet = find_planet_at_star(state_, star.id);
         QString tooltip = QString::fromStdString(star.name);
         QString mapLabel = QString::fromStdString(star.name);
-        if (planet) {
+
+        if (!surveyed) {
+            tooltip += "\nUnsurveyed system — planetary data unknown";
+            mapLabel += "  [?]";
+        } else if (planet) {
             tooltip += QString("\n%1 — habitability %2%")
                            .arg(QString::fromStdString(planet->name))
                            .arg(planet->habitability);
@@ -235,6 +240,7 @@ void MainWindow::updateControls()
 {
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
+    const bool surveyed = star && is_surveyed(state_, 1, star->id);
 
     std::size_t colonies = 0;
     std::uint64_t population = 0;
@@ -254,16 +260,26 @@ void MainWindow::updateControls()
             return fleet.owner == 1 && fleet.role == FleetRole::ColonyShip;
         }));
 
+    const auto* player = find_player(state_, 1);
+    const auto surveyedCount = player ? player->surveyedStars.size() : 0;
+
     empireLabel_->setText(
-        QString("<b>Terrans</b><br>Colonies: %1 &nbsp; Population: %2<br>"
-                "Industry: %3 / turn &nbsp; Stored: %4<br>Colony ships: %5")
+        QString("<b>Terrans</b><br>Surveyed: %1 / %2 &nbsp; Colonies: %3<br>"
+                "Population: %4 &nbsp; Industry: %5 / turn<br>Stored: %6 &nbsp; Colony ships: %7")
+            .arg(static_cast<qulonglong>(surveyedCount))
+            .arg(static_cast<qulonglong>(state_.stars.size()))
             .arg(static_cast<qulonglong>(colonies))
             .arg(static_cast<qulonglong>(population))
             .arg(industry)
             .arg(stockpile)
             .arg(static_cast<qulonglong>(colonyShips)));
 
-    if (star && planet) {
+    if (star && !surveyed) {
+        selectionLabel_->setText(
+            QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.<br>"
+                    "Send Scout 1 here and end the turn to survey this system.")
+                .arg(QString::fromStdString(star->name)));
+    } else if (star && planet) {
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
         selectionLabel_->setText(
             QString("<hr><b>%1</b><br>%2<br>Habitability: %3%<br>Status: %4<br>"
@@ -284,12 +300,12 @@ void MainWindow::updateControls()
     scoutMoveButton_->setEnabled(star != nullptr && playerScout() != nullptr);
     colonyMoveButton_->setEnabled(star != nullptr && playerColonyShip() != nullptr);
 
-    const bool ownedColony = planet != nullptr && planet->owner == 1;
+    const bool ownedColony = surveyed && planet != nullptr && planet->owner == 1;
     buildColonyButton_->setEnabled(ownedColony);
     buildFactoryButton_->setEnabled(ownedColony);
 
     colonizeButton_->setEnabled(
-        planet != nullptr && planet->owner == 0 && colonyShipAtSelectedStar() != nullptr);
+        surveyed && planet != nullptr && planet->owner == 0 && colonyShipAtSelectedStar() != nullptr);
 
     if (pendingOrders_.orders.empty()) {
         ordersLabel_->setText("<b>Orders this turn:</b> none");
@@ -321,7 +337,8 @@ void MainWindow::queueScoutMove()
 
     appendPendingOrder(
         MoveFleetOrder{scout->id, star->position},
-        QString("Move Scout 1 to %1").arg(QString::fromStdString(star->name)));
+        QString("Move Scout 1 to %1 and survey")
+            .arg(QString::fromStdString(star->name)));
 }
 
 void MainWindow::queueColonyShipMove()
@@ -341,8 +358,9 @@ void MainWindow::queueColonyShipMove()
 
 void MainWindow::queueProduction(ProductionKind kind)
 {
+    const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    if (!planet || planet->owner != 1) {
+    if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 1) {
         return;
     }
 
@@ -355,9 +373,10 @@ void MainWindow::queueProduction(ProductionKind kind)
 
 void MainWindow::queueColonize()
 {
+    const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     const auto* ship = colonyShipAtSelectedStar();
-    if (!planet || planet->owner != 0 || !ship) {
+    if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 0 || !ship) {
         return;
     }
 
@@ -375,7 +394,7 @@ void MainWindow::endTurn()
     pendingDescriptions_.clear();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — orders resolved, production advanced")
+        QString("Turn %1 — orders resolved, scouting intel and production updated")
             .arg(static_cast<qulonglong>(state_.turn)));
 }
 
