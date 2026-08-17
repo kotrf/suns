@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -78,11 +79,20 @@ struct Fleet {
 
 struct GameState {
     std::uint64_t turn{1};
+    std::uint64_t galaxySeed{};
     FleetId nextFleetId{1};
     std::vector<Player> players;
     std::vector<StarSystem> stars;
     std::vector<Planet> planets;
     std::vector<Fleet> fleets;
+};
+
+struct GalaxyConfig {
+    std::uint64_t seed{20260817};
+    std::size_t starCount{24};
+    double width{900.0};
+    double height{650.0};
+    double minimumSeparation{48.0};
 };
 
 [[nodiscard]] const StarSystem* find_star(const GameState& state, StarId id);
@@ -101,6 +111,7 @@ void mark_surveyed(GameState& state, PlayerId player, StarId star);
 [[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
 [[nodiscard]] std::uint32_t colony_output(const Planet& planet);
 
+[[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();
 
 } // namespace suns

@@ -1,9 +1,114 @@
 #include "suns/game_state.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <random>
+#include <stdexcept>
+#include <unordered_set>
 
 namespace suns {
+
+namespace {
+
+std::uint64_t bounded(std::mt19937_64& rng, std::uint64_t upperExclusive)
+{
+    return upperExclusive == 0 ? 0 : rng() % upperExclusive;
+}
+
+StarClass generated_star_class(std::mt19937_64& rng)
+{
+    const auto roll = bounded(rng, 100);
+    if (roll < 4) {
+        return StarClass::BlueWhite;
+    }
+    if (roll < 10) {
+        return StarClass::White;
+    }
+    if (roll < 20) {
+        return StarClass::YellowWhite;
+    }
+    if (roll < 35) {
+        return StarClass::Yellow;
+    }
+    if (roll < 62) {
+        return StarClass::Orange;
+    }
+    return StarClass::Red;
+}
+
+std::string generated_star_name(
+    std::mt19937_64& rng,
+    std::size_t index,
+    std::unordered_set<std::string>& usedNames)
+{
+    static constexpr std::array<const char*, 26> beginnings = {
+        "Al", "Ari", "Bel", "Cor", "Dar", "Eri", "Fen", "Gal", "Hel", "Ily", "Jan", "Kal", "Lor",
+        "Mer", "Nor", "Ori", "Pra", "Qua", "Rig", "Sar", "Tal", "Uma", "Ver", "Wex", "Yri", "Zen",
+    };
+    static constexpr std::array<const char*, 24> endings = {
+        "aris", "ora", "ion", "eth", "ara", "os", "ea", "iri", "on", "alis", "eron", "une",
+        "ax", "ira", "iel", "or", "eus", "oria", "ionis", "era", "oth", "arae", "eron", "is",
+    };
+
+    std::string name = std::string(beginnings[bounded(rng, beginnings.size())])
+        + endings[bounded(rng, endings.size())];
+
+    if (!usedNames.insert(name).second) {
+        name += "-" + std::to_string(index);
+        usedNames.insert(name);
+    }
+    return name;
+}
+
+std::string generated_planet_name(std::mt19937_64& rng, const std::string& starName)
+{
+    static constexpr std::array<const char*, 4> numerals = {"II", "III", "IV", "V"};
+    return starName + " " + numerals[bounded(rng, numerals.size())];
+}
+
+std::uint32_t generated_habitability(std::mt19937_64& rng)
+{
+    const auto a = bounded(rng, 86);
+    const auto b = bounded(rng, 86);
+    return static_cast<std::uint32_t>(15 + (a + b) / 2);
+}
+
+bool far_enough(Position candidate, const std::vector<StarSystem>& stars, double minimumSeparation)
+{
+    const double minimumSquared = minimumSeparation * minimumSeparation;
+    return std::all_of(stars.begin(), stars.end(), [&](const StarSystem& star) {
+        const double dx = candidate.x - star.position.x;
+        const double dy = candidate.y - star.position.y;
+        return dx * dx + dy * dy >= minimumSquared;
+    });
+}
+
+Position generated_position(
+    std::mt19937_64& rng,
+    const GalaxyConfig& config,
+    const std::vector<StarSystem>& stars)
+{
+    const int halfWidth = std::max(250, static_cast<int>(config.width / 2.0));
+    const int halfHeight = std::max(200, static_cast<int>(config.height / 2.0));
+    const double requestedSeparation = std::clamp(config.minimumSeparation, 24.0, 100.0);
+
+    for (int relaxation = 0; relaxation < 6; ++relaxation) {
+        const double separation = requestedSeparation * std::pow(0.90, relaxation);
+        for (int attempt = 0; attempt < 12000; ++attempt) {
+            const auto x = static_cast<int>(bounded(rng, static_cast<std::uint64_t>(halfWidth * 2 + 1))) - halfWidth;
+            const auto y = static_cast<int>(bounded(rng, static_cast<std::uint64_t>(halfHeight * 2 + 1))) - halfHeight;
+            const Position candidate{static_cast<double>(x), static_cast<double>(y)};
+            if (far_enough(candidate, stars, separation)) {
+                return candidate;
+            }
+        }
+    }
+
+    throw std::runtime_error("Unable to place generated star systems with the requested galaxy density");
+}
+
+} // namespace
 
 const StarSystem* find_star(const GameState& state, StarId id)
 {
@@ -99,9 +204,50 @@ std::uint32_t colony_output(const Planet& planet)
     return planet.industry + static_cast<std::uint32_t>(planet.population / 500);
 }
 
+GameState generate_game(const GalaxyConfig& config)
+{
+    const auto starCount = std::clamp<std::size_t>(config.starCount, 2, 64);
+    std::mt19937_64 rng(config.seed);
+
+    GameState state;
+    state.galaxySeed = config.seed;
+    state.players.push_back({1, "Terrans", {1}});
+    state.stars.reserve(starCount);
+    state.planets.reserve(starCount);
+
+    state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
+    state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, 0, {}});
+
+    std::unordered_set<std::string> usedNames{"Sol"};
+    for (std::size_t index = 2; index <= starCount; ++index) {
+        const auto id = static_cast<StarId>(index);
+        const auto name = generated_star_name(rng, index, usedNames);
+        const auto position = generated_position(rng, config, state.stars);
+        const auto stellarClass = generated_star_class(rng);
+
+        state.stars.push_back({id, name, position, stellarClass});
+        state.planets.push_back({
+            static_cast<PlanetId>(index),
+            id,
+            generated_planet_name(rng, name),
+            generated_habitability(rng),
+            0,
+            0,
+            1,
+            0,
+            {},
+        });
+    }
+
+    state.fleets.push_back({1, 1, "Scout 1", FleetRole::Scout, {0.0, 0.0}});
+    state.nextFleetId = 2;
+    return state;
+}
+
 GameState make_demo_game()
 {
     GameState state;
+    state.galaxySeed = 0;
     state.players.push_back({1, "Terrans", {1}});
 
     state.stars = {

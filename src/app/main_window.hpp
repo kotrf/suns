@@ -10,8 +10,11 @@
 #include <optional>
 
 class QGraphicsScene;
+class QGraphicsView;
 class QLabel;
+class QLineEdit;
 class QPushButton;
+class QSpinBox;
 
 namespace suns {
 
@@ -27,6 +30,7 @@ private:
     void queueProduction(ProductionKind kind);
     void queueColonize();
     void endTurn();
+    void newGalaxy();
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -36,6 +40,7 @@ private:
 
     void appendPendingOrder(Order order, const QString& description);
 
+    GalaxyConfig galaxyConfig_;
     GameState state_;
     TurnProcessor processor_;
     PlayerOrders pendingOrders_{1, {}};
@@ -43,9 +48,14 @@ private:
     QStringList pendingDescriptions_;
 
     QGraphicsScene* scene_{};
+    QGraphicsView* view_{};
+    QLabel* galaxyLabel_{};
     QLabel* selectionLabel_{};
     QLabel* empireLabel_{};
     QLabel* ordersLabel_{};
+    QLineEdit* seedEdit_{};
+    QSpinBox* starCountSpin_{};
+    QPushButton* newGalaxyButton_{};
     QPushButton* scoutMoveButton_{};
     QPushButton* colonyMoveButton_{};
     QPushButton* buildColonyButton_{};
