@@ -40,11 +40,14 @@ ctest --test-dir build --output-on-failure
 
 ## Current playable loop
 
-The desktop app now exposes the first interactive turn:
+The first expansion loop is now represented directly in the desktop app:
 
-1. select a star on the galaxy map;
-2. queue a destination for the player's scout fleet;
-3. end the turn;
-4. let the headless `TurnProcessor` resolve the order into the next `GameState`.
+1. select **Sol / Earth** and queue a colony ship build;
+2. end the turn to resolve production and construction;
+3. select another system and move the colony ship there;
+4. end the turn;
+5. select the destination again and queue colonization;
+6. end the turn to establish the second colony;
+7. subsequent turns produce resources independently at both colonies.
 
-This is deliberately tiny. Planets, colonies, production and colonization are the next pieces of the first vertical slice.
+The numbers are placeholders. At this stage the purpose is to validate the game-state/order/turn architecture and make each new rule usable through the UI immediately.

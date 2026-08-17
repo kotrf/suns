@@ -1,6 +1,5 @@
 #include "main_window.hpp"
 
-#include <QGraphicsEllipseItem>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
@@ -13,6 +12,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <utility>
 
 namespace suns {
 
@@ -21,7 +21,7 @@ MainWindow::MainWindow(QWidget* parent)
     , state_(make_demo_game())
 {
     setWindowTitle("Suns!");
-    resize(1100, 720);
+    resize(1180, 760);
 
     auto* central = new QWidget(this);
     auto* layout = new QHBoxLayout(central);
@@ -34,24 +34,36 @@ MainWindow::MainWindow(QWidget* parent)
     layout->addWidget(view, 1);
 
     auto* sidePanel = new QWidget(central);
-    sidePanel->setFixedWidth(270);
+    sidePanel->setFixedWidth(330);
     auto* sideLayout = new QVBoxLayout(sidePanel);
 
-    auto* title = new QLabel("<h2>Suns!</h2>", sidePanel);
-    sideLayout->addWidget(title);
+    sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Select a star on the map, queue a destination for Scout 1, then end the turn.",
+        "Select a system. Build a colony ship at Earth, move it to an uncolonized world, "
+        "then colonize that planet. Each owned colony produces locally every turn.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
+
+    empireLabel_ = new QLabel(sidePanel);
+    empireLabel_->setWordWrap(true);
+    sideLayout->addWidget(empireLabel_);
 
     selectionLabel_ = new QLabel(sidePanel);
     selectionLabel_->setWordWrap(true);
     sideLayout->addWidget(selectionLabel_);
 
-    moveButton_ = new QPushButton("Send Scout 1 here", sidePanel);
-    sideLayout->addWidget(moveButton_);
+    scoutMoveButton_ = new QPushButton("Send Scout 1 here", sidePanel);
+    colonyMoveButton_ = new QPushButton("Send Colony Ship here", sidePanel);
+    buildButton_ = new QPushButton(
+        QString("Build Colony Ship (%1 production)").arg(kColonyShipCost), sidePanel);
+    colonizeButton_ = new QPushButton("Colonize selected world", sidePanel);
+
+    sideLayout->addWidget(scoutMoveButton_);
+    sideLayout->addWidget(colonyMoveButton_);
+    sideLayout->addWidget(buildButton_);
+    sideLayout->addWidget(colonizeButton_);
 
     ordersLabel_ = new QLabel(sidePanel);
     ordersLabel_->setWordWrap(true);
@@ -73,15 +85,14 @@ MainWindow::MainWindow(QWidget* parent)
         updateControls();
     });
 
-    connect(moveButton_, &QPushButton::clicked, this, [this] {
-        queueMoveToSelectedStar();
-    });
-    connect(endTurnButton_, &QPushButton::clicked, this, [this] {
-        endTurn();
-    });
+    connect(scoutMoveButton_, &QPushButton::clicked, this, [this] { queueScoutMove(); });
+    connect(colonyMoveButton_, &QPushButton::clicked, this, [this] { queueColonyShipMove(); });
+    connect(buildButton_, &QPushButton::clicked, this, [this] { queueBuildColonyShip(); });
+    connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
+    connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
     rebuildScene();
-    statusBar()->showMessage("Turn 1 — choose a destination for Scout 1");
+    statusBar()->showMessage("Turn 1 — Earth can build the first colony ship");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -89,17 +100,42 @@ const StarSystem* MainWindow::selectedStar() const
     if (!selectedStarId_) {
         return nullptr;
     }
-
-    const auto it = std::find_if(state_.stars.begin(), state_.stars.end(), [this](const StarSystem& star) {
-        return star.id == *selectedStarId_;
-    });
-    return it == state_.stars.end() ? nullptr : &*it;
+    return find_star(state_, *selectedStarId_);
 }
 
-const Fleet* MainWindow::playerFleet() const
+const Planet* MainWindow::selectedPlanet() const
+{
+    const auto* star = selectedStar();
+    return star ? find_planet_at_star(state_, star->id) : nullptr;
+}
+
+const Fleet* MainWindow::playerScout() const
 {
     const auto it = std::find_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
-        return fleet.owner == 1;
+        return fleet.owner == 1 && fleet.role == FleetRole::Scout;
+    });
+    return it == state_.fleets.end() ? nullptr : &*it;
+}
+
+const Fleet* MainWindow::playerColonyShip() const
+{
+    const auto it = std::find_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
+        return fleet.owner == 1 && fleet.role == FleetRole::ColonyShip;
+    });
+    return it == state_.fleets.end() ? nullptr : &*it;
+}
+
+const Fleet* MainWindow::colonyShipAtSelectedStar() const
+{
+    const auto* star = selectedStar();
+    if (!star) {
+        return nullptr;
+    }
+
+    const auto it = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.owner == 1
+            && fleet.role == FleetRole::ColonyShip
+            && same_position(fleet.position, star->position);
     });
     return it == state_.fleets.end() ? nullptr : &*it;
 }
@@ -110,7 +146,7 @@ void MainWindow::rebuildScene()
     selectedStarId_.reset();
 
     for (const auto& star : state_.stars) {
-        constexpr double radius = 6.0;
+        constexpr double radius = 7.0;
         auto* marker = scene_->addEllipse(
             star.position.x - radius,
             star.position.y - radius,
@@ -118,23 +154,36 @@ void MainWindow::rebuildScene()
             radius * 2.0);
         marker->setFlag(QGraphicsItem::ItemIsSelectable);
         marker->setData(0, static_cast<unsigned int>(star.id));
-        marker->setToolTip(QString::fromStdString(star.name));
 
-        auto* label = scene_->addText(QString::fromStdString(star.name));
-        label->setPos(star.position.x + 9.0, star.position.y - 13.0);
+        const auto* planet = find_planet_at_star(state_, star.id);
+        QString tooltip = QString::fromStdString(star.name);
+        QString mapLabel = QString::fromStdString(star.name);
+        if (planet) {
+            tooltip += QString("\n%1 — habitability %2%")
+                           .arg(QString::fromStdString(planet->name))
+                           .arg(planet->habitability);
+            mapLabel += planet->owner == 1 ? "  [COLONY]" : "";
+        }
+        marker->setToolTip(tooltip);
+
+        auto* label = scene_->addText(mapLabel);
+        label->setPos(star.position.x + 10.0, star.position.y - 14.0);
     }
 
+    int fleetOffset = 0;
     for (const auto& fleet : state_.fleets) {
         constexpr double size = 8.0;
+        const double y = fleet.position.y + 12.0 + fleetOffset * 11.0;
         auto* marker = scene_->addRect(
             fleet.position.x - size / 2.0,
-            fleet.position.y + 10.0,
+            y,
             size,
             size);
         marker->setToolTip(QString::fromStdString(fleet.name));
 
         auto* label = scene_->addText(QString::fromStdString(fleet.name));
-        label->setPos(fleet.position.x + 7.0, fleet.position.y + 6.0);
+        label->setPos(fleet.position.x + 7.0, y - 5.0);
+        ++fleetOffset;
     }
 
     updateControls();
@@ -143,55 +192,140 @@ void MainWindow::rebuildScene()
 void MainWindow::updateControls()
 {
     const auto* star = selectedStar();
-    const auto* fleet = playerFleet();
+    const auto* planet = selectedPlanet();
 
-    if (star) {
+    std::size_t colonies = 0;
+    std::uint64_t population = 0;
+    std::uint32_t stockpile = 0;
+    for (const auto& candidate : state_.planets) {
+        if (candidate.owner == 1) {
+            ++colonies;
+            population += candidate.population;
+            stockpile += candidate.stockpile;
+        }
+    }
+
+    const auto colonyShips = static_cast<std::size_t>(std::count_if(
+        state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
+            return fleet.owner == 1 && fleet.role == FleetRole::ColonyShip;
+        }));
+
+    empireLabel_->setText(
+        QString("<b>Terrans</b><br>Colonies: %1 &nbsp; Population: %2<br>"
+                "Stored production: %3 &nbsp; Colony ships: %4")
+            .arg(static_cast<qulonglong>(colonies))
+            .arg(static_cast<qulonglong>(population))
+            .arg(stockpile)
+            .arg(static_cast<qulonglong>(colonyShips)));
+
+    if (star && planet) {
+        const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
         selectionLabel_->setText(
-            QString("Selected: <b>%1</b><br>Coordinates: %2, %3")
+            QString("<hr><b>%1</b><br>%2<br>Habitability: %3%<br>Status: %4<br>"
+                    "Population: %5<br>Industry: %6 / turn<br>Local production: %7")
                 .arg(QString::fromStdString(star->name))
-                .arg(star->position.x, 0, 'f', 0)
-                .arg(star->position.y, 0, 'f', 0));
+                .arg(QString::fromStdString(planet->name))
+                .arg(planet->habitability)
+                .arg(owner)
+                .arg(static_cast<qulonglong>(planet->population))
+                .arg(planet->industry)
+                .arg(planet->stockpile));
     } else {
-        selectionLabel_->setText("Selected: none");
+        selectionLabel_->setText("<hr>Select a star system.");
     }
 
-    moveButton_->setEnabled(star != nullptr && fleet != nullptr);
+    scoutMoveButton_->setEnabled(star != nullptr && playerScout() != nullptr);
+    colonyMoveButton_->setEnabled(star != nullptr && playerColonyShip() != nullptr);
 
-    if (pendingOrders_.orders.empty()) {
-        ordersLabel_->setText("Orders: none");
-    } else {
-        ordersLabel_->setText(
-            QString("Orders queued: %1").arg(static_cast<qulonglong>(pendingOrders_.orders.size())));
-    }
+    const bool canAffordAfterProduction = planet
+        && planet->owner == 1
+        && planet->stockpile + planet->industry >= kColonyShipCost;
+    buildButton_->setEnabled(canAffordAfterProduction);
+
+    colonizeButton_->setEnabled(
+        planet != nullptr && planet->owner == 0 && colonyShipAtSelectedStar() != nullptr);
+
+    ordersLabel_->setText(
+        pendingOrders_.orders.empty()
+            ? "<b>Pending order:</b> none (ending the turn still produces resources)"
+            : QString("<b>Pending order:</b> %1").arg(pendingDescription_));
 
     endTurnButton_->setText(QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
 }
 
-void MainWindow::queueMoveToSelectedStar()
+void MainWindow::replacePendingOrder(Order order, const QString& description)
+{
+    pendingOrders_.orders.clear();
+    pendingOrders_.orders.push_back(std::move(order));
+    pendingDescription_ = description;
+    updateControls();
+    statusBar()->showMessage(description);
+}
+
+void MainWindow::queueScoutMove()
 {
     const auto* star = selectedStar();
-    const auto* fleet = playerFleet();
-    if (!star || !fleet) {
+    const auto* scout = playerScout();
+    if (!star || !scout) {
         return;
     }
 
-    // The bootstrap UI controls one fleet, so a new destination replaces its previous order.
-    pendingOrders_.orders.clear();
-    pendingOrders_.orders.emplace_back(MoveFleetOrder{fleet->id, star->position});
+    replacePendingOrder(
+        MoveFleetOrder{scout->id, star->position},
+        QString("Move Scout 1 to %1").arg(QString::fromStdString(star->name)));
+}
 
-    ordersLabel_->setText(
-        QString("Scout 1 destination: <b>%1</b>").arg(QString::fromStdString(star->name)));
-    statusBar()->showMessage(
-        QString("Move order queued for %1").arg(QString::fromStdString(star->name)));
+void MainWindow::queueColonyShipMove()
+{
+    const auto* star = selectedStar();
+    const auto* ship = playerColonyShip();
+    if (!star || !ship) {
+        return;
+    }
+
+    replacePendingOrder(
+        MoveFleetOrder{ship->id, star->position},
+        QString("Move %1 to %2")
+            .arg(QString::fromStdString(ship->name))
+            .arg(QString::fromStdString(star->name)));
+}
+
+void MainWindow::queueBuildColonyShip()
+{
+    const auto* planet = selectedPlanet();
+    if (!planet || planet->owner != 1) {
+        return;
+    }
+
+    replacePendingOrder(
+        BuildColonyShipOrder{planet->id},
+        QString("Build a colony ship at %1").arg(QString::fromStdString(planet->name)));
+}
+
+void MainWindow::queueColonize()
+{
+    const auto* planet = selectedPlanet();
+    const auto* ship = colonyShipAtSelectedStar();
+    if (!planet || planet->owner != 0 || !ship) {
+        return;
+    }
+
+    replacePendingOrder(
+        ColonizePlanetOrder{ship->id, planet->id},
+        QString("Colonize %1 with %2")
+            .arg(QString::fromStdString(planet->name))
+            .arg(QString::fromStdString(ship->name)));
 }
 
 void MainWindow::endTurn()
 {
     state_ = processor_.process(state_, {pendingOrders_});
     pendingOrders_.orders.clear();
+    pendingDescription_.clear();
     rebuildScene();
     statusBar()->showMessage(
-        QString("Turn %1 — orders processed").arg(static_cast<qulonglong>(state_.turn)));
+        QString("Turn %1 — orders resolved and colonies produced")
+            .arg(static_cast<qulonglong>(state_.turn)));
 }
 
 } // namespace suns
