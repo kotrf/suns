@@ -2,6 +2,8 @@ qt_add_executable(suns_app
     main.cpp
     main_window.cpp
     main_window.hpp
+    star_item.cpp
+    star_item.hpp
 )
 
 target_link_libraries(suns_app PRIVATE Qt6::Widgets Suns::Core)

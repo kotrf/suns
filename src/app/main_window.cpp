@@ -1,17 +1,25 @@
 #include "main_window.hpp"
+#include "star_item.hpp"
 
-#include <QGraphicsItem>
+#include <QBrush>
+#include <QColor>
 #include <QGraphicsScene>
+#include <QGraphicsTextItem>
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
+#include <QPen>
+#include <QPolygonF>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <cstdint>
+#include <type_traits>
 #include <utility>
 
 namespace suns {
@@ -43,6 +51,85 @@ QString productionSummary(const Planet& planet)
     return summary;
 }
 
+QColor starColor(StarClass stellarClass)
+{
+    switch (stellarClass) {
+    case StarClass::BlueWhite:
+        return QColor("#9bc5ff");
+    case StarClass::White:
+        return QColor("#e7eeff");
+    case StarClass::YellowWhite:
+        return QColor("#fff0b0");
+    case StarClass::Yellow:
+        return QColor("#ffd36b");
+    case StarClass::Orange:
+        return QColor("#ff9955");
+    case StarClass::Red:
+        return QColor("#ff6b62");
+    }
+    return QColor("#ffd36b");
+}
+
+QString starClassName(StarClass stellarClass)
+{
+    switch (stellarClass) {
+    case StarClass::BlueWhite:
+        return "blue-white";
+    case StarClass::White:
+        return "white";
+    case StarClass::YellowWhite:
+        return "yellow-white";
+    case StarClass::Yellow:
+        return "yellow";
+    case StarClass::Orange:
+        return "orange";
+    case StarClass::Red:
+        return "red";
+    }
+    return "yellow";
+}
+
+const Fleet* findFleet(const GameState& state, FleetId id)
+{
+    const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
+        return fleet.id == id;
+    });
+    return it == state.fleets.end() ? nullptr : &*it;
+}
+
+void addBackgroundStars(QGraphicsScene* scene)
+{
+    const auto rect = scene->sceneRect();
+    std::uint32_t seed = 0x51A7C0DEu;
+    const auto next = [&seed]() {
+        seed = seed * 1664525u + 1013904223u;
+        return seed;
+    };
+
+    for (int i = 0; i < 120; ++i) {
+        const double xUnit = static_cast<double>(next() % 10000u) / 10000.0;
+        const double yUnit = static_cast<double>(next() % 10000u) / 10000.0;
+        const double size = 0.45 + static_cast<double>(next() % 110u) / 100.0;
+        const int alpha = 28 + static_cast<int>(next() % 58u);
+
+        QColor color(185, 205, 235, alpha);
+        if ((i % 13) == 0) {
+            color = QColor(255, 220, 170, alpha);
+        } else if ((i % 9) == 0) {
+            color = QColor(170, 195, 255, alpha);
+        }
+
+        auto* dot = scene->addEllipse(
+            rect.left() + xUnit * rect.width(),
+            rect.top() + yUnit * rect.height(),
+            size,
+            size,
+            Qt::NoPen,
+            QBrush(color));
+        dot->setZValue(-100.0);
+    }
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget* parent)
@@ -57,9 +144,11 @@ MainWindow::MainWindow(QWidget* parent)
 
     scene_ = new QGraphicsScene(this);
     scene_->setSceneRect(-300.0, -240.0, 600.0, 480.0);
+    scene_->setBackgroundBrush(QColor("#070b12"));
 
     auto* view = new QGraphicsView(scene_, central);
     view->setRenderHint(QPainter::Antialiasing);
+    view->setBackgroundBrush(QColor("#070b12"));
     layout->addWidget(view, 1);
 
     auto* sidePanel = new QWidget(central);
@@ -179,22 +268,58 @@ const Fleet* MainWindow::colonyShipAtSelectedStar() const
 
 void MainWindow::rebuildScene()
 {
+    const auto selectionToRestore = selectedStarId_;
+    const QSignalBlocker blocker(scene_);
     scene_->clear();
-    selectedStarId_.reset();
+    selectedStarId_ = selectionToRestore;
+
+    addBackgroundStars(scene_);
+
+    for (const auto& order : pendingOrders_.orders) {
+        std::visit(
+            [&](const auto& concreteOrder) {
+                using T = std::decay_t<decltype(concreteOrder)>;
+                if constexpr (std::is_same_v<T, MoveFleetOrder>) {
+                    const auto* fleet = findFleet(state_, concreteOrder.fleet);
+                    if (!fleet) {
+                        return;
+                    }
+
+                    const QColor routeColor = fleet->role == FleetRole::Scout
+                        ? QColor(90, 155, 255, 175)
+                        : QColor(190, 115, 235, 175);
+                    QPen routePen(routeColor);
+                    routePen.setWidthF(1.35);
+                    routePen.setStyle(Qt::DashLine);
+                    auto* route = scene_->addLine(
+                        fleet->position.x,
+                        fleet->position.y,
+                        concreteOrder.destination.x,
+                        concreteOrder.destination.y,
+                        routePen);
+                    route->setZValue(-20.0);
+                }
+            },
+            order);
+    }
 
     for (const auto& star : state_.stars) {
-        constexpr double radius = 7.0;
-        auto* marker = scene_->addEllipse(
-            star.position.x - radius,
-            star.position.y - radius,
-            radius * 2.0,
-            radius * 2.0);
-        marker->setFlag(QGraphicsItem::ItemIsSelectable);
-        marker->setData(0, static_cast<unsigned int>(star.id));
-
         const bool surveyed = is_surveyed(state_, 1, star.id);
         const auto* planet = find_planet_at_star(state_, star.id);
-        QString tooltip = QString::fromStdString(star.name);
+        const bool colony = planet && planet->owner == 1;
+
+        auto* marker = new StarItem(star.id, starColor(star.stellarClass), surveyed, colony);
+        marker->setPos(star.position.x, star.position.y);
+        marker->setZValue(0.0);
+        scene_->addItem(marker);
+
+        if (selectionToRestore && *selectionToRestore == star.id) {
+            marker->setSelected(true);
+        }
+
+        QString tooltip = QString("%1\n%2 star")
+                              .arg(QString::fromStdString(star.name))
+                              .arg(starClassName(star.stellarClass));
         QString mapLabel = QString::fromStdString(star.name);
 
         if (!surveyed) {
@@ -205,7 +330,7 @@ void MainWindow::rebuildScene()
                            .arg(QString::fromStdString(planet->name))
                            .arg(planet->habitability)
                            .arg(static_cast<qulonglong>(population_capacity(*planet)));
-            if (planet->owner == 1) {
+            if (colony) {
                 mapLabel += "  [COLONY]";
                 tooltip += QString("\nOutput %1 / turn — %2")
                                .arg(colony_output(*planet))
@@ -215,22 +340,42 @@ void MainWindow::rebuildScene()
         marker->setToolTip(tooltip);
 
         auto* label = scene_->addText(mapLabel);
-        label->setPos(star.position.x + 10.0, star.position.y - 14.0);
+        label->setPos(star.position.x + 12.0, star.position.y - 16.0);
+        label->setDefaultTextColor(
+            colony ? QColor("#8fdaa9") : surveyed ? QColor("#d1d9e6") : QColor("#727c8c"));
+        label->setZValue(5.0);
     }
 
     int fleetOffset = 0;
     for (const auto& fleet : state_.fleets) {
-        constexpr double size = 8.0;
-        const double y = fleet.position.y + 12.0 + fleetOffset * 11.0;
-        auto* marker = scene_->addRect(
-            fleet.position.x - size / 2.0,
-            y,
-            size,
-            size);
+        const double y = fleet.position.y + 15.0 + fleetOffset * 13.0;
+        const QColor fleetColor = fleet.role == FleetRole::Scout
+            ? QColor("#65a6ff")
+            : QColor("#c37bea");
+
+        QPolygonF shape;
+        if (fleet.role == FleetRole::Scout) {
+            shape << QPointF(fleet.position.x + 6.0, y)
+                  << QPointF(fleet.position.x - 5.0, y - 4.0)
+                  << QPointF(fleet.position.x - 2.0, y)
+                  << QPointF(fleet.position.x - 5.0, y + 4.0);
+        } else {
+            shape << QPointF(fleet.position.x, y - 5.0)
+                  << QPointF(fleet.position.x + 5.0, y)
+                  << QPointF(fleet.position.x, y + 5.0)
+                  << QPointF(fleet.position.x - 5.0, y);
+        }
+
+        QPen fleetPen(fleetColor.lighter(135));
+        fleetPen.setWidthF(1.0);
+        auto* marker = scene_->addPolygon(shape, fleetPen, QBrush(fleetColor));
         marker->setToolTip(QString::fromStdString(fleet.name));
+        marker->setZValue(10.0);
 
         auto* label = scene_->addText(QString::fromStdString(fleet.name));
-        label->setPos(fleet.position.x + 7.0, y - 5.0);
+        label->setPos(fleet.position.x + 9.0, y - 8.0);
+        label->setDefaultTextColor(fleetColor.lighter(135));
+        label->setZValue(11.0);
         ++fleetOffset;
     }
 
@@ -336,7 +481,7 @@ void MainWindow::appendPendingOrder(Order order, const QString& description)
 {
     pendingOrders_.orders.push_back(std::move(order));
     pendingDescriptions_.push_back(description);
-    updateControls();
+    rebuildScene();
     statusBar()->showMessage(description);
 }
 
@@ -405,6 +550,7 @@ void MainWindow::endTurn()
     state_ = processor_.process(state_, {pendingOrders_});
     pendingOrders_.orders.clear();
     pendingDescriptions_.clear();
+    selectedStarId_.reset();
     rebuildScene();
     statusBar()->showMessage(
         QString("Turn %1 — economy, population and scouting updated")
