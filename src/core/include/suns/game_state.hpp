@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,8 @@ using FleetId = std::uint32_t;
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
 inline constexpr std::uint32_t kFactoryCost = 6;
+inline constexpr double kScoutTravelSpeed = 100.0;
+inline constexpr double kColonyShipTravelSpeed = 70.0;
 
 struct Position {
     double x{};
@@ -75,6 +78,7 @@ struct Fleet {
     std::string name;
     FleetRole role{FleetRole::Scout};
     Position position;
+    std::optional<Position> destination;
 };
 
 struct GameState {
@@ -99,6 +103,10 @@ struct GalaxyConfig {
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
 [[nodiscard]] const Player* find_player(const GameState& state, PlayerId id);
 [[nodiscard]] bool same_position(Position a, Position b);
+[[nodiscard]] double distance_between(Position a, Position b);
+[[nodiscard]] double fleet_speed(FleetRole role);
+[[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
+[[nodiscard]] std::uint32_t fleet_eta(const Fleet& fleet);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
 void mark_surveyed(GameState& state, PlayerId player, StarId star);
 
