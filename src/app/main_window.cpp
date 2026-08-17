@@ -3,22 +3,26 @@
 
 #include <QBrush>
 #include <QColor>
+#include <QFormLayout>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPainter>
 #include <QPen>
 #include <QPolygonF>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
 #include <cstdint>
+#include <exception>
 #include <type_traits>
 #include <utility>
 
@@ -97,16 +101,17 @@ const Fleet* findFleet(const GameState& state, FleetId id)
     return it == state.fleets.end() ? nullptr : &*it;
 }
 
-void addBackgroundStars(QGraphicsScene* scene)
+void addBackgroundStars(QGraphicsScene* scene, std::uint64_t galaxySeed)
 {
     const auto rect = scene->sceneRect();
-    std::uint32_t seed = 0x51A7C0DEu;
+    std::uint32_t seed = static_cast<std::uint32_t>(galaxySeed ^ (galaxySeed >> 32U) ^ 0x51A7C0DEu);
     const auto next = [&seed]() {
         seed = seed * 1664525u + 1013904223u;
         return seed;
     };
 
-    for (int i = 0; i < 120; ++i) {
+    const int backgroundCount = static_cast<int>(std::clamp(rect.width() * rect.height() / 4200.0, 100.0, 260.0));
+    for (int i = 0; i < backgroundCount; ++i) {
         const double xUnit = static_cast<double>(next() % 10000u) / 10000.0;
         const double yUnit = static_cast<double>(next() % 10000u) / 10000.0;
         const double size = 0.45 + static_cast<double>(next() % 110u) / 100.0;
@@ -134,35 +139,58 @@ void addBackgroundStars(QGraphicsScene* scene)
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
-    , state_(make_demo_game())
+    , galaxyConfig_()
+    , state_(generate_game(galaxyConfig_))
 {
     setWindowTitle("Suns!");
-    resize(1200, 780);
+    resize(1280, 820);
 
     auto* central = new QWidget(this);
     auto* layout = new QHBoxLayout(central);
 
     scene_ = new QGraphicsScene(this);
-    scene_->setSceneRect(-300.0, -240.0, 600.0, 480.0);
+    scene_->setSceneRect(
+        -galaxyConfig_.width / 2.0 - 55.0,
+        -galaxyConfig_.height / 2.0 - 55.0,
+        galaxyConfig_.width + 110.0,
+        galaxyConfig_.height + 110.0);
     scene_->setBackgroundBrush(QColor("#070b12"));
 
-    auto* view = new QGraphicsView(scene_, central);
-    view->setRenderHint(QPainter::Antialiasing);
-    view->setBackgroundBrush(QColor("#070b12"));
-    layout->addWidget(view, 1);
+    view_ = new QGraphicsView(scene_, central);
+    view_->setRenderHint(QPainter::Antialiasing);
+    view_->setBackgroundBrush(QColor("#070b12"));
+    view_->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+    layout->addWidget(view_, 1);
 
     auto* sidePanel = new QWidget(central);
-    sidePanel->setFixedWidth(365);
+    sidePanel->setFixedWidth(380);
     auto* sideLayout = new QVBoxLayout(sidePanel);
 
     sideLayout->addWidget(new QLabel("<h2>Suns!</h2>", sidePanel));
 
     auto* help = new QLabel(
-        "Survey unknown systems with Scout 1. Habitability controls population capacity and growth, "
-        "so better worlds become stronger economies over time.",
+        "Survey an unknown procedural galaxy. The same seed always creates the same stars and worlds, "
+        "so interesting maps can be replayed and shared.",
         sidePanel);
     help->setWordWrap(true);
     sideLayout->addWidget(help);
+
+    galaxyLabel_ = new QLabel(sidePanel);
+    galaxyLabel_->setWordWrap(true);
+    sideLayout->addWidget(galaxyLabel_);
+
+    seedEdit_ = new QLineEdit(QString::number(state_.galaxySeed), sidePanel);
+    seedEdit_->setPlaceholderText("Unsigned 64-bit seed");
+    starCountSpin_ = new QSpinBox(sidePanel);
+    starCountSpin_->setRange(8, 64);
+    starCountSpin_->setValue(static_cast<int>(state_.stars.size()));
+    newGalaxyButton_ = new QPushButton("Generate / Restart Galaxy", sidePanel);
+
+    auto* galaxyForm = new QFormLayout;
+    galaxyForm->addRow("Seed", seedEdit_);
+    galaxyForm->addRow("Star systems", starCountSpin_);
+    sideLayout->addLayout(galaxyForm);
+    sideLayout->addWidget(newGalaxyButton_);
 
     empireLabel_ = new QLabel(sidePanel);
     empireLabel_->setWordWrap(true);
@@ -206,6 +234,7 @@ MainWindow::MainWindow(QWidget* parent)
         updateControls();
     });
 
+    connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
     connect(scoutMoveButton_, &QPushButton::clicked, this, [this] { queueScoutMove(); });
     connect(colonyMoveButton_, &QPushButton::clicked, this, [this] { queueColonyShipMove(); });
     connect(buildColonyButton_, &QPushButton::clicked, this, [this] {
@@ -218,7 +247,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
     rebuildScene();
-    statusBar()->showMessage("Turn 1 — survey worlds and compare their long-term potential");
+    view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
+    statusBar()->showMessage("Turn 1 — an unknown galaxy is waiting to be surveyed");
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -273,7 +303,7 @@ void MainWindow::rebuildScene()
     scene_->clear();
     selectedStarId_ = selectionToRestore;
 
-    addBackgroundStars(scene_);
+    addBackgroundStars(scene_, state_.galaxySeed);
 
     for (const auto& order : pendingOrders_.orders) {
         std::visit(
@@ -343,6 +373,7 @@ void MainWindow::rebuildScene()
         label->setPos(star.position.x + 12.0, star.position.y - 16.0);
         label->setDefaultTextColor(
             colony ? QColor("#8fdaa9") : surveyed ? QColor("#d1d9e6") : QColor("#727c8c"));
+        label->setScale(state_.stars.size() > 36 ? 0.72 : state_.stars.size() > 24 ? 0.82 : 0.92);
         label->setZValue(5.0);
     }
 
@@ -375,6 +406,7 @@ void MainWindow::rebuildScene()
         auto* label = scene_->addText(QString::fromStdString(fleet.name));
         label->setPos(fleet.position.x + 9.0, y - 8.0);
         label->setDefaultTextColor(fleetColor.lighter(135));
+        label->setScale(0.85);
         label->setZValue(11.0);
         ++fleetOffset;
     }
@@ -387,6 +419,11 @@ void MainWindow::updateControls()
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     const bool surveyed = star && is_surveyed(state_, 1, star->id);
+
+    galaxyLabel_->setText(
+        QString("<b>Galaxy seed:</b> %1 &nbsp; <b>Systems:</b> %2")
+            .arg(static_cast<qulonglong>(state_.galaxySeed))
+            .arg(static_cast<qulonglong>(state_.stars.size())));
 
     std::size_t colonies = 0;
     std::uint64_t population = 0;
@@ -555,6 +592,46 @@ void MainWindow::endTurn()
     statusBar()->showMessage(
         QString("Turn %1 — economy, population and scouting updated")
             .arg(static_cast<qulonglong>(state_.turn)));
+}
+
+void MainWindow::newGalaxy()
+{
+    bool ok = false;
+    const auto parsedSeed = seedEdit_->text().trimmed().toULongLong(&ok);
+    if (!ok) {
+        statusBar()->showMessage("Invalid seed — enter an unsigned integer");
+        return;
+    }
+
+    GalaxyConfig requested = galaxyConfig_;
+    requested.seed = static_cast<std::uint64_t>(parsedSeed);
+    requested.starCount = static_cast<std::size_t>(starCountSpin_->value());
+
+    try {
+        auto generated = generate_game(requested);
+        galaxyConfig_ = requested;
+        state_ = std::move(generated);
+    } catch (const std::exception& error) {
+        statusBar()->showMessage(QString("Galaxy generation failed: %1").arg(error.what()));
+        return;
+    }
+
+    pendingOrders_ = PlayerOrders{1, {}};
+    pendingDescriptions_.clear();
+    selectedStarId_.reset();
+
+    scene_->setSceneRect(
+        -galaxyConfig_.width / 2.0 - 55.0,
+        -galaxyConfig_.height / 2.0 - 55.0,
+        galaxyConfig_.width + 110.0,
+        galaxyConfig_.height + 110.0);
+    rebuildScene();
+    view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
+
+    statusBar()->showMessage(
+        QString("New galaxy: seed %1, %2 systems")
+            .arg(static_cast<qulonglong>(state_.galaxySeed))
+            .arg(static_cast<qulonglong>(state_.stars.size())));
 }
 
 } // namespace suns
