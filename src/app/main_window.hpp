@@ -10,6 +10,7 @@
 #include <optional>
 
 class QCheckBox;
+class QComboBox;
 class QGraphicsScene;
 class QGraphicsView;
 class QLabel;
@@ -26,8 +27,12 @@ public:
 private:
     void rebuildScene();
     void updateControls();
+    void refreshShipDesignChoices();
     void queueFleetMove();
+    void queueShipDesign();
     void queueProduction(ProductionKind kind);
+    void queueColonists();
+    void queueRefuel();
     void queueColonize();
     void endTurn();
     void newGalaxy();
@@ -36,6 +41,7 @@ private:
     [[nodiscard]] const Planet* selectedPlanet() const;
     [[nodiscard]] const Fleet* selectedFleet() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
+    [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;
 
     void appendPendingOrder(Order order, const QString& description);
     void replacePendingFleetMove(
@@ -51,6 +57,7 @@ private:
     std::optional<StarId> selectedStarId_;
     std::optional<FleetId> selectedFleetId_{1};
     std::optional<FleetId> warpControlFleetId_;
+    std::optional<FleetId> logisticsControlFleetId_;
     QStringList pendingDescriptions_;
     bool showSensorRanges_{true};
 
@@ -64,11 +71,15 @@ private:
     QLineEdit* seedEdit_{};
     QSpinBox* starCountSpin_{};
     QSpinBox* warpSpin_{};
+    QSpinBox* colonistLoadSpin_{};
+    QComboBox* shipDesignCombo_{};
     QCheckBox* sensorRangesCheck_{};
     QPushButton* newGalaxyButton_{};
     QPushButton* fleetMoveButton_{};
-    QPushButton* buildColonyButton_{};
+    QPushButton* buildShipButton_{};
     QPushButton* buildFactoryButton_{};
+    QPushButton* loadColonistsButton_{};
+    QPushButton* refuelButton_{};
     QPushButton* colonizeButton_{};
     QPushButton* endTurnButton_{};
 };

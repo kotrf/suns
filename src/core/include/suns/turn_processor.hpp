@@ -22,12 +22,40 @@ struct QueueProductionOrder {
     ProductionKind kind{ProductionKind::ColonyShip};
 };
 
+struct QueueShipDesignOrder {
+    PlanetId colony{};
+    ShipDesignId design{};
+};
+
+// Set the exact number of colonists carried by a fleet. The processor transfers
+// the difference to/from the specified friendly colony, so repeated planning is
+// deterministic and unloading uses the same command as loading.
+struct SetFleetColonistsOrder {
+    PlanetId colony{};
+    FleetId fleet{};
+    std::uint64_t colonists{};
+};
+
+// Friendly colonies currently provide fuel without a separate fuel economy.
+// Refuelling is nevertheless an explicit order so route logistics are visible
+// and can later be backed by a real planetary fuel stockpile.
+struct RefuelFleetOrder {
+    PlanetId colony{};
+    FleetId fleet{};
+};
+
 struct ColonizePlanetOrder {
     FleetId fleet{};
     PlanetId planet{};
 };
 
-using Order = std::variant<MoveFleetOrder, QueueProductionOrder, ColonizePlanetOrder>;
+using Order = std::variant<
+    MoveFleetOrder,
+    QueueProductionOrder,
+    QueueShipDesignOrder,
+    SetFleetColonistsOrder,
+    RefuelFleetOrder,
+    ColonizePlanetOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

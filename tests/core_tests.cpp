@@ -170,21 +170,31 @@ int main()
     assert(suns::is_surveyed(scoutTravel1, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
-    queueShip.orders.emplace_back(suns::QueueProductionOrder{1, suns::ProductionKind::ColonyShip});
+    queueShip.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kColonyShipDesignId});
     const auto shipTurn1 = processor.process(initial, {queueShip});
     assert(planet(shipTurn1, 1).productionQueue.front().remainingCost == 6);
     const auto shipTurn2 = processor.process(shipTurn1, {});
     const auto* builtShip = colony_ship(shipTurn2);
     assert(builtShip != nullptr);
     assert(builtShip->design == suns::kColonyShipDesignId);
+    assert(builtShip->colonists == 0);
     assert(std::abs(suns::fleet_speed(shipTurn2, *builtShip) - suns::kColonyShipTravelSpeed) < 0.000001);
     assert(suns::fleet_sensor_range(shipTurn2, *builtShip) == 0.0);
+
+    // Loading is now a real logistics action: population leaves Earth and
+    // becomes cargo before the colonizer can depart usefully.
+    suns::PlayerOrders loadShip{1, {}};
+    loadShip.orders.emplace_back(suns::SetFleetColonistsOrder{1, builtShip->id, 250});
+    const auto shipLoaded = processor.process(shipTurn2, {loadShip});
+    const auto* loadedShip = colony_ship(shipLoaded);
+    assert(loadedShip != nullptr);
+    assert(loadedShip->colonists == 250);
 
     const auto* alpha = suns::find_star(initial, 2);
     assert(alpha != nullptr);
     suns::PlayerOrders moveColony{1, {}};
-    moveColony.orders.emplace_back(suns::MoveFleetOrder{builtShip->id, alpha->position});
-    const auto colonyTravel1 = processor.process(shipTurn2, {moveColony});
+    moveColony.orders.emplace_back(suns::MoveFleetOrder{loadedShip->id, alpha->position});
+    const auto colonyTravel1 = processor.process(shipLoaded, {moveColony});
     const auto* travellingShip = colony_ship(colonyTravel1);
     assert(travellingShip != nullptr);
     assert(travellingShip->destination.has_value());
@@ -210,6 +220,7 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{readyShip->id, 2});
     const auto expanded = processor.process(destinationSurveyed, {colonize});
     assert(planet(expanded, 2).owner == 1);
+    assert(planet(expanded, 2).population == 250);
     assert(colony_ship(expanded) == nullptr);
 
     return 0;

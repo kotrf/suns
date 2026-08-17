@@ -7,31 +7,58 @@
 
 namespace suns {
 
+std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item)
+{
+    if (item.kind == ProductionKind::Factory) return kFactoryCost;
+    if (item.shipDesign != 0) {
+        if (const auto* design = find_ship_design(state, item.shipDesign)) {
+            return ship_design_cost(*design);
+        }
+    }
+    return kColonyShipCost;
+}
+
 namespace {
 
-void complete_production(GameState& state, Planet& planet, ProductionKind kind)
+FleetRole presentation_role_for_design(const ShipDesign& design)
 {
-    if (kind == ProductionKind::Factory) {
+    return ship_design_can_colonize(design) ? FleetRole::ColonyShip : FleetRole::Scout;
+}
+
+std::uint8_t initial_warp_for_design(const ShipDesign& design)
+{
+    const auto maxWarp = ship_design_max_warp(design);
+    if (maxWarp == 0) return 1;
+    const auto preferred = ship_design_can_colonize(design)
+        ? kColonyShipCruiseWarp
+        : kScoutCruiseWarp;
+    return std::min(maxWarp, preferred);
+}
+
+void complete_production(GameState& state, Planet& planet, const ProductionItem& item)
+{
+    if (item.kind == ProductionKind::Factory) {
         ++planet.industry;
         return;
     }
 
+    const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
     const auto* star = find_star(state, planet.star);
-    const auto* design = find_ship_design(state, kColonyShipDesignId);
-    if (!star || !design) return;
+    const auto* design = find_ship_design(state, designId);
+    if (!star || !design || design->owner != planet.owner) return;
 
     const auto id = state.nextFleetId++;
     state.fleets.push_back({
         id,
         planet.owner,
-        "Colony Ship " + std::to_string(id),
-        FleetRole::ColonyShip,
+        design->name + " " + std::to_string(id),
+        presentation_role_for_design(*design),
         design->id,
         star->position,
         std::nullopt,
-        kColonyShipCruiseWarp,
+        initial_warp_for_design(*design),
         ship_design_fuel_capacity(*design),
-        250,
+        0,
     });
 }
 
@@ -47,9 +74,9 @@ void run_colony_production(GameState& state, Planet& planet)
         item.remainingCost -= spent;
         if (item.remainingCost != 0) break;
 
-        const auto kind = item.kind;
+        const auto completed = item;
         planet.productionQueue.erase(planet.productionQueue.begin());
-        complete_production(state, planet, kind);
+        complete_production(state, planet, completed);
     }
     planet.stockpile = available;
 }
@@ -79,27 +106,19 @@ void survey_fleet_sweep(GameState& state, const Fleet& fleet, Position start, Po
     }
 }
 
-bool fleet_at_friendly_colony(const GameState& state, const Fleet& fleet)
+bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& planet)
 {
-    for (const auto& planet : state.planets) {
-        if (planet.owner != fleet.owner) continue;
-        const auto* star = find_star(state, planet.star);
-        if (star && same_position(star->position, fleet.position)) return true;
-    }
-    return false;
+    const auto* star = find_star(state, planet.star);
+    return star && same_position(star->position, fleet.position);
 }
 
-void service_fleet_fuel(GameState& state)
+void generate_fleet_fuel(GameState& state)
 {
     for (auto& fleet : state.fleets) {
         const auto capacity = fleet_fuel_capacity(state, fleet);
         if (capacity <= 0.0) {
             fleet.fuel = 0.0;
             continue;
-        }
-
-        if (fleet_at_friendly_colony(state, fleet)) {
-            fleet.fuel = capacity;
         }
 
         if (const auto* design = fleet_design(state, fleet)) {
@@ -164,9 +183,9 @@ GameState TurnProcessor::process(
 {
     GameState next = current;
 
-    // Fleets sitting at a friendly colony begin the planning turn refuelled.
-    // Onboard generators then add their per-turn production everywhere else.
-    service_fleet_fuel(next);
+    // Onboard generators produce fuel at the beginning of the planning turn.
+    // Friendly-colony refuelling is now an explicit player order.
+    generate_fleet_fuel(next);
 
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
@@ -199,12 +218,77 @@ GameState TurnProcessor::process(
                                 return candidate.id == concreteOrder.colony
                                     && candidate.owner == submission.player;
                             });
-                        if (planet != next.planets.end()) {
+                        if (planet == next.planets.end()) return;
+
+                        if (concreteOrder.kind == ProductionKind::Factory) {
+                            planet->productionQueue.push_back({ProductionKind::Factory, kFactoryCost, 0});
+                        } else if (const auto* design = find_ship_design(next, kColonyShipDesignId);
+                                   design && design->owner == submission.player) {
                             planet->productionQueue.push_back({
-                                concreteOrder.kind,
-                                production_cost(concreteOrder.kind),
+                                ProductionKind::ColonyShip,
+                                ship_design_cost(*design),
+                                design->id,
                             });
                         }
+                    } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
+                        const auto planet = std::find_if(
+                            next.planets.begin(), next.planets.end(),
+                            [&](const Planet& candidate) {
+                                return candidate.id == concreteOrder.colony
+                                    && candidate.owner == submission.player;
+                            });
+                        const auto* design = find_ship_design(next, concreteOrder.design);
+                        if (planet == next.planets.end() || !design || design->owner != submission.player) return;
+
+                        planet->productionQueue.push_back({
+                            ProductionKind::ColonyShip,
+                            ship_design_cost(*design),
+                            design->id,
+                        });
+                    } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
+                        const auto planet = std::find_if(
+                            next.planets.begin(), next.planets.end(),
+                            [&](const Planet& candidate) {
+                                return candidate.id == concreteOrder.colony
+                                    && candidate.owner == submission.player;
+                            });
+                        const auto fleet = std::find_if(
+                            next.fleets.begin(), next.fleets.end(),
+                            [&](const Fleet& candidate) {
+                                return candidate.id == concreteOrder.fleet
+                                    && candidate.owner == submission.player;
+                            });
+                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
+                        if (!fleet_at_planet(next, *fleet, *planet)) return;
+
+                        const auto capacity = fleet_cargo_capacity(next, *fleet);
+                        if (colonist_cargo_mass(concreteOrder.colonists) > capacity + 0.000001) return;
+
+                        if (concreteOrder.colonists > fleet->colonists) {
+                            const auto load = concreteOrder.colonists - fleet->colonists;
+                            // Colony abandonment should be an explicit future mechanic.
+                            if (planet->population <= load) return;
+                            planet->population -= load;
+                        } else {
+                            planet->population += fleet->colonists - concreteOrder.colonists;
+                        }
+                        fleet->colonists = concreteOrder.colonists;
+                    } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
+                        const auto planet = std::find_if(
+                            next.planets.begin(), next.planets.end(),
+                            [&](const Planet& candidate) {
+                                return candidate.id == concreteOrder.colony
+                                    && candidate.owner == submission.player;
+                            });
+                        const auto fleet = std::find_if(
+                            next.fleets.begin(), next.fleets.end(),
+                            [&](const Fleet& candidate) {
+                                return candidate.id == concreteOrder.fleet
+                                    && candidate.owner == submission.player;
+                            });
+                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
+                        if (!fleet_at_planet(next, *fleet, *planet)) return;
+                        fleet->fuel = fleet_fuel_capacity(next, *fleet);
                     } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
                         const auto planet = std::find_if(
                             next.planets.begin(), next.planets.end(),
