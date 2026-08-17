@@ -23,6 +23,7 @@ inline constexpr double kScoutSensorRange = 90.0;
 inline constexpr double kColonySensorRange = 60.0;
 inline constexpr ShipDesignId kScoutDesignId = 1;
 inline constexpr ShipDesignId kColonyShipDesignId = 2;
+inline constexpr ShipDesignId kFirstCustomShipDesignId = 3;
 inline constexpr std::uint8_t kMaxWarp = 10;
 inline constexpr std::uint8_t kScoutCruiseWarp = 10;
 inline constexpr std::uint8_t kColonyShipCruiseWarp = 8;
@@ -47,6 +48,23 @@ struct StarSystem {
     std::string name;
     Position position;
     StarClass stellarClass{StarClass::Yellow};
+};
+
+enum class ShipHullType {
+    Scout,
+    LightTransport,
+    MediumTransport,
+};
+
+struct ShipHullSpec {
+    ShipHullType type{ShipHullType::Scout};
+    std::string name;
+    double mass{};
+    std::uint32_t buildCost{};
+    double baseFuelCapacity{};
+    double baseCargoCapacity{};
+    std::uint8_t engineSlots{1};
+    std::uint8_t generalSlots{};
 };
 
 enum class ShipComponentType {
@@ -75,8 +93,8 @@ struct ShipComponentSpec {
     double mass{};
     std::uint32_t buildCost{};
 
-    // engineThrust is retained for the temporary pre-Warp UI compatibility
-    // calculation. Turn movement is driven by maxWarp + the ordered Warp.
+    // engineThrust is retained only for the temporary compatibility metric.
+    // Turn movement is driven by maxWarp + the ordered Warp.
     double engineThrust{};
     std::uint8_t maxWarp{};
     std::array<double, kMaxWarp + 1> fuelPer100MassLy{};
@@ -93,16 +111,13 @@ struct ShipDesign {
     ShipDesignId id{};
     PlayerId owner{};
     std::string name;
-    double hullMass{};
-    std::uint32_t hullCost{};
+    ShipHullType hull{ShipHullType::Scout};
     std::vector<ShipComponentType> components;
-    double baseFuelCapacity{};
-    double baseCargoCapacity{};
 };
 
 enum class ProductionKind {
-    // ColonyShip remains as a compatibility alias for the old UI/order path.
-    // New code should queue a concrete ShipDesignId.
+    // ColonyShip remains as a compatibility alias for old callers. New code
+    // queues a concrete ShipDesignId.
     ColonyShip,
     Factory,
 };
@@ -146,8 +161,6 @@ struct Fleet {
     ShipDesignId design{kScoutDesignId};
     Position position;
     std::optional<Position> destination;
-
-    // Warp is persistent while a course is active. An order may change it.
     std::uint8_t warp{kScoutCruiseWarp};
     double fuel{300.0};
     std::uint64_t colonists{};
@@ -157,6 +170,7 @@ struct GameState {
     std::uint64_t turn{1};
     std::uint64_t galaxySeed{};
     FleetId nextFleetId{1};
+    ShipDesignId nextShipDesignId{kFirstCustomShipDesignId};
     std::vector<Player> players;
     std::vector<ShipDesign> shipDesigns;
     std::vector<StarSystem> stars;
@@ -178,7 +192,11 @@ struct GalaxyConfig {
 [[nodiscard]] const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id);
 [[nodiscard]] const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet);
 
+[[nodiscard]] ShipHullSpec hull_spec(ShipHullType type);
 [[nodiscard]] ShipComponentSpec component_spec(ShipComponentType type);
+[[nodiscard]] std::size_t ship_design_engine_slots_used(const ShipDesign& design);
+[[nodiscard]] std::size_t ship_design_general_slots_used(const ShipDesign& design);
+[[nodiscard]] bool ship_design_valid(const ShipDesign& design);
 [[nodiscard]] double ship_design_mass(const ShipDesign& design);
 [[nodiscard]] std::uint32_t ship_design_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design); // Legacy compatibility metric.
@@ -196,12 +214,9 @@ struct GalaxyConfig {
 [[nodiscard]] double warp_distance(std::uint8_t warp);
 [[nodiscard]] double colonist_cargo_mass(std::uint64_t colonists);
 
-// Compatibility helpers for the current Qt client. Turn resolution no longer
-// uses these role-derived speeds; it uses Fleet::warp and Warp^2 movement.
 [[nodiscard]] double fleet_speed(FleetRole role);
 [[nodiscard]] double fleet_sensor_range(FleetRole role);
 [[nodiscard]] std::uint32_t fleet_eta(const Fleet& fleet);
-
 [[nodiscard]] double fleet_speed(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] bool fleet_can_colonize(const GameState& state, const Fleet& fleet);

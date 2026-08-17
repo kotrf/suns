@@ -49,7 +49,7 @@ void verify_default_propulsion_and_cargo()
 void verify_fuel_limits_actual_travel()
 {
     auto state = suns::make_demo_game();
-    state.planets.clear(); // Prevent automatic colony refuelling at the origin.
+    state.planets.clear();
     auto& scout = state.fleets.front();
     scout.position = {0.0, 0.0};
     scout.destination.reset();
@@ -62,7 +62,6 @@ void verify_fuel_limits_actual_travel()
     const suns::TurnProcessor processor;
     const auto next = processor.process(state, {orders});
     const auto& moved = next.fleets.front();
-
     assert(moved.position.x > 0.0);
     assert(moved.position.x < 100.0);
     assert(near(moved.fuel, 0.0));
@@ -74,21 +73,21 @@ void verify_ram_scoop_can_generate_fuel_in_flight()
     suns::GameState state;
     state.players.push_back({1, "Terrans", {}});
     state.shipDesigns.push_back({
-        10, 1, "Scoop Test", 40.0, 1,
-        {suns::ShipComponentType::RamScoopDrive}, 100.0, 0.0,
+        10, 1, "Scoop Test", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::RamScoopDrive},
     });
     state.fleets.push_back({
         1, 1, "Scoop", suns::FleetRole::Scout, 10,
         {0.0, 0.0}, suns::Position{50.0, 0.0}, 4, 0.0, 0,
     });
 
+    assert(suns::ship_design_valid(state.shipDesigns.front()));
     assert(suns::fleet_fuel_rate(state, state.fleets.front()) < 0.0);
 
     const suns::TurnProcessor processor;
     const auto next = processor.process(state, {});
     const auto& scoop = next.fleets.front();
-
-    assert(near(scoop.position.x, 16.0)); // Warp 4 => 16 ly/turn.
+    assert(near(scoop.position.x, 16.0));
     assert(scoop.fuel > 0.0);
 }
 
@@ -97,8 +96,8 @@ void verify_antimatter_generator_and_radiating_drive_metadata()
     suns::GameState state;
     state.players.push_back({1, "Terrans", {}});
     state.shipDesigns.push_back({
-        20, 1, "Generator Test", 40.0, 1,
-        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::AntimatterGenerator}, 0.0, 0.0,
+        20, 1, "Generator Test", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::AntimatterGenerator},
     });
     state.fleets.push_back({
         1, 1, "Generator", suns::FleetRole::Scout, 20,
@@ -107,7 +106,7 @@ void verify_antimatter_generator_and_radiating_drive_metadata()
 
     const auto* design = suns::find_ship_design(state, 20);
     assert(design != nullptr);
-    assert(suns::ship_design_fuel_capacity(*design) == 200.0);
+    assert(suns::ship_design_fuel_capacity(*design) == 500.0);
     assert(suns::ship_design_fuel_generation(*design) == 50.0);
 
     const suns::TurnProcessor processor;
@@ -115,9 +114,10 @@ void verify_antimatter_generator_and_radiating_drive_metadata()
     assert(near(next.fleets.front().fuel, 50.0));
 
     suns::ShipDesign radiating{
-        21, 1, "Radiating Test", 40.0, 1,
-        {suns::ShipComponentType::RadiatingRamScoopDrive}, 100.0, 0.0,
+        21, 1, "Radiating Test", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::RadiatingRamScoopDrive},
     };
+    assert(suns::ship_design_valid(radiating));
     assert(suns::ship_design_radiation_hazard(radiating) > 0.0);
     assert(suns::ship_design_max_warp(radiating) == 10);
     assert(suns::ship_design_fuel_rate(radiating, 4) < 0.0);

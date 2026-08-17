@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <limits>
 #include <random>
 #include <stdexcept>
 #include <unordered_set>
@@ -98,13 +97,11 @@ Position generated_position(
 
 std::vector<ShipDesign> default_ship_designs(PlayerId owner)
 {
-    // Base tank/cargo capacities model built-in hull volume. Additional Fuel
-    // Tanks and Cargo Pods can extend them later through the same component rules.
     return {
-        {kScoutDesignId, owner, "Scout", 34.5, 2,
-         {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner}, 300.0, 0.0},
-        {kColonyShipDesignId, owner, "Colony Ship", 45.0, 2,
-         {ShipComponentType::FusionDrive, ShipComponentType::ColonyModule}, 400.0, 5.0},
+        {kScoutDesignId, owner, "Scout", ShipHullType::Scout,
+         {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner}},
+        {kColonyShipDesignId, owner, "Colony Ship", ShipHullType::LightTransport,
+         {ShipComponentType::FusionDrive, ShipComponentType::ColonyModule}},
     };
 }
 
@@ -157,6 +154,19 @@ const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id)
 const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet)
 {
     return find_ship_design(state, fleet.design);
+}
+
+ShipHullSpec hull_spec(ShipHullType type)
+{
+    switch (type) {
+    case ShipHullType::Scout:
+        return {type, "Scout Hull", 34.5, 2, 300.0, 0.0, 1, 2};
+    case ShipHullType::LightTransport:
+        return {type, "Light Transport", 45.0, 2, 400.0, 5.0, 1, 3};
+    case ShipHullType::MediumTransport:
+        return {type, "Medium Transport", 70.0, 5, 500.0, 50.0, 1, 5};
+    }
+    return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0};
 }
 
 ShipComponentSpec component_spec(ShipComponentType type)
@@ -234,24 +244,46 @@ ShipComponentSpec component_spec(ShipComponentType type)
     return spec;
 }
 
+std::size_t ship_design_engine_slots_used(const ShipDesign& design)
+{
+    return static_cast<std::size_t>(std::count_if(
+        design.components.begin(), design.components.end(), [](ShipComponentType component) {
+            return component_spec(component).kind == ShipComponentKind::Engine;
+        }));
+}
+
+std::size_t ship_design_general_slots_used(const ShipDesign& design)
+{
+    return design.components.size() - ship_design_engine_slots_used(design);
+}
+
+bool ship_design_valid(const ShipDesign& design)
+{
+    if (design.owner == 0 || design.name.empty() || design.name.size() > 48) return false;
+    const auto hull = hull_spec(design.hull);
+    const auto engines = ship_design_engine_slots_used(design);
+    const auto general = ship_design_general_slots_used(design);
+    return engines == 1
+        && engines <= hull.engineSlots
+        && general <= hull.generalSlots;
+}
+
 double ship_design_mass(const ShipDesign& design)
 {
-    double mass = design.hullMass;
+    double mass = hull_spec(design.hull).mass;
     for (const auto component : design.components) mass += component_spec(component).mass;
     return mass;
 }
 
 std::uint32_t ship_design_cost(const ShipDesign& design)
 {
-    std::uint32_t cost = design.hullCost;
+    std::uint32_t cost = hull_spec(design.hull).buildCost;
     for (const auto component : design.components) cost += component_spec(component).buildCost;
     return cost;
 }
 
 double ship_design_speed(const ShipDesign& design)
 {
-    // Temporary compatibility metric for the existing Qt panel. Movement itself
-    // is now Warp-based and does not use thrust/mass as a travel speed.
     double thrust = 0.0;
     for (const auto component : design.components) thrust += component_spec(component).engineThrust;
     const auto mass = ship_design_mass(design);
@@ -275,9 +307,7 @@ bool ship_design_can_colonize(const ShipDesign& design)
 std::uint8_t ship_design_max_warp(const ShipDesign& design)
 {
     std::uint8_t maxWarp = 0;
-    for (const auto component : design.components) {
-        maxWarp = std::max(maxWarp, component_spec(component).maxWarp);
-    }
+    for (const auto component : design.components) maxWarp = std::max(maxWarp, component_spec(component).maxWarp);
     return maxWarp;
 }
 
@@ -292,14 +322,14 @@ double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp)
 
 double ship_design_fuel_capacity(const ShipDesign& design)
 {
-    double capacity = design.baseFuelCapacity;
+    double capacity = hull_spec(design.hull).baseFuelCapacity;
     for (const auto component : design.components) capacity += component_spec(component).fuelCapacity;
     return capacity;
 }
 
 double ship_design_cargo_capacity(const ShipDesign& design)
 {
-    double capacity = design.baseCargoCapacity;
+    double capacity = hull_spec(design.hull).baseCargoCapacity;
     for (const auto component : design.components) capacity += component_spec(component).cargoCapacity;
     return capacity;
 }
@@ -515,9 +545,11 @@ GameState generate_game(const GalaxyConfig& config)
             generated_habitability(rng), 0, 0, 1, 0, {}});
     }
 
+    const auto* scout = find_ship_design(state, kScoutDesignId);
+    const auto scoutFuel = scout ? ship_design_fuel_capacity(*scout) : 0.0;
     state.fleets.push_back({
         1, 1, "Scout 1", FleetRole::Scout, kScoutDesignId,
-        {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, 300.0, 0,
+        {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, scoutFuel, 0,
     });
     state.nextFleetId = 2;
     refresh_sensor_intel(state);
@@ -550,9 +582,11 @@ GameState make_demo_game()
         {7, 7, "Eridani II", 56, 0, 0, 1, 0, {}},
         {8, 8, "Procyon II", 76, 0, 0, 1, 0, {}},
     };
+    const auto* scout = find_ship_design(state, kScoutDesignId);
+    const auto scoutFuel = scout ? ship_design_fuel_capacity(*scout) : 0.0;
     state.fleets.push_back({
         1, 1, "Scout 1", FleetRole::Scout, kScoutDesignId,
-        {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, 300.0, 0,
+        {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, scoutFuel, 0,
     });
     state.nextFleetId = 2;
     refresh_sensor_intel(state);

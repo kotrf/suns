@@ -28,6 +28,7 @@ private:
     void rebuildScene();
     void updateControls();
     void refreshShipDesignChoices();
+    void openShipDesigner();
     void queueFleetMove();
     void queueShipDesign();
     void queueProduction(ProductionKind kind);
@@ -76,6 +77,7 @@ private:
     QCheckBox* sensorRangesCheck_{};
     QPushButton* newGalaxyButton_{};
     QPushButton* fleetMoveButton_{};
+    QPushButton* designShipButton_{};
     QPushButton* buildShipButton_{};
     QPushButton* buildFactoryButton_{};
     QPushButton* loadColonistsButton_{};
