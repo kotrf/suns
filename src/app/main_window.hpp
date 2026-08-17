@@ -5,6 +5,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 
@@ -23,7 +24,7 @@ private:
     void updateControls();
     void queueScoutMove();
     void queueColonyShipMove();
-    void queueBuildColonyShip();
+    void queueProduction(ProductionKind kind);
     void queueColonize();
     void endTurn();
 
@@ -33,13 +34,13 @@ private:
     [[nodiscard]] const Fleet* playerColonyShip() const;
     [[nodiscard]] const Fleet* colonyShipAtSelectedStar() const;
 
-    void replacePendingOrder(Order order, const QString& description);
+    void appendPendingOrder(Order order, const QString& description);
 
     GameState state_;
     TurnProcessor processor_;
     PlayerOrders pendingOrders_{1, {}};
     std::optional<StarId> selectedStarId_;
-    QString pendingDescription_;
+    QStringList pendingDescriptions_;
 
     QGraphicsScene* scene_{};
     QLabel* selectionLabel_{};
@@ -47,7 +48,8 @@ private:
     QLabel* ordersLabel_{};
     QPushButton* scoutMoveButton_{};
     QPushButton* colonyMoveButton_{};
-    QPushButton* buildButton_{};
+    QPushButton* buildColonyButton_{};
+    QPushButton* buildFactoryButton_{};
     QPushButton* colonizeButton_{};
     QPushButton* endTurnButton_{};
 };
