@@ -153,6 +153,20 @@ enum class FleetRole {
     ColonyShip,
 };
 
+enum class FleetArrivalActionKind {
+    None,
+    LoadColonistsToCapacity,
+    UnloadAllColonists,
+    Refuel,
+};
+
+struct FleetArrivalAction {
+    FleetArrivalActionKind kind{FleetArrivalActionKind::None};
+    // Used by LoadColonistsToCapacity. The action is dynamic: the amount loaded
+    // is calculated from the colony population and free cargo at arrival time.
+    std::uint64_t reservePopulation{1};
+};
+
 struct Fleet {
     FleetId id{};
     PlayerId owner{};
@@ -164,6 +178,7 @@ struct Fleet {
     std::uint8_t warp{kScoutCruiseWarp};
     double fuel{300.0};
     std::uint64_t colonists{};
+    std::optional<FleetArrivalAction> arrivalAction;
 };
 
 struct GameState {

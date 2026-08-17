@@ -29,3 +29,11 @@ add_executable(suns_ship_designer_tests
 target_link_libraries(suns_ship_designer_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_ship_designer_tests COMMAND suns_ship_designer_tests)
+
+add_executable(suns_arrival_actions_tests
+    arrival_actions_tests.cpp
+)
+
+target_link_libraries(suns_arrival_actions_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_arrival_actions_tests COMMAND suns_arrival_actions_tests)
