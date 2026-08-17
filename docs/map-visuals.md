@@ -7,25 +7,31 @@ The map should remain information-first: attractive enough to make exploration f
 From back to front:
 
 1. dark space background with a restrained deterministic star field;
-2. pending movement routes;
-3. stellar glow and star core;
-4. colony / unknown / selection rings;
-5. fleet markers;
-6. text labels.
+2. sensor-range overlays;
+3. active and pending movement routes;
+4. stellar glow and star core;
+5. colony / unknown / selection rings;
+6. fleet markers;
+7. text labels.
 
-Star colour comes from a physical `StarClass` property in the core model. Survey state, colonies, selection and movement routes remain presentation concerns in the Qt client.
+Star colour comes from a physical `StarClass` property in the core model. Survey state, colonies, selection, routes and overlays are presentation concerns in the Qt client, while the ranges themselves come from simulation data.
 
-## Sensor-range overlay (planned)
+## Sensor-range overlay
 
-Stars!-style sensor and radar circles should be implemented as a separate map-overlay layer rather than baked into star or fleet rendering.
+Sensor circles are now a real game mechanic rather than decoration:
 
-Planned behaviour:
+- colonies provide a short stationary survey range;
+- Scout 1 provides a larger mobile survey range;
+- stars become permanently surveyed when they enter friendly coverage;
+- a moving scout sweeps its sensor circle continuously across the segment travelled during a turn, so close fly-bys can reveal systems without requiring the scout to stop on the star;
+- the Qt map renders colony ranges in green and scout ranges in blue below routes, stars and fleets;
+- `Show sensor ranges` toggles the overlay without changing simulation state;
+- surveyed planetary knowledge remains known after the sensor source moves away.
 
-- circles render below routes, stars and fleets;
-- multiple sensor sources may overlap without obscuring the map;
-- a UI toggle controls whether sensor ranges are visible;
-- ranges come from real simulation data once sensors/scanners become a game mechanic;
-- no placeholder range values should be introduced merely for decoration;
-- later overlays (weapon range, fuel range, ownership influence, etc.) should follow the same layer pattern.
+Future enemy fleet detection should be modeled separately as transient contacts. Permanent survey knowledge and current sensor contacts are different concepts and should not be collapsed into one flag.
 
-The important rule is that an overlay must explain a strategic constraint, not merely add visual noise.
+## Future ship design connection
+
+The current Scout sensor range is a role-level placeholder. When custom ship designs arrive, scanner range should come from installed components on the ship design, alongside engines, fuel, defenses, weapons and special modules. A ship's strategic role should emerge from its fit rather than from a permanently hard-coded class.
+
+Later overlays such as weapon range, fuel range and territorial influence should follow the same layer pattern: an overlay must explain a strategic constraint, not merely add visual noise.

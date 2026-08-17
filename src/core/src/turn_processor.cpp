@@ -1,6 +1,7 @@
 #include "suns/turn_processor.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <type_traits>
 
@@ -56,6 +57,34 @@ void run_colony_production(GameState& state, Planet& planet)
     planet.stockpile = available;
 }
 
+double distance_to_segment(Position point, Position start, Position end)
+{
+    const double dx = end.x - start.x;
+    const double dy = end.y - start.y;
+    const double lengthSquared = dx * dx + dy * dy;
+    if (lengthSquared <= 0.000000000001) {
+        return distance_between(point, start);
+    }
+
+    const double projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
+    const double t = std::clamp(projection, 0.0, 1.0);
+    const Position closest{start.x + t * dx, start.y + t * dy};
+    return distance_between(point, closest);
+}
+
+void survey_scout_sweep(GameState& state, PlayerId owner, Position start, Position end, double range)
+{
+    if (range <= 0.0) {
+        return;
+    }
+
+    for (const auto& star : state.stars) {
+        if (distance_to_segment(star.position, start, end) <= range + 0.000001) {
+            mark_surveyed(state, owner, star.id);
+        }
+    }
+}
+
 void advance_fleets(GameState& state)
 {
     for (auto& fleet : state.fleets) {
@@ -63,6 +92,7 @@ void advance_fleets(GameState& state)
             continue;
         }
 
+        const Position start = fleet.position;
         const auto destination = *fleet.destination;
         const auto remaining = distance_between(fleet.position, destination);
         const auto speed = fleet_speed(fleet.role);
@@ -70,28 +100,18 @@ void advance_fleets(GameState& state)
         if (remaining <= speed || remaining <= 0.000001) {
             fleet.position = destination;
             fleet.destination.reset();
-            continue;
+        } else {
+            const auto fraction = speed / remaining;
+            fleet.position.x += (destination.x - fleet.position.x) * fraction;
+            fleet.position.y += (destination.y - fleet.position.y) * fraction;
         }
 
-        const auto fraction = speed / remaining;
-        fleet.position.x += (destination.x - fleet.position.x) * fraction;
-        fleet.position.y += (destination.y - fleet.position.y) * fraction;
-    }
-}
-
-void update_scout_intel(GameState& state)
-{
-    for (const auto& fleet : state.fleets) {
-        if (fleet.role != FleetRole::Scout) {
-            continue;
-        }
-
-        for (const auto& star : state.stars) {
-            if (same_position(fleet.position, star.position)) {
-                mark_surveyed(state, fleet.owner, star.id);
-                break;
-            }
-        }
+        survey_scout_sweep(
+            state,
+            fleet.owner,
+            start,
+            fleet.position,
+            fleet_sensor_range(fleet.role));
     }
 }
 
@@ -185,10 +205,11 @@ GameState TurnProcessor::process(
         }
     }
 
-    // Movement is a turn phase: newly issued courses advance immediately by one
-    // turn of travel, and fleets already in transit continue automatically.
+    // Scanner coverage moves with ships. The swept path is sampled continuously
+    // over each turn of travel, then stationary fleet/colony coverage is applied
+    // at the resulting positions. Survey knowledge is permanent once acquired.
     advance_fleets(next);
-    update_scout_intel(next);
+    refresh_sensor_intel(next);
 
     for (auto& planet : next.planets) {
         run_colony_production(next, planet);
