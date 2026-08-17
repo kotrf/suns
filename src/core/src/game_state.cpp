@@ -1,11 +1,12 @@
 #include "suns/game_state.hpp"
+#include "star_name_pool.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <random>
 #include <stdexcept>
-#include <unordered_set>
+#include <string_view>
 
 namespace suns {
 
@@ -27,27 +28,19 @@ StarClass generated_star_class(std::mt19937_64& rng)
     return StarClass::Red;
 }
 
-std::string generated_star_name(
-    std::mt19937_64& rng,
-    std::size_t index,
-    std::unordered_set<std::string>& usedNames)
+std::vector<std::string_view> generated_star_name_deck(std::mt19937_64& rng)
 {
-    static constexpr std::array<const char*, 26> beginnings = {
-        "Al", "Ari", "Bel", "Cor", "Dar", "Eri", "Fen", "Gal", "Hel", "Ily", "Jan", "Kal", "Lor",
-        "Mer", "Nor", "Ori", "Pra", "Qua", "Rig", "Sar", "Tal", "Uma", "Ver", "Wex", "Yri", "Zen",
-    };
-    static constexpr std::array<const char*, 24> endings = {
-        "aris", "ora", "ion", "eth", "ara", "os", "ea", "iri", "on", "alis", "eron", "une",
-        "ax", "ira", "iel", "or", "eus", "oria", "ionis", "era", "oth", "arae", "eron", "is",
-    };
+    std::vector<std::string_view> deck;
+    deck.reserve(kCuratedStarNameCount);
+    for (const auto name : kCuratedStarNames) deck.push_back(name);
 
-    std::string name = std::string(beginnings[bounded(rng, beginnings.size())])
-        + endings[bounded(rng, endings.size())];
-    if (!usedNames.insert(name).second) {
-        name += "-" + std::to_string(index);
-        usedNames.insert(name);
+    // Fisher-Yates using our bounded mt19937_64 helper keeps the permutation
+    // deterministic across standard-library implementations.
+    for (std::size_t remaining = deck.size(); remaining > 1; --remaining) {
+        const auto other = static_cast<std::size_t>(bounded(rng, remaining));
+        std::swap(deck[remaining - 1], deck[other]);
     }
-    return name;
+    return deck;
 }
 
 std::string generated_planet_name(std::mt19937_64& rng, const std::string& starName)
@@ -522,7 +515,13 @@ std::uint32_t colony_output(const Planet& planet)
 GameState generate_game(const GalaxyConfig& config)
 {
     const auto starCount = std::clamp<std::size_t>(config.starCount, 2, 64);
-    std::mt19937_64 rng(config.seed);
+
+    // Keep physical generation independent from naming. This means expanding or
+    // reordering the name pool does not move stars or change their properties
+    // for an existing galaxy seed.
+    std::mt19937_64 physicalRng(config.seed);
+    std::mt19937_64 namingRng(config.seed ^ 0x9E3779B97F4A7C15ULL);
+    const auto nameDeck = generated_star_name_deck(namingRng);
 
     GameState state;
     state.galaxySeed = config.seed;
@@ -534,15 +533,14 @@ GameState generate_game(const GalaxyConfig& config)
     state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
     state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, 0, {}});
 
-    std::unordered_set<std::string> usedNames{"Sol"};
     for (std::size_t index = 2; index <= starCount; ++index) {
         const auto id = static_cast<StarId>(index);
-        const auto name = generated_star_name(rng, index, usedNames);
-        const auto position = generated_position(rng, config, state.stars);
-        const auto stellarClass = generated_star_class(rng);
+        const auto name = std::string(nameDeck[index - 2]);
+        const auto position = generated_position(physicalRng, config, state.stars);
+        const auto stellarClass = generated_star_class(physicalRng);
         state.stars.push_back({id, name, position, stellarClass});
-        state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(rng, name),
-            generated_habitability(rng), 0, 0, 1, 0, {}});
+        state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(namingRng, name),
+            generated_habitability(physicalRng), 0, 0, 1, 0, {}});
     }
 
     const auto* scout = find_ship_design(state, kScoutDesignId);
