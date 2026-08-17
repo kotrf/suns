@@ -11,7 +11,7 @@ option(SUNS_BUILD_TESTS "Build unit tests" ON)
 add_subdirectory(src/core)
 
 if(SUNS_BUILD_APP)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
     qt_standard_project_setup()
     add_subdirectory(src/app)
 endif()
