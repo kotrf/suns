@@ -120,9 +120,17 @@ void verify_custom_design_can_enter_production()
 
     suns::PlayerOrders queue{1, {}};
     queue.orders.emplace_back(suns::QueueShipDesignOrder{1, designId});
-    const auto queued = processor.process(state, {queue});
-    assert(!queued.planets.front().productionQueue.empty());
-    assert(queued.planets.front().productionQueue.front().shipDesign == designId);
+    const auto built = processor.process(state, {queue});
+
+    // Earth already has enough accumulated production to complete this design
+    // during the same turn, so verify the resulting fleet rather than queue state.
+    const auto fleet = std::find_if(built.fleets.begin(), built.fleets.end(), [designId](const suns::Fleet& candidate) {
+        return candidate.design == designId;
+    });
+    assert(fleet != built.fleets.end());
+    assert(fleet->name == "Cargo Runner 2");
+    assert(fleet->colonists == 0);
+    assert(built.planets.front().productionQueue.empty());
 }
 
 } // namespace
