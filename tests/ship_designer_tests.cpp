@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
 
+#include <algorithm>
 #include <cassert>
 
 namespace {
