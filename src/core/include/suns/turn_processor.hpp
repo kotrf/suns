@@ -12,7 +12,16 @@ struct MoveFleetOrder {
     Position destination;
 };
 
-using Order = std::variant<MoveFleetOrder>;
+struct BuildColonyShipOrder {
+    PlanetId colony{};
+};
+
+struct ColonizePlanetOrder {
+    FleetId fleet{};
+    PlanetId planet{};
+};
+
+using Order = std::variant<MoveFleetOrder, BuildColonyShipOrder, ColonizePlanetOrder>;
 
 struct PlayerOrders {
     PlayerId player{};
