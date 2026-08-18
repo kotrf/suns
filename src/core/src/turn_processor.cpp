@@ -144,6 +144,24 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
     return it == state.planets.end() ? nullptr : &*it;
 }
 
+bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
+{
+    if (planet.owner != 0 || fleet.colonists == 0 || !fleet_can_colonize(state, fleet)) return false;
+    if (!is_surveyed(state, fleet.owner, planet.star)) return false;
+    if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
+    if (!fleet_at_planet(state, fleet, planet)) return false;
+
+    planet.owner = fleet.owner;
+    planet.population = fleet.colonists;
+    planet.minerals.ironium += fleet.minerals.ironium;
+    planet.minerals.boranium += fleet.minerals.boranium;
+    planet.minerals.germanium += fleet.minerals.germanium;
+    planet.industry = 1;
+    planet.stockpile = 0;
+    planet.productionQueue.clear();
+    return true;
+}
+
 std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction action)
 {
     return action.kind == FleetArrivalActionKind::None
@@ -151,46 +169,59 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
         : std::optional<FleetArrivalAction>{action};
 }
 
-void execute_arrival_action(GameState& state, Fleet& fleet)
+bool execute_arrival_action(GameState& state, Fleet& fleet)
 {
-    if (!fleet.arrivalAction) return;
+    if (!fleet.arrivalAction) return false;
 
     const auto action = *fleet.arrivalAction;
     fleet.arrivalAction.reset();
-    if (action.kind == FleetArrivalActionKind::None) return;
-
-    auto* colony = friendly_colony_at_fleet(state, fleet);
-    if (!colony) return;
+    if (action.kind == FleetArrivalActionKind::None) return false;
 
     switch (action.kind) {
     case FleetArrivalActionKind::None:
-        break;
+        return false;
     case FleetArrivalActionKind::LoadColonistsToCapacity: {
+        auto* colony = friendly_colony_at_fleet(state, fleet);
+        if (!colony) return false;
+
         const auto capacity = fleet_cargo_capacity(state, fleet);
         const auto mineralLoad = mineral_cargo_mass(fleet.minerals);
         const auto freeForColonists = std::max(0.0, capacity - mineralLoad);
         const auto capacityColonists = static_cast<std::uint64_t>(
             std::floor(freeForColonists * kColonistsPerCargoUnit + 0.000001));
-        if (fleet.colonists >= capacityColonists) break;
+        if (fleet.colonists >= capacityColonists) return false;
 
         const auto reserve = std::max<std::uint64_t>(1, action.reservePopulation);
-        if (colony->population <= reserve) break;
+        if (colony->population <= reserve) return false;
 
         const auto available = colony->population - reserve;
         const auto freeSpace = capacityColonists - fleet.colonists;
         const auto load = std::min(available, freeSpace);
         colony->population -= load;
         fleet.colonists += load;
-        break;
+        return false;
     }
-    case FleetArrivalActionKind::UnloadAllColonists:
+    case FleetArrivalActionKind::UnloadAllColonists: {
+        auto* colony = friendly_colony_at_fleet(state, fleet);
+        if (!colony) return false;
         colony->population += fleet.colonists;
         fleet.colonists = 0;
-        break;
-    case FleetArrivalActionKind::Refuel:
-        fleet.fuel = fleet_fuel_capacity(state, fleet);
-        break;
+        return false;
     }
+    case FleetArrivalActionKind::Refuel: {
+        auto* colony = friendly_colony_at_fleet(state, fleet);
+        if (!colony) return false;
+        fleet.fuel = fleet_fuel_capacity(state, fleet);
+        return false;
+    }
+    case FleetArrivalActionKind::Colonize: {
+        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
+        });
+        return planet != state.planets.end() && establish_colony(state, fleet, *planet);
+    }
+    }
+    return false;
 }
 
 void activate_next_waypoint(GameState& state, Fleet& fleet)
@@ -237,6 +268,7 @@ void generate_fleet_fuel(GameState& state)
 void advance_fleets(GameState& state)
 {
     constexpr double epsilon = 0.000001;
+    std::vector<FleetId> consumedFleets;
 
     for (auto& fleet : state.fleets) {
         if (!fleet.destination || !fleet_warp_valid(state, fleet, fleet.warp)) continue;
@@ -247,7 +279,10 @@ void advance_fleets(GameState& state)
         if (remaining <= epsilon) {
             fleet.position = destination;
             fleet.destination.reset();
-            execute_arrival_action(state, fleet);
+            if (execute_arrival_action(state, fleet)) {
+                consumedFleets.push_back(fleet.id);
+                continue;
+            }
             activate_next_waypoint(state, fleet);
             continue;
         }
@@ -277,9 +312,18 @@ void advance_fleets(GameState& state)
         apply_fleet_radiation_attrition(state, fleet);
 
         if (arrived) {
-            execute_arrival_action(state, fleet);
+            if (execute_arrival_action(state, fleet)) {
+                consumedFleets.push_back(fleet.id);
+                continue;
+            }
             activate_next_waypoint(state, fleet);
         }
+    }
+
+    if (!consumedFleets.empty()) {
+        std::erase_if(state.fleets, [&](const Fleet& fleet) {
+            return std::find(consumedFleets.begin(), consumedFleets.end(), fleet.id) != consumedFleets.end();
+        });
     }
 }
 
@@ -407,29 +451,11 @@ GameState TurnProcessor::process(
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.planet;
                         });
-                        if (planet == next.planets.end() || planet->owner != 0) return;
-                        if (!is_surveyed(next, submission.player, planet->star)) return;
-
                         const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
-                            return candidate.id == concreteOrder.fleet
-                                && candidate.owner == submission.player
-                                && fleet_can_colonize(next, candidate);
+                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
                         });
-                        if (fleet == next.fleets.end() || fleet->colonists == 0) return;
-                        if (fleet_cargo_used(next, *fleet) > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
-
-                        const auto* star = find_star(next, planet->star);
-                        if (!star || !same_position(fleet->position, star->position)) return;
-
-                        planet->owner = submission.player;
-                        planet->population = fleet->colonists;
-                        planet->minerals.ironium += fleet->minerals.ironium;
-                        planet->minerals.boranium += fleet->minerals.boranium;
-                        planet->minerals.germanium += fleet->minerals.germanium;
-                        planet->industry = 1;
-                        planet->stockpile = 0;
-                        planet->productionQueue.clear();
-                        next.fleets.erase(fleet);
+                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
+                        if (establish_colony(next, *fleet, *planet)) next.fleets.erase(fleet);
                     }
                 },
                 order);
