@@ -24,6 +24,8 @@ void MainWindow::installDeferredMapSelectionHandler()
     scene_->disconnect(this);
 
     connect(scene_, &QGraphicsScene::selectionChanged, this, [this] {
+        if (shuttingDown_) return;
+
         const auto selected = scene_->selectedItems();
         if (selected.isEmpty()) return;
 
@@ -44,6 +46,7 @@ void MainWindow::installDeferredMapSelectionHandler()
         mapSelectionRebuildPending_ = true;
         QTimer::singleShot(0, this, [this] {
             mapSelectionRebuildPending_ = false;
+            if (shuttingDown_) return;
             rebuildScene();
         });
     });

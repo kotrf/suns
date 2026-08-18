@@ -11,11 +11,14 @@
 #include <vector>
 
 class QCheckBox;
+class QCloseEvent;
 class QComboBox;
+class QEvent;
 class QGraphicsScene;
 class QGraphicsView;
 class QLabel;
 class QLineEdit;
+class QObject;
 class QPushButton;
 class QSpinBox;
 
@@ -45,6 +48,14 @@ public:
     // delivering selectionChanged may destroy the item currently being clicked.
     void installDeferredMapSelectionHandler();
 
+    // Responsive Full-HD layout, visual theme and map navigation controls.
+    // Installed after all docks have been attached.
+    void installUiPolish();
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void closeEvent(QCloseEvent* event) override;
+
 private:
     void rebuildScene();
     void updateControls();
@@ -59,6 +70,8 @@ private:
     void queueColonize();
     void endTurn();
     void newGalaxy();
+    void zoomMap(double factor);
+    void fitGalaxyView();
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -85,6 +98,7 @@ private:
     QStringList pendingDescriptions_;
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
+    bool shuttingDown_{};
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};
