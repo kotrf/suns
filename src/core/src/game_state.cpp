@@ -172,8 +172,8 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.mass = 15.0;
         spec.buildCost = 3;
         spec.engineThrust = 595.0;
-        spec.maxWarp = 10;
-        spec.fuelPer100MassLy = {0.0, 0.04, 0.05, 0.06, 0.08, 0.11, 0.16, 0.24, 0.38, 0.62, 1.00};
+        spec.maxWarp = 8;
+        spec.fuelPer100MassLy = {0.0, 0.05, 0.07, 0.10, 0.15, 0.23, 0.36, 0.60, 1.00, 0.0, 0.0};
         break;
     case ShipComponentType::RamScoopDrive:
         spec.name = "Ram Scoop Drive";
@@ -190,8 +190,8 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.mass = 18.0;
         spec.buildCost = 4;
         spec.engineThrust = 560.0;
-        spec.maxWarp = 10;
-        spec.fuelPer100MassLy = {0.0, -0.12, -0.12, -0.10, -0.07, -0.03, 0.0, 0.07, 0.18, 0.42, 0.85};
+        spec.maxWarp = 9;
+        spec.fuelPer100MassLy = {0.0, -0.12, -0.12, -0.10, -0.07, -0.03, 0.0, 0.07, 0.18, 0.42, 0.0};
         spec.radiationHazard = 1.0;
         break;
     case ShipComponentType::LongRangeScanner:
