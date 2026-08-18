@@ -74,8 +74,8 @@ private:
     void saveGame();
     void saveGameAs();
     void openGame();
-    [[nodiscard]] bool saveGameToPath(const QString& path);
-    [[nodiscard]] bool loadGameFromPath(const QString& path);
+    bool saveGameToPath(const QString& path);
+    bool loadGameFromPath(const QString& path);
     void updateSaveWindowTitle();
     void zoomMap(double factor);
     void fitGalaxyView();
