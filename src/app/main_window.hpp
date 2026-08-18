@@ -70,6 +70,7 @@ private:
     void queueColonize();
     void endTurn();
     void newGalaxy();
+    [[nodiscard]] bool installSaveMenuBootstrap();
     void saveGame();
     void saveGameAs();
     void openGame();
@@ -108,6 +109,7 @@ private:
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
     bool shuttingDown_{};
+    bool saveMenuBootstrap_{installSaveMenuBootstrap()};
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};
