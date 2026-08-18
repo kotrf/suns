@@ -130,13 +130,11 @@ QString routeForecast(
     std::size_t legIndex = 0;
 
     for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
-        const auto* before = findFleet(simulated, fleetId);
-        if (!before) {
+        if (!findFleet(simulated, fleetId)) {
             lines << "Fleet no longer exists in the projected state.";
             break;
         }
 
-        const auto beforeColonists = before->colonists;
         std::vector<PlayerOrders> submissions;
         if (firstTurn && !pending.orders.empty()) submissions.push_back(pending);
         firstTurn = false;
@@ -158,20 +156,15 @@ QString routeForecast(
             && remainingLegs == expectedRemaining;
 
         if (arrived) {
-            const auto navigationCertainty = dependsOnDynamicResult ? "projected" : "exact navigation";
+            const auto navigationCertainty = dependsOnDynamicResult ? "projected navigation" : "exact navigation";
             QString outcome;
             switch (leg.arrivalAction.kind) {
             case FleetArrivalActionKind::None:
                 break;
-            case FleetArrivalActionKind::LoadColonistsToCapacity: {
-                const auto loaded = after->colonists > beforeColonists
-                    ? after->colonists - beforeColonists
-                    : 0;
-                outcome = QString("; projected Load All outcome: +%1, %2 aboard")
-                              .arg(static_cast<qulonglong>(loaded))
+            case FleetArrivalActionKind::LoadColonistsToCapacity:
+                outcome = QString("; projected Load All result: %1 aboard")
                               .arg(static_cast<qulonglong>(after->colonists));
                 break;
-            }
             case FleetArrivalActionKind::UnloadAllColonists:
                 outcome = QString("; projected cargo after unload: %1 colonists")
                               .arg(static_cast<qulonglong>(after->colonists));
