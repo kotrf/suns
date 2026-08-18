@@ -261,6 +261,8 @@ void advance_fleets(GameState& state)
         }
 
         survey_fleet_sweep(state, fleet, start, fleet.position);
+        apply_fleet_radiation_attrition(state, fleet);
+
         if (arrived) {
             execute_arrival_action(state, fleet);
             // Arrival ends movement for this turn. The next leg becomes active
