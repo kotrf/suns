@@ -28,6 +28,8 @@ inline constexpr std::uint8_t kMaxWarp = 10;
 inline constexpr std::uint8_t kScoutCruiseWarp = 10;
 inline constexpr std::uint8_t kColonyShipCruiseWarp = 8;
 inline constexpr double kColonistsPerCargoUnit = 100.0;
+inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
+inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
 
 struct Position {
     double x{};
@@ -144,6 +146,9 @@ struct Player {
     PlayerId id{};
     std::string name;
     std::vector<StarId> surveyedStars;
+    // Normalized 0..1 race trait. Radiating drives are currently safe at 0.85+.
+    double radiationTolerance{0.50};
+    bool radiationImmune{};
 };
 
 // FleetRole remains a temporary presentation hint for the current Qt client.
@@ -254,6 +259,9 @@ struct GalaxyConfig {
     const Fleet& fleet,
     double distance);
 [[nodiscard]] bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp);
+[[nodiscard]] bool fleet_radiation_safe(const GameState& state, const Fleet& fleet);
+[[nodiscard]] std::uint64_t projected_fleet_radiation_losses(const GameState& state, const Fleet& fleet);
+void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 
 [[nodiscard]] bool within_range(Position source, Position target, double range);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);

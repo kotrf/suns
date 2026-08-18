@@ -1,5 +1,6 @@
 add_library(suns_core
     src/game_state.cpp
+    src/radiation.cpp
     src/turn_processor.cpp
 )
 
