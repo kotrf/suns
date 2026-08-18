@@ -40,6 +40,11 @@ public:
     // so logistics can evolve without further inflating main_window.cpp.
     void openCargoManifestDialog();
 
+    // Replace the constructor's legacy synchronous scene-selection callback
+    // with a deferred rebuild. Rebuilding QGraphicsScene while Qt is still
+    // delivering selectionChanged may destroy the item currently being clicked.
+    void installDeferredMapSelectionHandler();
+
 private:
     void rebuildScene();
     void updateControls();
@@ -79,6 +84,7 @@ private:
     std::optional<FleetId> logisticsControlFleetId_;
     QStringList pendingDescriptions_;
     bool showSensorRanges_{true};
+    bool mapSelectionRebuildPending_{};
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};

@@ -8,6 +8,7 @@ int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
     suns::MainWindow window;
+    window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
 
     auto* cargoAction = window.menuBar()->addAction("Cargo Manifest…");
