@@ -10,6 +10,7 @@ int main(int argc, char* argv[])
     suns::MainWindow window;
     window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
+    window.installUiPolish();
 
     auto* cargoAction = window.menuBar()->addAction("Cargo Manifest…");
     QObject::connect(cargoAction, &QAction::triggered, &window, [&window] {
