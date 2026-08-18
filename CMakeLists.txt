@@ -8,6 +8,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(SUNS_BUILD_APP "Build the Qt desktop application" ON)
 option(SUNS_BUILD_TESTS "Build unit tests" ON)
 
+if(SUNS_BUILD_TESTS)
+    enable_testing()
+endif()
+
 add_subdirectory(src/core)
 
 if(SUNS_BUILD_APP)
@@ -17,6 +21,5 @@ if(SUNS_BUILD_APP)
 endif()
 
 if(SUNS_BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
 endif()
