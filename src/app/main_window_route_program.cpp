@@ -45,6 +45,8 @@ QString actionName(const FleetArrivalAction& action)
         return "Unload All — dynamic";
     case FleetArrivalActionKind::Refuel:
         return "Refuel on arrival";
+    case FleetArrivalActionKind::Colonize:
+        return "Colonize world — consumes ship";
     }
     return "no action";
 }
@@ -130,10 +132,12 @@ QString routeForecast(
     std::size_t legIndex = 0;
 
     for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
-        if (!findFleet(simulated, fleetId)) {
+        const auto* beforeFleet = findFleet(simulated, fleetId);
+        if (!beforeFleet) {
             lines << "Fleet no longer exists in the projected state.";
             break;
         }
+        const auto fleetOwner = beforeFleet->owner;
 
         std::vector<PlayerOrders> submissions;
         if (firstTurn && !pending.orders.empty()) submissions.push_back(pending);
@@ -141,14 +145,31 @@ QString routeForecast(
 
         auto next = processor.process(simulated, submissions);
         const auto* after = findFleet(next, fleetId);
+        const auto& leg = legs[legIndex];
         if (!after) {
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::Colonize) {
+                const auto* targetStar = findStarAtPosition(next, leg.destination);
+                const auto* targetPlanet = targetStar ? find_planet_at_star(next, targetStar->id) : nullptr;
+                if (targetPlanet && targetPlanet->owner == fleetOwner) {
+                    lines << QString("%1. %2 — T+%3, W%4 — <b>colonized successfully; ship consumed</b>")
+                                 .arg(static_cast<qulonglong>(legIndex + 1))
+                                 .arg(waypointName(state, leg.destination))
+                                 .arg(step)
+                                 .arg(leg.warp);
+                    if (legIndex + 1 < legs.size()) {
+                        lines << "<i>Later waypoints cannot execute because successful colonization consumes the ship.</i>";
+                    }
+                    legIndex = legs.size();
+                    simulated = std::move(next);
+                    break;
+                }
+            }
             lines << QString("%1. fleet removed before completing the route")
                          .arg(static_cast<qulonglong>(legIndex + 1));
             simulated = std::move(next);
             break;
         }
 
-        const auto& leg = legs[legIndex];
         const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
             + after->waypointQueue.size();
         const auto expectedRemaining = legs.size() - legIndex - 1;
@@ -172,6 +193,9 @@ QString routeForecast(
             case FleetArrivalActionKind::Refuel:
                 outcome = QString("; projected fuel after refuel: %1")
                               .arg(after->fuel, 0, 'f', 1);
+                break;
+            case FleetArrivalActionKind::Colonize:
+                outcome = "; colonization could not be completed; fleet remains";
                 break;
             }
 
@@ -288,6 +312,11 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
     const auto* star = selectedStar();
     if (!fleet || !star || !fleet_warp_valid(state_, *fleet, warp)) {
         statusBar()->showMessage("Select a fleet and destination star with a valid Warp first");
+        return false;
+    }
+
+    if (arrivalAction.kind == FleetArrivalActionKind::Colonize && !fleet_can_colonize(state_, *fleet)) {
+        statusBar()->showMessage("Selected ship design has no colonization module", 3000);
         return false;
     }
 
