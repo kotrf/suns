@@ -21,3 +21,11 @@ add_executable(suns_cargo_tests
 target_link_libraries(suns_cargo_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_cargo_tests COMMAND suns_cargo_tests)
+
+add_executable(suns_route_program_tests
+    route_program_tests.cpp
+)
+
+target_link_libraries(suns_route_program_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_route_program_tests COMMAND suns_route_program_tests)
