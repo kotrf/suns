@@ -146,9 +146,8 @@ void attachRouteProgramDock(MainWindow& window)
 
     auto* timer = new QTimer(dock);
     timer->setInterval(180);
-    FleetId lastFleet = 0;
     QObject::connect(timer, &QTimer::timeout, dock,
-        [&window, routeLabel, warpSpin, appendButton, clearButton, &lastFleet] {
+        [&window, routeLabel, warpSpin, appendButton, clearButton, lastFleet = FleetId{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
 
