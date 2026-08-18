@@ -36,6 +36,10 @@ public:
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool clearSelectedFleetRouteProgram();
 
+    // Dockside cargo editor entrypoint. Implemented separately from the map UI
+    // so logistics can evolve without further inflating main_window.cpp.
+    void openCargoManifestDialog();
+
 private:
     void rebuildScene();
     void updateControls();
