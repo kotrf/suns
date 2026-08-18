@@ -8,6 +8,7 @@
 #include <QStringList>
 
 #include <optional>
+#include <vector>
 
 class QCheckBox;
 class QComboBox;
@@ -23,6 +24,17 @@ namespace suns {
 class MainWindow final : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+
+    // Route-program dock API. Kept outside the main map implementation so the
+    // increasingly rich fleet-program UI can evolve independently.
+    [[nodiscard]] FleetId selectedFleetForRouteProgram() const;
+    [[nodiscard]] std::uint8_t selectedFleetMaxWarpForRouteProgram() const;
+    [[nodiscard]] std::uint8_t selectedFleetSuggestedWarpForRouteProgram() const;
+    [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
+    [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
+    [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
+    bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
+    bool clearSelectedFleetRouteProgram();
 
 private:
     void rebuildScene();
