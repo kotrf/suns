@@ -3,19 +3,10 @@
 #include <QStatusBar>
 
 #include <algorithm>
-#include <cmath>
 
 namespace suns {
 
 namespace {
-
-const Fleet* findFleet(const GameState& state, FleetId id)
-{
-    const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
-        return fleet.id == id;
-    });
-    return it == state.fleets.end() ? nullptr : &*it;
-}
 
 const StarSystem* findStarAtPosition(const GameState& state, Position position)
 {
@@ -65,7 +56,7 @@ const MoveFleetOrder* pendingMove(const PlayerOrders& pending, FleetId fleet)
     return nullptr;
 }
 
-std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const PlayerOrders& pending, const Fleet& fleet)
+std::optional<MoveFleetOrder> effectiveRoute(const GameState&, const PlayerOrders& pending, const Fleet& fleet)
 {
     if (const auto* move = pendingMove(pending, fleet.id)) return *move;
     if (!fleet.destination) return std::nullopt;
@@ -198,7 +189,6 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         }
 
         for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-            if (&pendingOrders_.orders[index] == nullptr) continue;
             if (const auto* candidate = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
                 candidate && candidate->fleet == fleet->id) {
                 pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, *candidate);
