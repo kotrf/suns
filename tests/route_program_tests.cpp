@@ -65,18 +65,10 @@ ArrivalFixture make_arrival_fixture(std::uint64_t colonists)
 void colonize_on_arrival_establishes_colony_and_consumes_ship()
 {
     auto fixture = make_arrival_fixture(250);
-    const auto* target = std::find_if(fixture.state.planets.begin(), fixture.state.planets.end(), [&](const Planet& planet) {
+    const auto targetPlanet = std::find_if(fixture.state.planets.begin(), fixture.state.planets.end(), [&](const Planet& planet) {
         return planet.id == fixture.targetPlanet;
-    }).base();
-    (void)target;
-
-    const auto* targetPlanet = [&]() -> const Planet* {
-        const auto it = std::find_if(fixture.state.planets.begin(), fixture.state.planets.end(), [&](const Planet& planet) {
-            return planet.id == fixture.targetPlanet;
-        });
-        return it == fixture.state.planets.end() ? nullptr : &*it;
-    }();
-    assert(targetPlanet);
+    });
+    assert(targetPlanet != fixture.state.planets.end());
     const auto* targetStar = find_star(fixture.state, targetPlanet->star);
     assert(targetStar);
 
