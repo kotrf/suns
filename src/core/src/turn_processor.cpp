@@ -38,6 +38,27 @@ bool design_name_exists(const GameState& state, PlayerId owner, const std::strin
     });
 }
 
+bool valid_mineral_cargo(const MineralCargo& cargo)
+{
+    return cargo.ironium >= 0.0 && cargo.boranium >= 0.0 && cargo.germanium >= 0.0;
+}
+
+bool minerals_available(const MineralCargo& colony, const MineralCargo& current, const MineralCargo& target)
+{
+    constexpr double epsilon = 0.000001;
+    return target.ironium - current.ironium <= colony.ironium + epsilon
+        && target.boranium - current.boranium <= colony.boranium + epsilon
+        && target.germanium - current.germanium <= colony.germanium + epsilon;
+}
+
+void transfer_minerals(MineralCargo& colony, MineralCargo& fleet, const MineralCargo& target)
+{
+    colony.ironium += fleet.ironium - target.ironium;
+    colony.boranium += fleet.boranium - target.boranium;
+    colony.germanium += fleet.germanium - target.germanium;
+    fleet = target;
+}
+
 void complete_production(GameState& state, Planet& planet, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Factory) {
@@ -146,12 +167,12 @@ void execute_arrival_action(GameState& state, Fleet& fleet)
         break;
     case FleetArrivalActionKind::LoadColonistsToCapacity: {
         const auto capacity = fleet_cargo_capacity(state, fleet);
+        const auto mineralLoad = mineral_cargo_mass(fleet.minerals);
+        const auto freeForColonists = std::max(0.0, capacity - mineralLoad);
         const auto capacityColonists = static_cast<std::uint64_t>(
-            std::floor(capacity * kColonistsPerCargoUnit + 0.000001));
+            std::floor(freeForColonists * kColonistsPerCargoUnit + 0.000001));
         if (fleet.colonists >= capacityColonists) break;
 
-        // Until explicit colony-abandonment rules exist, dynamic loading always
-        // leaves at least one colonist behind even when the requested reserve is 0.
         const auto reserve = std::max<std::uint64_t>(1, action.reservePopulation);
         if (colony->population <= reserve) break;
 
@@ -179,9 +200,6 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
         fleet.waypointQueue.erase(fleet.waypointQueue.begin());
 
         if (!fleet_warp_valid(state, fleet, waypoint.warp)) {
-            // A route is only meaningful while every queued leg is executable
-            // by the fitted design. Invalid future data cancels the remainder
-            // rather than leaving a fleet stuck with an impossible program.
             fleet.waypointQueue.clear();
             fleet.arrivalAction.reset();
             return;
@@ -196,14 +214,9 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
         }
 
         if (fleet.arrivalAction) {
-            // Resolve a zero-distance waypoint during the next movement phase,
-            // keeping arrival actions in the same deterministic phase as travel.
             fleet.destination = waypoint.destination;
             return;
         }
-
-        // A zero-distance waypoint without an action has no effect; skip it and
-        // immediately promote the following leg.
     }
 }
 
@@ -265,8 +278,6 @@ void advance_fleets(GameState& state)
 
         if (arrived) {
             execute_arrival_action(state, fleet);
-            // Arrival ends movement for this turn. The next leg becomes active
-            // immediately but consumes no distance until the following turn.
             activate_next_waypoint(state, fleet);
         }
     }
@@ -293,20 +304,15 @@ GameState TurnProcessor::process(
                     using T = std::decay_t<decltype(concreteOrder)>;
 
                     if constexpr (std::is_same_v<T, MoveFleetOrder>) {
-                        const auto fleet = std::find_if(
-                            next.fleets.begin(), next.fleets.end(),
-                            [&](const Fleet& candidate) {
-                                return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                            });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
+                        });
                         if (fleet == next.fleets.end()) return;
 
                         const auto requestedWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
                         if (!fleet_warp_valid(next, *fleet, requestedWarp)) return;
-                        if (std::any_of(
-                                concreteOrder.queuedWaypoints.begin(), concreteOrder.queuedWaypoints.end(),
-                                [&](const FleetWaypoint& waypoint) {
-                                    return !fleet_warp_valid(next, *fleet, waypoint.warp);
-                                })) {
+                        if (std::any_of(concreteOrder.queuedWaypoints.begin(), concreteOrder.queuedWaypoints.end(),
+                                [&](const FleetWaypoint& waypoint) { return !fleet_warp_valid(next, *fleet, waypoint.warp); })) {
                             return;
                         }
 
@@ -315,11 +321,8 @@ GameState TurnProcessor::process(
                         fleet->waypointQueue = concreteOrder.queuedWaypoints;
 
                         if (same_position(fleet->position, concreteOrder.destination)) {
-                            // Keep a zero-distance destination only when an arrival
-                            // action must be resolved in the movement phase.
-                            if (fleet->arrivalAction) {
-                                fleet->destination = concreteOrder.destination;
-                            } else {
+                            if (fleet->arrivalAction) fleet->destination = concreteOrder.destination;
+                            else {
                                 fleet->destination.reset();
                                 activate_next_waypoint(next, *fleet);
                             }
@@ -327,62 +330,44 @@ GameState TurnProcessor::process(
                             fleet->destination = concreteOrder.destination;
                         }
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
-                        const auto planet = std::find_if(
-                            next.planets.begin(), next.planets.end(),
-                            [&](const Planet& candidate) {
-                                return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
-                            });
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
                         if (planet == next.planets.end()) return;
 
                         if (concreteOrder.kind == ProductionKind::Factory) {
                             planet->productionQueue.push_back({ProductionKind::Factory, kFactoryCost, 0});
                         } else if (const auto* design = find_ship_design(next, kColonyShipDesignId);
                                    design && design->owner == submission.player) {
-                            planet->productionQueue.push_back({
-                                ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
+                            planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                         }
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
-                        ShipDesign candidate{
-                            next.nextShipDesignId,
-                            submission.player,
-                            concreteOrder.name,
-                            concreteOrder.hull,
-                            concreteOrder.components,
-                        };
-                        if (!ship_design_valid(candidate) || design_name_exists(next, submission.player, candidate.name)) {
-                            return;
-                        }
+                        ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,
+                            concreteOrder.hull, concreteOrder.components};
+                        if (!ship_design_valid(candidate) || design_name_exists(next, submission.player, candidate.name)) return;
                         next.shipDesigns.push_back(std::move(candidate));
                         ++next.nextShipDesignId;
                     } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
-                        const auto planet = std::find_if(
-                            next.planets.begin(), next.planets.end(),
-                            [&](const Planet& candidate) {
-                                return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
-                            });
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
                         const auto* design = find_ship_design(next, concreteOrder.design);
                         if (planet == next.planets.end() || !design || design->owner != submission.player
-                            || !ship_design_valid(*design)) {
-                            return;
-                        }
-                        planet->productionQueue.push_back({
-                            ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
+                            || !ship_design_valid(*design)) return;
+                        planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                     } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
-                        const auto planet = std::find_if(
-                            next.planets.begin(), next.planets.end(),
-                            [&](const Planet& candidate) {
-                                return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
-                            });
-                        const auto fleet = std::find_if(
-                            next.fleets.begin(), next.fleets.end(),
-                            [&](const Fleet& candidate) {
-                                return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                            });
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
+                        });
                         if (planet == next.planets.end() || fleet == next.fleets.end()) return;
                         if (!fleet_at_planet(next, *fleet, *planet)) return;
 
-                        const auto capacity = fleet_cargo_capacity(next, *fleet);
-                        if (colonist_cargo_mass(concreteOrder.colonists) > capacity + 0.000001) return;
+                        const auto requestedLoad = colonist_cargo_mass(concreteOrder.colonists)
+                            + mineral_cargo_mass(fleet->minerals);
+                        if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
 
                         if (concreteOrder.colonists > fleet->colonists) {
                             const auto load = concreteOrder.colonists - fleet->colonists;
@@ -392,42 +377,55 @@ GameState TurnProcessor::process(
                             planet->population += fleet->colonists - concreteOrder.colonists;
                         }
                         fleet->colonists = concreteOrder.colonists;
+                    } else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
+                        });
+                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
+                        if (!fleet_at_planet(next, *fleet, *planet) || !valid_mineral_cargo(concreteOrder.minerals)) return;
+
+                        const auto requestedLoad = colonist_cargo_mass(fleet->colonists)
+                            + mineral_cargo_mass(concreteOrder.minerals);
+                        if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
+                        if (!minerals_available(planet->minerals, fleet->minerals, concreteOrder.minerals)) return;
+
+                        transfer_minerals(planet->minerals, fleet->minerals, concreteOrder.minerals);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
-                        const auto planet = std::find_if(
-                            next.planets.begin(), next.planets.end(),
-                            [&](const Planet& candidate) {
-                                return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
-                            });
-                        const auto fleet = std::find_if(
-                            next.fleets.begin(), next.fleets.end(),
-                            [&](const Fleet& candidate) {
-                                return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                            });
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
+                        });
                         if (planet == next.planets.end() || fleet == next.fleets.end()) return;
                         if (!fleet_at_planet(next, *fleet, *planet)) return;
                         fleet->fuel = fleet_fuel_capacity(next, *fleet);
                     } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
-                        const auto planet = std::find_if(
-                            next.planets.begin(), next.planets.end(),
-                            [&](const Planet& candidate) { return candidate.id == concreteOrder.planet; });
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.planet;
+                        });
                         if (planet == next.planets.end() || planet->owner != 0) return;
                         if (!is_surveyed(next, submission.player, planet->star)) return;
 
-                        const auto fleet = std::find_if(
-                            next.fleets.begin(), next.fleets.end(),
-                            [&](const Fleet& candidate) {
-                                return candidate.id == concreteOrder.fleet
-                                    && candidate.owner == submission.player
-                                    && fleet_can_colonize(next, candidate);
-                            });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet
+                                && candidate.owner == submission.player
+                                && fleet_can_colonize(next, candidate);
+                        });
                         if (fleet == next.fleets.end() || fleet->colonists == 0) return;
-                        if (colonist_cargo_mass(fleet->colonists) > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
+                        if (fleet_cargo_used(next, *fleet) > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
 
                         const auto* star = find_star(next, planet->star);
                         if (!star || !same_position(fleet->position, star->position)) return;
 
                         planet->owner = submission.player;
                         planet->population = fleet->colonists;
+                        planet->minerals.ironium += fleet->minerals.ironium;
+                        planet->minerals.boranium += fleet->minerals.boranium;
+                        planet->minerals.germanium += fleet->minerals.germanium;
                         planet->industry = 1;
                         planet->stockpile = 0;
                         planet->productionQueue.clear();
