@@ -55,7 +55,9 @@ ArrivalFixture make_arrival_fixture(std::uint64_t colonists)
         colonists,
         std::nullopt,
         {},
-        MineralCargo{7.0, 3.0, 2.0},
+        // 250 colonists use 2.5 of the default 5 cargo units; keep the
+        // mixed mineral manifest inside the remaining capacity.
+        MineralCargo{1.0, 0.5, 0.5},
     });
 
     fixture.targetPlanet = target->id;
@@ -87,9 +89,9 @@ void colonize_on_arrival_establishes_colony_and_consumes_ship()
     assert(colonized != next.planets.end());
     assert(colonized->owner == 1);
     assert(colonized->population >= 250);
-    assert(colonized->minerals.ironium >= 7.0);
-    assert(colonized->minerals.boranium >= 3.0);
-    assert(colonized->minerals.germanium >= 2.0);
+    assert(colonized->minerals.ironium >= 1.0);
+    assert(colonized->minerals.boranium >= 0.5);
+    assert(colonized->minerals.germanium >= 0.5);
 
     const auto ship = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& fleet) {
         return fleet.id == fixture.colonyFleet;
