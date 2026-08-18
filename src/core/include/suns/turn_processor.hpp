@@ -14,6 +14,8 @@ struct MoveFleetOrder {
     Position destination;
     std::uint8_t warp{}; // 0 means keep current Warp.
     FleetArrivalAction arrivalAction{};
+    // Replotting a course replaces the whole future program with this queue.
+    std::vector<FleetWaypoint> queuedWaypoints;
 };
 
 struct QueueProductionOrder {
