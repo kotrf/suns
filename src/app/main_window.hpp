@@ -78,6 +78,8 @@ private:
     [[nodiscard]] const Fleet* selectedFleet() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
     [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;
+    [[nodiscard]] QString selectedPlanetPanelSummary() const;
+    [[nodiscard]] QString selectedFleetPanelSummary() const;
 
     void appendPendingOrder(Order order, const QString& description);
     void replacePendingFleetMove(
