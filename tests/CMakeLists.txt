@@ -37,3 +37,11 @@ add_executable(suns_arrival_actions_tests
 target_link_libraries(suns_arrival_actions_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_arrival_actions_tests COMMAND suns_arrival_actions_tests)
+
+add_executable(suns_waypoint_program_tests
+    waypoint_program_tests.cpp
+)
+
+target_link_libraries(suns_waypoint_program_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_waypoint_program_tests COMMAND suns_waypoint_program_tests)
