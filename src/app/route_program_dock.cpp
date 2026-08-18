@@ -8,6 +8,7 @@
 #include <QFormLayout>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QGroupBox>
 #include <QLabel>
 #include <QPen>
 #include <QPushButton>
@@ -83,43 +84,55 @@ void attachRouteProgramDock(MainWindow& window)
     auto* layout = new QVBoxLayout(panel);
 
     auto* help = new QLabel(
-        "Select a fleet and a destination star on the map. Append waypoints to build a multi-leg program. "
-        "Each leg keeps its own Warp and arrival action.",
+        "Navigation lives here. Select a fleet on the map, select a destination star, choose Warp and an arrival action, then add the star to the route. "
+        "Dockside loading and refuelling are in the Selected Fleet block.",
         panel);
     help->setWordWrap(true);
     layout->addWidget(help);
 
-    auto* routeLabel = new QLabel(panel);
+    auto* routeGroup = new QGroupBox("Current program", panel);
+    routeGroup->setObjectName("routeSummaryGroup");
+    auto* routeLayout = new QVBoxLayout(routeGroup);
+    auto* routeLabel = new QLabel(routeGroup);
     routeLabel->setWordWrap(true);
     routeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(routeLabel);
+    routeLayout->addWidget(routeLabel);
+    layout->addWidget(routeGroup);
 
-    auto* warpSpin = new QSpinBox(panel);
+    auto* waypointGroup = new QGroupBox("Add waypoint", panel);
+    waypointGroup->setObjectName("routeWaypointGroup");
+    auto* waypointLayout = new QVBoxLayout(waypointGroup);
+
+    auto* warpSpin = new QSpinBox(waypointGroup);
     warpSpin->setRange(1, kMaxWarp);
-    auto* actionCombo = new QComboBox(panel);
+    auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
-    actionCombo->addItem("Load All on arrival", static_cast<int>(FleetArrivalActionKind::LoadColonistsToCapacity));
-    actionCombo->addItem("Unload All on arrival", static_cast<int>(FleetArrivalActionKind::UnloadAllColonists));
-    actionCombo->addItem("Refuel on arrival", static_cast<int>(FleetArrivalActionKind::Refuel));
-    auto* reserveSpin = new QSpinBox(panel);
+    actionCombo->addItem("Load colonists to capacity", static_cast<int>(FleetArrivalActionKind::LoadColonistsToCapacity));
+    actionCombo->addItem("Unload all colonists", static_cast<int>(FleetArrivalActionKind::UnloadAllColonists));
+    actionCombo->addItem("Refuel", static_cast<int>(FleetArrivalActionKind::Refuel));
+    actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
+    auto* reserveSpin = new QSpinBox(waypointGroup);
     reserveSpin->setRange(0, 2'000'000'000);
     reserveSpin->setValue(1000);
     reserveSpin->setEnabled(false);
 
     auto* form = new QFormLayout;
     form->addRow("Waypoint Warp", warpSpin);
-    form->addRow("Arrival action", actionCombo);
-    form->addRow("Leave colonists", reserveSpin);
-    layout->addLayout(form);
+    form->addRow("On arrival", actionCombo);
+    form->addRow("Leave on colony", reserveSpin);
+    waypointLayout->addLayout(form);
 
-    auto* appendButton = new QPushButton("Append selected star as waypoint", panel);
+    auto* appendButton = new QPushButton("Add selected star to route", waypointGroup);
+    appendButton->setObjectName("routeAddButton");
+    waypointLayout->addWidget(appendButton);
+    layout->addWidget(waypointGroup);
+
     auto* clearButton = new QPushButton("Clear selected fleet route", panel);
-    layout->addWidget(appendButton);
     layout->addWidget(clearButton);
 
     auto* note = new QLabel(
-        "Arrival ends that fleet's movement for the current turn. The next waypoint becomes active immediately and starts moving next turn. "
-        "Load All is dynamic: the amount is decided from the real colony population on arrival.",
+        "Each leg keeps its own Warp and arrival action. Arrival ends movement for that turn; the next leg starts next turn. "
+        "Load is resolved from the real colony population on arrival. Colonize requires a surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
         panel);
     note->setWordWrap(true);
     layout->addWidget(note);
