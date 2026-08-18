@@ -22,7 +22,7 @@ set_target_properties(suns_app PROPERTIES
     MACOSX_BUNDLE TRUE
 )
 
-if(BUILD_TESTING)
+if(SUNS_BUILD_TESTS)
     add_test(NAME suns_ui_smoke COMMAND suns_app --smoke-test)
     set_tests_properties(suns_ui_smoke PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
