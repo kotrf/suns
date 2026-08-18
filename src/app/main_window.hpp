@@ -70,6 +70,13 @@ private:
     void queueColonize();
     void endTurn();
     void newGalaxy();
+    [[nodiscard]] bool installSaveMenuBootstrap();
+    void saveGame();
+    void saveGameAs();
+    void openGame();
+    bool saveGameToPath(const QString& path);
+    bool loadGameFromPath(const QString& path);
+    void updateSaveWindowTitle();
     void zoomMap(double factor);
     void fitGalaxyView();
 
@@ -98,9 +105,11 @@ private:
     std::optional<FleetId> warpControlFleetId_;
     std::optional<FleetId> logisticsControlFleetId_;
     QStringList pendingDescriptions_;
+    QString currentSavePath_;
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
     bool shuttingDown_{};
+    bool saveMenuBootstrap_{installSaveMenuBootstrap()};
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};
