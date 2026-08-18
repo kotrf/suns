@@ -2,6 +2,9 @@ qt_add_executable(suns_app
     main.cpp
     main_window.cpp
     main_window.hpp
+    main_window_route_program.cpp
+    route_program_dock.cpp
+    route_program_dock.hpp
     ship_designer_dialog.cpp
     ship_designer_dialog.hpp
     star_item.cpp
