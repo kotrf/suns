@@ -2,19 +2,30 @@
 
 #include <QAction>
 #include <QCloseEvent>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QEvent>
 #include <QFont>
+#include <QFormLayout>
 #include <QFrame>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QKeySequence>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
+#include <QPushButton>
 #include <QScrollArea>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QWidget>
 
@@ -42,18 +53,183 @@ QScrollArea* makeVerticalScrollArea(QWidget* content, QWidget* parent, const cha
     return scroll;
 }
 
+void clearLayoutPreservingWidgets(QLayout* layout)
+{
+    if (!layout) return;
+    while (auto* item = layout->takeAt(0)) {
+        if (auto* childLayout = item->layout()) {
+            clearLayoutPreservingWidgets(childLayout);
+            delete childLayout;
+            continue;
+        }
+        if (auto* widget = item->widget()) widget->hide();
+        delete item;
+    }
+}
+
+QGroupBox* makeGroup(const QString& title, const char* objectName, QWidget* parent)
+{
+    auto* group = new QGroupBox(title, parent);
+    group->setObjectName(objectName);
+    return group;
+}
+
 } // namespace
 
 void MainWindow::installUiPolish()
 {
-    // The command panel used to be fixed at 425 px. Together with the route
-    // dock that made the whole window effectively demand more space than a
-    // Full-HD desktop could comfortably provide. Both panels now scroll
-    // vertically and are allowed to contract while the map gets the remainder.
+    QWidget* commandPanel = nullptr;
+    QLabel* planetInfo = nullptr;
+    QLabel* fleetInfo = nullptr;
+
+    // Rebuild the command panel around stable information locations. The old
+    // panel grew chronologically, which split fleet navigation between two
+    // different places. The left panel is now state + dockside actions; the
+    // Route Program dock is the single home for navigation.
     if (auto* central = centralWidget()) {
         if (auto* layout = qobject_cast<QHBoxLayout*>(central->layout()); layout && layout->count() >= 2) {
-            if (auto* commandPanel = layout->itemAt(1)->widget();
-                commandPanel && !qobject_cast<QScrollArea*>(commandPanel)) {
+            commandPanel = layout->itemAt(1)->widget();
+            if (commandPanel && !qobject_cast<QScrollArea*>(commandPanel)) {
+                if (auto* sideLayout = qobject_cast<QVBoxLayout*>(commandPanel->layout())) {
+                    clearLayoutPreservingWidgets(sideLayout);
+                    sideLayout->setContentsMargins(8, 8, 8, 8);
+                    sideLayout->setSpacing(8);
+
+                    auto* title = new QLabel("<h2>Suns!</h2><span style='color:#8394a8'>Command console</span>", commandPanel);
+                    sideLayout->addWidget(title);
+
+                    auto* empireGroup = makeGroup("Empire", "empireGroup", commandPanel);
+                    auto* empireLayout = new QVBoxLayout(empireGroup);
+                    galaxyLabel_->show();
+                    empireLabel_->show();
+                    empireLayout->addWidget(galaxyLabel_);
+                    empireLayout->addWidget(empireLabel_);
+                    sideLayout->addWidget(empireGroup);
+
+                    // Orders stay near the top and use a warm accent so the
+                    // player always knows where to look before ending a turn.
+                    auto* ordersGroup = makeGroup("Orders this turn", "ordersGroup", commandPanel);
+                    auto* ordersLayout = new QVBoxLayout(ordersGroup);
+                    ordersLabel_->show();
+                    endTurnButton_->show();
+                    endTurnButton_->setText("End Turn — resolve orders");
+                    endTurnButton_->setObjectName("primaryTurnButton");
+                    ordersLayout->addWidget(ordersLabel_);
+                    ordersLayout->addWidget(endTurnButton_);
+                    sideLayout->addWidget(ordersGroup);
+
+                    auto* planetGroup = makeGroup("Selected system / planet", "planetGroup", commandPanel);
+                    auto* planetLayout = new QVBoxLayout(planetGroup);
+                    planetInfo = new QLabel(planetGroup);
+                    planetInfo->setWordWrap(true);
+                    planetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+                    planetLayout->addWidget(planetInfo);
+                    colonizeButton_->show();
+                    colonizeButton_->setText("Colonize now with selected ship");
+                    planetLayout->addWidget(colonizeButton_);
+                    sideLayout->addWidget(planetGroup);
+
+                    auto* fleetGroup = makeGroup("Selected fleet", "fleetGroup", commandPanel);
+                    auto* fleetLayout = new QVBoxLayout(fleetGroup);
+                    fleetInfo = new QLabel(fleetGroup);
+                    fleetInfo->setWordWrap(true);
+                    fleetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+                    fleetLayout->addWidget(fleetInfo);
+
+                    auto* colonistForm = new QFormLayout;
+                    colonistLoadSpin_->show();
+                    colonistForm->addRow("Colonists aboard", colonistLoadSpin_);
+                    fleetLayout->addLayout(colonistForm);
+
+                    loadColonistsButton_->show();
+                    loadColonistsButton_->setText("Apply colonist load");
+                    fleetLayout->addWidget(loadColonistsButton_);
+
+                    auto* quickRow = new QHBoxLayout;
+                    auto* loadMaxButton = new QPushButton("Load to capacity", fleetGroup);
+                    loadMaxButton->setToolTip("Fill remaining cargo with colonists, leaving at least one colonist on the colony");
+                    auto* unloadButton = new QPushButton("Unload colonists", fleetGroup);
+                    quickRow->addWidget(loadMaxButton);
+                    quickRow->addWidget(unloadButton);
+                    fleetLayout->addLayout(quickRow);
+
+                    refuelButton_->show();
+                    refuelButton_->setText("Refuel now");
+                    fleetLayout->addWidget(refuelButton_);
+
+                    auto* cargoButton = new QPushButton("Cargo manifest…", fleetGroup);
+                    cargoButton->setToolTip("Load or unload Ironium, Boranium and Germanium at the selected friendly colony");
+                    fleetLayout->addWidget(cargoButton);
+                    sideLayout->addWidget(fleetGroup);
+
+                    auto* productionGroup = makeGroup("Colony production", "productionGroup", commandPanel);
+                    auto* productionLayout = new QVBoxLayout(productionGroup);
+                    auto* productionForm = new QFormLayout;
+                    shipDesignCombo_->show();
+                    productionForm->addRow("Ship design", shipDesignCombo_);
+                    productionLayout->addLayout(productionForm);
+                    designShipButton_->show();
+                    buildShipButton_->show();
+                    buildFactoryButton_->show();
+                    designShipButton_->setText("Design ship…");
+                    buildShipButton_->setText("Queue selected ship");
+                    productionLayout->addWidget(designShipButton_);
+                    productionLayout->addWidget(buildShipButton_);
+                    productionLayout->addWidget(buildFactoryButton_);
+                    sideLayout->addWidget(productionGroup);
+
+                    auto* viewGroup = makeGroup("Map display", "viewGroup", commandPanel);
+                    auto* viewLayout = new QVBoxLayout(viewGroup);
+                    sensorRangesCheck_->show();
+                    viewLayout->addWidget(sensorRangesCheck_);
+                    sideLayout->addWidget(viewGroup);
+                    sideLayout->addStretch(1);
+
+                    // Legacy summary/course widgets remain alive because the
+                    // original updateControls implementation still maintains
+                    // them, but they are no longer player-facing. This avoids
+                    // stale 'planned Warp' text competing with Route Program.
+                    selectionLabel_->hide();
+                    fleetLabel_->hide();
+                    warpSpin_->hide();
+                    arrivalReserveSpin_->hide();
+                    fleetMoveButton_->hide();
+                    fleetLoadAllButton_->hide();
+                    seedEdit_->hide();
+                    starCountSpin_->hide();
+                    newGalaxyButton_->hide();
+
+                    connect(loadMaxButton, &QPushButton::clicked, this, [this] {
+                        const auto* fleet = selectedFleet();
+                        const auto* colony = selectedFriendlyColonyForFleet();
+                        if (!fleet || !colony) {
+                            statusBar()->showMessage("Select a fleet docked at the selected friendly colony first", 2500);
+                            return;
+                        }
+
+                        const auto freeForColonists = std::max(
+                            0.0,
+                            fleet_cargo_capacity(state_, *fleet) - mineral_cargo_mass(fleet->minerals));
+                        const auto capacity = static_cast<std::uint64_t>(
+                            std::floor(freeForColonists * kColonistsPerCargoUnit + 0.000001));
+                        const auto colonyAvailable = colony->population > 1 ? colony->population - 1 : 0;
+                        const auto available = fleet->colonists + colonyAvailable;
+                        const auto target = std::min(capacity, available);
+                        colonistLoadSpin_->setValue(static_cast<int>(target));
+                        queueColonists();
+                    });
+
+                    connect(unloadButton, &QPushButton::clicked, this, [this] {
+                        if (!selectedFriendlyColonyForFleet()) {
+                            statusBar()->showMessage("Select a fleet docked at the selected friendly colony first", 2500);
+                            return;
+                        }
+                        colonistLoadSpin_->setValue(0);
+                        queueColonists();
+                    });
+                    connect(cargoButton, &QPushButton::clicked, this, [this] { openCargoManifestDialog(); });
+                }
+
                 layout->removeWidget(commandPanel);
                 auto* scroll = makeVerticalScrollArea(commandPanel, central, "commandScrollArea");
                 scroll->setMinimumWidth(315);
@@ -63,20 +239,19 @@ void MainWindow::installUiPolish()
         }
     }
 
-    if (auto* dock = findChild<QDockWidget*>("fleetRouteProgramDock")) {
-        dock->setMinimumWidth(270);
-        dock->setMaximumWidth(390);
-        dock->setFeatures(
+    auto* routeDock = findChild<QDockWidget*>("fleetRouteProgramDock");
+    if (routeDock) {
+        routeDock->setMinimumWidth(270);
+        routeDock->setMaximumWidth(390);
+        routeDock->setFeatures(
             QDockWidget::DockWidgetClosable
             | QDockWidget::DockWidgetMovable
             | QDockWidget::DockWidgetFloatable);
 
-        if (auto* routePanel = dock->widget(); routePanel && !qobject_cast<QScrollArea*>(routePanel)) {
-            // Detach the original panel before replacing the dock's widget so
-            // QDockWidget never owns two wrappers around the same panel.
-            dock->setWidget(nullptr);
-            auto* scroll = makeVerticalScrollArea(routePanel, dock, "routeProgramScrollArea");
-            dock->setWidget(scroll);
+        if (auto* routePanel = routeDock->widget(); routePanel && !qobject_cast<QScrollArea*>(routePanel)) {
+            routeDock->setWidget(nullptr);
+            auto* scroll = makeVerticalScrollArea(routePanel, routeDock, "routeProgramScrollArea");
+            routeDock->setWidget(scroll);
         }
     }
 
@@ -91,9 +266,6 @@ void MainWindow::installUiPolish()
         setFont(compactFont);
     }
 
-    // Keep the restrained, information-dense look of the map but extend it to
-    // controls. Accent colors identify interaction without turning the UI into
-    // a modern dashboard full of decorative chrome.
     setStyleSheet(R"(
         QMainWindow, QDockWidget {
             background: #0d141d;
@@ -109,6 +281,31 @@ void MainWindow::installUiPolish()
             background: transparent;
             color: #cfdae7;
         }
+        QGroupBox {
+            margin-top: 10px;
+            padding: 7px 5px 5px 5px;
+            border: 1px solid #2a4056;
+            border-radius: 5px;
+            font-weight: 600;
+            background: #101925;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 9px;
+            padding: 0 5px;
+            color: #a9bdd0;
+        }
+        QGroupBox#empireGroup { border-color: #4d5f82; }
+        QGroupBox#planetGroup { border-color: #477660; }
+        QGroupBox#fleetGroup { border-color: #43749a; }
+        QGroupBox#productionGroup { border-color: #665b86; }
+        QGroupBox#ordersGroup {
+            border-color: #a37748;
+            background: #171a20;
+        }
+        QGroupBox#ordersGroup::title { color: #e4b77d; }
+        QGroupBox#routeSummaryGroup { border-color: #3f6684; }
+        QGroupBox#routeWaypointGroup { border-color: #4a7797; }
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
             min-height: 22px;
             padding: 2px 5px;
@@ -140,6 +337,22 @@ void MainWindow::installUiPolish()
             color: #617286;
             background: #101821;
             border-color: #202f3d;
+        }
+        QPushButton#primaryTurnButton {
+            min-height: 29px;
+            font-weight: 700;
+            color: #fff0dc;
+            background: #5a3d25;
+            border-color: #a8794b;
+        }
+        QPushButton#primaryTurnButton:hover {
+            background: #704b2d;
+            border-color: #d09b62;
+        }
+        QPushButton#routeAddButton {
+            font-weight: 700;
+            background: #183a52;
+            border-color: #4f91bd;
         }
         QCheckBox {
             spacing: 6px;
@@ -173,6 +386,11 @@ void MainWindow::installUiPolish()
             background: #152231;
             border-bottom: 1px solid #294057;
         }
+        QLabel#homeworldDistance {
+            padding: 2px 8px;
+            color: #f0d59d;
+            border-left: 1px solid #45566a;
+        }
         QScrollBar:vertical {
             width: 10px;
             margin: 0;
@@ -202,6 +420,53 @@ void MainWindow::installUiPolish()
         view_->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     }
 
+    // Rare galaxy creation controls live in a menu rather than occupying prime
+    // command-panel space for the entire game.
+    auto* gameMenu = menuBar()->addMenu("&Game");
+    auto* newGalaxyAction = gameMenu->addAction("New galaxy…");
+    newGalaxyAction->setShortcut(QKeySequence::New);
+    connect(newGalaxyAction, &QAction::triggered, this, [this] {
+        QDialog dialog(this);
+        dialog.setWindowTitle("New Galaxy");
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* form = new QFormLayout;
+        auto* seed = new QLineEdit(seedEdit_->text(), &dialog);
+        auto* systems = new QSpinBox(&dialog);
+        systems->setRange(8, 64);
+        systems->setValue(starCountSpin_->value());
+        form->addRow("Seed", seed);
+        form->addRow("Star systems", systems);
+        layout->addLayout(form);
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(buttons);
+
+        if (dialog.exec() != QDialog::Accepted) return;
+        bool seedOk = false;
+        seed->text().toULongLong(&seedOk);
+        if (!seedOk) {
+            statusBar()->showMessage("Galaxy seed must be an unsigned 64-bit integer", 3000);
+            return;
+        }
+        seedEdit_->setText(seed->text());
+        starCountSpin_->setValue(systems->value());
+        newGalaxy();
+        fitGalaxyView();
+    });
+
+    auto* restartAction = gameMenu->addAction("Restart current galaxy");
+    connect(restartAction, &QAction::triggered, this, [this] {
+        newGalaxy();
+        fitGalaxyView();
+    });
+
+    auto* fleetMenu = menuBar()->addMenu("&Fleet");
+    auto* cargoAction = fleetMenu->addAction("Cargo manifest…");
+    connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
+    auto* designerAction = fleetMenu->addAction("Ship designer…");
+    connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
+
     auto* mapToolbar = addToolBar("Map view");
     mapToolbar->setObjectName("mapViewToolbar");
     mapToolbar->setMovable(false);
@@ -220,6 +485,46 @@ void MainWindow::installUiPolish()
     fit->setToolTip("Fit the whole generated galaxy into the map viewport");
     fit->setShortcut(Qt::Key_Home);
     connect(fit, &QAction::triggered, this, [this] { fitGalaxyView(); });
+
+    // Stars! style homeworld range stays in one fixed status-bar location so
+    // selecting systems never makes the player hunt for the distance readout.
+    auto* homeworldDistance = new QLabel(statusBar());
+    homeworldDistance->setObjectName("homeworldDistance");
+    statusBar()->addPermanentWidget(homeworldDistance);
+
+    auto updateCommandContext = [this, homeworldDistance, planetInfo, fleetInfo] {
+        if (planetInfo) planetInfo->setText(selectedPlanetPanelSummary());
+        if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
+
+        const auto homePlanet = std::find_if(state_.planets.begin(), state_.planets.end(), [](const Planet& planet) {
+            return planet.owner == 1;
+        });
+        if (homePlanet == state_.planets.end()) {
+            homeworldDistance->setText("Homeworld: —");
+            return;
+        }
+        const auto* homeStar = find_star(state_, homePlanet->star);
+        if (!homeStar) {
+            homeworldDistance->setText("Homeworld: —");
+            return;
+        }
+
+        const auto* star = selectedStar();
+        QString text = QString("Homeworld: %1 / %2")
+                           .arg(QString::fromStdString(homePlanet->name))
+                           .arg(QString::fromStdString(homeStar->name));
+        if (star) {
+            text += QString("  •  %1 ly to %2")
+                        .arg(distance_between(homeStar->position, star->position), 0, 'f', 1)
+                        .arg(QString::fromStdString(star->name));
+        }
+        homeworldDistance->setText(text);
+    };
+    updateCommandContext();
+    auto* contextTimer = new QTimer(this);
+    contextTimer->setInterval(120);
+    connect(contextTimer, &QTimer::timeout, this, updateCommandContext);
+    contextTimer->start();
 }
 
 void MainWindow::zoomMap(double factor)
@@ -262,10 +567,6 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    // Timers in the route-program dock continuously inspect the map. Stop them
-    // before child widgets/scenes begin disappearing, and suppress any queued
-    // deferred selection redraw. This makes shutdown deterministic instead of
-    // depending on QObject child destruction order.
     shuttingDown_ = true;
     mapSelectionRebuildPending_ = false;
 

@@ -163,6 +163,7 @@ enum class FleetArrivalActionKind {
     LoadColonistsToCapacity,
     UnloadAllColonists,
     Refuel,
+    Colonize,
 };
 
 struct FleetArrivalAction {

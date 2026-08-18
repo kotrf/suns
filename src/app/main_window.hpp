@@ -3,6 +3,8 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QMainWindow>
 #include <QString>
 #include <QStringList>
@@ -10,9 +12,7 @@
 #include <optional>
 #include <vector>
 
-class QCheckBox;
 class QCloseEvent;
-class QComboBox;
 class QEvent;
 class QGraphicsScene;
 class QGraphicsView;
@@ -78,6 +78,8 @@ private:
     [[nodiscard]] const Fleet* selectedFleet() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
     [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;
+    [[nodiscard]] QString selectedPlanetPanelSummary() const;
+    [[nodiscard]] QString selectedFleetPanelSummary() const;
 
     void appendPendingOrder(Order order, const QString& description);
     void replacePendingFleetMove(

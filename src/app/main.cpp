@@ -4,7 +4,6 @@
 #include <QApplication>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
-#include <QMenuBar>
 #include <QTimer>
 
 int main(int argc, char* argv[])
@@ -14,11 +13,6 @@ int main(int argc, char* argv[])
     window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
     window.installUiPolish();
-
-    auto* cargoAction = window.menuBar()->addAction("Cargo Manifest…");
-    QObject::connect(cargoAction, &QAction::triggered, &window, [&window] {
-        window.openCargoManifestDialog();
-    });
 
     window.show();
 
