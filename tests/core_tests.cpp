@@ -179,7 +179,14 @@ int main()
     assert(travellingScout != nullptr);
     assert(travellingScout->destination.has_value());
     assert(suns::fleet_eta(scoutTravel1, *travellingScout) == 2);
-    assert(suns::is_surveyed(scoutTravel1, 1, 4));
+    assert(!suns::is_surveyed(scoutTravel1, 1, 4));
+
+    const auto scoutTravel2 = processor.process(scoutTravel1, {});
+    const auto* approachingScout = fleet(scoutTravel2, 1);
+    assert(approachingScout != nullptr);
+    assert(approachingScout->destination.has_value());
+    assert(suns::fleet_eta(scoutTravel2, *approachingScout) == 1);
+    assert(suns::is_surveyed(scoutTravel2, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kColonyShipDesignId});
