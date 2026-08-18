@@ -45,12 +45,17 @@ void verify_ship_designs()
     assert(std::abs(suns::ship_design_sensor_range(*scout) - 90.0) < 0.000001);
     assert(!suns::ship_design_can_colonize(*scout));
     assert(suns::ship_design_cost(*scout) == 8);
+    assert(suns::ship_design_max_warp(*scout) == 8);
+    assert(std::abs(suns::ship_design_fuel_rate(*scout, 7) - 0.60) < 0.000001);
+    assert(std::abs(suns::ship_design_fuel_rate(*scout, 8) - 1.00) < 0.000001);
+    assert(suns::ship_design_fuel_rate(*scout, 9) == 0.0);
 
     assert(std::abs(suns::ship_design_mass(*colony) - 85.0) < 0.000001);
     assert(std::abs(suns::ship_design_speed(*colony) - 70.0) < 0.000001);
     assert(suns::ship_design_sensor_range(*colony) == 0.0);
     assert(suns::ship_design_can_colonize(*colony));
     assert(suns::ship_design_cost(*colony) == suns::kColonyShipCost);
+    assert(suns::ship_design_max_warp(*colony) == 8);
 
     auto hybrid = *scout;
     hybrid.components.push_back(suns::ShipComponentType::ColonyModule);
@@ -58,6 +63,11 @@ void verify_ship_designs()
     assert(suns::ship_design_sensor_range(hybrid) == 90.0);
     assert(suns::ship_design_speed(hybrid) < suns::ship_design_speed(*scout));
     assert(suns::ship_design_cost(hybrid) > suns::ship_design_cost(*scout));
+
+    auto radiatingScout = *scout;
+    radiatingScout.components.front() = suns::ShipComponentType::RadiatingRamScoopDrive;
+    assert(suns::ship_design_max_warp(radiatingScout) == 9);
+    assert(suns::ship_design_fuel_rate(radiatingScout, 10) == 0.0);
 
     auto mismatched = state.fleets.front();
     mismatched.role = suns::FleetRole::ColonyShip;
@@ -82,6 +92,8 @@ void verify_procedural_generation()
     assert(first.players.front().surveyedStars == repeat.players.front().surveyedStars);
     assert(first.fleets.size() == 1);
     assert(first.fleets.front().design == suns::kScoutDesignId);
+    assert(first.fleets.front().warp == suns::kScoutCruiseWarp);
+    assert(first.fleets.front().warp == 8);
     assert(suns::same_position(first.fleets.front().position, first.stars.front().position));
 
     for (std::size_t i = 0; i < first.stars.size(); ++i) {
@@ -166,7 +178,7 @@ int main()
     const auto* travellingScout = fleet(scoutTravel1, 1);
     assert(travellingScout != nullptr);
     assert(travellingScout->destination.has_value());
-    assert(suns::fleet_eta(scoutTravel1, *travellingScout) == 1);
+    assert(suns::fleet_eta(scoutTravel1, *travellingScout) == 2);
     assert(suns::is_surveyed(scoutTravel1, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
