@@ -97,7 +97,7 @@ int main()
         1,
     };
     const auto dynamicallyLoaded = processor.process(dynamic, {});
-    assert(fleet(dynamicallyLoaded, 2).colonists == 1000); // remaining 10 cargo units.
+    assert(fleet(dynamicallyLoaded, 2).colonists == 999); // keep one colonist at the source colony.
 
     // Colonization deposits carried minerals on the new world before the ship is consumed.
     auto colonization = suns::make_demo_game();
