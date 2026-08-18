@@ -1,17 +1,75 @@
 #include "main_window.hpp"
 #include "save_game.hpp"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGraphicsScene>
+#include <QKeySequence>
 #include <QLineEdit>
+#include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QTimer>
 
 namespace suns {
+
+bool MainWindow::installSaveMenuBootstrap()
+{
+    // MainWindow's legacy UI builds its menus late in the constructor. Queue
+    // this once so File appears after that setup without coupling persistence
+    // code to the large visual-layout implementation.
+    QTimer::singleShot(0, this, [this] {
+        auto* fileMenu = new QMenu("&File", this);
+        fileMenu->setObjectName("fileMenu");
+        const auto existingMenus = menuBar()->actions();
+        menuBar()->insertMenu(existingMenus.empty() ? nullptr : existingMenus.front(), fileMenu);
+
+        auto* openAction = fileMenu->addAction("&Open game…");
+        openAction->setShortcut(QKeySequence::Open);
+        openAction->setToolTip("Open a .suns save game");
+        connect(openAction, &QAction::triggered, this, [this] { openGame(); });
+
+        fileMenu->addSeparator();
+
+        auto* saveAction = fileMenu->addAction("&Save game");
+        saveAction->setShortcut(QKeySequence::Save);
+        connect(saveAction, &QAction::triggered, this, [this] { saveGame(); });
+
+        auto* saveAsAction = fileMenu->addAction("Save game &as…");
+        saveAsAction->setShortcut(QKeySequence::SaveAs);
+        connect(saveAsAction, &QAction::triggered, this, [this] { saveGameAs(); });
+
+        // Keep the title's turn counter current even when no save operation is
+        // performed on that turn.
+        connect(endTurnButton_, &QPushButton::clicked, this, [this] {
+            QTimer::singleShot(0, this, [this] { updateSaveWindowTitle(); });
+        });
+
+        // Starting/restarting a galaxy deliberately detaches the current file,
+        // preventing a later Ctrl+S from silently replacing the old campaign.
+        for (auto* menuAction : menuBar()->actions()) {
+            auto* menu = menuAction->menu();
+            if (!menu || QString(menu->title()).remove('&') != "Game") continue;
+            for (auto* action : menu->actions()) {
+                if (action->text() == "New galaxy…" || action->text() == "Restart current galaxy") {
+                    connect(action, &QAction::triggered, this, [this] {
+                        currentSavePath_.clear();
+                        updateSaveWindowTitle();
+                    });
+                }
+            }
+        }
+
+        updateSaveWindowTitle();
+    });
+    return true;
+}
 
 void MainWindow::saveGame()
 {
