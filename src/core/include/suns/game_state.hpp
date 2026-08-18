@@ -167,6 +167,12 @@ struct FleetArrivalAction {
     std::uint64_t reservePopulation{1};
 };
 
+struct FleetWaypoint {
+    Position destination;
+    std::uint8_t warp{kScoutCruiseWarp};
+    FleetArrivalAction arrivalAction{};
+};
+
 struct Fleet {
     FleetId id{};
     PlayerId owner{};
@@ -179,6 +185,9 @@ struct Fleet {
     double fuel{300.0};
     std::uint64_t colonists{};
     std::optional<FleetArrivalAction> arrivalAction;
+    // Future legs. The active leg remains in destination/warp/arrivalAction so
+    // existing movement/UI code stays stable while route programming grows.
+    std::vector<FleetWaypoint> waypointQueue;
 };
 
 struct GameState {

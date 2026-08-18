@@ -123,6 +123,13 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
     return it == state.planets.end() ? nullptr : &*it;
 }
 
+std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction action)
+{
+    return action.kind == FleetArrivalActionKind::None
+        ? std::optional<FleetArrivalAction>{}
+        : std::optional<FleetArrivalAction>{action};
+}
+
 void execute_arrival_action(GameState& state, Fleet& fleet)
 {
     if (!fleet.arrivalAction) return;
@@ -165,6 +172,41 @@ void execute_arrival_action(GameState& state, Fleet& fleet)
     }
 }
 
+void activate_next_waypoint(GameState& state, Fleet& fleet)
+{
+    while (!fleet.destination && !fleet.waypointQueue.empty()) {
+        const auto waypoint = fleet.waypointQueue.front();
+        fleet.waypointQueue.erase(fleet.waypointQueue.begin());
+
+        if (!fleet_warp_valid(state, fleet, waypoint.warp)) {
+            // A route is only meaningful while every queued leg is executable
+            // by the fitted design. Invalid future data cancels the remainder
+            // rather than leaving a fleet stuck with an impossible program.
+            fleet.waypointQueue.clear();
+            fleet.arrivalAction.reset();
+            return;
+        }
+
+        fleet.warp = waypoint.warp;
+        fleet.arrivalAction = active_arrival_action(waypoint.arrivalAction);
+
+        if (!same_position(fleet.position, waypoint.destination)) {
+            fleet.destination = waypoint.destination;
+            return;
+        }
+
+        if (fleet.arrivalAction) {
+            // Resolve a zero-distance waypoint during the next movement phase,
+            // keeping arrival actions in the same deterministic phase as travel.
+            fleet.destination = waypoint.destination;
+            return;
+        }
+
+        // A zero-distance waypoint without an action has no effect; skip it and
+        // immediately promote the following leg.
+    }
+}
+
 void generate_fleet_fuel(GameState& state)
 {
     for (auto& fleet : state.fleets) {
@@ -193,6 +235,7 @@ void advance_fleets(GameState& state)
             fleet.position = destination;
             fleet.destination.reset();
             execute_arrival_action(state, fleet);
+            activate_next_waypoint(state, fleet);
             continue;
         }
 
@@ -218,7 +261,12 @@ void advance_fleets(GameState& state)
         }
 
         survey_fleet_sweep(state, fleet, start, fleet.position);
-        if (arrived) execute_arrival_action(state, fleet);
+        if (arrived) {
+            execute_arrival_action(state, fleet);
+            // Arrival ends movement for this turn. The next leg becomes active
+            // immediately but consumes no distance until the following turn.
+            activate_next_waypoint(state, fleet);
+        }
     }
 }
 
@@ -252,16 +300,27 @@ GameState TurnProcessor::process(
 
                         const auto requestedWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
                         if (!fleet_warp_valid(next, *fleet, requestedWarp)) return;
+                        if (std::any_of(
+                                concreteOrder.queuedWaypoints.begin(), concreteOrder.queuedWaypoints.end(),
+                                [&](const FleetWaypoint& waypoint) {
+                                    return !fleet_warp_valid(next, *fleet, waypoint.warp);
+                                })) {
+                            return;
+                        }
+
                         fleet->warp = requestedWarp;
-                        fleet->arrivalAction = concreteOrder.arrivalAction.kind == FleetArrivalActionKind::None
-                            ? std::optional<FleetArrivalAction>{}
-                            : std::optional<FleetArrivalAction>{concreteOrder.arrivalAction};
+                        fleet->arrivalAction = active_arrival_action(concreteOrder.arrivalAction);
+                        fleet->waypointQueue = concreteOrder.queuedWaypoints;
 
                         if (same_position(fleet->position, concreteOrder.destination)) {
                             // Keep a zero-distance destination only when an arrival
                             // action must be resolved in the movement phase.
-                            if (fleet->arrivalAction) fleet->destination = concreteOrder.destination;
-                            else fleet->destination.reset();
+                            if (fleet->arrivalAction) {
+                                fleet->destination = concreteOrder.destination;
+                            } else {
+                                fleet->destination.reset();
+                                activate_next_waypoint(next, *fleet);
+                            }
                         } else {
                             fleet->destination = concreteOrder.destination;
                         }
