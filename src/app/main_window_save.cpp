@@ -17,7 +17,81 @@
 #include <QStatusBar>
 #include <QTimer>
 
+#include <algorithm>
+
 namespace suns {
+
+namespace {
+
+std::uint8_t legalWarpForFleet(const GameState& state, FleetId fleetId, std::uint8_t requested)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [fleetId](const Fleet& candidate) {
+        return candidate.id == fleetId;
+    });
+    if (fleet == state.fleets.end()) return requested;
+
+    const auto* design = fleet_design(state, *fleet);
+    const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+    if (maxWarp == 0) return requested;
+    return static_cast<std::uint8_t>(std::clamp<int>(requested, 1, maxWarp));
+}
+
+bool normalizeLoadedWarpLimits(GameState& state, PlayerOrders& pendingOrders)
+{
+    bool adjusted = false;
+
+    for (auto& fleet : state.fleets) {
+        const auto* design = fleet_design(state, fleet);
+        const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+        if (maxWarp == 0) continue;
+
+        const auto legal = static_cast<std::uint8_t>(std::clamp<int>(fleet.warp, 1, maxWarp));
+        if (legal != fleet.warp) {
+            fleet.warp = legal;
+            adjusted = true;
+        }
+
+        for (auto& waypoint : fleet.waypointQueue) {
+            const auto waypointWarp = static_cast<std::uint8_t>(std::clamp<int>(waypoint.warp, 1, maxWarp));
+            if (waypointWarp != waypoint.warp) {
+                waypoint.warp = waypointWarp;
+                adjusted = true;
+            }
+        }
+    }
+
+    for (auto& order : pendingOrders.orders) {
+        auto* move = std::get_if<MoveFleetOrder>(&order);
+        if (!move) continue;
+
+        if (move->warp != 0) {
+            const auto legal = legalWarpForFleet(state, move->fleet, move->warp);
+            if (legal != move->warp) {
+                move->warp = legal;
+                adjusted = true;
+            }
+        }
+
+        const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+            return candidate.id == move->fleet;
+        });
+        const auto* design = fleet == state.fleets.end() ? nullptr : fleet_design(state, *fleet);
+        const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+        if (maxWarp == 0) continue;
+
+        for (auto& waypoint : move->queuedWaypoints) {
+            const auto legal = static_cast<std::uint8_t>(std::clamp<int>(waypoint.warp, 1, maxWarp));
+            if (legal != waypoint.warp) {
+                waypoint.warp = legal;
+                adjusted = true;
+            }
+        }
+    }
+
+    return adjusted;
+}
+
+} // namespace
 
 bool MainWindow::installSaveMenuBootstrap()
 {
@@ -155,6 +229,8 @@ bool MainWindow::loadGameFromPath(const QString& path)
     showSensorRanges_ = loaded.showSensorRanges;
     currentSavePath_ = QFileInfo(path).absoluteFilePath();
 
+    const bool adjustedLegacyWarp = normalizeLoadedWarpLimits(state_, pendingOrders_);
+
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
 
@@ -176,13 +252,13 @@ bool MainWindow::loadGameFromPath(const QString& path)
     fitGalaxyView();
     updateSaveWindowTitle();
 
-    statusBar()->showMessage(
-        QString("Opened %1 — turn %2, %3 pending order%4")
-            .arg(QFileInfo(currentSavePath_).fileName())
-            .arg(static_cast<qulonglong>(state_.turn))
-            .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
-            .arg(pendingOrders_.orders.size() == 1 ? "" : "s"),
-        4000);
+    QString openedMessage = QString("Opened %1 — turn %2, %3 pending order%4")
+                                .arg(QFileInfo(currentSavePath_).fileName())
+                                .arg(static_cast<qulonglong>(state_.turn))
+                                .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
+                                .arg(pendingOrders_.orders.size() == 1 ? "" : "s");
+    if (adjustedLegacyWarp) openedMessage += " — Warp adjusted to current engine limits";
+    statusBar()->showMessage(openedMessage, 5000);
     return true;
 }
 
