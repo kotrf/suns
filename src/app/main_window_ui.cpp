@@ -79,6 +79,8 @@ QGroupBox* makeGroup(const QString& title, const char* objectName, QWidget* pare
 void MainWindow::installUiPolish()
 {
     QWidget* commandPanel = nullptr;
+    QLabel* planetInfo = nullptr;
+    QLabel* fleetInfo = nullptr;
 
     // Rebuild the command panel around stable information locations. The old
     // panel grew chronologically, which split fleet navigation between two
@@ -118,17 +120,21 @@ void MainWindow::installUiPolish()
 
                     auto* planetGroup = makeGroup("Selected system / planet", "planetGroup", commandPanel);
                     auto* planetLayout = new QVBoxLayout(planetGroup);
-                    selectionLabel_->show();
+                    planetInfo = new QLabel(planetGroup);
+                    planetInfo->setWordWrap(true);
+                    planetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+                    planetLayout->addWidget(planetInfo);
                     colonizeButton_->show();
                     colonizeButton_->setText("Colonize now with selected ship");
-                    planetLayout->addWidget(selectionLabel_);
                     planetLayout->addWidget(colonizeButton_);
                     sideLayout->addWidget(planetGroup);
 
                     auto* fleetGroup = makeGroup("Selected fleet", "fleetGroup", commandPanel);
                     auto* fleetLayout = new QVBoxLayout(fleetGroup);
-                    fleetLabel_->show();
-                    fleetLayout->addWidget(fleetLabel_);
+                    fleetInfo = new QLabel(fleetGroup);
+                    fleetInfo->setWordWrap(true);
+                    fleetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+                    fleetLayout->addWidget(fleetInfo);
 
                     auto* colonistForm = new QFormLayout;
                     colonistLoadSpin_->show();
@@ -179,9 +185,12 @@ void MainWindow::installUiPolish()
                     sideLayout->addWidget(viewGroup);
                     sideLayout->addStretch(1);
 
-                    // Legacy course widgets remain alive because updateControls
-                    // still uses their values internally, but they are no longer
-                    // exposed. All player-facing navigation lives in Route Program.
+                    // Legacy summary/course widgets remain alive because the
+                    // original updateControls implementation still maintains
+                    // them, but they are no longer player-facing. This avoids
+                    // stale 'planned Warp' text competing with Route Program.
+                    selectionLabel_->hide();
+                    fleetLabel_->hide();
                     warpSpin_->hide();
                     arrivalReserveSpin_->hide();
                     fleetMoveButton_->hide();
@@ -295,6 +304,8 @@ void MainWindow::installUiPolish()
             background: #171a20;
         }
         QGroupBox#ordersGroup::title { color: #e4b77d; }
+        QGroupBox#routeSummaryGroup { border-color: #3f6684; }
+        QGroupBox#routeWaypointGroup { border-color: #4a7797; }
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
             min-height: 22px;
             padding: 2px 5px;
@@ -337,6 +348,11 @@ void MainWindow::installUiPolish()
         QPushButton#primaryTurnButton:hover {
             background: #704b2d;
             border-color: #d09b62;
+        }
+        QPushButton#routeAddButton {
+            font-weight: 700;
+            background: #183a52;
+            border-color: #4f91bd;
         }
         QCheckBox {
             spacing: 6px;
@@ -476,7 +492,10 @@ void MainWindow::installUiPolish()
     homeworldDistance->setObjectName("homeworldDistance");
     statusBar()->addPermanentWidget(homeworldDistance);
 
-    auto updateHomeworldDistance = [this, homeworldDistance] {
+    auto updateCommandContext = [this, homeworldDistance, planetInfo, fleetInfo] {
+        if (planetInfo) planetInfo->setText(selectedPlanetPanelSummary());
+        if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
+
         const auto homePlanet = std::find_if(state_.planets.begin(), state_.planets.end(), [](const Planet& planet) {
             return planet.owner == 1;
         });
@@ -501,11 +520,11 @@ void MainWindow::installUiPolish()
         }
         homeworldDistance->setText(text);
     };
-    updateHomeworldDistance();
-    auto* homeworldTimer = new QTimer(this);
-    homeworldTimer->setInterval(120);
-    connect(homeworldTimer, &QTimer::timeout, this, updateHomeworldDistance);
-    homeworldTimer->start();
+    updateCommandContext();
+    auto* contextTimer = new QTimer(this);
+    contextTimer->setInterval(120);
+    connect(contextTimer, &QTimer::timeout, this, updateCommandContext);
+    contextTimer->start();
 }
 
 void MainWindow::zoomMap(double factor)
