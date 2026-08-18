@@ -34,8 +34,6 @@ std::vector<std::string_view> generated_star_name_deck(std::mt19937_64& rng)
     deck.reserve(kCuratedStarNameCount);
     for (const auto name : kCuratedStarNames) deck.push_back(name);
 
-    // Fisher-Yates using our bounded mt19937_64 helper keeps the permutation
-    // deterministic across standard-library implementations.
     for (std::size_t remaining = deck.size(); remaining > 1; --remaining) {
         const auto other = static_cast<std::size_t>(bounded(rng, remaining));
         std::swap(deck[remaining - 1], deck[other]);
@@ -364,6 +362,13 @@ double colonist_cargo_mass(std::uint64_t colonists)
     return static_cast<double>(colonists) / kColonistsPerCargoUnit;
 }
 
+double mineral_cargo_mass(const MineralCargo& minerals)
+{
+    return std::max(0.0, minerals.ironium)
+        + std::max(0.0, minerals.boranium)
+        + std::max(0.0, minerals.germanium);
+}
+
 double fleet_speed(FleetRole role)
 {
     return role == FleetRole::Scout ? kScoutTravelSpeed : kColonyShipTravelSpeed;
@@ -416,10 +421,15 @@ double fleet_cargo_capacity(const GameState& state, const Fleet& fleet)
     return design ? ship_design_cargo_capacity(*design) : 0.0;
 }
 
+double fleet_cargo_used(const GameState&, const Fleet& fleet)
+{
+    return colonist_cargo_mass(fleet.colonists) + mineral_cargo_mass(fleet.minerals);
+}
+
 double fleet_gross_mass(const GameState& state, const Fleet& fleet)
 {
     const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_mass(*design) + colonist_cargo_mass(fleet.colonists) : 0.0;
+    return design ? ship_design_mass(*design) + fleet_cargo_used(state, fleet) : 0.0;
 }
 
 double fleet_fuel_rate(const GameState& state, const Fleet& fleet)
@@ -516,9 +526,6 @@ GameState generate_game(const GalaxyConfig& config)
 {
     const auto starCount = std::clamp<std::size_t>(config.starCount, 2, 64);
 
-    // Keep physical generation independent from naming. This means expanding or
-    // reordering the name pool does not move stars or change their properties
-    // for an existing galaxy seed.
     std::mt19937_64 physicalRng(config.seed);
     std::mt19937_64 namingRng(config.seed ^ 0x9E3779B97F4A7C15ULL);
     const auto nameDeck = generated_star_name_deck(namingRng);
@@ -532,6 +539,7 @@ GameState generate_game(const GalaxyConfig& config)
 
     state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
     state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, 0, {}});
+    state.planets.front().minerals = {100.0, 100.0, 100.0};
 
     for (std::size_t index = 2; index <= starCount; ++index) {
         const auto id = static_cast<StarId>(index);
@@ -580,6 +588,7 @@ GameState make_demo_game()
         {7, 7, "Eridani II", 56, 0, 0, 1, 0, {}},
         {8, 8, "Procyon II", 76, 0, 0, 1, 0, {}},
     };
+    state.planets.front().minerals = {100.0, 100.0, 100.0};
     const auto* scout = find_ship_design(state, kScoutDesignId);
     const auto scoutFuel = scout ? ship_design_fuel_capacity(*scout) : 0.0;
     state.fleets.push_back({

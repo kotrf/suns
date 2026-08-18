@@ -52,6 +52,12 @@ struct StarSystem {
     StarClass stellarClass{StarClass::Yellow};
 };
 
+struct MineralCargo {
+    double ironium{};
+    double boranium{};
+    double germanium{};
+};
+
 enum class ShipHullType {
     Scout,
     LightTransport,
@@ -95,8 +101,6 @@ struct ShipComponentSpec {
     double mass{};
     std::uint32_t buildCost{};
 
-    // engineThrust is retained only for the temporary compatibility metric.
-    // Turn movement is driven by maxWarp + the ordered Warp.
     double engineThrust{};
     std::uint8_t maxWarp{};
     std::array<double, kMaxWarp + 1> fuelPer100MassLy{};
@@ -118,8 +122,6 @@ struct ShipDesign {
 };
 
 enum class ProductionKind {
-    // ColonyShip remains as a compatibility alias for old callers. New code
-    // queues a concrete ShipDesignId.
     ColonyShip,
     Factory,
 };
@@ -127,7 +129,7 @@ enum class ProductionKind {
 struct ProductionItem {
     ProductionKind kind{ProductionKind::ColonyShip};
     std::uint32_t remainingCost{};
-    ShipDesignId shipDesign{}; // 0 for non-ship production / legacy alias.
+    ShipDesignId shipDesign{};
 };
 
 struct Planet {
@@ -140,19 +142,17 @@ struct Planet {
     std::uint32_t industry{1};
     std::uint32_t stockpile{};
     std::vector<ProductionItem> productionQueue;
+    MineralCargo minerals;
 };
 
 struct Player {
     PlayerId id{};
     std::string name;
     std::vector<StarId> surveyedStars;
-    // Normalized 0..1 race trait. Radiating drives are currently safe at 0.85+.
     double radiationTolerance{0.50};
     bool radiationImmune{};
 };
 
-// FleetRole remains a temporary presentation hint for the current Qt client.
-// Simulation capabilities are derived from the referenced ShipDesign.
 enum class FleetRole {
     Scout,
     ColonyShip,
@@ -167,8 +167,6 @@ enum class FleetArrivalActionKind {
 
 struct FleetArrivalAction {
     FleetArrivalActionKind kind{FleetArrivalActionKind::None};
-    // Used by LoadColonistsToCapacity. The action is dynamic: the amount loaded
-    // is calculated from the colony population and free cargo at arrival time.
     std::uint64_t reservePopulation{1};
 };
 
@@ -190,9 +188,8 @@ struct Fleet {
     double fuel{300.0};
     std::uint64_t colonists{};
     std::optional<FleetArrivalAction> arrivalAction;
-    // Future legs. The active leg remains in destination/warp/arrivalAction so
-    // existing movement/UI code stays stable while route programming grows.
     std::vector<FleetWaypoint> waypointQueue;
+    MineralCargo minerals;
 };
 
 struct GameState {
@@ -228,7 +225,7 @@ struct GalaxyConfig {
 [[nodiscard]] bool ship_design_valid(const ShipDesign& design);
 [[nodiscard]] double ship_design_mass(const ShipDesign& design);
 [[nodiscard]] std::uint32_t ship_design_cost(const ShipDesign& design);
-[[nodiscard]] double ship_design_speed(const ShipDesign& design); // Legacy compatibility metric.
+[[nodiscard]] double ship_design_speed(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
@@ -242,6 +239,7 @@ struct GalaxyConfig {
 [[nodiscard]] double distance_between(Position a, Position b);
 [[nodiscard]] double warp_distance(std::uint8_t warp);
 [[nodiscard]] double colonist_cargo_mass(std::uint64_t colonists);
+[[nodiscard]] double mineral_cargo_mass(const MineralCargo& minerals);
 
 [[nodiscard]] double fleet_speed(FleetRole role);
 [[nodiscard]] double fleet_sensor_range(FleetRole role);
@@ -252,12 +250,10 @@ struct GalaxyConfig {
 [[nodiscard]] std::uint32_t fleet_eta(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_capacity(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_cargo_capacity(const GameState& state, const Fleet& fleet);
+[[nodiscard]] double fleet_cargo_used(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_gross_mass(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_rate(const GameState& state, const Fleet& fleet);
-[[nodiscard]] double fleet_fuel_change_for_distance(
-    const GameState& state,
-    const Fleet& fleet,
-    double distance);
+[[nodiscard]] double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance);
 [[nodiscard]] bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp);
 [[nodiscard]] bool fleet_radiation_safe(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint64_t projected_fleet_radiation_losses(const GameState& state, const Fleet& fleet);

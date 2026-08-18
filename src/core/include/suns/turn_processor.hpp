@@ -12,9 +12,8 @@ namespace suns {
 struct MoveFleetOrder {
     FleetId fleet{};
     Position destination;
-    std::uint8_t warp{}; // 0 means keep current Warp.
+    std::uint8_t warp{};
     FleetArrivalAction arrivalAction{};
-    // Replotting a course replaces the whole future program with this queue.
     std::vector<FleetWaypoint> queuedWaypoints;
 };
 
@@ -40,6 +39,12 @@ struct SetFleetColonistsOrder {
     std::uint64_t colonists{};
 };
 
+struct SetFleetMineralCargoOrder {
+    PlanetId colony{};
+    FleetId fleet{};
+    MineralCargo minerals;
+};
+
 struct RefuelFleetOrder {
     PlanetId colony{};
     FleetId fleet{};
@@ -56,6 +61,7 @@ using Order = std::variant<
     CreateShipDesignOrder,
     QueueShipDesignOrder,
     SetFleetColonistsOrder,
+    SetFleetMineralCargoOrder,
     RefuelFleetOrder,
     ColonizePlanetOrder>;
 
