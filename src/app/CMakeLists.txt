@@ -3,6 +3,7 @@ qt_add_executable(suns_app
     main_window.cpp
     main_window.hpp
     main_window_cargo.cpp
+    main_window_selection.cpp
     main_window_route_program.cpp
     route_program_dock.cpp
     route_program_dock.hpp
