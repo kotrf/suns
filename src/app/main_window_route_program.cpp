@@ -3,10 +3,19 @@
 #include <QStatusBar>
 
 #include <algorithm>
+#include <utility>
 
 namespace suns {
 
 namespace {
+
+const Fleet* findFleet(const GameState& state, FleetId id)
+{
+    const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
+        return fleet.id == id;
+    });
+    return it == state.fleets.end() ? nullptr : &*it;
+}
 
 const StarSystem* findStarAtPosition(const GameState& state, Position position)
 {
@@ -92,6 +101,109 @@ QString routeDescription(const GameState& state, const Fleet& fleet, const MoveF
         .arg(route.warp);
 }
 
+std::vector<FleetWaypoint> routeLegs(const MoveFleetOrder& route)
+{
+    std::vector<FleetWaypoint> legs;
+    legs.reserve(1 + route.queuedWaypoints.size());
+    legs.push_back({route.destination, route.warp, route.arrivalAction});
+    legs.insert(legs.end(), route.queuedWaypoints.begin(), route.queuedWaypoints.end());
+    return legs;
+}
+
+QString routeForecast(
+    const GameState& state,
+    const PlayerOrders& pending,
+    const TurnProcessor& processor,
+    FleetId fleetId,
+    const MoveFleetOrder& route)
+{
+    constexpr std::uint32_t kForecastHorizon = 96;
+    const auto legs = routeLegs(route);
+    if (legs.empty()) return {};
+
+    GameState simulated = state;
+    QStringList lines;
+    lines << "<br><b>Forecast if no further orders are issued:</b>";
+
+    bool firstTurn = true;
+    bool dependsOnDynamicResult = false;
+    std::size_t legIndex = 0;
+
+    for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
+        if (!findFleet(simulated, fleetId)) {
+            lines << "Fleet no longer exists in the projected state.";
+            break;
+        }
+
+        std::vector<PlayerOrders> submissions;
+        if (firstTurn && !pending.orders.empty()) submissions.push_back(pending);
+        firstTurn = false;
+
+        auto next = processor.process(simulated, submissions);
+        const auto* after = findFleet(next, fleetId);
+        if (!after) {
+            lines << QString("%1. fleet removed before completing the route")
+                         .arg(static_cast<qulonglong>(legIndex + 1));
+            simulated = std::move(next);
+            break;
+        }
+
+        const auto& leg = legs[legIndex];
+        const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
+            + after->waypointQueue.size();
+        const auto expectedRemaining = legs.size() - legIndex - 1;
+        const bool arrived = same_position(after->position, leg.destination)
+            && remainingLegs == expectedRemaining;
+
+        if (arrived) {
+            const auto navigationCertainty = dependsOnDynamicResult ? "projected navigation" : "exact navigation";
+            QString outcome;
+            switch (leg.arrivalAction.kind) {
+            case FleetArrivalActionKind::None:
+                break;
+            case FleetArrivalActionKind::LoadColonistsToCapacity:
+                outcome = QString("; projected Load All result: %1 aboard")
+                              .arg(static_cast<qulonglong>(after->colonists));
+                break;
+            case FleetArrivalActionKind::UnloadAllColonists:
+                outcome = QString("; projected cargo after unload: %1 colonists")
+                              .arg(static_cast<qulonglong>(after->colonists));
+                break;
+            case FleetArrivalActionKind::Refuel:
+                outcome = QString("; projected fuel after refuel: %1")
+                              .arg(after->fuel, 0, 'f', 1);
+                break;
+            }
+
+            lines << QString("%1. %2 — T+%3, W%4, fuel %5, colonists %6 — <b>%7</b>%8")
+                         .arg(static_cast<qulonglong>(legIndex + 1))
+                         .arg(waypointName(state, leg.destination))
+                         .arg(step)
+                         .arg(leg.warp)
+                         .arg(after->fuel, 0, 'f', 1)
+                         .arg(static_cast<qulonglong>(after->colonists))
+                         .arg(navigationCertainty)
+                         .arg(outcome);
+
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadColonistsToCapacity) {
+                dependsOnDynamicResult = true;
+            }
+            ++legIndex;
+        }
+
+        simulated = std::move(next);
+    }
+
+    if (legIndex < legs.size()) {
+        lines << QString("<i>Program does not complete inside the %1-turn preview horizon; it may be fuel-limited or very long.</i>")
+                     .arg(kForecastHorizon);
+    } else if (dependsOnDynamicResult) {
+        lines << "<i>Projected legs after Load All depend on the colony state that actually exists on arrival.</i>";
+    }
+
+    return lines.join("<br>");
+}
+
 } // namespace
 
 FleetId MainWindow::selectedFleetForRouteProgram() const
@@ -150,6 +262,7 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     if (pendingMove(pendingOrders_, fleet->id)) {
         lines << "<i>Pending program becomes authoritative on End Turn.</i>";
     }
+    lines << routeForecast(state_, pendingOrders_, processor_, fleet->id, *route);
     return lines.join("<br>");
 }
 
