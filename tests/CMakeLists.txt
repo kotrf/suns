@@ -29,3 +29,14 @@ add_executable(suns_route_program_tests
 target_link_libraries(suns_route_program_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_route_program_tests COMMAND suns_route_program_tests)
+
+if(SUNS_BUILD_APP)
+    add_executable(suns_save_game_tests
+        save_game_tests.cpp
+        ../src/app/save_game.cpp
+        ../src/app/save_game.hpp
+    )
+    target_include_directories(suns_save_game_tests PRIVATE ${CMAKE_SOURCE_DIR}/src/app)
+    target_link_libraries(suns_save_game_tests PRIVATE Qt6::Core Suns::Core)
+    add_test(NAME suns_save_game_tests COMMAND suns_save_game_tests)
+endif()
