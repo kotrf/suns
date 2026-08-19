@@ -70,6 +70,11 @@ public:
     // mineral colours, popup/dialog contrast and conventional menu ordering.
     void installFleetReadabilityPolish();
 
+    // Add a compact, recognisable fleet portrait derived from the actual ship
+    // design rather than a rigid role label. Custom hull/component fits therefore
+    // receive correspondingly different silhouettes.
+    void installFleetPortraitPolish();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
