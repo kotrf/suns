@@ -24,6 +24,11 @@ const suns::Fleet& fleet(const suns::GameState& state, suns::FleetId id)
     return state.fleets.front();
 }
 
+bool close(double a, double b)
+{
+    return std::abs(a - b) < 0.000001;
+}
+
 } // namespace
 
 int main()
@@ -49,10 +54,11 @@ int main()
     hauler.colonists = 1000; // 10 cargo units.
     state.fleets = {hauler};
 
-    assert(std::abs(suns::fleet_cargo_capacity(state, state.fleets.front()) - 50.0) < 0.000001);
-    assert(std::abs(suns::fleet_cargo_used(state, state.fleets.front()) - 10.0) < 0.000001);
+    assert(close(suns::fleet_cargo_capacity(state, state.fleets.front()), 50.0));
+    assert(close(suns::fleet_cargo_used(state, state.fleets.front()), 10.0));
 
     const auto emptyFuelBurn = suns::fleet_fuel_change_for_distance(state, state.fleets.front(), 36.0);
+    const auto firstMining = suns::projected_mineral_mining(state, state.planets.front());
 
     suns::PlayerOrders loadMinerals{1, {}};
     loadMinerals.orders.emplace_back(
@@ -61,13 +67,13 @@ int main()
     const auto loaded = processor.process(state, {loadMinerals});
 
     const auto& loadedFleet = fleet(loaded, 2);
-    assert(std::abs(loadedFleet.minerals.ironium - 20.0) < 0.000001);
-    assert(std::abs(loadedFleet.minerals.boranium - 10.0) < 0.000001);
-    assert(std::abs(loadedFleet.minerals.germanium - 10.0) < 0.000001);
-    assert(std::abs(suns::fleet_cargo_used(loaded, loadedFleet) - 50.0) < 0.000001);
-    assert(std::abs(planet(loaded, 1).minerals.ironium - 80.0) < 0.000001);
-    assert(std::abs(planet(loaded, 1).minerals.boranium - 90.0) < 0.000001);
-    assert(std::abs(planet(loaded, 1).minerals.germanium - 90.0) < 0.000001);
+    assert(close(loadedFleet.minerals.ironium, 20.0));
+    assert(close(loadedFleet.minerals.boranium, 10.0));
+    assert(close(loadedFleet.minerals.germanium, 10.0));
+    assert(close(suns::fleet_cargo_used(loaded, loadedFleet), 50.0));
+    assert(close(planet(loaded, 1).minerals.ironium, 80.0 + firstMining.ironium));
+    assert(close(planet(loaded, 1).minerals.boranium, 90.0 + firstMining.boranium));
+    assert(close(planet(loaded, 1).minerals.germanium, 90.0 + firstMining.germanium));
     assert(suns::fleet_fuel_change_for_distance(loaded, loadedFleet, 36.0) > emptyFuelBurn);
 
     // A load that would overflow the shared hold is rejected atomically.
@@ -75,17 +81,18 @@ int main()
     overload.orders.emplace_back(
         suns::SetFleetMineralCargoOrder{1, 2, {21.0, 10.0, 10.0}});
     const auto rejected = processor.process(loaded, {overload});
-    assert(std::abs(fleet(rejected, 2).minerals.ironium - 20.0) < 0.000001);
+    assert(close(fleet(rejected, 2).minerals.ironium, 20.0));
 
-    // Unloading returns exact mineral amounts to the colony.
+    // Unloading returns exact cargo while turn-start extraction remains in the colony.
+    const auto secondMining = suns::projected_mineral_mining(loaded, planet(loaded, 1));
     suns::PlayerOrders unload{1, {}};
     unload.orders.emplace_back(
         suns::SetFleetMineralCargoOrder{1, 2, {0.0, 0.0, 0.0}});
     const auto unloaded = processor.process(loaded, {unload});
-    assert(std::abs(suns::mineral_cargo_mass(fleet(unloaded, 2).minerals)) < 0.000001);
-    assert(std::abs(planet(unloaded, 1).minerals.ironium - 100.0) < 0.000001);
-    assert(std::abs(planet(unloaded, 1).minerals.boranium - 100.0) < 0.000001);
-    assert(std::abs(planet(unloaded, 1).minerals.germanium - 100.0) < 0.000001);
+    assert(close(suns::mineral_cargo_mass(fleet(unloaded, 2).minerals), 0.0));
+    assert(close(planet(unloaded, 1).minerals.ironium, 100.0 + firstMining.ironium + secondMining.ironium));
+    assert(close(planet(unloaded, 1).minerals.boranium, 100.0 + firstMining.boranium + secondMining.boranium));
+    assert(close(planet(unloaded, 1).minerals.germanium, 100.0 + firstMining.germanium + secondMining.germanium));
 
     // Minerals already aboard reduce how many colonists Load All may take.
     auto dynamic = state;
@@ -129,9 +136,9 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{2, 2});
     const auto expanded = processor.process(colonization, {colonize});
     assert(planet(expanded, 2).owner == 1);
-    assert(std::abs(planet(expanded, 2).minerals.ironium - 7.0) < 0.000001);
-    assert(std::abs(planet(expanded, 2).minerals.boranium - 5.0) < 0.000001);
-    assert(std::abs(planet(expanded, 2).minerals.germanium - 3.0) < 0.000001);
+    assert(close(planet(expanded, 2).minerals.ironium, 7.0));
+    assert(close(planet(expanded, 2).minerals.boranium, 5.0));
+    assert(close(planet(expanded, 2).minerals.germanium, 3.0));
 
     return 0;
 }
