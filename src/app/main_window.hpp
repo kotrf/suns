@@ -52,6 +52,10 @@ public:
     // Installed after all docks have been attached.
     void installUiPolish();
 
+    // Frequently switched map-reading modes: physical stellar colour,
+    // habitability heatmap and colony population marker size.
+    void installMapDisplayModes();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -79,6 +83,7 @@ private:
     void updateSaveWindowTitle();
     void zoomMap(double factor);
     void fitGalaxyView();
+    void applyMapDisplayMode();
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -106,8 +111,10 @@ private:
     std::optional<FleetId> logisticsControlFleetId_;
     QStringList pendingDescriptions_;
     QString currentSavePath_;
+    int mapDisplayMode_{};
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
+    bool mapDisplayApplyPending_{};
     bool shuttingDown_{};
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
 
