@@ -14,6 +14,7 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QProgressBar>
+#include <QRadialGradient>
 #include <QRandomGenerator>
 #include <QTimer>
 #include <QVBoxLayout>
