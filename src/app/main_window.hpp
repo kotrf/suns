@@ -60,6 +60,12 @@ public:
     // reference material moved out of the always-visible command console.
     void installPlanetPolish();
 
+    // Harden side-panel resizing after all command/dock content is installed.
+    // Adds recovery UI and enables horizontal scrolling when narrow panels
+    // cannot display a technical line without clipping it.
+    void installPanelLayoutFixes();
+    void resetPanelLayout();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
