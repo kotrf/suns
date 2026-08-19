@@ -2,6 +2,7 @@
 #include "route_program_dock.hpp"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QTimer>
@@ -13,6 +14,7 @@ int main(int argc, char* argv[])
     window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
     window.installUiPolish();
+    window.installMapDisplayModes();
 
     window.show();
 
@@ -27,9 +29,14 @@ int main(int argc, char* argv[])
                     }
                 }
             }
+            if (auto* mode = window.findChild<QComboBox*>("mapDisplayModeCombo")) {
+                mode->setCurrentIndex(1);
+                mode->setCurrentIndex(2);
+                mode->setCurrentIndex(0);
+            }
         });
-        // Let deferred selection redraw and the route-program refresh timer run
-        // before exercising the real close/shutdown path.
+        // Let deferred selection redraw, map-mode restyling and the route-program
+        // refresh timer run before exercising the real close/shutdown path.
         QTimer::singleShot(350, &window, [&window] { window.close(); });
         QTimer::singleShot(3000, &app, &QApplication::quit);
     }

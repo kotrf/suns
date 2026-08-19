@@ -17,9 +17,11 @@ public:
 
     [[nodiscard]] QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+    void setVisualStyle(const QColor& color, qreal scale);
 
 private:
     QColor color_;
+    qreal visualScale_{1.0};
     bool surveyed_{};
     bool colony_{};
 };
