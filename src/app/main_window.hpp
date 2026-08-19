@@ -66,6 +66,10 @@ public:
     void installPanelLayoutFixes();
     void resetPanelLayout();
 
+    // Finish the information-dashboard pass: fleet fuel/cargo gauges, distinct
+    // mineral colours, popup/dialog contrast and conventional menu ordering.
+    void installFleetReadabilityPolish();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
