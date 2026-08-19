@@ -40,7 +40,7 @@ ShipDesignerDialog::ShipDesignerDialog(QWidget* parent)
     auto* layout = new QVBoxLayout(this);
     auto* intro = new QLabel(
         "Choose a hull, one engine and equipment for its general slots. "
-        "Every fitted component adds mass and build cost; fuel use later scales with gross ship mass.",
+        "Every fitted component adds mass, production cost and a mineral bill; fuel use later scales with gross ship mass.",
         this);
     intro->setWordWrap(true);
     layout->addWidget(intro);
@@ -167,14 +167,16 @@ void ShipDesignerDialog::updatePreview()
     }
 
     const auto radiation = ship_design_radiation_hazard(design);
+    const auto mineralCost = ship_design_mineral_cost(design);
     previewLabel_->setText(
         QString("<hr><b>%1</b><br>"
                 "Hull: %2 — engine slots %3, general slots <b>%4/%5</b><br>"
                 "Dry mass: <b>%6 kt</b> &nbsp; Build cost: <b>%7</b><br>"
-                "Max Warp: <b>%8</b> &nbsp; Fuel capacity: <b>%9</b> &nbsp; Fuel generation: <b>%10/turn</b><br>"
-                "Cargo capacity: <b>%11</b> (%12 colonists max)<br>"
-                "%13%14<br><br>"
-                "<b>Engine fuel curve</b> — rate per 100 kt per ly:<br>%15%16")
+                "Minerals: <b>I %8 / B %9 / G %10</b><br>"
+                "Max Warp: <b>%11</b> &nbsp; Fuel capacity: <b>%12</b> &nbsp; Fuel generation: <b>%13/turn</b><br>"
+                "Cargo capacity: <b>%14</b> (%15 colonists max)<br>"
+                "%16%17<br><br>"
+                "<b>Engine fuel curve</b> — rate per 100 kt per ly:<br>%18%19")
             .arg(QString::fromStdString(design.name.empty() ? std::string("Unnamed design") : design.name))
             .arg(QString::fromStdString(hull.name))
             .arg(hull.engineSlots)
@@ -182,6 +184,9 @@ void ShipDesignerDialog::updatePreview()
             .arg(hull.generalSlots)
             .arg(ship_design_mass(design), 0, 'f', 1)
             .arg(ship_design_cost(design))
+            .arg(mineralCost.ironium, 0, 'f', 0)
+            .arg(mineralCost.boranium, 0, 'f', 0)
+            .arg(mineralCost.germanium, 0, 'f', 0)
             .arg(maxWarp)
             .arg(ship_design_fuel_capacity(design), 0, 'f', 0)
             .arg(ship_design_fuel_generation(design), 0, 'f', 0)
