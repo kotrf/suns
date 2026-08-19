@@ -56,6 +56,10 @@ public:
     // habitability heatmap and colony population marker size.
     void installMapDisplayModes();
 
+    // Procedural orbital portraits, compact planet geology presentation and
+    // reference material moved out of the always-visible command console.
+    void installPlanetPolish();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -84,6 +88,7 @@ private:
     void zoomMap(double factor);
     void fitGalaxyView();
     void applyMapDisplayMode();
+    void refreshPlanetPolish();
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -115,6 +120,7 @@ private:
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
     bool mapDisplayApplyPending_{};
+    bool planetPolishRefreshPending_{};
     bool shuttingDown_{};
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
 
