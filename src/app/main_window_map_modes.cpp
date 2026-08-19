@@ -41,6 +41,13 @@ qreal populationScale(std::uint64_t population)
     return static_cast<qreal>(0.68 + 1.20 * std::sqrt(normalized));
 }
 
+QString modeLegend(int mode)
+{
+    if (mode == 1) return "red 0%  ·  yellow 50%  ·  green 100%  ·  grey unknown";
+    if (mode == 2) return "marker size = population  ·  green = your colony  ·  grey = empty/unknown";
+    return "stellar spectral class colours";
+}
+
 } // namespace
 
 void MainWindow::installMapDisplayModes()
@@ -65,8 +72,14 @@ void MainWindow::installMapDisplayModes()
         "Population: marker size follows colony population");
     toolbar->addWidget(mode);
 
-    connect(mode, &QComboBox::currentIndexChanged, this, [this, mode](int index) {
+    auto* legend = new QLabel(modeLegend(0), toolbar);
+    legend->setObjectName("mapDisplayLegend");
+    legend->setContentsMargins(9, 0, 5, 0);
+    toolbar->addWidget(legend);
+
+    connect(mode, &QComboBox::currentIndexChanged, this, [this, mode, legend](int index) {
         mapDisplayMode_ = mode->itemData(index).toInt();
+        legend->setText(modeLegend(mapDisplayMode_));
         applyMapDisplayMode();
     });
 
