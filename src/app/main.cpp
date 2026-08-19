@@ -15,6 +15,7 @@ int main(int argc, char* argv[])
     suns::attachRouteProgramDock(window);
     window.installUiPolish();
     window.installMapDisplayModes();
+    window.installPlanetPolish();
 
     window.show();
 
@@ -35,8 +36,8 @@ int main(int argc, char* argv[])
                 mode->setCurrentIndex(0);
             }
         });
-        // Let deferred selection redraw, map-mode restyling and the route-program
-        // refresh timer run before exercising the real close/shutdown path.
+        // Let deferred selection redraw, map-mode restyling, planet portrait
+        // refresh and the route-program timer run before normal shutdown.
         QTimer::singleShot(350, &window, [&window] { window.close(); });
         QTimer::singleShot(3000, &app, &QApplication::quit);
     }
