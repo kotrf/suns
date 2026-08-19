@@ -65,6 +65,7 @@ int main()
     // Production points may finish while construction waits for material.
     auto starved = state;
     starved.planets.front().population = 0;
+    starved.planets.front().stockpile = 2; // 4 output + 2 stored finishes the 6-point factory.
     starved.planets.front().minerals = {};
     starved.planets.front().productionQueue.clear();
     const auto blocked = processor.process(starved, {buildFactory});
