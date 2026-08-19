@@ -7,6 +7,7 @@
 #include <QDockWidget>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QProgressBar>
 #include <QTimer>
 
 int main(int argc, char* argv[])
@@ -19,6 +20,7 @@ int main(int argc, char* argv[])
     window.installMapDisplayModes();
     window.installPlanetPolish();
     window.installPanelLayoutFixes();
+    window.installFleetReadabilityPolish();
 
     window.show();
 
@@ -46,9 +48,18 @@ int main(int argc, char* argv[])
             if (auto* reset = window.findChild<QAction*>("resetPanelLayoutAction")) {
                 reset->trigger();
             }
+
+            // Touch the new dashboard gauges in the offscreen path too; their
+            // values are refreshed asynchronously from the selected fleet.
+            if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) {
+                fuel->update();
+            }
+            if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) {
+                cargo->update();
+            }
         });
         // Let deferred selection redraw, map-mode restyling, planet portrait,
-        // panel-layout recovery and route-program timers run before shutdown.
+        // panel-layout recovery, fleet gauges and route-program timers run.
         QTimer::singleShot(350, &window, [&window] { window.close(); });
         QTimer::singleShot(3000, &app, &QApplication::quit);
     }
