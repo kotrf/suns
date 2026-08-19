@@ -30,6 +30,14 @@ target_link_libraries(suns_route_program_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_route_program_tests COMMAND suns_route_program_tests)
 
+add_executable(suns_mineral_economy_tests
+    mineral_economy_tests.cpp
+)
+
+target_link_libraries(suns_mineral_economy_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_mineral_economy_tests COMMAND suns_mineral_economy_tests)
+
 if(SUNS_BUILD_APP)
     add_executable(suns_save_game_tests
         save_game_tests.cpp

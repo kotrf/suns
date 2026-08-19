@@ -83,8 +83,6 @@ QPixmap renderPlanetPortrait(const Planet& planet, StarClass stellarClass, std::
     painter.save();
     painter.setClipPath(clip);
 
-    // Broad deterministic surface bands/continents. They are deliberately
-    // stylised: recognisable silhouettes matter more than photorealism.
     const int patches = 8 + static_cast<int>(rng.bounded(8u));
     QColor land = base.lighter(planet.habitability >= 55 ? 120 : 108);
     if (planet.habitability >= 70) land = QColor("#698957");
@@ -116,8 +114,6 @@ QPixmap renderPlanetPortrait(const Planet& planet, StarClass stellarClass, std::
 
     painter.restore();
 
-    // Atmospheric rim hints at world friendliness without encoding an exact
-    // numeric value; exact habitability remains textual gameplay information.
     QColor atmosphere = planet.habitability >= 60 ? QColor(93, 183, 227, 100) : QColor(175, 115, 84, 55);
     QPen atmospherePen(atmosphere);
     atmospherePen.setWidthF(2.2);
@@ -125,7 +121,6 @@ QPixmap renderPlanetPortrait(const Planet& planet, StarClass stellarClass, std::
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(disk.adjusted(-1.5, -1.5, 1.5, 1.5));
 
-    // Small phase shadow gives every portrait a clear orbital-view silhouette.
     QLinearGradient shadow(52, 0, 132, 0);
     shadow.setColorAt(0.0, QColor(0, 0, 0, 0));
     shadow.setColorAt(0.55, QColor(0, 0, 0, 45));
@@ -152,8 +147,8 @@ QProgressBar* makeMineralBar(const QString& name, const char* objectName, QWidge
     bar->setRange(0, 100);
     bar->setValue(0);
     bar->setTextVisible(true);
-    bar->setFormat(name + " — concentration pending");
-    bar->setToolTip("Geological concentration. It will control mining yield once mineral extraction is enabled.");
+    bar->setFormat(name + " — unknown");
+    bar->setToolTip("Geological concentration; higher concentration produces more mineral units each turn.");
     return bar;
 }
 
@@ -161,8 +156,6 @@ QProgressBar* makeMineralBar(const QString& name, const char* objectName, QWidge
 
 void MainWindow::installPlanetPolish()
 {
-    // Galaxy metadata is reference information rather than turn-to-turn state.
-    // Removing it from the command console frees vertical space for real play.
     if (galaxyLabel_) galaxyLabel_->hide();
 
     auto* helpMenu = menuBar()->findChild<QMenu*>("sunsHelpMenu");
@@ -174,7 +167,7 @@ void MainWindow::installPlanetPolish()
     connect(reference, &QAction::triggered, this, [this] {
         QDialog dialog(this);
         dialog.setWindowTitle("Suns! — Game Reference");
-        dialog.resize(520, 400);
+        dialog.resize(520, 420);
         auto* layout = new QVBoxLayout(&dialog);
         auto* text = new QLabel(&dialog);
         text->setWordWrap(true);
@@ -188,6 +181,7 @@ void MainWindow::installPlanetPolish()
             "<b>Fuel:</b> engine rate × gross mass / 100 × distance<br>"
             "<b>Cargo:</b> colonists and minerals share the same hold; 100 colonists = 1 cargo unit<br>"
             "<b>Sensors:</b> systems become surveyed when they enter friendly sensor coverage; fly-bys count<br>"
+            "<b>Minerals:</b> concentration controls automatic colony extraction. Ship and factory completion consumes I/B/G stocks.<br>"
             "<b>Orders:</b> commands are queued and resolved together at End Turn<br><br>"
             "Map modes: <b>Spectral</b> shows stellar class, <b>Habitability</b> shows surveyed world value, "
             "and <b>Population</b> scales colony markers by population.")
@@ -253,25 +247,35 @@ void MainWindow::refreshPlanetPolish()
     }
 
     portrait->setPixmap(renderPlanetPortrait(*planet, star->stellarClass, state_.galaxySeed));
+    const auto concentration = planet_mineral_concentration(state_, *planet);
+    const auto mining = projected_mineral_mining(state_, *planet);
 
-    // Concentrations become real core state in the immediately following
-    // mineral-economy pass. Keep the visual slots now so that pass changes data,
-    // not the player's learned information layout.
     const struct {
         QProgressBar* bar;
         const char* name;
+        double concentration;
         double stock;
+        double mining;
     } entries[] = {
-        {ironium, "Ironium", planet->minerals.ironium},
-        {boranium, "Boranium", planet->minerals.boranium},
-        {germanium, "Germanium", planet->minerals.germanium},
+        {ironium, "Ironium", concentration.ironium, planet->minerals.ironium, mining.ironium},
+        {boranium, "Boranium", concentration.boranium, planet->minerals.boranium, mining.boranium},
+        {germanium, "Germanium", concentration.germanium, planet->minerals.germanium, mining.germanium},
     };
     for (const auto& entry : entries) {
         entry.bar->setEnabled(true);
-        entry.bar->setValue(0);
-        entry.bar->setFormat(QString("%1 — concentration next • stock %2")
-                                 .arg(entry.name)
-                                 .arg(entry.stock, 0, 'f', 0));
+        entry.bar->setValue(static_cast<int>(std::lround(entry.concentration)));
+        if (planet->owner != 0) {
+            entry.bar->setFormat(QString("%1 %2% • stock %3 • +%4/turn")
+                                     .arg(entry.name)
+                                     .arg(entry.concentration, 0, 'f', 0)
+                                     .arg(entry.stock, 0, 'f', 1)
+                                     .arg(entry.mining, 0, 'f', 1));
+        } else {
+            entry.bar->setFormat(QString("%1 %2% • stock %3")
+                                     .arg(entry.name)
+                                     .arg(entry.concentration, 0, 'f', 0)
+                                     .arg(entry.stock, 0, 'f', 1));
+        }
     }
 }
 

@@ -59,6 +59,17 @@ void transfer_minerals(MineralCargo& colony, MineralCargo& fleet, const MineralC
     fleet = target;
 }
 
+void mine_colonies(GameState& state)
+{
+    for (auto& planet : state.planets) {
+        if (planet.owner == 0) continue;
+        const auto mined = projected_mineral_mining(state, planet);
+        planet.minerals.ironium += mined.ironium;
+        planet.minerals.boranium += mined.boranium;
+        planet.minerals.germanium += mined.germanium;
+    }
+}
+
 void complete_production(GameState& state, Planet& planet, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Factory) {
@@ -91,12 +102,19 @@ void run_colony_production(GameState& state, Planet& planet)
     if (planet.owner == 0) return;
 
     std::uint32_t available = planet.stockpile + colony_output(planet);
-    while (!planet.productionQueue.empty() && available > 0) {
+    while (!planet.productionQueue.empty()) {
         auto& item = planet.productionQueue.front();
-        const auto spent = std::min(available, item.remainingCost);
-        available -= spent;
-        item.remainingCost -= spent;
-        if (item.remainingCost != 0) break;
+        if (item.remainingCost > 0) {
+            if (available == 0) break;
+            const auto spent = std::min(available, item.remainingCost);
+            available -= spent;
+            item.remainingCost -= spent;
+            if (item.remainingCost != 0) break;
+        }
+
+        const auto requiredMinerals = production_item_mineral_cost(state, item);
+        if (!mineral_cargo_sufficient(planet.minerals, requiredMinerals)) break;
+        subtract_minerals(planet.minerals, requiredMinerals);
 
         const auto completed = item;
         planet.productionQueue.erase(planet.productionQueue.begin());
@@ -340,6 +358,7 @@ GameState TurnProcessor::process(
 {
     GameState next = current;
     generate_fleet_fuel(next);
+    mine_colonies(next);
 
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
