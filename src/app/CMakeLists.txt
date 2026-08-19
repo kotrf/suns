@@ -5,6 +5,7 @@ qt_add_executable(suns_app
     main_window_cargo.cpp
     main_window_dashboard.cpp
     main_window_map_modes.cpp
+    main_window_planet.cpp
     main_window_save.cpp
     main_window_selection.cpp
     main_window_ui.cpp
