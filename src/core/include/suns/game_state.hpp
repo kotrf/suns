@@ -226,6 +226,7 @@ struct GalaxyConfig {
 [[nodiscard]] bool ship_design_valid(const ShipDesign& design);
 [[nodiscard]] double ship_design_mass(const ShipDesign& design);
 [[nodiscard]] std::uint32_t ship_design_cost(const ShipDesign& design);
+[[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
@@ -241,6 +242,12 @@ struct GalaxyConfig {
 [[nodiscard]] double warp_distance(std::uint8_t warp);
 [[nodiscard]] double colonist_cargo_mass(std::uint64_t colonists);
 [[nodiscard]] double mineral_cargo_mass(const MineralCargo& minerals);
+[[nodiscard]] bool mineral_cargo_sufficient(const MineralCargo& available, const MineralCargo& required);
+void subtract_minerals(MineralCargo& available, const MineralCargo& required);
+
+[[nodiscard]] MineralCargo planet_mineral_concentration(const GameState& state, const Planet& planet);
+[[nodiscard]] MineralCargo projected_mineral_mining(const GameState& state, const Planet& planet);
+[[nodiscard]] MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item);
 
 [[nodiscard]] double fleet_speed(FleetRole role);
 [[nodiscard]] double fleet_sensor_range(FleetRole role);
