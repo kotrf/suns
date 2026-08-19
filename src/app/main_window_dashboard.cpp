@@ -14,6 +14,14 @@ const StarSystem* findStarAtPosition(const GameState& state, Position position)
     return it == state.stars.end() ? nullptr : &*it;
 }
 
+QString mineralBill(const MineralCargo& minerals)
+{
+    return QString("I %1 / B %2 / G %3")
+        .arg(minerals.ironium, 0, 'f', 0)
+        .arg(minerals.boranium, 0, 'f', 0)
+        .arg(minerals.germanium, 0, 'f', 0);
+}
+
 QString productionLine(const GameState& state, const Planet& planet)
 {
     if (planet.productionQueue.empty()) return "Idle";
@@ -24,7 +32,18 @@ QString productionLine(const GameState& state, const Planet& planet)
         if (const auto* design = find_ship_design(state, designId)) name = QString::fromStdString(design->name);
         else name = "Ship";
     }
-    QString text = QString("%1 — %2 remaining").arg(name).arg(item.remainingCost);
+
+    const auto minerals = production_item_mineral_cost(state, item);
+    QString text;
+    if (item.remainingCost == 0 && !mineral_cargo_sufficient(planet.minerals, minerals)) {
+        text = QString("%1 — <span style='color:#e4b77d'><b>waiting for minerals</b></span> (%2)")
+                   .arg(name, mineralBill(minerals));
+    } else {
+        text = QString("%1 — %2 production remaining • %3")
+                   .arg(name)
+                   .arg(item.remainingCost)
+                   .arg(mineralBill(minerals));
+    }
     if (planet.productionQueue.size() > 1) {
         text += QString(" • +%1 queued").arg(static_cast<qulonglong>(planet.productionQueue.size() - 1));
     }
@@ -90,18 +109,18 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(colony_output(*planet))
                      .arg(planet->stockpile);
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
-        lines << QString("Minerals — I %1 • B %2 • G %3")
-                     .arg(planet->minerals.ironium, 0, 'f', 0)
-                     .arg(planet->minerals.boranium, 0, 'f', 0)
-                     .arg(planet->minerals.germanium, 0, 'f', 0);
+        lines << QString("Mineral stocks — I %1 • B %2 • G %3")
+                     .arg(planet->minerals.ironium, 0, 'f', 1)
+                     .arg(planet->minerals.boranium, 0, 'f', 1)
+                     .arg(planet->minerals.germanium, 0, 'f', 1);
     } else if (planet->owner == 0) {
         lines << "<span style='color:#c6b57c'><b>Uncolonized</b></span>";
         lines << QString("Potential population capacity: %1")
                      .arg(static_cast<qulonglong>(population_capacity(*planet)));
-        lines << QString("Minerals — I %1 • B %2 • G %3")
-                     .arg(planet->minerals.ironium, 0, 'f', 0)
-                     .arg(planet->minerals.boranium, 0, 'f', 0)
-                     .arg(planet->minerals.germanium, 0, 'f', 0);
+        lines << QString("Mineral stocks — I %1 • B %2 • G %3")
+                     .arg(planet->minerals.ironium, 0, 'f', 1)
+                     .arg(planet->minerals.boranium, 0, 'f', 1)
+                     .arg(planet->minerals.germanium, 0, 'f', 1);
     } else {
         lines << "<b>Foreign world</b>";
     }
