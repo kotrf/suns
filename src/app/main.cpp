@@ -13,6 +13,7 @@ int main(int argc, char* argv[])
     window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
     window.installUiPolish();
+    window.installMapDisplayModes();
 
     window.show();
 
