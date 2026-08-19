@@ -7,6 +7,7 @@
 #include <QDockWidget>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QLabel>
 #include <QProgressBar>
 #include <QTimer>
 
@@ -21,6 +22,7 @@ int main(int argc, char* argv[])
     window.installPlanetPolish();
     window.installPanelLayoutFixes();
     window.installFleetReadabilityPolish();
+    window.installFleetPortraitPolish();
 
     window.show();
 
@@ -49,17 +51,14 @@ int main(int argc, char* argv[])
                 reset->trigger();
             }
 
-            // Touch the new dashboard gauges in the offscreen path too; their
-            // values are refreshed asynchronously from the selected fleet.
-            if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) {
-                fuel->update();
-            }
-            if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) {
-                cargo->update();
-            }
+            // Touch the dashboard gauges and the generated design portrait in
+            // the offscreen path too; all refresh from the selected fleet.
+            if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) fuel->update();
+            if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) cargo->update();
+            if (auto* portrait = window.findChild<QLabel*>("fleetPortrait")) portrait->update();
         });
-        // Let deferred selection redraw, map-mode restyling, planet portrait,
-        // panel-layout recovery, fleet gauges and route-program timers run.
+        // Let deferred selection redraw, map-mode restyling, planet/fleet
+        // portraits, panel recovery, gauges and route-program timers run.
         QTimer::singleShot(350, &window, [&window] { window.close(); });
         QTimer::singleShot(3000, &app, &QApplication::quit);
     }
