@@ -13,7 +13,8 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 1;
+constexpr quint32 kSaveFormatVersion = 2;
+constexpr quint32 kOldestSupportedSaveFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -169,7 +170,7 @@ void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 
 void readProductionItem(QDataStream& stream, ProductionItem& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Factory))) return;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Mine))) return;
     quint32 cost{};
     quint32 design{};
     stream >> cost >> design;
@@ -191,9 +192,10 @@ void writePlanet(QDataStream& stream, const Planet& value)
     stream << static_cast<quint32>(value.productionQueue.size());
     for (const auto& item : value.productionQueue) writeProductionItem(stream, item);
     writeMinerals(stream, value.minerals);
+    stream << static_cast<quint32>(value.mines);
 }
 
-void readPlanet(QDataStream& stream, Planet& value)
+void readPlanet(QDataStream& stream, Planet& value, quint32 saveVersion)
 {
     quint32 id{};
     quint32 star{};
@@ -226,6 +228,13 @@ void readPlanet(QDataStream& stream, Planet& value)
         value.productionQueue.push_back(item);
     }
     readMinerals(stream, value.minerals);
+
+    value.mines = 0;
+    if (saveVersion >= 2) {
+        quint32 mines{};
+        stream >> mines;
+        value.mines = static_cast<std::uint32_t>(mines);
+    }
 }
 
 void writePlayer(QDataStream& stream, const Player& value)
@@ -384,7 +393,7 @@ void writeGameState(QDataStream& stream, const GameState& value)
     writeVector(stream, value.fleets, writeFleet);
 }
 
-void readGameState(QDataStream& stream, GameState& value)
+void readGameState(QDataStream& stream, GameState& value, quint32 saveVersion)
 {
     quint64 turn{};
     quint64 seed{};
@@ -399,7 +408,9 @@ void readGameState(QDataStream& stream, GameState& value)
     if (!readVector(stream, value.players, readPlayer)) return;
     if (!readVector(stream, value.shipDesigns, readShipDesign)) return;
     if (!readVector(stream, value.stars, readStar)) return;
-    if (!readVector(stream, value.planets, readPlanet)) return;
+    if (!readVector(stream, value.planets, [saveVersion](QDataStream& input, Planet& planet) {
+            readPlanet(input, planet, saveVersion);
+        })) return;
     readVector(stream, value.fleets, readFleet);
 }
 
@@ -496,7 +507,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         stream >> colony;
         value.colony = static_cast<PlanetId>(colony);
-        if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Factory))) return false;
+        if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Mine))) return false;
         order = value;
         return true;
     }
@@ -707,16 +718,17 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "This is not a Suns! save file, or the file is damaged.";
         return false;
     }
-    if (version != kSaveFormatVersion) {
-        errorMessage = QString("Unsupported Suns! save version %1 (this build reads version %2).")
+    if (version < kOldestSupportedSaveFormatVersion || version > kSaveFormatVersion) {
+        errorMessage = QString("Unsupported Suns! save version %1 (this build reads versions %2..%3).")
                            .arg(version)
+                           .arg(kOldestSupportedSaveFormatVersion)
                            .arg(kSaveFormatVersion);
         return false;
     }
 
     SaveGameData loaded;
     readGalaxyConfig(stream, loaded.galaxyConfig);
-    readGameState(stream, loaded.state);
+    readGameState(stream, loaded.state, version);
     readPlayerOrders(stream, loaded.pendingOrders);
     readDescriptions(stream, loaded.pendingDescriptions);
     readOptionalId(stream, loaded.selectedStar);
