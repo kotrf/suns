@@ -10,11 +10,17 @@ Stellar spectral class provides only a weak prior. Hot blue/white systems are bi
 
 ## Extraction
 
-The first economy slice gives every settled world baseline extraction. Yield scales with population and concentration:
+Every settled world has baseline extraction capacity from its population. Yield is:
 
 `extraction units × concentration / 100`
 
-Dedicated mine infrastructure is intentionally deferred. When added, mines should multiply or add extraction capacity without changing concentration semantics.
+Baseline extraction units are:
+
+`1 + population / 750`
+
+A built **Mine** adds another `0.75` extraction units permanently. Because this capacity is still multiplied by mineral concentration, the same Mine is much more valuable on a geologically rich world than on a poor one. The colony UI therefore shows both current extraction and the marginal I/B/G gain from the next Mine before the player queues it.
+
+A Mine costs `5` production and `1 I / 2 B / 1 G`. Mines do not alter or deplete concentration; they represent extraction infrastructure, not a finite geological meter.
 
 ## Stocks and cargo
 
@@ -31,4 +37,10 @@ A construction item may reach zero remaining production points and then wait at 
 
 Factory mineral bill: `2 I / 1 B / 2 G`.
 
+Mine mineral bill: `1 I / 2 B / 1 G`.
+
 Ship mineral bills are derived from hull plus fitted components. This makes ship design affect industrial logistics as well as mass, fuel, cargo, sensing, and mission capability.
+
+## Save compatibility
+
+Save format v2 persists the Mine count on each planet. The v2 reader still accepts v1 saves; older planets simply load with zero built Mines.
