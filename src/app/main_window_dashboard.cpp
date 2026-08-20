@@ -26,8 +26,13 @@ QString productionLine(const GameState& state, const Planet& planet)
 {
     if (planet.productionQueue.empty()) return "Idle";
     const auto& item = planet.productionQueue.front();
-    QString name = "Factory";
-    if (item.kind != ProductionKind::Factory) {
+
+    QString name;
+    if (item.kind == ProductionKind::Factory) {
+        name = "Factory";
+    } else if (item.kind == ProductionKind::Mine) {
+        name = "Mine";
+    } else {
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
         if (const auto* design = find_ship_design(state, designId)) name = QString::fromStdString(design->name);
         else name = "Ship";
@@ -104,8 +109,9 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(static_cast<qulonglong>(planet->population))
                      .arg(static_cast<qulonglong>(population_capacity(*planet)))
                      .arg(static_cast<qulonglong>(projected_population_growth(*planet)));
-        lines << QString("Infrastructure %1 • Output %2 / turn • Stored %3")
+        lines << QString("Factories %1 • Mines %2 • Output %3 / turn • Stored %4")
                      .arg(planet->industry)
+                     .arg(planet->mines)
                      .arg(colony_output(*planet))
                      .arg(planet->stockpile);
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
