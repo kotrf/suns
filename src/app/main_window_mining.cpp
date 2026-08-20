@@ -46,7 +46,12 @@ void MainWindow::installMiningInfrastructure()
     productionLayout->insertWidget(insertAt + 1, miningSummary);
 
     connect(queueMineButton, &QPushButton::clicked, this, [this] {
-        queueProduction(ProductionKind::Mine);
+        const auto* star = selectedStar();
+        const auto* planet = selectedPlanet();
+        if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 1) return;
+        appendPendingOrder(
+            QueueProductionOrder{planet->id, ProductionKind::Mine},
+            QString("Queue Mine at %1").arg(QString::fromStdString(planet->name)));
     });
 
     const auto refresh = [this, queueMineButton, miningSummary] {
