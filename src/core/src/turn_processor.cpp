@@ -10,6 +10,7 @@ namespace suns {
 std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
+    if (item.kind == ProductionKind::Mine) return kMineCost;
     if (item.shipDesign != 0) {
         if (const auto* design = find_ship_design(state, item.shipDesign)) return ship_design_cost(*design);
     }
@@ -74,6 +75,10 @@ void complete_production(GameState& state, Planet& planet, const ProductionItem&
 {
     if (item.kind == ProductionKind::Factory) {
         ++planet.industry;
+        return;
+    }
+    if (item.kind == ProductionKind::Mine) {
+        ++planet.mines;
         return;
     }
 
@@ -177,6 +182,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.industry = 1;
     planet.stockpile = 0;
     planet.productionQueue.clear();
+    planet.mines = 0;
     return true;
 }
 
@@ -400,6 +406,8 @@ GameState TurnProcessor::process(
 
                         if (concreteOrder.kind == ProductionKind::Factory) {
                             planet->productionQueue.push_back({ProductionKind::Factory, kFactoryCost, 0});
+                        } else if (concreteOrder.kind == ProductionKind::Mine) {
+                            planet->productionQueue.push_back({ProductionKind::Mine, kMineCost, 0});
                         } else if (const auto* design = find_ship_design(next, kColonyShipDesignId);
                                    design && design->owner == submission.player) {
                             planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
