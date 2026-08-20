@@ -21,6 +21,7 @@ int main(int argc, char* argv[])
     window.installPlanetPolish();
     window.installPanelLayoutFixes();
     window.installFleetReadabilityPolish();
+    window.installMiningInfrastructure();
 
     window.show();
 
