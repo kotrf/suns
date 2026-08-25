@@ -232,8 +232,10 @@ int main()
 
     suns::PlayerOrders surveyDestination{1, {}};
     surveyDestination.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
-    const auto destinationSurveyed = processor.process(rejected, {surveyDestination});
-    assert(suns::is_surveyed(destinationSurveyed, 1, 2));
+    const auto destinationScanned = processor.process(rejected, {surveyDestination});
+    assert(suns::survey_level(destinationScanned, 1, 2) == suns::SurveyLevel::BasicScan);
+    const auto destinationSurveyed = processor.process(destinationScanned, {});
+    assert(suns::survey_level(destinationSurveyed, 1, 2) == suns::SurveyLevel::OrbitalSurvey);
 
     const auto* readyShip = colony_ship(destinationSurveyed);
     assert(readyShip != nullptr);

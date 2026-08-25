@@ -9,6 +9,8 @@ namespace {
 
 using namespace suns;
 
+const GameEvent* find_event(const std::vector<GameEvent>& events, GameEventKind kind);
+
 GameState survey_fixture(Position scoutPosition, Position targetPosition, std::uint64_t turn = 1)
 {
     auto state = make_demo_game();
@@ -42,6 +44,9 @@ void local_report_updates_knowledge_and_emits_a_stable_event()
 
     assert(first.state.turn == 2);
     assert(is_surveyed(first.state, 1, 2));
+    assert(survey_level(first.state, 1, 2) == SurveyLevel::BasicScan);
+    assert(known_planet_habitability(first.state, 1, 2).has_value());
+    assert(!planet_geology_known(first.state, 1, 2));
     assert(first.state.players.front().pendingSurveyReports.empty());
     assert(first.events.size() == 1);
     assert(first.events.front().kind == GameEventKind::SystemSurveyed);
@@ -51,6 +56,8 @@ void local_report_updates_knowledge_and_emits_a_stable_event()
     assert(first.events.front().fleet == 1);
     assert(first.events.front().observedTurn == 2);
     assert(first.events.front().turn == 2);
+    assert(first.events.front().surveyLevel == SurveyLevel::BasicScan);
+    assert(first.events.front().quantity == *known_planet_habitability(first.state, 1, 2));
     assert(first.events.front().id == replay.events.front().id);
 }
 
@@ -69,6 +76,7 @@ void remote_report_remains_in_flight_until_delivery()
     assert(pending.sourceFleet == 1);
     assert(pending.observedTurn == 11);
     assert(pending.deliveryTurn == 13);
+    assert(pending.level == SurveyLevel::BasicScan);
 
     const auto turn12 = processor.process_with_events(turn11.state, {});
     assert(!is_surveyed(turn12.state, 1, 2));
@@ -85,6 +93,31 @@ void remote_report_remains_in_flight_until_delivery()
 
     const auto turn14 = processor.process_with_events(turn13.state, {});
     assert(turn14.events.empty());
+}
+
+void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
+{
+    auto state = survey_fixture({0.0, 0.0}, {50.0, 0.0});
+    auto& scout = state.fleets.front();
+    scout.destination = Position{50.0, 0.0};
+    scout.fuel = 300.0;
+    const TurnProcessor processor;
+
+    const auto arrival = processor.process_with_events(state, {});
+    assert(survey_level(arrival.state, 1, 2) == SurveyLevel::OrbitalSurvey);
+    assert(known_planet_habitability(arrival.state, 1, 2) == 82);
+    assert(!planet_geology_known(arrival.state, 1, 2));
+    const auto* orbital = find_event(arrival.events, GameEventKind::SystemSurveyed);
+    assert(orbital);
+    assert(orbital->surveyLevel == SurveyLevel::OrbitalSurvey);
+    assert(orbital->quantity == 82);
+
+    const auto dwell = processor.process_with_events(arrival.state, {});
+    assert(survey_level(dwell.state, 1, 2) == SurveyLevel::GeologicalSurvey);
+    assert(planet_geology_known(dwell.state, 1, 2));
+    const auto* geological = find_event(dwell.events, GameEventKind::SystemSurveyed);
+    assert(geological);
+    assert(geological->surveyLevel == SurveyLevel::GeologicalSurvey);
 }
 
 const GameEvent* find_event(const std::vector<GameEvent>& events, GameEventKind kind)
@@ -269,6 +302,7 @@ int main()
 {
     local_report_updates_knowledge_and_emits_a_stable_event();
     remote_report_remains_in_flight_until_delivery();
+    arrival_and_dwell_progress_through_orbital_and_geological_surveys();
     remote_route_completion_obeys_communications_delay();
     intermediate_waypoint_emits_arrival_not_completion();
     fuel_stall_warns_once_and_only_after_delivery();

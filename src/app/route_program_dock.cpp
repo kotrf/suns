@@ -132,7 +132,7 @@ void attachRouteProgramDock(MainWindow& window)
 
     auto* note = new QLabel(
         "Each leg keeps its own Warp and arrival action. Arrival ends movement for that turn; the next leg starts next turn. "
-        "Load is resolved from the real colony population on arrival. Colonize requires a surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
+        "Load is resolved from the real colony population on arrival. Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
         panel);
     note->setWordWrap(true);
     layout->addWidget(note);

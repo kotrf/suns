@@ -155,11 +155,25 @@ struct Planet {
     bool productionWaitingForMinerals{};
 };
 
+enum class SurveyLevel : std::uint8_t {
+    Detected,
+    BasicScan,
+    OrbitalSurvey,
+    GeologicalSurvey,
+};
+
+struct SystemSurveyKnowledge {
+    StarId star{};
+    SurveyLevel level{SurveyLevel::Detected};
+    std::uint64_t observedTurn{};
+};
+
 struct PendingSurveyReport {
     StarId star{};
     FleetId sourceFleet{}; // Zero means a stationary colony sensor source.
     std::uint64_t observedTurn{};
     std::uint64_t deliveryTurn{};
+    SurveyLevel level{SurveyLevel::BasicScan};
 };
 
 enum class PlayerReportKind {
@@ -191,6 +205,7 @@ struct Player {
     PlayerId id{};
     std::string name;
     std::vector<StarId> surveyedStars;
+    std::vector<SystemSurveyKnowledge> surveyKnowledge;
     std::vector<PendingSurveyReport> pendingSurveyReports;
     std::vector<PendingPlayerReport> pendingPlayerReports;
     double radiationTolerance{0.50};
@@ -352,6 +367,16 @@ void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 [[nodiscard]] bool within_range(Position source, Position target, double range);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] std::optional<std::uint32_t> known_planet_habitability(
+    const GameState& state, PlayerId player, PlanetId planet);
+[[nodiscard]] bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planet);
+void set_survey_level(
+    GameState& state,
+    PlayerId player,
+    StarId star,
+    SurveyLevel level,
+    std::uint64_t observedTurn);
 void mark_surveyed(GameState& state, PlayerId player, StarId star);
 void refresh_sensor_intel(GameState& state);
 

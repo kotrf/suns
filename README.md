@@ -43,16 +43,16 @@ ctest --test-dir build --output-on-failure
 The desktop app now links exploration, planet quality, economy and expansion:
 
 1. star positions are visible, but non-home planetary data starts unknown;
-2. send **Scout 1** to a system and end the turn to survey it;
-3. compare the revealed world's habitability and long-term population capacity;
+2. a sensor fly-by produces a rough habitability estimate; arriving confirms it;
+3. remain in orbit for a geological survey, then compare habitability, capacity and mineral value;
 4. higher-habitability colonies grow faster and support larger populations;
 5. population contributes to economic output while factories add infrastructure output;
 6. queue a **Colony Ship** or invest first in a **Factory**;
 7. local output advances persistent production queues over multiple turns;
-8. move a completed colony ship to a surveyed system and colonize it.
+8. move a completed colony ship to an orbital-surveyed system and colonize it.
 
 Ending a turn also produces an actionable Turn Messages briefing. Survey discoveries, fleet arrivals, completed routes, fuel stalls, finished production, mineral shortages and new colonies are typed deterministic events. Remote fleet reports obey communication delay instead of exposing authoritative state through the UI.
 
-A colony ship may enter an unsurveyed system, but colonization requires survey intel. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
+A colony ship may enter an unknown or basically scanned system, but colonization requires a confirmed orbital survey. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.

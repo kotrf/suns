@@ -7,9 +7,9 @@
 
 namespace suns {
 
-// Record every system crossed by a fleet's sensor footprint. Physical
-// observation is authoritative, but owner knowledge changes only when the
-// resulting report reaches a communication relay.
+// Record a basic scan for every system crossed by a fleet's sensor footprint.
+// Physical observation is authoritative, but owner knowledge changes only
+// when the resulting staged report reaches a communication relay.
 void observe_fleet_sensor_sweep(
     GameState& state,
     const Fleet& fleet,
@@ -18,7 +18,8 @@ void observe_fleet_sensor_sweep(
     std::uint64_t observationTurn);
 
 // Observe stationary colony/fleet coverage at the end of the movement phase.
-// Duplicate reports already in flight are coalesced deterministically.
+// Arrival promotes to orbital knowledge; an additional turn in place promotes
+// to geology. Reports already in flight are dominance-coalesced deterministically.
 void observe_current_sensor_coverage(GameState& state, std::uint64_t observationTurn);
 
 // Deliver reports due at the current planning boundary. Delivery is the only

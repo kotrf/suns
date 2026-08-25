@@ -197,7 +197,7 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
 bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
 {
     if (planet.owner != 0 || fleet.colonists == 0 || !fleet_can_colonize(state, fleet)) return false;
-    if (!is_surveyed(state, fleet.owner, planet.star)) return false;
+    if (survey_level(state, fleet.owner, planet.star) < SurveyLevel::OrbitalSurvey) return false;
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
 
@@ -211,6 +211,8 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.productionQueue.clear();
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
+    set_survey_level(
+        state, fleet.owner, planet.star, SurveyLevel::GeologicalSurvey, state.turn + 1);
     const auto* star = find_star(state, planet.star);
     if (star) {
         queue_player_report(

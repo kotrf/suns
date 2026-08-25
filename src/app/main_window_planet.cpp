@@ -180,7 +180,7 @@ void MainWindow::installPlanetPolish()
             "<b>Movement:</b> Warp² light-years per turn<br>"
             "<b>Fuel:</b> engine rate × gross mass / 100 × distance<br>"
             "<b>Cargo:</b> colonists and minerals share the same hold; 100 colonists = 1 cargo unit<br>"
-            "<b>Sensors:</b> systems become surveyed when they enter friendly sensor coverage; fly-bys count<br>"
+            "<b>Sensors:</b> fly-bys give a basic estimate, arrival confirms habitability, and one turn in orbit reveals geology<br>"
             "<b>Minerals:</b> concentration controls automatic colony extraction. Ship and factory completion consumes I/B/G stocks.<br>"
             "<b>Orders:</b> commands are queued and resolved together at End Turn<br><br>"
             "Map modes: <b>Spectral</b> shows stellar class, <b>Habitability</b> shows surveyed world value, "
@@ -235,18 +235,28 @@ void MainWindow::refreshPlanetPolish()
 
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    const bool surveyed = star && planet && is_surveyed(state_, 1, star->id);
-    if (!surveyed) {
+    const auto level = star ? survey_level(state_, 1, star->id) : SurveyLevel::Detected;
+    if (!star || !planet || level < SurveyLevel::OrbitalSurvey) {
         portrait->setPixmap(unknownPortrait());
         for (auto* bar : {ironium, boranium, germanium}) {
             bar->setValue(0);
-            bar->setFormat("Unknown until surveyed");
+            bar->setFormat(level >= SurveyLevel::BasicScan
+                    ? "Unknown until orbital survey"
+                    : "Unknown until basic scan");
             bar->setEnabled(false);
         }
         return;
     }
 
     portrait->setPixmap(renderPlanetPortrait(*planet, star->stellarClass, state_.galaxySeed));
+    if (level < SurveyLevel::GeologicalSurvey && planet->owner != 1) {
+        for (auto* bar : {ironium, boranium, germanium}) {
+            bar->setValue(0);
+            bar->setFormat("Unknown until geological survey");
+            bar->setEnabled(false);
+        }
+        return;
+    }
     const auto concentration = planet_mineral_concentration(state_, *planet);
     const auto mining = projected_mineral_mining(state_, *planet);
 
