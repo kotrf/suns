@@ -7,6 +7,7 @@ qt_add_executable(suns_app
     main_window_fleet_portrait.cpp
     main_window_layout.cpp
     main_window_map_modes.cpp
+    main_window_mining.cpp
     main_window_planet.cpp
     main_window_readability.cpp
     main_window_save.cpp

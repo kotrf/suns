@@ -126,10 +126,13 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
     if (planet.owner == 0 || planet.population == 0) return {};
     const auto concentration = planet_mineral_concentration(state, planet);
 
-    // First economy slice: every settled world has a small baseline extraction
-    // workforce scaling with population. Dedicated mine infrastructure can be
-    // layered on later without changing concentrations or stock semantics.
-    const auto extractionUnits = 1.0 + static_cast<double>(planet.population) / 750.0;
+    // Population supplies a small baseline extraction workforce. Dedicated
+    // mines add fixed extraction capacity, so concentration determines whether
+    // building another mine on this particular world is worth the production.
+    constexpr double extractionUnitsPerMine = 0.75;
+    const auto extractionUnits = 1.0
+        + static_cast<double>(planet.population) / 750.0
+        + static_cast<double>(planet.mines) * extractionUnitsPerMine;
     return {
         extractionUnits * concentration.ironium / 100.0,
         extractionUnits * concentration.boranium / 100.0,
@@ -140,6 +143,7 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
 MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Factory) return {2.0, 1.0, 2.0};
+    if (item.kind == ProductionKind::Mine) return {1.0, 2.0, 1.0};
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
     if (const auto* design = find_ship_design(state, designId)) return ship_design_mineral_cost(*design);
     return {};

@@ -75,6 +75,10 @@ public:
     // receive correspondingly different silhouettes.
     void installFleetPortraitPolish();
 
+    // Add buildable mines and expose the marginal extraction benefit of the
+    // next mine on the currently selected colony.
+    void installMiningInfrastructure();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;

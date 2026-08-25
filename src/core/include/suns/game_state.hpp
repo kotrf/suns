@@ -17,6 +17,7 @@ using ShipDesignId = std::uint32_t;
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
 inline constexpr std::uint32_t kFactoryCost = 6;
+inline constexpr std::uint32_t kMineCost = 5;
 inline constexpr double kScoutTravelSpeed = 100.0;       // Legacy UI compatibility.
 inline constexpr double kColonyShipTravelSpeed = 70.0;  // Legacy UI compatibility.
 inline constexpr double kScoutSensorRange = 90.0;
@@ -124,6 +125,7 @@ struct ShipDesign {
 enum class ProductionKind {
     ColonyShip,
     Factory,
+    Mine,
 };
 
 struct ProductionItem {
@@ -143,6 +145,7 @@ struct Planet {
     std::uint32_t stockpile{};
     std::vector<ProductionItem> productionQueue;
     MineralCargo minerals;
+    std::uint32_t mines{};
 };
 
 struct Player {
@@ -275,7 +278,12 @@ void refresh_sensor_intel(GameState& state);
 
 [[nodiscard]] constexpr std::uint32_t production_cost(ProductionKind kind)
 {
-    return kind == ProductionKind::ColonyShip ? kColonyShipCost : kFactoryCost;
+    switch (kind) {
+    case ProductionKind::ColonyShip: return kColonyShipCost;
+    case ProductionKind::Factory: return kFactoryCost;
+    case ProductionKind::Mine: return kMineCost;
+    }
+    return kColonyShipCost;
 }
 
 [[nodiscard]] std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item);
