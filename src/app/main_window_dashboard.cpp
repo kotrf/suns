@@ -90,8 +90,13 @@ QString MainWindow::selectedPlanetPanelSummary() const
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));
 
     if (!is_surveyed(state_, 1, star->id)) {
-        lines << "<b>UNSURVEYED</b> — planetary data unknown";
-        lines << "Bring the star inside friendly sensor coverage to reveal it.";
+        if (survey_level(state_, 1, star->id) >= SurveyLevel::SystemScan) {
+            lines << "<b>SYSTEM CONTACT</b> — ordinary scanner data received";
+            lines << "Planetary parameters require orbit or a penetrating scanner.";
+        } else {
+            lines << "<b>UNSURVEYED</b> — planetary data unknown";
+            lines << "Bring the star inside friendly sensor coverage to detect it.";
+        }
         return lines.join("<br>");
     }
 
@@ -101,9 +106,13 @@ QString MainWindow::selectedPlanetPanelSummary() const
         return lines.join("<br>");
     }
 
-    lines << QString("%1 • Habitability <b>%2%</b>")
+    const auto knownHabitability = known_planet_habitability(state_, 1, planet->id);
+    const auto estimated = survey_level(state_, 1, star->id) == SurveyLevel::BasicScan;
+    lines << QString("%1 • Habitability <b>%2%3%</b>")
                  .arg(QString::fromStdString(planet->name))
-                 .arg(planet->habitability);
+                 .arg(estimated ? "~" : "")
+                 .arg(knownHabitability.value_or(0));
+    if (estimated) lines << "Basic scan estimate — enter orbit to confirm";
 
     if (planet->owner == 1) {
         lines << QString("<span style='color:#85d5a5'><b>Terran colony</b></span>");
@@ -123,12 +132,17 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(planet->minerals.germanium, 0, 'f', 1);
     } else if (planet->owner == 0) {
         lines << "<span style='color:#c6b57c'><b>Uncolonized</b></span>";
-        lines << QString("Potential population capacity: %1")
-                     .arg(static_cast<qulonglong>(population_capacity(*planet)));
-        lines << QString("Mineral stocks — I %1 • B %2 • G %3")
-                     .arg(planet->minerals.ironium, 0, 'f', 1)
-                     .arg(planet->minerals.boranium, 0, 'f', 1)
-                     .arg(planet->minerals.germanium, 0, 'f', 1);
+        lines << QString("%1 population capacity: %2")
+                     .arg(estimated ? "Estimated" : "Potential")
+                     .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * 25ULL);
+        if (planet_geology_known(state_, 1, planet->id)) {
+            lines << QString("Mineral stocks — I %1 • B %2 • G %3")
+                         .arg(planet->minerals.ironium, 0, 'f', 1)
+                         .arg(planet->minerals.boranium, 0, 'f', 1)
+                         .arg(planet->minerals.germanium, 0, 'f', 1);
+        } else {
+            lines << "Mineral geology unknown — remain in orbit for a geological survey";
+        }
     } else {
         lines << "<b>Foreign world</b>";
     }
@@ -185,8 +199,14 @@ QString MainWindow::selectedFleetPanelSummary() const
                  .arg(fleet->minerals.germanium, 0, 'f', 0);
 
     const auto sensor = fleet_sensor_range(state_, *fleet);
-    lines << QString("Survey sensor: %1")
-                 .arg(sensor > 0.0 ? QString("%1 ly").arg(sensor, 0, 'f', 0) : "none");
+    const auto penetrating = fleet_penetrating_sensor_range(state_, *fleet);
+    lines << QString("Sensors: %1")
+                 .arg(sensor <= 0.0
+                         ? "none"
+                         : penetrating > 0.0
+                             ? QString("%1 ly detection • %2 ly penetrating")
+                                   .arg(sensor, 0, 'f', 0).arg(penetrating, 0, 'f', 0)
+                             : QString("%1 ly detection").arg(sensor, 0, 'f', 0));
 
     if (design && ship_design_radiation_hazard(*design) > 0.0) {
         if (fleet_radiation_safe(state_, *fleet)) {

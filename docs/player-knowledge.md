@@ -4,18 +4,29 @@ Suns! keeps simulation truth separate from what an empire has actually learned. 
 
 ## Survey reports
 
-A scanner physically observing a system does not directly mutate `Player::surveyedStars`. It creates a `PendingSurveyReport` with stable subject IDs, the observation turn, its source fleet (or zero for a colony sensor) and a deterministic delivery turn.
+A scanner physically observing a system does not directly mutate player knowledge. It creates a `PendingSurveyReport` with a survey level, stable subject IDs, the observation turn, its source fleet (or zero for a colony sensor) and a deterministic delivery turn.
+
+The first staged model separates ordinary detection from planetary penetration:
+
+- `SystemScan`: an ordinary scanner footprint records a system contact, but no planetary parameters;
+- `BasicScan`: a penetrating-scanner footprint reveals a deterministic rough habitability estimate;
+- `OrbitalSurvey`: arriving at the system confirms exact habitability and population suitability;
+- `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
+
+The starting Scout carries an ordinary Long Range Scanner. `PenetratingScanner` is a distinct component with shorter range, higher mass and mineral cost, but is intentionally locked out of the starter Ship Designer until the Sensors technology layer exists. This also leaves room for a later racial trait whose hulls provide intrinsic penetrating coverage.
+
+Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
 
 Reports use the same relay coverage and signal-speed calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
-Repeated observations are coalesced while a report is in flight. A later observation replaces the pending report only when it produces an earlier delivery, with stable source-ID ordering as a deterministic tie-breaker.
+Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range is also the future hook for transient enemy-fleet contacts; those contacts will remain separate from permanent planetary knowledge.
 
 ## Delivery and events
 
 At a planning boundary, due reports:
 
-1. update the recipient's permanent surveyed-system knowledge;
-2. emit a typed `GameEvent::SystemSurveyed` containing stable star, planet and source-fleet IDs;
+1. promote the recipient's permanent per-system survey level;
+2. emit a typed `GameEvent::SystemSurveyed` containing the delivered level, stable star, planet and source-fleet IDs;
 3. preserve both observation and delivery turns, so the UI can state how stale the report is.
 
 Event IDs are derived deterministically from the event payload. PBEM resolution, replays and headless tests therefore produce the same event identity without putting UI-only unread state into `GameState`.
@@ -38,6 +49,6 @@ The save format persists pending operational reports, fleet fuel-stall transitio
 
 ## Turn Messages
 
-The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. New items are unread, Next unread navigates through them, activating a report centers its star or recorded position, and warning severity is visually distinct.
+The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. Survey text distinguishes basic, orbital and geological results. Planet panels, tooltips and the habitability map use only the delivered knowledge level: estimated values are marked and dimmed, exact habitability waits for orbit, and geology remains hidden until the deep survey. New items are unread, Next unread navigates through them, activating a report centers its star or recorded position, and warning severity is visually distinct.
 
 Later issue #45 slices can add research, contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state.

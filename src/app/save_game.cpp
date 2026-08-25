@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 6;
+constexpr quint32 kSaveFormatVersion = 7;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -302,7 +302,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::AntimatterGenerator))) return;
+        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::PenetratingScanner))) return;
         value.components.push_back(component);
     }
 }
@@ -393,12 +393,19 @@ void writePlayer(QDataStream& stream, const Player& value)
     writeString(stream, value.name);
     stream << static_cast<quint32>(value.surveyedStars.size());
     for (const auto star : value.surveyedStars) stream << static_cast<quint32>(star);
+    stream << static_cast<quint32>(value.surveyKnowledge.size());
+    for (const auto& knowledge : value.surveyKnowledge) {
+        stream << static_cast<quint32>(knowledge.star);
+        writeEnum(stream, knowledge.level);
+        stream << static_cast<quint64>(knowledge.observedTurn);
+    }
     stream << static_cast<quint32>(value.pendingSurveyReports.size());
     for (const auto& report : value.pendingSurveyReports) {
         stream << static_cast<quint32>(report.star)
                << static_cast<quint32>(report.sourceFleet)
                << static_cast<quint64>(report.observedTurn)
                << static_cast<quint64>(report.deliveryTurn);
+        writeEnum(stream, report.level);
     }
     stream << static_cast<quint32>(value.pendingPlayerReports.size());
     for (const auto& report : value.pendingPlayerReports) {
@@ -434,6 +441,23 @@ void readPlayer(QDataStream& stream, Player& value)
     }
 
     if (!readCount(stream, count)) return;
+    value.surveyKnowledge.clear();
+    value.surveyKnowledge.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        quint32 star{};
+        quint64 observedTurn{};
+        SurveyLevel level{};
+        stream >> star;
+        if (!readEnum(stream, level, static_cast<quint8>(SurveyLevel::GeologicalSurvey))) return;
+        stream >> observedTurn;
+        value.surveyKnowledge.push_back({
+            static_cast<StarId>(star),
+            level,
+            static_cast<std::uint64_t>(observedTurn),
+        });
+    }
+
+    if (!readCount(stream, count)) return;
     value.pendingSurveyReports.clear();
     value.pendingSurveyReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
@@ -441,12 +465,15 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 sourceFleet{};
         quint64 observedTurn{};
         quint64 deliveryTurn{};
+        SurveyLevel level{};
         stream >> star >> sourceFleet >> observedTurn >> deliveryTurn;
+        if (!readEnum(stream, level, static_cast<quint8>(SurveyLevel::GeologicalSurvey))) return;
         value.pendingSurveyReports.push_back({
             static_cast<StarId>(star),
             static_cast<FleetId>(sourceFleet),
             static_cast<std::uint64_t>(observedTurn),
             static_cast<std::uint64_t>(deliveryTurn),
+            level,
         });
     }
 
@@ -772,7 +799,7 @@ bool readOrder(QDataStream& stream, Order& order)
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::AntimatterGenerator))) return false;
+            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::PenetratingScanner))) return false;
             value.components.push_back(component);
         }
         order = std::move(value);

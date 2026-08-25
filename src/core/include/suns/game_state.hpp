@@ -91,6 +91,7 @@ enum class ShipComponentType {
     FuelTank,
     CargoPod,
     AntimatterGenerator,
+    PenetratingScanner,
 };
 
 enum class ShipComponentKind {
@@ -113,6 +114,7 @@ struct ShipComponentSpec {
     std::array<double, kMaxWarp + 1> fuelPer100MassLy{};
 
     double sensorRange{};
+    bool penetratesPlanets{};
     double fuelCapacity{};
     double cargoCapacity{};
     double fuelGenerationPerTurn{};
@@ -155,11 +157,26 @@ struct Planet {
     bool productionWaitingForMinerals{};
 };
 
+enum class SurveyLevel : std::uint8_t {
+    Detected,
+    SystemScan,
+    BasicScan,
+    OrbitalSurvey,
+    GeologicalSurvey,
+};
+
+struct SystemSurveyKnowledge {
+    StarId star{};
+    SurveyLevel level{SurveyLevel::Detected};
+    std::uint64_t observedTurn{};
+};
+
 struct PendingSurveyReport {
     StarId star{};
     FleetId sourceFleet{}; // Zero means a stationary colony sensor source.
     std::uint64_t observedTurn{};
     std::uint64_t deliveryTurn{};
+    SurveyLevel level{SurveyLevel::SystemScan};
 };
 
 enum class PlayerReportKind {
@@ -191,6 +208,7 @@ struct Player {
     PlayerId id{};
     std::string name;
     std::vector<StarId> surveyedStars;
+    std::vector<SystemSurveyKnowledge> surveyKnowledge;
     std::vector<PendingSurveyReport> pendingSurveyReports;
     std::vector<PendingPlayerReport> pendingPlayerReports;
     double radiationTolerance{0.50};
@@ -311,6 +329,7 @@ struct GalaxyConfig {
 [[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
+[[nodiscard]] double ship_design_penetrating_sensor_range(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp);
@@ -336,6 +355,7 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] std::uint32_t fleet_eta(const Fleet& fleet);
 [[nodiscard]] double fleet_speed(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_sensor_range(const GameState& state, const Fleet& fleet);
+[[nodiscard]] double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] bool fleet_can_colonize(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint32_t fleet_eta(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_capacity(const GameState& state, const Fleet& fleet);
@@ -352,6 +372,16 @@ void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 [[nodiscard]] bool within_range(Position source, Position target, double range);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] std::optional<std::uint32_t> known_planet_habitability(
+    const GameState& state, PlayerId player, PlanetId planet);
+[[nodiscard]] bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planet);
+void set_survey_level(
+    GameState& state,
+    PlayerId player,
+    StarId star,
+    SurveyLevel level,
+    std::uint64_t observedTurn);
 void mark_surveyed(GameState& state, PlayerId player, StarId star);
 void refresh_sensor_intel(GameState& state);
 

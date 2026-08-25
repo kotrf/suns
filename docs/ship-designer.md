@@ -22,6 +22,7 @@ The first designer exposes these components:
 - Ram Scoop Drive
 - Radiating Ram Scoop
 - Long Range Scanner
+- Penetrating Scanner (shown locked until advanced Sensors technology)
 - Colony Module
 - Fuel Tank
 - Cargo Pod

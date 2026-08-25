@@ -36,6 +36,7 @@ struct GameEvent {
     ProductionKind productionKind{ProductionKind::ColonyShip};
     Position position;
     std::uint32_t quantity{};
+    SurveyLevel surveyLevel{SurveyLevel::Detected};
 };
 
 } // namespace suns

@@ -201,6 +201,14 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 3;
         spec.sensorRange = 90.0;
         break;
+    case ShipComponentType::PenetratingScanner:
+        spec.name = "Penetrating Scanner";
+        spec.kind = ShipComponentKind::Scanner;
+        spec.mass = 14.0;
+        spec.buildCost = 6;
+        spec.sensorRange = 70.0;
+        spec.penetratesPlanets = true;
+        break;
     case ShipComponentType::ColonyModule:
         spec.name = "Colony Module";
         spec.kind = ShipComponentKind::Special;
@@ -285,6 +293,16 @@ double ship_design_sensor_range(const ShipDesign& design)
 {
     double range = 0.0;
     for (const auto component : design.components) range += component_spec(component).sensorRange;
+    return range;
+}
+
+double ship_design_penetrating_sensor_range(const ShipDesign& design)
+{
+    double range = 0.0;
+    for (const auto component : design.components) {
+        const auto spec = component_spec(component);
+        if (spec.penetratesPlanets) range += spec.sensorRange;
+    }
     return range;
 }
 
@@ -398,6 +416,12 @@ double fleet_sensor_range(const GameState& state, const Fleet& fleet)
     return design ? ship_design_sensor_range(*design) : 0.0;
 }
 
+double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet)
+{
+    const auto* design = fleet_design(state, fleet);
+    return design ? ship_design_penetrating_sensor_range(*design) : 0.0;
+}
+
 bool fleet_can_colonize(const GameState& state, const Fleet& fleet)
 {
     const auto* design = fleet_design(state, fleet);
@@ -461,23 +485,92 @@ std::uint32_t travel_turns(Position from, Position to, double speed)
     return static_cast<std::uint32_t>(std::ceil(distance_between(from, to) / speed));
 }
 
-bool is_surveyed(const GameState& state, PlayerId player, StarId star)
+SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star)
 {
     const auto* knownPlayer = find_player(state, player);
-    if (!knownPlayer) return false;
+    if (!knownPlayer) return SurveyLevel::Detected;
+    const auto knowledge = std::find_if(knownPlayer->surveyKnowledge.begin(), knownPlayer->surveyKnowledge.end(),
+        [star](const SystemSurveyKnowledge& entry) { return entry.star == star; });
+    if (knowledge != knownPlayer->surveyKnowledge.end()) return knowledge->level;
+
+    // Compatibility for fixtures and saves created before staged surveying:
+    // an old surveyed-star entry represented perfect knowledge.
     return std::find(knownPlayer->surveyedStars.begin(), knownPlayer->surveyedStars.end(), star)
-        != knownPlayer->surveyedStars.end();
+            != knownPlayer->surveyedStars.end()
+        ? SurveyLevel::GeologicalSurvey
+        : SurveyLevel::Detected;
 }
 
-void mark_surveyed(GameState& state, PlayerId player, StarId star)
+bool is_surveyed(const GameState& state, PlayerId player, StarId star)
+{
+    return survey_level(state, player, star) >= SurveyLevel::BasicScan;
+}
+
+std::optional<std::uint32_t> known_planet_habitability(
+    const GameState& state, PlayerId player, PlanetId planetId)
+{
+    const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [planetId](const Planet& candidate) {
+        return candidate.id == planetId;
+    });
+    if (planet == state.planets.end()) return std::nullopt;
+
+    const auto level = survey_level(state, player, planet->star);
+    if (level < SurveyLevel::BasicScan && planet->owner != player) return std::nullopt;
+    if (level >= SurveyLevel::OrbitalSurvey || planet->owner == player) return planet->habitability;
+
+    std::uint64_t mixed = state.galaxySeed
+        ^ (static_cast<std::uint64_t>(player) << 32U)
+        ^ (static_cast<std::uint64_t>(planet->id) * 0x9E3779B97F4A7C15ULL);
+    mixed ^= mixed >> 30U;
+    mixed *= 0xBF58476D1CE4E5B9ULL;
+    mixed ^= mixed >> 27U;
+    const auto error = static_cast<int>((mixed % 7ULL) * 5ULL) - 15;
+    const auto rough = std::clamp(static_cast<int>(planet->habitability) + error, 0, 100);
+    return static_cast<std::uint32_t>((rough + 5) / 10 * 10);
+}
+
+bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planetId)
+{
+    const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [planetId](const Planet& candidate) {
+        return candidate.id == planetId;
+    });
+    return planet != state.planets.end()
+        && (planet->owner == player
+            || survey_level(state, player, planet->star) >= SurveyLevel::GeologicalSurvey);
+}
+
+void set_survey_level(
+    GameState& state,
+    PlayerId player,
+    StarId star,
+    SurveyLevel level,
+    std::uint64_t observedTurn)
 {
     const auto it = std::find_if(state.players.begin(), state.players.end(), [player](const Player& candidate) {
         return candidate.id == player;
     });
     if (it == state.players.end()) return;
-    if (std::find(it->surveyedStars.begin(), it->surveyedStars.end(), star) == it->surveyedStars.end()) {
+
+    const auto knowledge = std::find_if(it->surveyKnowledge.begin(), it->surveyKnowledge.end(),
+        [star](const SystemSurveyKnowledge& entry) { return entry.star == star; });
+    if (knowledge == it->surveyKnowledge.end()) {
+        it->surveyKnowledge.push_back({star, level, observedTurn});
+    } else if (level > knowledge->level) {
+        knowledge->level = level;
+        knowledge->observedTurn = observedTurn;
+    } else if (level == knowledge->level) {
+        knowledge->observedTurn = std::max(knowledge->observedTurn, observedTurn);
+    }
+
+    if (level >= SurveyLevel::BasicScan
+        && std::find(it->surveyedStars.begin(), it->surveyedStars.end(), star) == it->surveyedStars.end()) {
         it->surveyedStars.push_back(star);
     }
+}
+
+void mark_surveyed(GameState& state, PlayerId player, StarId star)
+{
+    set_survey_level(state, player, star, SurveyLevel::GeologicalSurvey, state.turn);
 }
 
 void refresh_sensor_intel(GameState& state)
@@ -487,13 +580,22 @@ void refresh_sensor_intel(GameState& state)
             if (planet.owner == 0) continue;
             const auto* sourceStar = find_star(state, planet.star);
             if (sourceStar && within_range(sourceStar->position, star.position, kColonySensorRange)) {
-                mark_surveyed(state, planet.owner, star.id);
+                set_survey_level(state, planet.owner, star.id,
+                    star.id == planet.star ? SurveyLevel::GeologicalSurvey : SurveyLevel::SystemScan,
+                    state.turn);
             }
         }
         for (const auto& fleet : state.fleets) {
             const auto range = fleet_sensor_range(state, fleet);
             if (range > 0.0 && within_range(fleet.position, star.position, range)) {
-                mark_surveyed(state, fleet.owner, star.id);
+                const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
+                set_survey_level(state, fleet.owner, star.id,
+                    same_position(fleet.position, star.position)
+                        ? SurveyLevel::OrbitalSurvey
+                        : within_range(fleet.position, star.position, penetratingRange)
+                            ? SurveyLevel::BasicScan
+                            : SurveyLevel::SystemScan,
+                    state.turn);
             }
         }
     }

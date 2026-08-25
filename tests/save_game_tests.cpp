@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 
@@ -18,7 +19,10 @@ void round_trip_preserves_communications_and_planning()
     original.state.turn = 77;
     original.state.planets.front().mines = 17;
     original.state.planets.front().productionWaitingForMinerals = true;
-    original.state.players.front().pendingSurveyReports.push_back({2, 1, 76, 79});
+    original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
+    original.state.players.front().pendingSurveyReports.push_back({
+        2, 1, 76, 79, SurveyLevel::GeologicalSurvey,
+    });
     original.state.players.front().pendingPlayerReports.push_back({
         PlayerReportKind::FleetStalledForFuel,
         76,
@@ -85,10 +89,19 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.planets.front().mines == 17);
     assert(loaded.state.planets.front().productionWaitingForMinerals);
     assert(loaded.state.players.front().pendingSurveyReports.size() == 1);
+    assert(loaded.state.players.front().surveyKnowledge.size() >= 2);
+    const auto savedKnowledge = std::find_if(
+        loaded.state.players.front().surveyKnowledge.begin(),
+        loaded.state.players.front().surveyKnowledge.end(),
+        [](const SystemSurveyKnowledge& entry) { return entry.star == 2; });
+    assert(savedKnowledge != loaded.state.players.front().surveyKnowledge.end());
+    assert(savedKnowledge->level == SurveyLevel::OrbitalSurvey);
+    assert(savedKnowledge->observedTurn == 75);
     assert(loaded.state.players.front().pendingSurveyReports.front().star == 2);
     assert(loaded.state.players.front().pendingSurveyReports.front().sourceFleet == 1);
     assert(loaded.state.players.front().pendingSurveyReports.front().observedTurn == 76);
     assert(loaded.state.players.front().pendingSurveyReports.front().deliveryTurn == 79);
+    assert(loaded.state.players.front().pendingSurveyReports.front().level == SurveyLevel::GeologicalSurvey);
     assert(loaded.state.players.front().pendingPlayerReports.size() == 1);
     const auto& report = loaded.state.players.front().pendingPlayerReports.front();
     assert(report.kind == PlayerReportKind::FleetStalledForFuel);
@@ -133,7 +146,7 @@ void old_format_is_rejected_cleanly()
     assert(file.open(QIODevice::WriteOnly));
     QDataStream stream(&file);
     stream.setVersion(QDataStream::Qt_6_4);
-    stream << quint32{0x53554E53u} << quint32{5};
+    stream << quint32{0x53554E53u} << quint32{6};
     file.close();
 
     SaveGameData loaded;

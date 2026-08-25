@@ -583,13 +583,22 @@ void MainWindow::rebuildScene()
                               .arg(starClassName(star.stellarClass));
         QString mapLabel = QString::fromStdString(star.name);
         if (!surveyed) {
-            tooltip += "\nUnsurveyed system — outside all sensor history";
-            mapLabel += "  [?]";
+            if (survey_level(state_, 1, star.id) >= SurveyLevel::SystemScan) {
+                tooltip += "\nOrdinary scanner contact — planetary parameters unknown";
+                mapLabel += "  [SCAN]";
+            } else {
+                tooltip += "\nUnsurveyed system — outside all sensor history";
+                mapLabel += "  [?]";
+            }
         } else if (planet) {
-            tooltip += QString("\n%1 — habitability %2% — capacity %3")
+            const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
+            const auto estimated = survey_level(state_, 1, star.id) == SurveyLevel::BasicScan;
+            tooltip += QString("\n%1 — habitability %2%3% — %4 capacity %5")
                            .arg(QString::fromStdString(planet->name))
-                           .arg(planet->habitability)
-                           .arg(static_cast<qulonglong>(population_capacity(*planet)));
+                           .arg(estimated ? "~" : "")
+                           .arg(knownHabitability)
+                           .arg(estimated ? "estimated" : "potential")
+                           .arg(static_cast<qulonglong>(knownHabitability) * 25ULL);
             if (colony) {
                 mapLabel += "  [COLONY]";
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
@@ -788,6 +797,7 @@ void MainWindow::updateControls()
         : QString{};
 
     if (star && !surveyed) {
+        const bool systemContact = survey_level(state_, 1, star->id) >= SurveyLevel::SystemScan;
         QString travelLine;
         if (fleet) {
             travelLine = QString("<br>%1 at Warp %2: <b>%3</b> (%4 ly/turn).%5")
@@ -795,10 +805,16 @@ void MainWindow::updateControls()
                              .arg(turnCount(selectedEta)).arg(warp_distance(selectedWarp), 0, 'f', 0).arg(routeFuelLine);
             if (fleet_sensor_range(state_, *fleet) <= 0.0) travelLine += " This ship has no survey scanner.";
         }
-        selectionLabel_->setText(QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.%2<br>"
-                                          "The system is revealed as soon as the star enters friendly sensor coverage.")
-            .arg(QString::fromStdString(star->name)).arg(travelLine));
+        selectionLabel_->setText(QString("<hr><b>%1</b><br><b>%2</b><br>Planetary data unknown.%3<br>%4")
+            .arg(QString::fromStdString(star->name))
+            .arg(systemContact ? "SYSTEM CONTACT" : "UNSURVEYED")
+            .arg(travelLine)
+            .arg(systemContact
+                    ? "Enter orbit or use a penetrating scanner to study the planet."
+                    : "The system is detected as soon as it enters friendly sensor coverage."));
     } else if (star && planet) {
+        const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
+        const auto estimated = survey_level(state_, 1, star->id) == SurveyLevel::BasicScan;
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
         QString populationLine;
         if (planet->owner == 1) {
@@ -807,8 +823,9 @@ void MainWindow::updateControls()
                                  .arg(static_cast<qulonglong>(population_capacity(*planet)))
                                  .arg(static_cast<qulonglong>(projected_population_growth(*planet)));
         } else {
-            populationLine = QString("Potential population capacity: %1<br>")
-                                 .arg(static_cast<qulonglong>(population_capacity(*planet)));
+            populationLine = QString("%1 population capacity: %2<br>")
+                                 .arg(estimated ? "Estimated" : "Potential")
+                                 .arg(static_cast<qulonglong>(knownHabitability) * 25ULL);
         }
         QString travelLine;
         if (fleet) {
@@ -816,11 +833,11 @@ void MainWindow::updateControls()
                              .arg(QString::fromStdString(fleet->name)).arg(selectedWarp)
                              .arg(turnCount(selectedEta)).arg(routeFuelLine).arg(dynamicArrivalLine);
         }
-        selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>Habitability: <b>%3%</b><br>Status: %4<br>"
-                                          "%5Infrastructure: %6<br>Economic output: %7 / turn<br>"
-                                          "Stored production: %8<br>Production: <b>%9</b>%10")
+        selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>Habitability: <b>%3%4%</b><br>Status: %5<br>"
+                                          "%6Infrastructure: %7<br>Economic output: %8 / turn<br>"
+                                          "Stored production: %9<br>Production: <b>%10</b>%11")
             .arg(QString::fromStdString(star->name)).arg(QString::fromStdString(planet->name))
-            .arg(planet->habitability).arg(owner).arg(populationLine).arg(planet->industry)
+            .arg(estimated ? "~" : "").arg(knownHabitability).arg(owner).arg(populationLine).arg(planet->industry)
             .arg(colony_output(*planet)).arg(planet->stockpile).arg(productionSummary(state_, *planet)).arg(travelLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
@@ -839,6 +856,7 @@ void MainWindow::updateControls()
         }
 
         const auto sensor = fleet_sensor_range(state_, *fleet);
+        const auto penetratingSensor = fleet_penetrating_sensor_range(state_, *fleet);
         const auto fuelCapacity = fleet_fuel_capacity(state_, *fleet);
         const auto cargoCapacity = fleet_cargo_capacity(state_, *fleet);
         const auto cargoUsed = colonist_cargo_mass(fleet->colonists);
@@ -872,7 +890,12 @@ void MainWindow::updateControls()
             .arg(warp_distance(selectedWarp), 0, 'f', 0).arg(fuelValue(fleet->fuel)).arg(fuelValue(fuelCapacity))
             .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1).arg(static_cast<qulonglong>(fleet->colonists))
             .arg(cargoUsed, 0, 'f', 1).arg(cargoCapacity, 0, 'f', 1)
-            .arg(sensor > 0.0 ? QString::number(sensor, 'f', 0) : "none")
+            .arg(sensor <= 0.0
+                    ? "none"
+                    : penetratingSensor > 0.0
+                        ? QString("%1 ly detection / %2 ly penetrating")
+                              .arg(sensor, 0, 'f', 0).arg(penetratingSensor, 0, 'f', 0)
+                        : QString("%1 ly detection").arg(sensor, 0, 'f', 0))
             .arg(componentSummary(design)).arg(status).arg(dockedLine).arg(movementPlanLine).arg(radiationLine));
     } else {
         fleetLabel_->setText("<hr><b>Selected fleet:</b> none<br>Click a ship marker on the map.");
@@ -915,7 +938,9 @@ void MainWindow::updateControls()
         ? QString("Refuel to %1").arg(fuelValue(fleet_fuel_capacity(state_, *fleet))) : "Refuel selected fleet");
 
     const auto* colonizer = selectedColonyShipAtSelectedStar();
-    colonizeButton_->setEnabled(surveyed && planet != nullptr && planet->owner == 0
+    colonizeButton_->setEnabled(star != nullptr
+        && survey_level(state_, 1, star->id) >= SurveyLevel::OrbitalSurvey
+        && planet != nullptr && planet->owner == 0
         && colonizer != nullptr && colonizer->colonists > 0);
 
     if (pendingOrders_.orders.empty()) ordersLabel_->setText("<b>Orders this turn:</b> none");
@@ -1105,7 +1130,8 @@ void MainWindow::queueColonize()
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     const auto* ship = selectedColonyShipAtSelectedStar();
-    if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 0 || !ship || ship->colonists == 0) return;
+    if (!star || survey_level(state_, 1, star->id) < SurveyLevel::OrbitalSurvey
+        || !planet || planet->owner != 0 || !ship || ship->colonists == 0) return;
 
     appendPendingOrder(ColonizePlanetOrder{ship->id, planet->id},
         QString("Colonize %1 with %2 (%3 colonists)")

@@ -7,7 +7,8 @@ Suns! should eventually make ship roles emerge from fitted hardware rather than 
 A `Fleet` references a `ShipDesign`. A design has a hull mass, hull build cost and a list of installed components. The initial component catalog is deliberately tiny:
 
 - **Fusion Drive** — adds mass, build cost and engine thrust;
-- **Long Range Scanner** — adds mass, build cost and survey range;
+- **Long Range Scanner** — detects systems and, later, foreign fleets without reading planetary parameters;
+- **Penetrating Scanner** — a later Sensors technology that estimates planetary suitability inside its shorter field;
 - **Colony Module** — adds mass, build cost and enables colonization.
 
 The two starting designs reproduce the current game behaviour through the same component rules:
@@ -42,7 +43,7 @@ A later UI-focused step should remove this compatibility role and derive present
 
 ## Future direction
 
-The component system is intentionally extensible. Candidate future equipment includes fuel tanks, stronger engines, armor, shields, beam and missile weapons, point defense, cargo, minelayers, mining equipment, jammers, cloaking and specialized sensors.
+The component system is intentionally extensible. `PenetratingScanner` already has core mass, cost, mineral and range rules, but is deliberately not selectable in the starter designer until technology unlocks are modeled. Candidate future equipment includes fuel tanks, stronger engines, armor, shields, beam and missile weapons, point defense, cargo, minelayers, mining equipment, jammers and cloaking.
 
 Those components should not be added merely to create a long catalog. Each should introduce a strategic design decision through mass, cost, power, range, survivability, signature, logistics or another interacting constraint.
 

@@ -43,7 +43,7 @@ qreal populationScale(std::uint64_t population)
 
 QString modeLegend(int mode)
 {
-    if (mode == 1) return "red 0%  ·  yellow 50%  ·  green 100%  ·  grey unknown";
+    if (mode == 1) return "red 0%  ·  yellow 50%  ·  green 100%  ·  dim estimated  ·  grey unknown";
     if (mode == 2) return "marker size = population  ·  green = your colony  ·  grey = empty/unknown";
     return "stellar spectral class colours";
 }
@@ -109,12 +109,16 @@ void MainWindow::applyMapDisplayMode()
 
         const bool surveyed = is_surveyed(state_, 1, starId);
         const auto* planet = find_planet_at_star(state_, starId);
+        const auto knownHabitability = planet
+            ? known_planet_habitability(state_, 1, planet->id)
+            : std::optional<std::uint32_t>{};
 
         QColor color = spectralColor(star->stellarClass);
         qreal scale = 1.0;
 
         if (mapDisplayMode_ == 1) {
-            color = surveyed && planet ? habitabilityColor(planet->habitability) : QColor("#687381");
+            color = knownHabitability ? habitabilityColor(*knownHabitability) : QColor("#687381");
+            if (survey_level(state_, 1, starId) == SurveyLevel::BasicScan) color = color.darker(145);
         } else if (mapDisplayMode_ == 2) {
             if (!surveyed) {
                 color = QColor("#687381");

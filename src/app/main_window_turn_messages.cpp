@@ -47,18 +47,29 @@ QString event_text(const GameState& state, const GameEvent& event)
     QString text;
     if (event.kind == GameEventKind::SystemSurveyed) {
         QString detail;
-        if (planet) {
-            const auto concentrations = planet_mineral_concentration(state, *planet);
-            detail = QString("%1 — habitability %2%, deposits I %3 / B %4 / G %5")
+        if (event.surveyLevel == SurveyLevel::SystemScan) {
+            detail = "Ordinary scanner contact — planetary parameters require orbit or a penetrating scanner";
+        } else if (planet) {
+            detail = QString("%1 — habitability %2%3")
                          .arg(QString::fromStdString(planet->name))
-                         .arg(planet->habitability)
-                         .arg(concentrations.ironium, 0, 'f', 1)
-                         .arg(concentrations.boranium, 0, 'f', 1)
-                         .arg(concentrations.germanium, 0, 'f', 1);
+                         .arg(event.quantity)
+                         .arg(event.surveyLevel == SurveyLevel::BasicScan ? " estimated" : " confirmed");
+            if (event.surveyLevel >= SurveyLevel::GeologicalSurvey) {
+                const auto concentrations = planet_mineral_concentration(state, *planet);
+                detail += QString(", deposits I %1 / B %2 / G %3")
+                              .arg(concentrations.ironium, 0, 'f', 1)
+                              .arg(concentrations.boranium, 0, 'f', 1)
+                              .arg(concentrations.germanium, 0, 'f', 1);
+            }
         }
-        text = QString("Turn %1  •  Survey report: %2")
+        QString surveyName = event.surveyLevel == SurveyLevel::SystemScan
+            ? "Long-range system scan"
+            : "Penetrating scan";
+        if (event.surveyLevel == SurveyLevel::OrbitalSurvey) surveyName = "Orbital survey";
+        else if (event.surveyLevel >= SurveyLevel::GeologicalSurvey) surveyName = "Geological survey";
+        text = QString("Turn %1  •  %2: %3")
                    .arg(static_cast<qulonglong>(event.turn))
-                   .arg(starName);
+                   .arg(surveyName, starName);
         if (!detail.isEmpty()) text += QString("\n%1").arg(detail);
     } else if (event.kind == GameEventKind::FleetArrived) {
         text = QString("Turn %1  •  %2 arrived at %3 and continues its route")

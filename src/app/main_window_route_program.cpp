@@ -356,6 +356,17 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         statusBar()->showMessage("Selected ship design has no colonization module", 3000);
         return false;
     }
+    if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
+        const auto* planet = find_planet_at_star(state_, star->id);
+        if (survey_level(state_, fleet->owner, star->id) < SurveyLevel::OrbitalSurvey) {
+            statusBar()->showMessage("Complete an orbital survey before programming colonization", 3000);
+            return false;
+        }
+        if (!planet || planet->owner != 0) {
+            statusBar()->showMessage("Selected destination has no unowned world to colonize", 3000);
+            return false;
+        }
+    }
 
     if (auto* move = pendingMove(pendingOrders_, fleet->id)) {
         if (routeIsClearIntent(*fleet, *move)) {
