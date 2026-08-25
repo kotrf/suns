@@ -32,6 +32,12 @@ inline constexpr double kColonistsPerCargoUnit = 100.0;
 inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
 
+// First communications slice: established friendly colonies temporarily act as
+// relay nodes. Orbital-station work will later move this capability onto
+// explicit station/ship modules without changing the latency model.
+inline constexpr double kCommunicationRelayRange = 120.0;
+inline constexpr double kCommunicationSignalSpeed = 150.0;
+
 struct Position {
     double x{};
     double y{};
@@ -180,6 +186,36 @@ struct FleetWaypoint {
     FleetArrivalAction arrivalAction{};
 };
 
+struct FleetRouteProgram {
+    Position destination;
+    std::uint8_t warp{kScoutCruiseWarp};
+    FleetArrivalAction arrivalAction{};
+    std::vector<FleetWaypoint> queuedWaypoints;
+};
+
+struct FleetTelemetry {
+    std::uint64_t observedTurn{};
+    Position position;
+    std::optional<Position> destination;
+    std::uint8_t warp{kScoutCruiseWarp};
+    double fuel{};
+    std::uint64_t colonists{};
+    std::optional<FleetArrivalAction> arrivalAction;
+    std::vector<FleetWaypoint> waypointQueue;
+    MineralCargo minerals;
+};
+
+struct PendingFleetCommand {
+    std::uint64_t issuedTurn{};
+    std::uint64_t deliveryTurn{};
+    FleetRouteProgram program;
+};
+
+struct PendingFleetTelemetry {
+    std::uint64_t deliveryTurn{};
+    FleetTelemetry telemetry;
+};
+
 struct Fleet {
     FleetId id{};
     PlayerId owner{};
@@ -194,6 +230,12 @@ struct Fleet {
     std::optional<FleetArrivalAction> arrivalAction;
     std::vector<FleetWaypoint> waypointQueue;
     MineralCargo minerals;
+
+    // Authoritative state above stays private to the simulation. These trailing
+    // fields model what the owner has confirmed and what is physically in flight.
+    std::vector<PendingFleetCommand> pendingCommands;
+    FleetTelemetry telemetry;
+    std::vector<PendingFleetTelemetry> telemetryInTransit;
 };
 
 struct GameState {
