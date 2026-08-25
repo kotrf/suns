@@ -190,6 +190,20 @@ void local_production_completion_is_immediate_and_deterministic()
     assert(event->productionKind == ProductionKind::Factory);
     assert(event->quantity == 5);
     assert(event->id == replayEvent->id);
+
+    auto shipState = make_demo_game();
+    shipState.planets.front().productionQueue.push_back({
+        ProductionKind::ColonyShip,
+        0,
+        kColonyShipDesignId,
+    });
+    const auto shipResult = processor.process_with_events(shipState, {});
+    const auto* shipEvent = find_event(shipResult.events, GameEventKind::ProductionCompleted);
+    assert(shipEvent);
+    assert(shipEvent->productionKind == ProductionKind::ColonyShip);
+    assert(shipEvent->shipDesign == kColonyShipDesignId);
+    assert(shipEvent->fleet == 2);
+    assert(shipEvent->quantity == 2);
 }
 
 } // namespace
