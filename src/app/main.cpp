@@ -7,7 +7,9 @@
 #include <QDockWidget>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QLabel>
 #include <QProgressBar>
+#include <QPushButton>
 #include <QTimer>
 
 int main(int argc, char* argv[])
@@ -21,6 +23,7 @@ int main(int argc, char* argv[])
     window.installPlanetPolish();
     window.installPanelLayoutFixes();
     window.installFleetReadabilityPolish();
+    window.installFleetPortraitPolish();
     window.installMiningInfrastructure();
 
     window.show();
@@ -50,17 +53,15 @@ int main(int argc, char* argv[])
                 reset->trigger();
             }
 
-            // Touch the new dashboard gauges in the offscreen path too; their
-            // values are refreshed asynchronously from the selected fleet.
-            if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) {
-                fuel->update();
-            }
-            if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) {
-                cargo->update();
-            }
+            // Touch the dashboard gauges plus generated portrait/mining widgets
+            // in the offscreen path; all refresh from the selected game state.
+            if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) fuel->update();
+            if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) cargo->update();
+            if (auto* portrait = window.findChild<QLabel*>("fleetPortrait")) portrait->update();
+            if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
         });
-        // Let deferred selection redraw, map-mode restyling, planet portrait,
-        // panel-layout recovery, fleet gauges and route-program timers run.
+        // Let deferred selection redraw, map-mode restyling, portraits, mining,
+        // panel recovery, gauges and route-program timers run.
         QTimer::singleShot(350, &window, [&window] { window.close(); });
         QTimer::singleShot(3000, &app, &QApplication::quit);
     }
