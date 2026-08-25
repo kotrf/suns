@@ -379,7 +379,7 @@ GameState TurnProcessor::process(
                     using T = std::decay_t<decltype(concreteOrder)>;
 
                     if constexpr (std::is_same_v<T, MoveFleetOrder>) {
-                        submit_fleet_route_command(
+                        (void)submit_fleet_route_command(
                             next,
                             submission.player,
                             concreteOrder.fleet,

@@ -60,7 +60,7 @@ The eventual map presentation should therefore visually distinguish a confirmed 
 
 The current core delay applies to route commands and fleet telemetry. Existing survey discovery still updates the player's surveyed-star set immediately; routing sensor discoveries and other intelligence through the communication network belongs in the later player-knowledge / Turn Messages layer.
 
-The galaxy map, fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: confirmed telemetry plus deterministic prediction rather than authoritative coordinates/cargo/fuel. In-flight commands and telemetry are persisted in the current save format.
+The galaxy map (fleet marker, sensor circle and route overlays), fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: confirmed telemetry plus deterministic prediction rather than authoritative coordinates/cargo/fuel. In-flight commands and telemetry are persisted in the current save format.
 
 ## Future extensions
 

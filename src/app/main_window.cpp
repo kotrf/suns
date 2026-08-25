@@ -517,26 +517,28 @@ void MainWindow::rebuildScene()
         }
         for (const auto& fleet : state_.fleets) {
             if (fleet.owner != 1) continue;
-            const auto range = fleet_sensor_range(state_, fleet);
+            const auto visibleFleet = fleet_player_view(state_, fleet);
+            const auto range = fleet_sensor_range(state_, visibleFleet);
             if (range > 0.0) {
-                addSensorRange(scene_, fleet.position, range,
+                addSensorRange(scene_, visibleFleet.position, range,
                     QColor(90, 165, 255, 115), QColor(90, 165, 255, 10));
             }
         }
     }
 
     for (const auto& fleet : state_.fleets) {
-        if (!fleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
+        const auto visibleFleet = fleet_player_view(state_, fleet);
+        if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
         const auto routeColor = fleetColor(fleet.role, 105);
         QPen routePen(routeColor);
         routePen.setWidthF(1.15);
         routePen.setStyle(Qt::DotLine);
-        auto* route = scene_->addLine(fleet.position.x, fleet.position.y,
-            fleet.destination->x, fleet.destination->y, routePen);
+        auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
+            visibleFleet.destination->x, visibleFleet.destination->y, routePen);
         route->setZValue(-20.0);
-        QString routeText = QString("W%1 • ETA %2").arg(fleet.warp).arg(turnCount(fleet_eta(fleet)));
-        if (fleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*fleet.arrivalAction));
-        addTravelLabel(scene_, fleet.position, *fleet.destination, routeText, fleetColor(fleet.role, 155));
+        QString routeText = QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
+        if (visibleFleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
+        addTravelLabel(scene_, visibleFleet.position, *visibleFleet.destination, routeText, fleetColor(fleet.role, 155));
     }
 
     for (const auto& order : pendingOrders_.orders) {
@@ -545,20 +547,21 @@ void MainWindow::rebuildScene()
             if constexpr (std::is_same_v<T, MoveFleetOrder>) {
                 const auto* fleet = findFleet(state_, concreteOrder.fleet);
                 if (!fleet) return;
+                const auto visibleFleet = fleet_player_view(state_, *fleet);
                 const auto routeColor = fleetColor(fleet->role, 190);
                 QPen routePen(routeColor);
                 routePen.setWidthF(1.45);
                 routePen.setStyle(Qt::DashLine);
-                auto* route = scene_->addLine(fleet->position.x, fleet->position.y,
+                auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
                     concreteOrder.destination.x, concreteOrder.destination.y, routePen);
                 route->setZValue(-18.0);
-                const auto routeWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
-                const auto eta = travel_turns(fleet->position, concreteOrder.destination, warp_distance(routeWarp));
+                const auto routeWarp = concreteOrder.warp == 0 ? visibleFleet.warp : concreteOrder.warp;
+                const auto eta = travel_turns(visibleFleet.position, concreteOrder.destination, warp_distance(routeWarp));
                 QString routeText = QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
                 if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
                     routeText += QString(" • %1").arg(arrivalActionSummary(concreteOrder.arrivalAction));
                 }
-                addTravelLabel(scene_, fleet->position, concreteOrder.destination, routeText, fleetColor(fleet->role, 210));
+                addTravelLabel(scene_, visibleFleet.position, concreteOrder.destination, routeText, fleetColor(fleet->role, 210));
             }
         }, order);
     }
