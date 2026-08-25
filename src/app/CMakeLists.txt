@@ -13,6 +13,7 @@ qt_add_executable(suns_app
     main_window_readability.cpp
     main_window_save.cpp
     main_window_selection.cpp
+    main_window_turn_messages.cpp
     main_window_ui.cpp
     main_window_route_program.cpp
     route_program_dock.cpp

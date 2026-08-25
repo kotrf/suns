@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 3;
+constexpr quint32 kSaveFormatVersion = 4;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -386,6 +386,13 @@ void writePlayer(QDataStream& stream, const Player& value)
     writeString(stream, value.name);
     stream << static_cast<quint32>(value.surveyedStars.size());
     for (const auto star : value.surveyedStars) stream << static_cast<quint32>(star);
+    stream << static_cast<quint32>(value.pendingSurveyReports.size());
+    for (const auto& report : value.pendingSurveyReports) {
+        stream << static_cast<quint32>(report.star)
+               << static_cast<quint32>(report.sourceFleet)
+               << static_cast<quint64>(report.observedTurn)
+               << static_cast<quint64>(report.deliveryTurn);
+    }
     stream << value.radiationTolerance << static_cast<quint8>(value.radiationImmune ? 1 : 0);
 }
 
@@ -404,6 +411,23 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 star{};
         stream >> star;
         value.surveyedStars.push_back(static_cast<StarId>(star));
+    }
+
+    if (!readCount(stream, count)) return;
+    value.pendingSurveyReports.clear();
+    value.pendingSurveyReports.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        quint32 star{};
+        quint32 sourceFleet{};
+        quint64 observedTurn{};
+        quint64 deliveryTurn{};
+        stream >> star >> sourceFleet >> observedTurn >> deliveryTurn;
+        value.pendingSurveyReports.push_back({
+            static_cast<StarId>(star),
+            static_cast<FleetId>(sourceFleet),
+            static_cast<std::uint64_t>(observedTurn),
+            static_cast<std::uint64_t>(deliveryTurn),
+        });
     }
 
     quint8 immune{};

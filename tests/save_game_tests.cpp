@@ -17,6 +17,7 @@ void round_trip_preserves_communications_and_planning()
     original.state = generate_game(original.galaxyConfig);
     original.state.turn = 77;
     original.state.planets.front().mines = 17;
+    original.state.players.front().pendingSurveyReports.push_back({2, 1, 76, 79});
 
     auto& scout = original.state.fleets.front();
     scout.position = {420.0, 10.0};
@@ -68,6 +69,11 @@ void round_trip_preserves_communications_and_planning()
     assert(error.isEmpty());
     assert(loaded.state.turn == 77);
     assert(loaded.state.planets.front().mines == 17);
+    assert(loaded.state.players.front().pendingSurveyReports.size() == 1);
+    assert(loaded.state.players.front().pendingSurveyReports.front().star == 2);
+    assert(loaded.state.players.front().pendingSurveyReports.front().sourceFleet == 1);
+    assert(loaded.state.players.front().pendingSurveyReports.front().observedTurn == 76);
+    assert(loaded.state.players.front().pendingSurveyReports.front().deliveryTurn == 79);
 
     const auto& fleet = loaded.state.fleets.front();
     assert(same_position(fleet.position, {420.0, 10.0}));
@@ -104,7 +110,7 @@ void old_format_is_rejected_cleanly()
     assert(file.open(QIODevice::WriteOnly));
     QDataStream stream(&file);
     stream.setVersion(QDataStream::Qt_6_4);
-    stream << quint32{0x53554E53u} << quint32{2};
+    stream << quint32{0x53554E53u} << quint32{3};
     file.close();
 
     SaveGameData loaded;

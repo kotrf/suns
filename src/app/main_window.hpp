@@ -18,9 +18,11 @@ class QGraphicsScene;
 class QGraphicsView;
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QObject;
 class QPushButton;
 class QSpinBox;
+class QDockWidget;
 
 namespace suns {
 
@@ -82,6 +84,9 @@ public:
     // Show delayed telemetry, estimated position and commands physically in flight.
     void installCommunicationStatus();
 
+    // Player briefing backed by typed, fog-of-war-safe core events.
+    void installTurnMessages();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -111,6 +116,8 @@ private:
     void fitGalaxyView();
     void applyMapDisplayMode();
     void refreshPlanetPolish();
+    void appendTurnMessages(const std::vector<GameEvent>& events);
+    void resetTurnMessages();
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -145,6 +152,7 @@ private:
     bool planetPolishRefreshPending_{};
     bool shuttingDown_{};
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
+    std::vector<GameEvent> turnMessages_;
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};
@@ -170,6 +178,9 @@ private:
     QPushButton* refuelButton_{};
     QPushButton* colonizeButton_{};
     QPushButton* endTurnButton_{};
+    QDockWidget* turnMessagesDock_{};
+    QListWidget* turnMessagesList_{};
+    QLabel* turnMessagesSummary_{};
 };
 
 } // namespace suns

@@ -222,6 +222,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
 
     galaxyConfig_ = loaded.galaxyConfig;
     state_ = std::move(loaded.state);
+    resetTurnMessages();
     pendingOrders_ = std::move(loaded.pendingOrders);
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
     selectedStarId_ = loaded.selectedStar;

@@ -154,10 +154,18 @@ struct Planet {
     std::uint32_t mines{};
 };
 
+struct PendingSurveyReport {
+    StarId star{};
+    FleetId sourceFleet{}; // Zero means a stationary colony sensor source.
+    std::uint64_t observedTurn{};
+    std::uint64_t deliveryTurn{};
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
     std::vector<StarId> surveyedStars;
+    std::vector<PendingSurveyReport> pendingSurveyReports;
     double radiationTolerance{0.50};
     bool radiationImmune{};
 };
