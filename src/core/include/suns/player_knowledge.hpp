@@ -25,4 +25,21 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
 // operation that mutates Player::surveyedStars and emits briefing events.
 [[nodiscard]] std::vector<GameEvent> deliver_due_survey_reports(GameState& state);
 
+// Queue an operational report at the physical source. Delivery latency is
+// calculated here so callers never need to duplicate fog-of-war policy.
+void queue_player_report(
+    GameState& state,
+    PlayerId recipient,
+    PlayerReportKind kind,
+    Position sourcePosition,
+    std::uint64_t observationTurn,
+    StarId star = 0,
+    PlanetId planet = 0,
+    FleetId fleet = 0,
+    ShipDesignId shipDesign = 0,
+    ProductionKind productionKind = ProductionKind::ColonyShip,
+    std::uint32_t quantity = 0);
+
+[[nodiscard]] std::vector<GameEvent> deliver_due_player_reports(GameState& state);
+
 } // namespace suns

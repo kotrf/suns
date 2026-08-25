@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 
 #include <QAction>
+#include <QColor>
 #include <QDockWidget>
 #include <QFont>
 #include <QGraphicsView>
@@ -24,29 +25,71 @@ namespace {
 constexpr int kEventIdRole = Qt::UserRole + 1;
 constexpr int kStarIdRole = Qt::UserRole + 2;
 constexpr int kUnreadRole = Qt::UserRole + 3;
+constexpr int kFleetIdRole = Qt::UserRole + 4;
+constexpr int kPositionXRole = Qt::UserRole + 5;
+constexpr int kPositionYRole = Qt::UserRole + 6;
 
 QString event_text(const GameState& state, const GameEvent& event)
 {
     const auto* star = find_star(state, event.star);
     const auto* planet = event.planet != 0 ? find_planet_at_star(state, event.star) : nullptr;
-    const auto starName = star ? QString::fromStdString(star->name) : QString("System %1").arg(event.star);
+    const auto starName = star
+        ? QString::fromStdString(star->name)
+        : QString("deep space (%1, %2)").arg(event.position.x, 0, 'f', 0).arg(event.position.y, 0, 'f', 0);
 
-    QString detail;
-    if (planet) {
-        const auto concentrations = planet_mineral_concentration(state, *planet);
-        detail = QString("%1 — habitability %2%, deposits I %3 / B %4 / G %5")
-                     .arg(QString::fromStdString(planet->name))
-                     .arg(planet->habitability)
-                     .arg(concentrations.ironium, 0, 'f', 1)
-                     .arg(concentrations.boranium, 0, 'f', 1)
-                     .arg(concentrations.germanium, 0, 'f', 1);
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+        return candidate.id == event.fleet;
+    });
+    const auto fleetName = fleet != state.fleets.end()
+        ? QString::fromStdString(fleet->name)
+        : QString("Fleet %1").arg(event.fleet);
+
+    QString text;
+    if (event.kind == GameEventKind::SystemSurveyed) {
+        QString detail;
+        if (planet) {
+            const auto concentrations = planet_mineral_concentration(state, *planet);
+            detail = QString("%1 — habitability %2%, deposits I %3 / B %4 / G %5")
+                         .arg(QString::fromStdString(planet->name))
+                         .arg(planet->habitability)
+                         .arg(concentrations.ironium, 0, 'f', 1)
+                         .arg(concentrations.boranium, 0, 'f', 1)
+                         .arg(concentrations.germanium, 0, 'f', 1);
+        }
+        text = QString("Turn %1  •  Survey report: %2")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(starName);
+        if (!detail.isEmpty()) text += QString("\n%1").arg(detail);
+    } else if (event.kind == GameEventKind::FleetArrived) {
+        text = QString("Turn %1  •  %2 arrived at %3 and continues its route")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(fleetName, starName);
+    } else if (event.kind == GameEventKind::RouteCompleted) {
+        text = QString("Turn %1  •  %2 completed its route at %3")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(fleetName, starName);
+    } else if (event.kind == GameEventKind::FleetStalledForFuel) {
+        text = QString("Turn %1  •  Warning: %2 cannot continue — insufficient fuel")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(fleetName);
+    } else {
+        const auto planetName = planet
+            ? QString::fromStdString(planet->name)
+            : QString("Colony %1").arg(event.planet);
+        QString itemName;
+        if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
+        else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
+        else if (const auto* design = find_ship_design(state, event.shipDesign)) {
+            itemName = QString::fromStdString(design->name);
+        } else {
+            itemName = "Ship";
+        }
+        text = QString("Turn %1  •  %2 completed on %3")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(itemName, planetName);
     }
 
     const auto delay = event.turn > event.observedTurn ? event.turn - event.observedTurn : 0;
-    QString text = QString("Turn %1  •  Survey report: %2")
-                       .arg(static_cast<qulonglong>(event.turn))
-                       .arg(starName);
-    if (!detail.isEmpty()) text += QString("\n%1").arg(detail);
     if (delay > 0) {
         text += QString("\nObserved Turn %1 • received after %2 turn%3")
                     .arg(static_cast<qulonglong>(event.observedTurn))
@@ -108,11 +151,16 @@ void MainWindow::installTurnMessages()
         mark_read(item);
         const auto starId = static_cast<StarId>(item->data(kStarIdRole).toUInt());
         const auto* star = find_star(state_, starId);
-        if (!star) return;
-        selectedStarId_ = starId;
-        selectedFleetId_.reset();
+        const auto fleetId = static_cast<FleetId>(item->data(kFleetIdRole).toUInt());
+        const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
+            return candidate.id == fleetId;
+        });
+        if (star) selectedStarId_ = starId;
+        if (fleet != state_.fleets.end()) selectedFleetId_ = fleetId;
+        else selectedFleetId_.reset();
         rebuildScene();
-        view_->centerOn(star->position.x, star->position.y);
+        if (star) view_->centerOn(star->position.x, star->position.y);
+        else view_->centerOn(item->data(kPositionXRole).toDouble(), item->data(kPositionYRole).toDouble());
     };
     connect(turnMessagesList_, &QListWidget::itemActivated, this, focus);
     connect(turnMessagesList_, &QListWidget::itemClicked, this, focus);
@@ -147,7 +195,12 @@ void MainWindow::appendTurnMessages(const std::vector<GameEvent>& events)
         auto* item = new QListWidgetItem(event_text(state_, event), turnMessagesList_);
         item->setData(kEventIdRole, QVariant::fromValue<qulonglong>(event.id));
         item->setData(kStarIdRole, static_cast<quint32>(event.star));
+        item->setData(kFleetIdRole, static_cast<quint32>(event.fleet));
+        item->setData(kPositionXRole, event.position.x);
+        item->setData(kPositionYRole, event.position.y);
         item->setData(kUnreadRole, true);
+        if (event.severity == GameEventSeverity::Warning) item->setForeground(QColor(210, 135, 35));
+        else if (event.severity == GameEventSeverity::Critical) item->setForeground(QColor(210, 65, 65));
         auto font = item->font();
         font.setBold(true);
         item->setFont(font);

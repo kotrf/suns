@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 4;
+constexpr quint32 kSaveFormatVersion = 5;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -393,6 +393,19 @@ void writePlayer(QDataStream& stream, const Player& value)
                << static_cast<quint64>(report.observedTurn)
                << static_cast<quint64>(report.deliveryTurn);
     }
+    stream << static_cast<quint32>(value.pendingPlayerReports.size());
+    for (const auto& report : value.pendingPlayerReports) {
+        writeEnum(stream, report.kind);
+        stream << static_cast<quint64>(report.observedTurn)
+               << static_cast<quint64>(report.deliveryTurn)
+               << static_cast<quint32>(report.star)
+               << static_cast<quint32>(report.planet)
+               << static_cast<quint32>(report.fleet)
+               << static_cast<quint32>(report.shipDesign);
+        writeEnum(stream, report.productionKind);
+        writePosition(stream, report.position);
+        stream << static_cast<quint32>(report.quantity);
+    }
     stream << value.radiationTolerance << static_cast<quint8>(value.radiationImmune ? 1 : 0);
 }
 
@@ -428,6 +441,33 @@ void readPlayer(QDataStream& stream, Player& value)
             static_cast<std::uint64_t>(observedTurn),
             static_cast<std::uint64_t>(deliveryTurn),
         });
+    }
+
+    if (!readCount(stream, count)) return;
+    value.pendingPlayerReports.clear();
+    value.pendingPlayerReports.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        PendingPlayerReport report;
+        if (!readEnum(stream, report.kind, static_cast<quint8>(PlayerReportKind::ProductionCompleted))) return;
+        quint64 observedTurn{};
+        quint64 deliveryTurn{};
+        quint32 star{};
+        quint32 planet{};
+        quint32 fleet{};
+        quint32 shipDesign{};
+        stream >> observedTurn >> deliveryTurn >> star >> planet >> fleet >> shipDesign;
+        if (!readEnum(stream, report.productionKind, static_cast<quint8>(ProductionKind::Mine))) return;
+        readPosition(stream, report.position);
+        quint32 quantity{};
+        stream >> quantity;
+        report.observedTurn = static_cast<std::uint64_t>(observedTurn);
+        report.deliveryTurn = static_cast<std::uint64_t>(deliveryTurn);
+        report.star = static_cast<StarId>(star);
+        report.planet = static_cast<PlanetId>(planet);
+        report.fleet = static_cast<FleetId>(fleet);
+        report.shipDesign = static_cast<ShipDesignId>(shipDesign);
+        report.quantity = static_cast<std::uint32_t>(quantity);
+        value.pendingPlayerReports.push_back(report);
     }
 
     quint8 immune{};
@@ -467,6 +507,7 @@ void writeFleet(QDataStream& stream, const Fleet& value)
     writeTelemetry(stream, value.telemetry);
     stream << static_cast<quint32>(value.telemetryInTransit.size());
     for (const auto& packet : value.telemetryInTransit) writePendingTelemetry(stream, packet);
+    stream << static_cast<quint8>(value.fuelStalled ? 1 : 0);
 }
 
 void readFleet(QDataStream& stream, Fleet& value)
@@ -553,6 +594,14 @@ void readFleet(QDataStream& stream, Fleet& value)
         if (stream.status() != QDataStream::Ok) return;
         value.telemetryInTransit.push_back(std::move(packet));
     }
+
+    quint8 fuelStalled{};
+    stream >> fuelStalled;
+    if (fuelStalled > 1) {
+        markCorrupt(stream);
+        return;
+    }
+    value.fuelStalled = fuelStalled != 0;
 }
 
 template <typename Value, typename Writer>

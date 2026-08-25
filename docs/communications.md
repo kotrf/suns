@@ -58,7 +58,7 @@ The eventual map presentation should therefore visually distinguish a confirmed 
 
 ## Known first-slice limits
 
-Route commands and fleet telemetry use the fleet communication packet model. Sensor discoveries use the separate player-knowledge layer: a physical observation creates a survey report, and `Player::surveyedStars` changes only when that report reaches the empire. Delivery also emits a typed Turn Message event; the report is never smuggled through fleet telemetry.
+Route commands and fleet telemetry use the fleet communication packet model. Sensor discoveries and operational messages use the separate player-knowledge layer: a physical observation or fleet result creates a report, and player-visible knowledge changes only when that report reaches the empire. Arrival, route-completion and fuel-stall messages therefore cannot reveal remote truth before telemetry. Reports are never smuggled through fleet telemetry.
 
 The galaxy map (fleet marker, sensor circle and route overlays), fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: confirmed telemetry plus deterministic prediction rather than authoritative coordinates/cargo/fuel. In-flight commands and telemetry are persisted in the current save format.
 
@@ -69,7 +69,7 @@ The same model is intended to support:
 - orbital relay stations and dedicated relay ships
 - communication components in ship/station design
 - autonomous fleet doctrines when commands cannot arrive in time
-- delayed sensor/intelligence reports
+- additional delayed sensor/intelligence reports
 - jamming, interception and communication warfare
-- Turn Messages for command delivery, contact loss/restoration and delayed discoveries
+- Turn Messages for command delivery and contact loss/restoration
 - technology improvements to range, signal speed and resistance to interference

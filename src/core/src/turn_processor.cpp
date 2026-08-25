@@ -73,21 +73,21 @@ void mine_colonies(GameState& state)
     }
 }
 
-void complete_production(GameState& state, Planet& planet, const ProductionItem& item)
+std::optional<FleetId> complete_production(GameState& state, Planet& planet, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Factory) {
         ++planet.industry;
-        return;
+        return FleetId{0};
     }
     if (item.kind == ProductionKind::Mine) {
         ++planet.mines;
-        return;
+        return FleetId{0};
     }
 
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
     const auto* star = find_star(state, planet.star);
     const auto* design = find_ship_design(state, designId);
-    if (!star || !design || design->owner != planet.owner || !ship_design_valid(*design)) return;
+    if (!star || !design || design->owner != planet.owner || !ship_design_valid(*design)) return std::nullopt;
 
     const auto id = state.nextFleetId++;
     state.fleets.push_back({
@@ -102,6 +102,7 @@ void complete_production(GameState& state, Planet& planet, const ProductionItem&
         ship_design_fuel_capacity(*design),
         0,
     });
+    return id;
 }
 
 void run_colony_production(GameState& state, Planet& planet)
@@ -125,7 +126,27 @@ void run_colony_production(GameState& state, Planet& planet)
 
         const auto completed = item;
         planet.productionQueue.erase(planet.productionQueue.begin());
-        complete_production(state, planet, completed);
+        const auto completedFleet = complete_production(state, planet, completed);
+        if (!completedFleet) continue;
+
+        const auto* star = find_star(state, planet.star);
+        if (!star) continue;
+        std::uint32_t quantity = 0;
+        if (completed.kind == ProductionKind::Factory) quantity = planet.industry;
+        else if (completed.kind == ProductionKind::Mine) quantity = planet.mines;
+        else quantity = *completedFleet;
+        queue_player_report(
+            state,
+            planet.owner,
+            PlayerReportKind::ProductionCompleted,
+            star->position,
+            state.turn + 1,
+            planet.star,
+            planet.id,
+            *completedFleet,
+            completed.shipDesign,
+            completed.kind,
+            quantity);
     }
     planet.stockpile = available;
 }
@@ -266,13 +287,60 @@ void generate_fleet_fuel(GameState& state)
     }
 }
 
+void queue_fleet_movement_report(
+    GameState& state,
+    const Fleet& fleet,
+    PlayerReportKind kind,
+    std::uint64_t observationTurn)
+{
+    StarId starId = 0;
+    PlanetId planetId = 0;
+    for (const auto& star : state.stars) {
+        if (!same_position(star.position, fleet.position)) continue;
+        starId = star.id;
+        if (const auto* planet = find_planet_at_star(state, star.id)) planetId = planet->id;
+        break;
+    }
+    queue_player_report(
+        state,
+        fleet.owner,
+        kind,
+        fleet.position,
+        observationTurn,
+        starId,
+        planetId,
+        fleet.id,
+        fleet.design);
+}
+
+bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets)
+{
+    fleet.fuelStalled = false;
+    if (execute_arrival_action(state, fleet)) {
+        queue_fleet_movement_report(state, fleet, PlayerReportKind::RouteCompleted, state.turn + 1);
+        consumedFleets.push_back(fleet.id);
+        return true;
+    }
+
+    activate_next_waypoint(state, fleet);
+    queue_fleet_movement_report(
+        state,
+        fleet,
+        fleet.destination ? PlayerReportKind::FleetArrived : PlayerReportKind::RouteCompleted,
+        state.turn + 1);
+    return false;
+}
+
 void advance_fleets(GameState& state)
 {
     constexpr double epsilon = 0.000001;
     std::vector<FleetId> consumedFleets;
 
     for (auto& fleet : state.fleets) {
-        if (!fleet.destination || !fleet_warp_valid(state, fleet, fleet.warp)) continue;
+        if (!fleet.destination || !fleet_warp_valid(state, fleet, fleet.warp)) {
+            fleet.fuelStalled = false;
+            continue;
+        }
 
         const Position start = fleet.position;
         const auto destination = *fleet.destination;
@@ -280,11 +348,7 @@ void advance_fleets(GameState& state)
         if (remaining <= epsilon) {
             fleet.position = destination;
             fleet.destination.reset();
-            if (execute_arrival_action(state, fleet)) {
-                consumedFleets.push_back(fleet.id);
-                continue;
-            }
-            activate_next_waypoint(state, fleet);
+            if (finish_fleet_arrival(state, fleet, consumedFleets)) continue;
             continue;
         }
 
@@ -292,7 +356,15 @@ void advance_fleets(GameState& state)
         double travelDistance = std::min(remaining, maximumDistance);
         const double fuelChangePerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
         if (fuelChangePerLy > epsilon) travelDistance = std::min(travelDistance, fleet.fuel / fuelChangePerLy);
-        if (travelDistance <= epsilon) continue;
+        if (travelDistance <= epsilon) {
+            if (!fleet.fuelStalled && fuelChangePerLy > epsilon) {
+                fleet.fuelStalled = true;
+                queue_fleet_movement_report(
+                    state, fleet, PlayerReportKind::FleetStalledForFuel, state.turn + 1);
+            }
+            continue;
+        }
+        fleet.fuelStalled = false;
 
         const double fuelChange = fuelChangePerLy * travelDistance;
         const auto capacity = fleet_fuel_capacity(state, fleet);
@@ -313,11 +385,7 @@ void advance_fleets(GameState& state)
         apply_fleet_radiation_attrition(state, fleet);
 
         if (arrived) {
-            if (execute_arrival_action(state, fleet)) {
-                consumedFleets.push_back(fleet.id);
-                continue;
-            }
-            activate_next_waypoint(state, fleet);
+            if (finish_fleet_arrival(state, fleet, consumedFleets)) continue;
         }
     }
 
@@ -341,6 +409,8 @@ TurnResult TurnProcessor::process_with_events(
 {
     GameState next = current;
     std::vector<GameEvent> events = deliver_due_survey_reports(next);
+    auto deliveredReports = deliver_due_player_reports(next);
+    events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
 
     // Persisted traffic may already be due at this planning boundary.
     deliver_due_fleet_telemetry(next);
@@ -469,6 +539,8 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_telemetry(next);
     auto deliveredIntel = deliver_due_survey_reports(next);
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
+    deliveredReports = deliver_due_player_reports(next);
+    events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
     return {std::move(next), std::move(events)};
 }
 
