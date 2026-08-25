@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 
+#include "suns/communications.hpp"
+
 #include <algorithm>
 
 namespace suns {
@@ -136,8 +138,10 @@ QString MainWindow::selectedPlanetPanelSummary() const
 
 QString MainWindow::selectedFleetPanelSummary() const
 {
-    const auto* fleet = selectedFleet();
-    if (!fleet) return "<span style='color:#8090a2'>No fleet selected.</span>";
+    const auto* authoritativeFleet = selectedFleet();
+    if (!authoritativeFleet) return "<span style='color:#8090a2'>No fleet selected.</span>";
+    const auto visibleFleet = fleet_player_view(state_, *authoritativeFleet);
+    const auto* fleet = &visibleFleet;
 
     const auto* design = fleet_design(state_, *fleet);
     const auto hull = design ? hull_spec(design->hull) : ShipHullSpec{};

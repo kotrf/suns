@@ -1,4 +1,5 @@
 #include "suns/turn_processor.hpp"
+#include "suns/communications.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -363,6 +364,11 @@ GameState TurnProcessor::process(
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+
+    // Persisted traffic may already be due at this planning boundary.
+    deliver_due_fleet_telemetry(next);
+    deliver_due_fleet_commands(next);
+
     generate_fleet_fuel(next);
     mine_colonies(next);
 
@@ -373,31 +379,14 @@ GameState TurnProcessor::process(
                     using T = std::decay_t<decltype(concreteOrder)>;
 
                     if constexpr (std::is_same_v<T, MoveFleetOrder>) {
-                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
-                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                        });
-                        if (fleet == next.fleets.end()) return;
-
-                        const auto requestedWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
-                        if (!fleet_warp_valid(next, *fleet, requestedWarp)) return;
-                        if (std::any_of(concreteOrder.queuedWaypoints.begin(), concreteOrder.queuedWaypoints.end(),
-                                [&](const FleetWaypoint& waypoint) { return !fleet_warp_valid(next, *fleet, waypoint.warp); })) {
-                            return;
-                        }
-
-                        fleet->warp = requestedWarp;
-                        fleet->arrivalAction = active_arrival_action(concreteOrder.arrivalAction);
-                        fleet->waypointQueue = concreteOrder.queuedWaypoints;
-
-                        if (same_position(fleet->position, concreteOrder.destination)) {
-                            if (fleet->arrivalAction) fleet->destination = concreteOrder.destination;
-                            else {
-                                fleet->destination.reset();
-                                activate_next_waypoint(next, *fleet);
-                            }
-                        } else {
-                            fleet->destination = concreteOrder.destination;
-                        }
+                        submit_fleet_route_command(
+                            next,
+                            submission.player,
+                            concreteOrder.fleet,
+                            concreteOrder.destination,
+                            concreteOrder.warp,
+                            concreteOrder.arrivalAction,
+                            concreteOrder.queuedWaypoints);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -494,7 +483,13 @@ GameState TurnProcessor::process(
     for (auto& planet : next.planets) run_colony_production(next, planet);
     grow_colonies(next);
 
+    // The returned state is the next planning boundary. Commands arriving
+    // during this elapsed year become active now but never rewrite movement
+    // that has already happened. Telemetry is then emitted from truth.
     ++next.turn;
+    deliver_due_fleet_commands(next);
+    publish_fleet_telemetry(next, next.turn);
+    deliver_due_fleet_telemetry(next);
     return next;
 }
 

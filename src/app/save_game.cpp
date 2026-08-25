@@ -13,8 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 2;
-constexpr quint32 kOldestSupportedSaveFormatVersion = 1;
+constexpr quint32 kSaveFormatVersion = 3;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -113,6 +112,151 @@ void readWaypoint(QDataStream& stream, FleetWaypoint& value)
     readArrivalAction(stream, value.arrivalAction);
 }
 
+
+void writeOptionalPosition(QDataStream& stream, const std::optional<Position>& value)
+{
+    stream << static_cast<quint8>(value.has_value() ? 1 : 0);
+    if (value) writePosition(stream, *value);
+}
+
+bool readOptionalPosition(QDataStream& stream, std::optional<Position>& value)
+{
+    quint8 present{};
+    stream >> present;
+    if (present > 1) {
+        markCorrupt(stream);
+        return false;
+    }
+    value.reset();
+    if (present) {
+        Position position;
+        readPosition(stream, position);
+        value = position;
+    }
+    return stream.status() == QDataStream::Ok;
+}
+
+void writeRouteProgram(QDataStream& stream, const FleetRouteProgram& value)
+{
+    writePosition(stream, value.destination);
+    stream << static_cast<quint8>(value.warp);
+    writeArrivalAction(stream, value.arrivalAction);
+    stream << static_cast<quint32>(value.queuedWaypoints.size());
+    for (const auto& waypoint : value.queuedWaypoints) writeWaypoint(stream, waypoint);
+}
+
+void readRouteProgram(QDataStream& stream, FleetRouteProgram& value)
+{
+    readPosition(stream, value.destination);
+    quint8 warp{};
+    stream >> warp;
+    value.warp = static_cast<std::uint8_t>(warp);
+    readArrivalAction(stream, value.arrivalAction);
+    quint32 count{};
+    if (!readCount(stream, count)) return;
+    value.queuedWaypoints.clear();
+    value.queuedWaypoints.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        FleetWaypoint waypoint;
+        readWaypoint(stream, waypoint);
+        if (stream.status() != QDataStream::Ok) return;
+        value.queuedWaypoints.push_back(waypoint);
+    }
+}
+
+void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
+{
+    stream << static_cast<quint64>(value.observedTurn);
+    writePosition(stream, value.position);
+    writeOptionalPosition(stream, value.destination);
+    stream << static_cast<quint8>(value.warp)
+           << value.fuel
+           << static_cast<quint64>(value.colonists);
+    stream << static_cast<quint8>(value.arrivalAction.has_value() ? 1 : 0);
+    if (value.arrivalAction) writeArrivalAction(stream, *value.arrivalAction);
+    stream << static_cast<quint32>(value.waypointQueue.size());
+    for (const auto& waypoint : value.waypointQueue) writeWaypoint(stream, waypoint);
+    writeMinerals(stream, value.minerals);
+
+    stream << static_cast<quint32>(value.pendingCommands.size());
+    for (const auto& command : value.pendingCommands) writePendingCommand(stream, command);
+    writeTelemetry(stream, value.telemetry);
+    stream << static_cast<quint32>(value.telemetryInTransit.size());
+    for (const auto& packet : value.telemetryInTransit) writePendingTelemetry(stream, packet);
+}
+
+void readTelemetry(QDataStream& stream, FleetTelemetry& value)
+{
+    quint64 observed{};
+    stream >> observed;
+    value.observedTurn = static_cast<std::uint64_t>(observed);
+    readPosition(stream, value.position);
+    if (!readOptionalPosition(stream, value.destination)) return;
+
+    quint8 warp{};
+    quint64 colonists{};
+    stream >> warp >> value.fuel >> colonists;
+    value.warp = static_cast<std::uint8_t>(warp);
+    value.colonists = static_cast<std::uint64_t>(colonists);
+
+    quint8 hasArrival{};
+    stream >> hasArrival;
+    if (hasArrival > 1) {
+        markCorrupt(stream);
+        return;
+    }
+    value.arrivalAction.reset();
+    if (hasArrival) {
+        FleetArrivalAction action;
+        readArrivalAction(stream, action);
+        if (stream.status() != QDataStream::Ok) return;
+        value.arrivalAction = action;
+    }
+
+    quint32 count{};
+    if (!readCount(stream, count)) return;
+    value.waypointQueue.clear();
+    value.waypointQueue.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        FleetWaypoint waypoint;
+        readWaypoint(stream, waypoint);
+        if (stream.status() != QDataStream::Ok) return;
+        value.waypointQueue.push_back(waypoint);
+    }
+    readMinerals(stream, value.minerals);
+}
+
+void writePendingCommand(QDataStream& stream, const PendingFleetCommand& value)
+{
+    stream << static_cast<quint64>(value.issuedTurn)
+           << static_cast<quint64>(value.deliveryTurn);
+    writeRouteProgram(stream, value.program);
+}
+
+void readPendingCommand(QDataStream& stream, PendingFleetCommand& value)
+{
+    quint64 issued{};
+    quint64 delivery{};
+    stream >> issued >> delivery;
+    value.issuedTurn = static_cast<std::uint64_t>(issued);
+    value.deliveryTurn = static_cast<std::uint64_t>(delivery);
+    readRouteProgram(stream, value.program);
+}
+
+void writePendingTelemetry(QDataStream& stream, const PendingFleetTelemetry& value)
+{
+    stream << static_cast<quint64>(value.deliveryTurn);
+    writeTelemetry(stream, value.telemetry);
+}
+
+void readPendingTelemetry(QDataStream& stream, PendingFleetTelemetry& value)
+{
+    quint64 delivery{};
+    stream >> delivery;
+    value.deliveryTurn = static_cast<std::uint64_t>(delivery);
+    readTelemetry(stream, value.telemetry);
+}
+
 void writeStar(QDataStream& stream, const StarSystem& value)
 {
     stream << static_cast<quint32>(value.id);
@@ -195,7 +339,7 @@ void writePlanet(QDataStream& stream, const Planet& value)
     stream << static_cast<quint32>(value.mines);
 }
 
-void readPlanet(QDataStream& stream, Planet& value, quint32 saveVersion)
+void readPlanet(QDataStream& stream, Planet& value)
 {
     quint32 id{};
     quint32 star{};
@@ -229,12 +373,9 @@ void readPlanet(QDataStream& stream, Planet& value, quint32 saveVersion)
     }
     readMinerals(stream, value.minerals);
 
-    value.mines = 0;
-    if (saveVersion >= 2) {
-        quint32 mines{};
-        stream >> mines;
-        value.mines = static_cast<std::uint32_t>(mines);
-    }
+    quint32 mines{};
+    stream >> mines;
+    value.mines = static_cast<std::uint32_t>(mines);
 }
 
 void writePlayer(QDataStream& stream, const Player& value)
@@ -355,6 +496,31 @@ void readFleet(QDataStream& stream, Fleet& value)
         value.waypointQueue.push_back(waypoint);
     }
     readMinerals(stream, value.minerals);
+
+    quint32 pendingCount{};
+    if (!readCount(stream, pendingCount)) return;
+    value.pendingCommands.clear();
+    value.pendingCommands.reserve(pendingCount);
+    for (quint32 index = 0; index < pendingCount; ++index) {
+        PendingFleetCommand command;
+        readPendingCommand(stream, command);
+        if (stream.status() != QDataStream::Ok) return;
+        value.pendingCommands.push_back(std::move(command));
+    }
+
+    readTelemetry(stream, value.telemetry);
+    if (stream.status() != QDataStream::Ok) return;
+
+    quint32 telemetryCount{};
+    if (!readCount(stream, telemetryCount)) return;
+    value.telemetryInTransit.clear();
+    value.telemetryInTransit.reserve(telemetryCount);
+    for (quint32 index = 0; index < telemetryCount; ++index) {
+        PendingFleetTelemetry packet;
+        readPendingTelemetry(stream, packet);
+        if (stream.status() != QDataStream::Ok) return;
+        value.telemetryInTransit.push_back(std::move(packet));
+    }
 }
 
 template <typename Value, typename Writer>
@@ -393,7 +559,7 @@ void writeGameState(QDataStream& stream, const GameState& value)
     writeVector(stream, value.fleets, writeFleet);
 }
 
-void readGameState(QDataStream& stream, GameState& value, quint32 saveVersion)
+void readGameState(QDataStream& stream, GameState& value)
 {
     quint64 turn{};
     quint64 seed{};
@@ -408,9 +574,7 @@ void readGameState(QDataStream& stream, GameState& value, quint32 saveVersion)
     if (!readVector(stream, value.players, readPlayer)) return;
     if (!readVector(stream, value.shipDesigns, readShipDesign)) return;
     if (!readVector(stream, value.stars, readStar)) return;
-    if (!readVector(stream, value.planets, [saveVersion](QDataStream& input, Planet& planet) {
-            readPlanet(input, planet, saveVersion);
-        })) return;
+    if (!readVector(stream, value.planets, readPlanet)) return;
     readVector(stream, value.fleets, readFleet);
 }
 
@@ -718,17 +882,16 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "This is not a Suns! save file, or the file is damaged.";
         return false;
     }
-    if (version < kOldestSupportedSaveFormatVersion || version > kSaveFormatVersion) {
-        errorMessage = QString("Unsupported Suns! save version %1 (this build reads versions %2..%3).")
+    if (version != kSaveFormatVersion) {
+        errorMessage = QString("Unsupported Suns! save version %1 (this prototype build reads version %2 only).")
                            .arg(version)
-                           .arg(kOldestSupportedSaveFormatVersion)
                            .arg(kSaveFormatVersion);
         return false;
     }
 
     SaveGameData loaded;
     readGalaxyConfig(stream, loaded.galaxyConfig);
-    readGameState(stream, loaded.state, version);
+    readGameState(stream, loaded.state);
     readPlayerOrders(stream, loaded.pendingOrders);
     readDescriptions(stream, loaded.pendingDescriptions);
     readOptionalId(stream, loaded.selectedStar);

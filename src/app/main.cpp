@@ -25,6 +25,7 @@ int main(int argc, char* argv[])
     window.installFleetReadabilityPolish();
     window.installFleetPortraitPolish();
     window.installMiningInfrastructure();
+    window.installCommunicationStatus();
 
     window.show();
 
@@ -59,6 +60,7 @@ int main(int argc, char* argv[])
             if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) cargo->update();
             if (auto* portrait = window.findChild<QLabel*>("fleetPortrait")) portrait->update();
             if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
+            if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();
         });
         // Let deferred selection redraw, map-mode restyling, portraits, mining,
         // panel recovery, gauges and route-program timers run.

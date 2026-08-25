@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 
+#include "suns/communications.hpp"
+
 #include <QStatusBar>
 
 #include <algorithm>
@@ -232,13 +234,21 @@ QString routeForecast(
 
 FleetId MainWindow::selectedFleetForRouteProgram() const
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     return fleet ? fleet->id : 0;
 }
 
 std::uint8_t MainWindow::selectedFleetMaxWarpForRouteProgram() const
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) return 0;
     const auto* design = fleet_design(state_, *fleet);
     return design ? ship_design_max_warp(*design) : 0;
@@ -246,7 +256,11 @@ std::uint8_t MainWindow::selectedFleetMaxWarpForRouteProgram() const
 
 std::uint8_t MainWindow::selectedFleetSuggestedWarpForRouteProgram() const
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) return 1;
     const auto maxWarp = selectedFleetMaxWarpForRouteProgram();
     return maxWarp == 0 ? 1 : std::clamp<std::uint8_t>(fleet->warp, 1, maxWarp);
@@ -254,7 +268,11 @@ std::uint8_t MainWindow::selectedFleetSuggestedWarpForRouteProgram() const
 
 QString MainWindow::selectedFleetRouteProgramSummary() const
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) return "<b>Route program:</b> select a fleet on the map.";
 
     const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
@@ -292,7 +310,11 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
 
 std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) return {};
 
     std::vector<Position> points;
@@ -308,7 +330,11 @@ std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
 
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     const auto* star = selectedStar();
     if (!fleet || !star || !fleet_warp_valid(state_, *fleet, warp)) {
         statusBar()->showMessage("Select a fleet and destination star with a valid Warp first");
@@ -362,7 +388,11 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
 
 bool MainWindow::clearSelectedFleetRouteProgram()
 {
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) {
         statusBar()->showMessage("Select a fleet first");
         return false;
