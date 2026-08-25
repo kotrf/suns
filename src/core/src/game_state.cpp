@@ -522,6 +522,23 @@ std::uint32_t colony_output(const Planet& planet)
     return planet.industry + static_cast<std::uint32_t>(planet.population / 500);
 }
 
+namespace {
+
+void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
+{
+    fleet.telemetry.observedTurn = turn;
+    fleet.telemetry.position = fleet.position;
+    fleet.telemetry.destination = fleet.destination;
+    fleet.telemetry.warp = fleet.warp;
+    fleet.telemetry.fuel = fleet.fuel;
+    fleet.telemetry.colonists = fleet.colonists;
+    fleet.telemetry.arrivalAction = fleet.arrivalAction;
+    fleet.telemetry.waypointQueue = fleet.waypointQueue;
+    fleet.telemetry.minerals = fleet.minerals;
+}
+
+} // namespace
+
 GameState generate_game(const GalaxyConfig& config)
 {
     const auto starCount = std::clamp<std::size_t>(config.starCount, 2, 64);
@@ -557,6 +574,7 @@ GameState generate_game(const GalaxyConfig& config)
         1, 1, "Scout 1", FleetRole::Scout, kScoutDesignId,
         {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, scoutFuel, 0,
     });
+    initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;
     refresh_sensor_intel(state);
     return state;
@@ -595,6 +613,7 @@ GameState make_demo_game()
         1, 1, "Scout 1", FleetRole::Scout, kScoutDesignId,
         {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, scoutFuel, 0,
     });
+    initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;
     refresh_sensor_intel(state);
     return state;

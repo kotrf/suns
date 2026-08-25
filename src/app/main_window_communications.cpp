@@ -65,17 +65,17 @@ void MainWindow::installCommunicationStatus()
         }
 
         if (!fleet->pendingCommands.empty()) {
-            const auto nextCommand = std::min_element(
+            const auto oldest = std::min_element(
                 fleet->pendingCommands.begin(), fleet->pendingCommands.end(),
                 [](const PendingFleetCommand& lhs, const PendingFleetCommand& rhs) {
-                    return lhs.deliveryTurn < rhs.deliveryTurn;
+                    return lhs.issuedTurn < rhs.issuedTurn;
                 });
-            text += QString("<br><b>Command in transit:</b> issued turn %1, delivery turn %2")
-                        .arg(static_cast<qulonglong>(nextCommand->issuedTurn))
-                        .arg(static_cast<qulonglong>(nextCommand->deliveryTurn));
+            text += QString("<br><b>Command in transit:</b> transmitted turn %1 — reception not yet confirmed")
+                        .arg(static_cast<qulonglong>(oldest->issuedTurn));
             if (fleet->pendingCommands.size() > 1) {
-                text += QString(" (+%1 queued behind it)")
-                            .arg(static_cast<qulonglong>(fleet->pendingCommands.size() - 1));
+                text += QString(" (+%1 later transmission%2)")
+                            .arg(static_cast<qulonglong>(fleet->pendingCommands.size() - 1))
+                            .arg(fleet->pendingCommands.size() == 2 ? "" : "s");
             }
         }
 

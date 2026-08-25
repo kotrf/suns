@@ -28,7 +28,7 @@ void round_trip_preserves_communications_and_planning()
     scout.pendingCommands.push_back({
         77,
         80,
-        {{0.0, 0.0}, 7, {FleetArrivalActionKind::Refuel, 1}, {{{90.0, 30.0}, 6, {}}}},
+        {{0.0, 0.0}, 7, {FleetArrivalActionKind::Refuel, 1}, {{{90.0, 30.0}, 6, {}}}, true},
     });
     scout.telemetry = {
         75,
@@ -76,6 +76,7 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.pendingCommands.front().deliveryTurn == 80);
     assert(fleet.pendingCommands.front().program.warp == 7);
     assert(fleet.pendingCommands.front().program.queuedWaypoints.size() == 1);
+    assert(fleet.pendingCommands.front().program.clearRoute);
     assert(fleet.telemetry.observedTurn == 75);
     assert(same_position(fleet.telemetry.position, {300.0, 10.0}));
     assert(fleet.telemetry.destination.has_value());

@@ -191,6 +191,7 @@ struct FleetRouteProgram {
     std::uint8_t warp{kScoutCruiseWarp};
     FleetArrivalAction arrivalAction{};
     std::vector<FleetWaypoint> queuedWaypoints;
+    bool clearRoute{};
 };
 
 struct FleetTelemetry {

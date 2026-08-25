@@ -143,6 +143,7 @@ void writeRouteProgram(QDataStream& stream, const FleetRouteProgram& value)
     writeArrivalAction(stream, value.arrivalAction);
     stream << static_cast<quint32>(value.queuedWaypoints.size());
     for (const auto& waypoint : value.queuedWaypoints) writeWaypoint(stream, waypoint);
+    stream << static_cast<quint8>(value.clearRoute ? 1 : 0);
 }
 
 void readRouteProgram(QDataStream& stream, FleetRouteProgram& value)
@@ -162,6 +163,13 @@ void readRouteProgram(QDataStream& stream, FleetRouteProgram& value)
         if (stream.status() != QDataStream::Ok) return;
         value.queuedWaypoints.push_back(waypoint);
     }
+    quint8 clearRoute{};
+    stream >> clearRoute;
+    if (clearRoute > 1) {
+        markCorrupt(stream);
+        return;
+    }
+    value.clearRoute = clearRoute != 0;
 }
 
 void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
@@ -177,12 +185,6 @@ void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
     stream << static_cast<quint32>(value.waypointQueue.size());
     for (const auto& waypoint : value.waypointQueue) writeWaypoint(stream, waypoint);
     writeMinerals(stream, value.minerals);
-
-    stream << static_cast<quint32>(value.pendingCommands.size());
-    for (const auto& command : value.pendingCommands) writePendingCommand(stream, command);
-    writeTelemetry(stream, value.telemetry);
-    stream << static_cast<quint32>(value.telemetryInTransit.size());
-    for (const auto& packet : value.telemetryInTransit) writePendingTelemetry(stream, packet);
 }
 
 void readTelemetry(QDataStream& stream, FleetTelemetry& value)
@@ -435,6 +437,12 @@ void writeFleet(QDataStream& stream, const Fleet& value)
     stream << static_cast<quint32>(value.waypointQueue.size());
     for (const auto& waypoint : value.waypointQueue) writeWaypoint(stream, waypoint);
     writeMinerals(stream, value.minerals);
+
+    stream << static_cast<quint32>(value.pendingCommands.size());
+    for (const auto& command : value.pendingCommands) writePendingCommand(stream, command);
+    writeTelemetry(stream, value.telemetry);
+    stream << static_cast<quint32>(value.telemetryInTransit.size());
+    for (const auto& packet : value.telemetryInTransit) writePendingTelemetry(stream, packet);
 }
 
 void readFleet(QDataStream& stream, Fleet& value)

@@ -11,6 +11,14 @@ namespace suns {
 
 namespace {
 
+Fleet* findFleet(GameState& state, FleetId id)
+{
+    const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
+        return fleet.id == id;
+    });
+    return it == state.fleets.end() ? nullptr : &*it;
+}
+
 const Fleet* findFleet(const GameState& state, FleetId id)
 {
     const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
@@ -126,6 +134,9 @@ QString routeForecast(
     if (legs.empty()) return {};
 
     GameState simulated = state;
+    if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
+        *simulatedFleet = fleet_player_view(state, *simulatedFleet);
+    }
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
 
@@ -302,7 +313,7 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     }
 
     if (pendingMove(pendingOrders_, fleet->id)) {
-        lines << "<i>Pending program becomes authoritative on End Turn.</i>";
+        lines << "<i>Pending program is transmitted on End Turn; a remote fleet keeps its known onboard program until the command arrives.</i>";
     }
     lines << routeForecast(state_, pendingOrders_, processor_, fleet->id, *route);
     return lines.join("<br>");

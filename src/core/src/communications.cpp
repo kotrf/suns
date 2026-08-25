@@ -53,6 +53,13 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
     }
 
     fleet.warp = requestedWarp;
+    if (program.clearRoute) {
+        fleet.destination.reset();
+        fleet.arrivalAction.reset();
+        fleet.waypointQueue.clear();
+        return true;
+    }
+
     fleet.arrivalAction = active_arrival_action(program.arrivalAction);
     fleet.waypointQueue = program.queuedWaypoints;
 
@@ -170,7 +177,8 @@ bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)
 FleetTelemetry confirmed_fleet_telemetry(const GameState& state, const Fleet& fleet)
 {
     if (fleet.telemetry.observedTurn != 0) return fleet.telemetry;
-    return authoritative_snapshot(state, fleet, state.turn);
+    if (fleet_has_instant_link(state, fleet)) return authoritative_snapshot(state, fleet, state.turn);
+    return {};
 }
 
 std::uint64_t fleet_telemetry_age(const GameState& state, const Fleet& fleet)
@@ -197,6 +205,9 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;
     view.minerals = telemetry.minerals;
+    view.pendingCommands.clear();
+    view.telemetry = telemetry;
+    view.telemetryInTransit.clear();
     return view;
 }
 
@@ -215,6 +226,10 @@ bool submit_fleet_route_command(
     if (fleet == state.fleets.end()) return false;
 
     FleetRouteProgram program{destination, warp, arrivalAction, queuedWaypoints};
+    const auto visiblePosition = projected_fleet_position(state, *fleet);
+    program.clearRoute = same_position(destination, visiblePosition)
+        && arrivalAction.kind == FleetArrivalActionKind::None
+        && queuedWaypoints.empty();
     const auto requestedWarp = warp == 0 ? fleet->warp : warp;
     if (!fleet_warp_valid(state, *fleet, requestedWarp)) return false;
     if (std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),

@@ -83,6 +83,38 @@ void remote_command_arrives_after_signal_delay()
     assert(turn13.fleets.front().position.x < positionAtDelivery);
 }
 
+void remote_clear_route_stops_when_command_arrives()
+{
+    auto state = generate_game(GalaxyConfig{});
+    state.turn = 10;
+    auto& fleet = scout(state);
+    fleet.position = {420.0, 0.0};
+    fleet.destination = Position{700.0, 0.0};
+    fleet.warp = 8;
+    fleet.fuel = fleet_fuel_capacity(state, fleet);
+    fleet.telemetry = {10, fleet.position, fleet.destination, fleet.warp, fleet.fuel, 0, std::nullopt, {}, {}};
+
+    const auto visibleAtTransmission = projected_fleet_position(state, fleet);
+    MoveFleetOrder stop;
+    stop.fleet = fleet.id;
+    stop.destination = visibleAtTransmission;
+    stop.warp = fleet.warp;
+
+    TurnProcessor processor;
+    auto turn11 = processor.process(state, {{1, {stop}}});
+    assert(turn11.fleets.front().pendingCommands.size() == 1);
+    assert(turn11.fleets.front().pendingCommands.front().program.clearRoute);
+    assert(turn11.fleets.front().destination.has_value());
+
+    auto turn12 = processor.process(turn11, {});
+    assert(turn12.fleets.front().pendingCommands.empty());
+    assert(!turn12.fleets.front().destination.has_value());
+    const auto stoppedAt = turn12.fleets.front().position;
+
+    auto turn13 = processor.process(turn12, {});
+    assert(same_position(turn13.fleets.front().position, stoppedAt));
+}
+
 void stale_telemetry_predicts_without_revealing_route_change()
 {
     auto state = generate_game(GalaxyConfig{});
@@ -132,6 +164,7 @@ int main()
 {
     local_commands_remain_immediate();
     remote_command_arrives_after_signal_delay();
+    remote_clear_route_stops_when_command_arrives();
     stale_telemetry_predicts_without_revealing_route_change();
     std::cout << "communications tests passed\n";
     return 0;
