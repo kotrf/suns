@@ -1,4 +1,6 @@
 #include "main_window.hpp"
+
+#include "suns/communications.hpp"
 #include "ship_designer_dialog.hpp"
 #include "star_item.hpp"
 
@@ -515,26 +517,28 @@ void MainWindow::rebuildScene()
         }
         for (const auto& fleet : state_.fleets) {
             if (fleet.owner != 1) continue;
-            const auto range = fleet_sensor_range(state_, fleet);
+            const auto visibleFleet = fleet_player_view(state_, fleet);
+            const auto range = fleet_sensor_range(state_, visibleFleet);
             if (range > 0.0) {
-                addSensorRange(scene_, fleet.position, range,
+                addSensorRange(scene_, visibleFleet.position, range,
                     QColor(90, 165, 255, 115), QColor(90, 165, 255, 10));
             }
         }
     }
 
     for (const auto& fleet : state_.fleets) {
-        if (!fleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
+        const auto visibleFleet = fleet_player_view(state_, fleet);
+        if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
         const auto routeColor = fleetColor(fleet.role, 105);
         QPen routePen(routeColor);
         routePen.setWidthF(1.15);
         routePen.setStyle(Qt::DotLine);
-        auto* route = scene_->addLine(fleet.position.x, fleet.position.y,
-            fleet.destination->x, fleet.destination->y, routePen);
+        auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
+            visibleFleet.destination->x, visibleFleet.destination->y, routePen);
         route->setZValue(-20.0);
-        QString routeText = QString("W%1 • ETA %2").arg(fleet.warp).arg(turnCount(fleet_eta(fleet)));
-        if (fleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*fleet.arrivalAction));
-        addTravelLabel(scene_, fleet.position, *fleet.destination, routeText, fleetColor(fleet.role, 155));
+        QString routeText = QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
+        if (visibleFleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
+        addTravelLabel(scene_, visibleFleet.position, *visibleFleet.destination, routeText, fleetColor(fleet.role, 155));
     }
 
     for (const auto& order : pendingOrders_.orders) {
@@ -543,20 +547,21 @@ void MainWindow::rebuildScene()
             if constexpr (std::is_same_v<T, MoveFleetOrder>) {
                 const auto* fleet = findFleet(state_, concreteOrder.fleet);
                 if (!fleet) return;
+                const auto visibleFleet = fleet_player_view(state_, *fleet);
                 const auto routeColor = fleetColor(fleet->role, 190);
                 QPen routePen(routeColor);
                 routePen.setWidthF(1.45);
                 routePen.setStyle(Qt::DashLine);
-                auto* route = scene_->addLine(fleet->position.x, fleet->position.y,
+                auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
                     concreteOrder.destination.x, concreteOrder.destination.y, routePen);
                 route->setZValue(-18.0);
-                const auto routeWarp = concreteOrder.warp == 0 ? fleet->warp : concreteOrder.warp;
-                const auto eta = travel_turns(fleet->position, concreteOrder.destination, warp_distance(routeWarp));
+                const auto routeWarp = concreteOrder.warp == 0 ? visibleFleet.warp : concreteOrder.warp;
+                const auto eta = travel_turns(visibleFleet.position, concreteOrder.destination, warp_distance(routeWarp));
                 QString routeText = QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
                 if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
                     routeText += QString(" • %1").arg(arrivalActionSummary(concreteOrder.arrivalAction));
                 }
-                addTravelLabel(scene_, fleet->position, concreteOrder.destination, routeText, fleetColor(fleet->role, 210));
+                addTravelLabel(scene_, visibleFleet.position, concreteOrder.destination, routeText, fleetColor(fleet->role, 210));
             }
         }, order);
     }
@@ -604,27 +609,28 @@ void MainWindow::rebuildScene()
 
     int fleetOffset = 0;
     for (const auto& fleet : state_.fleets) {
-        const double y = fleet.position.y + 15.0 + fleetOffset * 13.0;
+        const auto visibleFleet = fleet_player_view(state_, fleet);
+        const double y = visibleFleet.position.y + 15.0 + fleetOffset * 13.0;
         const auto color = fleetColor(fleet.role);
         const bool selected = selectedFleetId_ && *selectedFleetId_ == fleet.id;
 
         QPolygonF shape;
         if (fleet.role == FleetRole::Scout) {
-            shape << QPointF(fleet.position.x + 6.0, y)
-                  << QPointF(fleet.position.x - 5.0, y - 4.0)
-                  << QPointF(fleet.position.x - 2.0, y)
-                  << QPointF(fleet.position.x - 5.0, y + 4.0);
+            shape << QPointF(visibleFleet.position.x + 6.0, y)
+                  << QPointF(visibleFleet.position.x - 5.0, y - 4.0)
+                  << QPointF(visibleFleet.position.x - 2.0, y)
+                  << QPointF(visibleFleet.position.x - 5.0, y + 4.0);
         } else {
-            shape << QPointF(fleet.position.x, y - 5.0)
-                  << QPointF(fleet.position.x + 5.0, y)
-                  << QPointF(fleet.position.x, y + 5.0)
-                  << QPointF(fleet.position.x - 5.0, y);
+            shape << QPointF(visibleFleet.position.x, y - 5.0)
+                  << QPointF(visibleFleet.position.x + 5.0, y)
+                  << QPointF(visibleFleet.position.x, y + 5.0)
+                  << QPointF(visibleFleet.position.x - 5.0, y);
         }
 
         if (selected) {
             QPen selectionPen(color.lighter(150));
             selectionPen.setWidthF(1.4);
-            auto* ring = scene_->addEllipse(fleet.position.x - 9.0, y - 9.0, 18.0, 18.0, selectionPen, Qt::NoBrush);
+            auto* ring = scene_->addEllipse(visibleFleet.position.x - 9.0, y - 9.0, 18.0, 18.0, selectionPen, Qt::NoBrush);
             ring->setZValue(9.0);
         }
 
@@ -638,23 +644,23 @@ void MainWindow::rebuildScene()
 
         QString tooltip = QString::fromStdString(fleet.name);
         tooltip += QString("\n%1 — Warp %2 (%3 ly/turn)")
-                       .arg(fleetRoleName(fleet.role)).arg(fleet.warp).arg(warp_distance(fleet.warp), 0, 'f', 0);
+                       .arg(fleetRoleName(fleet.role)).arg(visibleFleet.warp).arg(warp_distance(visibleFleet.warp), 0, 'f', 0);
         tooltip += QString("\nFuel %1 / %2 — gross mass %3")
-                       .arg(fuelValue(fleet.fuel)).arg(fuelValue(fleet_fuel_capacity(state_, fleet)))
-                       .arg(fleet_gross_mass(state_, fleet), 0, 'f', 1);
-        if (const auto range = fleet_sensor_range(state_, fleet); range > 0.0) {
+                       .arg(fuelValue(visibleFleet.fuel)).arg(fuelValue(fleet_fuel_capacity(state_, visibleFleet)))
+                       .arg(fleet_gross_mass(state_, visibleFleet), 0, 'f', 1);
+        if (const auto range = fleet_sensor_range(state_, visibleFleet); range > 0.0) {
             tooltip += QString("\nSensor range %1").arg(range, 0, 'f', 0);
         }
-        if (fleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));
-        if (fleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*fleet.arrivalAction));
+        if (visibleFleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(visibleFleet)));
+        if (visibleFleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
         marker->setToolTip(tooltip);
         marker->setZValue(10.0);
 
         QString fleetText = QString::fromStdString(fleet.name);
         if (selected) fleetText = QString("▶ %1").arg(fleetText);
-        if (fleet.destination) fleetText += QString("  [W%1 • %2]").arg(fleet.warp).arg(turnCount(fleet_eta(fleet)));
+        if (visibleFleet.destination) fleetText += QString("  [W%1 • %2]").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         auto* label = scene_->addText(fleetText);
-        label->setPos(fleet.position.x + 9.0, y - 8.0);
+        label->setPos(visibleFleet.position.x + 9.0, y - 8.0);
         label->setDefaultTextColor(selected ? color.lighter(165) : color.lighter(135));
         label->setScale(0.85);
         label->setZValue(11.0);
@@ -668,11 +674,16 @@ void MainWindow::updateControls()
 {
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    const auto* fleet = selectedFleet();
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     const bool surveyed = star && is_surveyed(state_, 1, star->id);
     const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
-    const auto* plannedFleet = fleet ? findFleet(movementPreview, fleet->id) : nullptr;
-    const auto* effectiveFleet = plannedFleet ? plannedFleet : fleet;
+    const auto* plannedFleet = authoritativeFleet ? findFleet(movementPreview, authoritativeFleet->id) : nullptr;
+    const bool instantLink = authoritativeFleet && fleet_has_instant_link(state_, *authoritativeFleet);
+    const auto* effectiveFleet = instantLink && plannedFleet ? plannedFleet : fleet;
 
     galaxyLabel_->setText(QString("<b>Galaxy seed:</b> %1 &nbsp; <b>Systems:</b> %2<br>"
                                   "Map units: light-years &nbsp; Movement: Warp² / turn")
@@ -815,7 +826,7 @@ void MainWindow::updateControls()
         selectionLabel_->setText("<hr>Select a star system.");
     }
 
-    const auto* logisticsColony = selectedFriendlyColonyForFleet();
+    const auto* logisticsColony = instantLink ? selectedFriendlyColonyForFleet() : nullptr;
     if (fleet) {
         const auto* design = fleet_design(state_, *fleet);
         QString status = "Stationary";

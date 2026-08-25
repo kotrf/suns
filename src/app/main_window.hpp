@@ -79,6 +79,9 @@ public:
     // next mine on the currently selected colony.
     void installMiningInfrastructure();
 
+    // Show delayed telemetry, estimated position and commands physically in flight.
+    void installCommunicationStatus();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;

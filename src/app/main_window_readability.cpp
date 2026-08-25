@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 
+#include "suns/communications.hpp"
+
 #include <QGraphicsScene>
 #include <QGroupBox>
 #include <QMenu>
@@ -155,7 +157,11 @@ void MainWindow::installFleetReadabilityPolish()
 
     const auto refresh = [this, fuelBar, cargoBar] {
         if (shuttingDown_) return;
-        const auto* fleet = selectedFleet();
+        const auto* authoritativeFleet = selectedFleet();
+        const auto visibleFleetStorage = authoritativeFleet
+            ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+            : std::nullopt;
+        const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
         if (!fleet) {
             for (auto* bar : {fuelBar, cargoBar}) {
                 bar->setValue(0);
