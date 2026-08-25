@@ -18,17 +18,18 @@ void verify_waypoints_advance_one_leg_per_turn()
 {
     suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
+    state.stars[1].position = {48.0, 0.0};
     const auto fuelCapacity = suns::fleet_fuel_capacity(state, state.fleets.front());
 
     suns::PlayerOrders orders{1, {}};
     orders.orders.emplace_back(suns::MoveFleetOrder{
         1,
-        state.stars[1].position, // Alpha Centauri: reachable in one W10 turn.
-        10,
+        state.stars[1].position, // Alpha Centauri: reachable in one W8 turn.
+        8,
         {},
         {
-            {state.stars[0].position, 10, {suns::FleetArrivalActionKind::Refuel, 1}},
-            {state.stars[2].position, 9, {}},
+            {state.stars[0].position, 8, {suns::FleetArrivalActionKind::Refuel, 1}},
+            {state.stars[2].position, 8, {}},
         },
     });
 
@@ -38,7 +39,7 @@ void verify_waypoints_advance_one_leg_per_turn()
     assert(suns::same_position(afterAlpha->position, state.stars[1].position));
     assert(afterAlpha->destination.has_value());
     assert(suns::same_position(*afterAlpha->destination, state.stars[0].position));
-    assert(afterAlpha->warp == 10);
+    assert(afterAlpha->warp == 8);
     assert(afterAlpha->arrivalAction.has_value());
     assert(afterAlpha->arrivalAction->kind == suns::FleetArrivalActionKind::Refuel);
     assert(afterAlpha->waypointQueue.size() == 1);
@@ -55,7 +56,7 @@ void verify_waypoints_advance_one_leg_per_turn()
     assert(std::abs(afterSol->fuel - fuelCapacity) < 0.000001); // Refuel on arrival.
     assert(afterSol->destination.has_value());
     assert(suns::same_position(*afterSol->destination, state.stars[2].position));
-    assert(afterSol->warp == 9);
+    assert(afterSol->warp == 8);
     assert(!afterSol->arrivalAction.has_value());
     assert(afterSol->waypointQueue.empty());
 
@@ -72,16 +73,17 @@ void verify_replot_replaces_future_program()
 {
     suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
+    state.stars[1].position = {48.0, 0.0};
 
     suns::PlayerOrders initial{1, {}};
     initial.orders.emplace_back(suns::MoveFleetOrder{
         1,
         state.stars[1].position,
-        10,
+        8,
         {},
         {
-            {state.stars[0].position, 10, {suns::FleetArrivalActionKind::Refuel, 1}},
-            {state.stars[2].position, 9, {}},
+            {state.stars[0].position, 8, {suns::FleetArrivalActionKind::Refuel, 1}},
+            {state.stars[2].position, 8, {}},
         },
     });
     auto turn2 = processor.process(state, {initial});

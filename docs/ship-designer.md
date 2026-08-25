@@ -47,7 +47,7 @@ The design therefore becomes available for production after `End Turn`, using th
 A design is not expected to maximize every stat. Examples of useful tensions already supported by the model:
 
 - a Scout Hull can fit a scanner plus either extra fuel, cargo or an antimatter generator, but not all three;
-- a Ram Scoop can make low-Warp exploration fuel-positive but gives up the Fusion Drive's Warp 10;
+- a Ram Scoop can make low-Warp exploration fuel-positive and reach Warp 9, but costs more mass and build resources than the starter Warp-8 Fusion Drive;
 - a Light Transport can combine a Colony Module with limited extra logistics equipment;
 - a Medium Transport has more slots and built-in cargo, but starts heavier and more expensive, increasing fuel demand.
 
