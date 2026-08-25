@@ -135,6 +135,9 @@ void run_colony_production(GameState& state, Planet& planet)
         if (completed.kind == ProductionKind::Factory) quantity = planet.industry;
         else if (completed.kind == ProductionKind::Mine) quantity = planet.mines;
         else quantity = *completedFleet;
+        const auto completedDesign = completed.kind == ProductionKind::ColonyShip
+            ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId)
+            : ShipDesignId{0};
         queue_player_report(
             state,
             planet.owner,
@@ -144,7 +147,7 @@ void run_colony_production(GameState& state, Planet& planet)
             planet.star,
             planet.id,
             *completedFleet,
-            completed.shipDesign,
+            completedDesign,
             completed.kind,
             quantity);
     }
