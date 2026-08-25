@@ -152,6 +152,7 @@ struct Planet {
     std::vector<ProductionItem> productionQueue;
     MineralCargo minerals;
     std::uint32_t mines{};
+    bool productionWaitingForMinerals{};
 };
 
 struct PendingSurveyReport {
@@ -166,6 +167,8 @@ enum class PlayerReportKind {
     RouteCompleted,
     FleetStalledForFuel,
     ProductionCompleted,
+    ColonyFounded,
+    ProductionWaitingForMinerals,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.

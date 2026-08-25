@@ -28,12 +28,16 @@ Fleet arrival, route completion and insufficient-fuel facts become `PendingPlaye
 
 Fuel warnings are transition-based: a fleet emits one report when it first becomes unable to move, not another copy every turn while it remains stalled. A resumed fleet may produce a new warning if it later stalls again.
 
-Production completion reports originate at the owning colony. Since colonies are the current relay nodes, factory, mine and ship completion is normally available at the next planning boundary with no extra communication delay. The payload preserves the colony, design and completed fleet IDs plus the resulting factory/mine count where applicable.
+Production completion and mineral-shortage reports originate at the owning colony. Since colonies are the current relay nodes, factory, mine and ship results are normally available at the next planning boundary with no extra communication delay. The payload preserves the colony, design and completed fleet IDs plus the resulting factory/mine count where applicable.
 
-The save format persists both pending operational reports and the fleet's fuel-stall transition state.
+A blocked production item emits `ProductionWaitingForMinerals` only when it first enters the waiting state. The colony remembers that transition, suppresses annual repeats, and becomes eligible for another warning only after production resumes or the blocked item changes.
+
+Successful colonization emits `ColonyFounded` from the new colony. Both direct colonization orders and programmed arrival actions pass through the same core operation, so they cannot diverge in event behavior.
+
+The save format persists pending operational reports, fleet fuel-stall transitions and colony mineral-wait transitions.
 
 ## Turn Messages
 
 The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. New items are unread, Next unread navigates through them, activating a report centers its star or recorded position, and warning severity is visually distinct.
 
-Later issue #45 slices can add colony founding, production waiting for minerals, research, contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state.
+Later issue #45 slices can add research, contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state.

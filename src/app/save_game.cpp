@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 5;
+constexpr quint32 kSaveFormatVersion = 6;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -338,7 +338,8 @@ void writePlanet(QDataStream& stream, const Planet& value)
     stream << static_cast<quint32>(value.productionQueue.size());
     for (const auto& item : value.productionQueue) writeProductionItem(stream, item);
     writeMinerals(stream, value.minerals);
-    stream << static_cast<quint32>(value.mines);
+    stream << static_cast<quint32>(value.mines)
+           << static_cast<quint8>(value.productionWaitingForMinerals ? 1 : 0);
 }
 
 void readPlanet(QDataStream& stream, Planet& value)
@@ -376,8 +377,14 @@ void readPlanet(QDataStream& stream, Planet& value)
     readMinerals(stream, value.minerals);
 
     quint32 mines{};
-    stream >> mines;
+    quint8 waitingForMinerals{};
+    stream >> mines >> waitingForMinerals;
+    if (waitingForMinerals > 1) {
+        markCorrupt(stream);
+        return;
+    }
     value.mines = static_cast<std::uint32_t>(mines);
+    value.productionWaitingForMinerals = waitingForMinerals != 0;
 }
 
 void writePlayer(QDataStream& stream, const Player& value)
@@ -448,7 +455,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        if (!readEnum(stream, report.kind, static_cast<quint8>(PlayerReportKind::ProductionCompleted))) return;
+        if (!readEnum(stream, report.kind, static_cast<quint8>(PlayerReportKind::ProductionWaitingForMinerals))) return;
         quint64 observedTurn{};
         quint64 deliveryTurn{};
         quint32 star{};
