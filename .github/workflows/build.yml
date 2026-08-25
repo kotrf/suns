@@ -7,13 +7,15 @@ on:
 
 jobs:
   linux:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, suns]
     steps:
       - uses: actions/checkout@v4
-      - name: Install dependencies
+      - name: Toolchain info
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ qt6-base-dev
+          cmake --version
+          ninja --version
+          g++ --version
+          qmake6 --version
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
       - name: Build
