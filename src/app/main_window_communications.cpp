@@ -11,8 +11,6 @@
 #include <QString>
 #include <QTimer>
 
-#include <algorithm>
-
 namespace suns {
 
 void MainWindow::installCommunicationStatus()
@@ -62,21 +60,7 @@ void MainWindow::installCommunicationStatus()
             text += QString("<br>Estimated new-command latency: %1 turn%2")
                         .arg(estimatedDelay)
                         .arg(estimatedDelay == 1 ? "" : "s");
-        }
-
-        if (!fleet->pendingCommands.empty()) {
-            const auto oldest = std::min_element(
-                fleet->pendingCommands.begin(), fleet->pendingCommands.end(),
-                [](const PendingFleetCommand& lhs, const PendingFleetCommand& rhs) {
-                    return lhs.issuedTurn < rhs.issuedTurn;
-                });
-            text += QString("<br><b>Command in transit:</b> transmitted turn %1 — reception not yet confirmed")
-                        .arg(static_cast<qulonglong>(oldest->issuedTurn));
-            if (fleet->pendingCommands.size() > 1) {
-                text += QString(" (+%1 later transmission%2)")
-                            .arg(static_cast<qulonglong>(fleet->pendingCommands.size() - 1))
-                            .arg(fleet->pendingCommands.size() == 2 ? "" : "s");
-            }
+            text += "<br>Command reception is not confirmed until delayed telemetry reports it.";
         }
 
         summary->setText(text);
