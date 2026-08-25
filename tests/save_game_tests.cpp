@@ -17,6 +17,7 @@ void round_trip_preserves_communications_and_planning()
     original.state = generate_game(original.galaxyConfig);
     original.state.turn = 77;
     original.state.planets.front().mines = 17;
+    original.state.planets.front().productionWaitingForMinerals = true;
     original.state.players.front().pendingSurveyReports.push_back({2, 1, 76, 79});
     original.state.players.front().pendingPlayerReports.push_back({
         PlayerReportKind::FleetStalledForFuel,
@@ -82,6 +83,7 @@ void round_trip_preserves_communications_and_planning()
     assert(error.isEmpty());
     assert(loaded.state.turn == 77);
     assert(loaded.state.planets.front().mines == 17);
+    assert(loaded.state.planets.front().productionWaitingForMinerals);
     assert(loaded.state.players.front().pendingSurveyReports.size() == 1);
     assert(loaded.state.players.front().pendingSurveyReports.front().star == 2);
     assert(loaded.state.players.front().pendingSurveyReports.front().sourceFleet == 1);
@@ -131,7 +133,7 @@ void old_format_is_rejected_cleanly()
     assert(file.open(QIODevice::WriteOnly));
     QDataStream stream(&file);
     stream.setVersion(QDataStream::Qt_6_4);
-    stream << quint32{0x53554E53u} << quint32{4};
+    stream << quint32{0x53554E53u} << quint32{5};
     file.close();
 
     SaveGameData loaded;

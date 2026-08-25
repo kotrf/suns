@@ -12,6 +12,8 @@ enum class GameEventKind {
     RouteCompleted,
     FleetStalledForFuel,
     ProductionCompleted,
+    ColonyFounded,
+    ProductionWaitingForMinerals,
 };
 
 enum class GameEventSeverity {

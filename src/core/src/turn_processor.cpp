@@ -108,11 +108,13 @@ std::optional<FleetId> complete_production(GameState& state, Planet& planet, con
 void run_colony_production(GameState& state, Planet& planet)
 {
     if (planet.owner == 0) return;
+    if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
 
     std::uint32_t available = planet.stockpile + colony_output(planet);
     while (!planet.productionQueue.empty()) {
         auto& item = planet.productionQueue.front();
         if (item.remainingCost > 0) {
+            planet.productionWaitingForMinerals = false;
             if (available == 0) break;
             const auto spent = std::min(available, item.remainingCost);
             available -= spent;
@@ -121,7 +123,30 @@ void run_colony_production(GameState& state, Planet& planet)
         }
 
         const auto requiredMinerals = production_item_mineral_cost(state, item);
-        if (!mineral_cargo_sufficient(planet.minerals, requiredMinerals)) break;
+        if (!mineral_cargo_sufficient(planet.minerals, requiredMinerals)) {
+            if (!planet.productionWaitingForMinerals) {
+                const auto* star = find_star(state, planet.star);
+                if (star) {
+                    const auto blockedDesign = item.kind == ProductionKind::ColonyShip
+                        ? (item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId)
+                        : ShipDesignId{0};
+                    queue_player_report(
+                        state,
+                        planet.owner,
+                        PlayerReportKind::ProductionWaitingForMinerals,
+                        star->position,
+                        state.turn + 1,
+                        planet.star,
+                        planet.id,
+                        0,
+                        blockedDesign,
+                        item.kind);
+                }
+            }
+            planet.productionWaitingForMinerals = true;
+            break;
+        }
+        planet.productionWaitingForMinerals = false;
         subtract_minerals(planet.minerals, requiredMinerals);
 
         const auto completed = item;
@@ -151,6 +176,7 @@ void run_colony_production(GameState& state, Planet& planet)
             completed.kind,
             quantity);
     }
+    if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
     planet.stockpile = available;
 }
 
@@ -184,6 +210,20 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.stockpile = 0;
     planet.productionQueue.clear();
     planet.mines = 0;
+    planet.productionWaitingForMinerals = false;
+    const auto* star = find_star(state, planet.star);
+    if (star) {
+        queue_player_report(
+            state,
+            fleet.owner,
+            PlayerReportKind::ColonyFounded,
+            star->position,
+            state.turn + 1,
+            planet.star,
+            planet.id,
+            fleet.id,
+            fleet.design);
+    }
     return true;
 }
 

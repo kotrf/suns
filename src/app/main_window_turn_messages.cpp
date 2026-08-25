@@ -72,7 +72,7 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  Warning: %2 cannot continue — insufficient fuel")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(fleetName);
-    } else {
+    } else if (event.kind == GameEventKind::ProductionCompleted) {
         const auto planetName = planet
             ? QString::fromStdString(planet->name)
             : QString("Colony %1").arg(event.planet);
@@ -85,6 +85,28 @@ QString event_text(const GameState& state, const GameEvent& event)
             itemName = "Ship";
         }
         text = QString("Turn %1  •  %2 completed on %3")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(itemName, planetName);
+    } else if (event.kind == GameEventKind::ColonyFounded) {
+        const auto planetName = planet
+            ? QString::fromStdString(planet->name)
+            : QString("Planet %1").arg(event.planet);
+        text = QString("Turn %1  •  New colony founded on %2")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(planetName);
+    } else {
+        const auto planetName = planet
+            ? QString::fromStdString(planet->name)
+            : QString("Colony %1").arg(event.planet);
+        QString itemName;
+        if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
+        else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
+        else if (const auto* design = find_ship_design(state, event.shipDesign)) {
+            itemName = QString::fromStdString(design->name);
+        } else {
+            itemName = "Ship";
+        }
+        text = QString("Turn %1  •  Warning: %2 on %3 is waiting for minerals")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(itemName, planetName);
     }

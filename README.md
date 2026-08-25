@@ -51,7 +51,7 @@ The desktop app now links exploration, planet quality, economy and expansion:
 7. local output advances persistent production queues over multiple turns;
 8. move a completed colony ship to a surveyed system and colonize it.
 
-Ending a turn also produces an actionable Turn Messages briefing. Survey discoveries, fleet arrivals, completed routes, fuel stalls and finished production are typed deterministic events. Remote fleet reports obey communication delay instead of exposing authoritative state through the UI.
+Ending a turn also produces an actionable Turn Messages briefing. Survey discoveries, fleet arrivals, completed routes, fuel stalls, finished production, mineral shortages and new colonies are typed deterministic events. Remote fleet reports obey communication delay instead of exposing authoritative state through the UI.
 
 A colony ship may enter an unsurveyed system, but colonization requires survey intel. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
 

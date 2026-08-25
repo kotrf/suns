@@ -206,6 +206,63 @@ void local_production_completion_is_immediate_and_deterministic()
     assert(shipEvent->quantity == 2);
 }
 
+void colony_founding_emits_a_player_event()
+{
+    auto state = make_demo_game();
+    state.players.front().surveyedStars.push_back(2);
+    const auto* target = find_star(state, 2);
+    assert(target);
+    auto& colonyShip = state.fleets.front();
+    colonyShip.position = target->position;
+    colonyShip.design = kColonyShipDesignId;
+    colonyShip.role = FleetRole::ColonyShip;
+    colonyShip.colonists = 500;
+
+    PlayerOrders orders;
+    orders.player = 1;
+    orders.orders.push_back(ColonizePlanetOrder{colonyShip.id, 2});
+    const TurnProcessor processor;
+    const auto result = processor.process_with_events(state, {orders});
+
+    const auto* event = find_event(result.events, GameEventKind::ColonyFounded);
+    assert(event);
+    assert(event->recipient == 1);
+    assert(event->star == 2);
+    assert(event->planet == 2);
+    assert(event->fleet == 1);
+    assert(event->shipDesign == kColonyShipDesignId);
+    assert(result.state.planets[1].owner == 1);
+    assert(result.state.fleets.empty());
+}
+
+void mineral_shortage_warns_once_per_blocked_transition()
+{
+    auto state = make_demo_game();
+    auto& earth = state.planets.front();
+    earth.population = 1;
+    earth.industry = 1;
+    earth.minerals = {};
+    earth.productionQueue.push_back({ProductionKind::Factory, 0, 0});
+    const TurnProcessor processor;
+
+    const auto first = processor.process_with_events(state, {});
+    const auto replay = processor.process_with_events(state, {});
+    const auto* warning = find_event(first.events, GameEventKind::ProductionWaitingForMinerals);
+    const auto* replayWarning = find_event(replay.events, GameEventKind::ProductionWaitingForMinerals);
+    assert(warning && replayWarning);
+    assert(warning->severity == GameEventSeverity::Warning);
+    assert(warning->planet == 1);
+    assert(warning->productionKind == ProductionKind::Factory);
+    assert(warning->id == replayWarning->id);
+    assert(first.state.planets.front().productionWaitingForMinerals);
+
+    auto stillBlocked = first.state;
+    stillBlocked.planets.front().minerals = {};
+    const auto second = processor.process_with_events(stillBlocked, {});
+    assert(find_event(second.events, GameEventKind::ProductionWaitingForMinerals) == nullptr);
+    assert(second.state.planets.front().productionWaitingForMinerals);
+}
+
 } // namespace
 
 int main()
@@ -216,6 +273,8 @@ int main()
     intermediate_waypoint_emits_arrival_not_completion();
     fuel_stall_warns_once_and_only_after_delivery();
     local_production_completion_is_immediate_and_deterministic();
+    colony_founding_emits_a_player_event();
+    mineral_shortage_warns_once_per_blocked_transition();
     std::cout << "player knowledge tests passed\n";
     return 0;
 }
