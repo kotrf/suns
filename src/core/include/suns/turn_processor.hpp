@@ -1,5 +1,6 @@
 #pragma once
 
+#include "suns/game_event.hpp"
 #include "suns/game_state.hpp"
 
 #include <cstdint>
@@ -70,8 +71,18 @@ struct PlayerOrders {
     std::vector<Order> orders;
 };
 
+struct TurnResult {
+    GameState state;
+    std::vector<GameEvent> events;
+};
+
 class TurnProcessor {
 public:
+    [[nodiscard]] TurnResult process_with_events(
+        const GameState& current,
+        const std::vector<PlayerOrders>& submitted_orders) const;
+
+    // Compatibility path for simulations and previews that need state only.
     [[nodiscard]] GameState process(
         const GameState& current,
         const std::vector<PlayerOrders>& submitted_orders) const;

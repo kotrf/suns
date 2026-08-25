@@ -2,6 +2,7 @@ add_library(suns_core
     src/game_state.cpp
     src/communications.cpp
     src/mineral_economy.cpp
+    src/player_knowledge.cpp
     src/radiation.cpp
     src/turn_processor.cpp
 )

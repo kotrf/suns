@@ -1,5 +1,6 @@
 #include "suns/turn_processor.hpp"
 #include "suns/communications.hpp"
+#include "suns/player_knowledge.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -127,31 +128,6 @@ void run_colony_production(GameState& state, Planet& planet)
         complete_production(state, planet, completed);
     }
     planet.stockpile = available;
-}
-
-double distance_to_segment(Position point, Position start, Position end)
-{
-    const double dx = end.x - start.x;
-    const double dy = end.y - start.y;
-    const double lengthSquared = dx * dx + dy * dy;
-    if (lengthSquared <= 0.000000000001) return distance_between(point, start);
-
-    const double projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared;
-    const double t = std::clamp(projection, 0.0, 1.0);
-    const Position closest{start.x + t * dx, start.y + t * dy};
-    return distance_between(point, closest);
-}
-
-void survey_fleet_sweep(GameState& state, const Fleet& fleet, Position start, Position end)
-{
-    const auto range = fleet_sensor_range(state, fleet);
-    if (range <= 0.0) return;
-
-    for (const auto& star : state.stars) {
-        if (distance_to_segment(star.position, start, end) <= range + 0.000001) {
-            mark_surveyed(state, fleet.owner, star.id);
-        }
-    }
 }
 
 bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& planet)
@@ -333,7 +309,7 @@ void advance_fleets(GameState& state)
             fleet.position.y += (destination.y - start.y) * fraction;
         }
 
-        survey_fleet_sweep(state, fleet, start, fleet.position);
+        observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
         apply_fleet_radiation_attrition(state, fleet);
 
         if (arrived) {
@@ -359,11 +335,12 @@ void grow_colonies(GameState& state)
 
 } // namespace
 
-GameState TurnProcessor::process(
+TurnResult TurnProcessor::process_with_events(
     const GameState& current,
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+    std::vector<GameEvent> events = deliver_due_survey_reports(next);
 
     // Persisted traffic may already be due at this planning boundary.
     deliver_due_fleet_telemetry(next);
@@ -479,7 +456,7 @@ GameState TurnProcessor::process(
     }
 
     advance_fleets(next);
-    refresh_sensor_intel(next);
+    observe_current_sensor_coverage(next, next.turn + 1);
     for (auto& planet : next.planets) run_colony_production(next, planet);
     grow_colonies(next);
 
@@ -490,7 +467,16 @@ GameState TurnProcessor::process(
     deliver_due_fleet_commands(next);
     publish_fleet_telemetry(next, next.turn);
     deliver_due_fleet_telemetry(next);
-    return next;
+    auto deliveredIntel = deliver_due_survey_reports(next);
+    events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
+    return {std::move(next), std::move(events)};
+}
+
+GameState TurnProcessor::process(
+    const GameState& current,
+    const std::vector<PlayerOrders>& submitted_orders) const
+{
+    return process_with_events(current, submitted_orders).state;
 }
 
 } // namespace suns

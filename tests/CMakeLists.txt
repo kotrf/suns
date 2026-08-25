@@ -47,6 +47,14 @@ target_link_libraries(suns_communications_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_communications_tests COMMAND suns_communications_tests)
 
+add_executable(suns_player_knowledge_tests
+    player_knowledge_tests.cpp
+)
+
+target_link_libraries(suns_player_knowledge_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_player_knowledge_tests COMMAND suns_player_knowledge_tests)
+
 if(SUNS_BUILD_APP)
     add_executable(suns_save_game_tests
         save_game_tests.cpp

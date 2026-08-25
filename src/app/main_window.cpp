@@ -1115,13 +1115,15 @@ void MainWindow::queueColonize()
 
 void MainWindow::endTurn()
 {
-    state_ = processor_.process(state_, {pendingOrders_});
+    auto result = processor_.process_with_events(state_, {pendingOrders_});
+    state_ = std::move(result.state);
     pendingOrders_.orders.clear();
     pendingDescriptions_.clear();
     selectedStarId_.reset();
     logisticsControlFleetId_.reset();
     refreshShipDesignChoices();
     rebuildScene();
+    appendTurnMessages(result.events);
     statusBar()->showMessage(QString("Turn %1 — orders, designs, logistics, Warp travel, arrival actions, sensors and economy resolved")
         .arg(static_cast<qulonglong>(state_.turn)));
 }
@@ -1149,6 +1151,7 @@ void MainWindow::newGalaxy()
     }
 
     pendingOrders_ = PlayerOrders{1, {}};
+    resetTurnMessages();
     pendingDescriptions_.clear();
     selectedStarId_.reset();
     selectedFleetId_ = 1;
