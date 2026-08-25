@@ -21,7 +21,9 @@ void round_trip_preserves_campaign_and_planning_phase()
     original.state.players.front().radiationTolerance = 0.83;
     original.state.players.front().radiationImmune = true;
     original.state.planets.front().population = 9007199254740995ULL;
+    original.state.planets.front().mines = 17;
     original.state.planets.front().productionQueue.push_back({ProductionKind::Factory, 4, 0});
+    original.state.planets.front().productionQueue.push_back({ProductionKind::Mine, 3, 0});
     original.state.planets.front().productionQueue.push_back({ProductionKind::ColonyShip, 9, kColonyShipDesignId});
     original.state.shipDesigns.push_back({
         3,
@@ -56,6 +58,7 @@ void round_trip_preserves_campaign_and_planning_phase()
     original.pendingOrders.orders = {
         move,
         QueueProductionOrder{1, ProductionKind::Factory},
+        QueueProductionOrder{1, ProductionKind::Mine},
         CreateShipDesignOrder{"Pending Surveyor", ShipHullType::Scout,
             {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner}},
         QueueShipDesignOrder{1, 3},
@@ -65,7 +68,7 @@ void round_trip_preserves_campaign_and_planning_phase()
         ColonizePlanetOrder{1, 2},
     };
     original.pendingDescriptions = {
-        "move", "factory", "design", "ship", "colonists", "minerals", "refuel", "colonize",
+        "move", "factory", "mine", "design", "ship", "colonists", "minerals", "refuel", "colonize",
     };
     original.selectedStar = 2;
     original.selectedFleet = 1;
@@ -91,7 +94,9 @@ void round_trip_preserves_campaign_and_planning_phase()
     assert(loaded.state.players.front().radiationTolerance == 0.83);
     assert(loaded.state.players.front().radiationImmune);
     assert(loaded.state.planets.front().population == 9007199254740995ULL);
-    assert(loaded.state.planets.front().productionQueue.size() == 2);
+    assert(loaded.state.planets.front().mines == 17);
+    assert(loaded.state.planets.front().productionQueue.size() == 3);
+    assert(loaded.state.planets.front().productionQueue[1].kind == ProductionKind::Mine);
     assert(loaded.state.shipDesigns.size() == original.state.shipDesigns.size());
     assert(loaded.state.shipDesigns.back().name == "Long Range Colonizer");
     assert(loaded.state.shipDesigns.back().components.size() == 4);
@@ -110,23 +115,91 @@ void round_trip_preserves_campaign_and_planning_phase()
     assert(loadedScout.minerals.germanium == 3.75);
 
     assert(loaded.pendingOrders.player == 1);
-    assert(loaded.pendingOrders.orders.size() == 8);
+    assert(loaded.pendingOrders.orders.size() == 9);
     const auto* loadedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders[0]);
     assert(loadedMove);
     assert(loadedMove->warp == 8);
     assert(loadedMove->arrivalAction.kind == FleetArrivalActionKind::Colonize);
     assert(loadedMove->queuedWaypoints.size() == 1);
-    assert(std::holds_alternative<QueueProductionOrder>(loaded.pendingOrders.orders[1]));
-    assert(std::holds_alternative<CreateShipDesignOrder>(loaded.pendingOrders.orders[2]));
-    assert(std::holds_alternative<QueueShipDesignOrder>(loaded.pendingOrders.orders[3]));
-    assert(std::holds_alternative<SetFleetColonistsOrder>(loaded.pendingOrders.orders[4]));
-    assert(std::holds_alternative<SetFleetMineralCargoOrder>(loaded.pendingOrders.orders[5]));
-    assert(std::holds_alternative<RefuelFleetOrder>(loaded.pendingOrders.orders[6]));
-    assert(std::holds_alternative<ColonizePlanetOrder>(loaded.pendingOrders.orders[7]));
+    const auto* loadedFactory = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[1]);
+    const auto* loadedMine = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[2]);
+    assert(loadedFactory && loadedFactory->kind == ProductionKind::Factory);
+    assert(loadedMine && loadedMine->kind == ProductionKind::Mine);
+    assert(std::holds_alternative<CreateShipDesignOrder>(loaded.pendingOrders.orders[3]));
+    assert(std::holds_alternative<QueueShipDesignOrder>(loaded.pendingOrders.orders[4]));
+    assert(std::holds_alternative<SetFleetColonistsOrder>(loaded.pendingOrders.orders[5]));
+    assert(std::holds_alternative<SetFleetMineralCargoOrder>(loaded.pendingOrders.orders[6]));
+    assert(std::holds_alternative<RefuelFleetOrder>(loaded.pendingOrders.orders[7]));
+    assert(std::holds_alternative<ColonizePlanetOrder>(loaded.pendingOrders.orders[8]));
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
     assert(!loaded.showSensorRanges);
+}
+
+void legacy_v1_save_loads_with_zero_mines()
+{
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    const auto path = directory.filePath("legacy-v1.suns");
+
+    QFile file(path);
+    assert(file.open(QIODevice::WriteOnly));
+    QDataStream stream(&file);
+    stream.setVersion(QDataStream::Qt_6_4);
+
+    // Header and GalaxyConfig.
+    stream << quint32{0x53554E53u} << quint32{1};
+    stream << quint64{12345} << quint32{1} << double{900.0} << double{650.0} << double{48.0};
+
+    // GameState header.
+    stream << quint64{7} << quint64{12345} << quint32{1} << quint32{3};
+
+    // players: one valid owner with Sol surveyed.
+    stream << quint32{1};
+    stream << quint32{1} << QString{"Legacy Terrans"};
+    stream << quint32{1} << quint32{1};
+    stream << double{0.5} << quint8{0};
+
+    // shipDesigns: not required for this minimal compatibility fixture.
+    stream << quint32{0};
+
+    // stars: one Sol-like system.
+    stream << quint32{1};
+    stream << quint32{1} << QString{"Sol"};
+    stream << double{0.0} << double{0.0};
+    stream << quint8{static_cast<quint8>(StarClass::Yellow)};
+
+    // planets: v1 planet ends immediately after the mineral triplet; there is
+    // deliberately no Mine count here.
+    stream << quint32{1};
+    stream << quint32{1} << quint32{1} << QString{"Earth"};
+    stream << quint32{100} << quint32{1} << quint64{1000} << quint32{4} << quint32{0};
+    stream << quint32{0}; // productionQueue
+    stream << double{12.0} << double{23.0} << double{34.0};
+
+    // fleets, planning orders and UI context.
+    stream << quint32{0};
+    stream << quint32{1} << quint32{0}; // PlayerOrders
+    stream << quint32{0}; // pending descriptions
+    stream << quint8{0};  // selected star
+    stream << quint8{0};  // selected fleet
+    stream << quint8{1};  // show sensor ranges
+    file.close();
+
+    assert(stream.status() == QDataStream::Ok);
+
+    SaveGameData loaded;
+    QString error;
+    assert(read_save_game_file(path, loaded, error));
+    assert(error.isEmpty());
+    assert(loaded.state.turn == 7);
+    assert(loaded.state.planets.size() == 1);
+    assert(loaded.state.planets.front().name == "Earth");
+    assert(loaded.state.planets.front().mines == 0);
+    assert(loaded.state.planets.front().minerals.ironium == 12.0);
+    assert(loaded.state.planets.front().minerals.boranium == 23.0);
+    assert(loaded.state.planets.front().minerals.germanium == 34.0);
 }
 
 void unsupported_version_is_rejected_cleanly()
@@ -153,6 +226,7 @@ void unsupported_version_is_rejected_cleanly()
 int main()
 {
     round_trip_preserves_campaign_and_planning_phase();
+    legacy_v1_save_loads_with_zero_mines();
     unsupported_version_is_rejected_cleanly();
     std::cout << "save game tests passed\n";
     return 0;
