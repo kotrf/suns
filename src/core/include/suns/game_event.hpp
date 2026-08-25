@@ -8,6 +8,10 @@ namespace suns {
 
 enum class GameEventKind {
     SystemSurveyed,
+    FleetArrived,
+    RouteCompleted,
+    FleetStalledForFuel,
+    ProductionCompleted,
 };
 
 enum class GameEventSeverity {
@@ -26,6 +30,10 @@ struct GameEvent {
     StarId star{};
     PlanetId planet{};
     FleetId fleet{};
+    ShipDesignId shipDesign{};
+    ProductionKind productionKind{ProductionKind::ColonyShip};
+    Position position;
+    std::uint32_t quantity{};
 };
 
 } // namespace suns

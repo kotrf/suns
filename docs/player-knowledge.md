@@ -1,6 +1,6 @@
 # Player knowledge and Turn Messages
 
-Suns! keeps simulation truth separate from what an empire has actually learned. The first player-knowledge slice applies that rule to system surveys.
+Suns! keeps simulation truth separate from what an empire has actually learned. The player-knowledge layer currently carries system surveys and operational reports from fleets and colonies.
 
 ## Survey reports
 
@@ -22,8 +22,18 @@ Event IDs are derived deterministically from the event payload. PBEM resolution,
 
 `TurnProcessor::process_with_events()` returns a `TurnResult` containing the new authoritative state and the player-specific event list. The original `process()` remains as a state-only compatibility path for forecasts, AI simulations and tests that deliberately discard messages.
 
-## Turn Messages first slice
+## Operational reports
 
-The desktop app presents delivered survey reports in a dedicated Turn Messages dock after End Turn. New items are unread, Next unread navigates through them, and activating a report centers the referenced system on the map.
+Fleet arrival, route completion and insufficient-fuel facts become `PendingPlayerReport` packets at the physical source. Their delivery turn uses the source position and the same relay model as commands and telemetry. This prevents the message list from becoming a side channel that exposes remote simulation truth.
 
-This is the foundation for later event kinds from issue #45: arrivals, fuel stalls, production completions, colony founding, research, contacts and battle results.
+Fuel warnings are transition-based: a fleet emits one report when it first becomes unable to move, not another copy every turn while it remains stalled. A resumed fleet may produce a new warning if it later stalls again.
+
+Production completion reports originate at the owning colony. Since colonies are the current relay nodes, factory, mine and ship completion is normally available at the next planning boundary with no extra communication delay. The payload preserves the colony, design and completed fleet IDs plus the resulting factory/mine count where applicable.
+
+The save format persists both pending operational reports and the fleet's fuel-stall transition state.
+
+## Turn Messages
+
+The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. New items are unread, Next unread navigates through them, activating a report centers its star or recorded position, and warning severity is visually distinct.
+
+Later issue #45 slices can add colony founding, production waiting for minerals, research, contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state.

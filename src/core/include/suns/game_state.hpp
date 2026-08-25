@@ -161,11 +161,35 @@ struct PendingSurveyReport {
     std::uint64_t deliveryTurn{};
 };
 
+enum class PlayerReportKind {
+    FleetArrived,
+    RouteCompleted,
+    FleetStalledForFuel,
+    ProductionCompleted,
+};
+
+// Player-facing operational facts travel independently from fleet telemetry.
+// This keeps the simulation truth authoritative while ensuring that Turn
+// Messages cannot reveal a remote result before its communication packet lands.
+struct PendingPlayerReport {
+    PlayerReportKind kind{PlayerReportKind::FleetArrived};
+    std::uint64_t observedTurn{};
+    std::uint64_t deliveryTurn{};
+    StarId star{};
+    PlanetId planet{};
+    FleetId fleet{};
+    ShipDesignId shipDesign{};
+    ProductionKind productionKind{ProductionKind::ColonyShip};
+    Position position;
+    std::uint32_t quantity{};
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
     std::vector<StarId> surveyedStars;
     std::vector<PendingSurveyReport> pendingSurveyReports;
+    std::vector<PendingPlayerReport> pendingPlayerReports;
     double radiationTolerance{0.50};
     bool radiationImmune{};
 };
@@ -245,6 +269,7 @@ struct Fleet {
     std::vector<PendingFleetCommand> pendingCommands;
     FleetTelemetry telemetry;
     std::vector<PendingFleetTelemetry> telemetryInTransit;
+    bool fuelStalled{};
 };
 
 struct GameState {

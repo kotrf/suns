@@ -18,6 +18,18 @@ void round_trip_preserves_communications_and_planning()
     original.state.turn = 77;
     original.state.planets.front().mines = 17;
     original.state.players.front().pendingSurveyReports.push_back({2, 1, 76, 79});
+    original.state.players.front().pendingPlayerReports.push_back({
+        PlayerReportKind::FleetStalledForFuel,
+        76,
+        79,
+        2,
+        2,
+        1,
+        kScoutDesignId,
+        ProductionKind::ColonyShip,
+        {420.0, 10.0},
+        0,
+    });
 
     auto& scout = original.state.fleets.front();
     scout.position = {420.0, 10.0};
@@ -47,6 +59,7 @@ void round_trip_preserves_communications_and_planning()
         {76, {360.0, 10.0}, Position{600.0, 20.0}, 8, 230.0, 950,
          std::nullopt, {}, {7.0, 8.0, 9.0}},
     });
+    scout.fuelStalled = true;
 
     MoveFleetOrder move;
     move.fleet = scout.id;
@@ -74,6 +87,13 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().pendingSurveyReports.front().sourceFleet == 1);
     assert(loaded.state.players.front().pendingSurveyReports.front().observedTurn == 76);
     assert(loaded.state.players.front().pendingSurveyReports.front().deliveryTurn == 79);
+    assert(loaded.state.players.front().pendingPlayerReports.size() == 1);
+    const auto& report = loaded.state.players.front().pendingPlayerReports.front();
+    assert(report.kind == PlayerReportKind::FleetStalledForFuel);
+    assert(report.observedTurn == 76);
+    assert(report.deliveryTurn == 79);
+    assert(report.fleet == 1);
+    assert(same_position(report.position, {420.0, 10.0}));
 
     const auto& fleet = loaded.state.fleets.front();
     assert(same_position(fleet.position, {420.0, 10.0}));
@@ -91,6 +111,7 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetryInTransit.size() == 1);
     assert(fleet.telemetryInTransit.front().deliveryTurn == 79);
     assert(fleet.telemetryInTransit.front().telemetry.observedTurn == 76);
+    assert(fleet.fuelStalled);
 
     assert(loaded.pendingOrders.orders.size() == 2);
     const auto* mine = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[1]);
@@ -110,7 +131,7 @@ void old_format_is_rejected_cleanly()
     assert(file.open(QIODevice::WriteOnly));
     QDataStream stream(&file);
     stream.setVersion(QDataStream::Qt_6_4);
-    stream << quint32{0x53554E53u} << quint32{3};
+    stream << quint32{0x53554E53u} << quint32{4};
     file.close();
 
     SaveGameData loaded;
