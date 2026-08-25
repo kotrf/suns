@@ -168,9 +168,14 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         painter.drawEllipse(QRectF(61, 53, 12, 20));
     }
 
-    if (hasComponent(design, ShipComponentType::LongRangeScanner)) {
+    if (hasComponent(design, ShipComponentType::LongRangeScanner)
+        || hasComponent(design, ShipComponentType::PenetratingScanner)) {
         painter.setBrush(Qt::NoBrush);
-        painter.setPen(QPen(QColor("#9fd5ff"), 1.5));
+        painter.setPen(QPen(
+            hasComponent(design, ShipComponentType::PenetratingScanner)
+                ? QColor("#d9a6ff")
+                : QColor("#9fd5ff"),
+            1.5));
         painter.drawArc(QRectF(96, 17, 25, 20), 18 * 16, 142 * 16);
         painter.drawLine(QPointF(106, 35), QPointF(106, 24));
         painter.drawEllipse(QRectF(104, 21, 4, 4));

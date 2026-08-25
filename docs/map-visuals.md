@@ -22,11 +22,12 @@ Sensor circles are now a real game mechanic rather than decoration:
 
 - colonies provide a short stationary survey range;
 - Scout 1 provides a larger mobile survey range;
-- stars become permanently surveyed when they enter friendly coverage;
-- a moving scout sweeps its sensor circle continuously across the segment travelled during a turn, so close fly-bys can reveal systems without requiring the scout to stop on the star;
+- stars keep a permanent system contact when they enter ordinary friendly coverage;
+- a moving scout sweeps its detection circle continuously across the segment travelled during a turn, so close fly-bys record system contacts without revealing planetary parameters;
+- a later-tech penetrating scanner has its own shorter field and can produce a rough planetary estimate during the same fly-by;
 - the Qt map renders colony ranges in green and scout ranges in blue below routes, stars and fleets;
 - `Show sensor ranges` toggles the overlay without changing simulation state;
-- surveyed planetary knowledge remains known after the sensor source moves away.
+- system contacts and surveyed planetary knowledge remain known after the sensor source moves away.
 
 Future enemy fleet detection should be modeled separately as transient contacts. Permanent survey knowledge and current sensor contacts are different concepts and should not be collapsed into one flag.
 

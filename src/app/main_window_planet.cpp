@@ -180,7 +180,7 @@ void MainWindow::installPlanetPolish()
             "<b>Movement:</b> Warp² light-years per turn<br>"
             "<b>Fuel:</b> engine rate × gross mass / 100 × distance<br>"
             "<b>Cargo:</b> colonists and minerals share the same hold; 100 colonists = 1 cargo unit<br>"
-            "<b>Sensors:</b> fly-bys give a basic estimate, arrival confirms habitability, and one turn in orbit reveals geology<br>"
+            "<b>Sensors:</b> ordinary fly-bys detect systems; penetrating scanners estimate planets; arrival confirms habitability; one turn in orbit reveals geology<br>"
             "<b>Minerals:</b> concentration controls automatic colony extraction. Ship and factory completion consumes I/B/G stocks.<br>"
             "<b>Orders:</b> commands are queued and resolved together at End Turn<br><br>"
             "Map modes: <b>Spectral</b> shows stellar class, <b>Habitability</b> shows surveyed world value, "

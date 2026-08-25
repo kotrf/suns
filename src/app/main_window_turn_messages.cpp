@@ -47,7 +47,9 @@ QString event_text(const GameState& state, const GameEvent& event)
     QString text;
     if (event.kind == GameEventKind::SystemSurveyed) {
         QString detail;
-        if (planet) {
+        if (event.surveyLevel == SurveyLevel::SystemScan) {
+            detail = "Ordinary scanner contact — planetary parameters require orbit or a penetrating scanner";
+        } else if (planet) {
             detail = QString("%1 — habitability %2%3")
                          .arg(QString::fromStdString(planet->name))
                          .arg(event.quantity)
@@ -60,7 +62,9 @@ QString event_text(const GameState& state, const GameEvent& event)
                               .arg(concentrations.germanium, 0, 'f', 1);
             }
         }
-        QString surveyName = "Basic scan";
+        QString surveyName = event.surveyLevel == SurveyLevel::SystemScan
+            ? "Long-range system scan"
+            : "Penetrating scan";
         if (event.surveyLevel == SurveyLevel::OrbitalSurvey) surveyName = "Orbital survey";
         else if (event.surveyLevel >= SurveyLevel::GeologicalSurvey) surveyName = "Geological survey";
         text = QString("Turn %1  •  %2: %3")

@@ -174,12 +174,15 @@ void observe_fleet_sensor_sweep(
 {
     const auto range = fleet_sensor_range(state, fleet);
     if (range <= 0.0) return;
+    const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
 
     for (const auto& star : state.stars) {
-        if (distance_to_segment(star.position, start, end) <= range + 0.000001) {
-            queue_survey_report(
-                state, fleet.owner, star.id, fleet.id, end, observationTurn, SurveyLevel::BasicScan);
-        }
+        const auto closest = distance_to_segment(star.position, start, end);
+        if (closest > range + 0.000001) continue;
+        const auto level = penetratingRange > 0.0 && closest <= penetratingRange + 0.000001
+            ? SurveyLevel::BasicScan
+            : SurveyLevel::SystemScan;
+        queue_survey_report(state, fleet.owner, star.id, fleet.id, end, observationTurn, level);
     }
 }
 
@@ -197,18 +200,23 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
                     0,
                     sourceStar->position,
                     observationTurn,
-                    star.id == planet.star ? SurveyLevel::GeologicalSurvey : SurveyLevel::BasicScan);
+                    star.id == planet.star ? SurveyLevel::GeologicalSurvey : SurveyLevel::SystemScan);
             }
         }
 
         for (const auto& fleet : state.fleets) {
             const auto range = fleet_sensor_range(state, fleet);
             if (range > 0.0 && within_range(fleet.position, star.position, range)) {
-                auto level = SurveyLevel::BasicScan;
+                auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
                     level = best_observed_level(state, fleet.owner, star.id) >= SurveyLevel::OrbitalSurvey
                         ? SurveyLevel::GeologicalSurvey
                         : SurveyLevel::OrbitalSurvey;
+                } else if (within_range(
+                               fleet.position,
+                               star.position,
+                               fleet_penetrating_sensor_range(state, fleet))) {
+                    level = SurveyLevel::BasicScan;
                 }
                 queue_survey_report(
                     state, fleet.owner, star.id, fleet.id, fleet.position, observationTurn, level);

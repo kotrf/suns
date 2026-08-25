@@ -43,13 +43,14 @@ ctest --test-dir build --output-on-failure
 The desktop app now links exploration, planet quality, economy and expansion:
 
 1. star positions are visible, but non-home planetary data starts unknown;
-2. a sensor fly-by produces a rough habitability estimate; arriving confirms it;
-3. remain in orbit for a geological survey, then compare habitability, capacity and mineral value;
-4. higher-habitability colonies grow faster and support larger populations;
-5. population contributes to economic output while factories add infrastructure output;
-6. queue a **Colony Ship** or invest first in a **Factory**;
-7. local output advances persistent production queues over multiple turns;
-8. move a completed colony ship to an orbital-surveyed system and colonize it.
+2. an ordinary scanner fly-by records a system contact but leaves planetary data unknown;
+3. the later-tech penetrating scanner estimates habitability at range, while arriving confirms it exactly;
+4. remain in orbit for a geological survey, then compare habitability, capacity and mineral value;
+5. higher-habitability colonies grow faster and support larger populations;
+6. population contributes to economic output while factories add infrastructure output;
+7. queue a **Colony Ship** or invest first in a **Factory**;
+8. local output advances persistent production queues over multiple turns;
+9. move a completed colony ship to an orbital-surveyed system and colonize it.
 
 Ending a turn also produces an actionable Turn Messages briefing. Survey discoveries, fleet arrivals, completed routes, fuel stalls, finished production, mineral shortages and new colonies are typed deterministic events. Remote fleet reports obey communication delay instead of exposing authoritative state through the UI.
 

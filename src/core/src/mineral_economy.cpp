@@ -57,6 +57,7 @@ MineralCargo componentMineralCost(ShipComponentType type)
     case ShipComponentType::FuelTank:                return {2.0, 0.0, 0.0};
     case ShipComponentType::CargoPod:                return {2.0, 1.0, 0.0};
     case ShipComponentType::AntimatterGenerator:     return {1.0, 3.0, 3.0};
+    case ShipComponentType::PenetratingScanner:      return {0.0, 3.0, 5.0};
     }
     return {};
 }

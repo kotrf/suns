@@ -583,8 +583,13 @@ void MainWindow::rebuildScene()
                               .arg(starClassName(star.stellarClass));
         QString mapLabel = QString::fromStdString(star.name);
         if (!surveyed) {
-            tooltip += "\nUnsurveyed system — outside all sensor history";
-            mapLabel += "  [?]";
+            if (survey_level(state_, 1, star.id) >= SurveyLevel::SystemScan) {
+                tooltip += "\nOrdinary scanner contact — planetary parameters unknown";
+                mapLabel += "  [SCAN]";
+            } else {
+                tooltip += "\nUnsurveyed system — outside all sensor history";
+                mapLabel += "  [?]";
+            }
         } else if (planet) {
             const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
             const auto estimated = survey_level(state_, 1, star.id) == SurveyLevel::BasicScan;
@@ -792,6 +797,7 @@ void MainWindow::updateControls()
         : QString{};
 
     if (star && !surveyed) {
+        const bool systemContact = survey_level(state_, 1, star->id) >= SurveyLevel::SystemScan;
         QString travelLine;
         if (fleet) {
             travelLine = QString("<br>%1 at Warp %2: <b>%3</b> (%4 ly/turn).%5")
@@ -799,9 +805,13 @@ void MainWindow::updateControls()
                              .arg(turnCount(selectedEta)).arg(warp_distance(selectedWarp), 0, 'f', 0).arg(routeFuelLine);
             if (fleet_sensor_range(state_, *fleet) <= 0.0) travelLine += " This ship has no survey scanner.";
         }
-        selectionLabel_->setText(QString("<hr><b>%1</b><br><b>UNSURVEYED</b><br>Planetary data unknown.%2<br>"
-                                          "The system is revealed as soon as the star enters friendly sensor coverage.")
-            .arg(QString::fromStdString(star->name)).arg(travelLine));
+        selectionLabel_->setText(QString("<hr><b>%1</b><br><b>%2</b><br>Planetary data unknown.%3<br>%4")
+            .arg(QString::fromStdString(star->name))
+            .arg(systemContact ? "SYSTEM CONTACT" : "UNSURVEYED")
+            .arg(travelLine)
+            .arg(systemContact
+                    ? "Enter orbit or use a penetrating scanner to study the planet."
+                    : "The system is detected as soon as it enters friendly sensor coverage."));
     } else if (star && planet) {
         const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
         const auto estimated = survey_level(state_, 1, star->id) == SurveyLevel::BasicScan;
@@ -846,6 +856,7 @@ void MainWindow::updateControls()
         }
 
         const auto sensor = fleet_sensor_range(state_, *fleet);
+        const auto penetratingSensor = fleet_penetrating_sensor_range(state_, *fleet);
         const auto fuelCapacity = fleet_fuel_capacity(state_, *fleet);
         const auto cargoCapacity = fleet_cargo_capacity(state_, *fleet);
         const auto cargoUsed = colonist_cargo_mass(fleet->colonists);
@@ -879,7 +890,12 @@ void MainWindow::updateControls()
             .arg(warp_distance(selectedWarp), 0, 'f', 0).arg(fuelValue(fleet->fuel)).arg(fuelValue(fuelCapacity))
             .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1).arg(static_cast<qulonglong>(fleet->colonists))
             .arg(cargoUsed, 0, 'f', 1).arg(cargoCapacity, 0, 'f', 1)
-            .arg(sensor > 0.0 ? QString::number(sensor, 'f', 0) : "none")
+            .arg(sensor <= 0.0
+                    ? "none"
+                    : penetratingSensor > 0.0
+                        ? QString("%1 ly detection / %2 ly penetrating")
+                              .arg(sensor, 0, 'f', 0).arg(penetratingSensor, 0, 'f', 0)
+                        : QString("%1 ly detection").arg(sensor, 0, 'f', 0))
             .arg(componentSummary(design)).arg(status).arg(dockedLine).arg(movementPlanLine).arg(radiationLine));
     } else {
         fleetLabel_->setText("<hr><b>Selected fleet:</b> none<br>Click a ship marker on the map.");

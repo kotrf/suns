@@ -7,7 +7,8 @@
 
 namespace suns {
 
-// Record a basic scan for every system crossed by a fleet's sensor footprint.
+// Record a system contact, or a basic planetary scan when the footprint comes
+// from a penetrating scanner, for every system crossed during movement.
 // Physical observation is authoritative, but owner knowledge changes only
 // when the resulting staged report reaches a communication relay.
 void observe_fleet_sensor_sweep(

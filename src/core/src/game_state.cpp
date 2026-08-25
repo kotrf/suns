@@ -201,6 +201,14 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 3;
         spec.sensorRange = 90.0;
         break;
+    case ShipComponentType::PenetratingScanner:
+        spec.name = "Penetrating Scanner";
+        spec.kind = ShipComponentKind::Scanner;
+        spec.mass = 14.0;
+        spec.buildCost = 6;
+        spec.sensorRange = 70.0;
+        spec.penetratesPlanets = true;
+        break;
     case ShipComponentType::ColonyModule:
         spec.name = "Colony Module";
         spec.kind = ShipComponentKind::Special;
@@ -285,6 +293,16 @@ double ship_design_sensor_range(const ShipDesign& design)
 {
     double range = 0.0;
     for (const auto component : design.components) range += component_spec(component).sensorRange;
+    return range;
+}
+
+double ship_design_penetrating_sensor_range(const ShipDesign& design)
+{
+    double range = 0.0;
+    for (const auto component : design.components) {
+        const auto spec = component_spec(component);
+        if (spec.penetratesPlanets) range += spec.sensorRange;
+    }
     return range;
 }
 
@@ -396,6 +414,12 @@ double fleet_sensor_range(const GameState& state, const Fleet& fleet)
 {
     const auto* design = fleet_design(state, fleet);
     return design ? ship_design_sensor_range(*design) : 0.0;
+}
+
+double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet)
+{
+    const auto* design = fleet_design(state, fleet);
+    return design ? ship_design_penetrating_sensor_range(*design) : 0.0;
 }
 
 bool fleet_can_colonize(const GameState& state, const Fleet& fleet)
@@ -557,17 +581,20 @@ void refresh_sensor_intel(GameState& state)
             const auto* sourceStar = find_star(state, planet.star);
             if (sourceStar && within_range(sourceStar->position, star.position, kColonySensorRange)) {
                 set_survey_level(state, planet.owner, star.id,
-                    star.id == planet.star ? SurveyLevel::GeologicalSurvey : SurveyLevel::BasicScan,
+                    star.id == planet.star ? SurveyLevel::GeologicalSurvey : SurveyLevel::SystemScan,
                     state.turn);
             }
         }
         for (const auto& fleet : state.fleets) {
             const auto range = fleet_sensor_range(state, fleet);
             if (range > 0.0 && within_range(fleet.position, star.position, range)) {
+                const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
                 set_survey_level(state, fleet.owner, star.id,
                     same_position(fleet.position, star.position)
                         ? SurveyLevel::OrbitalSurvey
-                        : SurveyLevel::BasicScan,
+                        : within_range(fleet.position, star.position, penetratingRange)
+                            ? SurveyLevel::BasicScan
+                            : SurveyLevel::SystemScan,
                     state.turn);
             }
         }

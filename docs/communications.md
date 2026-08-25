@@ -58,7 +58,7 @@ The eventual map presentation should therefore visually distinguish a confirmed 
 
 ## Known first-slice limits
 
-Route commands and fleet telemetry use the fleet communication packet model. Progressive basic/orbital/geological surveys and operational messages use the separate player-knowledge layer: a physical observation or fleet result creates a report, and player-visible knowledge changes only when that report reaches the empire. Higher survey levels can remain in flight while an earlier rough estimate is already usable. Arrival, route-completion and fuel-stall messages likewise cannot reveal remote truth before telemetry. Reports are never smuggled through fleet telemetry.
+Route commands and fleet telemetry use the fleet communication packet model. Progressive ordinary-contact/penetrating/orbital/geological surveys and operational messages use the separate player-knowledge layer: a physical observation or fleet result creates a report, and player-visible knowledge changes only when that report reaches the empire. Higher survey levels can remain in flight while an earlier system contact or rough estimate is already usable. Arrival, route-completion and fuel-stall messages likewise cannot reveal remote truth before telemetry. Reports are never smuggled through fleet telemetry.
 
 The galaxy map (fleet marker, sensor circle and route overlays), fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: confirmed telemetry plus deterministic prediction rather than authoritative coordinates/cargo/fuel. In-flight commands and telemetry are persisted in the current save format.
 

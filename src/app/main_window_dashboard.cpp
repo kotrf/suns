@@ -90,8 +90,13 @@ QString MainWindow::selectedPlanetPanelSummary() const
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));
 
     if (!is_surveyed(state_, 1, star->id)) {
-        lines << "<b>UNSURVEYED</b> — planetary data unknown";
-        lines << "Bring the star inside friendly sensor coverage to reveal it.";
+        if (survey_level(state_, 1, star->id) >= SurveyLevel::SystemScan) {
+            lines << "<b>SYSTEM CONTACT</b> — ordinary scanner data received";
+            lines << "Planetary parameters require orbit or a penetrating scanner.";
+        } else {
+            lines << "<b>UNSURVEYED</b> — planetary data unknown";
+            lines << "Bring the star inside friendly sensor coverage to detect it.";
+        }
         return lines.join("<br>");
     }
 
@@ -194,8 +199,14 @@ QString MainWindow::selectedFleetPanelSummary() const
                  .arg(fleet->minerals.germanium, 0, 'f', 0);
 
     const auto sensor = fleet_sensor_range(state_, *fleet);
-    lines << QString("Survey sensor: %1")
-                 .arg(sensor > 0.0 ? QString("%1 ly").arg(sensor, 0, 'f', 0) : "none");
+    const auto penetrating = fleet_penetrating_sensor_range(state_, *fleet);
+    lines << QString("Sensors: %1")
+                 .arg(sensor <= 0.0
+                         ? "none"
+                         : penetrating > 0.0
+                             ? QString("%1 ly detection • %2 ly penetrating")
+                                   .arg(sensor, 0, 'f', 0).arg(penetrating, 0, 'f', 0)
+                             : QString("%1 ly detection").arg(sensor, 0, 'f', 0));
 
     if (design && ship_design_radiation_hazard(*design) > 0.0) {
         if (fleet_radiation_safe(state_, *fleet)) {

@@ -302,7 +302,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::AntimatterGenerator))) return;
+        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::PenetratingScanner))) return;
         value.components.push_back(component);
     }
 }
@@ -799,7 +799,7 @@ bool readOrder(QDataStream& stream, Order& order)
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::AntimatterGenerator))) return false;
+            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::PenetratingScanner))) return false;
             value.components.push_back(component);
         }
         order = std::move(value);

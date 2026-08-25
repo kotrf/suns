@@ -34,7 +34,7 @@ GameState survey_fixture(Position scoutPosition, Position targetPosition, std::u
     return state;
 }
 
-void local_report_updates_knowledge_and_emits_a_stable_event()
+void ordinary_scanner_reports_system_contact_without_planet_data()
 {
     const auto initial = survey_fixture({100.0, 0.0}, {150.0, 0.0});
     const TurnProcessor processor;
@@ -43,9 +43,9 @@ void local_report_updates_knowledge_and_emits_a_stable_event()
     const auto replay = processor.process_with_events(initial, {});
 
     assert(first.state.turn == 2);
-    assert(is_surveyed(first.state, 1, 2));
-    assert(survey_level(first.state, 1, 2) == SurveyLevel::BasicScan);
-    assert(known_planet_habitability(first.state, 1, 2).has_value());
+    assert(!is_surveyed(first.state, 1, 2));
+    assert(survey_level(first.state, 1, 2) == SurveyLevel::SystemScan);
+    assert(!known_planet_habitability(first.state, 1, 2).has_value());
     assert(!planet_geology_known(first.state, 1, 2));
     assert(first.state.players.front().pendingSurveyReports.empty());
     assert(first.events.size() == 1);
@@ -56,9 +56,34 @@ void local_report_updates_knowledge_and_emits_a_stable_event()
     assert(first.events.front().fleet == 1);
     assert(first.events.front().observedTurn == 2);
     assert(first.events.front().turn == 2);
-    assert(first.events.front().surveyLevel == SurveyLevel::BasicScan);
-    assert(first.events.front().quantity == *known_planet_habitability(first.state, 1, 2));
+    assert(first.events.front().surveyLevel == SurveyLevel::SystemScan);
+    assert(first.events.front().quantity == 0);
     assert(first.events.front().id == replay.events.front().id);
+}
+
+void penetrating_scanner_estimates_planet_during_a_flyby()
+{
+    auto state = survey_fixture({0.0, 0.0}, {50.0, 65.0});
+    state.shipDesigns.push_back({
+        99,
+        1,
+        "Deep Surveyor",
+        ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::PenetratingScanner},
+    });
+    state.fleets.front().design = 99;
+    state.fleets.front().destination = Position{200.0, 0.0};
+    state.fleets.front().fuel = 300.0;
+    const TurnProcessor processor;
+
+    const auto result = processor.process_with_events(state, {});
+    assert(survey_level(result.state, 1, 2) == SurveyLevel::BasicScan);
+    assert(is_surveyed(result.state, 1, 2));
+    assert(known_planet_habitability(result.state, 1, 2).has_value());
+    assert(!planet_geology_known(result.state, 1, 2));
+    assert(result.events.size() == 1);
+    assert(result.events.front().surveyLevel == SurveyLevel::BasicScan);
+    assert(result.events.front().quantity == *known_planet_habitability(result.state, 1, 2));
 }
 
 void remote_report_remains_in_flight_until_delivery()
@@ -76,7 +101,7 @@ void remote_report_remains_in_flight_until_delivery()
     assert(pending.sourceFleet == 1);
     assert(pending.observedTurn == 11);
     assert(pending.deliveryTurn == 13);
-    assert(pending.level == SurveyLevel::BasicScan);
+    assert(pending.level == SurveyLevel::SystemScan);
 
     const auto turn12 = processor.process_with_events(turn11.state, {});
     assert(!is_surveyed(turn12.state, 1, 2));
@@ -85,7 +110,8 @@ void remote_report_remains_in_flight_until_delivery()
     assert(turn12.state.players.front().pendingSurveyReports.front().observedTurn == 11);
 
     const auto turn13 = processor.process_with_events(turn12.state, {});
-    assert(is_surveyed(turn13.state, 1, 2));
+    assert(!is_surveyed(turn13.state, 1, 2));
+    assert(survey_level(turn13.state, 1, 2) == SurveyLevel::SystemScan);
     assert(turn13.state.players.front().pendingSurveyReports.empty());
     assert(turn13.events.size() == 1);
     assert(turn13.events.front().observedTurn == 11);
@@ -300,7 +326,8 @@ void mineral_shortage_warns_once_per_blocked_transition()
 
 int main()
 {
-    local_report_updates_knowledge_and_emits_a_stable_event();
+    ordinary_scanner_reports_system_contact_without_planet_data();
+    penetrating_scanner_estimates_planet_during_a_flyby();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_orbital_and_geological_surveys();
     remote_route_completion_obeys_communications_delay();

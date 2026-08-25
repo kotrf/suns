@@ -149,7 +149,8 @@ void verify_swept_sensor_coverage()
     assert(!suns::within_range({100.0, 0.0}, {50.0, 85.0}, scannerRange));
     const suns::TurnProcessor processor;
     const auto next = processor.process(state, {});
-    assert(suns::is_surveyed(next, 1, 2));
+    assert(suns::survey_level(next, 1, 2) == suns::SurveyLevel::SystemScan);
+    assert(!suns::is_surveyed(next, 1, 2));
     assert(!suns::is_surveyed(next, 1, 3));
 }
 
@@ -188,7 +189,8 @@ int main()
     assert(suns::fleet_eta(scoutTravel2, *approachingScout) == 1);
     assert(!suns::is_surveyed(scoutTravel2, 1, 4));
     const auto scoutReportArrived = processor.process(scoutTravel2, {});
-    assert(suns::is_surveyed(scoutReportArrived, 1, 4));
+    assert(suns::survey_level(scoutReportArrived, 1, 4) == suns::SurveyLevel::SystemScan);
+    assert(!suns::is_surveyed(scoutReportArrived, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kColonyShipDesignId});
@@ -233,7 +235,7 @@ int main()
     suns::PlayerOrders surveyDestination{1, {}};
     surveyDestination.orders.emplace_back(suns::MoveFleetOrder{1, alpha->position});
     const auto destinationScanned = processor.process(rejected, {surveyDestination});
-    assert(suns::survey_level(destinationScanned, 1, 2) == suns::SurveyLevel::BasicScan);
+    assert(suns::survey_level(destinationScanned, 1, 2) == suns::SurveyLevel::SystemScan);
     const auto destinationSurveyed = processor.process(destinationScanned, {});
     assert(suns::survey_level(destinationSurveyed, 1, 2) == suns::SurveyLevel::OrbitalSurvey);
 

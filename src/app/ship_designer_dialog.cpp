@@ -73,6 +73,9 @@ ShipDesignerDialog::ShipDesignerDialog(QWidget* parent)
     scannerCount_->setValue(1);
 
     form->addRow("Long Range Scanner", scannerCount_);
+    auto* penetratingLocked = new QLabel("Locked — requires advanced Sensors technology", this);
+    penetratingLocked->setStyleSheet("color: #8792a2;");
+    form->addRow("Penetrating Scanner", penetratingLocked);
     form->addRow("Colony Module", colonyModuleCount_);
     form->addRow("Fuel Tank", fuelTankCount_);
     form->addRow("Cargo Pod", cargoPodCount_);

@@ -56,6 +56,15 @@ void verify_component_tradeoffs()
     assert(suns::ship_design_cost(longRange) > suns::ship_design_cost(surveyor));
     assert(suns::ship_design_fuel_capacity(longRange) > suns::ship_design_fuel_capacity(surveyor));
     assert(suns::ship_design_sensor_range(longRange) == suns::ship_design_sensor_range(surveyor));
+
+    suns::ShipDesign deepSurveyor{
+        12, 1, "Deep Surveyor", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::PenetratingScanner},
+    };
+    assert(suns::ship_design_valid(deepSurveyor));
+    assert(suns::ship_design_sensor_range(deepSurveyor) > 0.0);
+    assert(suns::ship_design_penetrating_sensor_range(surveyor) == 0.0);
+    assert(suns::ship_design_penetrating_sensor_range(deepSurveyor) > 0.0);
 }
 
 void verify_create_design_order()

@@ -6,17 +6,20 @@ Suns! keeps simulation truth separate from what an empire has actually learned. 
 
 A scanner physically observing a system does not directly mutate player knowledge. It creates a `PendingSurveyReport` with a survey level, stable subject IDs, the observation turn, its source fleet (or zero for a colony sensor) and a deterministic delivery turn.
 
-The first staged model is deliberately compact:
+The first staged model separates ordinary detection from planetary penetration:
 
-- `BasicScan`: a fly-by or remote sensor footprint reveals a deterministic rough habitability estimate;
+- `SystemScan`: an ordinary scanner footprint records a system contact, but no planetary parameters;
+- `BasicScan`: a penetrating-scanner footprint reveals a deterministic rough habitability estimate;
 - `OrbitalSurvey`: arriving at the system confirms exact habitability and population suitability;
 - `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
+
+The starting Scout carries an ordinary Long Range Scanner. `PenetratingScanner` is a distinct component with shorter range, higher mass and mineral cost, but is intentionally locked out of the starter Ship Designer until the Sensors technology layer exists. This also leaves room for a later racial trait whose hulls provide intrinsic penetrating coverage.
 
 Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
 
 Reports use the same relay coverage and signal-speed calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
-Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level.
+Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range is also the future hook for transient enemy-fleet contacts; those contacts will remain separate from permanent planetary knowledge.
 
 ## Delivery and events
 
