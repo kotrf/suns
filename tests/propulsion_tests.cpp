@@ -28,7 +28,7 @@ void verify_default_propulsion_and_cargo()
     assert(scoutDesign != nullptr);
     assert(colonyDesign != nullptr);
 
-    assert(suns::ship_design_max_warp(*scoutDesign) == 10);
+    assert(suns::ship_design_max_warp(*scoutDesign) == 8);
     assert(suns::ship_design_fuel_capacity(*scoutDesign) == 300.0);
     assert(suns::ship_design_fuel_capacity(*colonyDesign) == 400.0);
     assert(suns::ship_design_cargo_capacity(*colonyDesign) == 5.0);
@@ -53,17 +53,17 @@ void verify_fuel_limits_actual_travel()
     auto& scout = state.fleets.front();
     scout.position = {0.0, 0.0};
     scout.destination.reset();
-    scout.warp = 10;
+    scout.warp = 8;
     scout.fuel = 10.0;
 
     suns::PlayerOrders orders{1, {}};
-    orders.orders.emplace_back(suns::MoveFleetOrder{scout.id, {100.0, 0.0}, 10});
+    orders.orders.emplace_back(suns::MoveFleetOrder{scout.id, {64.0, 0.0}, 8});
 
     const suns::TurnProcessor processor;
     const auto next = processor.process(state, {orders});
     const auto& moved = next.fleets.front();
     assert(moved.position.x > 0.0);
-    assert(moved.position.x < 100.0);
+    assert(moved.position.x < 64.0);
     assert(near(moved.fuel, 0.0));
     assert(moved.destination.has_value());
 }
@@ -119,7 +119,7 @@ void verify_antimatter_generator_and_radiating_drive_metadata()
     };
     assert(suns::ship_design_valid(radiating));
     assert(suns::ship_design_radiation_hazard(radiating) > 0.0);
-    assert(suns::ship_design_max_warp(radiating) == 10);
+    assert(suns::ship_design_max_warp(radiating) == 9);
     assert(suns::ship_design_fuel_rate(radiating, 4) < 0.0);
 }
 

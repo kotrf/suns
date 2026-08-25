@@ -12,7 +12,7 @@ Therefore Warp 6 covers 36 ly/turn, Warp 9 covers 81 ly/turn and Warp 10 covers 
 
 Warp is a property of an active fleet course, not a permanent ship speed. A `MoveFleetOrder` may specify Warp explicitly; `warp = 0` means keep the fleet's current setting. The current Qt UI still uses the initial cruise Warp and will get an explicit Warp selector in a UI-focused follow-up.
 
-The starting Scout cruises at Warp 10. The starting Colony Ship cruises at Warp 8. This approximately preserves the existing prototype tempo while the new logistics model is introduced.
+The starting Scout cruises at Warp 8. The starting Colony Ship cruises at Warp 7. Warp 10 remains part of the global movement scale but is reserved for later high-technology engines.
 
 ## Engine fuel curves
 
@@ -26,9 +26,11 @@ Positive fuel rate consumes fuel. Negative fuel rate means the drive collects mo
 
 The first catalog contains three drives:
 
-- **Fusion Drive** — straightforward, available through Warp 10, increasingly expensive at high Warp;
+- **Fusion Drive** — straightforward starter engine, available through Warp 8 with steep fuel burn at its top speed;
 - **Ram Scoop Drive** — fuel-positive at low Warp, economical at moderate Warp, maximum Warp 9;
-- **Radiating Ram Scoop** — stronger scoop behaviour and Warp 10 capability, but carries a radiation-hazard flag for future interaction with race radiation tolerance and transported colonists.
+- **Radiating Ram Scoop** — stronger scoop behaviour and Warp 9 capability, but carries a radiation hazard for transported colonists.
+
+No current engine provides Warp 10. That step is deliberately reserved for future propulsion technology rather than being safe starter equipment.
 
 The numeric curves are tuning placeholders. Their strategic shape is intentional.
 
