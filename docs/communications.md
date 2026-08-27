@@ -4,13 +4,15 @@ Suns! treats a distant fleet as an autonomous spacecraft rather than an object t
 
 ## First playable model
 
-Established friendly colonies temporarily act as communication relay nodes. A fleet within 120 ly of its nearest friendly relay has an effectively real-time link. Outside that coverage, a signal delay is calculated as:
+Established friendly colonies temporarily act as access nodes to an empire-wide instantaneous relay backbone. A conventional signal expands in every direction from its source until it reaches the nearest friendly node; the backbone carries it instantaneously from there.
 
 ```text
-delay turns = ceil((distance to nearest relay - 120 ly) / 150 ly per turn)
+delay turns = floor(distance to nearest relay / 150 ly per turn)
 ```
 
-The constants are deliberately provisional balance values. Orbital stations and dedicated communication components will later replace the temporary colony-relay assumption while keeping the same packet/delivery architecture.
+The simulation resolves only whole-year planning boundaries, so propagation shorter than one signal-year is treated as effectively immediate; the delay counts complete signal-years between the source and the nearest node. This is turn quantization, not a separate coverage radius. The signal speed is deliberately provisional. Orbital stations and dedicated communication components will later replace the temporary colony-relay assumption while keeping the same packet/delivery architecture.
+
+Signals have the same propagation time regardless of message priority. Priority can matter only if a future relay has finite processing or transmission capacity; there is no artificial faster channel in the base model.
 
 ## Commands
 
@@ -73,3 +75,7 @@ The same model is intended to support:
 - jamming, interception and communication warfare
 - Turn Messages for command delivery and contact loss/restoration
 - technology improvements to range, signal speed and resistance to interference
+
+Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the conventional hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.
+
+When no new command can arrive, a fleet keeps executing its onboard waypoint queue and stops after the program is exhausted. Conditional contingency commands such as "if no contact for N turns, return to the nearest friendly relay" are a future autonomy layer rather than implicit fleet behaviour.

@@ -17,7 +17,7 @@ The starting Scout carries an ordinary Long Range Scanner. `PenetratingScanner` 
 
 Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
 
-Reports use the same relay coverage and signal-speed calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
+Reports use the same nearest-relay propagation and signal-speed calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
 Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range is also the future hook for transient enemy-fleet contacts; those contacts will remain separate from permanent planetary knowledge.
 

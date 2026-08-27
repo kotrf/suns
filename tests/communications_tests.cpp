@@ -35,6 +35,29 @@ void local_commands_remain_immediate()
     assert(moved.pendingCommands.empty());
 }
 
+void delay_is_propagation_to_the_nearest_relay_node()
+{
+    auto state = generate_game(GalaxyConfig{});
+    const auto& home = state.stars.front();
+
+    assert(communication_delay_turns(state, 1, home.position) == 0);
+    assert(communication_delay_turns(state, 1, {home.position.x + 1.0, home.position.y}) == 0);
+    assert(communication_delay_turns(state, 1, {home.position.x + 149.9999, home.position.y}) == 0);
+    assert(communication_delay_turns(state, 1, {home.position.x - 150.0, home.position.y}) == 1);
+    assert(communication_delay_turns(state, 1, {home.position.x, home.position.y + 299.9999}) == 1);
+
+    auto relayPlanet = state.planets.front();
+    relayPlanet.id = 999;
+    relayPlanet.star = state.stars[1].id;
+    relayPlanet.owner = 1;
+    relayPlanet.population = 1000;
+    state.planets.push_back(relayPlanet);
+
+    const auto& relay = state.stars[1];
+    const Position nearRelay{relay.position.x + 10.0, relay.position.y};
+    assert(communication_delay_turns(state, 1, nearRelay) == 0);
+}
+
 void remote_command_arrives_after_signal_delay()
 {
     auto state = generate_game(GalaxyConfig{});
@@ -163,6 +186,7 @@ void stale_telemetry_predicts_without_revealing_route_change()
 int main()
 {
     local_commands_remain_immediate();
+    delay_is_propagation_to_the_nearest_relay_node();
     remote_command_arrives_after_signal_delay();
     remote_clear_route_stops_when_command_arrives();
     stale_telemetry_predicts_without_revealing_route_change();
