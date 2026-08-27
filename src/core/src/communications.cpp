@@ -163,10 +163,16 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
     // Compatibility for tiny test fixtures and edge states that have no colony
     // node yet. Normal generated games always begin with the homeworld relay.
     if (!hasRelay) return 0;
-    if (nearest <= kCommunicationRelayRange + 0.000001) return 0;
+    if (nearest <= 0.000001) return 0;
 
-    const auto uncovered = nearest - kCommunicationRelayRange;
-    return static_cast<std::uint32_t>(std::ceil(uncovered / kCommunicationSignalSpeed));
+    // The signal expands conventionally in every direction until it reaches
+    // the nearest access node. Once there, the empire relay backbone carries
+    // it instantaneously. Priority may affect processing later, but never this
+    // physical propagation time.
+    // The simulation resolves only whole-year planning boundaries. Travel of
+    // less than one signal-year is therefore an effectively immediate link;
+    // the result counts complete signal-years between source and relay.
+    return static_cast<std::uint32_t>(std::floor(nearest / kCommunicationSignalSpeed));
 }
 
 bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)

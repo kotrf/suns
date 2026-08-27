@@ -33,9 +33,10 @@ inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
 
 // First communications slice: established friendly colonies temporarily act as
-// relay nodes. Orbital stations will later move this capability to explicit
-// station/ship modules without changing packet and latency semantics.
-inline constexpr double kCommunicationRelayRange = 120.0;
+// access nodes to the empire's instantaneous relay backbone. A conventional
+// signal still has to propagate from its source to the nearest node. Orbital
+// stations will later move this capability to explicit station/ship modules
+// without changing packet and latency semantics.
 inline constexpr double kCommunicationSignalSpeed = 150.0;
 
 struct Position {
