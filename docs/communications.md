@@ -4,13 +4,23 @@ Suns! treats a distant fleet as an autonomous spacecraft rather than an object t
 
 ## First playable model
 
-Established friendly colonies temporarily act as access nodes to an empire-wide instantaneous relay backbone. A conventional signal expands in every direction from its source until it reaches the nearest friendly node; the backbone carries it instantaneously from there.
+Established friendly colonies are roots of an empire-wide instantaneous network. The network coverage is not a separate communications statistic: it is the union of connected ordinary-scanner fields.
+
+- every colony projects its ordinary planetary scanner field;
+- every friendly ship with an ordinary scanner automatically joins and extends the network when its field overlaps an already-connected field;
+- chains of overlapping scanner fields relay instantaneously and can move with their ships;
+- a ship without a scanner is still connected while its position lies inside the connected field;
+- a detached scanner field is not part of the network;
+- penetrating-only scanners never extend communications coverage.
+
+Outside the connected mesh, a conventional signal expands in every direction until it reaches the nearest boundary of the network; the instantaneous backbone carries it from there.
 
 ```text
-delay turns = floor(distance to nearest relay / 150 ly per turn)
+uncovered distance = distance to nearest connected scanner field
+delay turns = ceil(uncovered distance / 150 ly per turn)
 ```
 
-The simulation resolves only whole-year planning boundaries, so propagation shorter than one signal-year is treated as effectively immediate; the delay counts complete signal-years between the source and the nearest node. This is turn quantization, not a separate coverage radius. The signal speed is deliberately provisional. Orbital stations and dedicated communication components will later replace the temporary colony-relay assumption while keeping the same packet/delivery architecture.
+Only positions inside the connected scanner mesh have zero-turn communication. Any non-zero conventional hop arrives at a later annual planning boundary. The signal speed is deliberately provisional. Orbital stations will later provide durable scanner/relay fields without requiring a separate communications-range number.
 
 Signals have the same propagation time regardless of message priority. Priority can matter only if a future relay has finite processing or transmission capacity; there is no artificial faster channel in the base model.
 

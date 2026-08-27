@@ -296,6 +296,18 @@ double ship_design_sensor_range(const ShipDesign& design)
     return range;
 }
 
+double ship_design_ordinary_sensor_range(const ShipDesign& design)
+{
+    double range = 0.0;
+    for (const auto component : design.components) {
+        const auto spec = component_spec(component);
+        if (spec.kind == ShipComponentKind::Scanner && !spec.penetratesPlanets) {
+            range += spec.sensorRange;
+        }
+    }
+    return range;
+}
+
 double ship_design_penetrating_sensor_range(const ShipDesign& design)
 {
     double range = 0.0;
@@ -414,6 +426,12 @@ double fleet_sensor_range(const GameState& state, const Fleet& fleet)
 {
     const auto* design = fleet_design(state, fleet);
     return design ? ship_design_sensor_range(*design) : 0.0;
+}
+
+double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet)
+{
+    const auto* design = fleet_design(state, fleet);
+    return design ? ship_design_ordinary_sensor_range(*design) : 0.0;
 }
 
 double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet)

@@ -9,6 +9,57 @@ namespace suns {
 
 namespace {
 
+struct CommunicationField {
+    Position position;
+    double radius{};
+    bool connected{};
+};
+
+std::vector<CommunicationField> connected_communication_fields(
+    const GameState& state,
+    PlayerId player)
+{
+    std::vector<CommunicationField> fields;
+
+    // Every established colony is a root of the instantaneous backbone and
+    // projects the same field as its ordinary planetary scanner.
+    for (const auto& planet : state.planets) {
+        if (planet.owner != player || planet.population == 0) continue;
+        const auto* star = find_star(state, planet.star);
+        if (!star) continue;
+        fields.push_back({star->position, kColonySensorRange, true});
+    }
+
+    // An ordinary ship scanner automatically relays while its field overlaps
+    // any already-connected field. Penetrating-only scanners do not take part.
+    for (const auto& fleet : state.fleets) {
+        if (fleet.owner != player) continue;
+        const auto range = fleet_ordinary_sensor_range(state, fleet);
+        if (range <= 0.0) continue;
+        fields.push_back({fleet.position, range, false});
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (auto& candidate : fields) {
+            if (candidate.connected) continue;
+            const auto overlapsConnected = std::any_of(
+                fields.begin(), fields.end(), [&](const CommunicationField& connected) {
+                    return connected.connected
+                        && distance_between(candidate.position, connected.position)
+                            <= candidate.radius + connected.radius + 0.000001;
+                });
+            if (!overlapsConnected) continue;
+            candidate.connected = true;
+            changed = true;
+        }
+    }
+
+    std::erase_if(fields, [](const CommunicationField& field) { return !field.connected; });
+    return fields;
+}
+
 std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction action)
 {
     return action.kind == FleetArrivalActionKind::None
@@ -149,30 +200,24 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 
 std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position)
 {
-    double nearest = std::numeric_limits<double>::infinity();
-    bool hasRelay = false;
-
-    for (const auto& planet : state.planets) {
-        if (planet.owner != player || planet.population == 0) continue;
-        const auto* star = find_star(state, planet.star);
-        if (!star) continue;
-        hasRelay = true;
-        nearest = std::min(nearest, distance_between(position, star->position));
-    }
+    const auto fields = connected_communication_fields(state, player);
 
     // Compatibility for tiny test fixtures and edge states that have no colony
     // node yet. Normal generated games always begin with the homeworld relay.
-    if (!hasRelay) return 0;
+    if (fields.empty()) return 0;
+
+    double nearest = std::numeric_limits<double>::infinity();
+    for (const auto& field : fields) {
+        nearest = std::min(
+            nearest,
+            std::max(0.0, distance_between(position, field.position) - field.radius));
+    }
     if (nearest <= 0.000001) return 0;
 
-    // The signal expands conventionally in every direction until it reaches
-    // the nearest access node. Once there, the empire relay backbone carries
-    // it instantaneously. Priority may affect processing later, but never this
-    // physical propagation time.
-    // The simulation resolves only whole-year planning boundaries. Travel of
-    // less than one signal-year is therefore an effectively immediate link;
-    // the result counts complete signal-years between source and relay.
-    return static_cast<std::uint32_t>(std::floor(nearest / kCommunicationSignalSpeed));
+    // Outside the connected scanner mesh a conventional signal expands toward
+    // its nearest boundary. Any non-zero uncovered hop lands at a later annual
+    // planning boundary; priority can never alter this physical propagation.
+    return static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed));
 }
 
 bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)

@@ -330,6 +330,7 @@ struct GalaxyConfig {
 [[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
+[[nodiscard]] double ship_design_ordinary_sensor_range(const ShipDesign& design);
 [[nodiscard]] double ship_design_penetrating_sensor_range(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
@@ -356,6 +357,7 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] std::uint32_t fleet_eta(const Fleet& fleet);
 [[nodiscard]] double fleet_speed(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_sensor_range(const GameState& state, const Fleet& fleet);
+[[nodiscard]] double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] bool fleet_can_colonize(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint32_t fleet_eta(const GameState& state, const Fleet& fleet);
