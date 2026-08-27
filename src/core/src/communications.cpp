@@ -15,7 +15,7 @@ struct CommunicationField {
     bool connected{};
 };
 
-std::vector<CommunicationField> connected_communication_fields(
+std::vector<CommunicationField> communication_fields(
     const GameState& state,
     PlayerId player)
 {
@@ -56,8 +56,52 @@ std::vector<CommunicationField> connected_communication_fields(
         }
     }
 
-    std::erase_if(fields, [](const CommunicationField& field) { return !field.connected; });
     return fields;
+}
+
+bool inside_field(Position position, const CommunicationField& field)
+{
+    return distance_between(position, field.position) <= field.radius + 0.000001;
+}
+
+std::vector<bool> field_component_containing(
+    const std::vector<CommunicationField>& fields,
+    Position position)
+{
+    std::vector<bool> component(fields.size(), false);
+    for (std::size_t index = 0; index < fields.size(); ++index) {
+        component[index] = inside_field(position, fields[index]);
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (std::size_t candidate = 0; candidate < fields.size(); ++candidate) {
+            if (component[candidate]) continue;
+            for (std::size_t member = 0; member < fields.size(); ++member) {
+                if (!component[member]) continue;
+                if (distance_between(fields[candidate].position, fields[member].position)
+                    > fields[candidate].radius + fields[member].radius + 0.000001) {
+                    continue;
+                }
+                component[candidate] = true;
+                changed = true;
+                break;
+            }
+        }
+    }
+    return component;
+}
+
+bool inside_component(
+    Position position,
+    const std::vector<CommunicationField>& fields,
+    const std::vector<bool>& component)
+{
+    for (std::size_t index = 0; index < fields.size(); ++index) {
+        if (component[index] && inside_field(position, fields[index])) return true;
+    }
+    return false;
 }
 
 std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction action)
@@ -200,23 +244,59 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 
 std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position)
 {
-    const auto fields = connected_communication_fields(state, player);
+    const auto fields = communication_fields(state, player);
 
     // Compatibility for tiny test fixtures and edge states that have no colony
     // node yet. Normal generated games always begin with the homeworld relay.
-    if (fields.empty()) return 0;
+    if (fields.empty()
+        || std::none_of(fields.begin(), fields.end(), [](const CommunicationField& field) {
+            return field.connected;
+        })) {
+        return 0;
+    }
+
+    // A position inside any field connected to a colony root belongs to the
+    // instantaneous empire mesh.
+    for (const auto& field : fields) {
+        if (field.connected && inside_field(position, field)) return 0;
+    }
+
+    // A detached scanner island still communicates instantaneously inside its
+    // own component. Find all physical transceivers belonging to the source
+    // island and to the colony-rooted mesh, then use the shortest real
+    // point-to-point radio hop. Scanner radii never subtract from this distance:
+    // there is no receiver on the imaginary surface of a sensor field.
+    const auto sourceComponent = field_component_containing(fields, position);
+    std::vector<Position> sourceTransceivers{position};
+    std::vector<Position> connectedTransceivers;
+
+    for (const auto& planet : state.planets) {
+        if (planet.owner != player || planet.population == 0) continue;
+        const auto* star = find_star(state, planet.star);
+        if (star) connectedTransceivers.push_back(star->position);
+    }
+    for (const auto& fleet : state.fleets) {
+        if (fleet.owner != player) continue;
+        const auto inConnectedMesh = std::any_of(
+            fields.begin(), fields.end(), [&](const CommunicationField& field) {
+                return field.connected && inside_field(fleet.position, field);
+            });
+        if (inConnectedMesh) connectedTransceivers.push_back(fleet.position);
+        if (inside_component(fleet.position, fields, sourceComponent)) {
+            sourceTransceivers.push_back(fleet.position);
+        }
+    }
 
     double nearest = std::numeric_limits<double>::infinity();
-    for (const auto& field : fields) {
-        nearest = std::min(
-            nearest,
-            std::max(0.0, distance_between(position, field.position) - field.radius));
+    for (const auto source : sourceTransceivers) {
+        for (const auto receiver : connectedTransceivers) {
+            nearest = std::min(nearest, distance_between(source, receiver));
+        }
     }
-    if (nearest <= 0.000001) return 0;
+    if (!std::isfinite(nearest) || nearest <= 0.000001) return 0;
 
-    // Outside the connected scanner mesh a conventional signal expands toward
-    // its nearest boundary. Any non-zero uncovered hop lands at a later annual
-    // planning boundary; priority can never alter this physical propagation.
+    // Any non-zero conventional hop lands at a later annual planning boundary;
+    // priority can never alter this physical propagation time.
     return static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed));
 }
 
