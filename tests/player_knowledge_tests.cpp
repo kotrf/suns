@@ -76,7 +76,11 @@ void penetrating_scanner_estimates_planet_during_a_flyby()
     state.fleets.front().fuel = 300.0;
     const TurnProcessor processor;
 
-    const auto result = processor.process_with_events(state, {});
+    const auto observed = processor.process_with_events(state, {});
+    assert(survey_level(observed.state, 1, 2) < SurveyLevel::BasicScan);
+    assert(!observed.state.players.front().pendingSurveyReports.empty());
+
+    const auto result = processor.process_with_events(observed.state, {});
     assert(survey_level(result.state, 1, 2) == SurveyLevel::BasicScan);
     assert(is_surveyed(result.state, 1, 2));
     assert(known_planet_habitability(result.state, 1, 2).has_value());
@@ -100,7 +104,7 @@ void remote_report_remains_in_flight_until_delivery()
     assert(pending.star == 2);
     assert(pending.sourceFleet == 1);
     assert(pending.observedTurn == 11);
-    assert(pending.deliveryTurn == 13);
+    assert(pending.deliveryTurn == 14);
     assert(pending.level == SurveyLevel::SystemScan);
 
     const auto turn12 = processor.process_with_events(turn11.state, {});
@@ -111,14 +115,18 @@ void remote_report_remains_in_flight_until_delivery()
 
     const auto turn13 = processor.process_with_events(turn12.state, {});
     assert(!is_surveyed(turn13.state, 1, 2));
-    assert(survey_level(turn13.state, 1, 2) == SurveyLevel::SystemScan);
-    assert(turn13.state.players.front().pendingSurveyReports.empty());
-    assert(turn13.events.size() == 1);
-    assert(turn13.events.front().observedTurn == 11);
-    assert(turn13.events.front().turn == 13);
+    assert(turn13.events.empty());
 
     const auto turn14 = processor.process_with_events(turn13.state, {});
-    assert(turn14.events.empty());
+    assert(!is_surveyed(turn14.state, 1, 2));
+    assert(survey_level(turn14.state, 1, 2) == SurveyLevel::SystemScan);
+    assert(turn14.state.players.front().pendingSurveyReports.empty());
+    assert(turn14.events.size() == 1);
+    assert(turn14.events.front().observedTurn == 11);
+    assert(turn14.events.front().turn == 14);
+
+    const auto turn15 = processor.process_with_events(turn14.state, {});
+    assert(turn15.events.empty());
 }
 
 void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
@@ -216,18 +224,20 @@ void fuel_stall_warns_once_and_only_after_delivery()
     assert(turn11.state.fleets.front().fuelStalled);
     assert(find_event(turn11.events, GameEventKind::FleetStalledForFuel) == nullptr);
     assert(turn11.state.players.front().pendingPlayerReports.size() == 1);
-    assert(turn11.state.players.front().pendingPlayerReports.front().deliveryTurn == 13);
+    assert(turn11.state.players.front().pendingPlayerReports.front().deliveryTurn == 14);
 
     const auto turn12 = processor.process_with_events(turn11.state, {});
     assert(turn12.state.players.front().pendingPlayerReports.size() == 1);
     const auto turn13 = processor.process_with_events(turn12.state, {});
-    const auto* warning = find_event(turn13.events, GameEventKind::FleetStalledForFuel);
+    assert(find_event(turn13.events, GameEventKind::FleetStalledForFuel) == nullptr);
+    const auto turn14 = processor.process_with_events(turn13.state, {});
+    const auto* warning = find_event(turn14.events, GameEventKind::FleetStalledForFuel);
     assert(warning);
     assert(warning->severity == GameEventSeverity::Warning);
 
-    const auto turn14 = processor.process_with_events(turn13.state, {});
-    assert(find_event(turn14.events, GameEventKind::FleetStalledForFuel) == nullptr);
-    assert(turn14.state.players.front().pendingPlayerReports.empty());
+    const auto turn15 = processor.process_with_events(turn14.state, {});
+    assert(find_event(turn15.events, GameEventKind::FleetStalledForFuel) == nullptr);
+    assert(turn15.state.players.front().pendingPlayerReports.empty());
 }
 
 void local_production_completion_is_immediate_and_deterministic()

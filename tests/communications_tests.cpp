@@ -35,16 +35,59 @@ void local_commands_remain_immediate()
     assert(moved.pendingCommands.empty());
 }
 
-void delay_is_propagation_to_the_nearest_relay_node()
+void homeworld_scanner_defines_the_initial_network_field()
 {
     auto state = generate_game(GalaxyConfig{});
     const auto& home = state.stars.front();
+    state.fleets.clear();
 
     assert(communication_delay_turns(state, 1, home.position) == 0);
-    assert(communication_delay_turns(state, 1, {home.position.x + 1.0, home.position.y}) == 0);
-    assert(communication_delay_turns(state, 1, {home.position.x + 149.9999, home.position.y}) == 0);
-    assert(communication_delay_turns(state, 1, {home.position.x - 150.0, home.position.y}) == 1);
-    assert(communication_delay_turns(state, 1, {home.position.x, home.position.y + 299.9999}) == 1);
+    assert(communication_delay_turns(state, 1, {home.position.x + kColonySensorRange, home.position.y}) == 0);
+    assert(communication_delay_turns(state, 1, {home.position.x + kColonySensorRange + 0.001, home.position.y}) == 1);
+    assert(communication_delay_turns(
+        state, 1, {home.position.x + kColonySensorRange + kCommunicationSignalSpeed, home.position.y}) == 1);
+    assert(communication_delay_turns(
+        state, 1, {home.position.x + kColonySensorRange + kCommunicationSignalSpeed + 0.001, home.position.y}) == 2);
+}
+
+void ordinary_scanners_automatically_form_a_relay_chain()
+{
+    auto state = generate_game(GalaxyConfig{});
+    auto& firstRelay = state.fleets.front();
+    firstRelay.position = {140.0, 0.0};
+
+    auto secondRelay = firstRelay;
+    secondRelay.id = 99;
+    secondRelay.position = {300.0, 0.0};
+    state.fleets.push_back(secondRelay);
+
+    // Homeworld R60 overlaps Scout A R90; the two scout fields then overlap.
+    assert(communication_delay_turns(state, 1, {380.0, 0.0}) == 0);
+
+    // Breaking the first overlap detaches the entire mobile branch.
+    state.fleets.front().position = {151.0, 0.0};
+    assert(communication_delay_turns(state, 1, {380.0, 0.0}) == 3);
+}
+
+void penetrating_only_scanner_does_not_extend_the_network()
+{
+    auto state = generate_game(GalaxyConfig{});
+    state.shipDesigns.push_back({
+        99,
+        1,
+        "Penetrating-only",
+        ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::PenetratingScanner},
+    });
+    state.fleets.front().design = 99;
+    state.fleets.front().position = {120.0, 0.0};
+
+    assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 1);
+}
+
+void nearest_colony_scanner_field_is_used()
+{
+    auto state = generate_game(GalaxyConfig{});
 
     auto relayPlanet = state.planets.front();
     relayPlanet.id = 999;
@@ -79,7 +122,7 @@ void remote_command_arrives_after_signal_delay()
         {},
     };
 
-    assert(communication_delay_turns(state, 1, fleet.position) == 2);
+    assert(communication_delay_turns(state, 1, fleet.position) == 3);
 
     MoveFleetOrder returnHome;
     returnHome.fleet = fleet.id;
@@ -90,20 +133,23 @@ void remote_command_arrives_after_signal_delay()
     auto turn11 = processor.process(state, {{1, {returnHome}}});
     assert(turn11.turn == 11);
     assert(turn11.fleets.front().pendingCommands.size() == 1);
-    assert(turn11.fleets.front().pendingCommands.front().deliveryTurn == 12);
+    assert(turn11.fleets.front().pendingCommands.front().deliveryTurn == 13);
     assert(turn11.fleets.front().destination.has_value());
     assert(same_position(*turn11.fleets.front().destination, Position{600.0, 0.0}));
     assert(turn11.fleets.front().position.x > 420.0);
 
     auto turn12 = processor.process(turn11, {});
-    assert(turn12.turn == 12);
-    assert(turn12.fleets.front().pendingCommands.empty());
-    assert(turn12.fleets.front().destination.has_value());
-    assert(same_position(*turn12.fleets.front().destination, Position{0.0, 0.0}));
+    assert(turn12.fleets.front().pendingCommands.size() == 1);
 
-    const auto positionAtDelivery = turn12.fleets.front().position.x;
     auto turn13 = processor.process(turn12, {});
-    assert(turn13.fleets.front().position.x < positionAtDelivery);
+    assert(turn13.turn == 13);
+    assert(turn13.fleets.front().pendingCommands.empty());
+    assert(turn13.fleets.front().destination.has_value());
+    assert(same_position(*turn13.fleets.front().destination, Position{0.0, 0.0}));
+
+    const auto positionAtDelivery = turn13.fleets.front().position.x;
+    auto turn14 = processor.process(turn13, {});
+    assert(turn14.fleets.front().position.x < positionAtDelivery);
 }
 
 void remote_clear_route_stops_when_command_arrives()
@@ -130,12 +176,15 @@ void remote_clear_route_stops_when_command_arrives()
     assert(turn11.fleets.front().destination.has_value());
 
     auto turn12 = processor.process(turn11, {});
-    assert(turn12.fleets.front().pendingCommands.empty());
-    assert(!turn12.fleets.front().destination.has_value());
-    const auto stoppedAt = turn12.fleets.front().position;
+    assert(turn12.fleets.front().pendingCommands.size() == 1);
 
     auto turn13 = processor.process(turn12, {});
-    assert(same_position(turn13.fleets.front().position, stoppedAt));
+    assert(turn13.fleets.front().pendingCommands.empty());
+    assert(!turn13.fleets.front().destination.has_value());
+    const auto stoppedAt = turn13.fleets.front().position;
+
+    auto turn14 = processor.process(turn13, {});
+    assert(same_position(turn14.fleets.front().position, stoppedAt));
 }
 
 void stale_telemetry_predicts_without_revealing_route_change()
@@ -166,11 +215,12 @@ void stale_telemetry_predicts_without_revealing_route_change()
 
     TurnProcessor processor;
     auto next = processor.process(state, {{1, {returnHome}}});
-    next = processor.process(next, {}); // command arrives at turn 12
+    next = processor.process(next, {});
+    next = processor.process(next, {}); // command arrives at turn 13
     next = processor.process(next, {}); // actual fleet now starts home
 
     const auto& actual = next.fleets.front();
-    assert(next.turn == 13);
+    assert(next.turn == 14);
     assert(actual.destination.has_value());
     assert(same_position(*actual.destination, Position{0.0, 0.0}));
     assert(fleet_telemetry_age(next, actual) >= 1);
@@ -186,7 +236,10 @@ void stale_telemetry_predicts_without_revealing_route_change()
 int main()
 {
     local_commands_remain_immediate();
-    delay_is_propagation_to_the_nearest_relay_node();
+    homeworld_scanner_defines_the_initial_network_field();
+    ordinary_scanners_automatically_form_a_relay_chain();
+    penetrating_only_scanner_does_not_extend_the_network();
+    nearest_colony_scanner_field_is_used();
     remote_command_arrives_after_signal_delay();
     remote_clear_route_stops_when_command_arrives();
     stale_telemetry_predicts_without_revealing_route_change();
