@@ -13,14 +13,17 @@ Established friendly colonies are roots of an empire-wide instantaneous network.
 - a detached scanner field is not part of the network;
 - penetrating-only scanners never extend communications coverage.
 
-Outside the connected mesh, a conventional signal expands in every direction until it reaches the nearest boundary of the network; the instantaneous backbone carries it from there.
+Outside the connected mesh, a conventional radio/laser signal travels between physical transceivers. A scanner field has no receiver distributed over its imaginary boundary, so its radius is never subtracted from the slow path.
+
+A detached group of overlapping scanner fields remains an instantaneous local island. Traffic can cross that island without delay to its physical ship nearest the empire mesh; the slow hop is then measured between that ship and the nearest physical transceiver in the colony-rooted component.
 
 ```text
-uncovered distance = distance to nearest connected scanner field
-delay turns = ceil(uncovered distance / 150 ly per turn)
+slow distance = shortest physical transceiver-to-transceiver gap
+                between the source island and the colony-rooted mesh
+delay turns = ceil(slow distance / 150 ly per turn)
 ```
 
-Only positions inside the connected scanner mesh have zero-turn communication. Any non-zero conventional hop arrives at a later annual planning boundary. The signal speed is deliberately provisional. Orbital stations will later provide durable scanner/relay fields without requiring a separate communications-range number.
+Only positions inside the colony-rooted scanner mesh have a zero-turn link to headquarters. Any non-zero conventional hop arrives at a later annual planning boundary. The signal speed is deliberately provisional. Orbital stations will later provide durable physical transceivers and scanner fields without requiring a second field-radius number.
 
 Signals have the same propagation time regardless of message priority. Priority can matter only if a future relay has finite processing or transmission capacity; there is no artificial faster channel in the base model.
 
