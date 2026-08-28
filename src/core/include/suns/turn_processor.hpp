@@ -66,6 +66,11 @@ struct ColonizePlanetOrder {
     PlanetId planet{};
 };
 
+struct SetRemoteMiningOrder {
+    FleetId fleet{};
+    bool enabled{true};
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -76,7 +81,8 @@ using Order = std::variant<
     SetFleetColonistsOrder,
     SetFleetMineralCargoOrder,
     RefuelFleetOrder,
-    ColonizePlanetOrder>;
+    ColonizePlanetOrder,
+    SetRemoteMiningOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

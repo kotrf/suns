@@ -62,6 +62,7 @@ int main(int argc, char* argv[])
             if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) cargo->update();
             if (auto* portrait = window.findChild<QLabel*>("fleetPortrait")) portrait->update();
             if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
+            if (auto* remoteMine = window.findChild<QPushButton*>("remoteMiningButton")) remoteMine->update();
             if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();
             if (auto* messages = window.findChild<QDockWidget*>("turnMessagesDock")) messages->update();
             if (auto* research = window.findChild<QDockWidget*>("researchDock")) research->update();

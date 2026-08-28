@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 9;
+constexpr quint32 kSaveFormatVersion = 10;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -185,6 +185,7 @@ void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
     stream << static_cast<quint32>(value.waypointQueue.size());
     for (const auto& waypoint : value.waypointQueue) writeWaypoint(stream, waypoint);
     writeMinerals(stream, value.minerals);
+    writeEnum(stream, value.task);
 }
 
 void readTelemetry(QDataStream& stream, FleetTelemetry& value)
@@ -226,6 +227,7 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
         value.waypointQueue.push_back(waypoint);
     }
     readMinerals(stream, value.minerals);
+    if (!readEnum(stream, value.task, static_cast<quint8>(FleetTask::RemoteMining))) return;
 }
 
 void writePendingCommand(QDataStream& stream, const PendingFleetCommand& value)
@@ -233,6 +235,8 @@ void writePendingCommand(QDataStream& stream, const PendingFleetCommand& value)
     stream << static_cast<quint64>(value.issuedTurn)
            << static_cast<quint64>(value.deliveryTurn);
     writeRouteProgram(stream, value.program);
+    stream << static_cast<quint8>(value.task.has_value() ? 1 : 0);
+    if (value.task) writeEnum(stream, *value.task);
 }
 
 void readPendingCommand(QDataStream& stream, PendingFleetCommand& value)
@@ -243,6 +247,18 @@ void readPendingCommand(QDataStream& stream, PendingFleetCommand& value)
     value.issuedTurn = static_cast<std::uint64_t>(issued);
     value.deliveryTurn = static_cast<std::uint64_t>(delivery);
     readRouteProgram(stream, value.program);
+    quint8 hasTask{};
+    stream >> hasTask;
+    if (hasTask > 1) {
+        markCorrupt(stream);
+        return;
+    }
+    value.task.reset();
+    if (hasTask) {
+        FleetTask task{};
+        if (!readEnum(stream, task, static_cast<quint8>(FleetTask::RemoteMining))) return;
+        value.task = task;
+    }
 }
 
 void writePendingTelemetry(QDataStream& stream, const PendingFleetTelemetry& value)
@@ -571,6 +587,7 @@ void writeFleet(QDataStream& stream, const Fleet& value)
     stream << static_cast<quint32>(value.telemetryInTransit.size());
     for (const auto& packet : value.telemetryInTransit) writePendingTelemetry(stream, packet);
     stream << static_cast<quint8>(value.fuelStalled ? 1 : 0);
+    writeEnum(stream, value.task);
 }
 
 void readFleet(QDataStream& stream, Fleet& value)
@@ -665,6 +682,7 @@ void readFleet(QDataStream& stream, Fleet& value)
         return;
     }
     value.fuelStalled = fuelStalled != 0;
+    if (!readEnum(stream, value.task, static_cast<quint8>(FleetTask::RemoteMining))) return;
 }
 
 template <typename Value, typename Writer>
@@ -785,6 +803,9 @@ void writeOrder(QDataStream& stream, const Order& order)
             writeEnum(stream, concrete.focus);
             stream << static_cast<quint8>(concrete.nextFocus.has_value() ? 1 : 0);
             if (concrete.nextFocus) writeEnum(stream, *concrete.nextFocus);
+        } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
+            stream << quint8{10} << static_cast<quint32>(concrete.fleet)
+                   << static_cast<quint8>(concrete.enabled ? 1 : 0);
         }
     }, order);
 }
@@ -923,6 +944,20 @@ bool readOrder(QDataStream& stream, Order& order)
             if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return false;
             value.nextFocus = next;
         }
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
+    case 10: {
+        SetRemoteMiningOrder value;
+        quint32 fleet{};
+        quint8 enabled{};
+        stream >> fleet >> enabled;
+        if (enabled > 1) {
+            markCorrupt(stream);
+            return false;
+        }
+        value.fleet = static_cast<FleetId>(fleet);
+        value.enabled = enabled != 0;
         order = value;
         return stream.status() == QDataStream::Ok;
     }

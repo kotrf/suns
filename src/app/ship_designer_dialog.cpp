@@ -96,7 +96,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         state, player, ShipComponentType::RemoteMiningModule);
     remoteMiningModuleCount_->setEnabled(remoteMiningAvailable);
     remoteMiningModuleCount_->setToolTip(remoteMiningAvailable
-        ? "Construction 1: mines uncolonized worlds into their surface stockpiles"
+        ? "Construction 1: 80 kt orbital apparatus; assign Remote Mining at an uncolonized world"
         : "Locked — requires Construction 1");
     form->addRow("Remote Mining Module (C1)", remoteMiningModuleCount_);
     form->addRow("Colony Module", colonyModuleCount_);
