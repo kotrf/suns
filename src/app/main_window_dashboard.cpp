@@ -30,7 +30,9 @@ QString productionLine(const GameState& state, const Planet& planet)
     const auto& item = planet.productionQueue.front();
 
     QString name;
-    if (item.kind == ProductionKind::Factory) {
+    if (item.kind == ProductionKind::Research) {
+        name = "Ongoing Research";
+    } else if (item.kind == ProductionKind::Factory) {
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
@@ -38,6 +40,14 @@ QString productionLine(const GameState& state, const Planet& planet)
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
         if (const auto* design = find_ship_design(state, designId)) name = QString::fromStdString(design->name);
         else name = "Ship";
+    }
+
+    if (item.kind == ProductionKind::Research) {
+        QString text = "Ongoing Research — all available production becomes empire RP";
+        if (planet.productionQueue.size() > 1) {
+            text += QString(" • +%1 queued").arg(static_cast<qulonglong>(planet.productionQueue.size() - 1));
+        }
+        return text;
     }
 
     const auto minerals = production_item_mineral_cost(state, item);

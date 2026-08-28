@@ -31,10 +31,11 @@ inline constexpr std::uint8_t kColonyShipCruiseWarp = 7;
 inline constexpr double kColonistsPerCargoUnit = 100.0;
 inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
+inline constexpr std::uint32_t kFirstResearchLevelCost = 18;
 
 // First communications slice: established friendly colonies temporarily act as
-// access nodes to the empire's instantaneous relay backbone. A conventional
-// signal still has to propagate from its source to the nearest node. Orbital
+// access nodes to the empire's instantaneous subspace backbone. Outside the
+// mesh a finite-speed subspace signal propagates between real transceivers. Orbital
 // stations will later move this capability to explicit station/ship modules
 // without changing packet and latency semantics.
 inline constexpr double kCommunicationSignalSpeed = 150.0;
@@ -93,6 +94,7 @@ enum class ShipComponentType {
     CargoPod,
     AntimatterGenerator,
     PenetratingScanner,
+    CompactLongRangeScanner,
 };
 
 enum class ShipComponentKind {
@@ -135,6 +137,7 @@ enum class ProductionKind {
     ColonyShip,
     Factory,
     Mine,
+    Research,
 };
 
 struct ProductionItem {
@@ -205,6 +208,24 @@ struct PendingPlayerReport {
     std::uint32_t quantity{};
 };
 
+enum class ResearchField : std::uint8_t {
+    Energy,
+    Propulsion,
+    Construction,
+    Electronics,
+    Biology,
+    Weapons,
+};
+
+inline constexpr std::size_t kResearchFieldCount = 6;
+
+struct TechnologyState {
+    std::array<std::uint8_t, kResearchFieldCount> levels{};
+    std::array<std::uint32_t, kResearchFieldCount> progress{};
+    ResearchField focus{ResearchField::Electronics};
+    std::optional<ResearchField> nextFocus;
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -214,6 +235,7 @@ struct Player {
     std::vector<PendingPlayerReport> pendingPlayerReports;
     double radiationTolerance{0.50};
     bool radiationImmune{};
+    TechnologyState technology;
 };
 
 enum class FleetRole {
@@ -325,6 +347,8 @@ struct GalaxyConfig {
 [[nodiscard]] std::size_t ship_design_engine_slots_used(const ShipDesign& design);
 [[nodiscard]] std::size_t ship_design_general_slots_used(const ShipDesign& design);
 [[nodiscard]] bool ship_design_valid(const ShipDesign& design);
+[[nodiscard]] bool ship_design_available_to_player(
+    const GameState& state, PlayerId player, const ShipDesign& design);
 [[nodiscard]] double ship_design_mass(const ShipDesign& design);
 [[nodiscard]] std::uint32_t ship_design_cost(const ShipDesign& design);
 [[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
@@ -339,6 +363,12 @@ struct GalaxyConfig {
 [[nodiscard]] double ship_design_cargo_capacity(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_generation(const ShipDesign& design);
 [[nodiscard]] double ship_design_radiation_hazard(const ShipDesign& design);
+[[nodiscard]] std::string research_field_name(ResearchField field);
+[[nodiscard]] std::uint8_t technology_level(
+    const GameState& state, PlayerId player, ResearchField field);
+[[nodiscard]] std::uint32_t research_level_cost(ResearchField field, std::uint8_t level);
+[[nodiscard]] bool component_available_to_player(
+    const GameState& state, PlayerId player, ShipComponentType component);
 
 [[nodiscard]] bool same_position(Position a, Position b);
 [[nodiscard]] double distance_between(Position a, Position b);
@@ -394,6 +424,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::ColonyShip: return kColonyShipCost;
     case ProductionKind::Factory: return kFactoryCost;
     case ProductionKind::Mine: return kMineCost;
+    case ProductionKind::Research: return 0;
     }
     return kColonyShipCost;
 }

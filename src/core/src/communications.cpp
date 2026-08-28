@@ -264,7 +264,7 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
     // A detached scanner island still communicates instantaneously inside its
     // own component. Find all physical transceivers belonging to the source
     // island and to the colony-rooted mesh, then use the shortest real
-    // point-to-point radio hop. Scanner radii never subtract from this distance:
+    // point-to-point subspace hop. Scanner radii never subtract from this distance:
     // there is no receiver on the imaginary surface of a sensor field.
     const auto sourceComponent = field_component_containing(fields, position);
     std::vector<Position> sourceTransceivers{position};
@@ -295,7 +295,7 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
     }
     if (!std::isfinite(nearest) || nearest <= 0.000001) return 0;
 
-    // Any non-zero conventional hop lands at a later annual planning boundary;
+    // Any non-zero subspace hop lands at a later annual planning boundary;
     // priority can never alter this physical propagation time.
     return static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed));
 }

@@ -4,13 +4,16 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace suns {
 
 std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item)
 {
+    if (item.kind == ProductionKind::Research) return 0;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
     if (item.shipDesign != 0) {
@@ -20,6 +23,91 @@ std::uint32_t production_item_cost(const GameState& state, const ProductionItem&
 }
 
 namespace {
+
+constexpr bool valid_research_field(ResearchField field)
+{
+    return static_cast<std::size_t>(field) < kResearchFieldCount;
+}
+
+Player* mutable_player(GameState& state, PlayerId id)
+{
+    const auto it = std::find_if(state.players.begin(), state.players.end(), [id](const Player& player) {
+        return player.id == id;
+    });
+    return it == state.players.end() ? nullptr : &*it;
+}
+
+std::uint64_t research_event_id(
+    PlayerId player, std::uint64_t turn, ResearchField field, std::uint8_t level)
+{
+    std::uint64_t hash = 1469598103934665603ULL;
+    auto mix = [&](std::uint64_t value) {
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (value >> (byte * 8)) & 0xffULL;
+            hash *= 1099511628211ULL;
+        }
+    };
+    mix(static_cast<std::uint64_t>(GameEventKind::ResearchLevelCompleted));
+    mix(player);
+    mix(turn);
+    mix(static_cast<std::uint64_t>(field));
+    mix(level);
+    return hash;
+}
+
+void apply_research_points(
+    GameState& state,
+    PlayerId playerId,
+    std::uint32_t points,
+    std::uint64_t completionTurn,
+    std::vector<GameEvent>& events)
+{
+    auto* player = mutable_player(state, playerId);
+    if (!player) return;
+
+    while (points > 0) {
+        const auto field = player->technology.focus;
+        if (!valid_research_field(field)) return;
+        const auto index = static_cast<std::size_t>(field);
+        const auto level = player->technology.levels[index];
+        if (level == std::numeric_limits<std::uint8_t>::max()) return;
+
+        const auto nextLevel = static_cast<std::uint8_t>(level + 1);
+        const auto cost = research_level_cost(field, nextLevel);
+        auto& progress = player->technology.progress[index];
+        const auto remaining = cost > progress ? cost - progress : 0;
+        const auto spent = std::min(points, remaining);
+        progress += spent;
+        points -= spent;
+        if (progress < cost) break;
+
+        progress = 0;
+        player->technology.levels[index] = nextLevel;
+        events.push_back({
+            research_event_id(playerId, completionTurn, field, nextLevel),
+            completionTurn,
+            completionTurn,
+            playerId,
+            GameEventKind::ResearchLevelCompleted,
+            GameEventSeverity::Information,
+            0,
+            0,
+            0,
+            0,
+            ProductionKind::Research,
+            {},
+            0,
+            SurveyLevel::Detected,
+            field,
+            nextLevel,
+        });
+
+        if (player->technology.nextFocus) {
+            player->technology.focus = *player->technology.nextFocus;
+            player->technology.nextFocus.reset();
+        }
+    }
+}
 
 FleetRole presentation_role_for_design(const ShipDesign& design)
 {
@@ -75,6 +163,7 @@ void mine_colonies(GameState& state)
 
 std::optional<FleetId> complete_production(GameState& state, Planet& planet, const ProductionItem& item)
 {
+    if (item.kind == ProductionKind::Research) return std::nullopt;
     if (item.kind == ProductionKind::Factory) {
         ++planet.industry;
         return FleetId{0};
@@ -105,14 +194,21 @@ std::optional<FleetId> complete_production(GameState& state, Planet& planet, con
     return id;
 }
 
-void run_colony_production(GameState& state, Planet& planet)
+std::uint32_t run_colony_production(GameState& state, Planet& planet)
 {
-    if (planet.owner == 0) return;
+    if (planet.owner == 0) return 0;
     if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
 
+    std::uint32_t researchProduced = 0;
     std::uint32_t available = planet.stockpile + colony_output(planet);
     while (!planet.productionQueue.empty()) {
         auto& item = planet.productionQueue.front();
+        if (item.kind == ProductionKind::Research) {
+            planet.productionWaitingForMinerals = false;
+            researchProduced += available;
+            available = 0;
+            break;
+        }
         if (item.remainingCost > 0) {
             planet.productionWaitingForMinerals = false;
             if (available == 0) break;
@@ -178,6 +274,7 @@ void run_colony_production(GameState& state, Planet& planet)
     }
     if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
     planet.stockpile = available;
+    return researchProduced;
 }
 
 bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& planet)
@@ -489,14 +586,41 @@ TurnResult TurnProcessor::process_with_events(
                             planet->productionQueue.push_back({ProductionKind::Factory, kFactoryCost, 0});
                         } else if (concreteOrder.kind == ProductionKind::Mine) {
                             planet->productionQueue.push_back({ProductionKind::Mine, kMineCost, 0});
+                        } else if (concreteOrder.kind == ProductionKind::Research) {
+                            return;
                         } else if (const auto* design = find_ship_design(next, kColonyShipDesignId);
                                    design && design->owner == submission.player) {
                             planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                         }
+                    } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
+                        if (planet == next.planets.end()) return;
+                        const auto isResearch = [](const ProductionItem& item) {
+                            return item.kind == ProductionKind::Research;
+                        };
+                        if (concreteOrder.enabled) {
+                            if (std::none_of(planet->productionQueue.begin(), planet->productionQueue.end(), isResearch)) {
+                                planet->productionQueue.push_back({ProductionKind::Research, 0, 0});
+                            }
+                        } else {
+                            std::erase_if(planet->productionQueue, isResearch);
+                        }
+                    } else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) {
+                        auto* player = mutable_player(next, submission.player);
+                        if (!player || !valid_research_field(concreteOrder.focus)
+                            || (concreteOrder.nextFocus && !valid_research_field(*concreteOrder.nextFocus))) {
+                            return;
+                        }
+                        player->technology.focus = concreteOrder.focus;
+                        player->technology.nextFocus = concreteOrder.nextFocus;
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
                         ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,
                             concreteOrder.hull, concreteOrder.components};
-                        if (!ship_design_valid(candidate) || design_name_exists(next, submission.player, candidate.name)) return;
+                        if (!ship_design_valid(candidate)
+                            || !ship_design_available_to_player(next, submission.player, candidate)
+                            || design_name_exists(next, submission.player, candidate.name)) return;
                         next.shipDesigns.push_back(std::move(candidate));
                         ++next.nextShipDesignId;
                     } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
@@ -572,7 +696,19 @@ TurnResult TurnProcessor::process_with_events(
 
     advance_fleets(next);
     observe_current_sensor_coverage(next, next.turn + 1);
-    for (auto& planet : next.planets) run_colony_production(next, planet);
+    std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
+    for (auto& planet : next.planets) {
+        const auto contribution = run_colony_production(next, planet);
+        if (contribution == 0) continue;
+        const auto total = std::find_if(researchByPlayer.begin(), researchByPlayer.end(), [&](const auto& entry) {
+            return entry.first == planet.owner;
+        });
+        if (total == researchByPlayer.end()) researchByPlayer.emplace_back(planet.owner, contribution);
+        else total->second += contribution;
+    }
+    for (const auto& [player, points] : researchByPlayer) {
+        apply_research_points(next, player, points, next.turn + 1, events);
+    }
     grow_colonies(next);
 
     // The returned state is the next planning boundary. Commands arriving

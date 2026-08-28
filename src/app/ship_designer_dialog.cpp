@@ -31,8 +31,9 @@ QString signedFuelRate(double value)
 
 } // namespace
 
-ShipDesignerDialog::ShipDesignerDialog(QWidget* parent)
+ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent)
     : QDialog(parent)
+    , player_(player)
 {
     setWindowTitle("Suns! — Ship Designer");
     resize(560, 600);
@@ -63,19 +64,33 @@ ShipDesignerDialog::ShipDesignerDialog(QWidget* parent)
     form->addRow("Engine slot", engineCombo_);
 
     scannerCount_ = new QSpinBox(this);
+    compactScannerCount_ = new QSpinBox(this);
+    penetratingScannerCount_ = new QSpinBox(this);
     colonyModuleCount_ = new QSpinBox(this);
     fuelTankCount_ = new QSpinBox(this);
     cargoPodCount_ = new QSpinBox(this);
     antimatterCount_ = new QSpinBox(this);
-    for (auto* spin : {scannerCount_, colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
+    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_,
+             colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         spin->setRange(0, 5);
     }
     scannerCount_->setValue(1);
 
     form->addRow("Long Range Scanner", scannerCount_);
-    auto* penetratingLocked = new QLabel("Locked — requires advanced Sensors technology", this);
-    penetratingLocked->setStyleSheet("color: #8792a2;");
-    form->addRow("Penetrating Scanner", penetratingLocked);
+    const auto compactAvailable = component_available_to_player(
+        state, player, ShipComponentType::CompactLongRangeScanner);
+    compactScannerCount_->setEnabled(compactAvailable);
+    compactScannerCount_->setToolTip(compactAvailable
+        ? "Electronics 1: lighter and cheaper, with a shorter field"
+        : "Locked — requires Electronics 1");
+    form->addRow("Compact Scanner (E1)", compactScannerCount_);
+    const auto penetratingAvailable = component_available_to_player(
+        state, player, ShipComponentType::PenetratingScanner);
+    penetratingScannerCount_->setEnabled(penetratingAvailable);
+    penetratingScannerCount_->setToolTip(penetratingAvailable
+        ? "Approximate planetary conditions without entering orbit"
+        : "Locked — requires Electronics 3");
+    form->addRow("Penetrating Scanner (E3)", penetratingScannerCount_);
     form->addRow("Colony Module", colonyModuleCount_);
     form->addRow("Fuel Tank", fuelTankCount_);
     form->addRow("Cargo Pod", cargoPodCount_);
@@ -96,7 +111,8 @@ ShipDesignerDialog::ShipDesignerDialog(QWidget* parent)
     connect(nameEdit_, &QLineEdit::textChanged, this, [this] { updatePreview(); });
     connect(hullCombo_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     connect(engineCombo_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
-    for (auto* spin : {scannerCount_, colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
+    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_,
+             colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         connect(spin, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
 
@@ -107,7 +123,7 @@ ShipDesign ShipDesignerDialog::previewDesign() const
 {
     ShipDesign design;
     design.id = 0;
-    design.owner = 1;
+    design.owner = player_;
     design.name = nameEdit_->text().trimmed().toStdString();
     design.hull = static_cast<ShipHullType>(hullCombo_->currentData().toInt());
     design.components.push_back(static_cast<ShipComponentType>(engineCombo_->currentData().toInt()));
@@ -116,6 +132,8 @@ ShipDesign ShipDesignerDialog::previewDesign() const
         for (int i = 0; i < count; ++i) design.components.push_back(type);
     };
     append(ShipComponentType::LongRangeScanner, scannerCount_->value());
+    append(ShipComponentType::CompactLongRangeScanner, compactScannerCount_->value());
+    append(ShipComponentType::PenetratingScanner, penetratingScannerCount_->value());
     append(ShipComponentType::ColonyModule, colonyModuleCount_->value());
     append(ShipComponentType::FuelTank, fuelTankCount_->value());
     append(ShipComponentType::CargoPod, cargoPodCount_->value());
@@ -137,7 +155,8 @@ void ShipDesignerDialog::updatePreview()
     const auto valid = ship_design_valid(design);
 
     const auto maxGeneral = static_cast<int>(hull.generalSlots);
-    for (auto* spin : {scannerCount_, colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
+    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_,
+             colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         spin->setMaximum(maxGeneral);
     }
 

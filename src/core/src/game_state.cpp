@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string_view>
@@ -209,6 +210,13 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.sensorRange = 70.0;
         spec.penetratesPlanets = true;
         break;
+    case ShipComponentType::CompactLongRangeScanner:
+        spec.name = "Compact Long Range Scanner";
+        spec.kind = ShipComponentKind::Scanner;
+        spec.mass = 5.0;
+        spec.buildCost = 2;
+        spec.sensorRange = 55.0;
+        break;
     case ShipComponentType::ColonyModule:
         spec.name = "Colony Module";
         spec.kind = ShipComponentKind::Special;
@@ -265,6 +273,70 @@ bool ship_design_valid(const ShipDesign& design)
     return engines == 1
         && engines <= hull.engineSlots
         && general <= hull.generalSlots;
+}
+
+std::string research_field_name(ResearchField field)
+{
+    switch (field) {
+    case ResearchField::Energy: return "Energy";
+    case ResearchField::Propulsion: return "Propulsion";
+    case ResearchField::Construction: return "Construction";
+    case ResearchField::Electronics: return "Electronics";
+    case ResearchField::Biology: return "Biology";
+    case ResearchField::Weapons: return "Weapons";
+    }
+    return "Unknown";
+}
+
+namespace {
+
+constexpr std::size_t research_index(ResearchField field)
+{
+    return static_cast<std::size_t>(field);
+}
+
+} // namespace
+
+std::uint8_t technology_level(const GameState& state, PlayerId player, ResearchField field)
+{
+    const auto* owner = find_player(state, player);
+    const auto index = research_index(field);
+    return owner && index < kResearchFieldCount ? owner->technology.levels[index] : 0;
+}
+
+std::uint32_t research_level_cost(ResearchField, std::uint8_t level)
+{
+    if (level == 0) return 0;
+    std::uint32_t cost = kFirstResearchLevelCost;
+    for (std::uint8_t current = 1; current < level; ++current) {
+        if (cost > std::numeric_limits<std::uint32_t>::max() / 2U) {
+            return std::numeric_limits<std::uint32_t>::max();
+        }
+        cost *= 2U;
+    }
+    return cost;
+}
+
+bool component_available_to_player(
+    const GameState& state, PlayerId player, ShipComponentType component)
+{
+    switch (component) {
+    case ShipComponentType::CompactLongRangeScanner:
+        return technology_level(state, player, ResearchField::Electronics) >= 1;
+    case ShipComponentType::PenetratingScanner:
+        return technology_level(state, player, ResearchField::Electronics) >= 3;
+    default:
+        return true;
+    }
+}
+
+bool ship_design_available_to_player(
+    const GameState& state, PlayerId player, const ShipDesign& design)
+{
+    return design.owner == player
+        && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
+            return component_available_to_player(state, player, component);
+        });
 }
 
 double ship_design_mass(const ShipDesign& design)

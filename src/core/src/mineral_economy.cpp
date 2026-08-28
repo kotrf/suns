@@ -58,6 +58,7 @@ MineralCargo componentMineralCost(ShipComponentType type)
     case ShipComponentType::CargoPod:                return {2.0, 1.0, 0.0};
     case ShipComponentType::AntimatterGenerator:     return {1.0, 3.0, 3.0};
     case ShipComponentType::PenetratingScanner:      return {0.0, 3.0, 5.0};
+    case ShipComponentType::CompactLongRangeScanner: return {0.0, 1.0, 2.0};
     }
     return {};
 }
@@ -143,6 +144,7 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
 
 MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item)
 {
+    if (item.kind == ProductionKind::Research) return {};
     if (item.kind == ProductionKind::Factory) return {2.0, 1.0, 2.0};
     if (item.kind == ProductionKind::Mine) return {1.0, 2.0, 1.0};
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;

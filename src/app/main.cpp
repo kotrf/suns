@@ -27,6 +27,7 @@ int main(int argc, char* argv[])
     window.installMiningInfrastructure();
     window.installCommunicationStatus();
     window.installTurnMessages();
+    window.installResearch();
 
     window.show();
 
@@ -63,6 +64,7 @@ int main(int argc, char* argv[])
             if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
             if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();
             if (auto* messages = window.findChild<QDockWidget*>("turnMessagesDock")) messages->update();
+            if (auto* research = window.findChild<QDockWidget*>("researchDock")) research->update();
         });
         // Let deferred selection redraw, map-mode restyling, portraits, mining,
         // panel recovery, gauges and route-program timers run.

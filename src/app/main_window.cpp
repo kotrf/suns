@@ -43,7 +43,13 @@ constexpr int kMapItemFleet = 2;
 
 QString productionName(ProductionKind kind)
 {
-    return kind == ProductionKind::ColonyShip ? "Colony Ship" : "Factory";
+    switch (kind) {
+    case ProductionKind::ColonyShip: return "Colony Ship";
+    case ProductionKind::Factory: return "Factory";
+    case ProductionKind::Mine: return "Mine";
+    case ProductionKind::Research: return "Research";
+    }
+    return "Production";
 }
 
 QString fleetRoleName(FleetRole role)
@@ -60,7 +66,9 @@ QString productionSummary(const GameState& state, const Planet& planet)
     const auto completed = total >= item.remainingCost ? total - item.remainingCost : 0;
 
     QString name;
-    if (item.kind == ProductionKind::Factory) {
+    if (item.kind == ProductionKind::Research) {
+        name = "Ongoing Research";
+    } else if (item.kind == ProductionKind::Factory) {
         name = "Factory";
     } else {
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
@@ -68,10 +76,9 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = design ? QString::fromStdString(design->name) : "Ship design";
     }
 
-    QString summary = QString("%1: %2/%3")
-                          .arg(name)
-                          .arg(completed)
-                          .arg(total);
+    QString summary = item.kind == ProductionKind::Research
+        ? name
+        : QString("%1: %2/%3").arg(name).arg(completed).arg(total);
     if (planet.productionQueue.size() > 1) {
         summary += QString(" (+%1 queued)")
                        .arg(static_cast<qulonglong>(planet.productionQueue.size() - 1));
@@ -948,6 +955,7 @@ void MainWindow::updateControls()
         .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(pendingDescriptions_.join("<br>")));
 
     endTurnButton_->setText(QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
+    refreshResearchPanel();
 }
 
 void MainWindow::appendPendingOrder(Order order, const QString& description)
@@ -979,7 +987,7 @@ void MainWindow::replacePendingFleetMove(
 
 void MainWindow::openShipDesigner()
 {
-    ShipDesignerDialog dialog(this);
+    ShipDesignerDialog dialog(state_, 1, this);
     if (dialog.exec() != QDialog::Accepted) return;
 
     const auto draft = dialog.draft();

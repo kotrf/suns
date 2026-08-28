@@ -1,4 +1,4 @@
-# Delayed communications
+# Delayed subspace communications
 
 Suns! treats a distant fleet as an autonomous spacecraft rather than an object that can always be controlled instantly from the map.
 
@@ -13,7 +13,7 @@ Established friendly colonies are roots of an empire-wide instantaneous network.
 - a detached scanner field is not part of the network;
 - penetrating-only scanners never extend communications coverage.
 
-Outside the connected mesh, a conventional radio/laser signal travels between physical transceivers. A scanner field has no receiver distributed over its imaginary boundary, so its radius is never subtracted from the slow path.
+Outside the connected mesh, a finite-speed subspace signal travels between physical transceivers. A scanner field has no receiver distributed over its imaginary boundary, so its radius is never subtracted from the slow path.
 
 A detached group of overlapping scanner fields remains an instantaneous local island. Traffic can cross that island without delay to its physical ship nearest the empire mesh; the slow hop is then measured between that ship and the nearest physical transceiver in the colony-rooted component.
 
@@ -23,7 +23,7 @@ slow distance = shortest physical transceiver-to-transceiver gap
 delay turns = ceil(slow distance / 150 ly per turn)
 ```
 
-Only positions inside the colony-rooted scanner mesh have a zero-turn link to headquarters. Any non-zero conventional hop arrives at a later annual planning boundary. The signal speed is deliberately provisional. Orbital stations will later provide durable physical transceivers and scanner fields without requiring a second field-radius number.
+Only positions inside the colony-rooted scanner mesh have a zero-turn subspace link to headquarters. Any non-zero subspace hop arrives at a later annual planning boundary. The signal speed is deliberately provisional. Orbital stations will later provide durable physical transceivers and scanner fields without requiring a second field-radius number.
 
 Signals have the same propagation time regardless of message priority. Priority can matter only if a future relay has finite processing or transmission capacity; there is no artificial faster channel in the base model.
 
@@ -89,6 +89,6 @@ The same model is intended to support:
 - Turn Messages for command delivery and contact loss/restoration
 - technology improvements to range, signal speed and resistance to interference
 
-Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the conventional hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.
+Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the subspace hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.
 
 When no new command can arrive, a fleet keeps executing its onboard waypoint queue and stops after the program is exhausted. Conditional contingency commands such as "if no contact for N turns, return to the nearest friendly relay" are a future autonomy layer rather than implicit fleet behaviour.

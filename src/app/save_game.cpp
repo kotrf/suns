@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 7;
+constexpr quint32 kSaveFormatVersion = 8;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -302,7 +302,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::PenetratingScanner))) return;
+        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::CompactLongRangeScanner))) return;
         value.components.push_back(component);
     }
 }
@@ -316,7 +316,7 @@ void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 
 void readProductionItem(QDataStream& stream, ProductionItem& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Mine))) return;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Research))) return;
     quint32 cost{};
     quint32 design{};
     stream >> cost >> design;
@@ -421,6 +421,11 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint32>(report.quantity);
     }
     stream << value.radiationTolerance << static_cast<quint8>(value.radiationImmune ? 1 : 0);
+    for (const auto level : value.technology.levels) stream << static_cast<quint8>(level);
+    for (const auto progress : value.technology.progress) stream << static_cast<quint32>(progress);
+    writeEnum(stream, value.technology.focus);
+    stream << static_cast<quint8>(value.technology.nextFocus.has_value() ? 1 : 0);
+    if (value.technology.nextFocus) writeEnum(stream, *value.technology.nextFocus);
 }
 
 void readPlayer(QDataStream& stream, Player& value)
@@ -490,7 +495,7 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 fleet{};
         quint32 shipDesign{};
         stream >> observedTurn >> deliveryTurn >> star >> planet >> fleet >> shipDesign;
-        if (!readEnum(stream, report.productionKind, static_cast<quint8>(ProductionKind::Mine))) return;
+        if (!readEnum(stream, report.productionKind, static_cast<quint8>(ProductionKind::Research))) return;
         readPosition(stream, report.position);
         quint32 quantity{};
         stream >> quantity;
@@ -511,6 +516,30 @@ void readPlayer(QDataStream& stream, Player& value)
         return;
     }
     value.radiationImmune = immune != 0;
+
+    for (auto& level : value.technology.levels) {
+        quint8 stored{};
+        stream >> stored;
+        level = static_cast<std::uint8_t>(stored);
+    }
+    for (auto& progress : value.technology.progress) {
+        quint32 stored{};
+        stream >> stored;
+        progress = static_cast<std::uint32_t>(stored);
+    }
+    if (!readEnum(stream, value.technology.focus, static_cast<quint8>(ResearchField::Weapons))) return;
+    quint8 hasNext{};
+    stream >> hasNext;
+    if (hasNext > 1) {
+        markCorrupt(stream);
+        return;
+    }
+    value.technology.nextFocus.reset();
+    if (hasNext) {
+        ResearchField next{};
+        if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return;
+        value.technology.nextFocus = next;
+    }
 }
 
 void writeFleet(QDataStream& stream, const Fleet& value)
@@ -748,6 +777,14 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
             stream << quint8{7} << static_cast<quint32>(concrete.fleet)
                    << static_cast<quint32>(concrete.planet);
+        } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
+            stream << quint8{8} << static_cast<quint32>(concrete.colony)
+                   << static_cast<quint8>(concrete.enabled ? 1 : 0);
+        } else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) {
+            stream << quint8{9};
+            writeEnum(stream, concrete.focus);
+            stream << static_cast<quint8>(concrete.nextFocus.has_value() ? 1 : 0);
+            if (concrete.nextFocus) writeEnum(stream, *concrete.nextFocus);
         }
     }, order);
 }
@@ -786,7 +823,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         stream >> colony;
         value.colony = static_cast<PlanetId>(colony);
-        if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Mine))) return false;
+        if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Research))) return false;
         order = value;
         return true;
     }
@@ -799,7 +836,7 @@ bool readOrder(QDataStream& stream, Order& order)
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::PenetratingScanner))) return false;
+            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::CompactLongRangeScanner))) return false;
             value.components.push_back(component);
         }
         order = std::move(value);
@@ -855,6 +892,37 @@ bool readOrder(QDataStream& stream, Order& order)
         stream >> fleet >> planet;
         value.fleet = static_cast<FleetId>(fleet);
         value.planet = static_cast<PlanetId>(planet);
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
+    case 8: {
+        SetColonyResearchOrder value;
+        quint32 colony{};
+        quint8 enabled{};
+        stream >> colony >> enabled;
+        if (enabled > 1) {
+            markCorrupt(stream);
+            return false;
+        }
+        value.colony = static_cast<PlanetId>(colony);
+        value.enabled = enabled != 0;
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
+    case 9: {
+        SetResearchPlanOrder value;
+        if (!readEnum(stream, value.focus, static_cast<quint8>(ResearchField::Weapons))) return false;
+        quint8 hasNext{};
+        stream >> hasNext;
+        if (hasNext > 1) {
+            markCorrupt(stream);
+            return false;
+        }
+        if (hasNext) {
+            ResearchField next{};
+            if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return false;
+            value.nextFocus = next;
+        }
         order = value;
         return stream.status() == QDataStream::Ok;
     }

@@ -14,6 +14,7 @@ enum class GameEventKind {
     ProductionCompleted,
     ColonyFounded,
     ProductionWaitingForMinerals,
+    ResearchLevelCompleted,
 };
 
 enum class GameEventSeverity {
@@ -37,6 +38,8 @@ struct GameEvent {
     Position position;
     std::uint32_t quantity{};
     SurveyLevel surveyLevel{SurveyLevel::Detected};
+    ResearchField researchField{ResearchField::Electronics};
+    std::uint8_t technologyLevel{};
 };
 
 } // namespace suns

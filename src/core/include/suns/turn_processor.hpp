@@ -23,6 +23,16 @@ struct QueueProductionOrder {
     ProductionKind kind{ProductionKind::ColonyShip};
 };
 
+struct SetColonyResearchOrder {
+    PlanetId colony{};
+    bool enabled{true};
+};
+
+struct SetResearchPlanOrder {
+    ResearchField focus{ResearchField::Electronics};
+    std::optional<ResearchField> nextFocus;
+};
+
 struct CreateShipDesignOrder {
     std::string name;
     ShipHullType hull{ShipHullType::Scout};
@@ -59,6 +69,8 @@ struct ColonizePlanetOrder {
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
+    SetColonyResearchOrder,
+    SetResearchPlanOrder,
     CreateShipDesignOrder,
     QueueShipDesignOrder,
     SetFleetColonistsOrder,

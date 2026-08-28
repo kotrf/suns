@@ -22,7 +22,8 @@ The first designer exposes these components:
 - Ram Scoop Drive
 - Radiating Ram Scoop
 - Long Range Scanner
-- Penetrating Scanner (shown locked until advanced Sensors technology)
+- Compact Long Range Scanner (Electronics 1)
+- Penetrating Scanner (Electronics 3)
 - Colony Module
 - Fuel Tank
 - Cargo Pod
@@ -37,7 +38,7 @@ The dialog previews derived mass, build cost, maximum Warp, fuel capacity/genera
 Saving a design does not mutate `GameState` directly from Qt. The UI queues a `CreateShipDesignOrder`. During turn resolution the core:
 
 1. assigns the next stable `ShipDesignId`;
-2. validates hull slots and the engine requirement again;
+2. validates hull slots, the engine requirement and component technology prerequisites again;
 3. rejects duplicate names for the same player;
 4. stores the design in `GameState`.
 
