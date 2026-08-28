@@ -29,6 +29,7 @@ This makes science compete with factories, mines and ships through the existing 
 - Electronics 1: Compact Long Range Scanner, 55 ly range, 5 kt, cost 2 and a smaller mineral bill.
 - Electronics 2: a heavy extended-range sensor remains planned but is not part of this slice.
 - Electronics 3: Penetrating Scanner.
+- Construction 1: Remote Mining Module. A ship in orbit of an uncolonized planet mines into its surface stockpile; cargo fleets collect the minerals separately.
 
 The compact scanner is not a universal upgrade: it halves scanner mass and lowers cost but also reduces field radius from 90 ly to 55 ly. Existing ship designs remain unchanged. New designs are validated against the owner's technology both in the desktop Ship Designer and again in core order processing.
 

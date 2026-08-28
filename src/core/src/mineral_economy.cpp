@@ -59,6 +59,7 @@ MineralCargo componentMineralCost(ShipComponentType type)
     case ShipComponentType::AntimatterGenerator:     return {1.0, 3.0, 3.0};
     case ShipComponentType::PenetratingScanner:      return {0.0, 3.0, 5.0};
     case ShipComponentType::CompactLongRangeScanner: return {0.0, 1.0, 2.0};
+    case ShipComponentType::RemoteMiningModule:      return {3.0, 2.0, 2.0};
     }
     return {};
 }
@@ -135,6 +136,24 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
     const auto extractionUnits = 1.0
         + static_cast<double>(planet.population) / 750.0
         + static_cast<double>(planet.mines) * extractionUnitsPerMine;
+    return {
+        extractionUnits * concentration.ironium / 100.0,
+        extractionUnits * concentration.boranium / 100.0,
+        extractionUnits * concentration.germanium / 100.0,
+    };
+}
+
+MineralCargo projected_remote_mining(const GameState& state, const Planet& planet, const ShipDesign& design)
+{
+    if (planet.owner != 0) return {};
+    const auto units = std::count_if(design.components.begin(), design.components.end(), [](const auto component) {
+        return component_spec(component).remoteMiningUnits > 0.0;
+    });
+    if (units == 0) return {};
+
+    const auto concentration = planet_mineral_concentration(state, planet);
+    constexpr double extractionUnitsPerModule = 1.25;
+    const auto extractionUnits = static_cast<double>(units) * extractionUnitsPerModule;
     return {
         extractionUnits * concentration.ironium / 100.0,
         extractionUnits * concentration.boranium / 100.0,

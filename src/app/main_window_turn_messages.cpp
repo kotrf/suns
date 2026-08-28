@@ -114,6 +114,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             text += "\nUnlocked: Compact Long Range Scanner";
         } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 3) {
             text += "\nUnlocked: Penetrating Scanner";
+        } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 1) {
+            text += "\nUnlocked: Remote Mining Module";
         }
     } else {
         const auto planetName = planet

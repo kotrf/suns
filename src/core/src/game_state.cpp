@@ -217,6 +217,13 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 2;
         spec.sensorRange = 55.0;
         break;
+    case ShipComponentType::RemoteMiningModule:
+        spec.name = "Remote Mining Module";
+        spec.kind = ShipComponentKind::Special;
+        spec.mass = 16.0;
+        spec.buildCost = 6;
+        spec.remoteMiningUnits = 1.0;
+        break;
     case ShipComponentType::ColonyModule:
         spec.name = "Colony Module";
         spec.kind = ShipComponentKind::Special;
@@ -325,6 +332,8 @@ bool component_available_to_player(
         return technology_level(state, player, ResearchField::Electronics) >= 1;
     case ShipComponentType::PenetratingScanner:
         return technology_level(state, player, ResearchField::Electronics) >= 3;
+    case ShipComponentType::RemoteMiningModule:
+        return technology_level(state, player, ResearchField::Construction) >= 1;
     default:
         return true;
     }

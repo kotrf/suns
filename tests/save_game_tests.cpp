@@ -45,7 +45,8 @@ void round_trip_preserves_communications_and_planning()
         1,
         "Compact Relay",
         ShipHullType::Scout,
-        {ShipComponentType::FusionDrive, ShipComponentType::CompactLongRangeScanner},
+        {ShipComponentType::FusionDrive, ShipComponentType::CompactLongRangeScanner,
+         ShipComponentType::RemoteMiningModule},
     });
 
     auto& scout = original.state.fleets.front();
@@ -133,7 +134,7 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.nextFocus == ResearchField::Propulsion);
     assert(loaded.state.planets.front().productionQueue.size() == 1);
     assert(loaded.state.planets.front().productionQueue.front().kind == ProductionKind::Research);
-    assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::CompactLongRangeScanner);
+    assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::RemoteMiningModule);
 
     const auto& fleet = loaded.state.fleets.front();
     assert(same_position(fleet.position, {420.0, 10.0}));

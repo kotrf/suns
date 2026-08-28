@@ -95,6 +95,7 @@ enum class ShipComponentType {
     AntimatterGenerator,
     PenetratingScanner,
     CompactLongRangeScanner,
+    RemoteMiningModule,
 };
 
 enum class ShipComponentKind {
@@ -122,6 +123,7 @@ struct ShipComponentSpec {
     double cargoCapacity{};
     double fuelGenerationPerTurn{};
     bool enablesColonization{};
+    double remoteMiningUnits{};
     double radiationHazard{};
 };
 
@@ -380,6 +382,8 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 
 [[nodiscard]] MineralCargo planet_mineral_concentration(const GameState& state, const Planet& planet);
 [[nodiscard]] MineralCargo projected_mineral_mining(const GameState& state, const Planet& planet);
+[[nodiscard]] MineralCargo projected_remote_mining(
+    const GameState& state, const Planet& planet, const ShipDesign& design);
 [[nodiscard]] MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item);
 
 [[nodiscard]] double fleet_speed(FleetRole role);

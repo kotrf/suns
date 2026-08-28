@@ -153,6 +153,8 @@ void MainWindow::refreshResearchPanel()
         else if (level == 1) unlock = "Electronics 2: extended sensor array is planned as a heavy, long-range alternative.";
         else if (level == 2) unlock = "Next unlock: Penetrating Scanner — approximate planetary data without entering orbit.";
         else unlock = "Higher Electronics levels will later support communications, classification and electronic warfare.";
+    } else if (focus == ResearchField::Construction && level == 0) {
+        unlock = "Next unlock: Remote Mining Module — mines uncolonized worlds into surface stockpiles for cargo fleets to collect.";
     }
     researchUnlock_->setText(unlock);
 
