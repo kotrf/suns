@@ -169,6 +169,7 @@ QPixmap renderShipPortrait(const ShipDesign& design)
     }
 
     if (hasComponent(design, ShipComponentType::LongRangeScanner)
+        || hasComponent(design, ShipComponentType::CompactLongRangeScanner)
         || hasComponent(design, ShipComponentType::PenetratingScanner)) {
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(

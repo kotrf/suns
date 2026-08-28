@@ -95,6 +95,14 @@ target_link_libraries(suns_ship_designer_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_ship_designer_tests COMMAND suns_ship_designer_tests)
 
+add_executable(suns_research_tests
+    research_tests.cpp
+)
+
+target_link_libraries(suns_research_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_research_tests COMMAND suns_research_tests)
+
 if(SUNS_BUILD_APP)
     add_executable(suns_save_game_tests
         save_game_tests.cpp

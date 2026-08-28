@@ -13,11 +13,11 @@ The first staged model separates ordinary detection from planetary penetration:
 - `OrbitalSurvey`: arriving at the system confirms exact habitability and population suitability;
 - `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
 
-The starting Scout carries an ordinary Long Range Scanner. `PenetratingScanner` is a distinct component with shorter range, higher mass and mineral cost, but is intentionally locked out of the starter Ship Designer until the Sensors technology layer exists. This also leaves room for a later racial trait whose hulls provide intrinsic penetrating coverage.
+The starting Scout carries an ordinary Long Range Scanner. `CompactLongRangeScanner` unlocks at Electronics 1. `PenetratingScanner` is a distinct component with shorter range, higher mass and mineral cost and remains locked until Electronics 3, so early exploration still rewards entering systems and spending time in orbit.
 
 Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
 
-Reports use the same ordinary-scanner components and physical transceiver-to-transceiver slow-hop calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
+Reports use the same ordinary-scanner components and physical transceiver-to-transceiver subspace-hop calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
 Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range is also the future hook for transient enemy-fleet contacts; those contacts will remain separate from permanent planetary knowledge.
 
@@ -51,4 +51,4 @@ The save format persists pending operational reports, fleet fuel-stall transitio
 
 The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. Survey text distinguishes basic, orbital and geological results. Planet panels, tooltips and the habitability map use only the delivered knowledge level: estimated values are marked and dimmed, exact habitability waits for orbit, and geology remains hidden until the deep survey. New items are unread, Next unread navigates through them, activating a report centers its star or recorded position, and warning severity is visually distinct.
 
-Later issue #45 slices can add research, contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state.
+Later issue #45 slices can add contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state. Research level completions already use the same typed Turn Messages channel.

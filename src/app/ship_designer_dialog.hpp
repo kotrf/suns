@@ -23,7 +23,7 @@ struct ShipDesignDraft {
 
 class ShipDesignerDialog final : public QDialog {
 public:
-    explicit ShipDesignerDialog(QWidget* parent = nullptr);
+    ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent = nullptr);
 
     [[nodiscard]] ShipDesignDraft draft() const;
 
@@ -31,10 +31,14 @@ private:
     void updatePreview();
     [[nodiscard]] ShipDesign previewDesign() const;
 
+    PlayerId player_{};
+
     QLineEdit* nameEdit_{};
     QComboBox* hullCombo_{};
     QComboBox* engineCombo_{};
     QSpinBox* scannerCount_{};
+    QSpinBox* compactScannerCount_{};
+    QSpinBox* penetratingScannerCount_{};
     QSpinBox* colonyModuleCount_{};
     QSpinBox* fuelTankCount_{};
     QSpinBox* cargoPodCount_{};

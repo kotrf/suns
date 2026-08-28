@@ -105,6 +105,16 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  New colony founded on %2")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(planetName);
+    } else if (event.kind == GameEventKind::ResearchLevelCompleted) {
+        text = QString("Turn %1  •  Research completed: %2 %3")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(QString::fromStdString(research_field_name(event.researchField)))
+                   .arg(event.technologyLevel);
+        if (event.researchField == ResearchField::Electronics && event.technologyLevel == 1) {
+            text += "\nUnlocked: Compact Long Range Scanner";
+        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 3) {
+            text += "\nUnlocked: Penetrating Scanner";
+        }
     } else {
         const auto planetName = planet
             ? QString::fromStdString(planet->name)

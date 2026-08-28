@@ -21,6 +21,7 @@ class QLineEdit;
 class QListWidget;
 class QObject;
 class QPushButton;
+class QProgressBar;
 class QSpinBox;
 class QDockWidget;
 
@@ -87,6 +88,9 @@ public:
     // Player briefing backed by typed, fog-of-war-safe core events.
     void installTurnMessages();
 
+    // Empire research allocation and colony research production.
+    void installResearch();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -118,6 +122,9 @@ private:
     void refreshPlanetPolish();
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
+    void refreshResearchPanel();
+    void queueResearchPlan();
+    void toggleSelectedColonyResearch();
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -181,6 +188,14 @@ private:
     QDockWidget* turnMessagesDock_{};
     QListWidget* turnMessagesList_{};
     QLabel* turnMessagesSummary_{};
+    QDockWidget* researchDock_{};
+    QLabel* researchSummary_{};
+    QLabel* researchUnlock_{};
+    QProgressBar* researchProgress_{};
+    QComboBox* researchFocusCombo_{};
+    QComboBox* researchNextCombo_{};
+    QPushButton* applyResearchPlanButton_{};
+    QPushButton* colonyResearchButton_{};
 };
 
 } // namespace suns

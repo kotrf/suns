@@ -35,6 +35,18 @@ void round_trip_preserves_communications_and_planning()
         {420.0, 10.0},
         0,
     });
+    original.state.players.front().technology.levels[3] = 1;
+    original.state.players.front().technology.progress[3] = 7;
+    original.state.players.front().technology.focus = ResearchField::Electronics;
+    original.state.players.front().technology.nextFocus = ResearchField::Propulsion;
+    original.state.planets.front().productionQueue.push_back({ProductionKind::Research, 0, 0});
+    original.state.shipDesigns.push_back({
+        original.state.nextShipDesignId++,
+        1,
+        "Compact Relay",
+        ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::CompactLongRangeScanner},
+    });
 
     auto& scout = original.state.fleets.front();
     scout.position = {420.0, 10.0};
@@ -70,8 +82,13 @@ void round_trip_preserves_communications_and_planning()
     move.fleet = scout.id;
     move.destination = {200.0, -100.0};
     move.warp = 8;
-    original.pendingOrders = {1, {move, QueueProductionOrder{1, ProductionKind::Mine}}};
-    original.pendingDescriptions = {"move", "mine"};
+    original.pendingOrders = {1, {
+        move,
+        QueueProductionOrder{1, ProductionKind::Mine},
+        SetResearchPlanOrder{ResearchField::Electronics, ResearchField::Propulsion},
+        SetColonyResearchOrder{1, false},
+    }};
+    original.pendingDescriptions = {"move", "mine", "research plan", "stop research"};
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
     original.showSensorRanges = false;
@@ -109,6 +126,14 @@ void round_trip_preserves_communications_and_planning()
     assert(report.deliveryTurn == 79);
     assert(report.fleet == 1);
     assert(same_position(report.position, {420.0, 10.0}));
+    const auto& technology = loaded.state.players.front().technology;
+    assert(technology.levels[3] == 1);
+    assert(technology.progress[3] == 7);
+    assert(technology.focus == ResearchField::Electronics);
+    assert(technology.nextFocus == ResearchField::Propulsion);
+    assert(loaded.state.planets.front().productionQueue.size() == 1);
+    assert(loaded.state.planets.front().productionQueue.front().kind == ProductionKind::Research);
+    assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::CompactLongRangeScanner);
 
     const auto& fleet = loaded.state.fleets.front();
     assert(same_position(fleet.position, {420.0, 10.0}));
@@ -128,9 +153,14 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetryInTransit.front().telemetry.observedTurn == 76);
     assert(fleet.fuelStalled);
 
-    assert(loaded.pendingOrders.orders.size() == 2);
+    assert(loaded.pendingOrders.orders.size() == 4);
     const auto* mine = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[1]);
     assert(mine && mine->kind == ProductionKind::Mine);
+    const auto* plan = std::get_if<SetResearchPlanOrder>(&loaded.pendingOrders.orders[2]);
+    assert(plan && plan->focus == ResearchField::Electronics);
+    assert(plan->nextFocus == ResearchField::Propulsion);
+    const auto* stop = std::get_if<SetColonyResearchOrder>(&loaded.pendingOrders.orders[3]);
+    assert(stop && stop->colony == 1 && !stop->enabled);
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
