@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 8;
+constexpr quint32 kSaveFormatVersion = 9;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -302,7 +302,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::CompactLongRangeScanner))) return;
+        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::RemoteMiningModule))) return;
         value.components.push_back(component);
     }
 }
@@ -836,7 +836,7 @@ bool readOrder(QDataStream& stream, Order& order)
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::CompactLongRangeScanner))) return false;
+            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::RemoteMiningModule))) return false;
             value.components.push_back(component);
         }
         order = std::move(value);

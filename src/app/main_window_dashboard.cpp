@@ -146,7 +146,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(estimated ? "Estimated" : "Potential")
                      .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * 25ULL);
         if (planet_geology_known(state_, 1, planet->id)) {
-            lines << QString("Mineral stocks — I %1 • B %2 • G %3")
+            lines << QString("Surface stockpiles — I %1 • B %2 • G %3")
                          .arg(planet->minerals.ironium, 0, 'f', 1)
                          .arg(planet->minerals.boranium, 0, 'f', 1)
                          .arg(planet->minerals.germanium, 0, 'f', 1);

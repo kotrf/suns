@@ -39,6 +39,7 @@ private:
     QSpinBox* scannerCount_{};
     QSpinBox* compactScannerCount_{};
     QSpinBox* penetratingScannerCount_{};
+    QSpinBox* remoteMiningModuleCount_{};
     QSpinBox* colonyModuleCount_{};
     QSpinBox* fuelTankCount_{};
     QSpinBox* cargoPodCount_{};

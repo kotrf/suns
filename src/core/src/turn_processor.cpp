@@ -283,6 +283,22 @@ bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& p
     return star && same_position(star->position, fleet.position);
 }
 
+void mine_uncolonized_planets(GameState& state)
+{
+    for (const auto& fleet : state.fleets) {
+        const auto* design = find_ship_design(state, fleet.design);
+        if (!design || !ship_design_available_to_player(state, fleet.owner, *design)) continue;
+        for (auto& planet : state.planets) {
+            if (!fleet_at_planet(state, fleet, planet)) continue;
+            const auto mined = projected_remote_mining(state, planet, *design);
+            planet.minerals.ironium += mined.ironium;
+            planet.minerals.boranium += mined.boranium;
+            planet.minerals.germanium += mined.germanium;
+            break;
+        }
+    }
+}
+
 Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
 {
     const auto it = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
@@ -655,7 +671,8 @@ TurnResult TurnProcessor::process_with_events(
                         fleet->colonists = concreteOrder.colonists;
                     } else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
-                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                            return candidate.id == concreteOrder.colony
+                                && (candidate.owner == submission.player || candidate.owner == 0);
                         });
                         const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
                             return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
@@ -695,6 +712,7 @@ TurnResult TurnProcessor::process_with_events(
     }
 
     advance_fleets(next);
+    mine_uncolonized_planets(next);
     observe_current_sensor_coverage(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
     for (auto& planet : next.planets) {
