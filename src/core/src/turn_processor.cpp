@@ -286,6 +286,7 @@ bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& p
 void mine_uncolonized_planets(GameState& state)
 {
     for (const auto& fleet : state.fleets) {
+        if (fleet.task != FleetTask::RemoteMining) continue;
         const auto* design = find_ship_design(state, fleet.design);
         if (!design || !ship_design_available_to_player(state, fleet.owner, *design)) continue;
         for (auto& planet : state.planets) {
@@ -705,6 +706,12 @@ TurnResult TurnProcessor::process_with_events(
                         });
                         if (planet == next.planets.end() || fleet == next.fleets.end()) return;
                         if (establish_colony(next, *fleet, *planet)) next.fleets.erase(fleet);
+                    } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
+                        (void)submit_fleet_task_command(
+                            next,
+                            submission.player,
+                            concreteOrder.fleet,
+                            concreteOrder.enabled ? FleetTask::RemoteMining : FleetTask::None);
                     }
                 },
                 order);

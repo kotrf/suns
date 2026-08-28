@@ -220,7 +220,7 @@ ShipComponentSpec component_spec(ShipComponentType type)
     case ShipComponentType::RemoteMiningModule:
         spec.name = "Remote Mining Module";
         spec.kind = ShipComponentKind::Special;
-        spec.mass = 16.0;
+        spec.mass = 80.0;
         spec.buildCost = 6;
         spec.remoteMiningUnits = 1.0;
         break;

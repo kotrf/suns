@@ -31,6 +31,14 @@ namespace suns {
     FleetArrivalAction arrivalAction,
     const std::vector<FleetWaypoint>& queuedWaypoints);
 
+// Queue a stationary fleet task for the same physical delivery path as route
+// programmes. Starting and stopping work therefore respect communication delay.
+[[nodiscard]] bool submit_fleet_task_command(
+    GameState& state,
+    PlayerId player,
+    FleetId fleet,
+    FleetTask task);
+
 void deliver_due_fleet_commands(GameState& state);
 void deliver_due_fleet_telemetry(GameState& state);
 void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn);

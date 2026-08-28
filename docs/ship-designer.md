@@ -24,7 +24,7 @@ The first designer exposes these components:
 - Long Range Scanner
 - Compact Long Range Scanner (Electronics 1)
 - Penetrating Scanner (Electronics 3)
-- Remote Mining Module (Construction 1)
+- Remote Mining Module (Construction 1, 80 kt; requires an explicit fleet task in orbit)
 - Colony Module
 - Fuel Tank
 - Cargo Pod

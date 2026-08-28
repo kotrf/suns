@@ -155,6 +155,9 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         return true;
     }
 
+    // A travel programme replaces stationary work. Delayed movement commands
+    // cancel mining only when they physically reach the fleet.
+    fleet.task = FleetTask::None;
     fleet.arrivalAction = active_arrival_action(program.arrivalAction);
     fleet.waypointQueue = program.queuedWaypoints;
 
@@ -171,6 +174,32 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
     return true;
 }
 
+bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
+{
+    if (task == FleetTask::None) {
+        fleet.task = FleetTask::None;
+        return true;
+    }
+    if (task != FleetTask::RemoteMining || fleet.destination || !fleet.waypointQueue.empty()) return false;
+
+    const auto* design = find_ship_design(state, fleet.design);
+    if (!design || !ship_design_available_to_player(state, fleet.owner, *design)) return false;
+    const auto hasMiningModule = std::any_of(
+        design->components.begin(), design->components.end(), [](ShipComponentType component) {
+            return component_spec(component).remoteMiningUnits > 0.0;
+        });
+    if (!hasMiningModule) return false;
+
+    const auto atUncolonizedPlanet = std::any_of(
+        state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+            const auto* star = find_star(state, planet.star);
+            return planet.owner == 0 && star && same_position(star->position, fleet.position);
+        });
+    if (!atUncolonizedPlanet) return false;
+    fleet.task = FleetTask::RemoteMining;
+    return true;
+}
+
 FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet, std::uint64_t observedTurn)
 {
     FleetTelemetry result;
@@ -183,6 +212,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.arrivalAction = fleet.arrivalAction;
     result.waypointQueue = fleet.waypointQueue;
     result.minerals = fleet.minerals;
+    result.task = fleet.task;
     return result;
 }
 
@@ -336,6 +366,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;
     view.minerals = telemetry.minerals;
+    view.task = telemetry.task;
     view.pendingCommands.clear();
     view.telemetry = telemetry;
     view.telemetryInTransit.clear();
@@ -379,6 +410,29 @@ bool submit_fleet_route_command(
     return true;
 }
 
+bool submit_fleet_task_command(
+    GameState& state,
+    PlayerId player,
+    FleetId fleetId,
+    FleetTask task)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+        return candidate.id == fleetId && candidate.owner == player;
+    });
+    if (fleet == state.fleets.end()) return false;
+
+    const auto delay = communication_delay_turns(state, player, fleet->position);
+    if (delay == 0) return apply_task_program(state, *fleet, task);
+
+    fleet->pendingCommands.push_back(PendingFleetCommand{
+        state.turn,
+        state.turn + delay,
+        {},
+        task,
+    });
+    return true;
+}
+
 void deliver_due_fleet_commands(GameState& state)
 {
     for (auto& fleet : state.fleets) {
@@ -390,7 +444,8 @@ void deliver_due_fleet_commands(GameState& state)
 
         for (const auto& pending : fleet.pendingCommands) {
             if (pending.deliveryTurn > state.turn) break;
-            apply_route_program(state, fleet, pending.program);
+            if (pending.task) apply_task_program(state, fleet, *pending.task);
+            else apply_route_program(state, fleet, pending.program);
         }
         std::erase_if(fleet.pendingCommands, [&](const PendingFleetCommand& pending) {
             return pending.deliveryTurn <= state.turn;

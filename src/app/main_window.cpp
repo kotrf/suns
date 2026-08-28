@@ -854,6 +854,12 @@ void MainWindow::updateControls()
     if (fleet) {
         const auto* design = fleet_design(state_, *fleet);
         QString status = "Stationary";
+        if (fleet->task == FleetTask::RemoteMining) status = "Remote Mining assigned";
+        else if (std::any_of(fleet->pendingCommands.begin(), fleet->pendingCommands.end(), [](const PendingFleetCommand& command) {
+                     return command.task == FleetTask::RemoteMining;
+                 })) {
+            status = "Remote Mining command in flight";
+        }
         if (fleet->destination) {
             const auto* destinationStar = findStarAtPosition(state_, *fleet->destination);
             status = QString("In transit to %1 — Warp %2, %3 remaining")
