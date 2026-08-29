@@ -361,32 +361,68 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
     switch (action.kind) {
     case FleetArrivalActionKind::None:
         return false;
-    case FleetArrivalActionKind::LoadColonistsToCapacity: {
-        auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony) return false;
-
+    case FleetArrivalActionKind::LoadAllAvailable: {
         const auto capacity = fleet_cargo_capacity(state, fleet);
-        const auto mineralLoad = mineral_cargo_mass(fleet.minerals);
-        const auto freeForColonists = std::max(0.0, capacity - mineralLoad);
-        const auto capacityColonists = static_cast<std::uint64_t>(
-            std::floor(freeForColonists * kColonistsPerCargoUnit + 0.000001));
-        if (fleet.colonists >= capacityColonists) return false;
+        const auto freeSpace = std::max(0.0, capacity - fleet_cargo_used(state, fleet));
+        if (action.cargo == FleetCargoKind::Colonists) {
+            auto* colony = friendly_colony_at_fleet(state, fleet);
+            if (!colony) return false;
+            const auto reserve = std::max<std::uint64_t>(1, action.reservePopulation);
+            if (colony->population <= reserve) return false;
+            const auto available = colony->population - reserve;
+            const auto capacityColonists = static_cast<std::uint64_t>(
+                std::floor(freeSpace * kColonistsPerCargoUnit + 0.000001));
+            const auto load = std::min(available, capacityColonists);
+            colony->population -= load;
+            fleet.colonists += load;
+            return false;
+        }
 
-        const auto reserve = std::max<std::uint64_t>(1, action.reservePopulation);
-        if (colony->population <= reserve) return false;
-
-        const auto available = colony->population - reserve;
-        const auto freeSpace = capacityColonists - fleet.colonists;
-        const auto load = std::min(available, freeSpace);
-        colony->population -= load;
-        fleet.colonists += load;
+        auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+            return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
+        });
+        if (surface == state.planets.end()) return false;
+        double* source{};
+        double* destination{};
+        switch (action.cargo) {
+        case FleetCargoKind::Colonists: break;
+        case FleetCargoKind::Ironium: source = &surface->minerals.ironium; destination = &fleet.minerals.ironium; break;
+        case FleetCargoKind::Boranium: source = &surface->minerals.boranium; destination = &fleet.minerals.boranium; break;
+        case FleetCargoKind::Germanium: source = &surface->minerals.germanium; destination = &fleet.minerals.germanium; break;
+        }
+        if (!source || !destination) return false;
+        const auto load = std::min(*source, freeSpace);
+        *source -= load;
+        *destination += load;
         return false;
     }
-    case FleetArrivalActionKind::UnloadAllColonists: {
-        auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony) return false;
-        colony->population += fleet.colonists;
-        fleet.colonists = 0;
+    case FleetArrivalActionKind::UnloadAll: {
+        if (action.cargo == FleetCargoKind::Colonists) {
+            auto* colony = friendly_colony_at_fleet(state, fleet);
+            if (!colony) return false;
+            colony->population += fleet.colonists;
+            fleet.colonists = 0;
+            return false;
+        }
+        auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+            return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
+        });
+        if (surface == state.planets.end()) return false;
+        switch (action.cargo) {
+        case FleetCargoKind::Colonists: break;
+        case FleetCargoKind::Ironium:
+            surface->minerals.ironium += fleet.minerals.ironium;
+            fleet.minerals.ironium = 0.0;
+            break;
+        case FleetCargoKind::Boranium:
+            surface->minerals.boranium += fleet.minerals.boranium;
+            fleet.minerals.boranium = 0.0;
+            break;
+        case FleetCargoKind::Germanium:
+            surface->minerals.germanium += fleet.minerals.germanium;
+            fleet.minerals.germanium = 0.0;
+            break;
+        }
         return false;
     }
     case FleetArrivalActionKind::Refuel: {
@@ -427,6 +463,8 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
         if (!fleet_warp_valid(state, fleet, waypoint.warp)) {
             fleet.waypointQueue.clear();
             fleet.arrivalAction.reset();
+            fleet.repeatOrders = false;
+            fleet.routeTemplate.clear();
             return;
         }
 
@@ -495,6 +533,14 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     }
 
     activate_next_waypoint(state, fleet);
+    if (!fleet.destination && fleet.waypointQueue.empty() && fleet.repeatOrders) {
+        fleet.waypointQueue = fleet.routeTemplate;
+        activate_next_waypoint(state, fleet);
+        if (!fleet.destination) {
+            fleet.repeatOrders = false;
+            fleet.routeTemplate.clear();
+        }
+    }
     queue_fleet_movement_report(
         state,
         fleet,
@@ -605,7 +651,8 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.destination,
                             concreteOrder.warp,
                             concreteOrder.arrivalAction,
-                            concreteOrder.queuedWaypoints);
+                            concreteOrder.queuedWaypoints,
+                            concreteOrder.repeatOrders);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

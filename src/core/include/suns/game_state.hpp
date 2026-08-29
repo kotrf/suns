@@ -255,16 +255,24 @@ enum class FleetTask {
 
 enum class FleetArrivalActionKind {
     None,
-    LoadColonistsToCapacity,
-    UnloadAllColonists,
+    LoadAllAvailable,
+    UnloadAll,
     Refuel,
     Colonize,
     RemoteMining,
 };
 
+enum class FleetCargoKind {
+    Colonists,
+    Ironium,
+    Boranium,
+    Germanium,
+};
+
 struct FleetArrivalAction {
     FleetArrivalActionKind kind{FleetArrivalActionKind::None};
     std::uint64_t reservePopulation{1};
+    FleetCargoKind cargo{FleetCargoKind::Colonists};
 };
 
 struct FleetWaypoint {
@@ -279,6 +287,7 @@ struct FleetRouteProgram {
     FleetArrivalAction arrivalAction{};
     std::vector<FleetWaypoint> queuedWaypoints;
     bool clearRoute{};
+    bool repeatOrders{};
 };
 
 struct FleetTelemetry {
@@ -292,6 +301,8 @@ struct FleetTelemetry {
     std::vector<FleetWaypoint> waypointQueue;
     MineralCargo minerals;
     FleetTask task{FleetTask::None};
+    bool repeatOrders{};
+    std::vector<FleetWaypoint> routeTemplate;
 };
 
 struct PendingFleetCommand {
@@ -328,6 +339,8 @@ struct Fleet {
     std::vector<PendingFleetTelemetry> telemetryInTransit;
     bool fuelStalled{};
     FleetTask task{FleetTask::None};
+    bool repeatOrders{};
+    std::vector<FleetWaypoint> routeTemplate;
 };
 
 struct GameState {

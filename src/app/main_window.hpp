@@ -36,10 +36,12 @@ public:
     [[nodiscard]] FleetId selectedFleetForRouteProgram() const;
     [[nodiscard]] std::uint8_t selectedFleetMaxWarpForRouteProgram() const;
     [[nodiscard]] std::uint8_t selectedFleetSuggestedWarpForRouteProgram() const;
+    [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
+    bool setSelectedFleetRepeatOrdersForRouteProgram(bool enabled);
     bool clearSelectedFleetRouteProgram();
 
     // Dockside cargo editor entrypoint. Implemented separately from the map UI

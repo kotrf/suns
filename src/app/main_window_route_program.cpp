@@ -45,14 +45,26 @@ QString waypointName(const GameState& state, Position position)
 
 QString actionName(const FleetArrivalAction& action)
 {
+    const auto cargoName = [&] {
+        switch (action.cargo) {
+        case FleetCargoKind::Colonists: return QString("colonists");
+        case FleetCargoKind::Ironium: return QString("Ironium");
+        case FleetCargoKind::Boranium: return QString("Boranium");
+        case FleetCargoKind::Germanium: return QString("Germanium");
+        }
+        return QString("cargo");
+    };
     switch (action.kind) {
     case FleetArrivalActionKind::None:
         return "no action";
-    case FleetArrivalActionKind::LoadColonistsToCapacity:
-        return QString("Load All, leave %1 — dynamic")
-            .arg(static_cast<qulonglong>(action.reservePopulation));
-    case FleetArrivalActionKind::UnloadAllColonists:
-        return "Unload All — dynamic";
+    case FleetArrivalActionKind::LoadAllAvailable:
+        return action.cargo == FleetCargoKind::Colonists
+            ? QString("Load all %1, leave %2 — dynamic")
+                  .arg(cargoName())
+                  .arg(static_cast<qulonglong>(action.reservePopulation))
+            : QString("Load all available %1 — dynamic").arg(cargoName());
+    case FleetArrivalActionKind::UnloadAll:
+        return QString("Unload all %1 — dynamic").arg(cargoName());
     case FleetArrivalActionKind::Refuel:
         return "Refuel on arrival";
     case FleetArrivalActionKind::Colonize:
@@ -90,6 +102,7 @@ std::optional<MoveFleetOrder> effectiveRoute(const GameState&, const PlayerOrder
         fleet.warp,
         fleet.arrivalAction.value_or(FleetArrivalAction{}),
         fleet.waypointQueue,
+        fleet.repeatOrders,
     };
 }
 
@@ -107,10 +120,11 @@ QString routeDescription(const GameState& state, const Fleet& fleet, const MoveF
     }
 
     const auto legs = static_cast<qulonglong>(1 + route.queuedWaypoints.size());
-    return QString("Program %1 — %2 leg%3, next %4 at W%5")
+    return QString("Program %1 — %2 leg%3%4, next %5 at W%6")
         .arg(QString::fromStdString(fleet.name))
         .arg(legs)
         .arg(legs == 1 ? "" : "s")
+        .arg(route.repeatOrders ? ", repeating" : "")
         .arg(waypointName(state, route.destination))
         .arg(route.warp);
 }
@@ -188,8 +202,11 @@ QString routeForecast(
         const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
             + after->waypointQueue.size();
         const auto expectedRemaining = legs.size() - legIndex - 1;
+        const auto expectedAfterRepeatRestart = route.repeatOrders && legIndex + 1 == legs.size()
+            ? after->routeTemplate.size()
+            : expectedRemaining;
         const bool arrived = same_position(after->position, leg.destination)
-            && remainingLegs == expectedRemaining;
+            && remainingLegs == expectedAfterRepeatRestart;
 
         if (arrived) {
             const auto navigationCertainty = dependsOnDynamicResult ? "projected navigation" : "exact navigation";
@@ -197,13 +214,21 @@ QString routeForecast(
             switch (leg.arrivalAction.kind) {
             case FleetArrivalActionKind::None:
                 break;
-            case FleetArrivalActionKind::LoadColonistsToCapacity:
-                outcome = QString("; projected Load All result: %1 aboard")
-                              .arg(static_cast<qulonglong>(after->colonists));
+            case FleetArrivalActionKind::LoadAllAvailable:
+                if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
+                    outcome = QString("; projected colonists aboard: %1")
+                                  .arg(static_cast<qulonglong>(after->colonists));
+                } else {
+                    const auto amount = leg.arrivalAction.cargo == FleetCargoKind::Ironium
+                        ? after->minerals.ironium
+                        : leg.arrivalAction.cargo == FleetCargoKind::Boranium
+                            ? after->minerals.boranium
+                            : after->minerals.germanium;
+                    outcome = QString("; projected mineral cargo aboard: %1").arg(amount, 0, 'f', 1);
+                }
                 break;
-            case FleetArrivalActionKind::UnloadAllColonists:
-                outcome = QString("; projected cargo after unload: %1 colonists")
-                              .arg(static_cast<qulonglong>(after->colonists));
+            case FleetArrivalActionKind::UnloadAll:
+                outcome = "; selected cargo unloaded to the planetary surface";
                 break;
             case FleetArrivalActionKind::Refuel:
                 outcome = QString("; projected fuel after refuel: %1")
@@ -229,7 +254,7 @@ QString routeForecast(
                          .arg(navigationCertainty)
                          .arg(outcome);
 
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadColonistsToCapacity) {
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable) {
                 dependsOnDynamicResult = true;
             }
             ++legIndex;
@@ -243,6 +268,9 @@ QString routeForecast(
                      .arg(kForecastHorizon);
     } else if (dependsOnDynamicResult) {
         lines << "<i>Projected legs after Load All depend on the colony state that actually exists on arrival.</i>";
+    }
+    if (route.repeatOrders && legIndex == legs.size()) {
+        lines << "<i>Repeat Orders restarts the complete program after the final arrival.</i>";
     }
 
     return lines.join("<br>");
@@ -284,6 +312,18 @@ std::uint8_t MainWindow::selectedFleetSuggestedWarpForRouteProgram() const
     return maxWarp == 0 ? 1 : std::clamp<std::uint8_t>(fleet->warp, 1, maxWarp);
 }
 
+bool MainWindow::selectedFleetRepeatOrdersForRouteProgram() const
+{
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
+    if (!fleet) return false;
+    const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
+    return route && !routeIsClearIntent(*fleet, *route) && route->repeatOrders;
+}
+
 QString MainWindow::selectedFleetRouteProgramSummary() const
 {
     const auto* authoritativeFleet = selectedFleet();
@@ -306,10 +346,11 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     }
 
     QStringList lines;
-    lines << QString("<b>%1 route — %2 leg%3</b>")
+    lines << QString("<b>%1 route — %2 leg%3%4</b>")
                  .arg(QString::fromStdString(fleet->name))
                  .arg(static_cast<qulonglong>(1 + route->queuedWaypoints.size()))
-                 .arg(route->queuedWaypoints.empty() ? "" : "s");
+                 .arg(route->queuedWaypoints.empty() ? "" : "s")
+                 .arg(route->repeatOrders ? " — Repeat Orders" : "");
 
     lines << QString("1. %1 — W%2 — %3 <b>[active]</b>")
                  .arg(waypointName(state_, route->destination))
@@ -401,6 +442,12 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
             statusBar()->showMessage("Remote Mining is terminal; clear or replace that task before adding another waypoint", 3000);
             return false;
         }
+        if (existing->repeatOrders
+            && (arrivalAction.kind == FleetArrivalActionKind::Colonize
+                || arrivalAction.kind == FleetArrivalActionKind::RemoteMining)) {
+            statusBar()->showMessage("Disable Repeat Orders before adding Colonize or Remote Mining", 3000);
+            return false;
+        }
     }
 
     if (auto* move = pendingMove(pendingOrders_, fleet->id)) {
@@ -432,6 +479,7 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
             fleet->warp,
             fleet->arrivalAction.value_or(FleetArrivalAction{}),
             fleet->waypointQueue,
+            fleet->repeatOrders,
         };
         route.queuedWaypoints.push_back({star->position, warp, arrivalAction});
         appendPendingOrder(route, routeDescription(state_, *fleet, route));
@@ -440,6 +488,62 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
 
     MoveFleetOrder route{fleet->id, star->position, warp, arrivalAction, {}};
     appendPendingOrder(route, routeDescription(state_, *fleet, route));
+    return true;
+}
+
+bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
+{
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
+    if (!fleet) return false;
+
+    auto route = effectiveRoute(state_, pendingOrders_, *fleet);
+    if (!route || routeIsClearIntent(*fleet, *route)) {
+        statusBar()->showMessage("Add at least two route points before enabling Repeat Orders", 3000);
+        return false;
+    }
+    if (enabled) {
+        if (route->queuedWaypoints.empty()) {
+            statusBar()->showMessage("Repeat Orders requires at least two route points", 3000);
+            return false;
+        }
+        const auto incompatible = [](const FleetArrivalAction& action) {
+            return action.kind == FleetArrivalActionKind::Colonize
+                || action.kind == FleetArrivalActionKind::RemoteMining;
+        };
+        if (incompatible(route->arrivalAction)
+            || std::any_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),
+                [&](const FleetWaypoint& waypoint) { return incompatible(waypoint.arrivalAction); })) {
+            statusBar()->showMessage("Colonize and Remote Mining cannot be repeated", 3000);
+            return false;
+        }
+        if (std::none_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),
+                [&](const FleetWaypoint& waypoint) {
+                    return !same_position(route->destination, waypoint.destination);
+                })) {
+            statusBar()->showMessage("Repeat Orders requires two different destinations", 3000);
+            return false;
+        }
+    }
+
+    route->repeatOrders = enabled;
+    if (auto* pending = pendingMove(pendingOrders_, fleet->id)) {
+        *pending = *route;
+        for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
+            if (const auto* candidate = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
+                candidate && candidate->fleet == fleet->id) {
+                pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, *route);
+                break;
+            }
+        }
+        rebuildScene();
+    } else {
+        appendPendingOrder(*route, routeDescription(state_, *fleet, *route));
+    }
+    statusBar()->showMessage(enabled ? "Repeat Orders enabled" : "Repeat Orders disabled");
     return true;
 }
 

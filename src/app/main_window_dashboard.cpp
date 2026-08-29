@@ -79,10 +79,19 @@ QString componentLine(const ShipDesign* design)
 
 QString arrivalName(const FleetArrivalAction& action)
 {
+    const auto cargo = [&] {
+        switch (action.cargo) {
+        case FleetCargoKind::Colonists: return QString("colonists");
+        case FleetCargoKind::Ironium: return QString("Ironium");
+        case FleetCargoKind::Boranium: return QString("Boranium");
+        case FleetCargoKind::Germanium: return QString("Germanium");
+        }
+        return QString("cargo");
+    };
     switch (action.kind) {
     case FleetArrivalActionKind::None: return "none";
-    case FleetArrivalActionKind::LoadColonistsToCapacity: return "load colonists";
-    case FleetArrivalActionKind::UnloadAllColonists: return "unload colonists";
+    case FleetArrivalActionKind::LoadAllAvailable: return QString("load all %1").arg(cargo());
+    case FleetArrivalActionKind::UnloadAll: return QString("unload all %1").arg(cargo());
     case FleetArrivalActionKind::Refuel: return "refuel";
     case FleetArrivalActionKind::Colonize: return "colonize";
     case FleetArrivalActionKind::RemoteMining: return "remote mining";

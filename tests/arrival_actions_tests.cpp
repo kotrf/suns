@@ -46,7 +46,7 @@ void verify_dynamic_load_uses_arrival_population()
         2,
         state.stars[1].position,
         8,
-        {suns::FleetArrivalActionKind::LoadColonistsToCapacity, 100},
+        {suns::FleetArrivalActionKind::LoadAllAvailable, 100},
     });
 
     auto turn2 = processor.process(state, {route});
@@ -89,7 +89,7 @@ void verify_unload_and_refuel_actions()
     state.fleets.push_back({
         2, 1, "Transport", suns::FleetRole::ColonyShip, suns::kColonyShipDesignId,
         state.stars[1].position, state.stars[1].position, 8, 10.0, 250,
-        suns::FleetArrivalAction{suns::FleetArrivalActionKind::UnloadAllColonists, 1},
+        suns::FleetArrivalAction{suns::FleetArrivalActionKind::UnloadAll, 1},
     });
 
     auto unloaded = processor.process(state, {});

@@ -156,13 +156,26 @@ bool hasPendingDesignName(const PlayerOrders& pending, const std::string& name)
 
 QString arrivalActionSummary(const FleetArrivalAction& action)
 {
+    const auto cargo = [&] {
+        switch (action.cargo) {
+        case FleetCargoKind::Colonists: return QString("colonists");
+        case FleetCargoKind::Ironium: return QString("Ironium");
+        case FleetCargoKind::Boranium: return QString("Boranium");
+        case FleetCargoKind::Germanium: return QString("Germanium");
+        }
+        return QString("cargo");
+    };
     switch (action.kind) {
     case FleetArrivalActionKind::None:
         return "none";
-    case FleetArrivalActionKind::LoadColonistsToCapacity:
-        return QString("load to capacity, leave %1").arg(static_cast<qulonglong>(action.reservePopulation));
-    case FleetArrivalActionKind::UnloadAllColonists:
-        return "unload all colonists";
+    case FleetArrivalActionKind::LoadAllAvailable:
+        return action.cargo == FleetCargoKind::Colonists
+            ? QString("load all %1, leave %2")
+                  .arg(cargo())
+                  .arg(static_cast<qulonglong>(action.reservePopulation))
+            : QString("load all available %1").arg(cargo());
+    case FleetArrivalActionKind::UnloadAll:
+        return QString("unload all %1").arg(cargo());
     case FleetArrivalActionKind::Refuel:
         return "refuel";
     case FleetArrivalActionKind::Colonize:
@@ -1062,7 +1075,7 @@ void MainWindow::queueFleetLoadAll()
 
     const auto eta = travel_turns(fleet->position, star->position, warp_distance(warp));
     const FleetArrivalAction action{
-        FleetArrivalActionKind::LoadColonistsToCapacity,
+        FleetArrivalActionKind::LoadAllAvailable,
         static_cast<std::uint64_t>(arrivalReserveSpin_->value()),
     };
 

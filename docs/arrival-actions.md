@@ -6,7 +6,7 @@ This is intentionally different from an immediate logistics order. `SetFleetColo
 
 ## Load colonists to capacity
 
-`LoadColonistsToCapacity` computes the loaded amount at arrival time from:
+`LoadAllAvailable` with cargo type `Colonists` computes the loaded amount at arrival time from:
 
 - the fleet's free cargo capacity;
 - the colony population at that future turn;
@@ -34,7 +34,7 @@ The action is attached to the active course and persists while the ship is in tr
 
 ## Current Qt exposure
 
-The first UI exposes `Plot course + Load All`, with a `Leave on Load All` reserve field. The core also models `UnloadAllColonists` and `Refuel` so a future waypoint editor can expose them without changing the simulation representation.
+The direct-course UI keeps `Plot course + Load All` as a colonist shortcut with a `Leave on Load All` reserve field. The route-program dock exposes `Load All Available` and `Unload All` for Colonists, Ironium, Boranium and Germanium, plus `Refuel`.
 
 This is the first step toward persistent multi-waypoint fleet programs such as:
 

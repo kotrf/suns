@@ -100,11 +100,36 @@ int main()
     dynamic.fleets.front().minerals = {20.0, 10.0, 10.0}; // 40/50 hold used.
     dynamic.fleets.front().destination = suns::Position{0.0, 0.0};
     dynamic.fleets.front().arrivalAction = suns::FleetArrivalAction{
-        suns::FleetArrivalActionKind::LoadColonistsToCapacity,
+        suns::FleetArrivalActionKind::LoadAllAvailable,
         1,
     };
     const auto dynamicallyLoaded = processor.process(dynamic, {});
     assert(fleet(dynamicallyLoaded, 2).colonists == 999); // keep one colonist at the source colony.
+
+    // Waypoint mineral policies use the real surface stockpile at arrival and
+    // fill only the space left in the shared hold.
+    auto mineralPolicy = state;
+    mineralPolicy.fleets.front().colonists = 1000; // 10/50 cargo units used.
+    mineralPolicy.fleets.front().destination = suns::Position{0.0, 0.0};
+    mineralPolicy.fleets.front().arrivalAction = suns::FleetArrivalAction{
+        suns::FleetArrivalActionKind::LoadAllAvailable,
+        1,
+        suns::FleetCargoKind::Ironium,
+    };
+    const auto policyLoaded = processor.process(mineralPolicy, {});
+    assert(close(fleet(policyLoaded, 2).minerals.ironium, 40.0));
+
+    auto mineralUnload = policyLoaded;
+    const auto surfaceBeforeUnload = planet(mineralUnload, 1).minerals.ironium;
+    mineralUnload.fleets.front().destination = suns::Position{0.0, 0.0};
+    mineralUnload.fleets.front().arrivalAction = suns::FleetArrivalAction{
+        suns::FleetArrivalActionKind::UnloadAll,
+        1,
+        suns::FleetCargoKind::Ironium,
+    };
+    const auto policyUnloaded = processor.process(mineralUnload, {});
+    assert(close(fleet(policyUnloaded, 2).minerals.ironium, 0.0));
+    assert(planet(policyUnloaded, 1).minerals.ironium > surfaceBeforeUnload + 39.9);
 
     // Colonization deposits carried minerals on the new world before the ship is consumed.
     auto colonization = suns::make_demo_game();
