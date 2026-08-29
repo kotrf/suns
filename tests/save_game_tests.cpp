@@ -79,14 +79,24 @@ void round_trip_preserves_communications_and_planning()
          std::nullopt, {}, {7.0, 8.0, 9.0}},
     });
     scout.telemetry.task = FleetTask::RemoteMining;
+    scout.telemetry.repeatOrders = true;
+    scout.telemetry.routeTemplate = {
+        {{600.0, 20.0}, 8, {}},
+        {{300.0, 10.0}, 8, {}},
+    };
     scout.fuelStalled = true;
     scout.task = FleetTask::RemoteMining;
+    scout.repeatOrders = true;
+    scout.routeTemplate = scout.telemetry.routeTemplate;
 
     MoveFleetOrder move;
     move.fleet = scout.id;
     move.destination = {200.0, -100.0};
     move.warp = 8;
-    move.arrivalAction.kind = FleetArrivalActionKind::RemoteMining;
+    move.arrivalAction.kind = FleetArrivalActionKind::LoadAllAvailable;
+    move.arrivalAction.cargo = FleetCargoKind::Germanium;
+    move.queuedWaypoints.push_back({{300.0, -100.0}, 7, {FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::Germanium}});
+    move.repeatOrders = true;
     original.pendingOrders = {1, {
         move,
         QueueProductionOrder{1, ProductionKind::Mine},
@@ -158,15 +168,22 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetry.colonists == 900);
     assert(fleet.telemetry.minerals.germanium == 6.0);
     assert(fleet.telemetry.task == FleetTask::RemoteMining);
+    assert(fleet.telemetry.repeatOrders);
+    assert(fleet.telemetry.routeTemplate.size() == 2);
     assert(fleet.telemetryInTransit.size() == 1);
     assert(fleet.telemetryInTransit.front().deliveryTurn == 79);
     assert(fleet.telemetryInTransit.front().telemetry.observedTurn == 76);
     assert(fleet.fuelStalled);
     assert(fleet.task == FleetTask::RemoteMining);
+    assert(fleet.repeatOrders);
+    assert(fleet.routeTemplate.size() == 2);
 
     assert(loaded.pendingOrders.orders.size() == 5);
     const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
-    assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::RemoteMining);
+    assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
+    assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
+    assert(savedMove->repeatOrders);
+    assert(savedMove->queuedWaypoints.size() == 1);
     const auto* mine = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[1]);
     assert(mine && mine->kind == ProductionKind::Mine);
     const auto* plan = std::get_if<SetResearchPlanOrder>(&loaded.pendingOrders.orders[2]);

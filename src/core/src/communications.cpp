@@ -122,6 +122,24 @@ bool route_tasks_valid(const FleetRouteProgram& program)
             return false;
         }
     }
+    if (program.repeatOrders) {
+        if (program.queuedWaypoints.empty()) return false;
+        const auto incompatible = [](const FleetArrivalAction& action) {
+            return action.kind == FleetArrivalActionKind::Colonize
+                || action.kind == FleetArrivalActionKind::RemoteMining;
+        };
+        if (incompatible(program.arrivalAction)
+            || std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
+                [&](const FleetWaypoint& waypoint) { return incompatible(waypoint.arrivalAction); })) {
+            return false;
+        }
+        const auto distinctDestination = std::any_of(
+            program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
+            [&](const FleetWaypoint& waypoint) {
+                return !same_position(program.destination, waypoint.destination);
+            });
+        if (!distinctDestination) return false;
+    }
     return true;
 }
 
@@ -134,6 +152,8 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
         if (!fleet_warp_valid(state, fleet, waypoint.warp)) {
             fleet.waypointQueue.clear();
             fleet.arrivalAction.reset();
+            fleet.repeatOrders = false;
+            fleet.routeTemplate.clear();
             return;
         }
 
@@ -168,6 +188,8 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         fleet.arrivalAction.reset();
         fleet.waypointQueue.clear();
         fleet.task = FleetTask::None;
+        fleet.repeatOrders = false;
+        fleet.routeTemplate.clear();
         return true;
     }
 
@@ -176,6 +198,14 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
     fleet.task = FleetTask::None;
     fleet.arrivalAction = active_arrival_action(program.arrivalAction);
     fleet.waypointQueue = program.queuedWaypoints;
+    fleet.repeatOrders = program.repeatOrders;
+    fleet.routeTemplate.clear();
+    if (program.repeatOrders) {
+        fleet.routeTemplate.reserve(1 + program.queuedWaypoints.size());
+        fleet.routeTemplate.push_back({program.destination, requestedWarp, program.arrivalAction});
+        fleet.routeTemplate.insert(
+            fleet.routeTemplate.end(), program.queuedWaypoints.begin(), program.queuedWaypoints.end());
+    }
 
     if (same_position(fleet.position, program.destination)) {
         if (fleet.arrivalAction) {
@@ -225,6 +255,8 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.waypointQueue = fleet.waypointQueue;
     result.minerals = fleet.minerals;
     result.task = fleet.task;
+    result.repeatOrders = fleet.repeatOrders;
+    result.routeTemplate = fleet.routeTemplate;
     return result;
 }
 
@@ -232,8 +264,11 @@ void activate_next_predicted_waypoint(
     Position position,
     std::optional<Position>& destination,
     std::uint8_t& warp,
-    std::vector<FleetWaypoint>& queue)
+    std::vector<FleetWaypoint>& queue,
+    bool repeatOrders,
+    const std::vector<FleetWaypoint>& routeTemplate)
 {
+    if (!destination && queue.empty() && repeatOrders) queue = routeTemplate;
     while (!destination && !queue.empty()) {
         const auto waypoint = queue.front();
         queue.erase(queue.begin());
@@ -255,7 +290,8 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 
     for (std::uint64_t turn = 0; turn < age; ++turn) {
         if (!destination) {
-            activate_next_predicted_waypoint(position, destination, warp, queue);
+            activate_next_predicted_waypoint(
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate);
             if (!destination) break;
         }
 
@@ -264,14 +300,16 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
         if (remaining <= epsilon || maximumDistance <= epsilon) {
             position = *destination;
             destination.reset();
-            activate_next_predicted_waypoint(position, destination, warp, queue);
+            activate_next_predicted_waypoint(
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate);
             continue;
         }
 
         if (maximumDistance >= remaining - epsilon) {
             position = *destination;
             destination.reset();
-            activate_next_predicted_waypoint(position, destination, warp, queue);
+            activate_next_predicted_waypoint(
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate);
         } else {
             const auto fraction = maximumDistance / remaining;
             position.x += (destination->x - position.x) * fraction;
@@ -379,6 +417,8 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.waypointQueue = telemetry.waypointQueue;
     view.minerals = telemetry.minerals;
     view.task = telemetry.task;
+    view.repeatOrders = telemetry.repeatOrders;
+    view.routeTemplate = telemetry.routeTemplate;
     view.pendingCommands.clear();
     view.telemetry = telemetry;
     view.telemetryInTransit.clear();
@@ -392,14 +432,15 @@ bool submit_fleet_route_command(
     Position destination,
     std::uint8_t warp,
     FleetArrivalAction arrivalAction,
-    const std::vector<FleetWaypoint>& queuedWaypoints)
+    const std::vector<FleetWaypoint>& queuedWaypoints,
+    bool repeatOrders)
 {
     const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
         return candidate.id == fleetId && candidate.owner == player;
     });
     if (fleet == state.fleets.end()) return false;
 
-    FleetRouteProgram program{destination, warp, arrivalAction, queuedWaypoints};
+    FleetRouteProgram program{destination, warp, arrivalAction, queuedWaypoints, false, repeatOrders};
     if (!route_tasks_valid(program)) return false;
     const auto visiblePosition = projected_fleet_position(state, *fleet);
     program.clearRoute = same_position(destination, visiblePosition)

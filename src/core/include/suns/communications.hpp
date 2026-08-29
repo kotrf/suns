@@ -29,7 +29,8 @@ namespace suns {
     Position destination,
     std::uint8_t warp,
     FleetArrivalAction arrivalAction,
-    const std::vector<FleetWaypoint>& queuedWaypoints);
+    const std::vector<FleetWaypoint>& queuedWaypoints,
+    bool repeatOrders = false);
 
 // Queue a stationary fleet task for the same physical delivery path as route
 // programmes. Starting and stopping work therefore respect communication delay.

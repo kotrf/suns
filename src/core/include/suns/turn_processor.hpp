@@ -16,6 +16,7 @@ struct MoveFleetOrder {
     std::uint8_t warp{};
     FleetArrivalAction arrivalAction{};
     std::vector<FleetWaypoint> queuedWaypoints;
+    bool repeatOrders{};
 };
 
 struct QueueProductionOrder {

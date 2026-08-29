@@ -30,17 +30,20 @@ The last rule deliberately makes arrival a clean phase boundary. Loading, unload
 
 Most current tasks are one-shot. `Remote Mining` is persistent and terminal: it can appear only on the final waypoint, becomes active on arrival, starts extraction on the following turn and remains active until a replacement route or `No Task` command is delivered. Clearing a stationary fleet's route is the current `No Task` operation.
 
+`Repeat Orders` is a flag on the complete program. After its final arrival, the fleet restores the original waypoint list and promotes its first leg; movement still waits until the following turn. A repeating program requires at least two distinct destinations. `Colonize` and `Remote Mining` are rejected in repeating programs because they consume the ship or intentionally remain active until cancelled.
+
 ## Dynamic logistics
 
-Arrival actions remain policies rather than precomputed amounts. A queued `LoadColonistsToCapacity` waypoint still evaluates available population and cargo space only when the ship actually reaches that colony.
+Arrival actions remain policies rather than precomputed amounts. `LoadAllAvailable` and `UnloadAll` select one cargo type: Colonists, Ironium, Boranium or Germanium. They evaluate the real population or planetary surface stockpile and the shared free cargo space only when the ship actually arrives.
 
 This means a program such as:
 
 ```text
 Earth
-  -> Alpha Centauri [Load to capacity, leave 1000]
-  -> Vega           [Unload all]
+  -> Alpha Centauri [Load all available Ironium]
+  -> Vega           [Unload all Ironium]
   -> Deneb          [Refuel]
+  -> repeat
 ```
 
 can be issued in advance without pretending that future colony populations are already known.
@@ -56,7 +59,5 @@ The first implementation keeps the active leg separate from the queued legs for 
 Possible later rules include:
 
 - continuing onto the next leg with unused same-turn travel distance;
-- `Repeat Orders` for transport loops;
 - conditional waypoints;
-- mineral-specific transport actions;
 - projected versus exact fuel/load forecasts across future dynamic legs.

@@ -3,6 +3,7 @@
 #include "main_window.hpp"
 
 #include <QColor>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFormLayout>
@@ -13,6 +14,7 @@
 #include <QPen>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QSignalBlocker>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -64,11 +66,13 @@ void drawRouteOverlay(MainWindow& window)
     }
 }
 
-FleetArrivalAction actionFromControls(QComboBox* actionCombo, QSpinBox* reserveSpin)
+FleetArrivalAction actionFromControls(
+    QComboBox* actionCombo, QComboBox* cargoCombo, QSpinBox* reserveSpin)
 {
     FleetArrivalAction action;
     action.kind = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
     action.reservePopulation = static_cast<std::uint64_t>(std::max(0, reserveSpin->value()));
+    action.cargo = static_cast<FleetCargoKind>(cargoCombo->currentData().toInt());
     return action;
 }
 
@@ -107,11 +111,17 @@ void attachRouteProgramDock(MainWindow& window)
     warpSpin->setRange(1, kMaxWarp);
     auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
-    actionCombo->addItem("Load colonists to capacity", static_cast<int>(FleetArrivalActionKind::LoadColonistsToCapacity));
-    actionCombo->addItem("Unload all colonists", static_cast<int>(FleetArrivalActionKind::UnloadAllColonists));
+    actionCombo->addItem("Load all available", static_cast<int>(FleetArrivalActionKind::LoadAllAvailable));
+    actionCombo->addItem("Unload all", static_cast<int>(FleetArrivalActionKind::UnloadAll));
     actionCombo->addItem("Refuel", static_cast<int>(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
     actionCombo->addItem("Remote Mining (persistent)", static_cast<int>(FleetArrivalActionKind::RemoteMining));
+    auto* cargoCombo = new QComboBox(waypointGroup);
+    cargoCombo->addItem("Colonists", static_cast<int>(FleetCargoKind::Colonists));
+    cargoCombo->addItem("Ironium", static_cast<int>(FleetCargoKind::Ironium));
+    cargoCombo->addItem("Boranium", static_cast<int>(FleetCargoKind::Boranium));
+    cargoCombo->addItem("Germanium", static_cast<int>(FleetCargoKind::Germanium));
+    cargoCombo->setEnabled(false);
     auto* reserveSpin = new QSpinBox(waypointGroup);
     reserveSpin->setRange(0, 2'000'000'000);
     reserveSpin->setValue(1000);
@@ -120,6 +130,7 @@ void attachRouteProgramDock(MainWindow& window)
     auto* form = new QFormLayout;
     form->addRow("Waypoint Warp", warpSpin);
     form->addRow("On arrival", actionCombo);
+    form->addRow("Cargo", cargoCombo);
     form->addRow("Leave on colony", reserveSpin);
     waypointLayout->addLayout(form);
 
@@ -128,13 +139,18 @@ void attachRouteProgramDock(MainWindow& window)
     waypointLayout->addWidget(appendButton);
     layout->addWidget(waypointGroup);
 
+    auto* repeatCheck = new QCheckBox("Repeat Orders", panel);
+    repeatCheck->setToolTip("Restart the complete route after its final waypoint");
+    layout->addWidget(repeatCheck);
+
     auto* clearButton = new QPushButton("Clear route / set No Task", panel);
     layout->addWidget(clearButton);
 
     auto* note = new QLabel(
         "Each leg keeps its own Warp and arrival action. Arrival ends movement for that turn; the next leg starts next turn. "
         "Remote Mining is a persistent terminal task: extraction starts on the following turn and continues until a new route or No Task command arrives. "
-        "Load is resolved from the real colony population on arrival. Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
+        "Load and unload are resolved from the real surface stockpile on arrival. Repeat Orders repeats the whole route; Colonize and Remote Mining cannot be repeated. "
+        "Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
         panel);
     note->setWordWrap(true);
     layout->addWidget(note);
@@ -143,16 +159,26 @@ void attachRouteProgramDock(MainWindow& window)
     dock->setWidget(panel);
     window.addDockWidget(Qt::RightDockWidgetArea, dock);
 
-    QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, [=](int) {
+    const auto updateCargoControls = [=] {
+        const auto action = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
+        const auto cargo = static_cast<FleetCargoKind>(cargoCombo->currentData().toInt());
+        const auto transfersCargo = action == FleetArrivalActionKind::LoadAllAvailable
+            || action == FleetArrivalActionKind::UnloadAll;
+        cargoCombo->setEnabled(transfersCargo);
         reserveSpin->setEnabled(
-            static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt())
-            == FleetArrivalActionKind::LoadColonistsToCapacity);
-    });
+            action == FleetArrivalActionKind::LoadAllAvailable && cargo == FleetCargoKind::Colonists);
+    };
+    QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
+    QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
 
-    QObject::connect(appendButton, &QPushButton::clicked, panel, [&window, warpSpin, actionCombo, reserveSpin] {
+    QObject::connect(appendButton, &QPushButton::clicked, panel, [&window, warpSpin, actionCombo, cargoCombo, reserveSpin] {
         window.appendSelectedStarWaypoint(
             static_cast<std::uint8_t>(warpSpin->value()),
-            actionFromControls(actionCombo, reserveSpin));
+            actionFromControls(actionCombo, cargoCombo, reserveSpin));
+    });
+
+    QObject::connect(repeatCheck, &QCheckBox::clicked, panel, [&window](bool enabled) {
+        window.setSelectedFleetRepeatOrdersForRouteProgram(enabled);
     });
 
     QObject::connect(clearButton, &QPushButton::clicked, panel, [&window] {
@@ -162,7 +188,7 @@ void attachRouteProgramDock(MainWindow& window)
     auto* timer = new QTimer(dock);
     timer->setInterval(180);
     QObject::connect(timer, &QTimer::timeout, dock,
-        [&window, routeLabel, warpSpin, appendButton, clearButton, lastFleet = FleetId{}]() mutable {
+        [&window, routeLabel, warpSpin, appendButton, clearButton, repeatCheck, lastFleet = FleetId{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
 
@@ -176,6 +202,11 @@ void attachRouteProgramDock(MainWindow& window)
             warpSpin->setEnabled(selectedFleet != 0 && maxWarp > 0);
             appendButton->setEnabled(selectedFleet != 0 && maxWarp > 0);
             clearButton->setEnabled(selectedFleet != 0);
+            repeatCheck->setEnabled(selectedFleet != 0);
+            {
+                const QSignalBlocker blocker(repeatCheck);
+                repeatCheck->setChecked(window.selectedFleetRepeatOrdersForRouteProgram());
+            }
             routeLabel->setText(window.selectedFleetRouteProgramSummary());
             drawRouteOverlay(window);
         });

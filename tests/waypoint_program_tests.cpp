@@ -137,6 +137,72 @@ void verify_invalid_future_warp_rejects_program()
     assert(unchanged->waypointQueue.empty());
 }
 
+void verify_repeat_orders_restarts_the_complete_program()
+{
+    suns::TurnProcessor processor;
+    auto state = suns::make_demo_game();
+    state.stars[1].position = {48.0, 0.0};
+
+    suns::MoveFleetOrder loop;
+    loop.fleet = 1;
+    loop.destination = state.stars[1].position;
+    loop.warp = 8;
+    loop.queuedWaypoints.push_back({state.stars[0].position, 8, {}});
+    loop.repeatOrders = true;
+    suns::PlayerOrders orders{1, {loop}};
+
+    const auto turn2 = processor.process(state, {orders});
+    const auto* atAlpha = fleet(turn2, 1);
+    assert(atAlpha != nullptr);
+    assert(suns::same_position(atAlpha->position, state.stars[1].position));
+    assert(atAlpha->destination.has_value());
+    assert(suns::same_position(*atAlpha->destination, state.stars[0].position));
+    assert(atAlpha->repeatOrders);
+    assert(atAlpha->routeTemplate.size() == 2);
+
+    const auto turn3 = processor.process(turn2, {});
+    const auto* restarted = fleet(turn3, 1);
+    assert(restarted != nullptr);
+    assert(suns::same_position(restarted->position, state.stars[0].position));
+    assert(restarted->destination.has_value());
+    assert(suns::same_position(*restarted->destination, state.stars[1].position));
+    assert(restarted->waypointQueue.size() == 1);
+
+    const auto turn4 = processor.process(turn3, {});
+    const auto* secondCycle = fleet(turn4, 1);
+    assert(secondCycle != nullptr);
+    assert(suns::same_position(secondCycle->position, state.stars[1].position));
+    assert(secondCycle->destination.has_value());
+    assert(suns::same_position(*secondCycle->destination, state.stars[0].position));
+}
+
+void verify_invalid_repeat_programs_are_rejected()
+{
+    suns::TurnProcessor processor;
+    auto state = suns::make_demo_game();
+
+    suns::MoveFleetOrder oneLeg;
+    oneLeg.fleet = 1;
+    oneLeg.destination = state.stars[1].position;
+    oneLeg.warp = 8;
+    oneLeg.repeatOrders = true;
+    const auto rejectedOneLeg = processor.process(state, {{1, {oneLeg}}});
+    assert(!fleet(rejectedOneLeg, 1)->destination.has_value());
+
+    suns::MoveFleetOrder persistentLoop;
+    persistentLoop.fleet = 1;
+    persistentLoop.destination = state.stars[1].position;
+    persistentLoop.warp = 8;
+    persistentLoop.queuedWaypoints.push_back({
+        state.stars[2].position,
+        8,
+        {suns::FleetArrivalActionKind::RemoteMining, 1},
+    });
+    persistentLoop.repeatOrders = true;
+    const auto rejectedPersistent = processor.process(state, {{1, {persistentLoop}}});
+    assert(!fleet(rejectedPersistent, 1)->destination.has_value());
+}
+
 } // namespace
 
 int main()
@@ -144,5 +210,7 @@ int main()
     verify_waypoints_advance_one_leg_per_turn();
     verify_replot_replaces_future_program();
     verify_invalid_future_warp_rejects_program();
+    verify_repeat_orders_restarts_the_complete_program();
+    verify_invalid_repeat_programs_are_rejected();
     return 0;
 }

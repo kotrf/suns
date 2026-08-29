@@ -25,6 +25,8 @@ All carried cargo contributes to fleet gross mass. The existing Warp fuel model 
 
 `SetFleetMineralCargoOrder` sets the desired mineral manifest for a fleet docked at a friendly colony. The turn processor transfers only the delta between colony stores and the fleet, rejects negative manifests, rejects unavailable minerals and rejects any target manifest that would overflow the shared hold.
 
+Waypoint programs add dynamic `LoadAllAvailable` and `UnloadAll` policies for each individual cargo type. Mineral policies transfer to or from the planet's surface stockpile, including an uncolonized world being worked by remote miners. Colonist policies require a friendly colony; loading retains the configured population reserve. The amount is resolved on every actual arrival, so the same policy is safe in a repeating transport loop.
+
 Colonist loading uses the same hold. In particular, the dynamic `Load All` arrival action fills only cargo capacity left after any minerals already aboard.
 
 ## Colonization
@@ -33,4 +35,4 @@ When a colony-capable fleet founds a new colony, its transported colonists becom
 
 ## Current scope
 
-Earth begins with a small placeholder stock of all three minerals so the logistics model can be exercised immediately. Mining rates, mineral depletion/concentrations, component mineral costs and mineral-specific waypoint actions belong to later economy layers. The important foundation is already shared: population and minerals now compete for one hold and one gross-mass/fuel calculation.
+Earth begins with a small placeholder stock of all three minerals so the logistics model can be exercised immediately. The important foundation is shared: population and minerals compete for one hold and one gross-mass/fuel calculation, while mined minerals remain on the planetary surface until a transport explicitly loads them.
