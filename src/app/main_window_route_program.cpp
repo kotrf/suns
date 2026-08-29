@@ -57,6 +57,8 @@ QString actionName(const FleetArrivalAction& action)
         return "Refuel on arrival";
     case FleetArrivalActionKind::Colonize:
         return "Colonize world — consumes ship";
+    case FleetArrivalActionKind::RemoteMining:
+        return "Remote Mining — persistent";
     }
     return "no action";
 }
@@ -210,6 +212,11 @@ QString routeForecast(
             case FleetArrivalActionKind::Colonize:
                 outcome = "; colonization could not be completed; fleet remains";
                 break;
+            case FleetArrivalActionKind::RemoteMining:
+                outcome = after->task == FleetTask::RemoteMining
+                    ? "; Remote Mining assigned; extraction begins next turn"
+                    : "; Remote Mining could not be assigned";
+                break;
             }
 
             lines << QString("%1. %2 — T+%3, W%4, fuel %5, colonists %6 — <b>%7</b>%8")
@@ -288,8 +295,14 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
 
     const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
     if (!route || routeIsClearIntent(*fleet, *route)) {
-        return QString("<b>%1 route:</b> none")
-            .arg(QString::fromStdString(fleet->name));
+        const auto task = fleet->task == FleetTask::RemoteMining ? "Remote Mining" : "No Task";
+        auto summary = QString("<b>%1 route:</b> none<br><b>Current task:</b> %2")
+                           .arg(QString::fromStdString(fleet->name))
+                           .arg(task);
+        if (route && routeIsClearIntent(*fleet, *route)) {
+            summary += "<br><i>Pending: clear route and set No Task when the command arrives.</i>";
+        }
+        return summary;
     }
 
     QStringList lines;
@@ -364,6 +377,28 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         }
         if (!planet || planet->owner != 0) {
             statusBar()->showMessage("Selected destination has no unowned world to colonize", 3000);
+            return false;
+        }
+    }
+    if (arrivalAction.kind == FleetArrivalActionKind::RemoteMining) {
+        const auto* design = fleet_design(state_, *fleet);
+        if (!design || !ship_design_can_remote_mine(*design)) {
+            statusBar()->showMessage("Remote Mining requires a Remote Miner hull with mining equipment", 3000);
+            return false;
+        }
+        const auto* planet = find_planet_at_star(state_, star->id);
+        if (!planet || planet->owner != 0) {
+            statusBar()->showMessage("Remote Mining requires an uncolonized destination world", 3000);
+            return false;
+        }
+    }
+
+    if (const auto existing = effectiveRoute(state_, pendingOrders_, *fleet)) {
+        const auto& finalAction = existing->queuedWaypoints.empty()
+            ? existing->arrivalAction
+            : existing->queuedWaypoints.back().arrivalAction;
+        if (finalAction.kind == FleetArrivalActionKind::RemoteMining) {
+            statusBar()->showMessage("Remote Mining is terminal; clear or replace that task before adding another waypoint", 3000);
             return false;
         }
     }

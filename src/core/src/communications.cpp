@@ -111,6 +111,20 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
         : std::optional<FleetArrivalAction>{action};
 }
 
+bool route_tasks_valid(const FleetRouteProgram& program)
+{
+    if (program.arrivalAction.kind == FleetArrivalActionKind::RemoteMining
+        && !program.queuedWaypoints.empty()) {
+        return false;
+    }
+    for (std::size_t index = 0; index + 1 < program.queuedWaypoints.size(); ++index) {
+        if (program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::RemoteMining) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void activate_next_waypoint(GameState& state, Fleet& fleet)
 {
     while (!fleet.destination && !fleet.waypointQueue.empty()) {
@@ -140,6 +154,7 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
 
 bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram& program)
 {
+    if (!route_tasks_valid(program)) return false;
     const auto requestedWarp = program.warp == 0 ? fleet.warp : program.warp;
     if (!fleet_warp_valid(state, fleet, requestedWarp)) return false;
     if (std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
@@ -152,6 +167,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         fleet.destination.reset();
         fleet.arrivalAction.reset();
         fleet.waypointQueue.clear();
+        fleet.task = FleetTask::None;
         return true;
     }
 
@@ -184,11 +200,7 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
 
     const auto* design = find_ship_design(state, fleet.design);
     if (!design || !ship_design_available_to_player(state, fleet.owner, *design)) return false;
-    const auto hasMiningModule = std::any_of(
-        design->components.begin(), design->components.end(), [](ShipComponentType component) {
-            return component_spec(component).remoteMiningUnits > 0.0;
-        });
-    if (!hasMiningModule) return false;
+    if (!ship_design_can_remote_mine(*design)) return false;
 
     const auto atUncolonizedPlanet = std::any_of(
         state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
@@ -388,6 +400,7 @@ bool submit_fleet_route_command(
     if (fleet == state.fleets.end()) return false;
 
     FleetRouteProgram program{destination, warp, arrivalAction, queuedWaypoints};
+    if (!route_tasks_valid(program)) return false;
     const auto visiblePosition = projected_fleet_position(state, *fleet);
     program.clearRoute = same_position(destination, visiblePosition)
         && arrivalAction.kind == FleetArrivalActionKind::None

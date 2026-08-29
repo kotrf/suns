@@ -152,13 +152,15 @@ ShipHullSpec hull_spec(ShipHullType type)
 {
     switch (type) {
     case ShipHullType::Scout:
-        return {type, "Scout Hull", 34.5, 2, 300.0, 0.0, 1, 2};
+        return {type, "Scout Hull", 34.5, 2, 300.0, 0.0, 1, 2, 0};
     case ShipHullType::LightTransport:
-        return {type, "Light Transport", 45.0, 2, 400.0, 5.0, 1, 3};
+        return {type, "Light Transport", 45.0, 2, 400.0, 5.0, 1, 3, 0};
     case ShipHullType::MediumTransport:
-        return {type, "Medium Transport", 70.0, 5, 500.0, 50.0, 1, 5};
+        return {type, "Medium Transport", 70.0, 5, 500.0, 50.0, 1, 5, 0};
+    case ShipHullType::RemoteMiner:
+        return {type, "Remote Miner", 120.0, 8, 500.0, 0.0, 1, 1, 2};
     }
-    return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0};
+    return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0};
 }
 
 ShipComponentSpec component_spec(ShipComponentType type)
@@ -219,7 +221,7 @@ ShipComponentSpec component_spec(ShipComponentType type)
         break;
     case ShipComponentType::RemoteMiningModule:
         spec.name = "Remote Mining Module";
-        spec.kind = ShipComponentKind::Special;
+        spec.kind = ShipComponentKind::Mining;
         spec.mass = 80.0;
         spec.buildCost = 6;
         spec.remoteMiningUnits = 1.0;
@@ -268,7 +270,19 @@ std::size_t ship_design_engine_slots_used(const ShipDesign& design)
 
 std::size_t ship_design_general_slots_used(const ShipDesign& design)
 {
-    return design.components.size() - ship_design_engine_slots_used(design);
+    return static_cast<std::size_t>(std::count_if(
+        design.components.begin(), design.components.end(), [](ShipComponentType component) {
+            const auto kind = component_spec(component).kind;
+            return kind != ShipComponentKind::Engine && kind != ShipComponentKind::Mining;
+        }));
+}
+
+std::size_t ship_design_mining_slots_used(const ShipDesign& design)
+{
+    return static_cast<std::size_t>(std::count_if(
+        design.components.begin(), design.components.end(), [](ShipComponentType component) {
+            return component_spec(component).kind == ShipComponentKind::Mining;
+        }));
 }
 
 bool ship_design_valid(const ShipDesign& design)
@@ -277,9 +291,11 @@ bool ship_design_valid(const ShipDesign& design)
     const auto hull = hull_spec(design.hull);
     const auto engines = ship_design_engine_slots_used(design);
     const auto general = ship_design_general_slots_used(design);
+    const auto mining = ship_design_mining_slots_used(design);
     return engines == 1
         && engines <= hull.engineSlots
-        && general <= hull.generalSlots;
+        && general <= hull.generalSlots
+        && mining <= hull.miningSlots;
 }
 
 std::string research_field_name(ResearchField field)
@@ -342,7 +358,10 @@ bool component_available_to_player(
 bool ship_design_available_to_player(
     const GameState& state, PlayerId player, const ShipDesign& design)
 {
+    const bool hullAvailable = design.hull != ShipHullType::RemoteMiner
+        || technology_level(state, player, ResearchField::Construction) >= 1;
     return design.owner == player
+        && hullAvailable
         && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
             return component_available_to_player(state, player, component);
         });
@@ -404,6 +423,14 @@ bool ship_design_can_colonize(const ShipDesign& design)
     return std::any_of(design.components.begin(), design.components.end(), [](ShipComponentType component) {
         return component_spec(component).enablesColonization;
     });
+}
+
+bool ship_design_can_remote_mine(const ShipDesign& design)
+{
+    return design.hull == ShipHullType::RemoteMiner
+        && std::any_of(design.components.begin(), design.components.end(), [](ShipComponentType component) {
+            return component_spec(component).remoteMiningUnits > 0.0;
+        });
 }
 
 std::uint8_t ship_design_max_warp(const ShipDesign& design)

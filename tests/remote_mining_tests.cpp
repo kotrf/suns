@@ -46,7 +46,7 @@ int main()
     auto state = suns::make_demo_game();
     state.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 1;
     state.shipDesigns.push_back({
-        3, 1, "Remote Miner", suns::ShipHullType::Scout,
+        3, 1, "Remote Miner", suns::ShipHullType::RemoteMiner,
         {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule},
     });
     state.shipDesigns.push_back({
@@ -57,24 +57,43 @@ int main()
     const auto* alpha = suns::find_star(state, 2);
     assert(alpha != nullptr);
     state.fleets = {
-        {2, 1, "Miner 2", suns::FleetRole::Scout, 3, alpha->position, {}, 1, 300.0, 0},
+        {2, 1, "Miner 2", suns::FleetRole::Scout, 3, state.stars.front().position, {}, 1, 300.0, 0},
         {3, 1, "Hauler 3", suns::FleetRole::Scout, 4, alpha->position, {}, 1, 300.0, 0},
     };
 
     const auto expected = suns::projected_remote_mining(state, planet(state, 2), state.shipDesigns[2]);
     const suns::TurnProcessor processor;
 
+    // A persistent work assignment must be the terminal route task.
+    suns::PlayerOrders invalidProgram{1, {suns::MoveFleetOrder{
+        2,
+        alpha->position,
+        8,
+        {suns::FleetArrivalActionKind::RemoteMining, 1},
+        {{{alpha->position.x + 10.0, alpha->position.y}, 8, {}}},
+    }}};
+    const auto rejectedProgram = processor.process(state, {invalidProgram});
+    assert(fleet(rejectedProgram, 2).pendingCommands.empty());
+    assert(!fleet(rejectedProgram, 2).destination);
+
     // Merely arriving in orbit does not start a mining operation.
     const auto first = processor.process(state, {});
     assert(close(suns::mineral_cargo_mass(planet(first, 2).minerals), 0.0));
     assert(fleet(first, 2).task == suns::FleetTask::None);
 
-    suns::PlayerOrders startMining{1, {suns::SetRemoteMiningOrder{2, true}}};
+    suns::MoveFleetOrder miningWaypoint{
+        2,
+        alpha->position,
+        8,
+        {suns::FleetArrivalActionKind::RemoteMining, 1},
+    };
+    suns::PlayerOrders startMining{1, {miningWaypoint}};
     auto started = processor.process(first, {startMining});
     started = advance_until_task(processor, std::move(started), 2, suns::FleetTask::RemoteMining);
-    if (close(suns::mineral_cargo_mass(planet(started, 2).minerals), 0.0)) {
-        started = processor.process(started, {});
-    }
+    // Arrival assigns the persistent task, but does not grant a full year's
+    // output after a turn that may have included travel.
+    assert(close(suns::mineral_cargo_mass(planet(started, 2).minerals), 0.0));
+    started = processor.process(started, {});
     assert(close(planet(started, 2).minerals.ironium, expected.ironium));
     assert(close(planet(started, 2).minerals.boranium, expected.boranium));
     assert(close(planet(started, 2).minerals.germanium, expected.germanium));
@@ -103,7 +122,13 @@ int main()
     assert(close(planet(collected, 2).minerals.germanium, expected.germanium));
 
     // The player can stop the task without moving the fleet.
-    suns::PlayerOrders stopMining{1, {suns::SetRemoteMiningOrder{2, false}}};
+    suns::PlayerOrders stopMining{1, {suns::MoveFleetOrder{
+        2,
+        alpha->position,
+        8,
+        {},
+        {},
+    }}};
     auto stopped = processor.process(collected, {stopMining});
     stopped = advance_until_task(processor, std::move(stopped), 2, suns::FleetTask::None);
     assert(fleet(stopped, 2).task == suns::FleetTask::None);
@@ -145,8 +170,15 @@ int main()
     heavyFleet.warp = 8;
     heavyFleet.fuel = 300.0;
     assert(suns::component_spec(suns::ShipComponentType::RemoteMiningModule).mass == 80.0);
+    assert(suns::hull_spec(suns::ShipHullType::RemoteMiner).mass == 120.0);
     assert(suns::fleet_fuel_change_for_distance(state, heavyFleet, 64.0)
-        > suns::fleet_fuel_change_for_distance(state, lightFleet, 64.0) * 2.5);
+        > suns::fleet_fuel_change_for_distance(state, lightFleet, 64.0) * 4.0);
+
+    suns::ShipDesign invalidScoutMiner{
+        6, 1, "Invalid Scout Miner", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule},
+    };
+    assert(!suns::ship_design_valid(invalidScoutMiner));
 
     // Construction 1 is an actual gate, not merely a Ship Designer hint.
     auto locked = state;

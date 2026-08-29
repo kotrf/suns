@@ -401,6 +401,19 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         });
         return planet != state.planets.end() && establish_colony(state, fleet, *planet);
     }
+    case FleetArrivalActionKind::RemoteMining: {
+        const auto* design = fleet_design(state, fleet);
+        if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
+            || !ship_design_can_remote_mine(*design)) {
+            return false;
+        }
+        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
+        });
+        if (planet == state.planets.end()) return false;
+        fleet.task = FleetTask::RemoteMining;
+        return false;
+    }
     }
     return false;
 }
@@ -718,8 +731,8 @@ TurnResult TurnProcessor::process_with_events(
         }
     }
 
-    advance_fleets(next);
     mine_uncolonized_planets(next);
+    advance_fleets(next);
     observe_current_sensor_coverage(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
     for (auto& planet : next.planets) {

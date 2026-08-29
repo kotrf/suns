@@ -11,12 +11,15 @@ void verify_hulls_and_slot_validation()
     const auto scoutHull = suns::hull_spec(suns::ShipHullType::Scout);
     const auto lightHull = suns::hull_spec(suns::ShipHullType::LightTransport);
     const auto mediumHull = suns::hull_spec(suns::ShipHullType::MediumTransport);
+    const auto minerHull = suns::hull_spec(suns::ShipHullType::RemoteMiner);
 
     assert(scoutHull.engineSlots == 1);
     assert(scoutHull.generalSlots == 2);
     assert(lightHull.generalSlots == 3);
     assert(mediumHull.generalSlots == 5);
     assert(mediumHull.baseCargoCapacity > lightHull.baseCargoCapacity);
+    assert(minerHull.miningSlots == 2);
+    assert(scoutHull.miningSlots == 0);
 
     suns::ShipDesign valid{
         10, 1, "Surveyor", suns::ShipHullType::Scout,
@@ -40,6 +43,22 @@ void verify_hulls_and_slot_validation()
         {suns::ShipComponentType::CargoPod},
     };
     assert(!suns::ship_design_valid(noEngine));
+
+    suns::ShipDesign invalidScoutMiner{
+        12, 1, "Impossible Scout Miner", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule},
+    };
+    assert(!suns::ship_design_valid(invalidScoutMiner));
+
+    suns::ShipDesign validMiner{
+        13, 1, "Dedicated Miner", suns::ShipHullType::RemoteMiner,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule,
+         suns::ShipComponentType::RemoteMiningModule, suns::ShipComponentType::FuelTank},
+    };
+    assert(suns::ship_design_valid(validMiner));
+    assert(suns::ship_design_mining_slots_used(validMiner) == 2);
+    assert(suns::ship_design_general_slots_used(validMiner) == 1);
+    assert(suns::ship_design_can_remote_mine(validMiner));
 }
 
 void verify_component_tradeoffs()
@@ -108,6 +127,21 @@ void verify_create_design_order()
     const auto rejected = processor.process(created, {invalid});
     assert(rejected.shipDesigns.size() == created.shipDesigns.size());
     assert(rejected.nextShipDesignId == created.nextShipDesignId);
+
+    suns::PlayerOrders lockedMiner{1, {}};
+    lockedMiner.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Too Early Miner",
+        suns::ShipHullType::RemoteMiner,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule},
+    });
+    const auto stillLocked = processor.process(rejected, {lockedMiner});
+    assert(stillLocked.shipDesigns.size() == rejected.shipDesigns.size());
+
+    auto unlocked = stillLocked;
+    unlocked.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 1;
+    const auto minerCreated = processor.process(unlocked, {lockedMiner});
+    assert(minerCreated.shipDesigns.size() == unlocked.shipDesigns.size() + 1);
+    assert(minerCreated.shipDesigns.back().hull == suns::ShipHullType::RemoteMiner);
 }
 
 void verify_custom_design_can_enter_production()

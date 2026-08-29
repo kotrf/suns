@@ -4,15 +4,16 @@ Suns! treats a ship role as the result of a fitted design rather than a fixed cl
 
 ## Hulls
 
-Three hulls are currently available:
+Four hulls are currently available:
 
-| Hull | Dry hull mass | Hull cost | Base fuel | Base cargo | Engine slots | General slots |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Scout Hull | 34.5 kt | 2 | 300 | 0 | 1 | 2 |
-| Light Transport | 45 kt | 2 | 400 | 5 | 1 | 3 |
-| Medium Transport | 70 kt | 5 | 500 | 50 | 1 | 5 |
+| Hull | Dry hull mass | Hull cost | Base fuel | Base cargo | Engine | General | Mining |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Scout Hull | 34.5 kt | 2 | 300 | 0 | 1 | 2 | 0 |
+| Light Transport | 45 kt | 2 | 400 | 5 | 1 | 3 | 0 |
+| Medium Transport | 70 kt | 5 | 500 | 50 | 1 | 5 | 0 |
+| Remote Miner (Construction 1) | 120 kt | 8 | 500 | 0 | 1 | 1 | 2 |
 
-The numbers are tuning placeholders. The structural rule is more important: a design must contain exactly one engine and may not exceed the hull's general slots.
+The numbers are tuning placeholders. The structural rule is more important: a design must contain exactly one engine and may not exceed any dedicated slot category. Remote Mining Modules use `Mining`, not general, slots.
 
 ## Fitting
 
@@ -24,13 +25,13 @@ The first designer exposes these components:
 - Long Range Scanner
 - Compact Long Range Scanner (Electronics 1)
 - Penetrating Scanner (Electronics 3)
-- Remote Mining Module (Construction 1, 80 kt; requires an explicit fleet task in orbit)
+- Remote Mining Module (Construction 1, 80 kt; Remote Miner `Mining` slots only)
 - Colony Module
 - Fuel Tank
 - Cargo Pod
 - Antimatter Generator
 
-The engine occupies the dedicated engine slot. Every other installed component consumes one general slot. Fuel tanks, cargo pods and generators may be fitted more than once when the hull has room.
+The engine occupies the dedicated engine slot. Remote Mining Modules occupy dedicated `Mining` slots. Every other installed component consumes one general slot. Fuel tanks, cargo pods and generators may be fitted more than once when the hull has room.
 
 The dialog previews derived mass, build cost, maximum Warp, fuel capacity/generation, cargo capacity, scanner range, colonization capability, radiation hazard and the engine's Warp-by-Warp fuel curve.
 
@@ -53,5 +54,6 @@ A design is not expected to maximize every stat. Examples of useful tensions alr
 - a Ram Scoop can make low-Warp exploration fuel-positive and reach Warp 9, but costs more mass and build resources than the starter Warp-8 Fusion Drive;
 - a Light Transport can combine a Colony Module with limited extra logistics equipment;
 - a Medium Transport has more slots and built-in cargo, but starts heavier and more expensive, increasing fuel demand.
+- a Remote Miner can carry one or two mining modules and at most one general module; its 120 kt hull plus 80 kt apparatus makes relocation a deliberate fuel-logistics decision.
 
 Future technology should unlock new hulls and components rather than replacing this model with fixed ship classes.

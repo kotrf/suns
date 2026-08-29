@@ -7,6 +7,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStandardItemModel>
 #include <QStringList>
 #include <QVBoxLayout>
 
@@ -34,13 +35,15 @@ QString signedFuelRate(double value)
 ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent)
     : QDialog(parent)
     , player_(player)
+    , remoteMiningAvailable_(component_available_to_player(
+          state, player, ShipComponentType::RemoteMiningModule))
 {
     setWindowTitle("Suns! — Ship Designer");
     resize(560, 600);
 
     auto* layout = new QVBoxLayout(this);
     auto* intro = new QLabel(
-        "Choose a hull, one engine and equipment for its general slots. "
+        "Choose a hull, one engine and equipment for its general slots. Remote-mining apparatus fits only dedicated Mining slots. "
         "Every fitted component adds mass, production cost and a mineral bill; fuel use later scales with gross ship mass.",
         this);
     intro->setWordWrap(true);
@@ -55,6 +58,13 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     addEnumItem(hullCombo_, "Scout Hull", ShipHullType::Scout);
     addEnumItem(hullCombo_, "Light Transport", ShipHullType::LightTransport);
     addEnumItem(hullCombo_, "Medium Transport", ShipHullType::MediumTransport);
+    addEnumItem(hullCombo_, remoteMiningAvailable_ ? "Remote Miner" : "Remote Miner (locked — Construction 1)",
+        ShipHullType::RemoteMiner);
+    if (!remoteMiningAvailable_) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model())) {
+            model->item(hullCombo_->count() - 1)->setEnabled(false);
+        }
+    }
     form->addRow("Hull", hullCombo_);
 
     engineCombo_ = new QComboBox(this);
@@ -92,11 +102,9 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ? "Approximate planetary conditions without entering orbit"
         : "Locked — requires Electronics 3");
     form->addRow("Penetrating Scanner (E3)", penetratingScannerCount_);
-    const auto remoteMiningAvailable = component_available_to_player(
-        state, player, ShipComponentType::RemoteMiningModule);
-    remoteMiningModuleCount_->setEnabled(remoteMiningAvailable);
-    remoteMiningModuleCount_->setToolTip(remoteMiningAvailable
-        ? "Construction 1: 80 kt orbital apparatus; assign Remote Mining at an uncolonized world"
+    remoteMiningModuleCount_->setEnabled(false);
+    remoteMiningModuleCount_->setToolTip(remoteMiningAvailable_
+        ? "Construction 1: 80 kt apparatus for dedicated Remote Miner hull slots"
         : "Locked — requires Construction 1");
     form->addRow("Remote Mining Module (C1)", remoteMiningModuleCount_);
     form->addRow("Colony Module", colonyModuleCount_);
@@ -161,13 +169,16 @@ void ShipDesignerDialog::updatePreview()
     const auto design = previewDesign();
     const auto hull = hull_spec(design.hull);
     const auto generalUsed = ship_design_general_slots_used(design);
+    const auto miningUsed = ship_design_mining_slots_used(design);
     const auto valid = ship_design_valid(design);
 
     const auto maxGeneral = static_cast<int>(hull.generalSlots);
-    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_, remoteMiningModuleCount_,
+    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_,
              colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         spin->setMaximum(maxGeneral);
     }
+    remoteMiningModuleCount_->setMaximum(static_cast<int>(hull.miningSlots));
+    remoteMiningModuleCount_->setEnabled(remoteMiningAvailable_ && hull.miningSlots > 0);
 
     QStringList fuelCurve;
     const auto maxWarp = ship_design_max_warp(design);
@@ -186,6 +197,10 @@ void ShipDesignerDialog::updatePreview()
         if (!capabilities.isEmpty()) capabilities += " • ";
         capabilities += "Colony capable";
     }
+    if (ship_design_can_remote_mine(design)) {
+        if (!capabilities.isEmpty()) capabilities += " • ";
+        capabilities += "Remote mining capable";
+    }
     if (capabilities.isEmpty()) capabilities = "No special mission capability";
 
     QString warning;
@@ -193,6 +208,10 @@ void ShipDesignerDialog::updatePreview()
         warning = QString("<br><b>Too many general modules: %1 used, %2 available.</b>")
                       .arg(static_cast<qulonglong>(generalUsed))
                       .arg(hull.generalSlots);
+    } else if (miningUsed > hull.miningSlots) {
+        warning = QString("<br><b>Too many mining modules: %1 used, %2 available.</b>")
+                      .arg(static_cast<qulonglong>(miningUsed))
+                      .arg(hull.miningSlots);
     } else if (design.name.empty()) {
         warning = "<br><b>Design needs a name.</b>";
     }
@@ -201,18 +220,20 @@ void ShipDesignerDialog::updatePreview()
     const auto mineralCost = ship_design_mineral_cost(design);
     previewLabel_->setText(
         QString("<hr><b>%1</b><br>"
-                "Hull: %2 — engine slots %3, general slots <b>%4/%5</b><br>"
-                "Dry mass: <b>%6 kt</b> &nbsp; Build cost: <b>%7</b><br>"
-                "Minerals: <b>I %8 / B %9 / G %10</b><br>"
-                "Max Warp: <b>%11</b> &nbsp; Fuel capacity: <b>%12</b> &nbsp; Fuel generation: <b>%13/turn</b><br>"
-                "Cargo capacity: <b>%14</b> (%15 colonists max)<br>"
-                "%16%17<br><br>"
-                "<b>Engine fuel curve</b> — rate per 100 kt per ly:<br>%18%19")
+                "Hull: %2 — engine slots %3, general slots <b>%4/%5</b>, Mining slots <b>%6/%7</b><br>"
+                "Dry mass: <b>%8 kt</b> &nbsp; Build cost: <b>%9</b><br>"
+                "Minerals: <b>I %10 / B %11 / G %12</b><br>"
+                "Max Warp: <b>%13</b> &nbsp; Fuel capacity: <b>%14</b> &nbsp; Fuel generation: <b>%15/turn</b><br>"
+                "Cargo capacity: <b>%16</b> (%17 colonists max)<br>"
+                "%18%19<br><br>"
+                "<b>Engine fuel curve</b> — rate per 100 kt per ly:<br>%20%21")
             .arg(QString::fromStdString(design.name.empty() ? std::string("Unnamed design") : design.name))
             .arg(QString::fromStdString(hull.name))
             .arg(hull.engineSlots)
             .arg(static_cast<qulonglong>(generalUsed))
             .arg(hull.generalSlots)
+            .arg(static_cast<qulonglong>(miningUsed))
+            .arg(hull.miningSlots)
             .arg(ship_design_mass(design), 0, 'f', 1)
             .arg(ship_design_cost(design))
             .arg(mineralCost.ironium, 0, 'f', 0)

@@ -71,6 +71,7 @@ enum class ShipHullType {
     Scout,
     LightTransport,
     MediumTransport,
+    RemoteMiner,
 };
 
 struct ShipHullSpec {
@@ -82,6 +83,7 @@ struct ShipHullSpec {
     double baseCargoCapacity{};
     std::uint8_t engineSlots{1};
     std::uint8_t generalSlots{};
+    std::uint8_t miningSlots{};
 };
 
 enum class ShipComponentType {
@@ -103,6 +105,7 @@ enum class ShipComponentKind {
     Scanner,
     Fuel,
     Cargo,
+    Mining,
     Special,
 };
 
@@ -256,6 +259,7 @@ enum class FleetArrivalActionKind {
     UnloadAllColonists,
     Refuel,
     Colonize,
+    RemoteMining,
 };
 
 struct FleetArrivalAction {
@@ -356,6 +360,7 @@ struct GalaxyConfig {
 [[nodiscard]] ShipComponentSpec component_spec(ShipComponentType type);
 [[nodiscard]] std::size_t ship_design_engine_slots_used(const ShipDesign& design);
 [[nodiscard]] std::size_t ship_design_general_slots_used(const ShipDesign& design);
+[[nodiscard]] std::size_t ship_design_mining_slots_used(const ShipDesign& design);
 [[nodiscard]] bool ship_design_valid(const ShipDesign& design);
 [[nodiscard]] bool ship_design_available_to_player(
     const GameState& state, PlayerId player, const ShipDesign& design);
@@ -367,6 +372,7 @@ struct GalaxyConfig {
 [[nodiscard]] double ship_design_ordinary_sensor_range(const ShipDesign& design);
 [[nodiscard]] double ship_design_penetrating_sensor_range(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
+[[nodiscard]] bool ship_design_can_remote_mine(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp);
 [[nodiscard]] double ship_design_fuel_capacity(const ShipDesign& design);
