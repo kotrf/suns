@@ -2,8 +2,8 @@ name: build
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches:
+      - "**"
 
 permissions:
   contents: read
@@ -11,11 +11,12 @@ permissions:
 
 jobs:
   linux:
+    if: github.repository == 'kotrf/suns'
     runs-on: [self-hosted, Linux, X64, suns]
     steps:
       - uses: actions/checkout@v4
       - name: Publish pending main status
-        if: github.event_name == 'push'
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -42,7 +43,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
       - name: Publish final main status
-        if: always() && github.event_name == 'push'
+        if: always() && github.ref == 'refs/heads/main'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
