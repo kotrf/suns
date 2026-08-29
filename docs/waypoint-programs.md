@@ -22,11 +22,13 @@ A `MoveFleetOrder` represents the player's complete route intent:
 2. it replaces the entire future waypoint queue atomically;
 3. all leg Warp values are validated against the fitted ship design before the order is accepted;
 4. the active leg moves during the normal movement phase;
-5. on arrival its one-shot arrival action executes against the actual arrival-time `GameState`;
+5. on arrival its task executes against the actual arrival-time `GameState`;
 6. the next queued waypoint is promoted to the active leg;
 7. **movement ends for that fleet for the current turn**; the promoted leg starts on the following turn.
 
 The last rule deliberately makes arrival a clean phase boundary. Loading, unloading, refuelling, future combat and colony-side effects therefore have an unambiguous ordering before the next leg consumes fuel.
+
+Most current tasks are one-shot. `Remote Mining` is persistent and terminal: it can appear only on the final waypoint, becomes active on arrival, starts extraction on the following turn and remains active until a replacement route or `No Task` command is delivered. Clearing a stationary fleet's route is the current `No Task` operation.
 
 ## Dynamic logistics
 
@@ -54,7 +56,7 @@ The first implementation keeps the active leg separate from the queued legs for 
 Possible later rules include:
 
 - continuing onto the next leg with unused same-turn travel distance;
-- repeat/patrol routes;
+- `Repeat Orders` for transport loops;
 - conditional waypoints;
-- colonize and transfer-cargo arrival actions;
+- mineral-specific transport actions;
 - projected versus exact fuel/load forecasts across future dynamic legs.

@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 10;
+constexpr quint32 kSaveFormatVersion = 11;
 constexpr quint32 kMaxCollectionItems = 100000;
 
 void markCorrupt(QDataStream& stream)
@@ -90,7 +90,7 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(FleetArrivalActionKind::Colonize))) return;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(FleetArrivalActionKind::RemoteMining))) return;
     quint64 reserve{};
     stream >> reserve;
     value.reservePopulation = static_cast<std::uint64_t>(reserve);
@@ -310,7 +310,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.id = static_cast<ShipDesignId>(id);
     value.owner = static_cast<PlayerId>(owner);
     readString(stream, value.name);
-    if (!readEnum(stream, value.hull, static_cast<quint8>(ShipHullType::MediumTransport))) return;
+    if (!readEnum(stream, value.hull, static_cast<quint8>(ShipHullType::RemoteMiner))) return;
 
     quint32 count{};
     if (!readCount(stream, count)) return;
@@ -851,7 +851,7 @@ bool readOrder(QDataStream& stream, Order& order)
     case 2: {
         CreateShipDesignOrder value;
         readString(stream, value.name);
-        if (!readEnum(stream, value.hull, static_cast<quint8>(ShipHullType::MediumTransport))) return false;
+        if (!readEnum(stream, value.hull, static_cast<quint8>(ShipHullType::RemoteMiner))) return false;
         quint32 count{};
         if (!readCount(stream, count)) return false;
         value.components.reserve(count);

@@ -111,6 +111,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Unload all colonists", static_cast<int>(FleetArrivalActionKind::UnloadAllColonists));
     actionCombo->addItem("Refuel", static_cast<int>(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
+    actionCombo->addItem("Remote Mining (persistent)", static_cast<int>(FleetArrivalActionKind::RemoteMining));
     auto* reserveSpin = new QSpinBox(waypointGroup);
     reserveSpin->setRange(0, 2'000'000'000);
     reserveSpin->setValue(1000);
@@ -127,11 +128,12 @@ void attachRouteProgramDock(MainWindow& window)
     waypointLayout->addWidget(appendButton);
     layout->addWidget(waypointGroup);
 
-    auto* clearButton = new QPushButton("Clear selected fleet route", panel);
+    auto* clearButton = new QPushButton("Clear route / set No Task", panel);
     layout->addWidget(clearButton);
 
     auto* note = new QLabel(
         "Each leg keeps its own Warp and arrival action. Arrival ends movement for that turn; the next leg starts next turn. "
+        "Remote Mining is a persistent terminal task: extraction starts on the following turn and continues until a new route or No Task command arrives. "
         "Load is resolved from the real colony population on arrival. Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
         panel);
     note->setWordWrap(true);

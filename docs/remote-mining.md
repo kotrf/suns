@@ -4,12 +4,13 @@ Remote mining lets an empire exploit an uncolonized planet without turning it in
 
 ## First slice
 
-- `Construction 1` unlocks the **Remote Mining Module**.
-- The module is a heavy 80 kt orbital apparatus, so miners consume substantially more fuel in transit than light scouts using the same engine and Warp factor.
-- A friendly fleet carrying one or more modules must be stationary at an uncolonized planet and receive the explicit **Remote Mining** task. Merely entering orbit does not start extraction.
-- The task persists between turns until the player stops it. A movement programme cancels it when that command reaches the fleet, so a distant miner continues working during the communication delay.
+- `Construction 1` unlocks both the **Remote Miner** hull and the **Remote Mining Module**.
+- Mining equipment fits only the hull's two dedicated `Mining` slots. Scout and transport hulls have no such slots, so they cannot be turned into miners by adding a general-purpose module.
+- The hull weighs 120 kt and each module another 80 kt. Even a minimal fitted miner is therefore far heavier and more fuel-hungry than a scout using the same engine and Warp factor.
+- **Remote Mining** is assigned to a route waypoint as its arrival task. Merely entering orbit with `No Task` does not start extraction.
+- It is a persistent terminal task: it must be the last item in the route, begins producing on the turn after arrival and continues until a replacement route or `No Task` command reaches the fleet.
 - A module produces minerals according to that world's geological concentration. Multiple modules add their output.
 - The minerals are added to the planet's existing **surface stockpile** (`Planet::minerals`); they do not enter the miner's cargo hold.
 - Any friendly cargo fleet co-located with that uncolonized planet may use the normal Cargo Manifest to collect the surface stockpile. Foreign colonies are not valid transfer sources.
 
-This creates the intended two-role loop: an assigned miner stays in orbit and builds a stockpile, while transports collect it on their own schedule. The first slice intentionally has no autonomous hauler programme, remote base, depletion model, or mining on foreign-owned worlds.
+This creates the intended two-role loop: an assigned miner stays in orbit and builds a stockpile, while transports collect it on their own schedule. The first slice intentionally has no `Repeat Orders`, autonomous hauler programme, remote base, depletion model, or mining on foreign-owned worlds.

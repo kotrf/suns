@@ -43,9 +43,9 @@ void round_trip_preserves_communications_and_planning()
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
-        "Compact Relay",
-        ShipHullType::Scout,
-        {ShipComponentType::FusionDrive, ShipComponentType::CompactLongRangeScanner,
+        "Remote Miner",
+        ShipHullType::RemoteMiner,
+        {ShipComponentType::FusionDrive,
          ShipComponentType::RemoteMiningModule},
     });
 
@@ -86,6 +86,7 @@ void round_trip_preserves_communications_and_planning()
     move.fleet = scout.id;
     move.destination = {200.0, -100.0};
     move.warp = 8;
+    move.arrivalAction.kind = FleetArrivalActionKind::RemoteMining;
     original.pendingOrders = {1, {
         move,
         QueueProductionOrder{1, ProductionKind::Mine},
@@ -139,6 +140,7 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.planets.front().productionQueue.size() == 1);
     assert(loaded.state.planets.front().productionQueue.front().kind == ProductionKind::Research);
     assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::RemoteMiningModule);
+    assert(loaded.state.shipDesigns.back().hull == ShipHullType::RemoteMiner);
 
     const auto& fleet = loaded.state.fleets.front();
     assert(same_position(fleet.position, {420.0, 10.0}));
@@ -163,6 +165,8 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.task == FleetTask::RemoteMining);
 
     assert(loaded.pendingOrders.orders.size() == 5);
+    const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
+    assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::RemoteMining);
     const auto* mine = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[1]);
     assert(mine && mine->kind == ProductionKind::Mine);
     const auto* plan = std::get_if<SetResearchPlanOrder>(&loaded.pendingOrders.orders[2]);

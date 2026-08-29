@@ -85,6 +85,7 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::UnloadAllColonists: return "unload colonists";
     case FleetArrivalActionKind::Refuel: return "refuel";
     case FleetArrivalActionKind::Colonize: return "colonize";
+    case FleetArrivalActionKind::RemoteMining: return "remote mining";
     }
     return "none";
 }

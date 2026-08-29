@@ -32,6 +32,7 @@ private:
     [[nodiscard]] ShipDesign previewDesign() const;
 
     PlayerId player_{};
+    bool remoteMiningAvailable_{};
 
     QLineEdit* nameEdit_{};
     QComboBox* hullCombo_{};

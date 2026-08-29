@@ -28,6 +28,7 @@ QColor hullAccent(ShipHullType hull)
     case ShipHullType::Scout: return QColor("#73bdf0");
     case ShipHullType::LightTransport: return QColor("#79c79b");
     case ShipHullType::MediumTransport: return QColor("#d8a862");
+    case ShipHullType::RemoteMiner: return QColor("#c58be2");
     }
     return QColor("#9eb3c8");
 }
@@ -118,6 +119,16 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         hull.cubicTo(111, 79, 135, 73, 151, 52);
         hull.closeSubpath();
         break;
+    case ShipHullType::RemoteMiner:
+        hull.moveTo(148, 52);
+        hull.lineTo(126, 32);
+        hull.lineTo(70, 27);
+        hull.lineTo(39, 42);
+        hull.lineTo(39, 62);
+        hull.lineTo(70, 77);
+        hull.lineTo(126, 72);
+        hull.closeSubpath();
+        break;
     }
 
     painter.setPen(QPen(QColor(0, 0, 0, 110), 5.0));
@@ -152,6 +163,12 @@ QPixmap renderShipPortrait(const ShipDesign& design)
     if (design.hull == ShipHullType::MediumTransport) {
         painter.drawRoundedRect(QRectF(104, 23, 24, 12), 4, 4);
         painter.drawRoundedRect(QRectF(104, 69, 24, 12), 4, 4);
+    }
+    if (design.hull == ShipHullType::RemoteMiner) {
+        painter.setBrush(QColor("#684876"));
+        painter.setPen(QPen(QColor("#d7a6ec"), 1.0));
+        painter.drawRoundedRect(QRectF(76, 18, 34, 15), 3, 3);
+        painter.drawRoundedRect(QRectF(76, 71, 34, 15), 3, 3);
     }
 
     if (hasComponent(design, ShipComponentType::CargoPod)) {
