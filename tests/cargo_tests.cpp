@@ -131,6 +131,110 @@ int main()
     assert(close(fleet(policyUnloaded, 2).minerals.ironium, 0.0));
     assert(planet(policyUnloaded, 1).minerals.ironium > surfaceBeforeUnload + 39.9);
 
+    // The source/destination transfer primitive moves mixed cargo atomically
+    // between a planetary surface and any friendly fleet at that system.
+    auto transferState = suns::make_demo_game();
+    transferState.shipDesigns.push_back({
+        3,
+        1,
+        "Heavy Source",
+        suns::ShipHullType::MediumTransport,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::CargoPod},
+    });
+    transferState.shipDesigns.push_back({
+        4,
+        1,
+        "Receiver",
+        suns::ShipHullType::MediumTransport,
+        {suns::ShipComponentType::FusionDrive},
+    });
+    suns::Fleet sourceFleet;
+    sourceFleet.id = 2;
+    sourceFleet.owner = 1;
+    sourceFleet.name = "Heavy Source 2";
+    sourceFleet.design = 3;
+    sourceFleet.position = {0.0, 0.0};
+    sourceFleet.fuel = 100.0;
+    sourceFleet.colonists = 300;
+    sourceFleet.minerals = {10.0, 6.0, 4.0};
+    suns::Fleet receiver = sourceFleet;
+    receiver.id = 3;
+    receiver.name = "Receiver 3";
+    receiver.design = 4;
+    receiver.colonists = 0;
+    receiver.minerals = {};
+    transferState.fleets = {sourceFleet, receiver};
+
+    const auto transferControl = processor.process(transferState, {});
+    suns::PlayerOrders surfaceTransfer{1, {}};
+    surfaceTransfer.orders.emplace_back(suns::TransferCargoOrder{
+        {1, 0},
+        {0, 3},
+        200,
+        {5.0, 4.0, 3.0},
+    });
+    const auto fromSurface = processor.process(transferState, {surfaceTransfer});
+    auto sourceAfterTransfer = planet(transferState, 1);
+    sourceAfterTransfer.population -= 200;
+    const auto expectedSourcePopulation = sourceAfterTransfer.population
+        + suns::projected_population_growth(sourceAfterTransfer);
+    assert(planet(fromSurface, 1).population == expectedSourcePopulation);
+    assert(fleet(fromSurface, 3).colonists == 200);
+    assert(close(fleet(fromSurface, 3).minerals.ironium, 5.0));
+    assert(close(
+        planet(fromSurface, 1).minerals.ironium + 5.0,
+        planet(transferControl, 1).minerals.ironium));
+
+    suns::PlayerOrders fleetTransfer{1, {}};
+    fleetTransfer.orders.emplace_back(suns::TransferCargoOrder{
+        {0, 2},
+        {0, 3},
+        100,
+        {3.0, 2.0, 1.0},
+    });
+    const auto betweenFleets = processor.process(transferState, {fleetTransfer});
+    assert(fleet(betweenFleets, 2).colonists == 200);
+    assert(fleet(betweenFleets, 3).colonists == 100);
+    assert(close(fleet(betweenFleets, 2).minerals.ironium, 7.0));
+    assert(close(fleet(betweenFleets, 3).minerals.ironium, 3.0));
+
+    // Capacity, location and unowned-world population rules reject the whole
+    // mixed transfer without partially moving another cargo type.
+    auto overloadTransferState = transferState;
+    overloadTransferState.fleets[0].colonists = 6000;
+    suns::PlayerOrders transferOverload{1, {}};
+    transferOverload.orders.emplace_back(suns::TransferCargoOrder{
+        {0, 2},
+        {0, 3},
+        6000,
+        {1.0, 0.0, 0.0},
+    });
+    const auto transferRejected = processor.process(overloadTransferState, {transferOverload});
+    assert(fleet(transferRejected, 2).colonists == 6000);
+    assert(fleet(transferRejected, 3).colonists == 0);
+    assert(close(fleet(transferRejected, 2).minerals.ironium, 10.0));
+
+    auto separated = transferState;
+    separated.fleets[1].position = {100.0, 0.0};
+    const auto separatedResult = processor.process(separated, {fleetTransfer});
+    assert(fleet(separatedResult, 2).colonists == 300);
+    assert(fleet(separatedResult, 3).colonists == 0);
+
+    auto unownedDestination = transferState;
+    const auto* unownedStar = suns::find_star(unownedDestination, 2);
+    assert(unownedStar != nullptr);
+    unownedDestination.fleets[0].position = unownedStar->position;
+    suns::PlayerOrders illegalPopulationDrop{1, {}};
+    illegalPopulationDrop.orders.emplace_back(suns::TransferCargoOrder{
+        {0, 2},
+        {2, 0},
+        100,
+        {},
+    });
+    const auto populationDropRejected = processor.process(unownedDestination, {illegalPopulationDrop});
+    assert(fleet(populationDropRejected, 2).colonists == 300);
+    assert(planet(populationDropRejected, 2).population == 0);
+
     // Colonization deposits carried minerals on the new world before the ship is consumed.
     auto colonization = suns::make_demo_game();
     colonization.shipDesigns.push_back({

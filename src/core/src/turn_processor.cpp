@@ -283,6 +283,98 @@ bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& p
     return star && same_position(star->position, fleet.position);
 }
 
+struct CargoEndpointRef {
+    Planet* planet{};
+    Fleet* fleet{};
+    Position position;
+};
+
+std::optional<CargoEndpointRef> resolve_cargo_endpoint(
+    GameState& state, PlayerId player, CargoTransferEndpoint endpoint)
+{
+    if ((endpoint.planet == 0) == (endpoint.fleet == 0)) return std::nullopt;
+
+    if (endpoint.planet != 0) {
+        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+            return candidate.id == endpoint.planet
+                && (candidate.owner == player || candidate.owner == 0);
+        });
+        if (planet == state.planets.end()) return std::nullopt;
+        const auto* star = find_star(state, planet->star);
+        if (!star) return std::nullopt;
+        return CargoEndpointRef{&*planet, nullptr, star->position};
+    }
+
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+        return candidate.id == endpoint.fleet && candidate.owner == player;
+    });
+    if (fleet == state.fleets.end()) return std::nullopt;
+    return CargoEndpointRef{nullptr, &*fleet, fleet->position};
+}
+
+std::uint64_t endpoint_colonists(const CargoEndpointRef& endpoint)
+{
+    return endpoint.planet ? endpoint.planet->population : endpoint.fleet->colonists;
+}
+
+MineralCargo& endpoint_minerals(CargoEndpointRef& endpoint)
+{
+    return endpoint.planet ? endpoint.planet->minerals : endpoint.fleet->minerals;
+}
+
+bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder& order)
+{
+    constexpr double epsilon = 0.000001;
+    auto source = resolve_cargo_endpoint(state, player, order.source);
+    auto destination = resolve_cargo_endpoint(state, player, order.destination);
+    if (!source || !destination || !same_position(source->position, destination->position)) return false;
+    if ((source->planet && destination->planet && source->planet == destination->planet)
+        || (source->fleet && destination->fleet && source->fleet == destination->fleet)) {
+        return false;
+    }
+    if (!valid_mineral_cargo(order.minerals)) return false;
+
+    // Population belongs only to friendly colonies. Loading from a colony
+    // retains one colonist, matching the existing exact-manifest order.
+    if (order.colonists > 0) {
+        if ((source->planet && source->planet->owner != player)
+            || (destination->planet && destination->planet->owner != player)) {
+            return false;
+        }
+        const auto available = endpoint_colonists(*source);
+        if (source->planet ? order.colonists >= available : order.colonists > available) return false;
+        const auto destinationPopulation = endpoint_colonists(*destination);
+        if (order.colonists > std::numeric_limits<std::uint64_t>::max() - destinationPopulation) return false;
+    }
+
+    auto& sourceMinerals = endpoint_minerals(*source);
+    if (!mineral_cargo_sufficient(sourceMinerals, order.minerals)) return false;
+
+    if (destination->fleet) {
+        const auto transferredCargo = colonist_cargo_mass(order.colonists)
+            + mineral_cargo_mass(order.minerals);
+        if (fleet_cargo_used(state, *destination->fleet) + transferredCargo
+            > fleet_cargo_capacity(state, *destination->fleet) + epsilon) {
+            return false;
+        }
+    }
+
+    // All validation is complete: apply the four resources atomically.
+    if (order.colonists > 0) {
+        if (source->planet) source->planet->population -= order.colonists;
+        else source->fleet->colonists -= order.colonists;
+        if (destination->planet) destination->planet->population += order.colonists;
+        else destination->fleet->colonists += order.colonists;
+    }
+
+    auto& destinationMinerals = endpoint_minerals(*destination);
+    subtract_minerals(sourceMinerals, order.minerals);
+    destinationMinerals.ironium += order.minerals.ironium;
+    destinationMinerals.boranium += order.minerals.boranium;
+    destinationMinerals.germanium += order.minerals.germanium;
+    return true;
+}
+
 void mine_uncolonized_planets(GameState& state)
 {
     for (const auto& fleet : state.fleets) {
@@ -747,6 +839,8 @@ TurnResult TurnProcessor::process_with_events(
                         if (!minerals_available(planet->minerals, fleet->minerals, concreteOrder.minerals)) return;
 
                         transfer_minerals(planet->minerals, fleet->minerals, concreteOrder.minerals);
+                    } else if constexpr (std::is_same_v<T, TransferCargoOrder>) {
+                        (void)transfer_cargo(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

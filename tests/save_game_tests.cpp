@@ -103,8 +103,11 @@ void round_trip_preserves_communications_and_planning()
         SetResearchPlanOrder{ResearchField::Electronics, ResearchField::Propulsion},
         SetColonyResearchOrder{1, false},
         SetRemoteMiningOrder{scout.id, false},
+        TransferCargoOrder{{1, 0}, {0, scout.id}, 100, {1.0, 2.0, 3.0}},
     }};
-    original.pendingDescriptions = {"move", "mine", "research plan", "stop research", "stop remote mining"};
+    original.pendingDescriptions = {
+        "move", "mine", "research plan", "stop research", "stop remote mining", "transfer cargo",
+    };
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
     original.showSensorRanges = false;
@@ -178,7 +181,7 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.repeatOrders);
     assert(fleet.routeTemplate.size() == 2);
 
-    assert(loaded.pendingOrders.orders.size() == 5);
+    assert(loaded.pendingOrders.orders.size() == 6);
     const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
     assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
     assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
@@ -193,6 +196,14 @@ void round_trip_preserves_communications_and_planning()
     assert(stop && stop->colony == 1 && !stop->enabled);
     const auto* stopMining = std::get_if<SetRemoteMiningOrder>(&loaded.pendingOrders.orders[4]);
     assert(stopMining && stopMining->fleet == scout.id && !stopMining->enabled);
+    const auto* transfer = std::get_if<TransferCargoOrder>(&loaded.pendingOrders.orders[5]);
+    assert(transfer);
+    assert(transfer->source.planet == 1 && transfer->source.fleet == 0);
+    assert(transfer->destination.planet == 0 && transfer->destination.fleet == scout.id);
+    assert(transfer->colonists == 100);
+    assert(transfer->minerals.ironium == 1.0);
+    assert(transfer->minerals.boranium == 2.0);
+    assert(transfer->minerals.germanium == 3.0);
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);

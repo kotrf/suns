@@ -11,6 +11,6 @@ Remote mining lets an empire exploit an uncolonized planet without turning it in
 - It is a persistent terminal task: it must be the last item in the route, begins producing on the turn after arrival and continues until a replacement route or `No Task` command reaches the fleet.
 - A module produces minerals according to that world's geological concentration. Multiple modules add their output.
 - The minerals are added to the planet's existing **surface stockpile** (`Planet::minerals`); they do not enter the miner's cargo hold.
-- Any friendly cargo fleet co-located with that uncolonized planet may use the normal Cargo Manifest to collect the surface stockpile. Foreign colonies are not valid transfer sources.
+- Any friendly cargo fleet co-located with that uncolonized planet may use Cargo Transfer to collect the surface stockpile. The planet and fleet dashboards show the stock and active I/B/G extraction per turn. Foreign colonies are not valid transfer sources.
 
 This creates the intended two-role loop: an assigned miner stays in orbit and builds a surface stockpile, while transports can collect it with explicit dynamic cargo waypoints and a repeating route. The current slice still has no conditional hauler programme, remote base, depletion model, or mining on foreign-owned worlds.
