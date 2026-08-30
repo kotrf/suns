@@ -57,6 +57,21 @@ struct SetFleetMineralCargoOrder {
     MineralCargo minerals;
 };
 
+// Exactly one ID is set. A planet endpoint denotes its surface stockpile (and,
+// for a friendly colony, its population); a fleet endpoint denotes its shared
+// cargo hold.
+struct CargoTransferEndpoint {
+    PlanetId planet{};
+    FleetId fleet{};
+};
+
+struct TransferCargoOrder {
+    CargoTransferEndpoint source;
+    CargoTransferEndpoint destination;
+    std::uint64_t colonists{};
+    MineralCargo minerals;
+};
+
 struct RefuelFleetOrder {
     PlanetId colony{};
     FleetId fleet{};
@@ -81,6 +96,7 @@ using Order = std::variant<
     QueueShipDesignOrder,
     SetFleetColonistsOrder,
     SetFleetMineralCargoOrder,
+    TransferCargoOrder,
     RefuelFleetOrder,
     ColonizePlanetOrder,
     SetRemoteMiningOrder>;

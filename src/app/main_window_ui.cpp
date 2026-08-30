@@ -157,8 +157,9 @@ void MainWindow::installUiPolish()
                     refuelButton_->setText("Refuel now");
                     fleetLayout->addWidget(refuelButton_);
 
-                    auto* cargoButton = new QPushButton("Cargo manifest…", fleetGroup);
-                    cargoButton->setToolTip("Load or unload Ironium, Boranium and Germanium at the selected friendly colony");
+                    auto* cargoButton = new QPushButton("Transfer cargo…", fleetGroup);
+                    cargoButton->setToolTip(
+                        "Transfer colonists and minerals between the planetary surface and friendly fleets at this system");
                     fleetLayout->addWidget(cargoButton);
                     sideLayout->addWidget(fleetGroup);
 
@@ -462,7 +463,7 @@ void MainWindow::installUiPolish()
     });
 
     auto* fleetMenu = menuBar()->addMenu("&Fleet");
-    auto* cargoAction = fleetMenu->addAction("Cargo manifest…");
+    auto* cargoAction = fleetMenu->addAction("Transfer cargo…");
     connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
     auto* designerAction = fleetMenu->addAction("Ship designer…");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });

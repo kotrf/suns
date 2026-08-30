@@ -202,6 +202,8 @@ GameState movementPhasePreviewState(
     PlayerOrders logistics{pending.player, {}};
     for (const auto& order : pending.orders) {
         if (std::holds_alternative<SetFleetColonistsOrder>(order)
+            || std::holds_alternative<SetFleetMineralCargoOrder>(order)
+            || std::holds_alternative<TransferCargoOrder>(order)
             || std::holds_alternative<RefuelFleetOrder>(order)) {
             logistics.orders.push_back(order);
         }

@@ -25,6 +25,10 @@ All carried cargo contributes to fleet gross mass. The existing Warp fuel model 
 
 `SetFleetMineralCargoOrder` sets the desired mineral manifest for a fleet docked at a friendly colony. The turn processor transfers only the delta between colony stores and the fleet, rejects negative manifests, rejects unavailable minerals and rejects any target manifest that would overflow the shared hold.
 
+The player-facing **Cargo Transfer** dialog builds on those rules with explicit source and destination endpoints. At a selected system it lists the friendly or uncolonized planetary surface and every co-located friendly fleet. A single atomic order may move Colonists, Ironium, Boranium and Germanium planet → fleet, fleet → planet or fleet → fleet. Sliders and exact numeric fields show the source remainder, destination result, shared hold usage and gross mass live; an over-capacity destination cannot be accepted. Population may move only through a friendly colony, and loading from one always leaves at least one colonist behind. Minerals may be deposited on or collected from an uncolonized surface stockpile.
+
+Transfers remain orders resolved at End Turn. Opening the dialog again previews earlier queued local cargo orders, so several deliberate transfers at the same system form a predictable sequence without mutating simulation state from the UI.
+
 Waypoint programs add dynamic `LoadAllAvailable` and `UnloadAll` policies for each individual cargo type. Mineral policies transfer to or from the planet's surface stockpile, including an uncolonized world being worked by remote miners. Colonist policies require a friendly colony; loading retains the configured population reserve. The amount is resolved on every actual arrival, so the same policy is safe in a repeating transport loop.
 
 Colonist loading uses the same hold. In particular, the dynamic `Load All` arrival action fills only cargo capacity left after any minerals already aboard.

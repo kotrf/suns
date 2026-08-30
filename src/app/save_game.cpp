@@ -857,6 +857,14 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
             stream << quint8{10} << static_cast<quint32>(concrete.fleet)
                    << static_cast<quint8>(concrete.enabled ? 1 : 0);
+        } else if constexpr (std::is_same_v<T, TransferCargoOrder>) {
+            stream << quint8{11}
+                   << static_cast<quint32>(concrete.source.planet)
+                   << static_cast<quint32>(concrete.source.fleet)
+                   << static_cast<quint32>(concrete.destination.planet)
+                   << static_cast<quint32>(concrete.destination.fleet)
+                   << static_cast<quint64>(concrete.colonists);
+            writeMinerals(stream, concrete.minerals);
         }
     }, order);
 }
@@ -1016,6 +1024,27 @@ bool readOrder(QDataStream& stream, Order& order)
         }
         value.fleet = static_cast<FleetId>(fleet);
         value.enabled = enabled != 0;
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
+    case 11: {
+        TransferCargoOrder value;
+        quint32 sourcePlanet{};
+        quint32 sourceFleet{};
+        quint32 destinationPlanet{};
+        quint32 destinationFleet{};
+        quint64 colonists{};
+        stream >> sourcePlanet >> sourceFleet >> destinationPlanet >> destinationFleet >> colonists;
+        value.source = {
+            static_cast<PlanetId>(sourcePlanet),
+            static_cast<FleetId>(sourceFleet),
+        };
+        value.destination = {
+            static_cast<PlanetId>(destinationPlanet),
+            static_cast<FleetId>(destinationFleet),
+        };
+        value.colonists = static_cast<std::uint64_t>(colonists);
+        readMinerals(stream, value.minerals);
         order = value;
         return stream.status() == QDataStream::Ok;
     }

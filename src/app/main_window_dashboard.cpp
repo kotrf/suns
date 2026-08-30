@@ -99,6 +99,26 @@ QString arrivalName(const FleetArrivalAction& action)
     return "none";
 }
 
+MineralCargo remoteMiningAtPlanet(const GameState& state, PlayerId player, const Planet& planet)
+{
+    MineralCargo total;
+    const auto* star = find_star(state, planet.star);
+    if (!star) return total;
+    for (const auto& fleet : state.fleets) {
+        if (fleet.owner != player || fleet.task != FleetTask::RemoteMining
+            || !same_position(fleet.position, star->position)) {
+            continue;
+        }
+        const auto* design = fleet_design(state, fleet);
+        if (!design) continue;
+        const auto yield = projected_remote_mining(state, planet, *design);
+        total.ironium += yield.ironium;
+        total.boranium += yield.boranium;
+        total.germanium += yield.germanium;
+    }
+    return total;
+}
+
 } // namespace
 
 QString MainWindow::selectedPlanetPanelSummary() const
@@ -160,6 +180,13 @@ QString MainWindow::selectedPlanetPanelSummary() const
                          .arg(planet->minerals.ironium, 0, 'f', 1)
                          .arg(planet->minerals.boranium, 0, 'f', 1)
                          .arg(planet->minerals.germanium, 0, 'f', 1);
+            const auto remoteYield = remoteMiningAtPlanet(state_, 1, *planet);
+            if (mineral_cargo_mass(remoteYield) > 0.000001) {
+                lines << QString("Remote extraction / turn — I %1 • B %2 • G %3")
+                             .arg(remoteYield.ironium, 0, 'f', 2)
+                             .arg(remoteYield.boranium, 0, 'f', 2)
+                             .arg(remoteYield.germanium, 0, 'f', 2);
+            }
         } else {
             lines << "Mineral geology unknown — remain in orbit for a geological survey";
         }
@@ -217,6 +244,27 @@ QString MainWindow::selectedFleetPanelSummary() const
                  .arg(fleet->minerals.ironium, 0, 'f', 0)
                  .arg(fleet->minerals.boranium, 0, 'f', 0)
                  .arg(fleet->minerals.germanium, 0, 'f', 0);
+
+    if (fleet->task == FleetTask::RemoteMining) {
+        const auto* star = findStarAtPosition(state_, fleet->position);
+        const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
+        if (design && planet) {
+            const auto yield = projected_remote_mining(state_, *planet, *design);
+            lines << QString("<span style='color:#d7bf78'><b>Remote Mining assigned</b></span> — I %1 / B %2 / G %3 per turn")
+                         .arg(yield.ironium, 0, 'f', 2)
+                         .arg(yield.boranium, 0, 'f', 2)
+                         .arg(yield.germanium, 0, 'f', 2);
+        } else {
+            lines << "<span style='color:#d7bf78'><b>Remote Mining assigned</b></span>";
+        }
+    } else if (std::any_of(
+                   authoritativeFleet->pendingCommands.begin(),
+                   authoritativeFleet->pendingCommands.end(),
+                   [](const PendingFleetCommand& command) {
+                       return command.task == FleetTask::RemoteMining;
+                   })) {
+        lines << "<span style='color:#d7bf78'><b>Remote Mining command in flight</b></span>";
+    }
 
     const auto sensor = fleet_sensor_range(state_, *fleet);
     const auto penetrating = fleet_penetrating_sensor_range(state_, *fleet);
