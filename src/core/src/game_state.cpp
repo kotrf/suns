@@ -527,6 +527,75 @@ double distance_between(Position a, Position b)
     return std::hypot(a.x - b.x, a.y - b.y);
 }
 
+FleetEncounterGeometry analyze_fleet_encounter(
+    Position pursuerStart,
+    Position pursuerEnd,
+    Position targetStart,
+    Position targetEnd,
+    double encounterRadius)
+{
+    const Position relativeStart{
+        pursuerStart.x - targetStart.x,
+        pursuerStart.y - targetStart.y,
+    };
+    const Position relativeVelocity{
+        (pursuerEnd.x - pursuerStart.x) - (targetEnd.x - targetStart.x),
+        (pursuerEnd.y - pursuerStart.y) - (targetEnd.y - targetStart.y),
+    };
+    const auto dot = [](Position left, Position right) {
+        return left.x * right.x + left.y * right.y;
+    };
+    const auto interpolate = [](Position start, Position end, double time) {
+        return Position{
+            start.x + (end.x - start.x) * time,
+            start.y + (end.y - start.y) * time,
+        };
+    };
+
+    const auto velocitySquared = dot(relativeVelocity, relativeVelocity);
+    const auto closestTime = velocitySquared <= 0.000000000001
+        ? 0.0
+        : std::clamp(-dot(relativeStart, relativeVelocity) / velocitySquared, 0.0, 1.0);
+    const Position closestRelative{
+        relativeStart.x + relativeVelocity.x * closestTime,
+        relativeStart.y + relativeVelocity.y * closestTime,
+    };
+
+    FleetEncounterGeometry result;
+    result.closestTimeFraction = closestTime;
+    result.closestDistance = std::hypot(closestRelative.x, closestRelative.y);
+    const auto encounterMidpoint = [&](double time) {
+        const auto pursuer = interpolate(pursuerStart, pursuerEnd, time);
+        const auto target = interpolate(targetStart, targetEnd, time);
+        return Position{(pursuer.x + target.x) * 0.5, (pursuer.y + target.y) * 0.5};
+    };
+    result.encounterPosition = encounterMidpoint(closestTime);
+
+    const auto radius = std::max(0.0, encounterRadius);
+    const auto startDistanceSquared = dot(relativeStart, relativeStart);
+    if (startDistanceSquared <= radius * radius + 0.000000000001) {
+        result.encounterTimeFraction = 0.0;
+        result.encounterPosition = encounterMidpoint(0.0);
+        return result;
+    }
+    if (velocitySquared <= 0.000000000001 || result.closestDistance > radius + 0.000000001) {
+        return result;
+    }
+
+    const auto linear = 2.0 * dot(relativeStart, relativeVelocity);
+    const auto constant = startDistanceSquared - radius * radius;
+    const auto discriminant = linear * linear - 4.0 * velocitySquared * constant;
+    if (discriminant < -0.000000001) return result;
+
+    const auto entry = (-linear - std::sqrt(std::max(0.0, discriminant)))
+        / (2.0 * velocitySquared);
+    if (entry < -0.000000001 || entry > 1.0 + 0.000000001) return result;
+
+    result.encounterTimeFraction = std::clamp(entry, 0.0, 1.0);
+    result.encounterPosition = encounterMidpoint(*result.encounterTimeFraction);
+    return result;
+}
+
 double warp_distance(std::uint8_t warp)
 {
     if (warp == 0 || warp > kMaxWarp) return 0.0;

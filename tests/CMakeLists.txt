@@ -127,6 +127,14 @@ target_link_libraries(suns_moving_fleet_target_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_moving_fleet_target_tests COMMAND suns_moving_fleet_target_tests)
 
+add_executable(suns_interception_tests
+    interception_tests.cpp
+)
+
+target_link_libraries(suns_interception_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_interception_tests COMMAND suns_interception_tests)
+
 add_executable(suns_production_queue_tests
     production_queue_tests.cpp
 )

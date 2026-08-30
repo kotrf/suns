@@ -963,7 +963,9 @@ void advance_fleets(GameState& state)
         Position destination;
         Position endpoint;
         Position baseEndpoint;
+        bool routed{};
         bool active{};
+        bool intercepted{};
     };
     std::vector<MotionPlan> plans;
     plans.reserve(state.fleets.size());
@@ -971,6 +973,7 @@ void advance_fleets(GameState& state)
         MotionPlan plan{fleet.id};
         if (!fleet_id_list_contains(skipMovement, fleet.id) && fleet.destination
             && fleet_warp_valid(state, fleet, fleet.warp)) {
+            plan.routed = true;
             plan.active = true;
             plan.destination = *fleet.destination;
             if (fleet.targetFleet != 0) {
@@ -1000,6 +1003,69 @@ void advance_fleets(GameState& state)
         plan.endpoint = projected_turn_endpoint(state, *fleet, plan.destination);
     }
 
+    struct EncounterCandidate {
+        FleetId pursuer{};
+        FleetId target{};
+        double timeFraction{};
+        Position position;
+    };
+    std::vector<EncounterCandidate> encounters;
+    for (const auto& plan : plans) {
+        const auto* pursuer = fleet_by_id(state, plan.fleet);
+        if (!pursuer || pursuer->targetFleet == 0 || !plan.active) continue;
+        const auto targetPlan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
+            return candidate.fleet == pursuer->targetFleet;
+        });
+        const auto* target = friendly_fleet(state, pursuer->owner, pursuer->targetFleet);
+        if (targetPlan == plans.end() || !target) continue;
+
+        const auto geometry = analyze_fleet_encounter(
+            pursuer->position,
+            plan.endpoint,
+            target->position,
+            targetPlan->endpoint);
+        if (!geometry.encounterTimeFraction) continue;
+        encounters.push_back({
+            pursuer->id,
+            target->id,
+            *geometry.encounterTimeFraction,
+            geometry.encounterPosition,
+        });
+    }
+    std::sort(encounters.begin(), encounters.end(), [](const EncounterCandidate& left, const EncounterCandidate& right) {
+        if (std::abs(left.timeFraction - right.timeFraction) > 0.000000001) {
+            return left.timeFraction < right.timeFraction;
+        }
+        if (left.pursuer != right.pursuer) return left.pursuer < right.pursuer;
+        return left.target < right.target;
+    });
+
+    // Resolve at most one encounter per fleet in a turn. Competing intercepts
+    // are ordered by physical time, then stable FleetId, so replay results do
+    // not depend on storage order.
+    std::vector<FleetId> encounteredFleets;
+    for (const auto& encounter : encounters) {
+        if (fleet_id_list_contains(encounteredFleets, encounter.pursuer)
+            || fleet_id_list_contains(encounteredFleets, encounter.target)) {
+            continue;
+        }
+        const auto pursuerPlan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
+            return candidate.fleet == encounter.pursuer;
+        });
+        const auto targetPlan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
+            return candidate.fleet == encounter.target;
+        });
+        if (pursuerPlan == plans.end() || targetPlan == plans.end()) continue;
+        pursuerPlan->endpoint = encounter.position;
+        targetPlan->endpoint = encounter.position;
+        pursuerPlan->active = true;
+        targetPlan->active = true;
+        pursuerPlan->intercepted = true;
+        targetPlan->intercepted = true;
+        encounteredFleets.push_back(encounter.pursuer);
+        encounteredFleets.push_back(encounter.target);
+    }
+
     std::vector<FleetId> fixedArrivals;
 
     for (auto& fleet : state.fleets) {
@@ -1012,48 +1078,47 @@ void advance_fleets(GameState& state)
         }
 
         const Position start = fleet.position;
-        const auto destination = plan->destination;
-        fleet.destination = destination;
-        const auto remaining = distance_between(start, destination);
+        const auto endpoint = plan->endpoint;
+        if (plan->routed) fleet.destination = plan->destination;
+        const auto remaining = distance_between(start, endpoint);
         if (remaining <= epsilon) {
-            fleet.position = destination;
-            if (fleet.targetFleet == 0) fixedArrivals.push_back(fleet.id);
-            continue;
-        }
-
-        const auto maximumDistance = warp_distance(fleet.warp);
-        double travelDistance = std::min(remaining, maximumDistance);
-        const double fuelChangePerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
-        if (fuelChangePerLy > epsilon) travelDistance = std::min(travelDistance, fleet.fuel / fuelChangePerLy);
-        if (travelDistance <= epsilon) {
-            if (!fleet.fuelStalled && fuelChangePerLy > epsilon) {
+            fleet.position = endpoint;
+            const auto routeDistance = plan->routed
+                ? distance_between(start, plan->destination)
+                : 0.0;
+            const auto fuelChangePerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
+            if (routeDistance > epsilon && fuelChangePerLy > epsilon && !plan->intercepted
+                && !fleet.fuelStalled) {
                 fleet.fuelStalled = true;
                 queue_fleet_movement_report(
                     state, fleet, PlayerReportKind::FleetStalledForFuel, state.turn + 1);
+            } else if (routeDistance <= epsilon || plan->intercepted) {
+                fleet.fuelStalled = false;
+            }
+            if (plan->routed && !plan->intercepted && fleet.targetFleet == 0
+                && same_position(endpoint, plan->destination)) {
+                fixedArrivals.push_back(fleet.id);
             }
             continue;
         }
+        const double fuelChangePerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
         fleet.fuelStalled = false;
 
-        const double fuelChange = fuelChangePerLy * travelDistance;
+        const double fuelChange = fuelChangePerLy * remaining;
         const auto capacity = fleet_fuel_capacity(state, fleet);
         fleet.fuel = std::clamp(fleet.fuel - fuelChange, 0.0, capacity);
-
-        bool arrived = false;
-        if (travelDistance >= remaining - epsilon) {
-            fleet.position = destination;
-            arrived = true;
-        } else {
-            const auto fraction = travelDistance / remaining;
-            fleet.position.x += (destination.x - start.x) * fraction;
-            fleet.position.y += (destination.y - start.y) * fraction;
-        }
+        fleet.position = endpoint;
 
         observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
         apply_fleet_radiation_attrition(state, fleet);
 
-        if (arrived && fleet.targetFleet == 0) fixedArrivals.push_back(fleet.id);
+        if (plan->routed && !plan->intercepted && fleet.targetFleet == 0
+            && same_position(endpoint, plan->destination)) {
+            fixedArrivals.push_back(fleet.id);
+        }
     }
+
+    std::sort(fixedArrivals.begin(), fixedArrivals.end());
 
     for (const auto id : fixedArrivals) {
         auto* fleet = fleet_by_id(state, id);

@@ -83,13 +83,14 @@ int main()
     assert(near(fleet(first, 2)->position.x, 66.0));
     assert(fleet(first, 1)->targetFleet == 2);
 
-    // On the following boundary both fleets really finish at x=82. The
-    // pursuer is consumed and its heterogeneous stacks join the target.
+    // On the following turn the fleets enter the strategic encounter radius
+    // immediately before x=82. Both stop at the shared encounter midpoint;
+    // the pursuer is consumed and its heterogeneous stacks join the target.
     auto second = processor.process(first, {});
     assert(!fleet(second, 1));
     const auto* merged = fleet(second, 2);
     assert(merged);
-    assert(near(merged->position.x, 82.0));
+    assert(near(merged->position.x, 81.915));
     assert(merged->destination && near(merged->destination->x, 200.0));
     assert(fleet_ship_count(*merged, kScoutDesignId) == 2);
     assert(fleet_ship_count(*merged, kColonyShipDesignId) == 1);
@@ -113,7 +114,7 @@ int main()
     auto rendezvousSecond = processor.process(rendezvousFirst, {});
     const auto* rendezvoused = fleet(rendezvousSecond, 1);
     assert(rendezvoused);
-    assert(near(rendezvoused->position.x, 82.0));
+    assert(near(rendezvoused->position.x, 81.915));
     assert(rendezvoused->targetFleet == 0);
     assert(!rendezvoused->destination);
 

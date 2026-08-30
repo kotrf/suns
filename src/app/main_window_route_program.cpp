@@ -188,7 +188,7 @@ QString routeForecast(
         if (!after) {
             if (leg.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
                 && findFleet(next, leg.targetFleet)) {
-                lines << QString("%1. %2 — T+%3, W%4 — <b>rendezvous completed; fleets merged</b>")
+                lines << QString("%1. %2 — intercept T+%3, W%4 — <b>rendezvous completed; fleets merged</b>")
                              .arg(static_cast<qulonglong>(legIndex + 1))
                              .arg(waypointName(state, leg.destination, leg.targetFleet))
                              .arg(step)
@@ -232,10 +232,13 @@ QString routeForecast(
             && remainingLegs == expectedAfterRepeatRestart;
 
         if (arrived) {
-            const auto navigationCertainty = dependsOnDynamicResult ? "projected navigation" : "exact navigation";
+            const auto navigationCertainty = leg.targetFleet != 0
+                ? (dependsOnDynamicResult ? "projected continuous intercept" : "continuous intercept")
+                : (dependsOnDynamicResult ? "projected navigation" : "exact navigation");
             QString outcome;
             switch (leg.arrivalAction.kind) {
             case FleetArrivalActionKind::None:
+                if (leg.targetFleet != 0) outcome = "; moving-target rendezvous completed";
                 break;
             case FleetArrivalActionKind::LoadAllAvailable:
                 if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
@@ -290,8 +293,13 @@ QString routeForecast(
     }
 
     if (legIndex < legs.size()) {
-        lines << QString("<i>Program does not complete inside the %1-turn preview horizon; it may be fuel-limited or very long.</i>")
-                     .arg(kForecastHorizon);
+        if (legs[legIndex].targetFleet != 0) {
+            lines << QString("<i>No intercept is predicted inside the %1-turn preview horizon; pursuit remains active and the ETA is uncertain.</i>")
+                         .arg(kForecastHorizon);
+        } else {
+            lines << QString("<i>Program does not complete inside the %1-turn preview horizon; it may be fuel-limited or very long.</i>")
+                         .arg(kForecastHorizon);
+        }
     } else if (dependsOnDynamicResult) {
         lines << "<i>Projected legs after Load All depend on the colony state that actually exists on arrival.</i>";
     }
