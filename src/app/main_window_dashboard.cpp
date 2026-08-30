@@ -109,12 +109,14 @@ MineralCargo remoteMiningAtPlanet(const GameState& state, PlayerId player, const
             || !same_position(fleet.position, star->position)) {
             continue;
         }
-        const auto* design = fleet_design(state, fleet);
-        if (!design) continue;
-        const auto yield = projected_remote_mining(state, planet, *design);
-        total.ironium += yield.ironium;
-        total.boranium += yield.boranium;
-        total.germanium += yield.germanium;
+        for (const auto& stack : fleet_ship_stacks(fleet)) {
+            const auto* design = find_ship_design(state, stack.design);
+            if (!design || !ship_design_can_remote_mine(*design)) continue;
+            const auto yield = projected_remote_mining(state, planet, *design);
+            total.ironium += yield.ironium * stack.count;
+            total.boranium += yield.boranium * stack.count;
+            total.germanium += yield.germanium * stack.count;
+        }
     }
     return total;
 }
@@ -205,15 +207,23 @@ QString MainWindow::selectedFleetPanelSummary() const
     const auto* fleet = &visibleFleet;
 
     const auto* design = fleet_design(state_, *fleet);
-    const auto hull = design ? hull_spec(design->hull) : ShipHullSpec{};
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(fleet->name));
-    if (design) {
-        lines << QString("%1 • %2 • max W%3")
-                     .arg(QString::fromStdString(design->name))
-                     .arg(QString::fromStdString(hull.name))
-                     .arg(ship_design_max_warp(*design));
+    QStringList composition;
+    for (const auto& stack : fleet_ship_stacks(*fleet)) {
+        const auto* stackDesign = find_ship_design(state_, stack.design);
+        composition << QString("%1× %2")
+                           .arg(stack.count)
+                           .arg(stackDesign
+                               ? QString::fromStdString(stackDesign->name)
+                               : QString("Design %1").arg(stack.design));
     }
+    lines << QString("Ships: <b>%1</b> • %2 design%3 • max W%4")
+                 .arg(fleet_ship_count(*fleet))
+                 .arg(static_cast<qulonglong>(composition.size()))
+                 .arg(composition.size() == 1 ? "" : "s")
+                 .arg(fleet_max_warp(state_, *fleet));
+    lines << composition.join(" • ");
 
     if (fleet->destination) {
         const auto* target = findStarAtPosition(state_, *fleet->destination);
@@ -248,8 +258,16 @@ QString MainWindow::selectedFleetPanelSummary() const
     if (fleet->task == FleetTask::RemoteMining) {
         const auto* star = findStarAtPosition(state_, fleet->position);
         const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
-        if (design && planet) {
-            const auto yield = projected_remote_mining(state_, *planet, *design);
+        if (planet) {
+            MineralCargo yield;
+            for (const auto& stack : fleet_ship_stacks(*fleet)) {
+                const auto* stackDesign = find_ship_design(state_, stack.design);
+                if (!stackDesign || !ship_design_can_remote_mine(*stackDesign)) continue;
+                const auto perShip = projected_remote_mining(state_, *planet, *stackDesign);
+                yield.ironium += perShip.ironium * stack.count;
+                yield.boranium += perShip.boranium * stack.count;
+                yield.germanium += perShip.germanium * stack.count;
+            }
             lines << QString("<span style='color:#d7bf78'><b>Remote Mining assigned</b></span> — I %1 / B %2 / G %3 per turn")
                          .arg(yield.ironium, 0, 'f', 2)
                          .arg(yield.boranium, 0, 'f', 2)
@@ -276,7 +294,7 @@ QString MainWindow::selectedFleetPanelSummary() const
                                    .arg(sensor, 0, 'f', 0).arg(penetrating, 0, 'f', 0)
                              : QString("%1 ly detection").arg(sensor, 0, 'f', 0));
 
-    if (design && ship_design_radiation_hazard(*design) > 0.0) {
+    if (fleet_radiation_hazard(state_, *fleet) > 0.0) {
         if (fleet_radiation_safe(state_, *fleet)) {
             lines << "<span style='color:#83c99a'>Radiating drive: safe for this race</span>";
         } else {
@@ -285,7 +303,7 @@ QString MainWindow::selectedFleetPanelSummary() const
         }
     }
 
-    lines << QString("Components: %1").arg(componentLine(design));
+    if (composition.size() == 1) lines << QString("Components: %1").arg(componentLine(design));
     return lines.join("<br>");
 }
 

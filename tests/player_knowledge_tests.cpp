@@ -72,6 +72,7 @@ void penetrating_scanner_estimates_planet_during_a_flyby()
         {ShipComponentType::FusionDrive, ShipComponentType::PenetratingScanner},
     });
     state.fleets.front().design = 99;
+    state.fleets.front().ships = {{99, 1}};
     state.fleets.front().destination = Position{200.0, 0.0};
     state.fleets.front().fuel = 300.0;
     const TurnProcessor processor;
@@ -284,6 +285,7 @@ void colony_founding_emits_a_player_event()
     auto& colonyShip = state.fleets.front();
     colonyShip.position = target->position;
     colonyShip.design = kColonyShipDesignId;
+    colonyShip.ships = {{kColonyShipDesignId, 1}};
     colonyShip.role = FleetRole::ColonyShip;
     colonyShip.colonists = 500;
 

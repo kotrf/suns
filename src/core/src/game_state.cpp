@@ -145,7 +145,46 @@ const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id)
 
 const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet)
 {
-    return find_ship_design(state, fleet.design);
+    const auto stacks = fleet_ship_stacks(fleet);
+    return stacks.empty() ? nullptr : find_ship_design(state, stacks.front().design);
+}
+
+std::vector<FleetShipStack> fleet_ship_stacks(const Fleet& fleet)
+{
+    if (fleet.ships.empty()) return {{fleet.design, 1}};
+
+    std::vector<FleetShipStack> result;
+    for (const auto& stack : fleet.ships) {
+        if (stack.design == 0 || stack.count == 0) continue;
+        const auto existing = std::find_if(result.begin(), result.end(), [&](const FleetShipStack& candidate) {
+            return candidate.design == stack.design;
+        });
+        if (existing == result.end()) result.push_back(stack);
+        else existing->count += stack.count;
+    }
+    return result;
+}
+
+std::uint32_t fleet_ship_count(const Fleet& fleet)
+{
+    std::uint32_t total = 0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) total += stack.count;
+    return total;
+}
+
+std::uint32_t fleet_ship_count(const Fleet& fleet, ShipDesignId design)
+{
+    const auto stacks = fleet_ship_stacks(fleet);
+    const auto stack = std::find_if(stacks.begin(), stacks.end(), [&](const FleetShipStack& candidate) {
+        return candidate.design == design;
+    });
+    return stack == stacks.end() ? 0 : stack->count;
+}
+
+void normalize_fleet_composition(Fleet& fleet)
+{
+    fleet.ships = fleet_ship_stacks(fleet);
+    if (!fleet.ships.empty()) fleet.design = fleet.ships.front().design;
 }
 
 ShipHullSpec hull_spec(ShipHullType type)
@@ -526,32 +565,97 @@ std::uint32_t fleet_eta(const Fleet& fleet)
 
 double fleet_speed(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_speed(*design) : 0.0;
+    double speed = std::numeric_limits<double>::infinity();
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) return 0.0;
+        speed = std::min(speed, ship_design_speed(*design));
+    }
+    return std::isfinite(speed) ? speed : 0.0;
 }
 
 double fleet_sensor_range(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_sensor_range(*design) : 0.0;
+    return std::max(
+        fleet_ordinary_sensor_range(state, fleet),
+        fleet_penetrating_sensor_range(state, fleet));
 }
 
 double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_ordinary_sensor_range(*design) : 0.0;
+    double range = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            range = std::max(range, ship_design_ordinary_sensor_range(*design));
+        }
+    }
+    return range;
 }
 
 double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_penetrating_sensor_range(*design) : 0.0;
+    double range = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            range = std::max(range, ship_design_penetrating_sensor_range(*design));
+        }
+    }
+    return range;
 }
 
 bool fleet_can_colonize(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design && ship_design_can_colonize(*design);
+    const auto stacks = fleet_ship_stacks(fleet);
+    return std::any_of(stacks.begin(), stacks.end(), [&](const FleetShipStack& stack) {
+        const auto* design = find_ship_design(state, stack.design);
+        return design && ship_design_can_colonize(*design);
+    });
+}
+
+bool fleet_can_remote_mine(const GameState& state, const Fleet& fleet)
+{
+    const auto stacks = fleet_ship_stacks(fleet);
+    return std::any_of(stacks.begin(), stacks.end(), [&](const FleetShipStack& stack) {
+        const auto* design = find_ship_design(state, stack.design);
+        return design
+            && ship_design_available_to_player(state, fleet.owner, *design)
+            && ship_design_can_remote_mine(*design);
+    });
+}
+
+std::uint8_t fleet_max_warp(const GameState& state, const Fleet& fleet)
+{
+    std::uint8_t result = kMaxWarp;
+    bool found = false;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) return 0;
+        result = std::min(result, ship_design_max_warp(*design));
+        found = true;
+    }
+    return found ? result : 0;
+}
+
+double fleet_fuel_generation(const GameState& state, const Fleet& fleet)
+{
+    double result = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            result += ship_design_fuel_generation(*design) * stack.count;
+        }
+    }
+    return result;
+}
+
+double fleet_radiation_hazard(const GameState& state, const Fleet& fleet)
+{
+    double result = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            result = std::max(result, ship_design_radiation_hazard(*design));
+        }
+    }
+    return result;
 }
 
 std::uint32_t fleet_eta(const GameState&, const Fleet& fleet)
@@ -561,14 +665,24 @@ std::uint32_t fleet_eta(const GameState&, const Fleet& fleet)
 
 double fleet_fuel_capacity(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_fuel_capacity(*design) : 0.0;
+    double capacity = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            capacity += ship_design_fuel_capacity(*design) * stack.count;
+        }
+    }
+    return capacity;
 }
 
 double fleet_cargo_capacity(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_cargo_capacity(*design) : 0.0;
+    double capacity = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            capacity += ship_design_cargo_capacity(*design) * stack.count;
+        }
+    }
+    return capacity;
 }
 
 double fleet_cargo_used(const GameState&, const Fleet& fleet)
@@ -578,14 +692,27 @@ double fleet_cargo_used(const GameState&, const Fleet& fleet)
 
 double fleet_gross_mass(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_mass(*design) + fleet_cargo_used(state, fleet) : 0.0;
+    double mass = fleet_cargo_used(state, fleet);
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            mass += ship_design_mass(*design) * stack.count;
+        }
+    }
+    return mass;
 }
 
 double fleet_fuel_rate(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design ? ship_design_fuel_rate(*design, fleet.warp) : 0.0;
+    double weightedRate = 0.0;
+    double dryMass = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) continue;
+        const auto mass = ship_design_mass(*design) * stack.count;
+        weightedRate += ship_design_fuel_rate(*design, fleet.warp) * mass;
+        dryMass += mass;
+    }
+    return dryMass > 0.0 ? weightedRate / dryMass : 0.0;
 }
 
 double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance)
@@ -596,8 +723,7 @@ double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet
 
 bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp)
 {
-    const auto* design = fleet_design(state, fleet);
-    return design && warp >= 1 && warp <= ship_design_max_warp(*design);
+    return warp >= 1 && warp <= fleet_max_warp(state, fleet);
 }
 
 bool within_range(Position source, Position target, double range)
@@ -754,6 +880,7 @@ namespace {
 
 void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
 {
+    normalize_fleet_composition(fleet);
     fleet.telemetry.observedTurn = turn;
     fleet.telemetry.position = fleet.position;
     fleet.telemetry.destination = fleet.destination;
@@ -763,6 +890,7 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.arrivalAction = fleet.arrivalAction;
     fleet.telemetry.waypointQueue = fleet.waypointQueue;
     fleet.telemetry.minerals = fleet.minerals;
+    fleet.telemetry.ships = fleet.ships;
 }
 
 } // namespace

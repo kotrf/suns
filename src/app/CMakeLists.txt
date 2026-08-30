@@ -6,6 +6,7 @@ qt_add_executable(suns_app
     main_window_communications.cpp
     main_window_dashboard.cpp
     main_window_fleet_portrait.cpp
+    main_window_fleet_management.cpp
     main_window_layout.cpp
     main_window_map_modes.cpp
     main_window_mining.cpp

@@ -228,9 +228,7 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
     }
     if (task != FleetTask::RemoteMining || fleet.destination || !fleet.waypointQueue.empty()) return false;
 
-    const auto* design = find_ship_design(state, fleet.design);
-    if (!design || !ship_design_available_to_player(state, fleet.owner, *design)) return false;
-    if (!ship_design_can_remote_mine(*design)) return false;
+    if (!fleet_can_remote_mine(state, fleet)) return false;
 
     const auto atUncolonizedPlanet = std::any_of(
         state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
@@ -257,6 +255,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.task = fleet.task;
     result.repeatOrders = fleet.repeatOrders;
     result.routeTemplate = fleet.routeTemplate;
+    result.ships = fleet_ship_stacks(fleet);
     return result;
 }
 
@@ -419,6 +418,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.task = telemetry.task;
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;
+    if (!telemetry.ships.empty()) view.ships = telemetry.ships;
     view.pendingCommands.clear();
     view.telemetry = telemetry;
     view.telemetryInTransit.clear();

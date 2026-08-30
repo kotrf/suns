@@ -290,6 +290,11 @@ struct FleetRouteProgram {
     bool repeatOrders{};
 };
 
+struct FleetShipStack {
+    ShipDesignId design{};
+    std::uint32_t count{};
+};
+
 struct FleetTelemetry {
     std::uint64_t observedTurn{};
     Position position;
@@ -303,6 +308,7 @@ struct FleetTelemetry {
     FleetTask task{FleetTask::None};
     bool repeatOrders{};
     std::vector<FleetWaypoint> routeTemplate;
+    std::vector<FleetShipStack> ships;
 };
 
 struct PendingFleetCommand {
@@ -341,6 +347,10 @@ struct Fleet {
     FleetTask task{FleetTask::None};
     bool repeatOrders{};
     std::vector<FleetWaypoint> routeTemplate;
+
+    // Authoritative fleet composition. Empty means one ship of the legacy
+    // `design` above and is accepted for old saves and compact test fixtures.
+    std::vector<FleetShipStack> ships;
 };
 
 struct GameState {
@@ -368,6 +378,10 @@ struct GalaxyConfig {
 [[nodiscard]] const Player* find_player(const GameState& state, PlayerId id);
 [[nodiscard]] const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id);
 [[nodiscard]] const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet);
+[[nodiscard]] std::vector<FleetShipStack> fleet_ship_stacks(const Fleet& fleet);
+[[nodiscard]] std::uint32_t fleet_ship_count(const Fleet& fleet);
+[[nodiscard]] std::uint32_t fleet_ship_count(const Fleet& fleet, ShipDesignId design);
+void normalize_fleet_composition(Fleet& fleet);
 
 [[nodiscard]] ShipHullSpec hull_spec(ShipHullType type);
 [[nodiscard]] ShipComponentSpec component_spec(ShipComponentType type);
@@ -421,6 +435,10 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] bool fleet_can_colonize(const GameState& state, const Fleet& fleet);
+[[nodiscard]] bool fleet_can_remote_mine(const GameState& state, const Fleet& fleet);
+[[nodiscard]] std::uint8_t fleet_max_warp(const GameState& state, const Fleet& fleet);
+[[nodiscard]] double fleet_fuel_generation(const GameState& state, const Fleet& fleet);
+[[nodiscard]] double fleet_radiation_hazard(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint32_t fleet_eta(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_capacity(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_cargo_capacity(const GameState& state, const Fleet& fleet);

@@ -56,6 +56,7 @@ void round_trip_preserves_communications_and_planning()
     scout.fuel = 217.75;
     scout.colonists = 1234;
     scout.minerals = {1.25, 2.5, 3.75};
+    scout.ships = {{kScoutDesignId, 2}, {3, 1}};
     scout.pendingCommands.push_back({
         77,
         80,
@@ -84,6 +85,8 @@ void round_trip_preserves_communications_and_planning()
         {{600.0, 20.0}, 8, {}},
         {{300.0, 10.0}, 8, {}},
     };
+    scout.telemetry.ships = scout.ships;
+    scout.telemetryInTransit.front().telemetry.ships = scout.ships;
     scout.fuelStalled = true;
     scout.task = FleetTask::RemoteMining;
     scout.repeatOrders = true;
@@ -104,9 +107,12 @@ void round_trip_preserves_communications_and_planning()
         SetColonyResearchOrder{1, false},
         SetRemoteMiningOrder{scout.id, false},
         TransferCargoOrder{{1, 0}, {0, scout.id}, 100, {1.0, 2.0, 3.0}},
+        MergeFleetsOrder{scout.id, 2},
+        SplitFleetOrder{scout.id, {{kScoutDesignId, 1}}},
     }};
     original.pendingDescriptions = {
         "move", "mine", "research plan", "stop research", "stop remote mining", "transfer cargo",
+        "merge fleets", "split fleet",
     };
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
@@ -180,8 +186,13 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.task == FleetTask::RemoteMining);
     assert(fleet.repeatOrders);
     assert(fleet.routeTemplate.size() == 2);
+    assert(fleet_ship_count(fleet) == 3);
+    assert(fleet_ship_count(fleet, kScoutDesignId) == 2);
+    assert(fleet_ship_count(fleet, 3) == 1);
+    assert(fleet.telemetry.ships.size() == 2);
+    assert(fleet.telemetryInTransit.front().telemetry.ships.size() == 2);
 
-    assert(loaded.pendingOrders.orders.size() == 6);
+    assert(loaded.pendingOrders.orders.size() == 8);
     const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
     assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
     assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
@@ -204,6 +215,11 @@ void round_trip_preserves_communications_and_planning()
     assert(transfer->minerals.ironium == 1.0);
     assert(transfer->minerals.boranium == 2.0);
     assert(transfer->minerals.germanium == 3.0);
+    const auto* merge = std::get_if<MergeFleetsOrder>(&loaded.pendingOrders.orders[6]);
+    assert(merge && merge->destination == scout.id && merge->source == 2);
+    const auto* split = std::get_if<SplitFleetOrder>(&loaded.pendingOrders.orders[7]);
+    assert(split && split->source == scout.id && split->ships.size() == 1);
+    assert(split->ships.front().design == kScoutDesignId && split->ships.front().count == 1);
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
