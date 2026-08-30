@@ -564,18 +564,16 @@ FleetEncounterGeometry analyze_fleet_encounter(
     FleetEncounterGeometry result;
     result.closestTimeFraction = closestTime;
     result.closestDistance = std::hypot(closestRelative.x, closestRelative.y);
-    const auto encounterMidpoint = [&](double time) {
-        const auto pursuer = interpolate(pursuerStart, pursuerEnd, time);
-        const auto target = interpolate(targetStart, targetEnd, time);
-        return Position{(pursuer.x + target.x) * 0.5, (pursuer.y + target.y) * 0.5};
+    const auto targetPosition = [&](double time) {
+        return interpolate(targetStart, targetEnd, time);
     };
-    result.encounterPosition = encounterMidpoint(closestTime);
+    result.encounterPosition = targetPosition(closestTime);
 
     const auto radius = std::max(0.0, encounterRadius);
     const auto startDistanceSquared = dot(relativeStart, relativeStart);
     if (startDistanceSquared <= radius * radius + 0.000000000001) {
         result.encounterTimeFraction = 0.0;
-        result.encounterPosition = encounterMidpoint(0.0);
+        result.encounterPosition = targetPosition(0.0);
         return result;
     }
     if (velocitySquared <= 0.000000000001 || result.closestDistance > radius + 0.000000001) {
@@ -592,7 +590,7 @@ FleetEncounterGeometry analyze_fleet_encounter(
     if (entry < -0.000000001 || entry > 1.0 + 0.000000001) return result;
 
     result.encounterTimeFraction = std::clamp(entry, 0.0, 1.0);
-    result.encounterPosition = encounterMidpoint(*result.encounterTimeFraction);
+    result.encounterPosition = targetPosition(*result.encounterTimeFraction);
     return result;
 }
 

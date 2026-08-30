@@ -907,12 +907,18 @@ bool resolve_fleet_target_arrival(
     return true;
 }
 
-Position projected_turn_endpoint(const GameState& state, const Fleet& fleet, Position destination)
+Position projected_movement_endpoint(
+    const GameState& state,
+    const Fleet& fleet,
+    Position destination,
+    double turnFraction)
 {
     const auto remaining = distance_between(fleet.position, destination);
     if (remaining <= 0.000001 || !fleet_warp_valid(state, fleet, fleet.warp)) return fleet.position;
 
-    double distance = std::min(remaining, warp_distance(fleet.warp));
+    double distance = std::min(
+        remaining,
+        warp_distance(fleet.warp) * std::clamp(turnFraction, 0.0, 1.0));
     const auto fuelPerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
     if (fuelPerLy > 0.000001) distance = std::min(distance, fleet.fuel / fuelPerLy);
     if (distance <= 0.000001) return fleet.position;
@@ -923,6 +929,60 @@ Position projected_turn_endpoint(const GameState& state, const Fleet& fleet, Pos
         fleet.position.x + (destination.x - fleet.position.x) * fraction,
         fleet.position.y + (destination.y - fleet.position.y) * fraction,
     };
+}
+
+Position projected_turn_endpoint(const GameState& state, const Fleet& fleet, Position destination)
+{
+    return projected_movement_endpoint(state, fleet, destination, 1.0);
+}
+
+void continue_merged_fleet_route(
+    GameState& state,
+    Fleet& fleet,
+    Position destination,
+    double remainingTurnFraction,
+    std::vector<FleetId>& consumedFleets)
+{
+    constexpr double epsilon = 0.000001;
+    if (remainingTurnFraction <= epsilon) return;
+
+    fleet.warp = std::min(fleet.warp, fleet_max_warp(state, fleet));
+    const auto start = fleet.position;
+    const auto routeDistance = distance_between(start, destination);
+    if (routeDistance <= epsilon) {
+        if (fleet.targetFleet == 0) {
+            fleet.destination.reset();
+            (void)finish_fleet_arrival(state, fleet, consumedFleets);
+        }
+        return;
+    }
+
+    const auto endpoint = projected_movement_endpoint(
+        state, fleet, destination, remainingTurnFraction);
+    const auto travelled = distance_between(start, endpoint);
+    if (travelled <= epsilon) {
+        const auto fuelPerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
+        if (routeDistance > epsilon && fuelPerLy > epsilon && !fleet.fuelStalled) {
+            fleet.fuelStalled = true;
+            queue_fleet_movement_report(
+                state, fleet, PlayerReportKind::FleetStalledForFuel, state.turn + 1);
+        }
+        return;
+    }
+
+    const auto fuelChange = fleet_fuel_change_for_distance(state, fleet, travelled);
+    fleet.fuel = std::clamp(
+        fleet.fuel - fuelChange,
+        0.0,
+        fleet_fuel_capacity(state, fleet));
+    fleet.position = endpoint;
+    fleet.fuelStalled = false;
+    observe_fleet_sensor_sweep(state, fleet, start, endpoint, state.turn + 1);
+
+    if (fleet.targetFleet == 0 && same_position(endpoint, destination)) {
+        fleet.destination.reset();
+        (void)finish_fleet_arrival(state, fleet, consumedFleets);
+    }
 }
 
 void advance_fleets(GameState& state)
@@ -1008,6 +1068,8 @@ void advance_fleets(GameState& state)
         FleetId target{};
         double timeFraction{};
         Position position;
+        Position targetDestination;
+        bool targetRouted{};
     };
     std::vector<EncounterCandidate> encounters;
     for (const auto& plan : plans) {
@@ -1030,6 +1092,8 @@ void advance_fleets(GameState& state)
             target->id,
             *geometry.encounterTimeFraction,
             geometry.encounterPosition,
+            targetPlan->destination,
+            targetPlan->routed,
         });
     }
     std::sort(encounters.begin(), encounters.end(), [](const EncounterCandidate& left, const EncounterCandidate& right) {
@@ -1044,6 +1108,7 @@ void advance_fleets(GameState& state)
     // are ordered by physical time, then stable FleetId, so replay results do
     // not depend on storage order.
     std::vector<FleetId> encounteredFleets;
+    std::vector<EncounterCandidate> resolvedEncounters;
     for (const auto& encounter : encounters) {
         if (fleet_id_list_contains(encounteredFleets, encounter.pursuer)
             || fleet_id_list_contains(encounteredFleets, encounter.target)) {
@@ -1064,6 +1129,7 @@ void advance_fleets(GameState& state)
         targetPlan->intercepted = true;
         encounteredFleets.push_back(encounter.pursuer);
         encounteredFleets.push_back(encounter.target);
+        resolvedEncounters.push_back(encounter);
     }
 
     std::vector<FleetId> fixedArrivals;
@@ -1130,7 +1196,38 @@ void advance_fleets(GameState& state)
     for (const auto id : fleetIds) {
         auto* fleet = fleet_by_id(state, id);
         if (!fleet || fleet_id_list_contains(consumedFleets, id) || fleet->targetFleet == 0) continue;
-        (void)resolve_fleet_target_arrival(state, *fleet, consumedFleets);
+        const auto encounter = std::find_if(
+            resolvedEncounters.begin(), resolvedEncounters.end(), [&](const EncounterCandidate& candidate) {
+                return candidate.pursuer == id;
+            });
+        if (fleet_id_list_contains(encounteredFleets, id) && encounter == resolvedEncounters.end()) {
+            continue;
+        }
+
+        const auto targetId = fleet->targetFleet;
+        const auto action = fleet->arrivalAction.value_or(FleetArrivalAction{});
+        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets);
+        if (!resolved || encounter == resolvedEncounters.end()
+            || action.kind != FleetArrivalActionKind::MergeWithFleet
+            || !encounter->targetRouted) {
+            continue;
+        }
+
+        auto* merged = fleet_by_id(state, targetId);
+        if (!merged || fleet_id_list_contains(consumedFleets, targetId)
+            || !merged->destination) {
+            continue;
+        }
+
+        // The target FleetId and its route survive a merge. Use only the time
+        // left after contact, and reduce Warp to the fastest setting supported
+        // by every ship in the new heterogeneous fleet.
+        continue_merged_fleet_route(
+            state,
+            *merged,
+            encounter->targetDestination,
+            1.0 - encounter->timeFraction,
+            consumedFleets);
     }
 
     if (!consumedFleets.empty()) {

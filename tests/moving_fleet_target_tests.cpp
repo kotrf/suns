@@ -84,16 +84,28 @@ int main()
     assert(fleet(first, 1)->targetFleet == 2);
 
     // On the following turn the fleets enter the strategic encounter radius
-    // immediately before x=82. Both stop at the shared encounter midpoint;
-    // the pursuer is consumed and its heterogeneous stacks join the target.
+    // immediately before x=82. The pursuer joins the target there, then the
+    // merged fleet uses the remaining fraction of the turn on the target route.
     auto second = processor.process(first, {});
     assert(!fleet(second, 1));
     const auto* merged = fleet(second, 2);
     assert(merged);
-    assert(near(merged->position.x, 81.915));
+    assert(near(merged->position.x, 82.0));
     assert(merged->destination && near(merged->destination->x, 200.0));
     assert(fleet_ship_count(*merged, kScoutDesignId) == 2);
     assert(fleet_ship_count(*merged, kColonyShipDesignId) == 1);
+
+    // If the target's destination is close enough, the merged fleet completes
+    // that route leg during the unused fraction of the same turn.
+    auto completesTargetRoute = pursuit_state();
+    fleet(completesTargetRoute, 2)->destination = Position{82.0, 0.0};
+    auto completingFirst = processor.process(completesTargetRoute, {});
+    auto completingSecond = processor.process(completingFirst, {});
+    const auto* completed = fleet(completingSecond, 2);
+    assert(completed);
+    assert(!fleet(completingSecond, 1));
+    assert(near(completed->position.x, 82.0));
+    assert(!completed->destination);
 
     // Reordering the backing vector cannot change the simultaneous movement
     // projection or meeting result.
@@ -114,7 +126,7 @@ int main()
     auto rendezvousSecond = processor.process(rendezvousFirst, {});
     const auto* rendezvoused = fleet(rendezvousSecond, 1);
     assert(rendezvoused);
-    assert(near(rendezvoused->position.x, 81.915));
+    assert(near(rendezvoused->position.x, 81.92));
     assert(rendezvoused->targetFleet == 0);
     assert(!rendezvoused->destination);
 
