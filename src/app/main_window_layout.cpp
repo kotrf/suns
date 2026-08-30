@@ -48,7 +48,9 @@ void MainWindow::installPanelLayoutFixes()
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
         dock->setFeatures(QDockWidget::DockWidgetClosable
             | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-        panels->addAction(dock->toggleViewAction());
+        if (!panels->actions().contains(dock->toggleViewAction())) {
+            panels->addAction(dock->toggleViewAction());
+        }
         if (dock->objectName() == "fleetRouteProgramDock") {
             dock->setMinimumWidth(280);
             dock->setMaximumWidth(520);
