@@ -60,6 +60,8 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::ProductionCompleted: return GameEventKind::ProductionCompleted;
     case PlayerReportKind::ColonyFounded: return GameEventKind::ColonyFounded;
     case PlayerReportKind::ProductionWaitingForMinerals: return GameEventKind::ProductionWaitingForMinerals;
+    case PlayerReportKind::FleetTargetLost: return GameEventKind::FleetTargetLost;
+    case PlayerReportKind::FleetsMerged: return GameEventKind::FleetsMerged;
     }
     return GameEventKind::FleetArrived;
 }
@@ -67,6 +69,7 @@ GameEventKind event_kind(PlayerReportKind kind)
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
     return kind == PlayerReportKind::FleetStalledForFuel
+            || kind == PlayerReportKind::FleetTargetLost
             || kind == PlayerReportKind::ProductionWaitingForMinerals
         ? GameEventSeverity::Warning
         : GameEventSeverity::Information;

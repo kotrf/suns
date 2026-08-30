@@ -15,6 +15,8 @@ enum class GameEventKind {
     ColonyFounded,
     ProductionWaitingForMinerals,
     ResearchLevelCompleted,
+    FleetTargetLost,
+    FleetsMerged,
 };
 
 enum class GameEventSeverity {

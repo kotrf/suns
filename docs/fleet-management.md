@@ -2,7 +2,7 @@
 
 A fleet is now a shared strategic unit containing one or more ship stacks. Each stack stores a stable `ShipDesignId` and a ship count, so scouts, transports, colonizers and remote miners can travel and work together without being converted into a rigid fleet role.
 
-The legacy single `Fleet::design` field remains as a representative design for old saves and presentation code. `Fleet::ships` is authoritative for new fleets. An empty stack list is interpreted as one ship of the legacy design, and save version 12 is migrated to that representation when loaded. Save version 13 persists fleet and telemetry composition as well as pending merge/split orders; version 14 adds pending production-queue reorder orders.
+The legacy single `Fleet::design` field remains as a representative design for old saves and presentation code. `Fleet::ships` is authoritative for new fleets. An empty stack list is interpreted as one ship of the legacy design, and save version 12 is migrated to that representation when loaded. Save version 13 persists fleet and telemetry composition as well as pending merge/split orders; version 14 adds pending production-queue reorder orders; version 15 adds moving FleetId route targets and merge-on-arrival.
 
 ## Derived capabilities
 
@@ -19,7 +19,7 @@ Colonization dismantles the complete fleet and removes its `FleetId`. Transporte
 
 `MergeFleetsOrder{destination, source}` combines two co-located friendly fleets. The destination `FleetId` and name survive, every ship stack and carried resource is retained, duplicate design stacks are consolidated, and the source fleet is removed.
 
-Both fleets must be stationary and idle, with no waypoint program, persistent task or command packet in flight. Moving-fleet rendezvous and merge-on-arrival remain a separate feature.
+Both fleets must be stationary and idle, with no waypoint program, persistent task or command packet in flight. For fleets that are already moving, Route Program can instead target a friendly FleetId and use `Merge with fleet`. The target fleet keeps its identity and onboard program after the actual rendezvous; the pursuing source is absorbed.
 
 ## Split order
 

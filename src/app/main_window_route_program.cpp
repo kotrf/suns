@@ -35,8 +35,14 @@ const StarSystem* findStarAtPosition(const GameState& state, Position position)
     return it == state.stars.end() ? nullptr : &*it;
 }
 
-QString waypointName(const GameState& state, Position position)
+QString waypointName(const GameState& state, Position position, FleetId targetFleet = 0)
 {
+    if (targetFleet != 0) {
+        if (const auto* fleet = findFleet(state, targetFleet)) {
+            return QString("%1 [moving fleet]").arg(QString::fromStdString(fleet->name));
+        }
+        return QString("Fleet %1 [target lost]").arg(targetFleet);
+    }
     if (const auto* star = findStarAtPosition(state, position)) {
         return QString::fromStdString(star->name);
     }
@@ -71,6 +77,8 @@ QString actionName(const FleetArrivalAction& action)
         return "Colonize world — dismantles entire fleet";
     case FleetArrivalActionKind::RemoteMining:
         return "Remote Mining — persistent";
+    case FleetArrivalActionKind::MergeWithFleet:
+        return "Merge with fleet — terminal";
     }
     return "no action";
 }
@@ -103,12 +111,14 @@ std::optional<MoveFleetOrder> effectiveRoute(const GameState&, const PlayerOrder
         fleet.arrivalAction.value_or(FleetArrivalAction{}),
         fleet.waypointQueue,
         fleet.repeatOrders,
+        fleet.targetFleet,
     };
 }
 
 bool routeIsClearIntent(const Fleet& fleet, const MoveFleetOrder& move)
 {
     return same_position(fleet.position, move.destination)
+        && move.targetFleet == 0
         && move.arrivalAction.kind == FleetArrivalActionKind::None
         && move.queuedWaypoints.empty();
 }
@@ -125,7 +135,7 @@ QString routeDescription(const GameState& state, const Fleet& fleet, const MoveF
         .arg(legs)
         .arg(legs == 1 ? "" : "s")
         .arg(route.repeatOrders ? ", repeating" : "")
-        .arg(waypointName(state, route.destination))
+        .arg(waypointName(state, route.destination, route.targetFleet))
         .arg(route.warp);
 }
 
@@ -133,7 +143,7 @@ std::vector<FleetWaypoint> routeLegs(const MoveFleetOrder& route)
 {
     std::vector<FleetWaypoint> legs;
     legs.reserve(1 + route.queuedWaypoints.size());
-    legs.push_back({route.destination, route.warp, route.arrivalAction});
+    legs.push_back({route.destination, route.warp, route.arrivalAction, route.targetFleet});
     legs.insert(legs.end(), route.queuedWaypoints.begin(), route.queuedWaypoints.end());
     return legs;
 }
@@ -176,13 +186,24 @@ QString routeForecast(
         const auto* after = findFleet(next, fleetId);
         const auto& leg = legs[legIndex];
         if (!after) {
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
+                && findFleet(next, leg.targetFleet)) {
+                lines << QString("%1. %2 — T+%3, W%4 — <b>rendezvous completed; fleets merged</b>")
+                             .arg(static_cast<qulonglong>(legIndex + 1))
+                             .arg(waypointName(state, leg.destination, leg.targetFleet))
+                             .arg(step)
+                             .arg(leg.warp);
+                legIndex = legs.size();
+                simulated = std::move(next);
+                break;
+            }
             if (leg.arrivalAction.kind == FleetArrivalActionKind::Colonize) {
                 const auto* targetStar = findStarAtPosition(next, leg.destination);
                 const auto* targetPlanet = targetStar ? find_planet_at_star(next, targetStar->id) : nullptr;
                 if (targetPlanet && targetPlanet->owner == fleetOwner) {
                     lines << QString("%1. %2 — T+%3, W%4 — <b>colonized successfully; fleet dismantled</b>")
                                  .arg(static_cast<qulonglong>(legIndex + 1))
-                                 .arg(waypointName(state, leg.destination))
+                                 .arg(waypointName(state, leg.destination, leg.targetFleet))
                                  .arg(step)
                                  .arg(leg.warp);
                     if (legIndex + 1 < legs.size()) {
@@ -205,7 +226,9 @@ QString routeForecast(
         const auto expectedAfterRepeatRestart = route.repeatOrders && legIndex + 1 == legs.size()
             ? after->routeTemplate.size()
             : expectedRemaining;
-        const bool arrived = same_position(after->position, leg.destination)
+        const auto* movingTarget = findFleet(next, leg.targetFleet);
+        const auto arrivalPosition = movingTarget ? movingTarget->position : leg.destination;
+        const bool arrived = same_position(after->position, arrivalPosition)
             && remainingLegs == expectedAfterRepeatRestart;
 
         if (arrived) {
@@ -242,11 +265,14 @@ QString routeForecast(
                     ? "; Remote Mining assigned; extraction begins next turn"
                     : "; Remote Mining could not be assigned";
                 break;
+            case FleetArrivalActionKind::MergeWithFleet:
+                outcome = "; rendezvous still pending";
+                break;
             }
 
             lines << QString("%1. %2 — T+%3, W%4, fuel %5, colonists %6 — <b>%7</b>%8")
                          .arg(static_cast<qulonglong>(legIndex + 1))
-                         .arg(waypointName(state, leg.destination))
+                         .arg(waypointName(state, leg.destination, leg.targetFleet))
                          .arg(step)
                          .arg(leg.warp)
                          .arg(after->fuel, 0, 'f', 1)
@@ -352,7 +378,7 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
                  .arg(route->repeatOrders ? " — Repeat Orders" : "");
 
     lines << QString("1. %1 — W%2 — %3 <b>[active]</b>")
-                 .arg(waypointName(state_, route->destination))
+                 .arg(waypointName(state_, route->destination, route->targetFleet))
                  .arg(route->warp)
                  .arg(actionName(route->arrivalAction));
 
@@ -360,7 +386,7 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     for (const auto& waypoint : route->queuedWaypoints) {
         lines << QString("%1. %2 — W%3 — %4")
                      .arg(static_cast<qulonglong>(index++))
-                     .arg(waypointName(state_, waypoint.destination))
+                     .arg(waypointName(state_, waypoint.destination, waypoint.targetFleet))
                      .arg(waypoint.warp)
                      .arg(actionName(waypoint.arrivalAction));
     }
@@ -387,9 +413,34 @@ std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
     const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
     if (!route || routeIsClearIntent(*fleet, *route)) return points;
 
-    points.push_back(route->destination);
-    for (const auto& waypoint : route->queuedWaypoints) points.push_back(waypoint.destination);
+    const auto resolvedPosition = [&](Position snapshot, FleetId target) {
+        if (const auto* targetFleet = findFleet(state_, target)) return targetFleet->position;
+        return snapshot;
+    };
+    points.push_back(resolvedPosition(route->destination, route->targetFleet));
+    for (const auto& waypoint : route->queuedWaypoints) {
+        points.push_back(resolvedPosition(waypoint.destination, waypoint.targetFleet));
+    }
     return points;
+}
+
+std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
+{
+    const auto source = selectedFleetForRouteProgram();
+    std::vector<FleetId> targets;
+    for (const auto& fleet : state_.fleets) {
+        if (fleet.owner == pendingOrders_.player && fleet.id != source) targets.push_back(fleet.id);
+    }
+    std::sort(targets.begin(), targets.end());
+    return targets;
+}
+
+QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
+{
+    if (const auto* fleet = findFleet(state_, fleetId)) {
+        return QString("%1 (Fleet %2)").arg(QString::fromStdString(fleet->name)).arg(fleetId);
+    }
+    return QString("Fleet %1").arg(fleetId);
 }
 
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)
@@ -402,6 +453,10 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
     const auto* star = selectedStar();
     if (!fleet || !star || !fleet_warp_valid(state_, *fleet, warp)) {
         statusBar()->showMessage("Select a fleet and destination star with a valid Warp first");
+        return false;
+    }
+    if (arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet) {
+        statusBar()->showMessage("Merge with fleet requires a moving fleet target", 3000);
         return false;
     }
 
@@ -432,35 +487,72 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         }
     }
 
-    if (const auto existing = effectiveRoute(state_, pendingOrders_, *fleet)) {
-        const auto& finalAction = existing->queuedWaypoints.empty()
-            ? existing->arrivalAction
-            : existing->queuedWaypoints.back().arrivalAction;
-        if (finalAction.kind == FleetArrivalActionKind::RemoteMining) {
-            statusBar()->showMessage("Remote Mining is terminal; clear or replace that task before adding another waypoint", 3000);
-            return false;
-        }
-        if (existing->repeatOrders
-            && (arrivalAction.kind == FleetArrivalActionKind::Colonize
-                || arrivalAction.kind == FleetArrivalActionKind::RemoteMining)) {
-            statusBar()->showMessage("Disable Repeat Orders before adding Colonize or Remote Mining", 3000);
-            return false;
-        }
-    }
-
     if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
         const auto* planet = find_planet_at_star(state_, star->id);
         if (!planet || !confirmFleetColonization(*fleet, *planet, true)) return false;
     }
 
+    return appendRouteWaypoint(star->position, 0, warp, arrivalAction);
+}
+
+bool MainWindow::appendFleetTargetWaypoint(
+    FleetId targetFleetId, std::uint8_t warp, FleetArrivalAction arrivalAction)
+{
+    const auto* source = selectedFleet();
+    const auto* target = findFleet(state_, targetFleetId);
+    if (!source || !target || source->owner != target->owner || source->id == target->id
+        || !fleet_warp_valid(state_, *source, warp)) {
+        statusBar()->showMessage("Select another friendly fleet as the moving target", 3000);
+        return false;
+    }
+    if (arrivalAction.kind != FleetArrivalActionKind::None
+        && arrivalAction.kind != FleetArrivalActionKind::MergeWithFleet) {
+        statusBar()->showMessage("A moving fleet target supports No action or Merge with fleet", 3000);
+        return false;
+    }
+    return appendRouteWaypoint(target->position, target->id, warp, arrivalAction);
+}
+
+bool MainWindow::appendRouteWaypoint(
+    Position destination,
+    FleetId targetFleet,
+    std::uint8_t warp,
+    FleetArrivalAction arrivalAction)
+{
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
+    if (!fleet || !fleet_warp_valid(state_, *fleet, warp)) return false;
+
+    if (const auto existing = effectiveRoute(state_, pendingOrders_, *fleet)) {
+        const auto& finalAction = existing->queuedWaypoints.empty()
+            ? existing->arrivalAction
+            : existing->queuedWaypoints.back().arrivalAction;
+        if (finalAction.kind == FleetArrivalActionKind::RemoteMining
+            || finalAction.kind == FleetArrivalActionKind::MergeWithFleet) {
+            statusBar()->showMessage("The current terminal action must be cleared before adding another waypoint", 3000);
+            return false;
+        }
+        if (existing->repeatOrders
+            && (arrivalAction.kind == FleetArrivalActionKind::Colonize
+                || arrivalAction.kind == FleetArrivalActionKind::RemoteMining
+                || arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet)) {
+            statusBar()->showMessage("Disable Repeat Orders before adding a terminal action", 3000);
+            return false;
+        }
+    }
+
     if (auto* move = pendingMove(pendingOrders_, fleet->id)) {
         if (routeIsClearIntent(*fleet, *move)) {
-            move->destination = star->position;
+            move->destination = destination;
+            move->targetFleet = targetFleet;
             move->warp = warp;
             move->arrivalAction = arrivalAction;
             move->queuedWaypoints.clear();
         } else {
-            move->queuedWaypoints.push_back({star->position, warp, arrivalAction});
+            move->queuedWaypoints.push_back({destination, warp, arrivalAction, targetFleet});
         }
 
         for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
@@ -483,13 +575,14 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
             fleet->arrivalAction.value_or(FleetArrivalAction{}),
             fleet->waypointQueue,
             fleet->repeatOrders,
+            fleet->targetFleet,
         };
-        route.queuedWaypoints.push_back({star->position, warp, arrivalAction});
+        route.queuedWaypoints.push_back({destination, warp, arrivalAction, targetFleet});
         appendPendingOrder(route, routeDescription(state_, *fleet, route));
         return true;
     }
 
-    MoveFleetOrder route{fleet->id, star->position, warp, arrivalAction, {}};
+    MoveFleetOrder route{fleet->id, destination, warp, arrivalAction, {}, false, targetFleet};
     appendPendingOrder(route, routeDescription(state_, *fleet, route));
     return true;
 }
@@ -515,17 +608,19 @@ bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
         }
         const auto incompatible = [](const FleetArrivalAction& action) {
             return action.kind == FleetArrivalActionKind::Colonize
-                || action.kind == FleetArrivalActionKind::RemoteMining;
+                || action.kind == FleetArrivalActionKind::RemoteMining
+                || action.kind == FleetArrivalActionKind::MergeWithFleet;
         };
         if (incompatible(route->arrivalAction)
             || std::any_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),
                 [&](const FleetWaypoint& waypoint) { return incompatible(waypoint.arrivalAction); })) {
-            statusBar()->showMessage("Colonize and Remote Mining cannot be repeated", 3000);
+            statusBar()->showMessage("Colonize, Remote Mining and fleet merging cannot be repeated", 3000);
             return false;
         }
         if (std::none_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),
                 [&](const FleetWaypoint& waypoint) {
-                    return !same_position(route->destination, waypoint.destination);
+                    return route->targetFleet != waypoint.targetFleet
+                        || !same_position(route->destination, waypoint.destination);
                 })) {
             statusBar()->showMessage("Repeat Orders requires two different destinations", 3000);
             return false;

@@ -95,6 +95,7 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::Refuel: return "refuel";
     case FleetArrivalActionKind::Colonize: return "colonize";
     case FleetArrivalActionKind::RemoteMining: return "remote mining";
+    case FleetArrivalActionKind::MergeWithFleet: return "merge with fleet";
     }
     return "none";
 }

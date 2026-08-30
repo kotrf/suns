@@ -83,6 +83,16 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  Warning: %2 cannot continue — insufficient fuel")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(fleetName);
+    } else if (event.kind == GameEventKind::FleetTargetLost) {
+        text = QString("Turn %1  •  Warning: %2 lost moving target Fleet %3; route cleared")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(fleetName)
+                   .arg(event.quantity);
+    } else if (event.kind == GameEventKind::FleetsMerged) {
+        text = QString("Turn %1  •  Fleet %2 rendezvoused with %3 and merged into it")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(event.quantity)
+                   .arg(fleetName);
     } else if (event.kind == GameEventKind::ProductionCompleted) {
         const auto planetName = planet
             ? QString::fromStdString(planet->name)

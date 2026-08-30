@@ -564,6 +564,10 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         fleet.task = FleetTask::RemoteMining;
         return false;
     }
+    case FleetArrivalActionKind::MergeWithFleet:
+        // Moving-target rendezvous resolves this action after both fleets have
+        // completed their deterministic movement for the turn.
+        return false;
     }
     return false;
 }
@@ -579,11 +583,21 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
             fleet.arrivalAction.reset();
             fleet.repeatOrders = false;
             fleet.routeTemplate.clear();
+            fleet.targetFleet = 0;
             return;
         }
 
         fleet.warp = waypoint.warp;
         fleet.arrivalAction = active_arrival_action(waypoint.arrivalAction);
+        fleet.targetFleet = waypoint.targetFleet;
+
+        if (waypoint.targetFleet != 0) {
+            const auto target = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+                return candidate.id == waypoint.targetFleet && candidate.owner == fleet.owner;
+            });
+            fleet.destination = target != state.fleets.end() ? target->position : waypoint.destination;
+            return;
+        }
 
         if (!same_position(fleet.position, waypoint.destination)) {
             fleet.destination = waypoint.destination;
@@ -612,6 +626,7 @@ void generate_fleet_fuel(GameState& state)
 bool fleet_ready_for_reorganization(const Fleet& fleet)
 {
     return !fleet.destination
+        && fleet.targetFleet == 0
         && fleet.waypointQueue.empty()
         && fleet.pendingCommands.empty()
         && fleet.task == FleetTask::None
@@ -701,6 +716,7 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     detached.ships = requested.ships;
     sync_fleet_presentation(state, detached);
     detached.destination.reset();
+    detached.targetFleet = 0;
     detached.arrivalAction.reset();
     detached.waypointQueue.clear();
     detached.pendingCommands.clear();
@@ -764,6 +780,7 @@ void queue_fleet_movement_report(
 bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets)
 {
     fleet.fuelStalled = false;
+    fleet.targetFleet = 0;
     if (execute_arrival_action(state, fleet)) {
         queue_fleet_movement_report(state, fleet, PlayerReportKind::RouteCompleted, state.turn + 1);
         consumedFleets.push_back(fleet.id);
@@ -787,24 +804,220 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     return false;
 }
 
+bool fleet_id_list_contains(const std::vector<FleetId>& values, FleetId id)
+{
+    return std::find(values.begin(), values.end(), id) != values.end();
+}
+
+Fleet* friendly_fleet(GameState& state, PlayerId owner, FleetId id)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+        return candidate.id == id && candidate.owner == owner;
+    });
+    return fleet == state.fleets.end() ? nullptr : &*fleet;
+}
+
+Fleet* fleet_by_id(GameState& state, FleetId id)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+        return candidate.id == id;
+    });
+    return fleet == state.fleets.end() ? nullptr : &*fleet;
+}
+
+void abandon_lost_fleet_target(GameState& state, Fleet& fleet)
+{
+    const auto lostTarget = fleet.targetFleet;
+    fleet.destination.reset();
+    fleet.targetFleet = 0;
+    fleet.arrivalAction.reset();
+    fleet.waypointQueue.clear();
+    fleet.repeatOrders = false;
+    fleet.routeTemplate.clear();
+    fleet.fuelStalled = false;
+    queue_player_report(
+        state,
+        fleet.owner,
+        PlayerReportKind::FleetTargetLost,
+        fleet.position,
+        state.turn + 1,
+        0,
+        0,
+        fleet.id,
+        fleet.design,
+        ProductionKind::ColonyShip,
+        lostTarget);
+}
+
+void merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
+{
+    const auto sourceId = source.id;
+    auto sourceShips = fleet_ship_stacks(source);
+    sync_fleet_presentation(state, destination);
+    destination.ships.insert(destination.ships.end(), sourceShips.begin(), sourceShips.end());
+    destination.fuel += source.fuel;
+    destination.colonists += source.colonists;
+    destination.minerals.ironium += source.minerals.ironium;
+    destination.minerals.boranium += source.minerals.boranium;
+    destination.minerals.germanium += source.minerals.germanium;
+    sync_fleet_presentation(state, destination);
+    destination.warp = std::min(destination.warp, fleet_max_warp(state, destination));
+    destination.fuel = std::min(destination.fuel, fleet_fuel_capacity(state, destination));
+
+    queue_player_report(
+        state,
+        destination.owner,
+        PlayerReportKind::FleetsMerged,
+        destination.position,
+        state.turn + 1,
+        0,
+        0,
+        destination.id,
+        destination.design,
+        ProductionKind::ColonyShip,
+        sourceId);
+}
+
+bool resolve_fleet_target_arrival(
+    GameState& state,
+    Fleet& fleet,
+    std::vector<FleetId>& consumedFleets)
+{
+    if (fleet.targetFleet == 0) return false;
+    auto* target = friendly_fleet(state, fleet.owner, fleet.targetFleet);
+    if (!target || fleet_id_list_contains(consumedFleets, target->id)) {
+        abandon_lost_fleet_target(state, fleet);
+        return true;
+    }
+
+    fleet.destination = target->position;
+    if (!same_position(fleet.position, target->position)) return false;
+
+    const auto action = fleet.arrivalAction.value_or(FleetArrivalAction{});
+    fleet.targetFleet = 0;
+    fleet.destination.reset();
+    if (action.kind == FleetArrivalActionKind::MergeWithFleet) {
+        fleet.arrivalAction.reset();
+        merge_rendezvous_fleet(state, fleet, *target);
+        consumedFleets.push_back(fleet.id);
+        return true;
+    }
+
+    (void)finish_fleet_arrival(state, fleet, consumedFleets);
+    return true;
+}
+
+Position projected_turn_endpoint(const GameState& state, const Fleet& fleet, Position destination)
+{
+    const auto remaining = distance_between(fleet.position, destination);
+    if (remaining <= 0.000001 || !fleet_warp_valid(state, fleet, fleet.warp)) return fleet.position;
+
+    double distance = std::min(remaining, warp_distance(fleet.warp));
+    const auto fuelPerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
+    if (fuelPerLy > 0.000001) distance = std::min(distance, fleet.fuel / fuelPerLy);
+    if (distance <= 0.000001) return fleet.position;
+    if (distance >= remaining - 0.000001) return destination;
+
+    const auto fraction = distance / remaining;
+    return {
+        fleet.position.x + (destination.x - fleet.position.x) * fraction,
+        fleet.position.y + (destination.y - fleet.position.y) * fraction,
+    };
+}
+
 void advance_fleets(GameState& state)
 {
     constexpr double epsilon = 0.000001;
     std::vector<FleetId> consumedFleets;
+    std::vector<FleetId> skipMovement;
+
+    // A rendezvous already true at the planning boundary resolves before either
+    // fleet starts another leg. This mirrors fixed-coordinate arrival behavior.
+    std::vector<FleetId> fleetIds;
+    fleetIds.reserve(state.fleets.size());
+    for (const auto& fleet : state.fleets) fleetIds.push_back(fleet.id);
+    std::sort(fleetIds.begin(), fleetIds.end());
+    for (const auto id : fleetIds) {
+        auto* fleet = fleet_by_id(state, id);
+        if (!fleet || fleet->targetFleet == 0) continue;
+        auto* target = friendly_fleet(state, fleet->owner, fleet->targetFleet);
+        if (!target) {
+            abandon_lost_fleet_target(state, *fleet);
+            skipMovement.push_back(id);
+            continue;
+        }
+        if (same_position(fleet->position, target->position)) {
+            resolve_fleet_target_arrival(state, *fleet, consumedFleets);
+            skipMovement.push_back(id);
+        }
+    }
+    if (!consumedFleets.empty()) {
+        std::erase_if(state.fleets, [&](const Fleet& fleet) {
+            return fleet_id_list_contains(consumedFleets, fleet.id);
+        });
+        consumedFleets.clear();
+    }
+
+    struct MotionPlan {
+        FleetId fleet{};
+        Position destination;
+        Position endpoint;
+        Position baseEndpoint;
+        bool active{};
+    };
+    std::vector<MotionPlan> plans;
+    plans.reserve(state.fleets.size());
+    for (const auto& fleet : state.fleets) {
+        MotionPlan plan{fleet.id};
+        if (!fleet_id_list_contains(skipMovement, fleet.id) && fleet.destination
+            && fleet_warp_valid(state, fleet, fleet.warp)) {
+            plan.active = true;
+            plan.destination = *fleet.destination;
+            if (fleet.targetFleet != 0) {
+                if (const auto* target = friendly_fleet(state, fleet.owner, fleet.targetFleet)) {
+                    plan.destination = target->position;
+                }
+            }
+            plan.endpoint = projected_turn_endpoint(state, fleet, plan.destination);
+        } else {
+            plan.endpoint = fleet.position;
+        }
+        plan.baseEndpoint = plan.endpoint;
+        plans.push_back(plan);
+    }
+
+    // Moving-target legs aim at the target's deterministic end-of-turn
+    // position. All plans use the same start-of-turn snapshot, so vector order
+    // can never change pursuit results.
+    for (auto& plan : plans) {
+        auto* fleet = fleet_by_id(state, plan.fleet);
+        if (!fleet || fleet->targetFleet == 0 || !plan.active) continue;
+        const auto targetPlan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
+            return candidate.fleet == fleet->targetFleet;
+        });
+        if (targetPlan == plans.end()) continue;
+        plan.destination = targetPlan->baseEndpoint;
+        plan.endpoint = projected_turn_endpoint(state, *fleet, plan.destination);
+    }
+
+    std::vector<FleetId> fixedArrivals;
 
     for (auto& fleet : state.fleets) {
-        if (!fleet.destination || !fleet_warp_valid(state, fleet, fleet.warp)) {
+        const auto plan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
+            return candidate.fleet == fleet.id;
+        });
+        if (plan == plans.end() || !plan->active) {
             fleet.fuelStalled = false;
             continue;
         }
 
         const Position start = fleet.position;
-        const auto destination = *fleet.destination;
+        const auto destination = plan->destination;
+        fleet.destination = destination;
         const auto remaining = distance_between(start, destination);
         if (remaining <= epsilon) {
             fleet.position = destination;
-            fleet.destination.reset();
-            if (finish_fleet_arrival(state, fleet, consumedFleets)) continue;
+            if (fleet.targetFleet == 0) fixedArrivals.push_back(fleet.id);
             continue;
         }
 
@@ -829,7 +1042,6 @@ void advance_fleets(GameState& state)
         bool arrived = false;
         if (travelDistance >= remaining - epsilon) {
             fleet.position = destination;
-            fleet.destination.reset();
             arrived = true;
         } else {
             const auto fraction = travelDistance / remaining;
@@ -840,14 +1052,25 @@ void advance_fleets(GameState& state)
         observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
         apply_fleet_radiation_attrition(state, fleet);
 
-        if (arrived) {
-            if (finish_fleet_arrival(state, fleet, consumedFleets)) continue;
-        }
+        if (arrived && fleet.targetFleet == 0) fixedArrivals.push_back(fleet.id);
+    }
+
+    for (const auto id : fixedArrivals) {
+        auto* fleet = fleet_by_id(state, id);
+        if (!fleet || fleet_id_list_contains(consumedFleets, id)) continue;
+        fleet->destination.reset();
+        (void)finish_fleet_arrival(state, *fleet, consumedFleets);
+    }
+
+    for (const auto id : fleetIds) {
+        auto* fleet = fleet_by_id(state, id);
+        if (!fleet || fleet_id_list_contains(consumedFleets, id) || fleet->targetFleet == 0) continue;
+        (void)resolve_fleet_target_arrival(state, *fleet, consumedFleets);
     }
 
     if (!consumedFleets.empty()) {
         std::erase_if(state.fleets, [&](const Fleet& fleet) {
-            return std::find(consumedFleets.begin(), consumedFleets.end(), fleet.id) != consumedFleets.end();
+            return fleet_id_list_contains(consumedFleets, fleet.id);
         });
     }
 }
@@ -890,7 +1113,8 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.warp,
                             concreteOrder.arrivalAction,
                             concreteOrder.queuedWaypoints,
-                            concreteOrder.repeatOrders);
+                            concreteOrder.repeatOrders,
+                            concreteOrder.targetFleet);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

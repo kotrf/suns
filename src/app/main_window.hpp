@@ -40,8 +40,12 @@ public:
     [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
+    [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
+    [[nodiscard]] QString fleetTargetNameForRouteProgram(FleetId fleet) const;
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
+    bool appendFleetTargetWaypoint(
+        FleetId targetFleet, std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool setSelectedFleetRepeatOrdersForRouteProgram(bool enabled);
     bool clearSelectedFleetRouteProgram();
 
@@ -145,6 +149,11 @@ private:
     [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;
     [[nodiscard]] QString selectedPlanetPanelSummary() const;
     [[nodiscard]] QString selectedFleetPanelSummary() const;
+    bool appendRouteWaypoint(
+        Position destination,
+        FleetId targetFleet,
+        std::uint8_t warp,
+        FleetArrivalAction arrivalAction);
 
     void appendPendingOrder(Order order, const QString& description);
     void replacePendingFleetMove(

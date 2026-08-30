@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 14;
+constexpr quint32 kSaveFormatVersion = 15;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -120,7 +120,7 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(FleetArrivalActionKind::RemoteMining))) return;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(FleetArrivalActionKind::MergeWithFleet))) return;
     quint64 reserve{};
     stream >> reserve;
     value.reservePopulation = static_cast<std::uint64_t>(reserve);
@@ -132,6 +132,7 @@ void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)
     writePosition(stream, value.destination);
     stream << static_cast<quint8>(value.warp);
     writeArrivalAction(stream, value.arrivalAction);
+    stream << static_cast<quint32>(value.targetFleet);
 }
 
 void readWaypoint(QDataStream& stream, FleetWaypoint& value)
@@ -141,6 +142,12 @@ void readWaypoint(QDataStream& stream, FleetWaypoint& value)
     stream >> warp;
     value.warp = static_cast<std::uint8_t>(warp);
     readArrivalAction(stream, value.arrivalAction);
+    value.targetFleet = 0;
+    if (gReadSaveFormatVersion >= 15) {
+        quint32 targetFleet{};
+        stream >> targetFleet;
+        value.targetFleet = static_cast<FleetId>(targetFleet);
+    }
 }
 
 
@@ -176,6 +183,7 @@ void writeRouteProgram(QDataStream& stream, const FleetRouteProgram& value)
     for (const auto& waypoint : value.queuedWaypoints) writeWaypoint(stream, waypoint);
     stream << static_cast<quint8>(value.clearRoute ? 1 : 0);
     stream << static_cast<quint8>(value.repeatOrders ? 1 : 0);
+    stream << static_cast<quint32>(value.targetFleet);
 }
 
 void readRouteProgram(QDataStream& stream, FleetRouteProgram& value)
@@ -209,6 +217,12 @@ void readRouteProgram(QDataStream& stream, FleetRouteProgram& value)
         return;
     }
     value.repeatOrders = repeatOrders != 0;
+    value.targetFleet = 0;
+    if (gReadSaveFormatVersion >= 15) {
+        quint32 targetFleet{};
+        stream >> targetFleet;
+        value.targetFleet = static_cast<FleetId>(targetFleet);
+    }
 }
 
 void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
@@ -229,6 +243,7 @@ void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
            << static_cast<quint32>(value.routeTemplate.size());
     for (const auto& waypoint : value.routeTemplate) writeWaypoint(stream, waypoint);
     writeShipStacks(stream, value.ships);
+    stream << static_cast<quint32>(value.targetFleet);
 }
 
 void readTelemetry(QDataStream& stream, FleetTelemetry& value)
@@ -289,6 +304,12 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
         value.routeTemplate.push_back(waypoint);
     }
     if (gReadSaveFormatVersion >= 13) readShipStacks(stream, value.ships);
+    value.targetFleet = 0;
+    if (gReadSaveFormatVersion >= 15) {
+        quint32 targetFleet{};
+        stream >> targetFleet;
+        value.targetFleet = static_cast<FleetId>(targetFleet);
+    }
 }
 
 void writePendingCommand(QDataStream& stream, const PendingFleetCommand& value)
@@ -564,7 +585,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        if (!readEnum(stream, report.kind, static_cast<quint8>(PlayerReportKind::ProductionWaitingForMinerals))) return;
+        if (!readEnum(stream, report.kind, static_cast<quint8>(PlayerReportKind::FleetsMerged))) return;
         quint64 observedTurn{};
         quint64 deliveryTurn{};
         quint32 star{};
@@ -653,6 +674,7 @@ void writeFleet(QDataStream& stream, const Fleet& value)
            << static_cast<quint32>(value.routeTemplate.size());
     for (const auto& waypoint : value.routeTemplate) writeWaypoint(stream, waypoint);
     writeShipStacks(stream, fleet_ship_stacks(value));
+    stream << static_cast<quint32>(value.targetFleet);
 }
 
 void readFleet(QDataStream& stream, Fleet& value)
@@ -766,6 +788,12 @@ void readFleet(QDataStream& stream, Fleet& value)
         value.routeTemplate.push_back(waypoint);
     }
     if (gReadSaveFormatVersion >= 13) readShipStacks(stream, value.ships);
+    value.targetFleet = 0;
+    if (gReadSaveFormatVersion >= 15) {
+        quint32 targetFleet{};
+        stream >> targetFleet;
+        value.targetFleet = static_cast<FleetId>(targetFleet);
+    }
     normalize_fleet_composition(value);
     if (value.telemetry.ships.empty()) value.telemetry.ships = value.ships;
     for (auto& packet : value.telemetryInTransit) {
@@ -858,6 +886,7 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << static_cast<quint32>(concrete.queuedWaypoints.size());
             for (const auto& waypoint : concrete.queuedWaypoints) writeWaypoint(stream, waypoint);
             stream << static_cast<quint8>(concrete.repeatOrders ? 1 : 0);
+            stream << static_cast<quint32>(concrete.targetFleet);
         } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
             stream << quint8{1} << static_cast<quint32>(concrete.colony);
             writeEnum(stream, concrete.kind);
@@ -952,6 +981,11 @@ bool readOrder(QDataStream& stream, Order& order)
             return false;
         }
         value.repeatOrders = repeatOrders != 0;
+        if (gReadSaveFormatVersion >= 15) {
+            quint32 targetFleet{};
+            stream >> targetFleet;
+            value.targetFleet = static_cast<FleetId>(targetFleet);
+        }
         order = std::move(value);
         return stream.status() == QDataStream::Ok;
     }
