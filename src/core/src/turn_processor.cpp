@@ -114,6 +114,14 @@ FleetRole presentation_role_for_design(const ShipDesign& design)
     return ship_design_can_colonize(design) ? FleetRole::ColonyShip : FleetRole::Scout;
 }
 
+void sync_fleet_presentation(GameState& state, Fleet& fleet)
+{
+    normalize_fleet_composition(fleet);
+    if (const auto* design = fleet_design(state, fleet)) {
+        fleet.role = presentation_role_for_design(*design);
+    }
+}
+
 std::uint8_t initial_warp_for_design(const ShipDesign& design)
 {
     const auto maxWarp = ship_design_max_warp(design);
@@ -191,6 +199,7 @@ std::optional<FleetId> complete_production(GameState& state, Planet& planet, con
         ship_design_fuel_capacity(*design),
         0,
     });
+    state.fleets.back().ships = {{design->id, 1}};
     return id;
 }
 
@@ -379,14 +388,17 @@ void mine_uncolonized_planets(GameState& state)
 {
     for (const auto& fleet : state.fleets) {
         if (fleet.task != FleetTask::RemoteMining) continue;
-        const auto* design = find_ship_design(state, fleet.design);
-        if (!design || !ship_design_available_to_player(state, fleet.owner, *design)) continue;
         for (auto& planet : state.planets) {
             if (!fleet_at_planet(state, fleet, planet)) continue;
-            const auto mined = projected_remote_mining(state, planet, *design);
-            planet.minerals.ironium += mined.ironium;
-            planet.minerals.boranium += mined.boranium;
-            planet.minerals.germanium += mined.germanium;
+            for (const auto& stack : fleet_ship_stacks(fleet)) {
+                const auto* design = find_ship_design(state, stack.design);
+                if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
+                    || !ship_design_can_remote_mine(*design)) continue;
+                const auto mined = projected_remote_mining(state, planet, *design);
+                planet.minerals.ironium += mined.ironium * stack.count;
+                planet.minerals.boranium += mined.boranium * stack.count;
+                planet.minerals.germanium += mined.germanium * stack.count;
+            }
             break;
         }
     }
@@ -419,6 +431,14 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.productionWaitingForMinerals = false;
     set_survey_level(
         state, fleet.owner, planet.star, SurveyLevel::GeologicalSurvey, state.turn + 1);
+    sync_fleet_presentation(state, fleet);
+    const auto colonizer = std::find_if(fleet.ships.begin(), fleet.ships.end(), [&](const FleetShipStack& stack) {
+        const auto* design = find_ship_design(state, stack.design);
+        return design && ship_design_can_colonize(*design);
+    });
+    if (colonizer == fleet.ships.end()) return false;
+    const auto colonizerDesign = colonizer->design;
+
     const auto* star = find_star(state, planet.star);
     if (star) {
         queue_player_report(
@@ -430,9 +450,16 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
             planet.star,
             planet.id,
             fleet.id,
-            fleet.design);
+            colonizerDesign);
     }
-    return true;
+
+    fleet.colonists = 0;
+    fleet.minerals = {};
+    if (--colonizer->count == 0) fleet.ships.erase(colonizer);
+    if (fleet.ships.empty()) return true;
+    sync_fleet_presentation(state, fleet);
+    fleet.fuel = std::min(fleet.fuel, fleet_fuel_capacity(state, fleet));
+    return false;
 }
 
 std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction action)
@@ -530,11 +557,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         return planet != state.planets.end() && establish_colony(state, fleet, *planet);
     }
     case FleetArrivalActionKind::RemoteMining: {
-        const auto* design = fleet_design(state, fleet);
-        if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
-            || !ship_design_can_remote_mine(*design)) {
-            return false;
-        }
+        if (!fleet_can_remote_mine(state, fleet)) return false;
         const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
             return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
         });
@@ -583,10 +606,134 @@ void generate_fleet_fuel(GameState& state)
             fleet.fuel = 0.0;
             continue;
         }
-        if (const auto* design = fleet_design(state, fleet)) {
-            fleet.fuel = std::min(capacity, fleet.fuel + ship_design_fuel_generation(*design));
+        fleet.fuel = std::min(capacity, fleet.fuel + fleet_fuel_generation(state, fleet));
+    }
+}
+
+bool fleet_ready_for_reorganization(const Fleet& fleet)
+{
+    return !fleet.destination
+        && fleet.waypointQueue.empty()
+        && fleet.pendingCommands.empty()
+        && fleet.task == FleetTask::None
+        && !fleet.repeatOrders
+        && fleet.routeTemplate.empty();
+}
+
+bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& order)
+{
+    if (order.destination == order.source) return false;
+    const auto destination = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.id == order.destination && fleet.owner == player;
+    });
+    const auto source = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.id == order.source && fleet.owner == player;
+    });
+    if (destination == state.fleets.end() || source == state.fleets.end()
+        || !same_position(destination->position, source->position)
+        || !fleet_ready_for_reorganization(*destination)
+        || !fleet_ready_for_reorganization(*source)) return false;
+
+    const auto sourceId = source->id;
+    auto sourceShips = fleet_ship_stacks(*source);
+    sync_fleet_presentation(state, *destination);
+    destination->ships.insert(destination->ships.end(), sourceShips.begin(), sourceShips.end());
+    destination->fuel += source->fuel;
+    destination->colonists += source->colonists;
+    destination->minerals.ironium += source->minerals.ironium;
+    destination->minerals.boranium += source->minerals.boranium;
+    destination->minerals.germanium += source->minerals.germanium;
+    sync_fleet_presentation(state, *destination);
+    destination->warp = std::min(destination->warp, fleet_max_warp(state, *destination));
+    destination->fuel = std::min(destination->fuel, fleet_fuel_capacity(state, *destination));
+    destination->telemetry = {};
+    destination->telemetryInTransit.clear();
+    std::erase_if(state.fleets, [&](const Fleet& fleet) { return fleet.id == sourceId; });
+    return true;
+}
+
+double stack_capacity(
+    const GameState& state,
+    const std::vector<FleetShipStack>& stacks,
+    double (*capacity)(const ShipDesign&))
+{
+    double total = 0.0;
+    for (const auto& stack : stacks) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            total += capacity(*design) * stack.count;
         }
     }
+    return total;
+}
+
+bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order)
+{
+    const auto source = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.id == order.source && fleet.owner == player;
+    });
+    if (source == state.fleets.end() || !fleet_ready_for_reorganization(*source)) return false;
+
+    if (order.ships.empty()) return false;
+    Fleet requested;
+    requested.design = source->design;
+    requested.ships = order.ships;
+    normalize_fleet_composition(requested);
+    if (requested.ships.empty()) return false;
+
+    sync_fleet_presentation(state, *source);
+    std::uint32_t movedCount = 0;
+    for (const auto& moved : requested.ships) {
+        const auto available = fleet_ship_count(*source, moved.design);
+        if (available < moved.count) return false;
+        movedCount += moved.count;
+    }
+    if (movedCount == 0 || movedCount >= fleet_ship_count(*source)) return false;
+
+    const auto totalFuelCapacity = fleet_fuel_capacity(state, *source);
+    const auto movedFuelCapacity = stack_capacity(state, requested.ships, ship_design_fuel_capacity);
+    const auto totalCargoCapacity = fleet_cargo_capacity(state, *source);
+    const auto movedCargoCapacity = stack_capacity(state, requested.ships, ship_design_cargo_capacity);
+    const auto fuelShare = totalFuelCapacity > 0.0 ? movedFuelCapacity / totalFuelCapacity : 0.0;
+    const auto cargoShare = totalCargoCapacity > 0.0 ? movedCargoCapacity / totalCargoCapacity : 0.0;
+
+    Fleet detached = *source;
+    detached.id = state.nextFleetId++;
+    detached.name = source->name + " Detachment " + std::to_string(detached.id);
+    detached.ships = requested.ships;
+    sync_fleet_presentation(state, detached);
+    detached.destination.reset();
+    detached.arrivalAction.reset();
+    detached.waypointQueue.clear();
+    detached.pendingCommands.clear();
+    detached.telemetry = {};
+    detached.telemetryInTransit.clear();
+    detached.fuelStalled = false;
+    detached.task = FleetTask::None;
+    detached.repeatOrders = false;
+    detached.routeTemplate.clear();
+    detached.fuel = source->fuel * fuelShare;
+    detached.colonists = static_cast<std::uint64_t>(std::floor(source->colonists * cargoShare));
+    detached.minerals.ironium = source->minerals.ironium * cargoShare;
+    detached.minerals.boranium = source->minerals.boranium * cargoShare;
+    detached.minerals.germanium = source->minerals.germanium * cargoShare;
+
+    source->fuel -= detached.fuel;
+    source->colonists -= detached.colonists;
+    source->minerals.ironium -= detached.minerals.ironium;
+    source->minerals.boranium -= detached.minerals.boranium;
+    source->minerals.germanium -= detached.minerals.germanium;
+    for (const auto& moved : requested.ships) {
+        const auto stack = std::find_if(source->ships.begin(), source->ships.end(), [&](const FleetShipStack& candidate) {
+            return candidate.design == moved.design;
+        });
+        stack->count -= moved.count;
+    }
+    sync_fleet_presentation(state, *source);
+    source->warp = std::min(source->warp, fleet_max_warp(state, *source));
+    source->telemetry = {};
+    source->telemetryInTransit.clear();
+    state.fleets.push_back(std::move(detached));
+    return true;
 }
 
 void queue_fleet_movement_report(
@@ -866,6 +1013,10 @@ TurnResult TurnProcessor::process_with_events(
                             submission.player,
                             concreteOrder.fleet,
                             concreteOrder.enabled ? FleetTask::RemoteMining : FleetTask::None);
+                    } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
+                        (void)merge_fleets(next, submission.player, concreteOrder);
+                    } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
+                        (void)split_fleet(next, submission.player, concreteOrder);
                     }
                 },
                 order);

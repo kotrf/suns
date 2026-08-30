@@ -47,6 +47,8 @@ public:
     // Dockside cargo editor entrypoint. Implemented separately from the map UI
     // so logistics can evolve without further inflating main_window.cpp.
     void openCargoManifestDialog();
+    void openMergeFleetsDialog();
+    void openSplitFleetDialog();
 
     // Replace the constructor's legacy synchronous scene-selection callback
     // with a deferred rebuild. Rebuilding QGraphicsScene while Qt is still

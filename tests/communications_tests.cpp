@@ -82,6 +82,7 @@ void penetrating_only_scanner_does_not_extend_the_network()
         {ShipComponentType::FusionDrive, ShipComponentType::PenetratingScanner},
     });
     state.fleets.front().design = 99;
+    state.fleets.front().ships = {{99, 1}};
     state.fleets.front().position = {120.0, 0.0};
 
     assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 2);

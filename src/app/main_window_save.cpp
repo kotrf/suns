@@ -30,8 +30,7 @@ std::uint8_t legalWarpForFleet(const GameState& state, FleetId fleetId, std::uin
     });
     if (fleet == state.fleets.end()) return requested;
 
-    const auto* design = fleet_design(state, *fleet);
-    const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+    const auto maxWarp = fleet_max_warp(state, *fleet);
     if (maxWarp == 0) return requested;
     return static_cast<std::uint8_t>(std::clamp<int>(requested, 1, maxWarp));
 }
@@ -41,8 +40,7 @@ bool normalizeLoadedWarpLimits(GameState& state, PlayerOrders& pendingOrders)
     bool adjusted = false;
 
     for (auto& fleet : state.fleets) {
-        const auto* design = fleet_design(state, fleet);
-        const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+        const auto maxWarp = fleet_max_warp(state, fleet);
         if (maxWarp == 0) continue;
 
         const auto legal = static_cast<std::uint8_t>(std::clamp<int>(fleet.warp, 1, maxWarp));
@@ -75,8 +73,7 @@ bool normalizeLoadedWarpLimits(GameState& state, PlayerOrders& pendingOrders)
         const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
             return candidate.id == move->fleet;
         });
-        const auto* design = fleet == state.fleets.end() ? nullptr : fleet_design(state, *fleet);
-        const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+        const auto maxWarp = fleet == state.fleets.end() ? 0 : fleet_max_warp(state, *fleet);
         if (maxWarp == 0) continue;
 
         for (auto& waypoint : move->queuedWaypoints) {

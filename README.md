@@ -54,6 +54,8 @@ The desktop app now links exploration, planet quality, economy and expansion:
 
 Ending a turn also produces an actionable Turn Messages briefing. Survey discoveries, fleet arrivals, completed routes, fuel stalls, finished production, mineral shortages and new colonies are typed deterministic events. Remote fleet reports obey communication delay instead of exposing authoritative state through the UI.
 
+Fleets may contain multiple ship designs and counts. Co-located idle fleets can be merged while preserving the chosen FleetId, or split by exact design stack into a new FleetId; movement, sensors, cargo, fuel, colonization and remote mining derive from the complete composition.
+
 A colony ship may enter an unknown or basically scanned system, but colonization requires a confirmed orbital survey. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.

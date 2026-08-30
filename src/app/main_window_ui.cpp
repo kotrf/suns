@@ -161,6 +161,15 @@ void MainWindow::installUiPolish()
                     cargoButton->setToolTip(
                         "Transfer colonists and minerals between the planetary surface and friendly fleets at this system");
                     fleetLayout->addWidget(cargoButton);
+
+                    auto* organizationRow = new QHBoxLayout;
+                    auto* mergeButton = new QPushButton("Merge fleets…", fleetGroup);
+                    mergeButton->setToolTip("Merge another co-located stationary friendly fleet into this FleetId");
+                    auto* splitButton = new QPushButton("Split fleet…", fleetGroup);
+                    splitButton->setToolTip("Move selected ships into a newly allocated FleetId");
+                    organizationRow->addWidget(mergeButton);
+                    organizationRow->addWidget(splitButton);
+                    fleetLayout->addLayout(organizationRow);
                     sideLayout->addWidget(fleetGroup);
 
                     auto* productionGroup = makeGroup("Colony production", "productionGroup", commandPanel);
@@ -229,6 +238,8 @@ void MainWindow::installUiPolish()
                         queueColonists();
                     });
                     connect(cargoButton, &QPushButton::clicked, this, [this] { openCargoManifestDialog(); });
+                    connect(mergeButton, &QPushButton::clicked, this, [this] { openMergeFleetsDialog(); });
+                    connect(splitButton, &QPushButton::clicked, this, [this] { openSplitFleetDialog(); });
                 }
 
                 layout->removeWidget(commandPanel);
@@ -465,6 +476,11 @@ void MainWindow::installUiPolish()
     auto* fleetMenu = menuBar()->addMenu("&Fleet");
     auto* cargoAction = fleetMenu->addAction("Transfer cargo…");
     connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
+    auto* mergeAction = fleetMenu->addAction("Merge fleets…");
+    connect(mergeAction, &QAction::triggered, this, [this] { openMergeFleetsDialog(); });
+    auto* splitAction = fleetMenu->addAction("Split fleet…");
+    connect(splitAction, &QAction::triggered, this, [this] { openSplitFleetDialog(); });
+    fleetMenu->addSeparator();
     auto* designerAction = fleetMenu->addAction("Ship designer…");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
 

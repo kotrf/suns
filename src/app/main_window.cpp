@@ -761,8 +761,7 @@ void MainWindow::updateControls()
 
     std::uint8_t selectedWarp = 1;
     if (fleet) {
-        const auto* design = fleet_design(state_, *fleet);
-        const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+        const auto maxWarp = fleet_max_warp(state_, *fleet);
         if (!warpControlFleetId_ || *warpControlFleetId_ != fleet->id) {
             const QSignalBlocker blocker(warpSpin_);
             warpSpin_->setRange(1, std::max<int>(1, maxWarp));
@@ -892,10 +891,10 @@ void MainWindow::updateControls()
         const auto fuelCapacity = fleet_fuel_capacity(state_, *fleet);
         const auto cargoCapacity = fleet_cargo_capacity(state_, *fleet);
         const auto cargoUsed = colonist_cargo_mass(fleet->colonists);
-        const auto maxWarp = design ? ship_design_max_warp(*design) : 0;
+        const auto maxWarp = fleet_max_warp(state_, *fleet);
         const auto hullName = design ? QString::fromStdString(hull_spec(design->hull).name) : "unknown";
         QString radiationLine;
-        if (design && ship_design_radiation_hazard(*design) > 0.0) {
+        if (fleet_radiation_hazard(state_, *fleet) > 0.0) {
             radiationLine = "<br><b>Radiating drive fitted</b> — colonist effect pending race-tolerance rules.";
         }
         const QString dockedLine = logisticsColony

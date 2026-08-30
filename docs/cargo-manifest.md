@@ -35,7 +35,7 @@ Colonist loading uses the same hold. In particular, the dynamic `Load All` arriv
 
 ## Colonization
 
-When a colony-capable fleet founds a new colony, its transported colonists become the colony population and all transported Ironium, Boranium and Germanium are deposited into the new colony's mineral stores before the ship is consumed.
+When a colony-capable fleet founds a new colony, its transported colonists become the colony population and all transported Ironium, Boranium and Germanium are deposited into the new colony's mineral stores. Exactly one colony-capable ship is consumed; every other ship in a heterogeneous fleet remains under the same FleetId.
 
 ## Current scope
 

@@ -7,8 +7,7 @@ namespace suns {
 
 bool fleet_radiation_safe(const GameState& state, const Fleet& fleet)
 {
-    const auto* design = fleet_design(state, fleet);
-    if (!design || ship_design_radiation_hazard(*design) <= 0.0) return true;
+    if (fleet_radiation_hazard(state, fleet) <= 0.0) return true;
 
     const auto* player = find_player(state, fleet.owner);
     if (!player) return true;

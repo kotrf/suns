@@ -87,6 +87,18 @@ struct SetRemoteMiningOrder {
     bool enabled{true};
 };
 
+// The destination FleetId survives; the source is consumed.
+struct MergeFleetsOrder {
+    FleetId destination{};
+    FleetId source{};
+};
+
+// The source FleetId survives and a new FleetId is allocated for `ships`.
+struct SplitFleetOrder {
+    FleetId source{};
+    std::vector<FleetShipStack> ships;
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -99,7 +111,9 @@ using Order = std::variant<
     TransferCargoOrder,
     RefuelFleetOrder,
     ColonizePlanetOrder,
-    SetRemoteMiningOrder>;
+    SetRemoteMiningOrder,
+    MergeFleetsOrder,
+    SplitFleetOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

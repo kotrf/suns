@@ -111,6 +111,14 @@ target_link_libraries(suns_remote_mining_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_remote_mining_tests COMMAND suns_remote_mining_tests)
 
+add_executable(suns_fleet_management_tests
+    fleet_management_tests.cpp
+)
+
+target_link_libraries(suns_fleet_management_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_fleet_management_tests COMMAND suns_fleet_management_tests)
+
 if(SUNS_BUILD_APP)
     add_executable(suns_save_game_tests
         save_game_tests.cpp

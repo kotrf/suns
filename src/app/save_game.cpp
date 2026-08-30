@@ -13,8 +13,10 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 12;
+constexpr quint32 kSaveFormatVersion = 13;
+constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kMaxCollectionItems = 100000;
+quint32 gReadSaveFormatVersion = kSaveFormatVersion;
 
 void markCorrupt(QDataStream& stream)
 {
@@ -80,6 +82,33 @@ void writeMinerals(QDataStream& stream, const MineralCargo& value)
 void readMinerals(QDataStream& stream, MineralCargo& value)
 {
     stream >> value.ironium >> value.boranium >> value.germanium;
+}
+
+void writeShipStacks(QDataStream& stream, const std::vector<FleetShipStack>& values)
+{
+    stream << static_cast<quint32>(values.size());
+    for (const auto& value : values) {
+        stream << static_cast<quint32>(value.design)
+               << static_cast<quint32>(value.count);
+    }
+}
+
+void readShipStacks(QDataStream& stream, std::vector<FleetShipStack>& values)
+{
+    quint32 count{};
+    if (!readCount(stream, count)) return;
+    values.clear();
+    values.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        quint32 design{};
+        quint32 ships{};
+        stream >> design >> ships;
+        if (design == 0 || ships == 0) {
+            markCorrupt(stream);
+            return;
+        }
+        values.push_back({static_cast<ShipDesignId>(design), static_cast<std::uint32_t>(ships)});
+    }
 }
 
 void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
@@ -199,6 +228,7 @@ void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
     stream << static_cast<quint8>(value.repeatOrders ? 1 : 0)
            << static_cast<quint32>(value.routeTemplate.size());
     for (const auto& waypoint : value.routeTemplate) writeWaypoint(stream, waypoint);
+    writeShipStacks(stream, value.ships);
 }
 
 void readTelemetry(QDataStream& stream, FleetTelemetry& value)
@@ -258,6 +288,7 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
         if (stream.status() != QDataStream::Ok) return;
         value.routeTemplate.push_back(waypoint);
     }
+    if (gReadSaveFormatVersion >= 13) readShipStacks(stream, value.ships);
 }
 
 void writePendingCommand(QDataStream& stream, const PendingFleetCommand& value)
@@ -621,6 +652,7 @@ void writeFleet(QDataStream& stream, const Fleet& value)
     stream << static_cast<quint8>(value.repeatOrders ? 1 : 0)
            << static_cast<quint32>(value.routeTemplate.size());
     for (const auto& waypoint : value.routeTemplate) writeWaypoint(stream, waypoint);
+    writeShipStacks(stream, fleet_ship_stacks(value));
 }
 
 void readFleet(QDataStream& stream, Fleet& value)
@@ -732,6 +764,12 @@ void readFleet(QDataStream& stream, Fleet& value)
         readWaypoint(stream, waypoint);
         if (stream.status() != QDataStream::Ok) return;
         value.routeTemplate.push_back(waypoint);
+    }
+    if (gReadSaveFormatVersion >= 13) readShipStacks(stream, value.ships);
+    normalize_fleet_composition(value);
+    if (value.telemetry.ships.empty()) value.telemetry.ships = value.ships;
+    for (auto& packet : value.telemetryInTransit) {
+        if (packet.telemetry.ships.empty()) packet.telemetry.ships = value.ships;
     }
 }
 
@@ -865,6 +903,13 @@ void writeOrder(QDataStream& stream, const Order& order)
                    << static_cast<quint32>(concrete.destination.fleet)
                    << static_cast<quint64>(concrete.colonists);
             writeMinerals(stream, concrete.minerals);
+        } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
+            stream << quint8{12}
+                   << static_cast<quint32>(concrete.destination)
+                   << static_cast<quint32>(concrete.source);
+        } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
+            stream << quint8{13} << static_cast<quint32>(concrete.source);
+            writeShipStacks(stream, concrete.ships);
         }
     }, order);
 }
@@ -1048,6 +1093,25 @@ bool readOrder(QDataStream& stream, Order& order)
         order = value;
         return stream.status() == QDataStream::Ok;
     }
+    case 12: {
+        MergeFleetsOrder value;
+        quint32 destination{};
+        quint32 source{};
+        stream >> destination >> source;
+        value.destination = static_cast<FleetId>(destination);
+        value.source = static_cast<FleetId>(source);
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
+    case 13: {
+        SplitFleetOrder value;
+        quint32 source{};
+        stream >> source;
+        value.source = static_cast<FleetId>(source);
+        readShipStacks(stream, value.ships);
+        order = std::move(value);
+        return stream.status() == QDataStream::Ok;
+    }
     default:
         markCorrupt(stream);
         return false;
@@ -1187,12 +1251,14 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "This is not a Suns! save file, or the file is damaged.";
         return false;
     }
-    if (version != kSaveFormatVersion) {
-        errorMessage = QString("Unsupported Suns! save version %1 (this prototype build reads version %2 only).")
+    if (version < kOldestSupportedSaveFormatVersion || version > kSaveFormatVersion) {
+        errorMessage = QString("Unsupported Suns! save version %1 (this build reads versions %2 through %3).")
                            .arg(version)
+                           .arg(kOldestSupportedSaveFormatVersion)
                            .arg(kSaveFormatVersion);
         return false;
     }
+    gReadSaveFormatVersion = version;
 
     SaveGameData loaded;
     readGalaxyConfig(stream, loaded.galaxyConfig);

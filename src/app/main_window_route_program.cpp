@@ -296,8 +296,7 @@ std::uint8_t MainWindow::selectedFleetMaxWarpForRouteProgram() const
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) return 0;
-    const auto* design = fleet_design(state_, *fleet);
-    return design ? ship_design_max_warp(*design) : 0;
+    return fleet_max_warp(state_, *fleet);
 }
 
 std::uint8_t MainWindow::selectedFleetSuggestedWarpForRouteProgram() const
@@ -422,8 +421,7 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         }
     }
     if (arrivalAction.kind == FleetArrivalActionKind::RemoteMining) {
-        const auto* design = fleet_design(state_, *fleet);
-        if (!design || !ship_design_can_remote_mine(*design)) {
+        if (!fleet_can_remote_mine(state_, *fleet)) {
             statusBar()->showMessage("Remote Mining requires a Remote Miner hull with mining equipment", 3000);
             return false;
         }
