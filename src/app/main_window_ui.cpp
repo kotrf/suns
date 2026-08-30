@@ -306,7 +306,9 @@ void MainWindow::installUiPolish()
         }
     }
 
-    setDockOptions(QMainWindow::AnimatedDocks | QMainWindow::AllowTabbedDocks);
+    setDockOptions(QMainWindow::AnimatedDocks
+        | QMainWindow::AllowTabbedDocks
+        | QMainWindow::AllowNestedDocks);
     setMinimumSize(900, 600);
     setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     setWindowFlags(windowFlags() | Qt::WindowMaximizeButtonHint);
