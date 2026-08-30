@@ -419,11 +419,21 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
 
+    const auto stacks = fleet_ship_stacks(fleet);
+    const auto colonizer = std::find_if(stacks.begin(), stacks.end(),
+        [&](const FleetShipStack& stack) {
+            const auto* design = find_ship_design(state, stack.design);
+            return design && ship_design_can_colonize(*design);
+        });
+    if (colonizer == stacks.end()) return false;
+    const auto colonizerDesign = colonizer->design;
+    const auto salvage = fleet_colonization_salvage(state, fleet);
+
     planet.owner = fleet.owner;
     planet.population = fleet.colonists;
-    planet.minerals.ironium += fleet.minerals.ironium;
-    planet.minerals.boranium += fleet.minerals.boranium;
-    planet.minerals.germanium += fleet.minerals.germanium;
+    planet.minerals.ironium += fleet.minerals.ironium + salvage.ironium;
+    planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
+    planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     planet.industry = 1;
     planet.stockpile = 0;
     planet.productionQueue.clear();
@@ -431,14 +441,6 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.productionWaitingForMinerals = false;
     set_survey_level(
         state, fleet.owner, planet.star, SurveyLevel::GeologicalSurvey, state.turn + 1);
-    sync_fleet_presentation(state, fleet);
-    const auto colonizer = std::find_if(fleet.ships.begin(), fleet.ships.end(), [&](const FleetShipStack& stack) {
-        const auto* design = find_ship_design(state, stack.design);
-        return design && ship_design_can_colonize(*design);
-    });
-    if (colonizer == fleet.ships.end()) return false;
-    const auto colonizerDesign = colonizer->design;
-
     const auto* star = find_star(state, planet.star);
     if (star) {
         queue_player_report(
@@ -453,13 +455,10 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
             colonizerDesign);
     }
 
-    fleet.colonists = 0;
-    fleet.minerals = {};
-    if (--colonizer->count == 0) fleet.ships.erase(colonizer);
-    if (fleet.ships.empty()) return true;
-    sync_fleet_presentation(state, fleet);
-    fleet.fuel = std::min(fleet.fuel, fleet_fuel_capacity(state, fleet));
-    return false;
+    // Successful colonization dismantles the entire fleet. Cargo minerals are
+    // deposited in full above; fuel and construction resources are otherwise
+    // lost. The caller removes the now-consumed FleetId atomically.
+    return true;
 }
 
 std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction action)
@@ -947,6 +946,22 @@ TurnResult TurnProcessor::process_with_events(
                         if (planet == next.planets.end() || !design || design->owner != submission.player
                             || !ship_design_valid(*design)) return;
                         planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
+                    } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
+                        if (planet == next.planets.end()
+                            || concreteOrder.fromIndex >= planet->productionQueue.size()
+                            || concreteOrder.toIndex >= planet->productionQueue.size()
+                            || concreteOrder.fromIndex == concreteOrder.toIndex) {
+                            return;
+                        }
+                        auto item = std::move(planet->productionQueue[concreteOrder.fromIndex]);
+                        planet->productionQueue.erase(
+                            planet->productionQueue.begin() + concreteOrder.fromIndex);
+                        planet->productionQueue.insert(
+                            planet->productionQueue.begin() + concreteOrder.toIndex,
+                            std::move(item));
                     } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

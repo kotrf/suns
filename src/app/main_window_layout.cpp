@@ -4,7 +4,9 @@
 #include <QDockWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QCoreApplication>
 #include <QScrollArea>
+#include <QSettings>
 #include <QStatusBar>
 
 namespace suns {
@@ -37,19 +39,35 @@ void MainWindow::installPanelLayoutFixes()
     // still have a real minimum width. In a narrow panel those controls were
     // clipped with no way for the player to reach their right-hand side.
     makePanelScrollable(findChild<QScrollArea*>("commandScrollArea"), 300, 520);
+    makePanelScrollable(findChild<QScrollArea*>("fleetScrollArea"), 300, 560);
     makePanelScrollable(findChild<QScrollArea*>("routeProgramScrollArea"), 280, 520);
 
-    if (auto* routeDock = findChild<QDockWidget*>("fleetRouteProgramDock")) {
-        routeDock->setAllowedAreas(Qt::RightDockWidgetArea);
-        routeDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
-        routeDock->setMinimumWidth(280);
-        routeDock->setMaximumWidth(520);
+    auto* panels = viewMenu(menuBar());
+    panels->addSection("Panels");
+    for (auto* dock : findChildren<QDockWidget*>()) {
+        dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        dock->setFeatures(QDockWidget::DockWidgetClosable
+            | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+        if (!panels->actions().contains(dock->toggleViewAction())) {
+            panels->addAction(dock->toggleViewAction());
+        }
+        if (dock->objectName() == "fleetRouteProgramDock") {
+            dock->setMinimumWidth(280);
+            dock->setMaximumWidth(520);
+        }
     }
 
-    auto* reset = viewMenu(menuBar())->addAction("Reset panel layout");
+    panels->addSeparator();
+    auto* reset = panels->addAction("Reset panel layout");
     reset->setObjectName("resetPanelLayoutAction");
-    reset->setToolTip("Restore the command and Fleet Route Program panels to their default widths and positions");
+    reset->setToolTip("Restore the default docked workspace around the galaxy map");
     connect(reset, &QAction::triggered, this, &MainWindow::resetPanelLayout);
+
+    if (!QCoreApplication::arguments().contains("--smoke-test")) {
+        QSettings settings("SunsProject", "Suns");
+        restoreGeometry(settings.value("workspace/geometry").toByteArray());
+        restoreState(settings.value("workspace/docks").toByteArray(), 1);
+    }
 }
 
 void MainWindow::resetPanelLayout()
@@ -61,24 +79,41 @@ void MainWindow::resetPanelLayout()
         command->show();
     }
 
-    if (auto* routeDock = findChild<QDockWidget*>("fleetRouteProgramDock")) {
-        routeDock->setFloating(false);
-        routeDock->setAllowedAreas(Qt::RightDockWidgetArea);
-        routeDock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
-        addDockWidget(Qt::RightDockWidgetArea, routeDock);
-        routeDock->show();
-        routeDock->raise();
-        routeDock->setMinimumWidth(280);
-        routeDock->setMaximumWidth(520);
-        resizeDocks({routeDock}, {335}, Qt::Horizontal);
+    auto* overview = findChild<QDockWidget*>("overviewDock");
+    auto* production = findChild<QDockWidget*>("productionDock");
+    auto* fleet = findChild<QDockWidget*>("fleetDock");
+    auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
+    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, researchDock_}) {
+        if (!dock) continue;
+        dock->setFloating(false);
+        dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+        dock->setFeatures(QDockWidget::DockWidgetClosable
+            | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+        dock->show();
     }
+
+    if (overview) addDockWidget(Qt::LeftDockWidgetArea, overview);
+    if (production) {
+        addDockWidget(Qt::LeftDockWidgetArea, production);
+        if (overview) splitDockWidget(overview, production, Qt::Vertical);
+    }
+    if (fleet) addDockWidget(Qt::RightDockWidgetArea, fleet);
+    if (route) {
+        addDockWidget(Qt::RightDockWidgetArea, route);
+        route->setMinimumWidth(280);
+        route->setMaximumWidth(520);
+        if (fleet) tabifyDockWidget(fleet, route);
+    }
+    if (fleet) fleet->raise();
+    if (overview) resizeDocks({overview}, {330}, Qt::Horizontal);
+    if (fleet) resizeDocks({fleet}, {350}, Qt::Horizontal);
 
     if (auto* routeScroll = findChild<QScrollArea*>("routeProgramScrollArea")) {
         routeScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         routeScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     }
 
-    statusBar()->showMessage("Panel layout restored", 1800);
+    statusBar()->showMessage("Dockable workspace restored", 1800);
 }
 
 } // namespace suns

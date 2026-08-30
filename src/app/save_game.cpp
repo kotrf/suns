@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 13;
+constexpr quint32 kSaveFormatVersion = 14;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -910,6 +910,11 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
             stream << quint8{13} << static_cast<quint32>(concrete.source);
             writeShipStacks(stream, concrete.ships);
+        } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
+            stream << quint8{14}
+                   << static_cast<quint32>(concrete.colony)
+                   << static_cast<quint32>(concrete.fromIndex)
+                   << static_cast<quint32>(concrete.toIndex);
         }
     }, order);
 }
@@ -1110,6 +1115,18 @@ bool readOrder(QDataStream& stream, Order& order)
         value.source = static_cast<FleetId>(source);
         readShipStacks(stream, value.ships);
         order = std::move(value);
+        return stream.status() == QDataStream::Ok;
+    }
+    case 14: {
+        ReorderProductionQueueOrder value;
+        quint32 colony{};
+        quint32 fromIndex{};
+        quint32 toIndex{};
+        stream >> colony >> fromIndex >> toIndex;
+        value.colony = static_cast<PlanetId>(colony);
+        value.fromIndex = static_cast<std::uint32_t>(fromIndex);
+        value.toIndex = static_cast<std::uint32_t>(toIndex);
+        order = value;
         return stream.status() == QDataStream::Ok;
     }
     default:

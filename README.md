@@ -56,6 +56,11 @@ Ending a turn also produces an actionable Turn Messages briefing. Survey discove
 
 Fleets may contain multiple ship designs and counts. Co-located idle fleets can be merged while preserving the chosen FleetId, or split by exact design stack into a new FleetId; movement, sensors, cargo, fuel, colonization and remote mining derive from the complete composition.
 
+The galaxy map is the permanent workspace while Overview, Fleet, Fleet Route Program, Production, Research and Turn Messages are dockable panels. They may be tabbed, resized or detached into operating-system windows, and the chosen layout is restored on the next launch. Fleet logistics, organization, colonization and ship design live together in the Fleet area.
+
+Colony production is shown as an ordered list with per-item remaining work and a forecast completion turn. Items can be moved earlier or later before End Turn; ongoing Research visibly blocks anything behind it.
+
 A colony ship may enter an unknown or basically scanned system, but colonization requires a confirmed orbital survey. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
+Successful colonization dismantles the entire fleet, deposits all carried minerals, and recovers 33% of every ship design's Ironium, Boranium and Germanium construction cost, rounded down per mineral. Split escorts or valuable ships away before founding the colony.
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.

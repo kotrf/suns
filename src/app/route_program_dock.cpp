@@ -150,7 +150,7 @@ void attachRouteProgramDock(MainWindow& window)
         "Each leg keeps its own Warp and arrival action. Arrival ends movement for that turn; the next leg starts next turn. "
         "Remote Mining is a persistent terminal task: extraction starts on the following turn and continues until a new route or No Task command arrives. "
         "Load and unload are resolved from the real surface stockpile on arrival. Repeat Orders repeats the whole route; Colonize and Remote Mining cannot be repeated. "
-        "Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization consumes that ship.",
+        "Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization dismantles the entire fleet and recovers 33% of its ship minerals.",
         panel);
     note->setWordWrap(true);
     layout->addWidget(note);

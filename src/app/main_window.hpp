@@ -24,6 +24,7 @@ class QPushButton;
 class QProgressBar;
 class QSpinBox;
 class QDockWidget;
+class QTreeWidget;
 
 namespace suns {
 
@@ -95,6 +96,9 @@ public:
     // Empire research allocation and colony research production.
     void installResearch();
 
+    // Ordered colony build list with completion forecasts and move controls.
+    void installProductionQueue();
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
@@ -129,6 +133,10 @@ private:
     void refreshResearchPanel();
     void queueResearchPlan();
     void toggleSelectedColonyResearch();
+    void refreshProductionQueue();
+    void moveSelectedProductionItem(int direction);
+    [[nodiscard]] bool confirmFleetColonization(
+        const Fleet& fleet, const Planet& planet, bool scheduledRoute);
 
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
@@ -200,6 +208,10 @@ private:
     QComboBox* researchNextCombo_{};
     QPushButton* applyResearchPlanButton_{};
     QPushButton* colonyResearchButton_{};
+    QTreeWidget* productionQueueTree_{};
+    QLabel* productionQueueSummary_{};
+    QPushButton* productionMoveUpButton_{};
+    QPushButton* productionMoveDownButton_{};
 };
 
 } // namespace suns

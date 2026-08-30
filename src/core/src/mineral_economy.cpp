@@ -172,4 +172,25 @@ MineralCargo production_item_mineral_cost(const GameState& state, const Producti
     return {};
 }
 
+MineralCargo fleet_colonization_salvage(const GameState& state, const Fleet& fleet)
+{
+    MineralCargo constructionMinerals;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) continue;
+        const auto cost = ship_design_mineral_cost(*design);
+        constructionMinerals.ironium += cost.ironium * stack.count;
+        constructionMinerals.boranium += cost.boranium * stack.count;
+        constructionMinerals.germanium += cost.germanium * stack.count;
+    }
+
+    // A new colony has no starbase, so dismantling follows the Stars!-style
+    // one-third recovery rule. Each mineral is rounded down independently.
+    return {
+        std::floor(constructionMinerals.ironium / 3.0),
+        std::floor(constructionMinerals.boranium / 3.0),
+        std::floor(constructionMinerals.germanium / 3.0),
+    };
+}
+
 } // namespace suns

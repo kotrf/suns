@@ -45,6 +45,12 @@ struct QueueShipDesignOrder {
     ShipDesignId design{};
 };
 
+struct ReorderProductionQueueOrder {
+    PlanetId colony{};
+    std::uint32_t fromIndex{};
+    std::uint32_t toIndex{};
+};
+
 struct SetFleetColonistsOrder {
     PlanetId colony{};
     FleetId fleet{};
@@ -106,6 +112,7 @@ using Order = std::variant<
     SetResearchPlanOrder,
     CreateShipDesignOrder,
     QueueShipDesignOrder,
+    ReorderProductionQueueOrder,
     SetFleetColonistsOrder,
     SetFleetMineralCargoOrder,
     TransferCargoOrder,

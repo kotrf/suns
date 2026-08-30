@@ -119,6 +119,14 @@ target_link_libraries(suns_fleet_management_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_fleet_management_tests COMMAND suns_fleet_management_tests)
 
+add_executable(suns_production_queue_tests
+    production_queue_tests.cpp
+)
+
+target_link_libraries(suns_production_queue_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_production_queue_tests COMMAND suns_production_queue_tests)
+
 if(SUNS_BUILD_APP)
     add_executable(suns_save_game_tests
         save_game_tests.cpp
