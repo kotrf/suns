@@ -102,9 +102,9 @@ void apply_research_points(
             nextLevel,
         });
 
-        if (player->technology.nextFocus) {
-            player->technology.focus = *player->technology.nextFocus;
-            player->technology.nextFocus.reset();
+        if (!player->technology.queuedFocuses.empty()) {
+            player->technology.focus = player->technology.queuedFocuses.front();
+            player->technology.queuedFocuses.erase(player->technology.queuedFocuses.begin());
         }
     }
 }
@@ -1310,12 +1310,15 @@ TurnResult TurnProcessor::process_with_events(
                         }
                     } else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) {
                         auto* player = mutable_player(next, submission.player);
-                        if (!player || !valid_research_field(concreteOrder.focus)
-                            || (concreteOrder.nextFocus && !valid_research_field(*concreteOrder.nextFocus))) {
+                        if (!player || concreteOrder.focus != player->technology.focus
+                            || !valid_research_field(concreteOrder.focus)
+                            || !std::all_of(
+                                concreteOrder.queuedFocuses.begin(),
+                                concreteOrder.queuedFocuses.end(),
+                                valid_research_field)) {
                             return;
                         }
-                        player->technology.focus = concreteOrder.focus;
-                        player->technology.nextFocus = concreteOrder.nextFocus;
+                        player->technology.queuedFocuses = concreteOrder.queuedFocuses;
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
                         ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,
                             concreteOrder.hull, concreteOrder.components};

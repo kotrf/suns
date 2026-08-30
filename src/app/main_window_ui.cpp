@@ -439,6 +439,33 @@ void MainWindow::installUiPolish()
             background: #152231;
             border-bottom: 1px solid #294057;
         }
+        QMainWindow QTabBar {
+            background: #090f16;
+        }
+        QMainWindow QTabBar::tab {
+            min-width: 120px;
+            min-height: 25px;
+            padding: 5px 12px;
+            margin-right: 2px;
+            color: #9fb1c3;
+            background: #111c28;
+            border: 1px solid #2d4358;
+            border-bottom: 2px solid #2d4358;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        QMainWindow QTabBar::tab:hover:!selected {
+            color: #e5eff8;
+            background: #1b3042;
+            border-color: #4f7899;
+        }
+        QMainWindow QTabBar::tab:selected {
+            color: #ffffff;
+            font-weight: 700;
+            background: #274d69;
+            border-color: #70b9e8;
+            border-bottom: 3px solid #70b9e8;
+        }
         QLabel#homeworldDistance {
             padding: 2px 8px;
             color: #f0d59d;

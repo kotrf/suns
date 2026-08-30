@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 15;
+constexpr quint32 kSaveFormatVersion = 16;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -522,8 +522,8 @@ void writePlayer(QDataStream& stream, const Player& value)
     for (const auto level : value.technology.levels) stream << static_cast<quint8>(level);
     for (const auto progress : value.technology.progress) stream << static_cast<quint32>(progress);
     writeEnum(stream, value.technology.focus);
-    stream << static_cast<quint8>(value.technology.nextFocus.has_value() ? 1 : 0);
-    if (value.technology.nextFocus) writeEnum(stream, *value.technology.nextFocus);
+    stream << static_cast<quint32>(value.technology.queuedFocuses.size());
+    for (const auto field : value.technology.queuedFocuses) writeEnum(stream, field);
 }
 
 void readPlayer(QDataStream& stream, Player& value)
@@ -626,17 +626,27 @@ void readPlayer(QDataStream& stream, Player& value)
         progress = static_cast<std::uint32_t>(stored);
     }
     if (!readEnum(stream, value.technology.focus, static_cast<quint8>(ResearchField::Weapons))) return;
-    quint8 hasNext{};
-    stream >> hasNext;
-    if (hasNext > 1) {
-        markCorrupt(stream);
-        return;
-    }
-    value.technology.nextFocus.reset();
-    if (hasNext) {
-        ResearchField next{};
-        if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return;
-        value.technology.nextFocus = next;
+    value.technology.queuedFocuses.clear();
+    if (gReadSaveFormatVersion >= 16) {
+        if (!readCount(stream, count)) return;
+        value.technology.queuedFocuses.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            ResearchField field{};
+            if (!readEnum(stream, field, static_cast<quint8>(ResearchField::Weapons))) return;
+            value.technology.queuedFocuses.push_back(field);
+        }
+    } else {
+        quint8 hasNext{};
+        stream >> hasNext;
+        if (hasNext > 1) {
+            markCorrupt(stream);
+            return;
+        }
+        if (hasNext) {
+            ResearchField next{};
+            if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return;
+            value.technology.queuedFocuses.push_back(next);
+        }
     }
 }
 
@@ -919,8 +929,8 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) {
             stream << quint8{9};
             writeEnum(stream, concrete.focus);
-            stream << static_cast<quint8>(concrete.nextFocus.has_value() ? 1 : 0);
-            if (concrete.nextFocus) writeEnum(stream, *concrete.nextFocus);
+            stream << static_cast<quint32>(concrete.queuedFocuses.size());
+            for (const auto field : concrete.queuedFocuses) writeEnum(stream, field);
         } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
             stream << quint8{10} << static_cast<quint32>(concrete.fleet)
                    << static_cast<quint8>(concrete.enabled ? 1 : 0);
@@ -1083,16 +1093,27 @@ bool readOrder(QDataStream& stream, Order& order)
     case 9: {
         SetResearchPlanOrder value;
         if (!readEnum(stream, value.focus, static_cast<quint8>(ResearchField::Weapons))) return false;
-        quint8 hasNext{};
-        stream >> hasNext;
-        if (hasNext > 1) {
-            markCorrupt(stream);
-            return false;
-        }
-        if (hasNext) {
-            ResearchField next{};
-            if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return false;
-            value.nextFocus = next;
+        if (gReadSaveFormatVersion >= 16) {
+            quint32 count{};
+            if (!readCount(stream, count)) return false;
+            value.queuedFocuses.reserve(count);
+            for (quint32 index = 0; index < count; ++index) {
+                ResearchField field{};
+                if (!readEnum(stream, field, static_cast<quint8>(ResearchField::Weapons))) return false;
+                value.queuedFocuses.push_back(field);
+            }
+        } else {
+            quint8 hasNext{};
+            stream >> hasNext;
+            if (hasNext > 1) {
+                markCorrupt(stream);
+                return false;
+            }
+            if (hasNext) {
+                ResearchField next{};
+                if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return false;
+                value.queuedFocuses.push_back(next);
+            }
         }
         order = value;
         return stream.status() == QDataStream::Ok;
