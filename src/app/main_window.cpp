@@ -571,9 +571,11 @@ void MainWindow::rebuildScene()
         auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
             routeDestination.x, routeDestination.y, routePen);
         route->setZValue(-20.0);
-        QString routeText = QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
+        QString routeText = visibleFleet.targetFleet != 0
+            ? QString("W%1 • intercept ETA ~%2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
+            : QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         if (visibleFleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
-        if (visibleFleet.targetFleet != 0) routeText += QString(" • tracking Fleet %1").arg(visibleFleet.targetFleet);
+        if (visibleFleet.targetFleet != 0) routeText += QString(" • pursuing Fleet %1").arg(visibleFleet.targetFleet);
         addTravelLabel(scene_, visibleFleet.position, routeDestination, routeText, fleetColor(fleet.role, 155));
     }
 
@@ -599,8 +601,10 @@ void MainWindow::rebuildScene()
                 route->setZValue(-18.0);
                 const auto routeWarp = concreteOrder.warp == 0 ? visibleFleet.warp : concreteOrder.warp;
                 const auto eta = travel_turns(visibleFleet.position, routeDestination, warp_distance(routeWarp));
-                QString routeText = QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
-                if (concreteOrder.targetFleet != 0) routeText += QString(" • tracking Fleet %1").arg(concreteOrder.targetFleet);
+                QString routeText = concreteOrder.targetFleet != 0
+                    ? QString("course W%1 • intercept ETA ~%2").arg(routeWarp).arg(turnCount(eta))
+                    : QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
+                if (concreteOrder.targetFleet != 0) routeText += QString(" • pursuing Fleet %1").arg(concreteOrder.targetFleet);
                 if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
                     routeText += QString(" • %1").arg(arrivalActionSummary(concreteOrder.arrivalAction));
                 }

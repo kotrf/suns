@@ -39,10 +39,21 @@ inline constexpr std::uint32_t kFirstResearchLevelCost = 18;
 // stations will later move this capability to explicit station/ship modules
 // without changing packet and latency semantics.
 inline constexpr double kCommunicationSignalSpeed = 150.0;
+// Strategic contact envelope used by continuous within-turn interception. It
+// is deliberately tiny relative to ordinary Warp travel distances and absorbs
+// only navigation/tactical closure that the annual movement model cannot show.
+inline constexpr double kFleetEncounterRadius = 0.01;
 
 struct Position {
     double x{};
     double y{};
+};
+
+struct FleetEncounterGeometry {
+    double closestTimeFraction{};
+    double closestDistance{};
+    std::optional<double> encounterTimeFraction;
+    Position encounterPosition;
 };
 
 enum class StarClass {
@@ -431,6 +442,12 @@ void normalize_fleet_composition(Fleet& fleet);
 
 [[nodiscard]] bool same_position(Position a, Position b);
 [[nodiscard]] double distance_between(Position a, Position b);
+[[nodiscard]] FleetEncounterGeometry analyze_fleet_encounter(
+    Position pursuerStart,
+    Position pursuerEnd,
+    Position targetStart,
+    Position targetEnd,
+    double encounterRadius = kFleetEncounterRadius);
 [[nodiscard]] double warp_distance(std::uint8_t warp);
 [[nodiscard]] double colonist_cargo_mass(std::uint64_t colonists);
 [[nodiscard]] double mineral_cargo_mass(const MineralCargo& minerals);

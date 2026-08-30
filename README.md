@@ -56,7 +56,7 @@ Ending a turn also produces an actionable Turn Messages briefing. Survey discove
 
 Fleets may contain multiple ship designs and counts. Co-located idle fleets can be merged while preserving the chosen FleetId, or split by exact design stack into a new FleetId; movement, sensors, cargo, fuel, colonization and remote mining derive from the complete composition.
 
-Route programs can target another friendly FleetId. Pursuers resolve the target's projected motion every turn and may use **Merge with fleet**; the merge happens only when the fleets really share an end-of-turn position, while a lost target clears the route and produces a warning.
+Route programs can target another friendly FleetId. Pursuers resolve the target's projected motion every turn and may use **Merge with fleet**. Their relative movement is checked continuously inside the annual turn, so a real crossing can stop both fleets at the intercept point while a closest-approach miss keeps the pursuit active. A lost target clears the route and produces a warning.
 
 The galaxy map is the permanent workspace while Overview, Fleet, Fleet Route Program, Production, Research and Turn Messages are dockable panels. They may be tabbed, resized or detached into operating-system windows, and the chosen layout is restored on the next launch. Fleet logistics, organization, colonization and ship design live together in the Fleet area.
 
