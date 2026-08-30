@@ -91,6 +91,13 @@ void round_trip_preserves_communications_and_planning()
     scout.task = FleetTask::RemoteMining;
     scout.repeatOrders = true;
     scout.routeTemplate = scout.telemetry.routeTemplate;
+    scout.targetFleet = 2;
+    scout.pendingCommands.front().program.targetFleet = 3;
+    scout.pendingCommands.front().program.queuedWaypoints.front().targetFleet = 4;
+    scout.telemetry.targetFleet = 5;
+    scout.telemetry.routeTemplate.front().targetFleet = 6;
+    scout.telemetryInTransit.front().telemetry.targetFleet = 7;
+    scout.routeTemplate.front().targetFleet = 8;
 
     MoveFleetOrder move;
     move.fleet = scout.id;
@@ -100,6 +107,8 @@ void round_trip_preserves_communications_and_planning()
     move.arrivalAction.cargo = FleetCargoKind::Germanium;
     move.queuedWaypoints.push_back({{300.0, -100.0}, 7, {FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::Germanium}});
     move.repeatOrders = true;
+    move.targetFleet = 9;
+    move.queuedWaypoints.front().targetFleet = 10;
     original.pendingOrders = {1, {
         move,
         QueueProductionOrder{1, ProductionKind::Mine},
@@ -170,6 +179,8 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.pendingCommands.front().program.warp == 7);
     assert(fleet.pendingCommands.front().program.queuedWaypoints.size() == 1);
     assert(fleet.pendingCommands.front().program.clearRoute);
+    assert(fleet.pendingCommands.front().program.targetFleet == 3);
+    assert(fleet.pendingCommands.front().program.queuedWaypoints.front().targetFleet == 4);
     assert(!fleet.pendingCommands.front().task);
     assert(fleet.pendingCommands[1].task == FleetTask::None);
     assert(fleet.telemetry.observedTurn == 75);
@@ -179,14 +190,19 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetry.minerals.germanium == 6.0);
     assert(fleet.telemetry.task == FleetTask::RemoteMining);
     assert(fleet.telemetry.repeatOrders);
+    assert(fleet.telemetry.targetFleet == 5);
     assert(fleet.telemetry.routeTemplate.size() == 2);
+    assert(fleet.telemetry.routeTemplate.front().targetFleet == 6);
     assert(fleet.telemetryInTransit.size() == 1);
     assert(fleet.telemetryInTransit.front().deliveryTurn == 79);
     assert(fleet.telemetryInTransit.front().telemetry.observedTurn == 76);
+    assert(fleet.telemetryInTransit.front().telemetry.targetFleet == 7);
     assert(fleet.fuelStalled);
     assert(fleet.task == FleetTask::RemoteMining);
     assert(fleet.repeatOrders);
     assert(fleet.routeTemplate.size() == 2);
+    assert(fleet.routeTemplate.front().targetFleet == 8);
+    assert(fleet.targetFleet == 2);
     assert(fleet_ship_count(fleet) == 3);
     assert(fleet_ship_count(fleet, kScoutDesignId) == 2);
     assert(fleet_ship_count(fleet, 3) == 1);
@@ -198,7 +214,9 @@ void round_trip_preserves_communications_and_planning()
     assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
     assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
     assert(savedMove->repeatOrders);
+    assert(savedMove->targetFleet == 9);
     assert(savedMove->queuedWaypoints.size() == 1);
+    assert(savedMove->queuedWaypoints.front().targetFleet == 10);
     const auto* mine = std::get_if<QueueProductionOrder>(&loaded.pendingOrders.orders[1]);
     assert(mine && mine->kind == ProductionKind::Mine);
     const auto* plan = std::get_if<SetResearchPlanOrder>(&loaded.pendingOrders.orders[2]);

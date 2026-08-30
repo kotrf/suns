@@ -109,6 +109,11 @@ void attachRouteProgramDock(MainWindow& window)
 
     auto* warpSpin = new QSpinBox(waypointGroup);
     warpSpin->setRange(1, kMaxWarp);
+    auto* targetTypeCombo = new QComboBox(waypointGroup);
+    targetTypeCombo->addItem("Selected star", 0);
+    targetTypeCombo->addItem("Friendly fleet", 1);
+    auto* targetFleetCombo = new QComboBox(waypointGroup);
+    targetFleetCombo->setEnabled(false);
     auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
     actionCombo->addItem("Load all available", static_cast<int>(FleetArrivalActionKind::LoadAllAvailable));
@@ -116,6 +121,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Refuel", static_cast<int>(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
     actionCombo->addItem("Remote Mining (persistent)", static_cast<int>(FleetArrivalActionKind::RemoteMining));
+    actionCombo->addItem("Merge with fleet", static_cast<int>(FleetArrivalActionKind::MergeWithFleet));
     auto* cargoCombo = new QComboBox(waypointGroup);
     cargoCombo->addItem("Colonists", static_cast<int>(FleetCargoKind::Colonists));
     cargoCombo->addItem("Ironium", static_cast<int>(FleetCargoKind::Ironium));
@@ -128,6 +134,8 @@ void attachRouteProgramDock(MainWindow& window)
     reserveSpin->setEnabled(false);
 
     auto* form = new QFormLayout;
+    form->addRow("Target type", targetTypeCombo);
+    form->addRow("Target fleet", targetFleetCombo);
     form->addRow("Waypoint Warp", warpSpin);
     form->addRow("On arrival", actionCombo);
     form->addRow("Cargo", cargoCombo);
@@ -147,9 +155,10 @@ void attachRouteProgramDock(MainWindow& window)
     layout->addWidget(clearButton);
 
     auto* note = new QLabel(
-        "Each leg keeps its own Warp and arrival action. Arrival ends movement for that turn; the next leg starts next turn. "
+        "Each leg keeps its own Warp and arrival action. A friendly-fleet target is resolved again every turn, so the pursuing fleet follows its motion instead of flying to stale coordinates. "
         "Remote Mining is a persistent terminal task: extraction starts on the following turn and continues until a new route or No Task command arrives. "
-        "Load and unload are resolved from the real surface stockpile on arrival. Repeat Orders repeats the whole route; Colonize and Remote Mining cannot be repeated. "
+        "Merge with fleet completes only when both fleets really meet; the pursuing fleet is absorbed into the target fleet. "
+        "Load and unload are resolved from the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
         "Colonize requires an orbital-surveyed unowned world, a colonization-capable ship and colonists aboard; successful colonization dismantles the entire fleet and recovers 33% of its ship minerals.",
         panel);
     note->setWordWrap(true);
@@ -170,11 +179,30 @@ void attachRouteProgramDock(MainWindow& window)
     };
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
     QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
+    QObject::connect(targetTypeCombo, &QComboBox::currentIndexChanged, panel, [=](int) {
+        const bool fleetTarget = targetTypeCombo->currentData().toInt() == 1;
+        targetFleetCombo->setEnabled(fleetTarget);
+        appendButton->setText(fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+        const auto currentAction = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
+        if (fleetTarget) {
+            actionCombo->setCurrentIndex(
+                actionCombo->findData(static_cast<int>(FleetArrivalActionKind::MergeWithFleet)));
+        } else if (currentAction == FleetArrivalActionKind::MergeWithFleet) {
+            actionCombo->setCurrentIndex(
+                actionCombo->findData(static_cast<int>(FleetArrivalActionKind::None)));
+        }
+    });
 
-    QObject::connect(appendButton, &QPushButton::clicked, panel, [&window, warpSpin, actionCombo, cargoCombo, reserveSpin] {
-        window.appendSelectedStarWaypoint(
-            static_cast<std::uint8_t>(warpSpin->value()),
-            actionFromControls(actionCombo, cargoCombo, reserveSpin));
+    QObject::connect(appendButton, &QPushButton::clicked, panel,
+        [&window, warpSpin, actionCombo, cargoCombo, reserveSpin, targetTypeCombo, targetFleetCombo] {
+            const auto warp = static_cast<std::uint8_t>(warpSpin->value());
+            const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin);
+            if (targetTypeCombo->currentData().toInt() == 1) {
+                window.appendFleetTargetWaypoint(
+                    static_cast<FleetId>(targetFleetCombo->currentData().toUInt()), warp, action);
+            } else {
+                window.appendSelectedStarWaypoint(warp, action);
+            }
     });
 
     QObject::connect(repeatCheck, &QCheckBox::clicked, panel, [&window](bool enabled) {
@@ -188,7 +216,8 @@ void attachRouteProgramDock(MainWindow& window)
     auto* timer = new QTimer(dock);
     timer->setInterval(180);
     QObject::connect(timer, &QTimer::timeout, dock,
-        [&window, routeLabel, warpSpin, appendButton, clearButton, repeatCheck, lastFleet = FleetId{}]() mutable {
+        [&window, routeLabel, warpSpin, appendButton, clearButton, repeatCheck,
+            targetTypeCombo, targetFleetCombo, lastFleet = FleetId{}, lastTargets = std::vector<FleetId>{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
 
@@ -200,7 +229,23 @@ void attachRouteProgramDock(MainWindow& window)
 
             warpSpin->setMaximum(std::max<int>(1, maxWarp));
             warpSpin->setEnabled(selectedFleet != 0 && maxWarp > 0);
-            appendButton->setEnabled(selectedFleet != 0 && maxWarp > 0);
+            const auto targets = window.availableFleetTargetsForRouteProgram();
+            if (targets != lastTargets) {
+                const auto previous = static_cast<FleetId>(targetFleetCombo->currentData().toUInt());
+                const QSignalBlocker blocker(targetFleetCombo);
+                targetFleetCombo->clear();
+                for (const auto target : targets) {
+                    targetFleetCombo->addItem(
+                        window.fleetTargetNameForRouteProgram(target), static_cast<quint32>(target));
+                }
+                const auto previousIndex = targetFleetCombo->findData(static_cast<quint32>(previous));
+                if (previousIndex >= 0) targetFleetCombo->setCurrentIndex(previousIndex);
+                lastTargets = targets;
+            }
+            const bool wantsFleetTarget = targetTypeCombo->currentData().toInt() == 1;
+            targetFleetCombo->setEnabled(wantsFleetTarget && !targets.empty());
+            appendButton->setEnabled(selectedFleet != 0 && maxWarp > 0
+                && (!wantsFleetTarget || !targets.empty()));
             clearButton->setEnabled(selectedFleet != 0);
             repeatCheck->setEnabled(selectedFleet != 0);
             {

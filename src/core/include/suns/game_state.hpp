@@ -201,6 +201,8 @@ enum class PlayerReportKind {
     ProductionCompleted,
     ColonyFounded,
     ProductionWaitingForMinerals,
+    FleetTargetLost,
+    FleetsMerged,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -266,6 +268,7 @@ enum class FleetArrivalActionKind {
     Refuel,
     Colonize,
     RemoteMining,
+    MergeWithFleet,
 };
 
 enum class FleetCargoKind {
@@ -285,6 +288,7 @@ struct FleetWaypoint {
     Position destination;
     std::uint8_t warp{kScoutCruiseWarp};
     FleetArrivalAction arrivalAction{};
+    FleetId targetFleet{};
 };
 
 struct FleetRouteProgram {
@@ -294,6 +298,7 @@ struct FleetRouteProgram {
     std::vector<FleetWaypoint> queuedWaypoints;
     bool clearRoute{};
     bool repeatOrders{};
+    FleetId targetFleet{};
 };
 
 struct FleetShipStack {
@@ -315,6 +320,7 @@ struct FleetTelemetry {
     bool repeatOrders{};
     std::vector<FleetWaypoint> routeTemplate;
     std::vector<FleetShipStack> ships;
+    FleetId targetFleet{};
 };
 
 struct PendingFleetCommand {
@@ -357,6 +363,10 @@ struct Fleet {
     // Authoritative fleet composition. Empty means one ship of the legacy
     // `design` above and is accepted for old saves and compact test fixtures.
     std::vector<FleetShipStack> ships;
+
+    // Non-zero means the active route follows this FleetId. `destination`
+    // remains a resolved position snapshot for rendering and compatibility.
+    FleetId targetFleet{};
 };
 
 struct GameState {

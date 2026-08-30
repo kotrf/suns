@@ -183,6 +183,8 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
         return "colonize";
     case FleetArrivalActionKind::RemoteMining:
         return "begin remote mining";
+    case FleetArrivalActionKind::MergeWithFleet:
+        return "merge with fleet";
     }
     return "none";
 }
@@ -556,16 +558,23 @@ void MainWindow::rebuildScene()
     for (const auto& fleet : state_.fleets) {
         const auto visibleFleet = fleet_player_view(state_, fleet);
         if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
+        auto routeDestination = *visibleFleet.destination;
+        if (visibleFleet.targetFleet != 0) {
+            if (const auto* target = findFleet(state_, visibleFleet.targetFleet)) {
+                routeDestination = fleet_player_view(state_, *target).position;
+            }
+        }
         const auto routeColor = fleetColor(fleet.role, 105);
         QPen routePen(routeColor);
         routePen.setWidthF(1.15);
         routePen.setStyle(Qt::DotLine);
         auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
-            visibleFleet.destination->x, visibleFleet.destination->y, routePen);
+            routeDestination.x, routeDestination.y, routePen);
         route->setZValue(-20.0);
         QString routeText = QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         if (visibleFleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
-        addTravelLabel(scene_, visibleFleet.position, *visibleFleet.destination, routeText, fleetColor(fleet.role, 155));
+        if (visibleFleet.targetFleet != 0) routeText += QString(" • tracking Fleet %1").arg(visibleFleet.targetFleet);
+        addTravelLabel(scene_, visibleFleet.position, routeDestination, routeText, fleetColor(fleet.role, 155));
     }
 
     for (const auto& order : pendingOrders_.orders) {
@@ -575,20 +584,27 @@ void MainWindow::rebuildScene()
                 const auto* fleet = findFleet(state_, concreteOrder.fleet);
                 if (!fleet) return;
                 const auto visibleFleet = fleet_player_view(state_, *fleet);
+                auto routeDestination = concreteOrder.destination;
+                if (concreteOrder.targetFleet != 0) {
+                    if (const auto* target = findFleet(state_, concreteOrder.targetFleet)) {
+                        routeDestination = fleet_player_view(state_, *target).position;
+                    }
+                }
                 const auto routeColor = fleetColor(fleet->role, 190);
                 QPen routePen(routeColor);
                 routePen.setWidthF(1.45);
                 routePen.setStyle(Qt::DashLine);
                 auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
-                    concreteOrder.destination.x, concreteOrder.destination.y, routePen);
+                    routeDestination.x, routeDestination.y, routePen);
                 route->setZValue(-18.0);
                 const auto routeWarp = concreteOrder.warp == 0 ? visibleFleet.warp : concreteOrder.warp;
-                const auto eta = travel_turns(visibleFleet.position, concreteOrder.destination, warp_distance(routeWarp));
+                const auto eta = travel_turns(visibleFleet.position, routeDestination, warp_distance(routeWarp));
                 QString routeText = QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
+                if (concreteOrder.targetFleet != 0) routeText += QString(" • tracking Fleet %1").arg(concreteOrder.targetFleet);
                 if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
                     routeText += QString(" • %1").arg(arrivalActionSummary(concreteOrder.arrivalAction));
                 }
-                addTravelLabel(scene_, visibleFleet.position, concreteOrder.destination, routeText, fleetColor(fleet->role, 210));
+                addTravelLabel(scene_, visibleFleet.position, routeDestination, routeText, fleetColor(fleet->role, 210));
             }
         }, order);
     }

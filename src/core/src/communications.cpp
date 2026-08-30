@@ -113,12 +113,28 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
 
 bool route_tasks_valid(const FleetRouteProgram& program)
 {
-    if (program.arrivalAction.kind == FleetArrivalActionKind::RemoteMining
+    const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
+        if (target != 0) {
+            return action.kind == FleetArrivalActionKind::None
+                || action.kind == FleetArrivalActionKind::MergeWithFleet;
+        }
+        return action.kind != FleetArrivalActionKind::MergeWithFleet;
+    };
+    if (!targetActionValid(program.targetFleet, program.arrivalAction)) return false;
+    if (std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
+            [&](const FleetWaypoint& waypoint) {
+                return !targetActionValid(waypoint.targetFleet, waypoint.arrivalAction);
+            })) {
+        return false;
+    }
+    if ((program.arrivalAction.kind == FleetArrivalActionKind::RemoteMining
+            || program.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet)
         && !program.queuedWaypoints.empty()) {
         return false;
     }
     for (std::size_t index = 0; index + 1 < program.queuedWaypoints.size(); ++index) {
-        if (program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::RemoteMining) {
+        if (program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::RemoteMining
+            || program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet) {
             return false;
         }
     }
@@ -126,7 +142,8 @@ bool route_tasks_valid(const FleetRouteProgram& program)
         if (program.queuedWaypoints.empty()) return false;
         const auto incompatible = [](const FleetArrivalAction& action) {
             return action.kind == FleetArrivalActionKind::Colonize
-                || action.kind == FleetArrivalActionKind::RemoteMining;
+                || action.kind == FleetArrivalActionKind::RemoteMining
+                || action.kind == FleetArrivalActionKind::MergeWithFleet;
         };
         if (incompatible(program.arrivalAction)
             || std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
@@ -136,7 +153,8 @@ bool route_tasks_valid(const FleetRouteProgram& program)
         const auto distinctDestination = std::any_of(
             program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
             [&](const FleetWaypoint& waypoint) {
-                return !same_position(program.destination, waypoint.destination);
+                return program.targetFleet != waypoint.targetFleet
+                    || !same_position(program.destination, waypoint.destination);
             });
         if (!distinctDestination) return false;
     }
@@ -154,11 +172,21 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
             fleet.arrivalAction.reset();
             fleet.repeatOrders = false;
             fleet.routeTemplate.clear();
+            fleet.targetFleet = 0;
             return;
         }
 
         fleet.warp = waypoint.warp;
         fleet.arrivalAction = active_arrival_action(waypoint.arrivalAction);
+        fleet.targetFleet = waypoint.targetFleet;
+
+        if (waypoint.targetFleet != 0) {
+            const auto target = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+                return candidate.id == waypoint.targetFleet && candidate.owner == fleet.owner;
+            });
+            fleet.destination = target != state.fleets.end() ? target->position : waypoint.destination;
+            return;
+        }
 
         if (!same_position(fleet.position, waypoint.destination)) {
             fleet.destination = waypoint.destination;
@@ -190,6 +218,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         fleet.task = FleetTask::None;
         fleet.repeatOrders = false;
         fleet.routeTemplate.clear();
+        fleet.targetFleet = 0;
         return true;
     }
 
@@ -199,23 +228,35 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
     fleet.arrivalAction = active_arrival_action(program.arrivalAction);
     fleet.waypointQueue = program.queuedWaypoints;
     fleet.repeatOrders = program.repeatOrders;
+    fleet.targetFleet = program.targetFleet;
     fleet.routeTemplate.clear();
     if (program.repeatOrders) {
         fleet.routeTemplate.reserve(1 + program.queuedWaypoints.size());
-        fleet.routeTemplate.push_back({program.destination, requestedWarp, program.arrivalAction});
+        fleet.routeTemplate.push_back({
+            program.destination, requestedWarp, program.arrivalAction, program.targetFleet});
         fleet.routeTemplate.insert(
             fleet.routeTemplate.end(), program.queuedWaypoints.begin(), program.queuedWaypoints.end());
     }
 
-    if (same_position(fleet.position, program.destination)) {
+    Position resolvedDestination = program.destination;
+    if (program.targetFleet != 0) {
+        const auto target = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+            return candidate.id == program.targetFleet && candidate.owner == fleet.owner;
+        });
+        if (target != state.fleets.end()) resolvedDestination = target->position;
+    }
+
+    if (program.targetFleet != 0) {
+        fleet.destination = resolvedDestination;
+    } else if (same_position(fleet.position, resolvedDestination)) {
         if (fleet.arrivalAction) {
-            fleet.destination = program.destination;
+            fleet.destination = resolvedDestination;
         } else {
             fleet.destination.reset();
             activate_next_waypoint(state, fleet);
         }
     } else {
-        fleet.destination = program.destination;
+        fleet.destination = resolvedDestination;
     }
     return true;
 }
@@ -226,7 +267,8 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
         fleet.task = FleetTask::None;
         return true;
     }
-    if (task != FleetTask::RemoteMining || fleet.destination || !fleet.waypointQueue.empty()) return false;
+    if (task != FleetTask::RemoteMining || fleet.destination || fleet.targetFleet != 0
+        || !fleet.waypointQueue.empty()) return false;
 
     if (!fleet_can_remote_mine(state, fleet)) return false;
 
@@ -256,6 +298,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.repeatOrders = fleet.repeatOrders;
     result.routeTemplate = fleet.routeTemplate;
     result.ships = fleet_ship_stacks(fleet);
+    result.targetFleet = fleet.targetFleet;
     return result;
 }
 
@@ -418,6 +461,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.task = telemetry.task;
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;
+    view.targetFleet = telemetry.targetFleet;
     if (!telemetry.ships.empty()) view.ships = telemetry.ships;
     view.pendingCommands.clear();
     view.telemetry = telemetry;
@@ -433,17 +477,31 @@ bool submit_fleet_route_command(
     std::uint8_t warp,
     FleetArrivalAction arrivalAction,
     const std::vector<FleetWaypoint>& queuedWaypoints,
-    bool repeatOrders)
+    bool repeatOrders,
+    FleetId targetFleet)
 {
     const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
         return candidate.id == fleetId && candidate.owner == player;
     });
     if (fleet == state.fleets.end()) return false;
 
-    FleetRouteProgram program{destination, warp, arrivalAction, queuedWaypoints, false, repeatOrders};
+    FleetRouteProgram program{
+        destination, warp, arrivalAction, queuedWaypoints, false, repeatOrders, targetFleet};
     if (!route_tasks_valid(program)) return false;
+    const auto validTarget = [&](FleetId candidateId) {
+        if (candidateId == 0) return true;
+        return candidateId != fleetId
+            && std::any_of(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+                return candidate.id == candidateId && candidate.owner == player;
+            });
+    };
+    if (!validTarget(targetFleet)
+        || std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
+            [&](const FleetWaypoint& waypoint) { return !validTarget(waypoint.targetFleet); })) {
+        return false;
+    }
     const auto visiblePosition = projected_fleet_position(state, *fleet);
-    program.clearRoute = same_position(destination, visiblePosition)
+    program.clearRoute = targetFleet == 0 && same_position(destination, visiblePosition)
         && arrivalAction.kind == FleetArrivalActionKind::None
         && queuedWaypoints.empty();
     const auto requestedWarp = warp == 0 ? fleet->warp : warp;

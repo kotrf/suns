@@ -31,7 +31,7 @@ Signals have the same propagation time regardless of message priority. Priority 
 
 A local fleet receives a new route program immediately, preserving the familiar early-game interaction around the homeworld.
 
-A remote fleet does not. A movement/route order becomes a `PendingFleetCommand` containing the replacement onboard route program and its delivery turn. Until that turn the fleet continues to execute its previous destination, arrival action and waypoint queue.
+A remote fleet does not. A movement/route order becomes a `PendingFleetCommand` containing the replacement onboard route program and its delivery turn. Moving-target legs preserve the stable target `FleetId`; they are not reduced to the coordinate observed when the command was issued. Until that turn the fleet continues to execute its previous destination, arrival action and waypoint queue.
 
 Delivery happens at a turn boundary. A command that arrives after the fleet has already moved for that year changes the program for subsequent movement; it never rewrites history or retroactively changes the just-completed trajectory.
 

@@ -10,7 +10,7 @@ The currently active leg continues to use the existing `Fleet` fields:
 - `warp`
 - `arrivalAction`
 
-`Fleet::waypointQueue` stores the future legs. Each `FleetWaypoint` contains its own destination, Warp and arrival action.
+`Fleet::waypointQueue` stores the future legs. Each `FleetWaypoint` contains its own destination, optional moving `targetFleet`, Warp and arrival action. A moving target keeps a positional snapshot for presentation and backward compatibility, but navigation resolves its current fleet state every turn.
 
 This keeps the already-tested movement and arrival-action semantics stable while adding automation incrementally.
 
@@ -28,9 +28,11 @@ A `MoveFleetOrder` represents the player's complete route intent:
 
 The last rule deliberately makes arrival a clean phase boundary. Loading, unloading, refuelling, future combat and colony-side effects therefore have an unambiguous ordering before the next leg consumes fuel.
 
-Most current tasks are one-shot. `Remote Mining` is persistent and terminal: it can appear only on the final waypoint, becomes active on arrival, starts extraction on the following turn and remains active until a replacement route or `No Task` command is delivered. Clearing a stationary fleet's route is the current `No Task` operation.
+Most current tasks are one-shot. `Remote Mining` is persistent and terminal: it can appear only on the final waypoint, becomes active on arrival, starts extraction on the following turn and remains active until a replacement route or `No Task` command is delivered. `Merge with fleet` is also terminal because the pursuing FleetId is consumed when the rendezvous succeeds. Clearing a stationary fleet's route is the current `No Task` operation.
 
-`Repeat Orders` is a flag on the complete program. After its final arrival, the fleet restores the original waypoint list and promotes its first leg; movement still waits until the following turn. A repeating program requires at least two distinct destinations. `Colonize` and `Remote Mining` are rejected in repeating programs because colonization dismantles the fleet while remote mining intentionally remains active until cancelled.
+`Repeat Orders` is a flag on the complete program. After its final arrival, the fleet restores the original waypoint list and promotes its first leg; movement still waits until the following turn. A repeating program requires at least two distinct destinations. `Colonize`, `Remote Mining` and `Merge with fleet` are rejected in repeating programs because colonization or merging dismantles the fleet while remote mining intentionally remains active until cancelled.
+
+Moving-target turn resolution and rendezvous semantics are specified in [Moving fleet targets](moving-fleet-targets.md).
 
 ## Dynamic logistics
 
