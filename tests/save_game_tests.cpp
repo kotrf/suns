@@ -109,10 +109,11 @@ void round_trip_preserves_communications_and_planning()
         TransferCargoOrder{{1, 0}, {0, scout.id}, 100, {1.0, 2.0, 3.0}},
         MergeFleetsOrder{scout.id, 2},
         SplitFleetOrder{scout.id, {{kScoutDesignId, 1}}},
+        ReorderProductionQueueOrder{1, 2, 0},
     }};
     original.pendingDescriptions = {
         "move", "mine", "research plan", "stop research", "stop remote mining", "transfer cargo",
-        "merge fleets", "split fleet",
+        "merge fleets", "split fleet", "reorder production",
     };
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
@@ -192,7 +193,7 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetry.ships.size() == 2);
     assert(fleet.telemetryInTransit.front().telemetry.ships.size() == 2);
 
-    assert(loaded.pendingOrders.orders.size() == 8);
+    assert(loaded.pendingOrders.orders.size() == 9);
     const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
     assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
     assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
@@ -220,6 +221,8 @@ void round_trip_preserves_communications_and_planning()
     const auto* split = std::get_if<SplitFleetOrder>(&loaded.pendingOrders.orders[7]);
     assert(split && split->source == scout.id && split->ships.size() == 1);
     assert(split->ships.front().design == kScoutDesignId && split->ships.front().count == 1);
+    const auto* reorder = std::get_if<ReorderProductionQueueOrder>(&loaded.pendingOrders.orders[8]);
+    assert(reorder && reorder->colony == 1 && reorder->fromIndex == 2 && reorder->toIndex == 0);
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);

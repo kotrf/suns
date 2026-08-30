@@ -2,6 +2,7 @@
 
 #include <QAction>
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
@@ -21,6 +22,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSizePolicy>
+#include <QSettings>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTimer>
@@ -79,13 +81,14 @@ QGroupBox* makeGroup(const QString& title, const char* objectName, QWidget* pare
 void MainWindow::installUiPolish()
 {
     QWidget* commandPanel = nullptr;
+    QWidget* fleetPanel = nullptr;
+    QWidget* productionPanel = nullptr;
     QLabel* planetInfo = nullptr;
     QLabel* fleetInfo = nullptr;
 
-    // Rebuild the command panel around stable information locations. The old
-    // panel grew chronologically, which split fleet navigation between two
-    // different places. The left panel is now state + dockside actions; the
-    // Route Program dock is the single home for navigation.
+    // Rebuild the chronological side panel as a dockable workspace. Map state,
+    // fleet operations and production each get a stable thematic home; the
+    // Fleet and Route Program docks share one tabbed area by default.
     if (auto* central = centralWidget()) {
         if (auto* layout = qobject_cast<QHBoxLayout*>(central->layout()); layout && layout->count() >= 2) {
             commandPanel = layout->itemAt(1)->widget();
@@ -124,12 +127,11 @@ void MainWindow::installUiPolish()
                     planetInfo->setWordWrap(true);
                     planetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
                     planetLayout->addWidget(planetInfo);
-                    colonizeButton_->show();
-                    colonizeButton_->setText("Colonize now with selected ship");
-                    planetLayout->addWidget(colonizeButton_);
                     sideLayout->addWidget(planetGroup);
 
-                    auto* fleetGroup = makeGroup("Selected fleet", "fleetGroup", commandPanel);
+                    fleetPanel = new QWidget(this);
+                    auto* fleetPanelLayout = new QVBoxLayout(fleetPanel);
+                    auto* fleetGroup = makeGroup("Selected fleet", "fleetGroup", fleetPanel);
                     auto* fleetLayout = new QVBoxLayout(fleetGroup);
                     fleetInfo = new QLabel(fleetGroup);
                     fleetInfo->setWordWrap(true);
@@ -170,23 +172,31 @@ void MainWindow::installUiPolish()
                     organizationRow->addWidget(mergeButton);
                     organizationRow->addWidget(splitButton);
                     fleetLayout->addLayout(organizationRow);
-                    sideLayout->addWidget(fleetGroup);
 
-                    auto* productionGroup = makeGroup("Colony production", "productionGroup", commandPanel);
+                    colonizeButton_->show();
+                    colonizeButton_->setText("Colonize selected world…");
+                    colonizeButton_->setToolTip("Dismantles the entire selected fleet and recovers one third of its construction minerals");
+                    fleetLayout->addWidget(colonizeButton_);
+                    designShipButton_->show();
+                    designShipButton_->setText("Ship designer…");
+                    fleetLayout->addWidget(designShipButton_);
+                    fleetPanelLayout->addWidget(fleetGroup);
+                    fleetPanelLayout->addStretch(1);
+
+                    productionPanel = new QWidget(this);
+                    auto* productionPanelLayout = new QVBoxLayout(productionPanel);
+                    auto* productionGroup = makeGroup("Add to queue", "productionGroup", productionPanel);
                     auto* productionLayout = new QVBoxLayout(productionGroup);
                     auto* productionForm = new QFormLayout;
                     shipDesignCombo_->show();
                     productionForm->addRow("Ship design", shipDesignCombo_);
                     productionLayout->addLayout(productionForm);
-                    designShipButton_->show();
                     buildShipButton_->show();
                     buildFactoryButton_->show();
-                    designShipButton_->setText("Design ship…");
                     buildShipButton_->setText("Queue selected ship");
-                    productionLayout->addWidget(designShipButton_);
                     productionLayout->addWidget(buildShipButton_);
                     productionLayout->addWidget(buildFactoryButton_);
-                    sideLayout->addWidget(productionGroup);
+                    productionPanelLayout->addWidget(productionGroup);
 
                     auto* viewGroup = makeGroup("Map display", "viewGroup", commandPanel);
                     auto* viewLayout = new QVBoxLayout(viewGroup);
@@ -244,9 +254,34 @@ void MainWindow::installUiPolish()
 
                 layout->removeWidget(commandPanel);
                 auto* scroll = makeVerticalScrollArea(commandPanel, central, "commandScrollArea");
-                scroll->setMinimumWidth(315);
-                scroll->setMaximumWidth(405);
-                layout->addWidget(scroll, 0);
+                auto* overviewDock = new QDockWidget("Overview", this);
+                overviewDock->setObjectName("overviewDock");
+                overviewDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+                overviewDock->setFeatures(QDockWidget::DockWidgetClosable
+                    | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+                overviewDock->setWidget(scroll);
+                addDockWidget(Qt::LeftDockWidgetArea, overviewDock);
+
+                if (fleetPanel) {
+                    auto* fleetDock = new QDockWidget("Fleet — Overview & Logistics", this);
+                    fleetDock->setObjectName("fleetDock");
+                    fleetDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+                    fleetDock->setFeatures(QDockWidget::DockWidgetClosable
+                        | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+                    fleetDock->setWidget(makeVerticalScrollArea(fleetPanel, fleetDock, "fleetScrollArea"));
+                    addDockWidget(Qt::RightDockWidgetArea, fleetDock);
+                }
+
+                if (productionPanel) {
+                    auto* productionDock = new QDockWidget("Production", this);
+                    productionDock->setObjectName("productionDock");
+                    productionDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+                    productionDock->setFeatures(QDockWidget::DockWidgetClosable
+                        | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+                    productionDock->setWidget(productionPanel);
+                    addDockWidget(Qt::LeftDockWidgetArea, productionDock);
+                    splitDockWidget(overviewDock, productionDock, Qt::Vertical);
+                }
             }
         }
     }
@@ -264,6 +299,10 @@ void MainWindow::installUiPolish()
             routeDock->setWidget(nullptr);
             auto* scroll = makeVerticalScrollArea(routePanel, routeDock, "routeProgramScrollArea");
             routeDock->setWidget(scroll);
+        }
+        if (auto* fleetDock = findChild<QDockWidget*>("fleetDock")) {
+            tabifyDockWidget(fleetDock, routeDock);
+            fleetDock->raise();
         }
     }
 
@@ -594,6 +633,12 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (view_) {
         view_->viewport()->removeEventFilter(this);
         view_->setScene(nullptr);
+    }
+
+    if (!QCoreApplication::arguments().contains("--smoke-test")) {
+        QSettings settings("SunsProject", "Suns");
+        settings.setValue("workspace/geometry", saveGeometry());
+        settings.setValue("workspace/docks", saveState(1));
     }
 
     QMainWindow::closeEvent(event);

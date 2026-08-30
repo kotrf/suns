@@ -21,13 +21,14 @@ int main(int argc, char* argv[])
     window.installUiPolish();
     window.installMapDisplayModes();
     window.installPlanetPolish();
-    window.installPanelLayoutFixes();
+    window.installProductionQueue();
     window.installFleetReadabilityPolish();
     window.installFleetPortraitPolish();
     window.installMiningInfrastructure();
     window.installCommunicationStatus();
     window.installTurnMessages();
     window.installResearch();
+    window.installPanelLayoutFixes();
 
     window.show();
 

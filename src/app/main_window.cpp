@@ -17,6 +17,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPen>
 #include <QPolygonF>
@@ -1164,11 +1165,65 @@ void MainWindow::queueColonize()
     const auto* ship = selectedColonyShipAtSelectedStar();
     if (!star || survey_level(state_, 1, star->id) < SurveyLevel::OrbitalSurvey
         || !planet || planet->owner != 0 || !ship || ship->colonists == 0) return;
+    if (!confirmFleetColonization(*ship, *planet, false)) return;
 
     appendPendingOrder(ColonizePlanetOrder{ship->id, planet->id},
-        QString("Colonize %1 with %2 (%3 colonists)")
+        QString("Colonize %1 with %2 (%3 colonists; entire fleet dismantled)")
             .arg(QString::fromStdString(planet->name)).arg(QString::fromStdString(ship->name))
             .arg(static_cast<qulonglong>(ship->colonists)));
+}
+
+bool MainWindow::confirmFleetColonization(
+    const Fleet& fleet, const Planet& planet, bool scheduledRoute)
+{
+    QStringList composition;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state_, stack.design);
+        composition << QString("%1× %2")
+            .arg(stack.count)
+            .arg(design ? QString::fromStdString(design->name) : QString("Design %1").arg(stack.design));
+    }
+
+    const auto salvage = fleet_colonization_salvage(state_, fleet);
+    const MineralCargo delivered{
+        fleet.minerals.ironium + salvage.ironium,
+        fleet.minerals.boranium + salvage.boranium,
+        fleet.minerals.germanium + salvage.germanium,
+    };
+
+    QMessageBox warning(this);
+    warning.setIcon(QMessageBox::Warning);
+    warning.setWindowTitle("Confirm fleet colonization");
+    warning.setText(QString("Colonize %1 with the entire fleet %2?")
+        .arg(QString::fromStdString(planet.name))
+        .arg(QString::fromStdString(fleet.name)));
+    warning.setInformativeText(
+        QString("All %1 ship(s) will be dismantled and Fleet %2 will cease to exist.\n\n"
+                "Ships: %3\n"
+                "Colonists landed: %4\n"
+                "Cargo deposited: I %5 / B %6 / G %7\n"
+                "33% ship salvage: I %8 / B %9 / G %10\n"
+                "Total added to colony: I %11 / B %12 / G %13\n\n"
+                "Fuel and production points are not recovered.%14")
+            .arg(fleet_ship_count(fleet))
+            .arg(fleet.id)
+            .arg(composition.join(", "))
+            .arg(static_cast<qulonglong>(fleet.colonists))
+            .arg(fleet.minerals.ironium, 0, 'f', 0)
+            .arg(fleet.minerals.boranium, 0, 'f', 0)
+            .arg(fleet.minerals.germanium, 0, 'f', 0)
+            .arg(salvage.ironium, 0, 'f', 0)
+            .arg(salvage.boranium, 0, 'f', 0)
+            .arg(salvage.germanium, 0, 'f', 0)
+            .arg(delivered.ironium, 0, 'f', 0)
+            .arg(delivered.boranium, 0, 'f', 0)
+            .arg(delivered.germanium, 0, 'f', 0)
+            .arg(scheduledRoute
+                ? "\n\nThis is a route preview; cargo and colonists may change before arrival."
+                : ""));
+    warning.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+    warning.setDefaultButton(QMessageBox::Cancel);
+    return warning.exec() == QMessageBox::Yes;
 }
 
 void MainWindow::endTurn()

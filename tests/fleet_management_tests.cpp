@@ -151,7 +151,7 @@ void moving_fleets_cannot_be_reorganized()
     assert(find_fleet(result, 2));
 }
 
-void colonization_consumes_only_one_colony_ship()
+void colonization_dismantles_entire_fleet_and_recovers_minerals()
 {
     const TurnProcessor processor;
     auto state = make_demo_game();
@@ -159,16 +159,18 @@ void colonization_consumes_only_one_colony_ship()
     fleet.position = state.stars[1].position;
     fleet.ships = {{kScoutDesignId, 1}, {kColonyShipDesignId, 1}};
     fleet.colonists = 100;
+    fleet.minerals = {0.5, 0.5, 0.5};
     set_survey_level(state, 1, 2, SurveyLevel::OrbitalSurvey, state.turn);
+    const auto salvage = fleet_colonization_salvage(state, fleet);
+    const auto before = state.planets[1].minerals;
 
     const auto result = processor.process(state, {{1, {ColonizePlanetOrder{1, 2}}}});
-    const auto* survivor = find_fleet(result, 1);
-    assert(survivor);
-    assert(fleet_ship_count(*survivor) == 1);
-    assert(fleet_ship_count(*survivor, kScoutDesignId) == 1);
-    assert(fleet_ship_count(*survivor, kColonyShipDesignId) == 0);
-    assert(survivor->colonists == 0);
+    assert(find_fleet(result, 1) == nullptr);
     assert(result.planets[1].owner == 1);
+    assert(result.planets[1].population >= 100);
+    assert(close(result.planets[1].minerals.ironium, before.ironium + 0.5 + salvage.ironium));
+    assert(close(result.planets[1].minerals.boranium, before.boranium + 0.5 + salvage.boranium));
+    assert(close(result.planets[1].minerals.germanium, before.germanium + 0.5 + salvage.germanium));
 }
 
 } // namespace
@@ -180,5 +182,5 @@ int main()
     merge_preserves_destination_id_and_all_stacks();
     split_preserves_source_id_and_resources();
     moving_fleets_cannot_be_reorganized();
-    colonization_consumes_only_one_colony_ship();
+    colonization_dismantles_entire_fleet_and_recovers_minerals();
 }

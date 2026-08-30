@@ -235,7 +235,7 @@ int main()
     assert(fleet(populationDropRejected, 2).colonists == 300);
     assert(planet(populationDropRejected, 2).population == 0);
 
-    // Colonization deposits carried minerals on the new world before the ship is consumed.
+    // Colonization deposits cargo in full and adds one-third ship salvage.
     auto colonization = suns::make_demo_game();
     colonization.shipDesigns.push_back({
         3,
@@ -265,9 +265,9 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{2, 2});
     const auto expanded = processor.process(colonization, {colonize});
     assert(planet(expanded, 2).owner == 1);
-    assert(close(planet(expanded, 2).minerals.ironium, 7.0));
-    assert(close(planet(expanded, 2).minerals.boranium, 5.0));
-    assert(close(planet(expanded, 2).minerals.germanium, 3.0));
+    assert(close(planet(expanded, 2).minerals.ironium, 11.0));
+    assert(close(planet(expanded, 2).minerals.boranium, 7.0));
+    assert(close(planet(expanded, 2).minerals.germanium, 5.0));
 
     return 0;
 }

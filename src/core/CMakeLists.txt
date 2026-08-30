@@ -3,6 +3,7 @@ add_library(suns_core
     src/communications.cpp
     src/mineral_economy.cpp
     src/player_knowledge.cpp
+    src/production_forecast.cpp
     src/radiation.cpp
     src/turn_processor.cpp
 )

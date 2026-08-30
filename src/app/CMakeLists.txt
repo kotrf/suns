@@ -11,6 +11,7 @@ qt_add_executable(suns_app
     main_window_map_modes.cpp
     main_window_mining.cpp
     main_window_planet.cpp
+    main_window_production.cpp
     main_window_readability.cpp
     main_window_research.cpp
     main_window_save.cpp

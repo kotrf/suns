@@ -151,6 +151,12 @@ struct ProductionItem {
     ShipDesignId shipDesign{};
 };
 
+struct ProductionCompletionEstimate {
+    std::optional<std::uint64_t> completionTurn;
+    bool blockedByResearch{};
+    bool beyondForecastHorizon{};
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -426,6 +432,12 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] MineralCargo projected_remote_mining(
     const GameState& state, const Planet& planet, const ShipDesign& design);
 [[nodiscard]] MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item);
+[[nodiscard]] MineralCargo fleet_colonization_salvage(const GameState& state, const Fleet& fleet);
+[[nodiscard]] std::vector<ProductionCompletionEstimate> forecast_production_queue(
+    const GameState& state,
+    const Planet& planet,
+    const std::vector<ProductionItem>& queue,
+    std::uint32_t maximumTurns = 10000);
 
 [[nodiscard]] double fleet_speed(FleetRole role);
 [[nodiscard]] double fleet_sensor_range(FleetRole role);

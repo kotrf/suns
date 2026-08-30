@@ -68,7 +68,7 @@ QString actionName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::Refuel:
         return "Refuel on arrival";
     case FleetArrivalActionKind::Colonize:
-        return "Colonize world — consumes ship";
+        return "Colonize world — dismantles entire fleet";
     case FleetArrivalActionKind::RemoteMining:
         return "Remote Mining — persistent";
     }
@@ -180,13 +180,13 @@ QString routeForecast(
                 const auto* targetStar = findStarAtPosition(next, leg.destination);
                 const auto* targetPlanet = targetStar ? find_planet_at_star(next, targetStar->id) : nullptr;
                 if (targetPlanet && targetPlanet->owner == fleetOwner) {
-                    lines << QString("%1. %2 — T+%3, W%4 — <b>colonized successfully; ship consumed</b>")
+                    lines << QString("%1. %2 — T+%3, W%4 — <b>colonized successfully; fleet dismantled</b>")
                                  .arg(static_cast<qulonglong>(legIndex + 1))
                                  .arg(waypointName(state, leg.destination))
                                  .arg(step)
                                  .arg(leg.warp);
                     if (legIndex + 1 < legs.size()) {
-                        lines << "<i>Later waypoints cannot execute because successful colonization consumes the ship.</i>";
+                        lines << "<i>Later waypoints cannot execute because successful colonization dismantles the fleet.</i>";
                     }
                     legIndex = legs.size();
                     simulated = std::move(next);
@@ -446,6 +446,11 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
             statusBar()->showMessage("Disable Repeat Orders before adding Colonize or Remote Mining", 3000);
             return false;
         }
+    }
+
+    if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
+        const auto* planet = find_planet_at_star(state_, star->id);
+        if (!planet || !confirmFleetColonization(*fleet, *planet, true)) return false;
     }
 
     if (auto* move = pendingMove(pendingOrders_, fleet->id)) {
