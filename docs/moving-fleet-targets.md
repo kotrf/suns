@@ -17,7 +17,7 @@ turn:
 5. relative motion along the two real movement segments is solved over the
    normalized interval from 0 to 1;
 6. if separation reaches the 0.01 ly strategic encounter radius, both fleets
-   stop at a shared encounter point and the arrival action resolves there;
+   reach a shared encounter point and the arrival action resolves there;
 7. otherwise both fleets keep their physical end positions and pursuit remains
    active for the next turn.
 
@@ -37,7 +37,10 @@ pursuit result or replay.
 fleet target. When the fleets actually meet, the target FleetId, name and route
 survive. The pursuing FleetId is removed; all its ship stacks, fuel, colonists
 and mineral cargo are added to the target, duplicate design stacks are
-consolidated, and aggregate limits are recalculated.
+consolidated, and aggregate limits are recalculated. The merged fleet then uses
+the remaining fraction of the year to continue the target's route. Its Warp is
+capped at the highest setting supported by every ship in the new composition,
+and continuation fuel use is based on the combined mass and cargo.
 
 If both fleets already share a position at a planning boundary, merging is
 resolved before movement. The surviving fleet may then continue its own route

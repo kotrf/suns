@@ -30,7 +30,7 @@ void verify_encounter_geometry()
     assert(near(headOn.closestTimeFraction, 0.5));
     assert(near(headOn.closestDistance, 0.0));
     assert(near(*headOn.encounterTimeFraction, 0.4995));
-    assert(near(headOn.encounterPosition.x, 5.0));
+    assert(near(headOn.encounterPosition.x, 5.005));
 
     const auto crossing = analyze_fleet_encounter(
         {0.0, 0.0}, {10.0, 0.0}, {5.0, -5.0}, {5.0, 5.0});
@@ -102,7 +102,8 @@ void verify_within_turn_flyby_stops_both_fleets()
     assert(!fleet(next, 1));
     const auto* merged = fleet(next, 2);
     assert(merged);
-    assert(near(merged->position.x, -37.6044117647059));
+    assert(merged->warp == 8);
+    assert(near(merged->position.x, -63.99));
     assert(fleet_ship_count(*merged, kScoutDesignId) == 1);
     assert(fleet_ship_count(*merged, kFirstCustomShipDesignId) == 1);
     assert(merged->destination);
