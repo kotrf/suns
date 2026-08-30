@@ -247,7 +247,7 @@ struct TechnologyState {
     std::array<std::uint8_t, kResearchFieldCount> levels{};
     std::array<std::uint32_t, kResearchFieldCount> progress{};
     ResearchField focus{ResearchField::Electronics};
-    std::optional<ResearchField> nextFocus;
+    std::vector<ResearchField> queuedFocuses;
 };
 
 struct Player {

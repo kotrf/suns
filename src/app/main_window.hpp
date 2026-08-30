@@ -136,6 +136,9 @@ private:
     void resetTurnMessages();
     void refreshResearchPanel();
     void queueResearchPlan();
+    void addResearchPlanItem();
+    void moveSelectedResearchPlanItem(int direction);
+    void removeSelectedResearchPlanItem();
     void toggleSelectedColonyResearch();
     void refreshProductionQueue();
     void moveSelectedProductionItem(int direction);
@@ -213,9 +216,12 @@ private:
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};
     QProgressBar* researchProgress_{};
-    QComboBox* researchFocusCombo_{};
-    QComboBox* researchNextCombo_{};
-    QPushButton* applyResearchPlanButton_{};
+    QTreeWidget* researchPlanTree_{};
+    QComboBox* researchAddCombo_{};
+    QPushButton* researchAddButton_{};
+    QPushButton* researchMoveUpButton_{};
+    QPushButton* researchMoveDownButton_{};
+    QPushButton* researchRemoveButton_{};
     QPushButton* colonyResearchButton_{};
     QTreeWidget* productionQueueTree_{};
     QLabel* productionQueueSummary_{};

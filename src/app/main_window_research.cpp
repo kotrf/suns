@@ -2,19 +2,22 @@
 
 #include <QComboBox>
 #include <QDockWidget>
-#include <QFormLayout>
+#include <QHeaderView>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QStringList>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <iterator>
 
 namespace suns {
 
@@ -71,28 +74,54 @@ void MainWindow::installResearch()
     researchUnlock_->setWordWrap(true);
     layout->addWidget(researchUnlock_);
 
-    researchFocusCombo_ = new QComboBox(content);
-    researchFocusCombo_->setObjectName("researchFocusCombo");
-    researchNextCombo_ = new QComboBox(content);
-    researchNextCombo_->setObjectName("researchNextCombo");
-    researchNextCombo_->addItem("Continue the same field", -1);
+    auto* planLabel = new QLabel(
+        "Research plan — the active first row is locked; queued rows may be reordered or removed.",
+        content);
+    planLabel->setWordWrap(true);
+    layout->addWidget(planLabel);
+
+    researchPlanTree_ = new QTreeWidget(content);
+    researchPlanTree_->setObjectName("researchPlanTree");
+    researchPlanTree_->setColumnCount(5);
+    researchPlanTree_->setHeaderLabels({"#", "Field", "Target", "Work", "Status"});
+    researchPlanTree_->setRootIsDecorated(false);
+    researchPlanTree_->setAlternatingRowColors(true);
+    researchPlanTree_->setSelectionMode(QAbstractItemView::SingleSelection);
+    researchPlanTree_->setMinimumHeight(190);
+    researchPlanTree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    researchPlanTree_->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    researchPlanTree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    researchPlanTree_->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    researchPlanTree_->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    layout->addWidget(researchPlanTree_, 1);
+
+    auto* addRow = new QHBoxLayout;
+    researchAddCombo_ = new QComboBox(content);
+    researchAddCombo_->setObjectName("researchAddCombo");
     for (const auto field : kResearchFields) {
-        researchFocusCombo_->addItem(fieldName(field), static_cast<int>(field));
-        researchNextCombo_->addItem(fieldName(field), static_cast<int>(field));
+        researchAddCombo_->addItem(fieldName(field), static_cast<int>(field));
     }
+    researchAddButton_ = new QPushButton("Add to plan", content);
+    researchAddButton_->setObjectName("researchAddButton");
+    addRow->addWidget(researchAddCombo_, 1);
+    addRow->addWidget(researchAddButton_);
+    layout->addLayout(addRow);
 
-    auto* form = new QFormLayout;
-    form->addRow("Current focus", researchFocusCombo_);
-    form->addRow("After next level", researchNextCombo_);
-    layout->addLayout(form);
+    auto* editRow = new QHBoxLayout;
+    researchMoveUpButton_ = new QPushButton("Move up", content);
+    researchMoveDownButton_ = new QPushButton("Move down", content);
+    researchRemoveButton_ = new QPushButton("Remove", content);
+    researchMoveUpButton_->setToolTip("Move the selected queued level earlier");
+    researchMoveDownButton_->setToolTip("Move the selected queued level later");
+    researchRemoveButton_->setToolTip("Remove the selected queued level");
+    editRow->addWidget(researchMoveUpButton_);
+    editRow->addWidget(researchMoveDownButton_);
+    editRow->addWidget(researchRemoveButton_);
+    layout->addLayout(editRow);
 
-    applyResearchPlanButton_ = new QPushButton("Apply research plan", content);
-    applyResearchPlanButton_->setObjectName("applyResearchPlanButton");
     colonyResearchButton_ = new QPushButton("Start ongoing colony research", content);
     colonyResearchButton_->setObjectName("colonyResearchButton");
-    layout->addWidget(applyResearchPlanButton_);
     layout->addWidget(colonyResearchButton_);
-    layout->addStretch(1);
 
     researchDock_->setWidget(content);
     addDockWidget(Qt::RightDockWidgetArea, researchDock_);
@@ -104,7 +133,19 @@ void MainWindow::installResearch()
     }
     view->addAction(researchDock_->toggleViewAction());
 
-    connect(applyResearchPlanButton_, &QPushButton::clicked, this, [this] { queueResearchPlan(); });
+    connect(researchAddButton_, &QPushButton::clicked, this, &MainWindow::addResearchPlanItem);
+    connect(researchMoveUpButton_, &QPushButton::clicked, this,
+        [this] { moveSelectedResearchPlanItem(-1); });
+    connect(researchMoveDownButton_, &QPushButton::clicked, this,
+        [this] { moveSelectedResearchPlanItem(1); });
+    connect(researchRemoveButton_, &QPushButton::clicked, this, &MainWindow::removeSelectedResearchPlanItem);
+    connect(researchPlanTree_, &QTreeWidget::itemSelectionChanged, this, [this] {
+        const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
+        const auto count = researchPlanTree_->topLevelItemCount();
+        researchMoveUpButton_->setEnabled(row > 1);
+        researchMoveDownButton_->setEnabled(row >= 1 && row + 1 < count);
+        researchRemoveButton_->setEnabled(row >= 1);
+    });
     connect(colonyResearchButton_, &QPushButton::clicked, this, [this] { toggleSelectedColonyResearch(); });
     refreshResearchPanel();
 }
@@ -115,21 +156,13 @@ void MainWindow::refreshResearchPanel()
     const auto* player = find_player(state_, 1);
     if (!player) return;
 
-    auto focus = player->technology.focus;
-    auto nextFocus = player->technology.nextFocus;
+    const auto focus = player->technology.focus;
+    auto queuedFocuses = player->technology.queuedFocuses;
     for (const auto& order : pendingOrders_.orders) {
         if (const auto* plan = std::get_if<SetResearchPlanOrder>(&order)) {
-            focus = plan->focus;
-            nextFocus = plan->nextFocus;
+            if (plan->focus == focus) queuedFocuses = plan->queuedFocuses;
         }
     }
-
-    const QSignalBlocker focusBlocker(researchFocusCombo_);
-    const QSignalBlocker nextBlocker(researchNextCombo_);
-    researchFocusCombo_->setCurrentIndex(researchFocusCombo_->findData(static_cast<int>(focus)));
-    researchNextCombo_->setCurrentIndex(nextFocus
-        ? researchNextCombo_->findData(static_cast<int>(*nextFocus))
-        : 0);
 
     QStringList levels;
     for (const auto field : kResearchFields) {
@@ -158,6 +191,42 @@ void MainWindow::refreshResearchPanel()
     }
     researchUnlock_->setText(unlock);
 
+    const auto previousRow = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
+    researchPlanTree_->clear();
+    auto projectedLevels = player->technology.levels;
+    auto projectedProgress = player->technology.progress;
+    std::vector<ResearchField> planFields{focus};
+    planFields.insert(planFields.end(), queuedFocuses.begin(), queuedFocuses.end());
+    for (std::size_t planIndex = 0; planIndex < planFields.size(); ++planIndex) {
+        const auto field = planFields[planIndex];
+        const auto fieldIndex = static_cast<std::size_t>(field);
+        const auto fromLevel = projectedLevels[fieldIndex];
+        const auto toLevel = static_cast<std::uint8_t>(fromLevel + 1);
+        const auto levelCost = research_level_cost(field, toLevel);
+        const auto completedRp = std::min(projectedProgress[fieldIndex], levelCost);
+
+        auto* row = new QTreeWidgetItem(researchPlanTree_);
+        row->setText(0, QString::number(planIndex + 1));
+        row->setText(1, fieldName(field));
+        row->setText(2, QString("L%1 → L%2").arg(fromLevel).arg(toLevel));
+        row->setText(3, QString("%1 / %2 RP").arg(completedRp).arg(levelCost));
+        row->setText(4, planIndex == 0 ? "In progress • locked" : "Queued");
+        row->setData(0, Qt::UserRole, static_cast<int>(field));
+
+        projectedLevels[fieldIndex] = toLevel;
+        projectedProgress[fieldIndex] = 0;
+    }
+    const auto selectedRow = std::clamp(
+        previousRow,
+        0,
+        std::max(0, researchPlanTree_->topLevelItemCount() - 1));
+    researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
+    const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
+    const auto rowCount = researchPlanTree_->topLevelItemCount();
+    researchMoveUpButton_->setEnabled(row > 1);
+    researchMoveDownButton_->setEnabled(row >= 1 && row + 1 < rowCount);
+    researchRemoveButton_->setEnabled(row >= 1);
+
     const auto* planet = selectedPlanet();
     const bool owned = planet && planet->owner == 1;
     bool enabled = owned && colonyResearchEnabled(*planet);
@@ -179,24 +248,82 @@ void MainWindow::refreshResearchPanel()
 
 void MainWindow::queueResearchPlan()
 {
-    const auto focus = static_cast<ResearchField>(researchFocusCombo_->currentData().toInt());
-    const auto nextValue = researchNextCombo_->currentData().toInt();
-    const auto next = nextValue < 0
-        ? std::optional<ResearchField>{}
-        : std::optional<ResearchField>{static_cast<ResearchField>(nextValue)};
-    const auto description = QString("Research %1%2")
-        .arg(fieldName(focus))
-        .arg(next ? QString("; then %1").arg(fieldName(*next)) : "; continue same field");
+    const auto* player = find_player(state_, pendingOrders_.player);
+    if (!player || !researchPlanTree_) return;
+    const auto focus = player->technology.focus;
+    std::vector<ResearchField> queuedFocuses;
+    for (int row = 1; row < researchPlanTree_->topLevelItemCount(); ++row) {
+        queuedFocuses.push_back(static_cast<ResearchField>(
+            researchPlanTree_->topLevelItem(row)->data(0, Qt::UserRole).toInt()));
+    }
 
-    for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-        if (!std::holds_alternative<SetResearchPlanOrder>(pendingOrders_.orders[index])) continue;
-        pendingOrders_.orders[index] = SetResearchPlanOrder{focus, next};
-        pendingDescriptions_[static_cast<int>(index)] = description;
+    const auto pendingPlan = std::find_if(
+        pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [](const Order& order) {
+            return std::holds_alternative<SetResearchPlanOrder>(order);
+        });
+    if (queuedFocuses == player->technology.queuedFocuses) {
+        if (pendingPlan == pendingOrders_.orders.end()) return;
+        const auto index = static_cast<int>(std::distance(pendingOrders_.orders.begin(), pendingPlan));
+        pendingOrders_.orders.erase(pendingPlan);
+        pendingDescriptions_.removeAt(index);
+        rebuildScene();
+        statusBar()->showMessage("Research plan reverted to the current committed queue");
+        return;
+    }
+
+    QStringList futureNames;
+    for (const auto field : queuedFocuses) futureNames << fieldName(field);
+    const auto description = futureNames.empty()
+        ? QString("Research %1; continue the same field").arg(fieldName(focus))
+        : QString("Research %1; then %2").arg(fieldName(focus), futureNames.join(" → "));
+
+    if (pendingPlan != pendingOrders_.orders.end()) {
+        const auto index = static_cast<int>(std::distance(pendingOrders_.orders.begin(), pendingPlan));
+        *pendingPlan = SetResearchPlanOrder{focus, queuedFocuses};
+        pendingDescriptions_[index] = description;
         rebuildScene();
         statusBar()->showMessage(description);
         return;
     }
-    appendPendingOrder(SetResearchPlanOrder{focus, next}, description);
+    appendPendingOrder(SetResearchPlanOrder{focus, queuedFocuses}, description);
+}
+
+void MainWindow::addResearchPlanItem()
+{
+    if (!researchPlanTree_ || !researchAddCombo_) return;
+    auto* row = new QTreeWidgetItem(researchPlanTree_);
+    row->setData(0, Qt::UserRole, researchAddCombo_->currentData());
+    const auto selectedRow = researchPlanTree_->topLevelItemCount() - 1;
+    queueResearchPlan();
+    if (selectedRow < researchPlanTree_->topLevelItemCount()) {
+        researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
+    }
+}
+
+void MainWindow::moveSelectedResearchPlanItem(int direction)
+{
+    if (!researchPlanTree_) return;
+    const auto from = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
+    const auto to = from + direction;
+    if (from < 1 || to < 1 || to >= researchPlanTree_->topLevelItemCount()) return;
+    auto* item = researchPlanTree_->takeTopLevelItem(from);
+    researchPlanTree_->insertTopLevelItem(to, item);
+    researchPlanTree_->setCurrentItem(item);
+    queueResearchPlan();
+    if (to < researchPlanTree_->topLevelItemCount()) {
+        researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(to));
+    }
+}
+
+void MainWindow::removeSelectedResearchPlanItem()
+{
+    if (!researchPlanTree_) return;
+    const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
+    if (row < 1) return;
+    delete researchPlanTree_->takeTopLevelItem(row);
+    queueResearchPlan();
+    const auto selectedRow = std::min(row, researchPlanTree_->topLevelItemCount() - 1);
+    researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
 }
 
 void MainWindow::toggleSelectedColonyResearch()

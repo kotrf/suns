@@ -38,7 +38,10 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().technology.levels[3] = 1;
     original.state.players.front().technology.progress[3] = 7;
     original.state.players.front().technology.focus = ResearchField::Electronics;
-    original.state.players.front().technology.nextFocus = ResearchField::Propulsion;
+    original.state.players.front().technology.queuedFocuses = {
+        ResearchField::Propulsion,
+        ResearchField::Construction,
+    };
     original.state.planets.front().productionQueue.push_back({ProductionKind::Research, 0, 0});
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
@@ -112,7 +115,10 @@ void round_trip_preserves_communications_and_planning()
     original.pendingOrders = {1, {
         move,
         QueueProductionOrder{1, ProductionKind::Mine},
-        SetResearchPlanOrder{ResearchField::Electronics, ResearchField::Propulsion},
+        SetResearchPlanOrder{
+            ResearchField::Electronics,
+            {ResearchField::Propulsion, ResearchField::Construction},
+        },
         SetColonyResearchOrder{1, false},
         SetRemoteMiningOrder{scout.id, false},
         TransferCargoOrder{{1, 0}, {0, scout.id}, 100, {1.0, 2.0, 3.0}},
@@ -165,7 +171,9 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 7);
     assert(technology.focus == ResearchField::Electronics);
-    assert(technology.nextFocus == ResearchField::Propulsion);
+    assert(technology.queuedFocuses.size() == 2);
+    assert(technology.queuedFocuses[0] == ResearchField::Propulsion);
+    assert(technology.queuedFocuses[1] == ResearchField::Construction);
     assert(loaded.state.planets.front().productionQueue.size() == 1);
     assert(loaded.state.planets.front().productionQueue.front().kind == ProductionKind::Research);
     assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::RemoteMiningModule);
@@ -221,7 +229,9 @@ void round_trip_preserves_communications_and_planning()
     assert(mine && mine->kind == ProductionKind::Mine);
     const auto* plan = std::get_if<SetResearchPlanOrder>(&loaded.pendingOrders.orders[2]);
     assert(plan && plan->focus == ResearchField::Electronics);
-    assert(plan->nextFocus == ResearchField::Propulsion);
+    assert(plan->queuedFocuses.size() == 2);
+    assert(plan->queuedFocuses[0] == ResearchField::Propulsion);
+    assert(plan->queuedFocuses[1] == ResearchField::Construction);
     const auto* stop = std::get_if<SetColonyResearchOrder>(&loaded.pendingOrders.orders[3]);
     assert(stop && stop->colony == 1 && !stop->enabled);
     const auto* stopMining = std::get_if<SetRemoteMiningOrder>(&loaded.pendingOrders.orders[4]);

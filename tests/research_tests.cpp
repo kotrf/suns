@@ -29,7 +29,7 @@ void verify_research_costs_and_initial_unlocks()
         state, 1, suns::ShipComponentType::LongRangeScanner));
 }
 
-void verify_repeating_colony_research_and_next_focus()
+void verify_repeating_colony_research_and_focus_queue()
 {
     const suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
@@ -37,7 +37,7 @@ void verify_repeating_colony_research_and_next_focus()
     suns::PlayerOrders start{1, {}};
     start.orders.emplace_back(suns::SetResearchPlanOrder{
         suns::ResearchField::Electronics,
-        suns::ResearchField::Propulsion,
+        {suns::ResearchField::Propulsion, suns::ResearchField::Construction},
     });
     start.orders.emplace_back(suns::SetColonyResearchOrder{1, true});
 
@@ -56,7 +56,8 @@ void verify_repeating_colony_research_and_next_focus()
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 0);
     assert(technology.focus == suns::ResearchField::Propulsion);
-    assert(!technology.nextFocus.has_value());
+    assert(technology.queuedFocuses.size() == 1);
+    assert(technology.queuedFocuses.front() == suns::ResearchField::Construction);
     assert(suns::component_available_to_player(
         turn4.state, 1, suns::ShipComponentType::CompactLongRangeScanner));
     assert(!suns::component_available_to_player(
@@ -80,7 +81,10 @@ void verify_overflow_follows_preselected_field()
     auto state = suns::make_demo_game();
     auto& technology = state.players.front().technology;
     technology.focus = suns::ResearchField::Electronics;
-    technology.nextFocus = suns::ResearchField::Propulsion;
+    technology.queuedFocuses = {
+        suns::ResearchField::Propulsion,
+        suns::ResearchField::Construction,
+    };
     technology.progress[3] = 17;
 
     suns::PlayerOrders start{1, {}};
@@ -91,6 +95,47 @@ void verify_overflow_follows_preselected_field()
     assert(completed.levels[3] == 1);
     assert(completed.focus == suns::ResearchField::Propulsion);
     assert(completed.progress[1] == 5);
+    assert(completed.queuedFocuses.size() == 1);
+    assert(completed.queuedFocuses.front() == suns::ResearchField::Construction);
+
+    suns::PlayerOrders invalid{1, {}};
+    invalid.orders.emplace_back(suns::SetResearchPlanOrder{
+        suns::ResearchField::Weapons,
+        {suns::ResearchField::Biology},
+    });
+    const auto unchanged = processor.process(state, {invalid});
+    assert(unchanged.players.front().technology.focus == suns::ResearchField::Electronics);
+    assert(unchanged.players.front().technology.queuedFocuses.size() == 2);
+}
+
+void verify_future_plan_can_be_reordered_and_cleared()
+{
+    const suns::TurnProcessor processor;
+    auto state = suns::make_demo_game();
+    state.players.front().technology.queuedFocuses = {
+        suns::ResearchField::Propulsion,
+        suns::ResearchField::Construction,
+    };
+
+    suns::PlayerOrders reorder{1, {}};
+    reorder.orders.emplace_back(suns::SetResearchPlanOrder{
+        suns::ResearchField::Electronics,
+        {suns::ResearchField::Construction, suns::ResearchField::Propulsion},
+    });
+    const auto reordered = processor.process(state, {reorder});
+    assert(reordered.players.front().technology.focus == suns::ResearchField::Electronics);
+    assert(reordered.players.front().technology.queuedFocuses.size() == 2);
+    assert(reordered.players.front().technology.queuedFocuses[0] == suns::ResearchField::Construction);
+    assert(reordered.players.front().technology.queuedFocuses[1] == suns::ResearchField::Propulsion);
+
+    suns::PlayerOrders clear{1, {}};
+    clear.orders.emplace_back(suns::SetResearchPlanOrder{
+        suns::ResearchField::Electronics,
+        {},
+    });
+    const auto cleared = processor.process(reordered, {clear});
+    assert(cleared.players.front().technology.focus == suns::ResearchField::Electronics);
+    assert(cleared.players.front().technology.queuedFocuses.empty());
 }
 
 void verify_component_unlock_is_enforced_for_new_designs()
@@ -148,8 +193,9 @@ void verify_research_can_be_stopped()
 int main()
 {
     verify_research_costs_and_initial_unlocks();
-    verify_repeating_colony_research_and_next_focus();
+    verify_repeating_colony_research_and_focus_queue();
     verify_overflow_follows_preselected_field();
+    verify_future_plan_can_be_reordered_and_cleared();
     verify_component_unlock_is_enforced_for_new_designs();
     verify_research_can_be_stopped();
     return 0;

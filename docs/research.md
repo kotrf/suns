@@ -13,7 +13,12 @@ The first model uses six broad fields:
 - Biology
 - Weapons
 
-The player selects one current focus and may preselect a one-time next field. When the current field gains a level, the focus switches automatically and the preselection clears. Excess RP from the completing turn immediately enters the new field; no research is lost.
+The current focus is the locked first row of an ordered research plan because RP
+has already been committed to that level. Any number of future fields may be
+queued, reordered or removed before End Turn. When the current field gains a
+level, the first queued field becomes active and is removed from the queue.
+Excess RP from the completing turn immediately enters the new field; no research
+is lost. If the future queue is empty, research continues in the current field.
 
 Level costs currently double from an 18 RP base: 18 RP for level 1, 36 RP for level 2 and 72 RP for level 3. These values are early balance parameters rather than permanent rules.
 
@@ -35,7 +40,13 @@ The compact scanner is not a universal upgrade: it halves scanner mass and lower
 
 ## Events and UI
 
-The Research dock shows all field levels, current RP progress, the current focus, the optional next focus and the next concrete unlock. It also starts or stops ongoing research at the selected friendly colony.
+The Research dock shows all field levels, current RP progress, the next concrete
+unlock and an ordered plan with per-level target and RP work. The active first
+row is visibly locked; future rows have Add, Move Up, Move Down and Remove
+controls. Returning the displayed future rows to the committed plan removes the
+pending research-plan order instead of leaving an accidental Apply action in the
+turn order list. The dock also starts or stops ongoing research at the selected
+friendly colony.
 
 Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Compact Long Range Scanner.
 
