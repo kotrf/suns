@@ -280,7 +280,7 @@ void local_production_completion_is_immediate_and_deterministic()
 void colony_founding_emits_a_player_event()
 {
     auto state = make_demo_game();
-    state.players.front().surveyedStars.push_back(2);
+    set_survey_level(state, 1, 2, SurveyLevel::OrbitalSurvey, state.turn);
     const auto* target = find_star(state, 2);
     assert(target);
     auto& colonyShip = state.fleets.front();
