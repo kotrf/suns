@@ -123,6 +123,19 @@ void verify_antimatter_generator_and_radiating_drive_metadata()
     assert(suns::ship_design_fuel_rate(radiating, 4) < 0.0);
 }
 
+void verify_advanced_fusion_drive()
+{
+    suns::ShipDesign courier{
+        22, 1, "Fast Courier", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::AdvancedFusionDrive},
+    };
+    assert(suns::ship_design_valid(courier));
+    assert(suns::ship_design_max_warp(courier) == 9);
+    assert(suns::ship_design_radiation_hazard(courier) == 0.0);
+    assert(suns::ship_design_fuel_rate(courier, 4) > 0.0);
+    assert(suns::ship_design_fuel_rate(courier, 9) > 0.0);
+}
+
 void verify_invalid_warp_order_is_rejected()
 {
     auto state = suns::make_demo_game();
@@ -147,6 +160,7 @@ int main()
     verify_fuel_limits_actual_travel();
     verify_ram_scoop_can_generate_fuel_in_flight();
     verify_antimatter_generator_and_radiating_drive_metadata();
+    verify_advanced_fusion_drive();
     verify_invalid_warp_order_is_rejected();
     return 0;
 }

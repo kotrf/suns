@@ -128,6 +128,7 @@ void verify_travel_and_sensor_math()
     assert(suns::travel_turns({0.0, 0.0}, {3.0, 4.0}, 2.0) == 3);
     assert(std::abs(suns::fleet_speed(state, scout) - suns::kScoutTravelSpeed) < 0.000001);
     assert(std::abs(suns::fleet_sensor_range(state, scout) - suns::kScoutSensorRange) < 0.000001);
+    assert(suns::kColonySensorRange > suns::kScoutSensorRange);
     assert(suns::within_range({0.0, 0.0}, {3.0, 4.0}, 5.0));
     assert(!suns::within_range({0.0, 0.0}, {3.0, 4.0}, 4.9));
 }

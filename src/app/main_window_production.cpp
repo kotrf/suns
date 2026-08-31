@@ -23,7 +23,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     switch (item.kind) {
     case ProductionKind::Factory: return "Factory";
     case ProductionKind::Mine: return "Mine";
-    case ProductionKind::Research: return "Research (ongoing)";
+    case ProductionKind::Research: return "Legacy Research item";
     case ProductionKind::ColonyShip:
         if (const auto* design = find_ship_design(
                 state, item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId)) {
@@ -38,6 +38,9 @@ std::vector<ProductionItem> plannedQueue(
     const GameState& state, const Planet& planet, const PlayerOrders& pending)
 {
     auto queue = planet.productionQueue;
+    std::erase_if(queue, [](const ProductionItem& item) {
+        return item.kind == ProductionKind::Research;
+    });
     const auto addDefaultShip = [&] {
         if (const auto* design = find_ship_design(state, kColonyShipDesignId)) {
             queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
@@ -60,18 +63,6 @@ std::vector<ProductionItem> plannedQueue(
                 if (concrete.colony != planet.id) return;
                 if (const auto* design = find_ship_design(state, concrete.design)) {
                     queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
-                }
-            } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
-                if (concrete.colony != planet.id) return;
-                const auto research = [](const ProductionItem& item) {
-                    return item.kind == ProductionKind::Research;
-                };
-                if (concrete.enabled) {
-                    if (std::none_of(queue.begin(), queue.end(), research)) {
-                        queue.push_back({ProductionKind::Research, 0, 0});
-                    }
-                } else {
-                    std::erase_if(queue, research);
                 }
             } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
                 if (concrete.colony != planet.id
@@ -163,29 +154,47 @@ void MainWindow::refreshProductionQueue()
     }
 
     const auto queue = plannedQueue(state_, *planet, pendingOrders_);
-    const auto forecast = forecast_production_queue(state_, *planet, queue);
+    auto forecastState = state_;
+    const auto forecastPlayerIt = std::find_if(
+        forecastState.players.begin(), forecastState.players.end(), [this](const Player& player) {
+            return player.id == pendingOrders_.player;
+        });
+    auto* forecastPlayer = forecastPlayerIt == forecastState.players.end() ? nullptr : &*forecastPlayerIt;
+    if (forecastPlayer) {
+        for (const auto& order : pendingOrders_.orders) {
+            if (const auto* allocation = std::get_if<SetResearchAllocationOrder>(&order)) {
+                forecastPlayer->technology.researchAllocationPercent = allocation->percent;
+            } else if (const auto* plan = std::get_if<SetResearchPlanOrder>(&order)) {
+                forecastPlayer->technology.researchActive = plan->active;
+            }
+        }
+    }
+    const auto forecast = forecast_production_queue(forecastState, *planet, queue);
+    const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
+        ? forecastPlayer->technology.researchAllocationPercent
+        : 0;
+    const auto output = colony_output(*planet);
+    const auto guaranteedResearch = static_cast<std::uint32_t>(
+        static_cast<std::uint64_t>(output) * allocationPercent / 100U);
     productionQueueSummary_->setText(
-        QString("<b>%1</b> • output %2/turn • stored %3 • %4 item%5")
+        QString("<b>%1</b> • output %2/turn • guaranteed research %3 • production %4 • %5 item%6")
             .arg(QString::fromStdString(planet->name))
-            .arg(colony_output(*planet))
-            .arg(planet->stockpile)
+            .arg(output)
+            .arg(guaranteedResearch)
+            .arg(output - guaranteedResearch)
             .arg(static_cast<qulonglong>(queue.size()))
             .arg(queue.size() == 1 ? "" : "s"));
 
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
-        QString remaining = item.kind == ProductionKind::Research
-            ? "all output"
-            : QString::number(item.remainingCost);
-        if (item.kind != ProductionKind::Research && item.remainingCost == 0
+        QString remaining = QString::number(item.remainingCost);
+        if (item.remainingCost == 0
             && !mineral_cargo_sufficient(planet->minerals, production_item_mineral_cost(state_, item))) {
             remaining = "minerals";
         }
 
         QString completion;
-        if (item.kind == ProductionKind::Research) completion = "ongoing";
-        else if (forecast[index].blockedByResearch) completion = "blocked by research";
-        else if (forecast[index].completionTurn) {
+        if (forecast[index].completionTurn) {
             completion = QString("Turn %1 (+%2)")
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn))
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn - state_.turn));

@@ -6,7 +6,8 @@ Suns! treats a distant fleet as an autonomous spacecraft rather than an object t
 
 Established friendly colonies are roots of an empire-wide instantaneous network. The network coverage is not a separate communications statistic: it is the union of connected ordinary-scanner fields.
 
-- every colony projects its ordinary planetary scanner field;
+- every colony projects a 150 ly ordinary planetary scanner field, stronger
+  than the starting 90 ly ship scanner;
 - every friendly ship with an ordinary scanner automatically joins and extends the network when its field overlaps an already-connected field;
 - chains of overlapping scanner fields relay instantaneously and can move with their ships;
 - a ship without a scanner is still connected while its position lies inside the connected field;

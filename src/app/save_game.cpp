@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 17;
+constexpr quint32 kSaveFormatVersion = 18;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -400,7 +400,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::RemoteMiningModule))) return;
+        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
         value.components.push_back(component);
     }
 }
@@ -430,8 +430,7 @@ void writePlanet(QDataStream& stream, const Planet& value)
     stream << static_cast<quint32>(value.habitability)
            << static_cast<quint32>(value.owner)
            << static_cast<quint64>(value.population)
-           << static_cast<quint32>(value.industry)
-           << static_cast<quint32>(value.stockpile);
+           << static_cast<quint32>(value.industry);
 
     stream << static_cast<quint32>(value.productionQueue.size());
     for (const auto& item : value.productionQueue) writeProductionItem(stream, item);
@@ -448,11 +447,14 @@ void readPlanet(QDataStream& stream, Planet& value)
     quint32 owner{};
     quint64 population{};
     quint32 industry{};
-    quint32 stockpile{};
 
     stream >> id >> star;
     readString(stream, value.name);
-    stream >> habitability >> owner >> population >> industry >> stockpile;
+    stream >> habitability >> owner >> population >> industry;
+    if (gReadSaveFormatVersion <= 17) {
+        quint32 discardedProductionStockpile{};
+        stream >> discardedProductionStockpile;
+    }
 
     value.id = static_cast<PlanetId>(id);
     value.star = static_cast<StarId>(star);
@@ -460,7 +462,6 @@ void readPlanet(QDataStream& stream, Planet& value)
     value.owner = static_cast<PlayerId>(owner);
     value.population = static_cast<std::uint64_t>(population);
     value.industry = static_cast<std::uint32_t>(industry);
-    value.stockpile = static_cast<std::uint32_t>(stockpile);
 
     quint32 count{};
     if (!readCount(stream, count)) return;
@@ -470,7 +471,7 @@ void readPlanet(QDataStream& stream, Planet& value)
         ProductionItem item;
         readProductionItem(stream, item);
         if (stream.status() != QDataStream::Ok) return;
-        value.productionQueue.push_back(item);
+        if (item.kind != ProductionKind::Research) value.productionQueue.push_back(item);
     }
     readMinerals(stream, value.minerals);
 
@@ -525,6 +526,7 @@ void writePlayer(QDataStream& stream, const Player& value)
     stream << static_cast<quint8>(value.technology.researchActive ? 1 : 0);
     stream << static_cast<quint32>(value.technology.queuedFocuses.size());
     for (const auto field : value.technology.queuedFocuses) writeEnum(stream, field);
+    stream << static_cast<quint8>(value.technology.researchAllocationPercent);
 }
 
 void readPlayer(QDataStream& stream, Player& value)
@@ -658,6 +660,16 @@ void readPlayer(QDataStream& stream, Player& value)
             if (!readEnum(stream, next, static_cast<quint8>(ResearchField::Weapons))) return;
             value.technology.queuedFocuses.push_back(next);
         }
+    }
+    value.technology.researchAllocationPercent = 0;
+    if (gReadSaveFormatVersion >= 18) {
+        quint8 percent{};
+        stream >> percent;
+        if (percent > 100) {
+            markCorrupt(stream);
+            return;
+        }
+        value.technology.researchAllocationPercent = percent;
     }
 }
 
@@ -966,6 +978,8 @@ void writeOrder(QDataStream& stream, const Order& order)
                    << static_cast<quint32>(concrete.colony)
                    << static_cast<quint32>(concrete.fromIndex)
                    << static_cast<quint32>(concrete.toIndex);
+        } else if constexpr (std::is_same_v<T, SetResearchAllocationOrder>) {
+            stream << quint8{15} << static_cast<quint8>(concrete.percent);
         }
     }, order);
 }
@@ -1029,7 +1043,7 @@ bool readOrder(QDataStream& stream, Order& order)
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::RemoteMiningModule))) return false;
+            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
             value.components.push_back(component);
         }
         order = std::move(value);
@@ -1205,6 +1219,18 @@ bool readOrder(QDataStream& stream, Order& order)
         order = value;
         return stream.status() == QDataStream::Ok;
     }
+    case 15: {
+        SetResearchAllocationOrder value;
+        quint8 percent{};
+        stream >> percent;
+        if (percent > 100) {
+            markCorrupt(stream);
+            return false;
+        }
+        value.percent = percent;
+        order = value;
+        return stream.status() == QDataStream::Ok;
+    }
     default:
         markCorrupt(stream);
         return false;
@@ -1372,6 +1398,15 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (loaded.pendingDescriptions.size() != static_cast<qsizetype>(loaded.pendingOrders.orders.size())) {
         errorMessage = "The Suns! save file has an inconsistent planning-order section.";
         return false;
+    }
+    for (auto index = loaded.pendingOrders.orders.size(); index > 0; --index) {
+        const auto& order = loaded.pendingOrders.orders[index - 1];
+        const bool obsolete = std::holds_alternative<SetColonyResearchOrder>(order)
+            || (std::get_if<QueueProductionOrder>(&order)
+                && std::get<QueueProductionOrder>(order).kind == ProductionKind::Research);
+        if (!obsolete) continue;
+        loaded.pendingOrders.orders.erase(loaded.pendingOrders.orders.begin() + (index - 1));
+        loaded.pendingDescriptions.removeAt(static_cast<qsizetype>(index - 1));
     }
     if (loaded.state.turn == 0 || loaded.state.players.empty() || loaded.state.stars.empty()) {
         errorMessage = "The Suns! save file does not contain a valid game state.";

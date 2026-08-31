@@ -9,6 +9,8 @@
 #include <QMenuBar>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTreeWidget>
@@ -35,13 +37,6 @@ constexpr std::array<ResearchField, kResearchFieldCount> kResearchFields = {
 QString fieldName(ResearchField field)
 {
     return QString::fromStdString(research_field_name(field));
-}
-
-bool colonyResearchEnabled(const Planet& planet)
-{
-    return std::any_of(planet.productionQueue.begin(), planet.productionQueue.end(), [](const ProductionItem& item) {
-        return item.kind == ProductionKind::Research;
-    });
 }
 
 } // namespace
@@ -73,6 +68,19 @@ void MainWindow::installResearch()
     researchUnlock_->setObjectName("researchUnlock");
     researchUnlock_->setWordWrap(true);
     layout->addWidget(researchUnlock_);
+
+    auto* allocationRow = new QHBoxLayout;
+    allocationRow->addWidget(new QLabel("Guaranteed research allocation", content));
+    researchAllocationSpin_ = new QSpinBox(content);
+    researchAllocationSpin_->setObjectName("researchAllocationSpin");
+    researchAllocationSpin_->setRange(0, 100);
+    researchAllocationSpin_->setSingleStep(5);
+    researchAllocationSpin_->setSuffix("%");
+    researchAllocationSpin_->setToolTip(
+        "This share of every colony's yearly output goes to empire research before local production. "
+        "Output left after a colony finishes its queue also becomes research.");
+    allocationRow->addWidget(researchAllocationSpin_);
+    layout->addLayout(allocationRow);
 
     auto* planLabel = new QLabel(
         "Research plan — every row may be reordered or removed; invested RP remains in its field.",
@@ -119,10 +127,6 @@ void MainWindow::installResearch()
     editRow->addWidget(researchRemoveButton_);
     layout->addLayout(editRow);
 
-    colonyResearchButton_ = new QPushButton("Start ongoing colony research", content);
-    colonyResearchButton_->setObjectName("colonyResearchButton");
-    layout->addWidget(colonyResearchButton_);
-
     researchDock_->setWidget(content);
     addDockWidget(Qt::RightDockWidgetArea, researchDock_);
 
@@ -139,6 +143,8 @@ void MainWindow::installResearch()
     connect(researchMoveDownButton_, &QPushButton::clicked, this,
         [this] { moveSelectedResearchPlanItem(1); });
     connect(researchRemoveButton_, &QPushButton::clicked, this, &MainWindow::removeSelectedResearchPlanItem);
+    connect(researchAllocationSpin_, &QSpinBox::valueChanged,
+        this, &MainWindow::queueResearchAllocation);
     connect(researchPlanTree_, &QTreeWidget::itemSelectionChanged, this, [this] {
         const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
         const auto count = researchPlanTree_->topLevelItemCount();
@@ -146,7 +152,6 @@ void MainWindow::installResearch()
         researchMoveDownButton_->setEnabled(row >= 0 && row + 1 < count);
         researchRemoveButton_->setEnabled(row >= 0);
     });
-    connect(colonyResearchButton_, &QPushButton::clicked, this, [this] { toggleSelectedColonyResearch(); });
     refreshResearchPanel();
 }
 
@@ -159,11 +164,27 @@ void MainWindow::refreshResearchPanel()
     auto planActive = player->technology.researchActive;
     auto focus = player->technology.focus;
     auto queuedFocuses = player->technology.queuedFocuses;
+    auto allocationPercent = player->technology.researchAllocationPercent;
     for (const auto& order : pendingOrders_.orders) {
         if (const auto* plan = std::get_if<SetResearchPlanOrder>(&order)) {
             planActive = plan->active;
             focus = plan->focus;
             queuedFocuses = plan->queuedFocuses;
+        } else if (const auto* allocation = std::get_if<SetResearchAllocationOrder>(&order)) {
+            allocationPercent = allocation->percent;
+        }
+    }
+
+    {
+        const QSignalBlocker blocker(researchAllocationSpin_);
+        researchAllocationSpin_->setValue(allocationPercent);
+    }
+    std::uint32_t guaranteedRp = 0;
+    if (planActive) {
+        for (const auto& planet : state_.planets) {
+            if (planet.owner != player->id) continue;
+            guaranteedRp += static_cast<std::uint32_t>(
+                static_cast<std::uint64_t>(colony_output(planet)) * allocationPercent / 100U);
         }
     }
 
@@ -172,7 +193,11 @@ void MainWindow::refreshResearchPanel()
         const auto index = static_cast<std::size_t>(field);
         levels << QString("%1 %2").arg(fieldName(field)).arg(player->technology.levels[index]);
     }
-    researchSummary_->setText(QString("<b>Empire technology</b><br>%1").arg(levels.join(" • ")));
+    const auto allocationSummary = planActive
+        ? QString("Guaranteed RP next turn: %1, plus unused colony output").arg(guaranteedRp)
+        : QString("Research is paused; the allocation is not deducted from colony output");
+    researchSummary_->setText(QString("<b>Empire technology</b><br>%1<br>%2")
+        .arg(levels.join(" • "), allocationSummary));
 
     const auto index = static_cast<std::size_t>(focus);
     const auto level = player->technology.levels[index];
@@ -192,9 +217,13 @@ void MainWindow::refreshResearchPanel()
     QString unlock = "No concrete unlock is assigned to the next level in this first slice.";
     if (!planActive) {
         unlock = "No research target is selected. Accumulated RP is preserved in each field.";
+    } else if (focus == ResearchField::Energy && level == 0) {
+        unlock = "Next unlock: Antimatter Generator — onboard fuel production plus 200 units of reserve capacity.";
+    } else if (focus == ResearchField::Propulsion && level == 0) {
+        unlock = "Next unlock: Advanced Fusion Drive — a light, safe Warp-9 engine that consumes fuel instead of scooping it.";
     } else if (focus == ResearchField::Electronics) {
         if (level == 0) unlock = "Next unlock: Compact Long Range Scanner — lighter and cheaper, with a 55 ly field.";
-        else if (level == 1) unlock = "Electronics 2: extended sensor array is planned as a heavy, long-range alternative.";
+        else if (level == 1) unlock = "Next unlock: Extended Range Scanner — a heavy 160 ly ordinary sensor for deep-space coverage.";
         else if (level == 2) unlock = "Next unlock: Penetrating Scanner — approximate planetary data without entering orbit.";
         else unlock = "Higher Electronics levels will later support communications, classification and electronic warfare.";
     } else if (focus == ResearchField::Construction && level == 0) {
@@ -243,23 +272,37 @@ void MainWindow::refreshResearchPanel()
     researchMoveDownButton_->setEnabled(row >= 0 && row + 1 < rowCount);
     researchRemoveButton_->setEnabled(row >= 0);
 
-    const auto* planet = selectedPlanet();
-    const bool owned = planet && planet->owner == 1;
-    bool enabled = owned && colonyResearchEnabled(*planet);
-    if (owned) {
-        for (const auto& order : pendingOrders_.orders) {
-            if (const auto* research = std::get_if<SetColonyResearchOrder>(&order);
-                research && research->colony == planet->id) {
-                enabled = research->enabled;
-            }
-        }
+}
+
+void MainWindow::queueResearchAllocation(int percent)
+{
+    const auto* player = find_player(state_, pendingOrders_.player);
+    if (!player || percent < 0 || percent > 100) return;
+
+    const auto pending = std::find_if(
+        pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [](const Order& order) {
+            return std::holds_alternative<SetResearchAllocationOrder>(order);
+        });
+    if (percent == player->technology.researchAllocationPercent) {
+        if (pending == pendingOrders_.orders.end()) return;
+        const auto index = static_cast<int>(std::distance(pendingOrders_.orders.begin(), pending));
+        pendingOrders_.orders.erase(pending);
+        pendingDescriptions_.removeAt(index);
+        rebuildScene();
+        statusBar()->showMessage("Research allocation reverted to the committed value");
+        return;
     }
-    colonyResearchButton_->setEnabled(owned);
-    colonyResearchButton_->setText(!owned
-        ? "Select a friendly colony"
-        : enabled
-            ? "Stop ongoing research at selected colony"
-            : "Start ongoing research after queued work");
+
+    const auto description = QString("Allocate %1% of every colony's output to research").arg(percent);
+    if (pending != pendingOrders_.orders.end()) {
+        const auto index = static_cast<int>(std::distance(pendingOrders_.orders.begin(), pending));
+        *pending = SetResearchAllocationOrder{static_cast<std::uint8_t>(percent)};
+        pendingDescriptions_[index] = description;
+        rebuildScene();
+        statusBar()->showMessage(description);
+        return;
+    }
+    appendPendingOrder(SetResearchAllocationOrder{static_cast<std::uint8_t>(percent)}, description);
 }
 
 void MainWindow::queueResearchPlan()
@@ -352,35 +395,6 @@ void MainWindow::removeSelectedResearchPlanItem()
         const auto selectedRow = std::min(row, rowCount - 1);
         researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
     }
-}
-
-void MainWindow::toggleSelectedColonyResearch()
-{
-    const auto* planet = selectedPlanet();
-    if (!planet || planet->owner != 1) return;
-
-    bool enabled = colonyResearchEnabled(*planet);
-    for (const auto& order : pendingOrders_.orders) {
-        if (const auto* research = std::get_if<SetColonyResearchOrder>(&order);
-            research && research->colony == planet->id) {
-            enabled = research->enabled;
-        }
-    }
-    const bool target = !enabled;
-    const auto description = QString("%1 ongoing Research at %2")
-        .arg(target ? "Enable" : "Stop")
-        .arg(QString::fromStdString(planet->name));
-
-    for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
-        const auto* research = std::get_if<SetColonyResearchOrder>(&pendingOrders_.orders[index]);
-        if (!research || research->colony != planet->id) continue;
-        pendingOrders_.orders[index] = SetColonyResearchOrder{planet->id, target};
-        pendingDescriptions_[static_cast<int>(index)] = description;
-        rebuildScene();
-        statusBar()->showMessage(description);
-        return;
-    }
-    appendPendingOrder(SetColonyResearchOrder{planet->id, target}, description);
 }
 
 } // namespace suns

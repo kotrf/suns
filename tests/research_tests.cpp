@@ -29,7 +29,7 @@ void verify_research_costs_and_initial_unlocks()
         state, 1, suns::ShipComponentType::LongRangeScanner));
 }
 
-void verify_repeating_colony_research_and_focus_queue()
+void verify_unused_colony_output_advances_focus_queue()
 {
     const suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
@@ -39,12 +39,10 @@ void verify_repeating_colony_research_and_focus_queue()
         suns::ResearchField::Electronics,
         {suns::ResearchField::Propulsion, suns::ResearchField::Construction},
     });
-    start.orders.emplace_back(suns::SetColonyResearchOrder{1, true});
 
     const auto turn2 = processor.process_with_events(state, {start});
     assert(turn2.state.players.front().technology.progress[3] == 6);
-    assert(turn2.state.planets.front().productionQueue.size() == 1);
-    assert(turn2.state.planets.front().productionQueue.front().kind == suns::ProductionKind::Research);
+    assert(turn2.state.planets.front().productionQueue.empty());
     assert(research_event(turn2.events) == nullptr);
 
     const auto turn3 = processor.process_with_events(turn2.state, {});
@@ -87,9 +85,7 @@ void verify_overflow_follows_preselected_field()
     };
     technology.progress[3] = 17;
 
-    suns::PlayerOrders start{1, {}};
-    start.orders.emplace_back(suns::SetColonyResearchOrder{1, true});
-    const auto result = processor.process_with_events(state, {start});
+    const auto result = processor.process_with_events(state, {});
 
     const auto& completed = result.state.players.front().technology;
     assert(completed.levels[3] == 1);
@@ -151,8 +147,8 @@ void verify_active_research_can_be_moved_removed_and_resumed()
     assert(movedTechnology.researchActive);
     assert(movedTechnology.focus == suns::ResearchField::Propulsion);
     assert(movedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 7);
+    assert(movedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Propulsion)] == 6);
     assert(movedTechnology.queuedFocuses.back() == suns::ResearchField::Electronics);
-    moved.planets.front().productionQueue.push_back({suns::ProductionKind::Research, 0, 0});
 
     suns::PlayerOrders pause{1, {}};
     pause.orders.emplace_back(suns::SetResearchPlanOrder{
@@ -164,8 +160,7 @@ void verify_active_research_can_be_moved_removed_and_resumed()
     const auto& pausedTechnology = paused.players.front().technology;
     assert(!pausedTechnology.researchActive);
     assert(pausedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 7);
-    assert(pausedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Propulsion)] == 0);
-    assert(paused.planets.front().stockpile == 12);
+    assert(pausedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Propulsion)] == 6);
 
     suns::PlayerOrders resume{1, {}};
     resume.orders.emplace_back(suns::SetResearchPlanOrder{
@@ -177,8 +172,8 @@ void verify_active_research_can_be_moved_removed_and_resumed()
     const auto& resumedTechnology = resumed.players.front().technology;
     assert(resumedTechnology.researchActive);
     assert(resumedTechnology.focus == suns::ResearchField::Electronics);
-    assert(resumedTechnology.levels[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 1);
-    assert(resumedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 7);
+    assert(resumedTechnology.levels[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 0);
+    assert(resumedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 13);
 }
 
 void verify_component_unlock_is_enforced_for_new_designs()
@@ -215,20 +210,28 @@ void verify_component_unlock_is_enforced_for_new_designs()
     assert(suns::find_ship_design(unlocked, suns::kFirstCustomShipDesignId) != nullptr);
 }
 
-void verify_research_can_be_stopped()
+void verify_percentage_is_taken_before_production_and_leftovers_follow()
 {
     const suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
-    suns::PlayerOrders start{1, {}};
-    start.orders.emplace_back(suns::SetColonyResearchOrder{1, true});
-    state = processor.process(state, {start});
+    auto& colony = state.planets.front();
+    colony.minerals = {100.0, 100.0, 100.0};
+    colony.productionQueue = {{suns::ProductionKind::Factory, suns::kFactoryCost, 0}};
 
-    suns::PlayerOrders stop{1, {}};
-    stop.orders.emplace_back(suns::SetColonyResearchOrder{1, false});
-    const auto stopped = processor.process(state, {stop});
-    assert(stopped.planets.front().productionQueue.empty());
-    assert(stopped.planets.front().stockpile == 6);
-    assert(stopped.players.front().technology.progress[3] == 6);
+    suns::PlayerOrders allocate{1, {}};
+    allocate.orders.emplace_back(suns::SetResearchAllocationOrder{50});
+    const auto first = processor.process(state, {allocate});
+    assert(first.players.front().technology.researchAllocationPercent == 50);
+    assert(first.players.front().technology.progress[3] == 3);
+    assert(first.planets.front().productionQueue.front().remainingCost == 3);
+
+    const auto second = processor.process(first, {});
+    assert(second.players.front().technology.progress[3] == 6);
+    assert(second.planets.front().industry == colony.industry + 1);
+    assert(second.planets.front().productionQueue.empty());
+
+    const auto third = processor.process(second, {});
+    assert(third.players.front().technology.progress[3] == 13);
 }
 
 } // namespace
@@ -236,11 +239,11 @@ void verify_research_can_be_stopped()
 int main()
 {
     verify_research_costs_and_initial_unlocks();
-    verify_repeating_colony_research_and_focus_queue();
+    verify_unused_colony_output_advances_focus_queue();
     verify_overflow_follows_preselected_field();
     verify_future_plan_can_be_reordered_and_cleared();
     verify_active_research_can_be_moved_removed_and_resumed();
     verify_component_unlock_is_enforced_for_new_designs();
-    verify_research_can_be_stopped();
+    verify_percentage_is_taken_before_production_and_leftovers_follow();
     return 0;
 }

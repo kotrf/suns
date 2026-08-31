@@ -206,20 +206,22 @@ std::optional<FleetId> complete_production(GameState& state, Planet& planet, con
 std::uint32_t run_colony_production(GameState& state, Planet& planet)
 {
     if (planet.owner == 0) return 0;
+    std::erase_if(planet.productionQueue, [](const ProductionItem& item) {
+        return item.kind == ProductionKind::Research;
+    });
     if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
 
-    std::uint32_t researchProduced = 0;
-    std::uint32_t available = planet.stockpile + colony_output(planet);
+    const auto* player = find_player(state, planet.owner);
+    const bool researchActive = player && player->technology.researchActive;
+    const auto output = colony_output(planet);
+    const auto allocated = researchActive
+        ? static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(output) * player->technology.researchAllocationPercent / 100U)
+        : 0U;
+    std::uint32_t researchProduced = allocated;
+    std::uint32_t available = output - allocated;
     while (!planet.productionQueue.empty()) {
         auto& item = planet.productionQueue.front();
-        if (item.kind == ProductionKind::Research) {
-            planet.productionWaitingForMinerals = false;
-            const auto* player = find_player(state, planet.owner);
-            if (!player || !player->technology.researchActive) break;
-            researchProduced += available;
-            available = 0;
-            break;
-        }
         if (item.remainingCost > 0) {
             planet.productionWaitingForMinerals = false;
             if (available == 0) break;
@@ -284,7 +286,7 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
             quantity);
     }
     if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
-    planet.stockpile = available;
+    if (researchActive) researchProduced += available;
     return researchProduced;
 }
 
@@ -437,7 +439,6 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     planet.industry = 1;
-    planet.stockpile = 0;
     planet.productionQueue.clear();
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
@@ -1300,16 +1301,9 @@ TurnResult TurnProcessor::process_with_events(
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
                         });
                         if (planet == next.planets.end()) return;
-                        const auto isResearch = [](const ProductionItem& item) {
+                        std::erase_if(planet->productionQueue, [](const ProductionItem& item) {
                             return item.kind == ProductionKind::Research;
-                        };
-                        if (concreteOrder.enabled) {
-                            if (std::none_of(planet->productionQueue.begin(), planet->productionQueue.end(), isResearch)) {
-                                planet->productionQueue.push_back({ProductionKind::Research, 0, 0});
-                            }
-                        } else {
-                            std::erase_if(planet->productionQueue, isResearch);
-                        }
+                        });
                     } else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) {
                         auto* player = mutable_player(next, submission.player);
                         if (!player
@@ -1324,6 +1318,10 @@ TurnResult TurnProcessor::process_with_events(
                         player->technology.researchActive = concreteOrder.active;
                         if (concreteOrder.active) player->technology.focus = concreteOrder.focus;
                         player->technology.queuedFocuses = concreteOrder.queuedFocuses;
+                    } else if constexpr (std::is_same_v<T, SetResearchAllocationOrder>) {
+                        auto* player = mutable_player(next, submission.player);
+                        if (!player || concreteOrder.percent > 100) return;
+                        player->technology.researchAllocationPercent = concreteOrder.percent;
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
                         ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,
                             concreteOrder.hull, concreteOrder.components};

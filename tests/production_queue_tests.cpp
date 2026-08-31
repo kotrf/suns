@@ -53,22 +53,17 @@ void forecast_matches_resolved_completion_turns()
     assert(mineTurn == *forecast[1].completionTurn);
 }
 
-void research_marks_later_items_as_blocked()
+void guaranteed_research_allocation_reduces_local_production()
 {
     auto state = make_demo_game();
     auto& colony = state.planets.front();
-    colony.productionQueue = {
-        {ProductionKind::Research, 0, 0},
-        {ProductionKind::Mine, kMineCost, 0},
-    };
-    const auto blocked = forecast_production_queue(state, colony, colony.productionQueue);
-    assert(!blocked[0].completionTurn);
-    assert(blocked[1].blockedByResearch);
+    colony.productionQueue = {{ProductionKind::Factory, kFactoryCost, 0}};
+    const auto fullProduction = forecast_production_queue(state, colony, colony.productionQueue);
+    assert(fullProduction.front().completionTurn == state.turn + 1);
 
-    std::swap(colony.productionQueue[0], colony.productionQueue[1]);
-    const auto unblocked = forecast_production_queue(state, colony, colony.productionQueue);
-    assert(unblocked[0].completionTurn);
-    assert(!unblocked[0].blockedByResearch);
+    state.players.front().technology.researchAllocationPercent = 50;
+    const auto shared = forecast_production_queue(state, colony, colony.productionQueue);
+    assert(shared.front().completionTurn == state.turn + 2);
 }
 
 } // namespace
@@ -77,5 +72,5 @@ int main()
 {
     reorder_is_applied_before_production();
     forecast_matches_resolved_completion_turns();
-    research_marks_later_items_as_blocked();
+    guaranteed_research_allocation_reduces_local_production();
 }

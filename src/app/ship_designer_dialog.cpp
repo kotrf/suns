@@ -71,17 +71,29 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     addEnumItem(engineCombo_, "Fusion Drive", ShipComponentType::FusionDrive);
     addEnumItem(engineCombo_, "Ram Scoop Drive", ShipComponentType::RamScoopDrive);
     addEnumItem(engineCombo_, "Radiating Ram Scoop", ShipComponentType::RadiatingRamScoopDrive);
+    const auto advancedFusionAvailable = component_available_to_player(
+        state, player, ShipComponentType::AdvancedFusionDrive);
+    addEnumItem(engineCombo_, advancedFusionAvailable
+            ? "Advanced Fusion Drive"
+            : "Advanced Fusion Drive (locked — Propulsion 1)",
+        ShipComponentType::AdvancedFusionDrive);
+    if (!advancedFusionAvailable) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(engineCombo_->model())) {
+            model->item(engineCombo_->count() - 1)->setEnabled(false);
+        }
+    }
     form->addRow("Engine slot", engineCombo_);
 
     scannerCount_ = new QSpinBox(this);
     compactScannerCount_ = new QSpinBox(this);
+    extendedScannerCount_ = new QSpinBox(this);
     penetratingScannerCount_ = new QSpinBox(this);
     remoteMiningModuleCount_ = new QSpinBox(this);
     colonyModuleCount_ = new QSpinBox(this);
     fuelTankCount_ = new QSpinBox(this);
     cargoPodCount_ = new QSpinBox(this);
     antimatterCount_ = new QSpinBox(this);
-    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_, remoteMiningModuleCount_,
+    for (auto* spin : {scannerCount_, compactScannerCount_, extendedScannerCount_, penetratingScannerCount_, remoteMiningModuleCount_,
              colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         spin->setRange(0, 5);
     }
@@ -95,6 +107,13 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ? "Electronics 1: lighter and cheaper, with a shorter field"
         : "Locked — requires Electronics 1");
     form->addRow("Compact Scanner (E1)", compactScannerCount_);
+    const auto extendedAvailable = component_available_to_player(
+        state, player, ShipComponentType::ExtendedRangeScanner);
+    extendedScannerCount_->setEnabled(extendedAvailable);
+    extendedScannerCount_->setToolTip(extendedAvailable
+        ? "Electronics 2: 160 ly ordinary field, at high mass and cost"
+        : "Locked — requires Electronics 2");
+    form->addRow("Extended Range Scanner (E2)", extendedScannerCount_);
     const auto penetratingAvailable = component_available_to_player(
         state, player, ShipComponentType::PenetratingScanner);
     penetratingScannerCount_->setEnabled(penetratingAvailable);
@@ -110,7 +129,13 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     form->addRow("Colony Module", colonyModuleCount_);
     form->addRow("Fuel Tank", fuelTankCount_);
     form->addRow("Cargo Pod", cargoPodCount_);
-    form->addRow("Antimatter Generator", antimatterCount_);
+    const auto antimatterAvailable = component_available_to_player(
+        state, player, ShipComponentType::AntimatterGenerator);
+    antimatterCount_->setEnabled(antimatterAvailable);
+    antimatterCount_->setToolTip(antimatterAvailable
+        ? "Energy 1: generates 50 fuel per turn and adds 200 fuel capacity"
+        : "Locked — requires Energy 1");
+    form->addRow("Antimatter Generator (Energy 1)", antimatterCount_);
     layout->addLayout(form);
 
     previewLabel_ = new QLabel(this);
@@ -127,7 +152,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     connect(nameEdit_, &QLineEdit::textChanged, this, [this] { updatePreview(); });
     connect(hullCombo_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
     connect(engineCombo_, &QComboBox::currentIndexChanged, this, [this] { updatePreview(); });
-    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_, remoteMiningModuleCount_,
+    for (auto* spin : {scannerCount_, compactScannerCount_, extendedScannerCount_, penetratingScannerCount_, remoteMiningModuleCount_,
              colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         connect(spin, &QSpinBox::valueChanged, this, [this] { updatePreview(); });
     }
@@ -149,6 +174,7 @@ ShipDesign ShipDesignerDialog::previewDesign() const
     };
     append(ShipComponentType::LongRangeScanner, scannerCount_->value());
     append(ShipComponentType::CompactLongRangeScanner, compactScannerCount_->value());
+    append(ShipComponentType::ExtendedRangeScanner, extendedScannerCount_->value());
     append(ShipComponentType::PenetratingScanner, penetratingScannerCount_->value());
     append(ShipComponentType::RemoteMiningModule, remoteMiningModuleCount_->value());
     append(ShipComponentType::ColonyModule, colonyModuleCount_->value());
@@ -173,7 +199,7 @@ void ShipDesignerDialog::updatePreview()
     const auto valid = ship_design_valid(design);
 
     const auto maxGeneral = static_cast<int>(hull.generalSlots);
-    for (auto* spin : {scannerCount_, compactScannerCount_, penetratingScannerCount_,
+    for (auto* spin : {scannerCount_, compactScannerCount_, extendedScannerCount_, penetratingScannerCount_,
              colonyModuleCount_, fuelTankCount_, cargoPodCount_, antimatterCount_}) {
         spin->setMaximum(maxGeneral);
     }

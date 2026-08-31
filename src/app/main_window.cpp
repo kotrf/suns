@@ -748,13 +748,11 @@ void MainWindow::updateControls()
 
     std::size_t colonies = 0;
     std::uint64_t population = 0;
-    std::uint32_t stockpile = 0;
     std::uint32_t output = 0;
     for (const auto& candidate : state_.planets) {
         if (candidate.owner == 1) {
             ++colonies;
             population += candidate.population;
-            stockpile += candidate.stockpile;
             output += colony_output(candidate);
         }
     }
@@ -769,13 +767,12 @@ void MainWindow::updateControls()
     const auto surveyedCount = player ? player->surveyedStars.size() : 0;
     empireLabel_->setText(QString("<b>Terrans</b><br>Surveyed: %1 / %2 &nbsp; Colonies: %3<br>"
                                   "Population: %4 &nbsp; Output: %5 / turn<br>"
-                                  "Stored: %6 &nbsp; Designs: %7 &nbsp; Colonizers: %8 &nbsp; In transit: %9")
+                                  "Designs: %6 &nbsp; Colonizers: %7 &nbsp; In transit: %8")
         .arg(static_cast<qulonglong>(surveyedCount))
         .arg(static_cast<qulonglong>(state_.stars.size()))
         .arg(static_cast<qulonglong>(colonies))
         .arg(static_cast<qulonglong>(population))
         .arg(output)
-        .arg(stockpile)
         .arg(static_cast<qulonglong>(state_.shipDesigns.size()))
         .arg(static_cast<qulonglong>(colonyShips))
         .arg(static_cast<qulonglong>(inTransit)));
@@ -881,10 +878,10 @@ void MainWindow::updateControls()
         }
         selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>Habitability: <b>%3%4%</b><br>Status: %5<br>"
                                           "%6Infrastructure: %7<br>Economic output: %8 / turn<br>"
-                                          "Stored production: %9<br>Production: <b>%10</b>%11")
+                                          "Production: <b>%9</b>%10")
             .arg(QString::fromStdString(star->name)).arg(QString::fromStdString(planet->name))
             .arg(estimated ? "~" : "").arg(knownHabitability).arg(owner).arg(populationLine).arg(planet->industry)
-            .arg(colony_output(*planet)).arg(planet->stockpile).arg(productionSummary(state_, *planet)).arg(travelLine));
+            .arg(colony_output(*planet)).arg(productionSummary(state_, *planet)).arg(travelLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
     }

@@ -36,6 +36,10 @@ struct SetResearchPlanOrder {
     bool active{true};
 };
 
+struct SetResearchAllocationOrder {
+    std::uint8_t percent{};
+};
+
 struct CreateShipDesignOrder {
     std::string name;
     ShipHullType hull{ShipHullType::Scout};
@@ -112,6 +116,7 @@ using Order = std::variant<
     QueueProductionOrder,
     SetColonyResearchOrder,
     SetResearchPlanOrder,
+    SetResearchAllocationOrder,
     CreateShipDesignOrder,
     QueueShipDesignOrder,
     ReorderProductionQueueOrder,

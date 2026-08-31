@@ -60,6 +60,8 @@ MineralCargo componentMineralCost(ShipComponentType type)
     case ShipComponentType::PenetratingScanner:      return {0.0, 3.0, 5.0};
     case ShipComponentType::CompactLongRangeScanner: return {0.0, 1.0, 2.0};
     case ShipComponentType::RemoteMiningModule:      return {3.0, 2.0, 2.0};
+    case ShipComponentType::AdvancedFusionDrive:     return {3.0, 2.0, 4.0};
+    case ShipComponentType::ExtendedRangeScanner:    return {1.0, 4.0, 7.0};
     }
     return {};
 }

@@ -84,6 +84,23 @@ void verify_component_tradeoffs()
     assert(suns::ship_design_sensor_range(deepSurveyor) > 0.0);
     assert(suns::ship_design_penetrating_sensor_range(surveyor) == 0.0);
     assert(suns::ship_design_penetrating_sensor_range(deepSurveyor) > 0.0);
+
+    const auto fusion = suns::component_spec(suns::ShipComponentType::FusionDrive);
+    const auto scoop = suns::component_spec(suns::ShipComponentType::RamScoopDrive);
+    const auto advanced = suns::component_spec(suns::ShipComponentType::AdvancedFusionDrive);
+    assert(advanced.maxWarp == 9);
+    assert(advanced.mass < scoop.mass);
+    assert(advanced.buildCost > scoop.buildCost);
+    assert(advanced.fuelPer100MassLy[4] > 0.0);
+    assert(scoop.fuelPer100MassLy[4] < 0.0);
+    assert(advanced.maxWarp > fusion.maxWarp);
+
+    const auto standardScanner = suns::component_spec(suns::ShipComponentType::LongRangeScanner);
+    const auto extendedScanner = suns::component_spec(suns::ShipComponentType::ExtendedRangeScanner);
+    assert(extendedScanner.sensorRange > standardScanner.sensorRange);
+    assert(extendedScanner.mass > standardScanner.mass);
+    assert(extendedScanner.buildCost > standardScanner.buildCost);
+    assert(!extendedScanner.penetratesPlanets);
 }
 
 void verify_create_design_order()
@@ -142,6 +159,71 @@ void verify_create_design_order()
     const auto minerCreated = processor.process(unlocked, {lockedMiner});
     assert(minerCreated.shipDesigns.size() == unlocked.shipDesigns.size() + 1);
     assert(minerCreated.shipDesigns.back().hull == suns::ShipHullType::RemoteMiner);
+
+    suns::PlayerOrders advancedDrive{1, {}};
+    advancedDrive.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Fast Courier",
+        suns::ShipHullType::Scout,
+        {suns::ShipComponentType::AdvancedFusionDrive},
+    });
+    const auto driveLocked = processor.process(stillLocked, {advancedDrive});
+    assert(driveLocked.shipDesigns.size() == stillLocked.shipDesigns.size());
+    assert(!suns::component_available_to_player(
+        stillLocked, 1, suns::ShipComponentType::AdvancedFusionDrive));
+
+    auto propulsionUnlocked = stillLocked;
+    propulsionUnlocked.players.front().technology.levels[
+        static_cast<std::size_t>(suns::ResearchField::Propulsion)] = 1;
+    const auto courierCreated = processor.process(propulsionUnlocked, {advancedDrive});
+    assert(courierCreated.shipDesigns.size() == propulsionUnlocked.shipDesigns.size() + 1);
+    assert(courierCreated.shipDesigns.back().components.front()
+        == suns::ShipComponentType::AdvancedFusionDrive);
+    assert(suns::component_available_to_player(
+        propulsionUnlocked, 1, suns::ShipComponentType::AdvancedFusionDrive));
+
+    suns::PlayerOrders extendedScanner{1, {}};
+    extendedScanner.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Deep Space Surveyor",
+        suns::ShipHullType::Scout,
+        {suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::ExtendedRangeScanner},
+    });
+    const auto scannerLocked = processor.process(stillLocked, {extendedScanner});
+    assert(scannerLocked.shipDesigns.size() == stillLocked.shipDesigns.size());
+    assert(!suns::component_available_to_player(
+        stillLocked, 1, suns::ShipComponentType::ExtendedRangeScanner));
+
+    auto electronicsUnlocked = stillLocked;
+    electronicsUnlocked.players.front().technology.levels[
+        static_cast<std::size_t>(suns::ResearchField::Electronics)] = 2;
+    const auto surveyorCreated = processor.process(electronicsUnlocked, {extendedScanner});
+    assert(surveyorCreated.shipDesigns.size() == electronicsUnlocked.shipDesigns.size() + 1);
+    assert(surveyorCreated.shipDesigns.back().components.back()
+        == suns::ShipComponentType::ExtendedRangeScanner);
+    assert(suns::component_available_to_player(
+        electronicsUnlocked, 1, suns::ShipComponentType::ExtendedRangeScanner));
+
+    suns::PlayerOrders antimatterGenerator{1, {}};
+    antimatterGenerator.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Fuel Tender",
+        suns::ShipHullType::LightTransport,
+        {suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::AntimatterGenerator},
+    });
+    const auto generatorLocked = processor.process(stillLocked, {antimatterGenerator});
+    assert(generatorLocked.shipDesigns.size() == stillLocked.shipDesigns.size());
+    assert(!suns::component_available_to_player(
+        stillLocked, 1, suns::ShipComponentType::AntimatterGenerator));
+
+    auto energyUnlocked = stillLocked;
+    energyUnlocked.players.front().technology.levels[
+        static_cast<std::size_t>(suns::ResearchField::Energy)] = 1;
+    const auto tenderCreated = processor.process(energyUnlocked, {antimatterGenerator});
+    assert(tenderCreated.shipDesigns.size() == energyUnlocked.shipDesigns.size() + 1);
+    assert(tenderCreated.shipDesigns.back().components.back()
+        == suns::ShipComponentType::AntimatterGenerator);
+    assert(suns::component_available_to_player(
+        energyUnlocked, 1, suns::ShipComponentType::AntimatterGenerator));
 }
 
 void verify_custom_design_can_enter_production()

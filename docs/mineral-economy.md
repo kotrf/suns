@@ -30,7 +30,7 @@ Mined minerals accumulate in the planet's existing mineral stock. The same miner
 
 Production has two independent constraints:
 
-1. production points, represented by `remainingCost` and colony stockpile/output;
+1. yearly production output, represented by each item's `remainingCost`;
 2. the required I/B/G material bill.
 
 A construction item may reach zero remaining production points and then wait at the head of the queue until the colony has all required minerals. Minerals are consumed atomically when construction completes.

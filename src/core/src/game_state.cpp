@@ -236,6 +236,15 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.fuelPer100MassLy = {0.0, -0.12, -0.12, -0.10, -0.07, -0.03, 0.0, 0.07, 0.18, 0.42, 0.0};
         spec.radiationHazard = 1.0;
         break;
+    case ShipComponentType::AdvancedFusionDrive:
+        spec.name = "Advanced Fusion Drive";
+        spec.kind = ShipComponentKind::Engine;
+        spec.mass = 16.0;
+        spec.buildCost = 7;
+        spec.engineThrust = 650.0;
+        spec.maxWarp = 9;
+        spec.fuelPer100MassLy = {0.0, 0.04, 0.05, 0.07, 0.10, 0.16, 0.24, 0.38, 0.62, 0.88, 0.0};
+        break;
     case ShipComponentType::LongRangeScanner:
         spec.name = "Long Range Scanner";
         spec.kind = ShipComponentKind::Scanner;
@@ -257,6 +266,13 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.mass = 5.0;
         spec.buildCost = 2;
         spec.sensorRange = 55.0;
+        break;
+    case ShipComponentType::ExtendedRangeScanner:
+        spec.name = "Extended Range Scanner";
+        spec.kind = ShipComponentKind::Scanner;
+        spec.mass = 24.0;
+        spec.buildCost = 8;
+        spec.sensorRange = 160.0;
         break;
     case ShipComponentType::RemoteMiningModule:
         spec.name = "Remote Mining Module";
@@ -383,6 +399,12 @@ bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component)
 {
     switch (component) {
+    case ShipComponentType::AntimatterGenerator:
+        return technology_level(state, player, ResearchField::Energy) >= 1;
+    case ShipComponentType::AdvancedFusionDrive:
+        return technology_level(state, player, ResearchField::Propulsion) >= 1;
+    case ShipComponentType::ExtendedRangeScanner:
+        return technology_level(state, player, ResearchField::Electronics) >= 2;
     case ShipComponentType::CompactLongRangeScanner:
         return technology_level(state, player, ResearchField::Electronics) >= 1;
     case ShipComponentType::PenetratingScanner:
@@ -978,7 +1000,7 @@ GameState generate_game(const GalaxyConfig& config)
     state.planets.reserve(starCount);
 
     state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
-    state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, 0, {}});
+    state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, {}});
     state.planets.front().minerals = {100.0, 100.0, 100.0};
 
     for (std::size_t index = 2; index <= starCount; ++index) {
@@ -988,7 +1010,7 @@ GameState generate_game(const GalaxyConfig& config)
         const auto stellarClass = generated_star_class(physicalRng);
         state.stars.push_back({id, name, position, stellarClass});
         state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(namingRng, name),
-            generated_habitability(physicalRng), 0, 0, 1, 0, {}});
+            generated_habitability(physicalRng), 0, 0, 1, {}});
     }
 
     const auto* scout = find_ship_design(state, kScoutDesignId);

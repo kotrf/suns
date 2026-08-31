@@ -13,7 +13,7 @@ The first staged model separates ordinary detection from planetary penetration:
 - `OrbitalSurvey`: arriving at the system confirms exact habitability and population suitability;
 - `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
 
-The starting Scout carries an ordinary Long Range Scanner. `CompactLongRangeScanner` unlocks at Electronics 1. `PenetratingScanner` is a distinct component with shorter range, higher mass and mineral cost and remains locked until Electronics 3, so early exploration still rewards entering systems and spending time in orbit.
+The starting Scout carries an ordinary 90 ly Long Range Scanner, while colonies project a stronger stationary 150 ly field. `CompactLongRangeScanner` unlocks at Electronics 1, the heavy 160 ly `ExtendedRangeScanner` at Electronics 2, and `PenetratingScanner` at Electronics 3. Penetration remains distinct from ordinary detection, so early exploration still rewards entering systems and spending time in orbit.
 
 Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
 

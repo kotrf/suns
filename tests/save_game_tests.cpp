@@ -42,13 +42,14 @@ void round_trip_preserves_communications_and_planning()
         ResearchField::Propulsion,
         ResearchField::Construction,
     };
-    original.state.planets.front().productionQueue.push_back({ProductionKind::Research, 0, 0});
+    original.state.players.front().technology.researchAllocationPercent = 35;
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
         "Remote Miner",
         ShipHullType::RemoteMiner,
-        {ShipComponentType::FusionDrive,
+        {ShipComponentType::AdvancedFusionDrive,
+         ShipComponentType::ExtendedRangeScanner,
          ShipComponentType::RemoteMiningModule},
     });
 
@@ -119,7 +120,7 @@ void round_trip_preserves_communications_and_planning()
             ResearchField::Electronics,
             {ResearchField::Propulsion, ResearchField::Construction},
         },
-        SetColonyResearchOrder{1, false},
+        SetResearchAllocationOrder{35},
         SetRemoteMiningOrder{scout.id, false},
         TransferCargoOrder{{1, 0}, {0, scout.id}, 100, {1.0, 2.0, 3.0}},
         MergeFleetsOrder{scout.id, 2},
@@ -127,7 +128,7 @@ void round_trip_preserves_communications_and_planning()
         ReorderProductionQueueOrder{1, 2, 0},
     }};
     original.pendingDescriptions = {
-        "move", "mine", "research plan", "stop research", "stop remote mining", "transfer cargo",
+        "move", "mine", "research plan", "research allocation", "stop remote mining", "transfer cargo",
         "merge fleets", "split fleet", "reorder production",
     };
     original.selectedStar = 2;
@@ -175,8 +176,10 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.queuedFocuses.size() == 2);
     assert(technology.queuedFocuses[0] == ResearchField::Propulsion);
     assert(technology.queuedFocuses[1] == ResearchField::Construction);
-    assert(loaded.state.planets.front().productionQueue.size() == 1);
-    assert(loaded.state.planets.front().productionQueue.front().kind == ProductionKind::Research);
+    assert(technology.researchAllocationPercent == 35);
+    assert(loaded.state.planets.front().productionQueue.empty());
+    assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
+    assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::ExtendedRangeScanner);
     assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::RemoteMiningModule);
     assert(loaded.state.shipDesigns.back().hull == ShipHullType::RemoteMiner);
 
@@ -234,8 +237,8 @@ void round_trip_preserves_communications_and_planning()
     assert(plan->queuedFocuses.size() == 2);
     assert(plan->queuedFocuses[0] == ResearchField::Propulsion);
     assert(plan->queuedFocuses[1] == ResearchField::Construction);
-    const auto* stop = std::get_if<SetColonyResearchOrder>(&loaded.pendingOrders.orders[3]);
-    assert(stop && stop->colony == 1 && !stop->enabled);
+    const auto* allocation = std::get_if<SetResearchAllocationOrder>(&loaded.pendingOrders.orders[3]);
+    assert(allocation && allocation->percent == 35);
     const auto* stopMining = std::get_if<SetRemoteMiningOrder>(&loaded.pendingOrders.orders[4]);
     assert(stopMining && stopMining->fleet == scout.id && !stopMining->enabled);
     const auto* transfer = std::get_if<TransferCargoOrder>(&loaded.pendingOrders.orders[5]);

@@ -120,8 +120,14 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(QString::fromStdString(research_field_name(event.researchField)))
                    .arg(event.technologyLevel);
-        if (event.researchField == ResearchField::Electronics && event.technologyLevel == 1) {
+        if (event.researchField == ResearchField::Energy && event.technologyLevel == 1) {
+            text += "\nUnlocked: Antimatter Generator";
+        } else if (event.researchField == ResearchField::Propulsion && event.technologyLevel == 1) {
+            text += "\nUnlocked: Advanced Fusion Drive";
+        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 1) {
             text += "\nUnlocked: Compact Long Range Scanner";
+        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 2) {
+            text += "\nUnlocked: Extended Range Scanner";
         } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 3) {
             text += "\nUnlocked: Penetrating Scanner";
         } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 1) {

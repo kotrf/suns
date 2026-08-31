@@ -36,7 +36,7 @@ GameState survey_fixture(Position scoutPosition, Position targetPosition, std::u
 
 void ordinary_scanner_reports_system_contact_without_planet_data()
 {
-    const auto initial = survey_fixture({100.0, 0.0}, {150.0, 0.0});
+    const auto initial = survey_fixture({200.0, 0.0}, {250.0, 0.0});
     const TurnProcessor processor;
 
     const auto first = processor.process_with_events(initial, {});

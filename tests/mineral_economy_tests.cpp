@@ -103,7 +103,7 @@ int main()
     // Production points may finish while construction waits for material.
     auto starved = state;
     starved.planets.front().population = 0;
-    starved.planets.front().stockpile = 2; // 4 output + 2 stored finishes the 6-point factory.
+    starved.planets.front().industry = 6;
     starved.planets.front().minerals = {};
     starved.planets.front().productionQueue.clear();
     const auto blocked = processor.process(starved, {buildFactory});
@@ -115,7 +115,7 @@ int main()
     // incidental mining, so this fixture precisely tests the I1/B2/G1 bill.
     auto mineStarved = suns::make_demo_game();
     mineStarved.planets.front().population = 0;
-    mineStarved.planets.front().stockpile = 1; // 4 industry + 1 stored = Mine cost 5.
+    mineStarved.planets.front().industry = 5;
     mineStarved.planets.front().minerals = {};
     mineStarved.planets.front().productionQueue.clear();
     const auto blockedMine = processor.process(mineStarved, {buildMine});
