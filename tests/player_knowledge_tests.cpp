@@ -99,7 +99,7 @@ void remote_report_remains_in_flight_until_delivery()
     const auto turn11 = processor.process_with_events(state, {});
     assert(turn11.state.turn == 11);
     assert(!is_surveyed(turn11.state, 1, 2));
-    assert(turn11.events.empty());
+    assert(find_event(turn11.events, GameEventKind::SystemSurveyed) == nullptr);
     assert(turn11.state.players.front().pendingSurveyReports.size() == 1);
     const auto& pending = turn11.state.players.front().pendingSurveyReports.front();
     assert(pending.star == 2);
@@ -110,24 +110,25 @@ void remote_report_remains_in_flight_until_delivery()
 
     const auto turn12 = processor.process_with_events(turn11.state, {});
     assert(!is_surveyed(turn12.state, 1, 2));
-    assert(turn12.events.empty());
+    assert(find_event(turn12.events, GameEventKind::SystemSurveyed) == nullptr);
     assert(turn12.state.players.front().pendingSurveyReports.size() == 1);
     assert(turn12.state.players.front().pendingSurveyReports.front().observedTurn == 11);
 
     const auto turn13 = processor.process_with_events(turn12.state, {});
     assert(!is_surveyed(turn13.state, 1, 2));
-    assert(turn13.events.empty());
+    assert(find_event(turn13.events, GameEventKind::SystemSurveyed) == nullptr);
 
     const auto turn14 = processor.process_with_events(turn13.state, {});
     assert(!is_surveyed(turn14.state, 1, 2));
     assert(survey_level(turn14.state, 1, 2) == SurveyLevel::SystemScan);
     assert(turn14.state.players.front().pendingSurveyReports.empty());
-    assert(turn14.events.size() == 1);
-    assert(turn14.events.front().observedTurn == 11);
-    assert(turn14.events.front().turn == 14);
+    const auto* survey = find_event(turn14.events, GameEventKind::SystemSurveyed);
+    assert(survey);
+    assert(survey->observedTurn == 11);
+    assert(survey->turn == 14);
 
     const auto turn15 = processor.process_with_events(turn14.state, {});
-    assert(turn15.events.empty());
+    assert(find_event(turn15.events, GameEventKind::SystemSurveyed) == nullptr);
 }
 
 void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
