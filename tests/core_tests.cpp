@@ -128,6 +128,7 @@ void verify_travel_and_sensor_math()
     assert(suns::travel_turns({0.0, 0.0}, {3.0, 4.0}, 2.0) == 3);
     assert(std::abs(suns::fleet_speed(state, scout) - suns::kScoutTravelSpeed) < 0.000001);
     assert(std::abs(suns::fleet_sensor_range(state, scout) - suns::kScoutSensorRange) < 0.000001);
+    assert(suns::kColonySensorRange > suns::kScoutSensorRange);
     assert(suns::within_range({0.0, 0.0}, {3.0, 4.0}, 5.0));
     assert(!suns::within_range({0.0, 0.0}, {3.0, 4.0}, 4.9));
 }
@@ -188,9 +189,9 @@ int main()
     assert(approachingScout->destination.has_value());
     assert(suns::fleet_eta(scoutTravel2, *approachingScout) == 1);
     assert(!suns::is_surveyed(scoutTravel2, 1, 4));
-    const auto scoutReportArrived = processor.process(scoutTravel2, {});
-    assert(suns::survey_level(scoutReportArrived, 1, 4) == suns::SurveyLevel::SystemScan);
-    assert(!suns::is_surveyed(scoutReportArrived, 1, 4));
+    const auto scoutArrived = processor.process(scoutTravel2, {});
+    assert(suns::survey_level(scoutArrived, 1, 4) == suns::SurveyLevel::OrbitalSurvey);
+    assert(suns::is_surveyed(scoutArrived, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kColonyShipDesignId});

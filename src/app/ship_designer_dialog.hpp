@@ -39,6 +39,7 @@ private:
     QComboBox* engineCombo_{};
     QSpinBox* scannerCount_{};
     QSpinBox* compactScannerCount_{};
+    QSpinBox* extendedScannerCount_{};
     QSpinBox* penetratingScannerCount_{};
     QSpinBox* remoteMiningModuleCount_{};
     QSpinBox* colonyModuleCount_{};

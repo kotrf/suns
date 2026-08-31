@@ -43,32 +43,32 @@ void homeworld_scanner_defines_the_initial_network_field()
 
     assert(communication_delay_turns(state, 1, home.position) == 0);
     assert(communication_delay_turns(state, 1, {home.position.x + kColonySensorRange, home.position.y}) == 0);
-    assert(communication_delay_turns(state, 1, {home.position.x + kColonySensorRange + 0.001, home.position.y}) == 1);
+    assert(communication_delay_turns(state, 1, {home.position.x + kColonySensorRange + 0.001, home.position.y}) == 2);
     assert(communication_delay_turns(
-        state, 1, {home.position.x + kCommunicationSignalSpeed, home.position.y}) == 1);
+        state, 1, {home.position.x + 2.0 * kCommunicationSignalSpeed, home.position.y}) == 2);
     assert(communication_delay_turns(
-        state, 1, {home.position.x + kCommunicationSignalSpeed + 0.001, home.position.y}) == 2);
+        state, 1, {home.position.x + 2.0 * kCommunicationSignalSpeed + 0.001, home.position.y}) == 3);
 }
 
 void ordinary_scanners_automatically_form_a_relay_chain()
 {
     auto state = generate_game(GalaxyConfig{});
     auto& firstRelay = state.fleets.front();
-    firstRelay.position = {140.0, 0.0};
+    firstRelay.position = {200.0, 0.0};
 
     auto secondRelay = firstRelay;
     secondRelay.id = 99;
-    secondRelay.position = {300.0, 0.0};
+    secondRelay.position = {370.0, 0.0};
     state.fleets.push_back(secondRelay);
 
-    // Homeworld R60 overlaps Scout A R90; the two scout fields then overlap.
-    assert(communication_delay_turns(state, 1, {380.0, 0.0}) == 0);
+    // Homeworld R150 overlaps Scout A R90; the two scout fields then overlap.
+    assert(communication_delay_turns(state, 1, {450.0, 0.0}) == 0);
 
     // Breaking the first overlap detaches the entire mobile branch. Its local
     // scanner island forwards instantly to Scout A, then the slow signal must
-    // cover the physical 151 ly from Scout A to Homeworld (two turns).
-    state.fleets.front().position = {151.0, 0.0};
-    assert(communication_delay_turns(state, 1, {380.0, 0.0}) == 2);
+    // cover the physical 241 ly from Scout A to Homeworld (two turns).
+    state.fleets.front().position = {241.0, 0.0};
+    assert(communication_delay_turns(state, 1, {450.0, 0.0}) == 2);
 }
 
 void penetrating_only_scanner_does_not_extend_the_network()
@@ -85,7 +85,10 @@ void penetrating_only_scanner_does_not_extend_the_network()
     state.fleets.front().ships = {{99, 1}};
     state.fleets.front().position = {120.0, 0.0};
 
-    assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 2);
+    // The ship itself is a physical receiver inside colony coverage, so the
+    // remote point can reach it in one turn. Its penetrating field still does
+    // not turn that point into part of the instantaneous mesh.
+    assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 1);
 }
 
 void slow_signal_reaches_a_physical_receiver_not_a_field_boundary()
@@ -93,7 +96,7 @@ void slow_signal_reaches_a_physical_receiver_not_a_field_boundary()
     auto state = generate_game(GalaxyConfig{});
     state.fleets.clear();
 
-    // The Homeworld scanner reaches 60 ly, but there is no receiver at x=60.
+    // The Homeworld scanner reaches 150 ly, but there is no receiver at x=150.
     // From x=200 the real radio path to Homeworld is 200 ly: two turns, not one.
     assert(communication_delay_turns(state, 1, {200.0, 0.0}) == 2);
 }

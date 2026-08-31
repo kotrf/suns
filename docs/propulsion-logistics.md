@@ -24,9 +24,10 @@ Each engine component provides:
 
 Positive fuel rate consumes fuel. Negative fuel rate means the drive collects more fuel from interstellar space than it spends, so the tank fills while travelling. This is how ram-scoop drives can have effectively fuel-free or fuel-positive low-Warp regimes.
 
-The first catalog contains three drives:
+The current catalog contains four drives:
 
 - **Fusion Drive** — straightforward starter engine, available through Warp 8 with steep fuel burn at its top speed;
+- **Advanced Fusion Drive** — Propulsion 1, light and radiation-safe through Warp 9, but expensive and always consumes fuel;
 - **Ram Scoop Drive** — fuel-positive at low Warp, economical at moderate Warp, maximum Warp 9;
 - **Radiating Ram Scoop** — stronger scoop behaviour and Warp 9 capability, but carries a radiation hazard for transported colonists.
 
@@ -41,7 +42,7 @@ A ship design has built-in hull fuel capacity. Components can add more capacity.
 Current logistics components include:
 
 - **Fuel Tank** — +300 fuel capacity;
-- **Antimatter Generator** — +200 fuel capacity and +50 fuel per turn.
+- **Antimatter Generator** — Energy 1; +200 fuel capacity and +50 fuel per turn.
 
 Fleets at a friendly colony are automatically refuelled at the start of turn for now. This stands in for explicit planetary fuel transfer until colony logistics are modelled in more detail.
 

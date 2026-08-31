@@ -97,7 +97,7 @@ public:
     // Player briefing backed by typed, fog-of-war-safe core events.
     void installTurnMessages();
 
-    // Empire research allocation and colony research production.
+    // Empire research allocation and ordered technology plan.
     void installResearch();
 
     // Ordered colony build list with completion forecasts and move controls.
@@ -136,10 +136,10 @@ private:
     void resetTurnMessages();
     void refreshResearchPanel();
     void queueResearchPlan();
+    void queueResearchAllocation(int percent);
     void addResearchPlanItem();
     void moveSelectedResearchPlanItem(int direction);
     void removeSelectedResearchPlanItem();
-    void toggleSelectedColonyResearch();
     void refreshProductionQueue();
     void moveSelectedProductionItem(int direction);
     [[nodiscard]] bool confirmFleetColonization(
@@ -222,7 +222,7 @@ private:
     QPushButton* researchMoveUpButton_{};
     QPushButton* researchMoveDownButton_{};
     QPushButton* researchRemoveButton_{};
-    QPushButton* colonyResearchButton_{};
+    QSpinBox* researchAllocationSpin_{};
     QTreeWidget* productionQueueTree_{};
     QLabel* productionQueueSummary_{};
     QPushButton* productionMoveUpButton_{};

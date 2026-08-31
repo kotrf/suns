@@ -28,20 +28,25 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
 
     Planet simulated = planet;
     simulated.productionQueue.clear();
+    const auto* player = find_player(state, planet.owner);
+    const auto allocationPercent = player && player->technology.researchActive
+        ? player->technology.researchAllocationPercent
+        : 0;
     for (std::uint32_t offset = 1; offset <= maximumTurns && !remaining.empty(); ++offset) {
         const auto mined = projected_mineral_mining(state, simulated);
         simulated.minerals.ironium += mined.ironium;
         simulated.minerals.boranium += mined.boranium;
         simulated.minerals.germanium += mined.germanium;
 
-        std::uint32_t available = simulated.stockpile + colony_output(simulated);
+        const auto output = colony_output(simulated);
+        const auto research = static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(output) * allocationPercent / 100U);
+        std::uint32_t available = output - research;
         while (!remaining.empty()) {
             auto& front = remaining.front();
             if (front.item.kind == ProductionKind::Research) {
-                for (std::size_t index = 1; index < remaining.size(); ++index) {
-                    result[remaining[index].originalIndex].blockedByResearch = true;
-                }
-                return result;
+                remaining.erase(remaining.begin());
+                continue;
             }
 
             const auto spent = std::min(available, front.item.remainingCost);
@@ -58,7 +63,6 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             else if (front.item.kind == ProductionKind::Mine) ++simulated.mines;
             remaining.erase(remaining.begin());
         }
-        simulated.stockpile = available;
         simulated.population += projected_population_growth(simulated);
     }
 

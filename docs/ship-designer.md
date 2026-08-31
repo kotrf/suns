@@ -20,16 +20,18 @@ The numbers are tuning placeholders. The structural rule is more important: a de
 The first designer exposes these components:
 
 - Fusion Drive
+- Advanced Fusion Drive (Propulsion 1; light, safe Warp 9, but no fuel scooping)
 - Ram Scoop Drive
 - Radiating Ram Scoop
 - Long Range Scanner
 - Compact Long Range Scanner (Electronics 1)
+- Extended Range Scanner (Electronics 2; 160 ly ordinary field, heavy and expensive)
 - Penetrating Scanner (Electronics 3)
 - Remote Mining Module (Construction 1, 80 kt; Remote Miner `Mining` slots only)
 - Colony Module
 - Fuel Tank
 - Cargo Pod
-- Antimatter Generator
+- Antimatter Generator (Energy 1; +200 fuel capacity and +50 fuel/turn)
 
 The engine occupies the dedicated engine slot. Remote Mining Modules occupy dedicated `Mining` slots. Every other installed component consumes one general slot. Fuel tanks, cargo pods and generators may be fitted more than once when the hull has room.
 
@@ -51,7 +53,9 @@ The design therefore becomes available for production after `End Turn`, using th
 A design is not expected to maximize every stat. Examples of useful tensions already supported by the model:
 
 - a Scout Hull can fit a scanner plus either extra fuel, cargo or an antimatter generator, but not all three;
+- an Advanced Fusion Drive makes a light, safe Warp-9 courier after Propulsion 1, but cannot collect fuel like either ram scoop;
 - a Ram Scoop can make low-Warp exploration fuel-positive and reach Warp 9, but costs more mass and build resources than the starter Warp-8 Fusion Drive;
+- an Extended Range Scanner more than doubles the compact scanner's field, but its 24 kt mass makes it expensive to accelerate and leaves no planetary penetration;
 - a Light Transport can combine a Colony Module with limited extra logistics equipment;
 - a Medium Transport has more slots and built-in cargo, but starts heavier and more expensive, increasing fuel demand.
 - a Remote Miner can carry one or two mining modules and at most one general module; its 120 kt hull plus 80 kt apparatus makes relocation a deliberate fuel-logistics decision.

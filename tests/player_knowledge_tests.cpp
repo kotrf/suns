@@ -21,9 +21,12 @@ GameState survey_fixture(Position scoutPosition, Position targetPosition, std::u
 
     state.stars[0] = {1, "Home", {0.0, 0.0}, StarClass::Yellow};
     state.stars[1] = {2, "Target", targetPosition, StarClass::Orange};
-    state.planets[0] = {1, 1, "Home I", 100, 1, 1000, 4, 0, {}};
-    state.planets[1] = {2, 2, "Target II", 82, 0, 0, 1, 0, {}};
+    state.planets[0] = {1, 1, "Home I", 100, 1, 1000, 4, {}};
+    state.planets[1] = {2, 2, "Target II", 82, 0, 0, 1, {}};
     state.players.front().surveyedStars = {1};
+    state.players.front().surveyKnowledge = {
+        {1, SurveyLevel::GeologicalSurvey, turn},
+    };
     state.players.front().pendingSurveyReports.clear();
 
     auto& scout = state.fleets.front();
@@ -36,7 +39,7 @@ GameState survey_fixture(Position scoutPosition, Position targetPosition, std::u
 
 void ordinary_scanner_reports_system_contact_without_planet_data()
 {
-    const auto initial = survey_fixture({100.0, 0.0}, {150.0, 0.0});
+    const auto initial = survey_fixture({200.0, 0.0}, {250.0, 0.0});
     const TurnProcessor processor;
 
     const auto first = processor.process_with_events(initial, {});
@@ -61,7 +64,7 @@ void ordinary_scanner_reports_system_contact_without_planet_data()
     assert(first.events.front().id == replay.events.front().id);
 }
 
-void penetrating_scanner_estimates_planet_during_a_flyby()
+void penetrating_scanner_estimates_planet_during_a_connected_flyby()
 {
     auto state = survey_fixture({0.0, 0.0}, {50.0, 65.0});
     state.shipDesigns.push_back({
@@ -77,15 +80,12 @@ void penetrating_scanner_estimates_planet_during_a_flyby()
     state.fleets.front().fuel = 300.0;
     const TurnProcessor processor;
 
-    const auto observed = processor.process_with_events(state, {});
-    assert(survey_level(observed.state, 1, 2) < SurveyLevel::BasicScan);
-    assert(!observed.state.players.front().pendingSurveyReports.empty());
-
-    const auto result = processor.process_with_events(observed.state, {});
+    const auto result = processor.process_with_events(state, {});
     assert(survey_level(result.state, 1, 2) == SurveyLevel::BasicScan);
     assert(is_surveyed(result.state, 1, 2));
     assert(known_planet_habitability(result.state, 1, 2).has_value());
     assert(!planet_geology_known(result.state, 1, 2));
+    assert(result.state.players.front().pendingSurveyReports.empty());
     assert(result.events.size() == 1);
     assert(result.events.front().surveyLevel == SurveyLevel::BasicScan);
     assert(result.events.front().quantity == *known_planet_habitability(result.state, 1, 2));
@@ -99,7 +99,7 @@ void remote_report_remains_in_flight_until_delivery()
     const auto turn11 = processor.process_with_events(state, {});
     assert(turn11.state.turn == 11);
     assert(!is_surveyed(turn11.state, 1, 2));
-    assert(turn11.events.empty());
+    assert(find_event(turn11.events, GameEventKind::SystemSurveyed) == nullptr);
     assert(turn11.state.players.front().pendingSurveyReports.size() == 1);
     const auto& pending = turn11.state.players.front().pendingSurveyReports.front();
     assert(pending.star == 2);
@@ -110,24 +110,25 @@ void remote_report_remains_in_flight_until_delivery()
 
     const auto turn12 = processor.process_with_events(turn11.state, {});
     assert(!is_surveyed(turn12.state, 1, 2));
-    assert(turn12.events.empty());
+    assert(find_event(turn12.events, GameEventKind::SystemSurveyed) == nullptr);
     assert(turn12.state.players.front().pendingSurveyReports.size() == 1);
     assert(turn12.state.players.front().pendingSurveyReports.front().observedTurn == 11);
 
     const auto turn13 = processor.process_with_events(turn12.state, {});
     assert(!is_surveyed(turn13.state, 1, 2));
-    assert(turn13.events.empty());
+    assert(find_event(turn13.events, GameEventKind::SystemSurveyed) == nullptr);
 
     const auto turn14 = processor.process_with_events(turn13.state, {});
     assert(!is_surveyed(turn14.state, 1, 2));
     assert(survey_level(turn14.state, 1, 2) == SurveyLevel::SystemScan);
     assert(turn14.state.players.front().pendingSurveyReports.empty());
-    assert(turn14.events.size() == 1);
-    assert(turn14.events.front().observedTurn == 11);
-    assert(turn14.events.front().turn == 14);
+    const auto* survey = find_event(turn14.events, GameEventKind::SystemSurveyed);
+    assert(survey);
+    assert(survey->observedTurn == 11);
+    assert(survey->turn == 14);
 
     const auto turn15 = processor.process_with_events(turn14.state, {});
-    assert(turn15.events.empty());
+    assert(find_event(turn15.events, GameEventKind::SystemSurveyed) == nullptr);
 }
 
 void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
@@ -279,7 +280,7 @@ void local_production_completion_is_immediate_and_deterministic()
 void colony_founding_emits_a_player_event()
 {
     auto state = make_demo_game();
-    state.players.front().surveyedStars.push_back(2);
+    set_survey_level(state, 1, 2, SurveyLevel::OrbitalSurvey, state.turn);
     const auto* target = find_star(state, 2);
     assert(target);
     auto& colonyShip = state.fleets.front();
@@ -339,7 +340,7 @@ void mineral_shortage_warns_once_per_blocked_transition()
 int main()
 {
     ordinary_scanner_reports_system_contact_without_planet_data();
-    penetrating_scanner_estimates_planet_during_a_flyby();
+    penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_orbital_and_geological_surveys();
     remote_route_completion_obeys_communications_delay();

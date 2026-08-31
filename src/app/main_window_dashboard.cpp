@@ -163,11 +163,10 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(static_cast<qulonglong>(planet->population))
                      .arg(static_cast<qulonglong>(population_capacity(*planet)))
                      .arg(static_cast<qulonglong>(projected_population_growth(*planet)));
-        lines << QString("Factories %1 • Mines %2 • Output %3 / turn • Stored %4")
+        lines << QString("Factories %1 • Mines %2 • Output %3 / turn")
                      .arg(planet->industry)
                      .arg(planet->mines)
-                     .arg(colony_output(*planet))
-                     .arg(planet->stockpile);
+                     .arg(colony_output(*planet));
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
         lines << QString("Mineral stocks — I %1 • B %2 • G %3")
                      .arg(planet->minerals.ironium, 0, 'f', 1)

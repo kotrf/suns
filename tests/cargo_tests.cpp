@@ -244,7 +244,8 @@ int main()
         suns::ShipHullType::MediumTransport,
         {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::ColonyModule},
     });
-    colonization.players.front().surveyedStars.push_back(2);
+    suns::set_survey_level(
+        colonization, 1, 2, suns::SurveyLevel::OrbitalSurvey, colonization.turn);
     const auto* alpha = suns::find_star(colonization, 2);
     assert(alpha != nullptr);
 

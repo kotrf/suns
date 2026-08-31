@@ -60,7 +60,7 @@ Route programs can target another friendly FleetId. Pursuers resolve the target'
 
 The galaxy map is the permanent workspace while Overview, Fleet, Fleet Route Program, Production, Research and Turn Messages are dockable panels. They may be tabbed, resized or detached into operating-system windows, and the chosen layout is restored on the next launch. Fleet logistics, organization, colonization and ship design live together in the Fleet area.
 
-Colony production is shown as an ordered list with per-item remaining work and a forecast completion turn. Items can be moved earlier or later before End Turn; ongoing Research visibly blocks anything behind it.
+Colony production is shown as an ordered list with per-item remaining work and a forecast completion turn. Items can be moved earlier or later before End Turn. An empire-wide percentage funds global research before local production, and unused output after each colony's queue also becomes RP. Energy 1 unlocks onboard fuel generation, Propulsion 1 a light safe Warp-9 drive, and Electronics 2 a heavy 160 ly sensor.
 
 A colony ship may enter an unknown or basically scanned system, but colonization requires a confirmed orbital survey. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
 Successful colonization dismantles the entire fleet, deposits all carried minerals, and recovers 33% of every ship design's Ironium, Boranium and Germanium construction cost, rounded down per mineral. Split escorts or valuable ships away before founding the colony.

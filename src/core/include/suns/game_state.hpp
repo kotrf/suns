@@ -21,7 +21,7 @@ inline constexpr std::uint32_t kMineCost = 5;
 inline constexpr double kScoutTravelSpeed = 100.0;       // Legacy UI compatibility.
 inline constexpr double kColonyShipTravelSpeed = 70.0;  // Legacy UI compatibility.
 inline constexpr double kScoutSensorRange = 90.0;
-inline constexpr double kColonySensorRange = 60.0;
+inline constexpr double kColonySensorRange = 150.0;
 inline constexpr ShipDesignId kScoutDesignId = 1;
 inline constexpr ShipDesignId kColonyShipDesignId = 2;
 inline constexpr ShipDesignId kFirstCustomShipDesignId = 3;
@@ -109,6 +109,8 @@ enum class ShipComponentType {
     PenetratingScanner,
     CompactLongRangeScanner,
     RemoteMiningModule,
+    AdvancedFusionDrive,
+    ExtendedRangeScanner,
 };
 
 enum class ShipComponentKind {
@@ -164,7 +166,6 @@ struct ProductionItem {
 
 struct ProductionCompletionEstimate {
     std::optional<std::uint64_t> completionTurn;
-    bool blockedByResearch{};
     bool beyondForecastHorizon{};
 };
 
@@ -176,7 +177,6 @@ struct Planet {
     PlayerId owner{};
     std::uint64_t population{};
     std::uint32_t industry{1};
-    std::uint32_t stockpile{};
     std::vector<ProductionItem> productionQueue;
     MineralCargo minerals;
     std::uint32_t mines{};
@@ -249,6 +249,7 @@ struct TechnologyState {
     ResearchField focus{ResearchField::Electronics};
     std::vector<ResearchField> queuedFocuses;
     bool researchActive{true};
+    std::uint8_t researchAllocationPercent{};
 };
 
 struct Player {
