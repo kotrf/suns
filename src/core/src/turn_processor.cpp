@@ -63,7 +63,7 @@ void apply_research_points(
     std::vector<GameEvent>& events)
 {
     auto* player = mutable_player(state, playerId);
-    if (!player) return;
+    if (!player || !player->technology.researchActive) return;
 
     while (points > 0) {
         const auto field = player->technology.focus;
@@ -214,6 +214,8 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
         auto& item = planet.productionQueue.front();
         if (item.kind == ProductionKind::Research) {
             planet.productionWaitingForMinerals = false;
+            const auto* player = find_player(state, planet.owner);
+            if (!player || !player->technology.researchActive) break;
             researchProduced += available;
             available = 0;
             break;
@@ -1310,14 +1312,17 @@ TurnResult TurnProcessor::process_with_events(
                         }
                     } else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) {
                         auto* player = mutable_player(next, submission.player);
-                        if (!player || concreteOrder.focus != player->technology.focus
-                            || !valid_research_field(concreteOrder.focus)
+                        if (!player
+                            || (concreteOrder.active && !valid_research_field(concreteOrder.focus))
+                            || (!concreteOrder.active && !concreteOrder.queuedFocuses.empty())
                             || !std::all_of(
                                 concreteOrder.queuedFocuses.begin(),
                                 concreteOrder.queuedFocuses.end(),
                                 valid_research_field)) {
                             return;
                         }
+                        player->technology.researchActive = concreteOrder.active;
+                        if (concreteOrder.active) player->technology.focus = concreteOrder.focus;
                         player->technology.queuedFocuses = concreteOrder.queuedFocuses;
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
                         ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,

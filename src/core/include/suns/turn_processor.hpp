@@ -33,6 +33,7 @@ struct SetColonyResearchOrder {
 struct SetResearchPlanOrder {
     ResearchField focus{ResearchField::Electronics};
     std::vector<ResearchField> queuedFocuses;
+    bool active{true};
 };
 
 struct CreateShipDesignOrder {

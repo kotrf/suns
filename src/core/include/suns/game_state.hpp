@@ -248,6 +248,7 @@ struct TechnologyState {
     std::array<std::uint32_t, kResearchFieldCount> progress{};
     ResearchField focus{ResearchField::Electronics};
     std::vector<ResearchField> queuedFocuses;
+    bool researchActive{true};
 };
 
 struct Player {

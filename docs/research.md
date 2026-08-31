@@ -13,12 +13,15 @@ The first model uses six broad fields:
 - Biology
 - Weapons
 
-The current focus is the locked first row of an ordered research plan because RP
-has already been committed to that level. Any number of future fields may be
-queued, reordered or removed before End Turn. When the current field gains a
-level, the first queued field becomes active and is removed from the queue.
-Excess RP from the completing turn immediately enters the new field; no research
-is lost. If the future queue is empty, research continues in the current field.
+The current focus is the first row of an ordered research plan. Every row,
+including the active one, may be reordered or removed before End Turn. RP already
+invested in a field remains attached to that field and is available when the
+field returns to the plan. An empty plan pauses empire research; colonies blocked
+on ongoing Research preserve their output in their stockpiles until a target is
+selected again. When the current field gains a level, the first queued field
+becomes active and is removed from the queue. Excess RP from the completing turn
+immediately enters the new field; no research is lost. If the future queue is
+empty, research continues in the current field.
 
 Level costs currently double from an 18 RP base: 18 RP for level 1, 36 RP for level 2 and 72 RP for level 3. These values are early balance parameters rather than permanent rules.
 
@@ -41,12 +44,12 @@ The compact scanner is not a universal upgrade: it halves scanner mass and lower
 ## Events and UI
 
 The Research dock shows all field levels, current RP progress, the next concrete
-unlock and an ordered plan with per-level target and RP work. The active first
-row is visibly locked; future rows have Add, Move Up, Move Down and Remove
-controls. Returning the displayed future rows to the committed plan removes the
-pending research-plan order instead of leaving an accidental Apply action in the
-turn order list. The dock also starts or stops ongoing research at the selected
-friendly colony.
+unlock and an ordered plan with per-level target and RP work. Every row has Move
+Up, Move Down and Remove controls, including the active first row. Removing or
+moving it preserves its accumulated RP. Returning the displayed rows to the
+committed plan removes the pending research-plan order instead of leaving an
+accidental action in the turn order list. The dock also starts or stops ongoing
+research at the selected friendly colony.
 
 Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Compact Long Range Scanner.
 

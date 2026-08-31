@@ -98,14 +98,6 @@ void verify_overflow_follows_preselected_field()
     assert(completed.queuedFocuses.size() == 1);
     assert(completed.queuedFocuses.front() == suns::ResearchField::Construction);
 
-    suns::PlayerOrders invalid{1, {}};
-    invalid.orders.emplace_back(suns::SetResearchPlanOrder{
-        suns::ResearchField::Weapons,
-        {suns::ResearchField::Biology},
-    });
-    const auto unchanged = processor.process(state, {invalid});
-    assert(unchanged.players.front().technology.focus == suns::ResearchField::Electronics);
-    assert(unchanged.players.front().technology.queuedFocuses.size() == 2);
 }
 
 void verify_future_plan_can_be_reordered_and_cleared()
@@ -136,6 +128,57 @@ void verify_future_plan_can_be_reordered_and_cleared()
     const auto cleared = processor.process(reordered, {clear});
     assert(cleared.players.front().technology.focus == suns::ResearchField::Electronics);
     assert(cleared.players.front().technology.queuedFocuses.empty());
+}
+
+void verify_active_research_can_be_moved_removed_and_resumed()
+{
+    const suns::TurnProcessor processor;
+    auto state = suns::make_demo_game();
+    auto& technology = state.players.front().technology;
+    technology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] = 7;
+    technology.queuedFocuses = {
+        suns::ResearchField::Propulsion,
+        suns::ResearchField::Construction,
+    };
+
+    suns::PlayerOrders moveCurrent{1, {}};
+    moveCurrent.orders.emplace_back(suns::SetResearchPlanOrder{
+        suns::ResearchField::Propulsion,
+        {suns::ResearchField::Construction, suns::ResearchField::Electronics},
+    });
+    auto moved = processor.process(state, {moveCurrent});
+    const auto& movedTechnology = moved.players.front().technology;
+    assert(movedTechnology.researchActive);
+    assert(movedTechnology.focus == suns::ResearchField::Propulsion);
+    assert(movedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 7);
+    assert(movedTechnology.queuedFocuses.back() == suns::ResearchField::Electronics);
+    moved.planets.front().productionQueue.push_back({suns::ProductionKind::Research, 0, 0});
+
+    suns::PlayerOrders pause{1, {}};
+    pause.orders.emplace_back(suns::SetResearchPlanOrder{
+        suns::ResearchField::Propulsion,
+        {},
+        false,
+    });
+    const auto paused = processor.process(moved, {pause});
+    const auto& pausedTechnology = paused.players.front().technology;
+    assert(!pausedTechnology.researchActive);
+    assert(pausedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 7);
+    assert(pausedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Propulsion)] == 0);
+    assert(paused.planets.front().stockpile == 12);
+
+    suns::PlayerOrders resume{1, {}};
+    resume.orders.emplace_back(suns::SetResearchPlanOrder{
+        suns::ResearchField::Electronics,
+        {},
+        true,
+    });
+    const auto resumed = processor.process(paused, {resume});
+    const auto& resumedTechnology = resumed.players.front().technology;
+    assert(resumedTechnology.researchActive);
+    assert(resumedTechnology.focus == suns::ResearchField::Electronics);
+    assert(resumedTechnology.levels[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 1);
+    assert(resumedTechnology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] == 7);
 }
 
 void verify_component_unlock_is_enforced_for_new_designs()
@@ -196,6 +239,7 @@ int main()
     verify_repeating_colony_research_and_focus_queue();
     verify_overflow_follows_preselected_field();
     verify_future_plan_can_be_reordered_and_cleared();
+    verify_active_research_can_be_moved_removed_and_resumed();
     verify_component_unlock_is_enforced_for_new_designs();
     verify_research_can_be_stopped();
     return 0;
