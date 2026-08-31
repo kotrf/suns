@@ -75,7 +75,7 @@ void MainWindow::installResearch()
     layout->addWidget(researchUnlock_);
 
     auto* planLabel = new QLabel(
-        "Research plan — the active first row is locked; queued rows may be reordered or removed.",
+        "Research plan — every row may be reordered or removed; invested RP remains in its field.",
         content);
     planLabel->setWordWrap(true);
     layout->addWidget(planLabel);
@@ -142,9 +142,9 @@ void MainWindow::installResearch()
     connect(researchPlanTree_, &QTreeWidget::itemSelectionChanged, this, [this] {
         const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
         const auto count = researchPlanTree_->topLevelItemCount();
-        researchMoveUpButton_->setEnabled(row > 1);
-        researchMoveDownButton_->setEnabled(row >= 1 && row + 1 < count);
-        researchRemoveButton_->setEnabled(row >= 1);
+        researchMoveUpButton_->setEnabled(row > 0);
+        researchMoveDownButton_->setEnabled(row >= 0 && row + 1 < count);
+        researchRemoveButton_->setEnabled(row >= 0);
     });
     connect(colonyResearchButton_, &QPushButton::clicked, this, [this] { toggleSelectedColonyResearch(); });
     refreshResearchPanel();
@@ -156,11 +156,14 @@ void MainWindow::refreshResearchPanel()
     const auto* player = find_player(state_, 1);
     if (!player) return;
 
-    const auto focus = player->technology.focus;
+    auto planActive = player->technology.researchActive;
+    auto focus = player->technology.focus;
     auto queuedFocuses = player->technology.queuedFocuses;
     for (const auto& order : pendingOrders_.orders) {
         if (const auto* plan = std::get_if<SetResearchPlanOrder>(&order)) {
-            if (plan->focus == focus) queuedFocuses = plan->queuedFocuses;
+            planActive = plan->active;
+            focus = plan->focus;
+            queuedFocuses = plan->queuedFocuses;
         }
     }
 
@@ -173,15 +176,23 @@ void MainWindow::refreshResearchPanel()
 
     const auto index = static_cast<std::size_t>(focus);
     const auto level = player->technology.levels[index];
-    const auto progress = player->technology.progress[index];
-    const auto cost = research_level_cost(focus, static_cast<std::uint8_t>(level + 1));
-    researchProgress_->setRange(0, static_cast<int>(cost));
-    researchProgress_->setValue(static_cast<int>(std::min(progress, cost)));
-    researchProgress_->setFormat(QString("%1 %2 → %3: %4 / %5 RP")
-        .arg(fieldName(focus)).arg(level).arg(level + 1).arg(progress).arg(cost));
+    if (planActive) {
+        const auto progress = player->technology.progress[index];
+        const auto cost = research_level_cost(focus, static_cast<std::uint8_t>(level + 1));
+        researchProgress_->setRange(0, static_cast<int>(cost));
+        researchProgress_->setValue(static_cast<int>(std::min(progress, cost)));
+        researchProgress_->setFormat(QString("%1 %2 → %3: %4 / %5 RP")
+            .arg(fieldName(focus)).arg(level).arg(level + 1).arg(progress).arg(cost));
+    } else {
+        researchProgress_->setRange(0, 1);
+        researchProgress_->setValue(0);
+        researchProgress_->setFormat("Research paused — add a field to the plan");
+    }
 
     QString unlock = "No concrete unlock is assigned to the next level in this first slice.";
-    if (focus == ResearchField::Electronics) {
+    if (!planActive) {
+        unlock = "No research target is selected. Accumulated RP is preserved in each field.";
+    } else if (focus == ResearchField::Electronics) {
         if (level == 0) unlock = "Next unlock: Compact Long Range Scanner — lighter and cheaper, with a 55 ly field.";
         else if (level == 1) unlock = "Electronics 2: extended sensor array is planned as a heavy, long-range alternative.";
         else if (level == 2) unlock = "Next unlock: Penetrating Scanner — approximate planetary data without entering orbit.";
@@ -195,7 +206,8 @@ void MainWindow::refreshResearchPanel()
     researchPlanTree_->clear();
     auto projectedLevels = player->technology.levels;
     auto projectedProgress = player->technology.progress;
-    std::vector<ResearchField> planFields{focus};
+    std::vector<ResearchField> planFields;
+    if (planActive) planFields.push_back(focus);
     planFields.insert(planFields.end(), queuedFocuses.begin(), queuedFocuses.end());
     for (std::size_t planIndex = 0; planIndex < planFields.size(); ++planIndex) {
         const auto field = planFields[planIndex];
@@ -210,22 +222,26 @@ void MainWindow::refreshResearchPanel()
         row->setText(1, fieldName(field));
         row->setText(2, QString("L%1 → L%2").arg(fromLevel).arg(toLevel));
         row->setText(3, QString("%1 / %2 RP").arg(completedRp).arg(levelCost));
-        row->setText(4, planIndex == 0 ? "In progress • locked" : "Queued");
+        const bool alreadyActive = planIndex == 0
+            && player->technology.researchActive
+            && field == player->technology.focus;
+        row->setText(4, planIndex == 0
+            ? alreadyActive ? "In progress" : "Next after End Turn"
+            : "Queued");
         row->setData(0, Qt::UserRole, static_cast<int>(field));
 
         projectedLevels[fieldIndex] = toLevel;
         projectedProgress[fieldIndex] = 0;
     }
-    const auto selectedRow = std::clamp(
-        previousRow,
-        0,
-        std::max(0, researchPlanTree_->topLevelItemCount() - 1));
-    researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
-    const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
     const auto rowCount = researchPlanTree_->topLevelItemCount();
-    researchMoveUpButton_->setEnabled(row > 1);
-    researchMoveDownButton_->setEnabled(row >= 1 && row + 1 < rowCount);
-    researchRemoveButton_->setEnabled(row >= 1);
+    if (rowCount > 0) {
+        const auto selectedRow = std::clamp(previousRow, 0, rowCount - 1);
+        researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
+    }
+    const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
+    researchMoveUpButton_->setEnabled(row > 0);
+    researchMoveDownButton_->setEnabled(row >= 0 && row + 1 < rowCount);
+    researchRemoveButton_->setEnabled(row >= 0);
 
     const auto* planet = selectedPlanet();
     const bool owned = planet && planet->owner == 1;
@@ -250,18 +266,25 @@ void MainWindow::queueResearchPlan()
 {
     const auto* player = find_player(state_, pendingOrders_.player);
     if (!player || !researchPlanTree_) return;
-    const auto focus = player->technology.focus;
-    std::vector<ResearchField> queuedFocuses;
-    for (int row = 1; row < researchPlanTree_->topLevelItemCount(); ++row) {
-        queuedFocuses.push_back(static_cast<ResearchField>(
+    std::vector<ResearchField> planFields;
+    planFields.reserve(static_cast<std::size_t>(researchPlanTree_->topLevelItemCount()));
+    for (int row = 0; row < researchPlanTree_->topLevelItemCount(); ++row) {
+        planFields.push_back(static_cast<ResearchField>(
             researchPlanTree_->topLevelItem(row)->data(0, Qt::UserRole).toInt()));
     }
+
+    const bool active = !planFields.empty();
+    const auto focus = active ? planFields.front() : player->technology.focus;
+    std::vector<ResearchField> queuedFocuses;
+    if (active) queuedFocuses.assign(planFields.begin() + 1, planFields.end());
 
     const auto pendingPlan = std::find_if(
         pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [](const Order& order) {
             return std::holds_alternative<SetResearchPlanOrder>(order);
         });
-    if (queuedFocuses == player->technology.queuedFocuses) {
+    if (active == player->technology.researchActive
+        && (!active || focus == player->technology.focus)
+        && queuedFocuses == player->technology.queuedFocuses) {
         if (pendingPlan == pendingOrders_.orders.end()) return;
         const auto index = static_cast<int>(std::distance(pendingOrders_.orders.begin(), pendingPlan));
         pendingOrders_.orders.erase(pendingPlan);
@@ -273,19 +296,21 @@ void MainWindow::queueResearchPlan()
 
     QStringList futureNames;
     for (const auto field : queuedFocuses) futureNames << fieldName(field);
-    const auto description = futureNames.empty()
-        ? QString("Research %1; continue the same field").arg(fieldName(focus))
+    const auto description = !active
+        ? QString("Pause empire research; preserve accumulated RP")
+        : futureNames.empty()
+        ? QString("Research %1").arg(fieldName(focus))
         : QString("Research %1; then %2").arg(fieldName(focus), futureNames.join(" → "));
 
     if (pendingPlan != pendingOrders_.orders.end()) {
         const auto index = static_cast<int>(std::distance(pendingOrders_.orders.begin(), pendingPlan));
-        *pendingPlan = SetResearchPlanOrder{focus, queuedFocuses};
+        *pendingPlan = SetResearchPlanOrder{focus, queuedFocuses, active};
         pendingDescriptions_[index] = description;
         rebuildScene();
         statusBar()->showMessage(description);
         return;
     }
-    appendPendingOrder(SetResearchPlanOrder{focus, queuedFocuses}, description);
+    appendPendingOrder(SetResearchPlanOrder{focus, queuedFocuses, active}, description);
 }
 
 void MainWindow::addResearchPlanItem()
@@ -305,7 +330,7 @@ void MainWindow::moveSelectedResearchPlanItem(int direction)
     if (!researchPlanTree_) return;
     const auto from = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
     const auto to = from + direction;
-    if (from < 1 || to < 1 || to >= researchPlanTree_->topLevelItemCount()) return;
+    if (from < 0 || to < 0 || to >= researchPlanTree_->topLevelItemCount()) return;
     auto* item = researchPlanTree_->takeTopLevelItem(from);
     researchPlanTree_->insertTopLevelItem(to, item);
     researchPlanTree_->setCurrentItem(item);
@@ -319,11 +344,14 @@ void MainWindow::removeSelectedResearchPlanItem()
 {
     if (!researchPlanTree_) return;
     const auto row = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
-    if (row < 1) return;
+    if (row < 0) return;
     delete researchPlanTree_->takeTopLevelItem(row);
     queueResearchPlan();
-    const auto selectedRow = std::min(row, researchPlanTree_->topLevelItemCount() - 1);
-    researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
+    const auto rowCount = researchPlanTree_->topLevelItemCount();
+    if (rowCount > 0) {
+        const auto selectedRow = std::min(row, rowCount - 1);
+        researchPlanTree_->setCurrentItem(researchPlanTree_->topLevelItem(selectedRow));
+    }
 }
 
 void MainWindow::toggleSelectedColonyResearch()

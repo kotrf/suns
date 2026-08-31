@@ -171,6 +171,7 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 7);
     assert(technology.focus == ResearchField::Electronics);
+    assert(technology.researchActive);
     assert(technology.queuedFocuses.size() == 2);
     assert(technology.queuedFocuses[0] == ResearchField::Propulsion);
     assert(technology.queuedFocuses[1] == ResearchField::Construction);
@@ -229,6 +230,7 @@ void round_trip_preserves_communications_and_planning()
     assert(mine && mine->kind == ProductionKind::Mine);
     const auto* plan = std::get_if<SetResearchPlanOrder>(&loaded.pendingOrders.orders[2]);
     assert(plan && plan->focus == ResearchField::Electronics);
+    assert(plan->active);
     assert(plan->queuedFocuses.size() == 2);
     assert(plan->queuedFocuses[0] == ResearchField::Propulsion);
     assert(plan->queuedFocuses[1] == ResearchField::Construction);
