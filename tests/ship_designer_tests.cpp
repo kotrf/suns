@@ -246,10 +246,13 @@ void verify_custom_design_can_enter_production()
 
     suns::PlayerOrders queue{1, {}};
     queue.orders.emplace_back(suns::QueueShipDesignOrder{1, designId});
-    const auto built = processor.process(state, {queue});
+    const auto queued = processor.process(state, {queue});
+    assert(queued.planets.front().productionQueue.size() == 1);
+    assert(queued.planets.front().productionQueue.front().remainingCost == 4);
+    const auto built = processor.process(queued, {});
 
-    // Earth already has enough accumulated production to complete this design
-    // during the same turn, so verify the resulting fleet rather than queue state.
+    // Production capacity is annual and no longer stockpiles between turns, so
+    // the 10-point design completes from two years of Earth output.
     const auto fleet = std::find_if(built.fleets.begin(), built.fleets.end(), [designId](const suns::Fleet& candidate) {
         return candidate.design == designId;
     });

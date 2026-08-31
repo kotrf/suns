@@ -85,7 +85,10 @@ void penetrating_only_scanner_does_not_extend_the_network()
     state.fleets.front().ships = {{99, 1}};
     state.fleets.front().position = {120.0, 0.0};
 
-    assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 2);
+    // The ship itself is a physical receiver inside colony coverage, so the
+    // remote point can reach it in one turn. Its penetrating field still does
+    // not turn that point into part of the instantaneous mesh.
+    assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 1);
 }
 
 void slow_signal_reaches_a_physical_receiver_not_a_field_boundary()

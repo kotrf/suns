@@ -24,6 +24,9 @@ GameState survey_fixture(Position scoutPosition, Position targetPosition, std::u
     state.planets[0] = {1, 1, "Home I", 100, 1, 1000, 4, {}};
     state.planets[1] = {2, 2, "Target II", 82, 0, 0, 1, {}};
     state.players.front().surveyedStars = {1};
+    state.players.front().surveyKnowledge = {
+        {1, SurveyLevel::GeologicalSurvey, turn},
+    };
     state.players.front().pendingSurveyReports.clear();
 
     auto& scout = state.fleets.front();

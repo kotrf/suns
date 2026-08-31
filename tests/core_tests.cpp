@@ -189,9 +189,9 @@ int main()
     assert(approachingScout->destination.has_value());
     assert(suns::fleet_eta(scoutTravel2, *approachingScout) == 1);
     assert(!suns::is_surveyed(scoutTravel2, 1, 4));
-    const auto scoutReportArrived = processor.process(scoutTravel2, {});
-    assert(suns::survey_level(scoutReportArrived, 1, 4) == suns::SurveyLevel::SystemScan);
-    assert(!suns::is_surveyed(scoutReportArrived, 1, 4));
+    const auto scoutArrived = processor.process(scoutTravel2, {});
+    assert(suns::survey_level(scoutArrived, 1, 4) == suns::SurveyLevel::OrbitalSurvey);
+    assert(suns::is_surveyed(scoutArrived, 1, 4));
 
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kColonyShipDesignId});
