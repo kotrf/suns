@@ -21,8 +21,8 @@ GameState survey_fixture(Position scoutPosition, Position targetPosition, std::u
 
     state.stars[0] = {1, "Home", {0.0, 0.0}, StarClass::Yellow};
     state.stars[1] = {2, "Target", targetPosition, StarClass::Orange};
-    state.planets[0] = {1, 1, "Home I", 100, 1, 1000, 4, 0, {}};
-    state.planets[1] = {2, 2, "Target II", 82, 0, 0, 1, 0, {}};
+    state.planets[0] = {1, 1, "Home I", 100, 1, 1000, 4, {}};
+    state.planets[1] = {2, 2, "Target II", 82, 0, 0, 1, {}};
     state.players.front().surveyedStars = {1};
     state.players.front().pendingSurveyReports.clear();
 
