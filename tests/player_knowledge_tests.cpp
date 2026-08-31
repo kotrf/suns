@@ -64,7 +64,7 @@ void ordinary_scanner_reports_system_contact_without_planet_data()
     assert(first.events.front().id == replay.events.front().id);
 }
 
-void penetrating_scanner_estimates_planet_during_a_flyby()
+void penetrating_scanner_estimates_planet_during_a_connected_flyby()
 {
     auto state = survey_fixture({0.0, 0.0}, {50.0, 65.0});
     state.shipDesigns.push_back({
@@ -80,15 +80,12 @@ void penetrating_scanner_estimates_planet_during_a_flyby()
     state.fleets.front().fuel = 300.0;
     const TurnProcessor processor;
 
-    const auto observed = processor.process_with_events(state, {});
-    assert(survey_level(observed.state, 1, 2) < SurveyLevel::BasicScan);
-    assert(!observed.state.players.front().pendingSurveyReports.empty());
-
-    const auto result = processor.process_with_events(observed.state, {});
+    const auto result = processor.process_with_events(state, {});
     assert(survey_level(result.state, 1, 2) == SurveyLevel::BasicScan);
     assert(is_surveyed(result.state, 1, 2));
     assert(known_planet_habitability(result.state, 1, 2).has_value());
     assert(!planet_geology_known(result.state, 1, 2));
+    assert(result.state.players.front().pendingSurveyReports.empty());
     assert(result.events.size() == 1);
     assert(result.events.front().surveyLevel == SurveyLevel::BasicScan);
     assert(result.events.front().quantity == *known_planet_habitability(result.state, 1, 2));
@@ -342,7 +339,7 @@ void mineral_shortage_warns_once_per_blocked_transition()
 int main()
 {
     ordinary_scanner_reports_system_contact_without_planet_data();
-    penetrating_scanner_estimates_planet_during_a_flyby();
+    penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_report_remains_in_flight_until_delivery();
     arrival_and_dwell_progress_through_orbital_and_geological_surveys();
     remote_route_completion_obeys_communications_delay();
