@@ -83,7 +83,7 @@ void MainWindow::resetPanelLayout()
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
     auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
-    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, researchDock_}) {
+    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
