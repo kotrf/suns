@@ -14,6 +14,7 @@
 #include <vector>
 
 class QCloseEvent;
+class QDialog;
 class QEvent;
 class QGraphicsScene;
 class QGraphicsView;
@@ -141,6 +142,7 @@ private:
     void refreshPlanetPolish();
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
+    void openResearchDialog();
     void refreshResearchPanel();
     void queueResearchPlan();
     void queueResearchAllocation(int percent);
@@ -222,7 +224,7 @@ private:
     QDockWidget* turnMessagesDock_{};
     QListWidget* turnMessagesList_{};
     QLabel* turnMessagesSummary_{};
-    QDockWidget* researchDock_{};
+    QDialog* researchDialog_{};
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};
     QProgressBar* researchProgress_{};
