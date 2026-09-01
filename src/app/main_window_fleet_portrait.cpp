@@ -29,6 +29,7 @@ QColor hullAccent(ShipHullType hull)
     case ShipHullType::LightTransport: return QColor("#79c79b");
     case ShipHullType::MediumTransport: return QColor("#d8a862");
     case ShipHullType::RemoteMiner: return QColor("#c58be2");
+    case ShipHullType::Utility: return QColor("#68c7c2");
     }
     return QColor("#9eb3c8");
 }
@@ -129,6 +130,16 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         hull.lineTo(126, 72);
         hull.closeSubpath();
         break;
+    case ShipHullType::Utility:
+        hull.moveTo(150, 52);
+        hull.lineTo(126, 31);
+        hull.lineTo(72, 30);
+        hull.lineTo(43, 43);
+        hull.lineTo(43, 61);
+        hull.lineTo(72, 74);
+        hull.lineTo(126, 73);
+        hull.closeSubpath();
+        break;
     }
 
     painter.setPen(QPen(QColor(0, 0, 0, 110), 5.0));
@@ -148,10 +159,15 @@ QPixmap renderShipPortrait(const ShipDesign& design)
     QColor engineColour("#76b8ff");
     if (hasComponent(design, ShipComponentType::RamScoopDrive)) engineColour = QColor("#65d6cf");
     if (hasComponent(design, ShipComponentType::RadiatingRamScoopDrive)) engineColour = QColor("#ff8b63");
-    drawEngineGlow(painter, 47, 52, engineColour);
-    painter.setBrush(engineColour.darker(145));
-    painter.setPen(QPen(engineColour.lighter(125), 1.0));
-    painter.drawRect(QRectF(43, 43, 10, 18));
+    const auto engineCount = hull_spec(design.hull).requiredEngines;
+    for (std::uint8_t index = 0; index < engineCount; ++index) {
+        const auto offset = (static_cast<qreal>(index) - (engineCount - 1.0) / 2.0) * 16.0;
+        const auto engineY = 52.0 + offset;
+        drawEngineGlow(painter, 47, engineY, engineColour);
+        painter.setBrush(engineColour.darker(145));
+        painter.setPen(QPen(engineColour.lighter(125), 1.0));
+        painter.drawRect(QRectF(43, engineY - 7, 10, 14));
+    }
 
     // Hull mass class gets a different silhouette even before optional modules.
     if (design.hull != ShipHullType::Scout) {
@@ -169,6 +185,14 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         painter.setPen(QPen(QColor("#d7a6ec"), 1.0));
         painter.drawRoundedRect(QRectF(76, 18, 34, 15), 3, 3);
         painter.drawRoundedRect(QRectF(76, 71, 34, 15), 3, 3);
+    }
+    if (design.hull == ShipHullType::Utility) {
+        painter.setBrush(QColor("#315f67"));
+        painter.setPen(QPen(QColor("#85ded8"), 1.0));
+        painter.drawRoundedRect(QRectF(72, 20, 25, 13), 3, 3);
+        painter.drawRoundedRect(QRectF(101, 20, 25, 13), 3, 3);
+        painter.drawRoundedRect(QRectF(72, 71, 25, 13), 3, 3);
+        painter.drawRoundedRect(QRectF(101, 71, 25, 13), 3, 3);
     }
 
     if (hasComponent(design, ShipComponentType::CargoPod)) {

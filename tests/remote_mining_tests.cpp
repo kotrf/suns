@@ -47,17 +47,18 @@ int main()
     state.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 1;
     state.shipDesigns.push_back({
         3, 1, "Remote Miner", suns::ShipHullType::RemoteMiner,
-        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::RemoteMiningModule},
     });
     state.shipDesigns.push_back({
         4, 1, "Ore Hauler", suns::ShipHullType::MediumTransport,
-        {suns::ShipComponentType::FusionDrive},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive},
     });
 
     const auto* alpha = suns::find_star(state, 2);
     assert(alpha != nullptr);
     state.fleets = {
-        {2, 1, "Miner 2", suns::FleetRole::Scout, 3, state.stars.front().position, {}, 1, 300.0, 0},
+        {2, 1, "Miner 2", suns::FleetRole::Scout, 3, state.stars.front().position, {}, 1, 500.0, 0},
         {3, 1, "Hauler 3", suns::FleetRole::Scout, 4, alpha->position, {}, 1, 300.0, 0},
     };
 

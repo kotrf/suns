@@ -89,12 +89,14 @@ Position generated_position(
 
 std::vector<ShipDesign> default_ship_designs(PlayerId owner)
 {
-    return {
+    std::vector<ShipDesign> designs{
         {kScoutDesignId, owner, "Scout", ShipHullType::Scout,
          {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner}},
         {kColonyShipDesignId, owner, "Colony Ship", ShipHullType::LightTransport,
          {ShipComponentType::FusionDrive, ShipComponentType::ColonyModule}},
     };
+    for (auto& design : designs) normalize_ship_design_placement(design);
+    return designs;
 }
 
 const ShipComponentSpec* primary_engine(const ShipDesign& design, ShipComponentSpec& storage)
@@ -187,19 +189,43 @@ void normalize_fleet_composition(Fleet& fleet)
     if (!fleet.ships.empty()) fleet.design = fleet.ships.front().design;
 }
 
+namespace {
+
+std::vector<ShipSlotSpec> make_hull_slots(
+    std::uint8_t engineSlots, std::uint8_t generalSlots, std::uint8_t miningSlots)
+{
+    std::vector<ShipSlotSpec> slots;
+    slots.reserve(static_cast<std::size_t>(engineSlots) + generalSlots + miningSlots);
+    for (std::uint8_t index = 0; index < engineSlots; ++index) {
+        slots.push_back({static_cast<ShipSlotId>(100 + index), ShipSlotCategory::Engine, index, 0});
+    }
+    for (std::uint8_t index = 0; index < generalSlots; ++index) {
+        slots.push_back({static_cast<ShipSlotId>(200 + index), ShipSlotCategory::General,
+            static_cast<std::uint8_t>(index % 3), static_cast<std::uint8_t>(1 + index / 3)});
+    }
+    for (std::uint8_t index = 0; index < miningSlots; ++index) {
+        slots.push_back({static_cast<ShipSlotId>(300 + index), ShipSlotCategory::Mining, index, 3});
+    }
+    return slots;
+}
+
+} // namespace
+
 ShipHullSpec hull_spec(ShipHullType type)
 {
     switch (type) {
     case ShipHullType::Scout:
-        return {type, "Scout Hull", 34.5, 2, 300.0, 0.0, 1, 2, 0};
+        return {type, "Scout Hull", 34.5, 2, 300.0, 0.0, 1, 2, 0, make_hull_slots(1, 2, 0)};
     case ShipHullType::LightTransport:
-        return {type, "Light Transport", 45.0, 2, 400.0, 5.0, 1, 3, 0};
+        return {type, "Light Transport", 45.0, 2, 400.0, 5.0, 1, 3, 0, make_hull_slots(1, 3, 0)};
     case ShipHullType::MediumTransport:
-        return {type, "Medium Transport", 70.0, 5, 500.0, 50.0, 1, 5, 0};
+        return {type, "Medium Transport", 70.0, 5, 500.0, 50.0, 2, 5, 0, make_hull_slots(2, 5, 0)};
     case ShipHullType::RemoteMiner:
-        return {type, "Remote Miner", 120.0, 8, 500.0, 0.0, 1, 1, 2};
+        return {type, "Remote Miner", 120.0, 8, 500.0, 0.0, 2, 1, 2, make_hull_slots(2, 1, 2)};
+    case ShipHullType::Utility:
+        return {type, "Utility Hull", 85.0, 7, 500.0, 0.0, 2, 8, 0, make_hull_slots(2, 8, 0)};
     }
-    return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0};
+    return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0, {}};
 }
 
 ShipComponentSpec component_spec(ShipComponentType type)
@@ -315,6 +341,128 @@ ShipComponentSpec component_spec(ShipComponentType type)
     return spec;
 }
 
+ShipSlotCategory ship_component_slot_category(ShipComponentType component)
+{
+    switch (component_spec(component).kind) {
+    case ShipComponentKind::Engine: return ShipSlotCategory::Engine;
+    case ShipComponentKind::Mining: return ShipSlotCategory::Mining;
+    default: return ShipSlotCategory::General;
+    }
+}
+
+std::vector<ShipComponentPlacement> autoplace_ship_components(
+    ShipHullType hullType, const std::vector<ShipComponentType>& components)
+{
+    const auto hull = hull_spec(hullType);
+    std::vector<ShipComponentPlacement> placements;
+    placements.reserve(components.size());
+    for (const auto component : components) {
+        const auto category = ship_component_slot_category(component);
+        const auto slot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& candidate) {
+            if (candidate.category != category) return false;
+            return std::none_of(placements.begin(), placements.end(), [&](const ShipComponentPlacement& placed) {
+                return placed.slot == candidate.id;
+            });
+        });
+        if (slot == hull.fittingSlots.end()) return {};
+        placements.push_back({slot->id, component});
+    }
+    return placements;
+}
+
+void normalize_ship_design_engine_bank(ShipDesign& design)
+{
+    const auto firstEngine = std::find_if(
+        design.components.begin(), design.components.end(), [](ShipComponentType component) {
+            return component_spec(component).kind == ShipComponentKind::Engine;
+        });
+    if (firstEngine != design.components.end()) {
+        const auto engine = *firstEngine;
+        std::vector<ShipComponentType> normalized;
+        normalized.reserve(design.components.size() + hull_spec(design.hull).requiredEngines);
+        bool engineBankInserted = false;
+        for (const auto component : design.components) {
+            if (component_spec(component).kind == ShipComponentKind::Engine) {
+                if (!engineBankInserted) {
+                    normalized.insert(normalized.end(), hull_spec(design.hull).requiredEngines, engine);
+                    engineBankInserted = true;
+                }
+                continue;
+            }
+            normalized.push_back(component);
+        }
+        design.components = std::move(normalized);
+    }
+    design.placements = autoplace_ship_components(design.hull, design.components);
+}
+
+void normalize_ship_design_placement(ShipDesign& design)
+{
+    if (design.placements.empty()) {
+        design.placements = autoplace_ship_components(design.hull, design.components);
+    }
+}
+
+std::string ship_design_validation_error(const ShipDesign& design)
+{
+    if (design.owner == 0) return "A ship design must have an owner.";
+    if (design.name.empty()) return "A ship design must have a name.";
+    if (design.name.size() > 48) return "A ship design name may contain at most 48 characters.";
+    const auto hull = hull_spec(design.hull);
+    if (ship_design_engine_slots_used(design) != hull.requiredEngines) {
+        return "The hull requires exactly " + std::to_string(hull.requiredEngines)
+            + (hull.requiredEngines == 1 ? " engine." : " identical engines.");
+    }
+    std::optional<ShipComponentType> engineType;
+    for (const auto component : design.components) {
+        if (component_spec(component).kind != ShipComponentKind::Engine) continue;
+        if (!engineType) {
+            engineType = component;
+        } else if (*engineType != component) {
+            return "Every engine in a hull's propulsion bank must be the same model.";
+        }
+    }
+
+    const auto resolved = design.placements.empty()
+        ? autoplace_ship_components(design.hull, design.components)
+        : design.placements;
+    if (resolved.size() != design.components.size()) {
+        return design.placements.empty()
+            ? "The hull does not have enough compatible slots for every component."
+            : "Every component must have exactly one slot placement.";
+    }
+
+    std::vector<bool> matchedComponents(design.components.size(), false);
+    std::vector<ShipSlotId> occupiedSlots;
+    occupiedSlots.reserve(resolved.size());
+    for (const auto& placement : resolved) {
+        std::size_t componentIndex = design.components.size();
+        for (std::size_t index = 0; index < design.components.size(); ++index) {
+            if (!matchedComponents[index] && design.components[index] == placement.component) {
+                componentIndex = index;
+                break;
+            }
+        }
+        if (componentIndex == design.components.size()) {
+            return "Placed components do not match the design component list.";
+        }
+        matchedComponents[componentIndex] = true;
+
+        if (std::find(occupiedSlots.begin(), occupiedSlots.end(), placement.slot) != occupiedSlots.end()) {
+            return "Only one component may occupy a hull slot.";
+        }
+        const auto slot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& candidate) {
+            return candidate.id == placement.slot;
+        });
+        if (slot == hull.fittingSlots.end()) return "A component refers to an unknown hull slot.";
+        if (slot->category != ship_component_slot_category(placement.component)) {
+            return "A component is placed in an incompatible hull slot.";
+        }
+        occupiedSlots.push_back(placement.slot);
+    }
+    return {};
+}
+
 std::size_t ship_design_engine_slots_used(const ShipDesign& design)
 {
     return static_cast<std::size_t>(std::count_if(
@@ -342,15 +490,7 @@ std::size_t ship_design_mining_slots_used(const ShipDesign& design)
 
 bool ship_design_valid(const ShipDesign& design)
 {
-    if (design.owner == 0 || design.name.empty() || design.name.size() > 48) return false;
-    const auto hull = hull_spec(design.hull);
-    const auto engines = ship_design_engine_slots_used(design);
-    const auto general = ship_design_general_slots_used(design);
-    const auto mining = ship_design_mining_slots_used(design);
-    return engines == 1
-        && engines <= hull.engineSlots
-        && general <= hull.generalSlots
-        && mining <= hull.miningSlots;
+    return ship_design_validation_error(design).empty();
 }
 
 std::string research_field_name(ResearchField field)

@@ -73,6 +73,7 @@ MineralCargo hullMineralCost(ShipHullType type)
     case ShipHullType::LightTransport: return {6.0, 2.0, 2.0};
     case ShipHullType::MediumTransport:return {9.0, 3.0, 3.0};
     case ShipHullType::RemoteMiner:    return {12.0, 6.0, 8.0};
+    case ShipHullType::Utility:        return {10.0, 5.0, 5.0};
     }
     return {};
 }

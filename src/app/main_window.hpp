@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QMainWindow>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -27,6 +28,8 @@ class QDockWidget;
 class QTreeWidget;
 
 namespace suns {
+
+class ShipDesignerDialog;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -184,6 +187,7 @@ private:
     bool shuttingDown_{};
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
     std::vector<GameEvent> turnMessages_;
+    QPointer<ShipDesignerDialog> shipDesigner_;
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};

@@ -79,7 +79,8 @@ void remote_mining_output_sums_ship_counts()
         1,
         "Remote Miner",
         ShipHullType::RemoteMiner,
-        {ShipComponentType::FusionDrive, ShipComponentType::RemoteMiningModule},
+        {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive,
+         ShipComponentType::RemoteMiningModule},
     });
     auto& miners = state.fleets.front();
     miners.design = 3;

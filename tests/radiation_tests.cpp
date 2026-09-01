@@ -11,7 +11,9 @@ int main()
         1,
         "Radiating Transport",
         suns::ShipHullType::MediumTransport,
-        {suns::ShipComponentType::RadiatingRamScoopDrive, suns::ShipComponentType::ColonyModule},
+        {suns::ShipComponentType::RadiatingRamScoopDrive,
+         suns::ShipComponentType::RadiatingRamScoopDrive,
+         suns::ShipComponentType::ColonyModule},
     });
 
     suns::Fleet radiating{

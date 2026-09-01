@@ -1324,10 +1324,11 @@ TurnResult TurnProcessor::process_with_events(
                         player->technology.researchAllocationPercent = concreteOrder.percent;
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
                         ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,
-                            concreteOrder.hull, concreteOrder.components};
+                            concreteOrder.hull, concreteOrder.components, concreteOrder.placements};
                         if (!ship_design_valid(candidate)
                             || !ship_design_available_to_player(next, submission.player, candidate)
                             || design_name_exists(next, submission.player, candidate.name)) return;
+                        normalize_ship_design_placement(candidate);
                         next.shipDesigns.push_back(std::move(candidate));
                         ++next.nextShipDesignId;
                     } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {

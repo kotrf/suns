@@ -13,7 +13,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 18;
+constexpr quint32 kSaveFormatVersion = 20;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -382,6 +382,14 @@ void writeShipDesign(QDataStream& stream, const ShipDesign& value)
     writeEnum(stream, value.hull);
     stream << static_cast<quint32>(value.components.size());
     for (const auto component : value.components) writeEnum(stream, component);
+    const auto placements = value.placements.empty()
+        ? autoplace_ship_components(value.hull, value.components)
+        : value.placements;
+    stream << static_cast<quint32>(placements.size());
+    for (const auto& placement : placements) {
+        stream << static_cast<quint16>(placement.slot);
+        writeEnum(stream, placement.component);
+    }
 }
 
 void readShipDesign(QDataStream& stream, ShipDesign& value)
@@ -392,7 +400,10 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.id = static_cast<ShipDesignId>(id);
     value.owner = static_cast<PlayerId>(owner);
     readString(stream, value.name);
-    if (!readEnum(stream, value.hull, static_cast<quint8>(ShipHullType::RemoteMiner))) return;
+    const auto newestHull = gReadSaveFormatVersion >= 20
+        ? ShipHullType::Utility
+        : ShipHullType::RemoteMiner;
+    if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return;
 
     quint32 count{};
     if (!readCount(stream, count)) return;
@@ -403,6 +414,20 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
         if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
         value.components.push_back(component);
     }
+    value.placements.clear();
+    if (gReadSaveFormatVersion >= 19) {
+        quint32 placementCount{};
+        if (!readCount(stream, placementCount)) return;
+        value.placements.reserve(placementCount);
+        for (quint32 index = 0; index < placementCount; ++index) {
+            quint16 slot{};
+            ShipComponentType component{};
+            stream >> slot;
+            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
+            value.placements.push_back({static_cast<ShipSlotId>(slot), component});
+        }
+    }
+    if (gReadSaveFormatVersion < 20) normalize_ship_design_engine_bank(value);
 }
 
 void writeProductionItem(QDataStream& stream, const ProductionItem& value)
@@ -929,6 +954,11 @@ void writeOrder(QDataStream& stream, const Order& order)
             writeEnum(stream, concrete.hull);
             stream << static_cast<quint32>(concrete.components.size());
             for (const auto component : concrete.components) writeEnum(stream, component);
+            stream << static_cast<quint32>(concrete.placements.size());
+            for (const auto& placement : concrete.placements) {
+                stream << static_cast<quint16>(placement.slot);
+                writeEnum(stream, placement.component);
+            }
         } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
             stream << quint8{3} << static_cast<quint32>(concrete.colony)
                    << static_cast<quint32>(concrete.design);
@@ -1037,7 +1067,10 @@ bool readOrder(QDataStream& stream, Order& order)
     case 2: {
         CreateShipDesignOrder value;
         readString(stream, value.name);
-        if (!readEnum(stream, value.hull, static_cast<quint8>(ShipHullType::RemoteMiner))) return false;
+        const auto newestHull = gReadSaveFormatVersion >= 20
+            ? ShipHullType::Utility
+            : ShipHullType::RemoteMiner;
+        if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return false;
         quint32 count{};
         if (!readCount(stream, count)) return false;
         value.components.reserve(count);
@@ -1045,6 +1078,24 @@ bool readOrder(QDataStream& stream, Order& order)
             ShipComponentType component{};
             if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
             value.components.push_back(component);
+        }
+        if (gReadSaveFormatVersion >= 19) {
+            quint32 placementCount{};
+            if (!readCount(stream, placementCount)) return false;
+            value.placements.reserve(placementCount);
+            for (quint32 index = 0; index < placementCount; ++index) {
+                quint16 slot{};
+                ShipComponentType component{};
+                stream >> slot;
+                if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
+                value.placements.push_back({static_cast<ShipSlotId>(slot), component});
+            }
+        }
+        if (gReadSaveFormatVersion < 20) {
+            ShipDesign migrated{0, 1, value.name, value.hull, value.components, value.placements};
+            normalize_ship_design_engine_bank(migrated);
+            value.components = std::move(migrated.components);
+            value.placements = std::move(migrated.placements);
         }
         order = std::move(value);
         return true;
@@ -1410,6 +1461,14 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     }
     if (loaded.state.turn == 0 || loaded.state.players.empty() || loaded.state.stars.empty()) {
         errorMessage = "The Suns! save file does not contain a valid game state.";
+        return false;
+    }
+    for (const auto& design : loaded.state.shipDesigns) {
+        const auto validationError = ship_design_validation_error(design);
+        if (validationError.empty()) continue;
+        errorMessage = QString("Ship design '%1' cannot be loaded: %2")
+                           .arg(QString::fromStdString(design.name),
+                               QString::fromStdString(validationError));
         return false;
     }
 

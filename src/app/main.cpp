@@ -8,9 +8,11 @@
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QLabel>
+#include <QListWidget>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QTimer>
+#include <QToolButton>
 
 int main(int argc, char* argv[])
 {
@@ -66,6 +68,22 @@ int main(int argc, char* argv[])
             if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();
             if (auto* messages = window.findChild<QDockWidget*>("turnMessagesDock")) messages->update();
             if (auto* research = window.findChild<QDockWidget*>("researchDock")) research->update();
+
+            // Open the non-modal graphical Ship Designer, select an empty
+            // general slot and fit a Fuel Tank through the keyboard-accessible
+            // button path. Drag/drop uses the same placement operation.
+            if (auto* openDesigner = window.findChild<QPushButton*>("openShipDesignerButton")) {
+                openDesigner->click();
+                if (auto* hull = window.findChild<QComboBox*>("shipHullCatalog")) {
+                    hull->setCurrentIndex(hull->findData(static_cast<int>(suns::ShipHullType::Utility)));
+                }
+                if (auto* catalog = window.findChild<QListWidget*>("shipComponentCatalog")) {
+                    catalog->setCurrentRow(10); // Fuel Tank
+                }
+                if (auto* slot = window.findChild<QToolButton*>("shipSlot_201")) slot->click();
+                if (auto* fit = window.findChild<QPushButton*>("fitSelectedComponent")) fit->click();
+                if (auto* save = window.findChild<QPushButton*>("saveShipDesign")) save->update();
+            }
         });
         // Let deferred selection redraw, map-mode restyling, portraits, mining,
         // panel recovery, gauges and route-program timers run.

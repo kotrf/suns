@@ -39,7 +39,7 @@ int main()
         1,
         "Mineral Hauler",
         suns::ShipHullType::MediumTransport,
-        {suns::ShipComponentType::FusionDrive},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive},
     });
 
     suns::Fleet hauler;
@@ -139,14 +139,15 @@ int main()
         1,
         "Heavy Source",
         suns::ShipHullType::MediumTransport,
-        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::CargoPod},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::CargoPod},
     });
     transferState.shipDesigns.push_back({
         4,
         1,
         "Receiver",
         suns::ShipHullType::MediumTransport,
-        {suns::ShipComponentType::FusionDrive},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive},
     });
     suns::Fleet sourceFleet;
     sourceFleet.id = 2;
@@ -242,7 +243,8 @@ int main()
         1,
         "Mineral Colonizer",
         suns::ShipHullType::MediumTransport,
-        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::ColonyModule},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::ColonyModule},
     });
     suns::set_survey_level(
         colonization, 1, 2, suns::SurveyLevel::OrbitalSurvey, colonization.turn);
@@ -266,8 +268,8 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{2, 2});
     const auto expanded = processor.process(colonization, {colonize});
     assert(planet(expanded, 2).owner == 1);
-    assert(close(planet(expanded, 2).minerals.ironium, 11.0));
-    assert(close(planet(expanded, 2).minerals.boranium, 7.0));
+    assert(close(planet(expanded, 2).minerals.ironium, 12.0));
+    assert(close(planet(expanded, 2).minerals.boranium, 8.0));
     assert(close(planet(expanded, 2).minerals.germanium, 5.0));
 
     return 0;
