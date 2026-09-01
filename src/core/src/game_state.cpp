@@ -358,13 +358,13 @@ std::vector<ShipComponentPlacement> autoplace_ship_components(
     placements.reserve(components.size());
     for (const auto component : components) {
         const auto category = ship_component_slot_category(component);
-        const auto slot = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& candidate) {
+        const auto slot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& candidate) {
             if (candidate.category != category) return false;
             return std::none_of(placements.begin(), placements.end(), [&](const ShipComponentPlacement& placed) {
                 return placed.slot == candidate.id;
             });
         });
-        if (slot == hull.slots.end()) return {};
+        if (slot == hull.fittingSlots.end()) return {};
         placements.push_back({slot->id, component});
     }
     return placements;
@@ -451,10 +451,10 @@ std::string ship_design_validation_error(const ShipDesign& design)
         if (std::find(occupiedSlots.begin(), occupiedSlots.end(), placement.slot) != occupiedSlots.end()) {
             return "Only one component may occupy a hull slot.";
         }
-        const auto slot = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& candidate) {
+        const auto slot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& candidate) {
             return candidate.id == placement.slot;
         });
-        if (slot == hull.slots.end()) return "A component refers to an unknown hull slot.";
+        if (slot == hull.fittingSlots.end()) return "A component refers to an unknown hull slot.";
         if (slot->category != ship_component_slot_category(placement.component)) {
             return "A component is placed in an incompatible hull slot.";
         }

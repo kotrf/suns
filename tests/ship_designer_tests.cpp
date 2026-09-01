@@ -26,13 +26,13 @@ void verify_hulls_and_slot_validation()
     assert(utilityHull.generalSlots > mediumHull.generalSlots);
     assert(minerHull.miningSlots == 2);
     assert(scoutHull.miningSlots == 0);
-    assert(scoutHull.slots.size() == 3);
-    assert(scoutHull.slots[0].id == 100);
-    assert(scoutHull.slots[0].category == suns::ShipSlotCategory::Engine);
-    assert(scoutHull.slots[1].id == 200);
-    assert(scoutHull.slots[1].category == suns::ShipSlotCategory::General);
-    assert(minerHull.slots[3].id == 300);
-    assert(minerHull.slots[3].category == suns::ShipSlotCategory::Mining);
+    assert(scoutHull.fittingSlots.size() == 3);
+    assert(scoutHull.fittingSlots[0].id == 100);
+    assert(scoutHull.fittingSlots[0].category == suns::ShipSlotCategory::Engine);
+    assert(scoutHull.fittingSlots[1].id == 200);
+    assert(scoutHull.fittingSlots[1].category == suns::ShipSlotCategory::General);
+    assert(minerHull.fittingSlots[3].id == 300);
+    assert(minerHull.fittingSlots[3].category == suns::ShipSlotCategory::Mining);
 
     suns::ShipDesign valid{
         10, 1, "Surveyor", suns::ShipHullType::Scout,

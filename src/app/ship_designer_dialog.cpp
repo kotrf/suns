@@ -375,15 +375,15 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             placements_ = replacement;
         } else {
             placements_.clear();
-            const auto slots = hull_spec(hullType).slots;
+            const auto fittingSlots = hull_spec(hullType).fittingSlots;
             for (const auto component : components) {
-                const auto target = std::find_if(slots.begin(), slots.end(), [&](const ShipSlotSpec& slot) {
+                const auto target = std::find_if(fittingSlots.begin(), fittingSlots.end(), [&](const ShipSlotSpec& slot) {
                     if (slot.category != ship_component_slot_category(component)) return false;
                     return std::none_of(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placed) {
                         return placed.slot == slot.id;
                     });
                 });
-                if (target != slots.end()) placements_.push_back({target->id, component});
+                if (target != fittingSlots.end()) placements_.push_back({target->id, component});
             }
         }
         selectedSlot_ = 0;
@@ -399,25 +399,25 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         if (!component) return;
         const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
         if (component_spec(*component).kind == ShipComponentKind::Engine) {
-            const auto target = std::find_if(hull.slots.begin(), hull.slots.end(), [](const ShipSlotSpec& slot) {
+            const auto target = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [](const ShipSlotSpec& slot) {
                 return slot.category == ShipSlotCategory::Engine;
             });
-            if (target != hull.slots.end()) fitComponent(*component, target->id);
+            if (target != hull.fittingSlots.end()) fitComponent(*component, target->id);
             return;
         }
-        auto target = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& slot) {
+        auto target = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
             return slot.id == selectedSlot_
                 && slot.category == ship_component_slot_category(*component);
         });
-        if (target == hull.slots.end()) {
-            target = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& slot) {
+        if (target == hull.fittingSlots.end()) {
+            target = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
                 if (slot.category != ship_component_slot_category(*component)) return false;
                 return std::none_of(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placed) {
                     return placed.slot == slot.id;
                 });
             });
         }
-        if (target != hull.slots.end()) fitComponent(*component, target->id);
+        if (target != hull.fittingSlots.end()) fitComponent(*component, target->id);
     });
     connect(fitButton_, &QPushButton::clicked, this, [this] {
         const auto component = selectedCatalogComponent();
@@ -453,10 +453,10 @@ void ShipDesignerDialog::fitComponent(
     ShipComponentType component, ShipSlotId target, ShipSlotId source)
 {
     const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    const auto targetSlot = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& slot) {
+    const auto targetSlot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
         return slot.id == target;
     });
-    if (targetSlot == hull.slots.end()
+    if (targetSlot == hull.fittingSlots.end()
         || targetSlot->category != ship_component_slot_category(component)) {
         fitMessage_->setText("That component is incompatible with the selected cell.");
         return;
@@ -466,7 +466,7 @@ void ShipDesignerDialog::fitComponent(
         std::erase_if(placements_, [](const ShipComponentPlacement& placement) {
             return component_spec(placement.component).kind == ShipComponentKind::Engine;
         });
-        for (const auto& slot : hull.slots) {
+        for (const auto& slot : hull.fittingSlots) {
             if (slot.category == ShipSlotCategory::Engine) placements_.push_back({slot.id, component});
         }
         selectedSlot_ = target;
@@ -495,10 +495,10 @@ void ShipDesignerDialog::fitComponent(
         sourcePlacement->slot = target;
     } else {
         const auto displaced = targetPlacement->component;
-        const auto sourceSlot = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& slot) {
+        const auto sourceSlot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
             return slot.id == source;
         });
-        if (sourceSlot == hull.slots.end()
+        if (sourceSlot == hull.fittingSlots.end()
             || sourceSlot->category != ship_component_slot_category(displaced)) {
             fitMessage_->setText("Those components cannot be swapped between different slot categories.");
             return;
@@ -514,10 +514,10 @@ void ShipDesignerDialog::fitComponent(
 void ShipDesignerDialog::removeComponent(ShipSlotId slot)
 {
     const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    const auto selected = std::find_if(hull.slots.begin(), hull.slots.end(), [&](const ShipSlotSpec& candidate) {
+    const auto selected = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& candidate) {
         return candidate.id == slot;
     });
-    const auto removingEngineBank = selected != hull.slots.end()
+    const auto removingEngineBank = selected != hull.fittingSlots.end()
         && selected->category == ShipSlotCategory::Engine;
     std::erase_if(placements_, [&](const ShipComponentPlacement& placement) {
         return removingEngineBank
@@ -535,7 +535,7 @@ void ShipDesignerDialog::rebuildSlotGrid()
         delete item;
     }
     const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    for (const auto& slot : hull.slots) {
+    for (const auto& slot : hull.fittingSlots) {
         const auto placement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
             return candidate.slot == slot.id;
         });
@@ -570,7 +570,7 @@ ShipDesign ShipDesignerDialog::previewDesign() const
     design.name = nameEdit_->text().trimmed().toStdString();
     design.hull = static_cast<ShipHullType>(hullCombo_->currentData().toInt());
     const auto hull = hull_spec(design.hull);
-    for (const auto& slot : hull.slots) {
+    for (const auto& slot : hull.fittingSlots) {
         const auto placement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
             return candidate.slot == slot.id;
         });

@@ -111,7 +111,7 @@ struct ShipHullSpec {
     std::uint8_t requiredEngines{1};
     std::uint8_t generalSlots{};
     std::uint8_t miningSlots{};
-    std::vector<ShipSlotSpec> slots;
+    std::vector<ShipSlotSpec> fittingSlots;
 };
 
 enum class ShipComponentType {
