@@ -552,6 +552,35 @@ void MainWindow::installUiPolish()
     auto* designerAction = fleetMenu->addAction("Ship designer…");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
 
+    auto* dialogToolbar = addToolBar("Dialogs");
+    dialogToolbar->setObjectName("dialogToolbar");
+    dialogToolbar->setMovable(false);
+    dialogToolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+
+    auto* designerToolAction = dialogToolbar->addAction("Designer");
+    designerToolAction->setObjectName("openShipDesignerToolAction");
+    designerToolAction->setToolTip("Open the graphical Ship Designer");
+    connect(designerToolAction, &QAction::triggered, this, [this] { openShipDesigner(); });
+
+    auto* researchToolAction = dialogToolbar->addAction("Research");
+    researchToolAction->setObjectName("openResearchToolAction");
+    researchToolAction->setToolTip("Edit empire research allocation and the ordered technology plan");
+    connect(researchToolAction, &QAction::triggered, this, [this] { openResearchDialog(); });
+
+    dialogToolbar->addSeparator();
+
+    auto* cargoToolAction = dialogToolbar->addAction("Cargo");
+    cargoToolAction->setToolTip("Transfer colonists and minerals at the selected system");
+    connect(cargoToolAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
+
+    auto* mergeToolAction = dialogToolbar->addAction("Merge");
+    mergeToolAction->setToolTip("Merge co-located friendly fleets");
+    connect(mergeToolAction, &QAction::triggered, this, [this] { openMergeFleetsDialog(); });
+
+    auto* splitToolAction = dialogToolbar->addAction("Split");
+    splitToolAction->setToolTip("Split ships from the selected fleet");
+    connect(splitToolAction, &QAction::triggered, this, [this] { openSplitFleetDialog(); });
+
     auto* mapToolbar = addToolBar("Map view");
     mapToolbar->setObjectName("mapViewToolbar");
     mapToolbar->setMovable(false);
