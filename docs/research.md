@@ -56,14 +56,16 @@ The scanner line offers three different engineering choices rather than automati
 
 ## Events and UI
 
-The Research dock shows all field levels, current RP progress, the next concrete
-unlock and an ordered plan with per-level target and RP work. Every row has Move
-Up, Move Down and Remove controls, including the active first row. Removing or
-moving it preserves its accumulated RP. Returning the displayed rows to the
-committed plan removes the pending research-plan order instead of leaving an
-accidental action in the turn order list. The same dock sets the empire-wide
-allocation percentage and shows its guaranteed RP contribution; unused output
-after local queues is additional research.
+The modal Research dialog opens from the compact dialog toolbar. It shows all
+field levels, current RP progress, the next concrete unlock and an ordered plan
+with per-level target and RP work. Every row has Move Up, Move Down and Remove
+controls, including the active first row. Removing or moving it preserves its
+accumulated RP. Returning the displayed rows to the committed plan removes the
+pending research-plan order instead of leaving an accidental action in the turn
+order list. The same dialog sets the empire-wide allocation percentage and shows
+its guaranteed RP contribution; unused output after local queues is additional
+research. Changes immediately update the current turn's pending orders, while
+Close simply returns to the galaxy map.
 
 Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Compact Long Range Scanner.
 
