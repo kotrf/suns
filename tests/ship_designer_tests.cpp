@@ -12,14 +12,27 @@ void verify_hulls_and_slot_validation()
     const auto lightHull = suns::hull_spec(suns::ShipHullType::LightTransport);
     const auto mediumHull = suns::hull_spec(suns::ShipHullType::MediumTransport);
     const auto minerHull = suns::hull_spec(suns::ShipHullType::RemoteMiner);
+    const auto utilityHull = suns::hull_spec(suns::ShipHullType::Utility);
 
-    assert(scoutHull.engineSlots == 1);
+    assert(scoutHull.requiredEngines == 1);
+    assert(mediumHull.requiredEngines == 2);
+    assert(minerHull.requiredEngines == 2);
+    assert(utilityHull.requiredEngines == 2);
     assert(scoutHull.generalSlots == 2);
     assert(lightHull.generalSlots == 3);
     assert(mediumHull.generalSlots == 5);
     assert(mediumHull.baseCargoCapacity > lightHull.baseCargoCapacity);
+    assert(utilityHull.baseCargoCapacity == 0.0);
+    assert(utilityHull.generalSlots > mediumHull.generalSlots);
     assert(minerHull.miningSlots == 2);
     assert(scoutHull.miningSlots == 0);
+    assert(scoutHull.slots.size() == 3);
+    assert(scoutHull.slots[0].id == 100);
+    assert(scoutHull.slots[0].category == suns::ShipSlotCategory::Engine);
+    assert(scoutHull.slots[1].id == 200);
+    assert(scoutHull.slots[1].category == suns::ShipSlotCategory::General);
+    assert(minerHull.slots[3].id == 300);
+    assert(minerHull.slots[3].category == suns::ShipSlotCategory::Mining);
 
     suns::ShipDesign valid{
         10, 1, "Surveyor", suns::ShipHullType::Scout,
@@ -52,13 +65,57 @@ void verify_hulls_and_slot_validation()
 
     suns::ShipDesign validMiner{
         13, 1, "Dedicated Miner", suns::ShipHullType::RemoteMiner,
-        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::RemoteMiningModule,
          suns::ShipComponentType::RemoteMiningModule, suns::ShipComponentType::FuelTank},
     };
     assert(suns::ship_design_valid(validMiner));
     assert(suns::ship_design_mining_slots_used(validMiner) == 2);
     assert(suns::ship_design_general_slots_used(validMiner) == 1);
     assert(suns::ship_design_can_remote_mine(validMiner));
+
+    suns::ShipDesign mixedEngineBank{
+        14, 1, "Mixed Engines", suns::ShipHullType::Utility,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RamScoopDrive},
+    };
+    assert(!suns::ship_design_valid(mixedEngineBank));
+    assert(suns::ship_design_validation_error(mixedEngineBank)
+        == "Every engine in a hull's propulsion bank must be the same model.");
+
+    suns::ShipDesign legacyUtility{
+        15, 1, "Legacy Utility", suns::ShipHullType::Utility,
+        {suns::ShipComponentType::RamScoopDrive, suns::ShipComponentType::CargoPod},
+    };
+    suns::normalize_ship_design_engine_bank(legacyUtility);
+    assert(suns::ship_design_engine_slots_used(legacyUtility) == 2);
+    assert(legacyUtility.components[0] == suns::ShipComponentType::RamScoopDrive);
+    assert(legacyUtility.components[1] == suns::ShipComponentType::RamScoopDrive);
+    assert(legacyUtility.placements[0].slot == 100);
+    assert(legacyUtility.placements[1].slot == 101);
+    assert(suns::ship_design_valid(legacyUtility));
+
+    const auto automatic = suns::autoplace_ship_components(valid.hull, valid.components);
+    assert(automatic.size() == valid.components.size());
+    assert(automatic[0].slot == 100);
+    assert(automatic[1].slot == 200);
+    assert(automatic[2].slot == 201);
+    auto normalized = valid;
+    suns::normalize_ship_design_placement(normalized);
+    assert(normalized.placements == automatic);
+    assert(suns::ship_design_valid(normalized));
+
+    auto duplicateSlot = normalized;
+    duplicateSlot.placements[2].slot = duplicateSlot.placements[1].slot;
+    assert(!suns::ship_design_valid(duplicateSlot));
+    assert(suns::ship_design_validation_error(duplicateSlot)
+        == "Only one component may occupy a hull slot.");
+
+    auto incompatibleSlot = normalized;
+    incompatibleSlot.placements[1].slot = 100;
+    incompatibleSlot.placements[0].slot = 200;
+    assert(!suns::ship_design_valid(incompatibleSlot));
+    assert(suns::ship_design_validation_error(incompatibleSlot)
+        == "A component is placed in an incompatible hull slot.");
 }
 
 void verify_component_tradeoffs()
@@ -116,6 +173,9 @@ void verify_create_design_order()
         {suns::ShipComponentType::RamScoopDrive,
          suns::ShipComponentType::LongRangeScanner,
          suns::ShipComponentType::FuelTank},
+        {{100, suns::ShipComponentType::RamScoopDrive},
+         {201, suns::ShipComponentType::LongRangeScanner},
+         {200, suns::ShipComponentType::FuelTank}},
     });
 
     const auto created = processor.process(initial, {create});
@@ -124,6 +184,9 @@ void verify_create_design_order()
     assert(design->name == "Long Range Surveyor");
     assert(design->owner == 1);
     assert(suns::ship_design_valid(*design));
+    assert(design->placements.size() == 3);
+    assert(design->placements[1].slot == 201);
+    assert(design->placements[2].slot == 200);
     assert(created.nextShipDesignId == suns::kFirstCustomShipDesignId + 1);
 
     // Duplicate names and slot-invalid designs are rejected without consuming IDs.
@@ -149,7 +212,8 @@ void verify_create_design_order()
     lockedMiner.orders.emplace_back(suns::CreateShipDesignOrder{
         "Too Early Miner",
         suns::ShipHullType::RemoteMiner,
-        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::RemoteMiningModule},
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::RemoteMiningModule},
     });
     const auto stillLocked = processor.process(rejected, {lockedMiner});
     assert(stillLocked.shipDesigns.size() == rejected.shipDesigns.size());

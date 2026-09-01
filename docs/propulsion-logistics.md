@@ -35,6 +35,16 @@ No current engine provides Warp 10. That step is deliberately reserved for futur
 
 The numeric curves are tuning placeholders. Their strategic shape is intentional.
 
+## Multi-engine hulls
+
+Engine count is a hull requirement rather than a stacking speed bonus. Light
+hulls require one engine; the current Medium Transport, Remote Miner and Utility
+Hull require a bank of two identical engines. The selected engine model still
+sets the design's maximum Warp and fuel curve. Each physical engine adds its own
+mass, construction cost and mineral bill, so larger hulls pay for the machinery
+needed to move their certified load without turning two engines into twice the
+Warp speed.
+
 ## Fuel capacity and generation
 
 A ship design has built-in hull fuel capacity. Components can add more capacity.

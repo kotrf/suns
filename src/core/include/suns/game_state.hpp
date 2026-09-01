@@ -83,6 +83,22 @@ enum class ShipHullType {
     LightTransport,
     MediumTransport,
     RemoteMiner,
+    Utility,
+};
+
+using ShipSlotId = std::uint16_t;
+
+enum class ShipSlotCategory : std::uint8_t {
+    Engine,
+    General,
+    Mining,
+};
+
+struct ShipSlotSpec {
+    ShipSlotId id{};
+    ShipSlotCategory category{ShipSlotCategory::General};
+    std::uint8_t column{};
+    std::uint8_t row{};
 };
 
 struct ShipHullSpec {
@@ -92,9 +108,10 @@ struct ShipHullSpec {
     std::uint32_t buildCost{};
     double baseFuelCapacity{};
     double baseCargoCapacity{};
-    std::uint8_t engineSlots{1};
+    std::uint8_t requiredEngines{1};
     std::uint8_t generalSlots{};
     std::uint8_t miningSlots{};
+    std::vector<ShipSlotSpec> slots;
 };
 
 enum class ShipComponentType {
@@ -143,12 +160,20 @@ struct ShipComponentSpec {
     double radiationHazard{};
 };
 
+struct ShipComponentPlacement {
+    ShipSlotId slot{};
+    ShipComponentType component{ShipComponentType::FusionDrive};
+
+    bool operator==(const ShipComponentPlacement&) const = default;
+};
+
 struct ShipDesign {
     ShipDesignId id{};
     PlayerId owner{};
     std::string name;
     ShipHullType hull{ShipHullType::Scout};
     std::vector<ShipComponentType> components;
+    std::vector<ShipComponentPlacement> placements;
 };
 
 enum class ProductionKind {
@@ -414,6 +439,12 @@ void normalize_fleet_composition(Fleet& fleet);
 
 [[nodiscard]] ShipHullSpec hull_spec(ShipHullType type);
 [[nodiscard]] ShipComponentSpec component_spec(ShipComponentType type);
+[[nodiscard]] ShipSlotCategory ship_component_slot_category(ShipComponentType component);
+[[nodiscard]] std::vector<ShipComponentPlacement> autoplace_ship_components(
+    ShipHullType hull, const std::vector<ShipComponentType>& components);
+void normalize_ship_design_engine_bank(ShipDesign& design);
+void normalize_ship_design_placement(ShipDesign& design);
+[[nodiscard]] std::string ship_design_validation_error(const ShipDesign& design);
 [[nodiscard]] std::size_t ship_design_engine_slots_used(const ShipDesign& design);
 [[nodiscard]] std::size_t ship_design_general_slots_used(const ShipDesign& design);
 [[nodiscard]] std::size_t ship_design_mining_slots_used(const ShipDesign& design);

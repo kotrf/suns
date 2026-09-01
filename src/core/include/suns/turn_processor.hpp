@@ -44,6 +44,7 @@ struct CreateShipDesignOrder {
     std::string name;
     ShipHullType hull{ShipHullType::Scout};
     std::vector<ShipComponentType> components;
+    std::vector<ShipComponentPlacement> placements;
 };
 
 struct QueueShipDesignOrder {

@@ -392,6 +392,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     shipDesignCombo_ = new QComboBox(sidePanel);
     designShipButton_ = new QPushButton("Design Ship…", sidePanel);
+    designShipButton_->setObjectName("openShipDesignerButton");
     buildShipButton_ = new QPushButton("Queue selected ship design", sidePanel);
     buildFactoryButton_ = new QPushButton(QString("Queue Factory (%1)").arg(kFactoryCost), sidePanel);
     colonizeButton_ = new QPushButton("Colonize selected world with selected ship", sidePanel);
@@ -1029,22 +1030,36 @@ void MainWindow::replacePendingFleetMove(
 
 void MainWindow::openShipDesigner()
 {
-    ShipDesignerDialog dialog(state_, 1, this);
-    if (dialog.exec() != QDialog::Accepted) return;
-
-    const auto draft = dialog.draft();
-    const auto duplicateInState = std::any_of(state_.shipDesigns.begin(), state_.shipDesigns.end(), [&](const ShipDesign& design) {
-        return design.owner == 1 && design.name == draft.name;
-    });
-    if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
-        statusBar()->showMessage("A ship design with that name already exists or is pending");
+    if (shipDesigner_) {
+        shipDesigner_->raise();
+        shipDesigner_->activateWindow();
         return;
     }
 
-    appendPendingOrder(
-        CreateShipDesignOrder{draft.name, draft.hull, draft.components},
-        QString("Save ship design %1 — available after End Turn")
-            .arg(QString::fromStdString(draft.name)));
+    auto* dialog = new ShipDesignerDialog(state_, 1, this);
+    shipDesigner_ = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setModal(false);
+    connect(dialog, &QDialog::accepted, this, [this, dialog] {
+        const auto draft = dialog->draft();
+        const auto duplicateInState = std::any_of(
+            state_.shipDesigns.begin(), state_.shipDesigns.end(), [&](const ShipDesign& design) {
+                return design.owner == 1 && design.name == draft.name;
+            });
+        if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
+            statusBar()->showMessage("A ship design with that name already exists or is pending");
+            return;
+        }
+        appendPendingOrder(
+            CreateShipDesignOrder{draft.name, draft.hull, draft.components, draft.placements},
+            QString("Save ship design %1 — available after End Turn")
+                .arg(QString::fromStdString(draft.name)));
+    });
+    connect(dialog, &QDialog::finished, dialog, &QObject::deleteLater);
+    connect(dialog, &QObject::destroyed, this, [this] { shipDesigner_.clear(); });
+    dialog->show();
+    dialog->raise();
+    dialog->activateWindow();
 }
 
 void MainWindow::queueFleetMove()

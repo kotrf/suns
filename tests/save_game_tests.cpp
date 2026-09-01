@@ -49,8 +49,13 @@ void round_trip_preserves_communications_and_planning()
         "Remote Miner",
         ShipHullType::RemoteMiner,
         {ShipComponentType::AdvancedFusionDrive,
+         ShipComponentType::AdvancedFusionDrive,
          ShipComponentType::ExtendedRangeScanner,
          ShipComponentType::RemoteMiningModule},
+        {{100, ShipComponentType::AdvancedFusionDrive},
+         {101, ShipComponentType::AdvancedFusionDrive},
+         {200, ShipComponentType::ExtendedRangeScanner},
+         {300, ShipComponentType::RemoteMiningModule}},
     });
 
     auto& scout = original.state.fleets.front();
@@ -126,10 +131,20 @@ void round_trip_preserves_communications_and_planning()
         MergeFleetsOrder{scout.id, 2},
         SplitFleetOrder{scout.id, {{kScoutDesignId, 1}}},
         ReorderProductionQueueOrder{1, 2, 0},
+        CreateShipDesignOrder{
+            "Utility Tender",
+            ShipHullType::Utility,
+            {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive,
+             ShipComponentType::CargoPod},
+            {{100, ShipComponentType::FusionDrive},
+             {101, ShipComponentType::FusionDrive},
+             {201, ShipComponentType::CargoPod}},
+        },
     }};
     original.pendingDescriptions = {
         "move", "mine", "research plan", "research allocation", "stop remote mining", "transfer cargo",
         "merge fleets", "split fleet", "reorder production",
+        "create placed design",
     };
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
@@ -179,9 +194,15 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.researchAllocationPercent == 35);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
-    assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::ExtendedRangeScanner);
+    assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);
+    assert(loaded.state.shipDesigns.back().components[2] == ShipComponentType::ExtendedRangeScanner);
     assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::RemoteMiningModule);
     assert(loaded.state.shipDesigns.back().hull == ShipHullType::RemoteMiner);
+    assert(loaded.state.shipDesigns.back().placements.size() == 4);
+    assert(loaded.state.shipDesigns.back().placements[0].slot == 100);
+    assert(loaded.state.shipDesigns.back().placements[1].slot == 101);
+    assert(loaded.state.shipDesigns.back().placements[2].slot == 200);
+    assert(loaded.state.shipDesigns.back().placements[3].slot == 300);
 
     const auto& fleet = loaded.state.fleets.front();
     assert(same_position(fleet.position, {420.0, 10.0}));
@@ -221,7 +242,7 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetry.ships.size() == 2);
     assert(fleet.telemetryInTransit.front().telemetry.ships.size() == 2);
 
-    assert(loaded.pendingOrders.orders.size() == 9);
+    assert(loaded.pendingOrders.orders.size() == 10);
     const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
     assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
     assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
@@ -256,6 +277,13 @@ void round_trip_preserves_communications_and_planning()
     assert(split->ships.front().design == kScoutDesignId && split->ships.front().count == 1);
     const auto* reorder = std::get_if<ReorderProductionQueueOrder>(&loaded.pendingOrders.orders[8]);
     assert(reorder && reorder->colony == 1 && reorder->fromIndex == 2 && reorder->toIndex == 0);
+    const auto* createDesign = std::get_if<CreateShipDesignOrder>(&loaded.pendingOrders.orders[9]);
+    assert(createDesign && createDesign->name == "Utility Tender");
+    assert(createDesign->hull == ShipHullType::Utility);
+    assert(createDesign->placements.size() == 3);
+    assert(createDesign->placements[0].slot == 100);
+    assert(createDesign->placements[1].slot == 101);
+    assert(createDesign->placements[2].slot == 201);
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
