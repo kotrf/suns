@@ -14,6 +14,8 @@ using namespace suns;
 void round_trip_preserves_communications_and_planning()
 {
     SaveGameData original;
+    original.campaignId = 0x123456789abcdef0ULL;
+    original.turnToken = 0x0fedcba987654321ULL;
     original.galaxyConfig = GalaxyConfig{20260825, 24, 940.0, 700.0, 50.0};
     original.state = generate_game(original.galaxyConfig);
     original.state.turn = 77;
@@ -159,6 +161,8 @@ void round_trip_preserves_communications_and_planning()
     SaveGameData loaded;
     assert(read_save_game_file(path, loaded, error));
     assert(error.isEmpty());
+    assert(loaded.campaignId == original.campaignId);
+    assert(loaded.turnToken == original.turnToken);
     assert(loaded.state.turn == 77);
     assert(loaded.state.planets.front().mines == 17);
     assert(loaded.state.planets.front().productionWaitingForMinerals);
@@ -290,6 +294,58 @@ void round_trip_preserves_communications_and_planning()
     assert(!loaded.showSensorRanges);
 }
 
+void turn_order_file_round_trip_preserves_envelope_and_orders()
+{
+    MoveFleetOrder move;
+    move.fleet = 4;
+    move.destination = {120.0, -45.0};
+    move.warp = 7;
+    move.arrivalAction.kind = FleetArrivalActionKind::MergeWithFleet;
+    move.targetFleet = 9;
+    move.queuedWaypoints.push_back({{240.0, 30.0}, 6, {FleetArrivalActionKind::Refuel, 2}});
+
+    TurnOrderFileData original;
+    original.campaignId = 0xa11ce55badf00dULL;
+    original.turn = 42;
+    original.turnToken = 0x55aa55aa12344321ULL;
+    original.orders = {2, {
+        move,
+        QueueProductionOrder{3, ProductionKind::Factory},
+        SetResearchAllocationOrder{30},
+    }};
+    original.descriptions = {"intercept and merge", "build factory", "research 30%"};
+
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    const auto path = directory.filePath("turn-42.sunsorders");
+    QString error;
+    assert(write_turn_order_file(path, original, error));
+
+    TurnOrderFileData loaded;
+    assert(read_turn_order_file(path, loaded, error));
+    assert(error.isEmpty());
+    assert(loaded.campaignId == original.campaignId);
+    assert(loaded.turn == 42);
+    assert(loaded.turnToken == original.turnToken);
+    assert(loaded.orders.player == 2);
+    assert(loaded.orders.orders.size() == 3);
+    assert(loaded.descriptions == original.descriptions);
+
+    const auto* loadedMove = std::get_if<MoveFleetOrder>(&loaded.orders.orders[0]);
+    assert(loadedMove);
+    assert(loadedMove->fleet == 4);
+    assert(loadedMove->warp == 7);
+    assert(loadedMove->targetFleet == 9);
+    assert(loadedMove->arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet);
+    assert(loadedMove->queuedWaypoints.size() == 1);
+    assert(loadedMove->queuedWaypoints.front().arrivalAction.kind == FleetArrivalActionKind::Refuel);
+
+    const auto* production = std::get_if<QueueProductionOrder>(&loaded.orders.orders[1]);
+    assert(production && production->colony == 3 && production->kind == ProductionKind::Factory);
+    const auto* allocation = std::get_if<SetResearchAllocationOrder>(&loaded.orders.orders[2]);
+    assert(allocation && allocation->percent == 30);
+}
+
 void old_format_is_rejected_cleanly()
 {
     QTemporaryDir directory;
@@ -313,6 +369,7 @@ void old_format_is_rejected_cleanly()
 int main()
 {
     round_trip_preserves_communications_and_planning();
+    turn_order_file_round_trip_preserves_envelope_and_orders();
     old_format_is_rejected_cleanly();
     std::cout << "save game tests passed\n";
     return 0;
