@@ -1,6 +1,8 @@
 #include "main_window.hpp"
 
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -43,13 +45,16 @@ QString fieldName(ResearchField field)
 
 void MainWindow::installResearch()
 {
-    if (researchDock_) return;
+    if (researchDialog_) return;
 
-    researchDock_ = new QDockWidget("Research", this);
-    researchDock_->setObjectName("researchDock");
-    researchDock_->setAllowedAreas(Qt::RightDockWidgetArea | Qt::BottomDockWidgetArea);
+    researchDialog_ = new QDialog(this);
+    researchDialog_->setObjectName("researchDialog");
+    researchDialog_->setWindowTitle("Empire Research");
+    researchDialog_->setWindowModality(Qt::WindowModal);
+    researchDialog_->setMinimumSize(680, 500);
+    researchDialog_->resize(780, 600);
 
-    auto* content = new QWidget(researchDock_);
+    auto* content = researchDialog_;
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(7);
@@ -127,15 +132,10 @@ void MainWindow::installResearch()
     editRow->addWidget(researchRemoveButton_);
     layout->addLayout(editRow);
 
-    researchDock_->setWidget(content);
-    addDockWidget(Qt::RightDockWidgetArea, researchDock_);
-
-    QMenu* view = menuBar()->findChild<QMenu*>("sunsViewMenu");
-    if (!view) {
-        view = menuBar()->addMenu("&View");
-        view->setObjectName("sunsViewMenu");
-    }
-    view->addAction(researchDock_->toggleViewAction());
+    auto* dialogButtons = new QDialogButtonBox(QDialogButtonBox::Close, content);
+    dialogButtons->setObjectName("researchDialogButtons");
+    layout->addWidget(dialogButtons);
+    connect(dialogButtons, &QDialogButtonBox::rejected, researchDialog_, &QDialog::reject);
 
     connect(researchAddButton_, &QPushButton::clicked, this, &MainWindow::addResearchPlanItem);
     connect(researchMoveUpButton_, &QPushButton::clicked, this,
@@ -155,9 +155,16 @@ void MainWindow::installResearch()
     refreshResearchPanel();
 }
 
+void MainWindow::openResearchDialog()
+{
+    installResearch();
+    refreshResearchPanel();
+    researchDialog_->exec();
+}
+
 void MainWindow::refreshResearchPanel()
 {
-    if (!researchDock_) return;
+    if (!researchDialog_) return;
     const auto* player = find_player(state_, 1);
     if (!player) return;
 
