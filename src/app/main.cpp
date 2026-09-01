@@ -4,6 +4,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QDialog>
 #include <QDockWidget>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
@@ -67,7 +68,7 @@ int main(int argc, char* argv[])
             if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
             if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();
             if (auto* messages = window.findChild<QDockWidget*>("turnMessagesDock")) messages->update();
-            if (auto* research = window.findChild<QDockWidget*>("researchDock")) research->update();
+            if (auto* research = window.findChild<QDialog*>("researchDialog")) research->update();
 
             // Open the non-modal graphical Ship Designer, select an empty
             // general slot and fit a Fuel Tank through the keyboard-accessible
