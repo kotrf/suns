@@ -277,6 +277,39 @@ struct TechnologyState {
     std::uint8_t researchAllocationPercent{};
 };
 
+// Stable core identity for future race creation. Traits are intentionally
+// structural choices rather than percentage modifiers; only Generalist has
+// gameplay-neutral semantics in the current slice.
+enum class PrimaryRaceTrait : std::uint8_t {
+    Generalist,
+    StargateSpecialist,
+    HabitatCivilization,
+    RemoteLogisticsSpecialist,
+};
+
+struct RaceProfile {
+    PrimaryRaceTrait primaryTrait{PrimaryRaceTrait::Generalist};
+    double radiationTolerance{0.50};
+    bool radiationImmune{};
+};
+
+// Compact player-owned history. It contains no enemy or unsurveyed truth and
+// can therefore later back statistics, PBEM exports and replay inspection.
+struct EmpireTurnStatistics {
+    std::uint64_t turn{};
+    std::uint64_t population{};
+    std::uint32_t colonies{};
+    std::uint32_t factories{};
+    std::uint32_t mines{};
+    std::uint32_t productionOutput{};
+    MineralCargo minerals;
+    std::uint32_t fleets{};
+    std::uint32_t ships{};
+    double fleetMass{};
+    std::array<std::uint8_t, kResearchFieldCount> technologyLevels{};
+    std::array<std::uint32_t, kResearchFieldCount> technologyProgress{};
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -284,9 +317,9 @@ struct Player {
     std::vector<SystemSurveyKnowledge> surveyKnowledge;
     std::vector<PendingSurveyReport> pendingSurveyReports;
     std::vector<PendingPlayerReport> pendingPlayerReports;
-    double radiationTolerance{0.50};
-    bool radiationImmune{};
+    RaceProfile race;
     TechnologyState technology;
+    std::vector<EmpireTurnStatistics> history;
 };
 
 enum class FleetRole {
@@ -554,6 +587,10 @@ void refresh_sensor_intel(GameState& state);
 [[nodiscard]] std::uint64_t population_capacity(const Planet& planet);
 [[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
 [[nodiscard]] std::uint32_t colony_output(const Planet& planet);
+[[nodiscard]] int stellar_habitability_bias(StarClass stellarClass);
+[[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
+    const GameState& state, PlayerId player);
+void record_empire_turn_statistics(GameState& state);
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();

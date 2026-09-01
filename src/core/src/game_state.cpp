@@ -48,11 +48,13 @@ std::string generated_planet_name(std::mt19937_64& rng, const std::string& starN
     return starName + " " + numerals[bounded(rng, numerals.size())];
 }
 
-std::uint32_t generated_habitability(std::mt19937_64& rng)
+std::uint32_t generated_habitability(std::mt19937_64& rng, StarClass stellarClass)
 {
     const auto a = bounded(rng, 86);
     const auto b = bounded(rng, 86);
-    return static_cast<std::uint32_t>(15 + (a + b) / 2);
+    const auto baseline = static_cast<int>(15 + (a + b) / 2);
+    return static_cast<std::uint32_t>(
+        std::clamp(baseline + stellar_habitability_bias(stellarClass), 5, 100));
 }
 
 bool far_enough(Position candidate, const std::vector<StarSystem>& stars, double minimumSeparation)
@@ -1105,6 +1107,68 @@ std::uint32_t colony_output(const Planet& planet)
     return planet.industry + static_cast<std::uint32_t>(planet.population / 500);
 }
 
+int stellar_habitability_bias(StarClass stellarClass)
+{
+    // A weak prior with deliberately broad overlap. Spectral class may guide
+    // scouting intuition but can never identify a good planet on its own.
+    switch (stellarClass) {
+    case StarClass::BlueWhite: return -10;
+    case StarClass::White: return -5;
+    case StarClass::YellowWhite: return 2;
+    case StarClass::Yellow: return 7;
+    case StarClass::Orange: return 1;
+    case StarClass::Red: return -4;
+    }
+    return 0;
+}
+
+EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId playerId)
+{
+    EmpireTurnStatistics result;
+    result.turn = state.turn;
+
+    for (const auto& planet : state.planets) {
+        if (planet.owner != playerId) continue;
+        ++result.colonies;
+        result.population += planet.population;
+        result.factories += planet.industry;
+        result.mines += planet.mines;
+        result.productionOutput += colony_output(planet);
+        result.minerals.ironium += planet.minerals.ironium;
+        result.minerals.boranium += planet.minerals.boranium;
+        result.minerals.germanium += planet.minerals.germanium;
+    }
+
+    for (const auto& fleet : state.fleets) {
+        if (fleet.owner != playerId) continue;
+        ++result.fleets;
+        result.population += fleet.colonists;
+        result.ships += fleet_ship_count(fleet);
+        result.fleetMass += fleet_gross_mass(state, fleet);
+        result.minerals.ironium += fleet.minerals.ironium;
+        result.minerals.boranium += fleet.minerals.boranium;
+        result.minerals.germanium += fleet.minerals.germanium;
+    }
+
+    if (const auto* player = find_player(state, playerId)) {
+        result.technologyLevels = player->technology.levels;
+        result.technologyProgress = player->technology.progress;
+    }
+    return result;
+}
+
+void record_empire_turn_statistics(GameState& state)
+{
+    for (auto& player : state.players) {
+        auto snapshot = empire_turn_statistics(state, player.id);
+        if (!player.history.empty() && player.history.back().turn == state.turn) {
+            player.history.back() = std::move(snapshot);
+        } else {
+            player.history.push_back(std::move(snapshot));
+        }
+    }
+}
+
 namespace {
 
 void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
@@ -1150,7 +1214,7 @@ GameState generate_game(const GalaxyConfig& config)
         const auto stellarClass = generated_star_class(physicalRng);
         state.stars.push_back({id, name, position, stellarClass});
         state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(namingRng, name),
-            generated_habitability(physicalRng), 0, 0, 1, {}});
+            generated_habitability(physicalRng, stellarClass), 0, 0, 1, {}});
     }
 
     const auto* scout = find_ship_design(state, kScoutDesignId);
@@ -1162,6 +1226,7 @@ GameState generate_game(const GalaxyConfig& config)
     initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;
     refresh_sensor_intel(state);
+    record_empire_turn_statistics(state);
     return state;
 }
 
@@ -1201,6 +1266,7 @@ GameState make_demo_game()
     initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;
     refresh_sensor_intel(state);
+    record_empire_turn_statistics(state);
     return state;
 }
 

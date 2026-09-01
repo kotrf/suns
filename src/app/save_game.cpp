@@ -5,6 +5,7 @@
 #include <QSaveFile>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <type_traits>
 
@@ -13,7 +14,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 21;
+constexpr quint32 kSaveFormatVersion = 22;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 1;
@@ -533,6 +534,67 @@ void readPlanet(QDataStream& stream, Planet& value)
     value.productionWaitingForMinerals = waitingForMinerals != 0;
 }
 
+void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& value)
+{
+    stream << static_cast<quint64>(value.turn)
+           << static_cast<quint64>(value.population)
+           << static_cast<quint32>(value.colonies)
+           << static_cast<quint32>(value.factories)
+           << static_cast<quint32>(value.mines)
+           << static_cast<quint32>(value.productionOutput);
+    writeMinerals(stream, value.minerals);
+    stream << static_cast<quint32>(value.fleets)
+           << static_cast<quint32>(value.ships)
+           << value.fleetMass;
+    for (const auto level : value.technologyLevels) stream << static_cast<quint8>(level);
+    for (const auto progress : value.technologyProgress) stream << static_cast<quint32>(progress);
+}
+
+void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
+{
+    quint64 turn{};
+    quint64 population{};
+    quint32 colonies{};
+    quint32 factories{};
+    quint32 mines{};
+    quint32 productionOutput{};
+    stream >> turn >> population >> colonies >> factories >> mines >> productionOutput;
+    value.turn = static_cast<std::uint64_t>(turn);
+    value.population = static_cast<std::uint64_t>(population);
+    value.colonies = static_cast<std::uint32_t>(colonies);
+    value.factories = static_cast<std::uint32_t>(factories);
+    value.mines = static_cast<std::uint32_t>(mines);
+    value.productionOutput = static_cast<std::uint32_t>(productionOutput);
+    readMinerals(stream, value.minerals);
+    quint32 fleets{};
+    quint32 ships{};
+    stream >> fleets >> ships >> value.fleetMass;
+    value.fleets = static_cast<std::uint32_t>(fleets);
+    value.ships = static_cast<std::uint32_t>(ships);
+    for (auto& level : value.technologyLevels) {
+        quint8 stored{};
+        stream >> stored;
+        level = static_cast<std::uint8_t>(stored);
+    }
+    for (auto& progress : value.technologyProgress) {
+        quint32 stored{};
+        stream >> stored;
+        progress = static_cast<std::uint32_t>(stored);
+    }
+}
+
+bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
+{
+    const auto validAmount = [](double amount) {
+        return std::isfinite(amount) && amount >= 0.0;
+    };
+    return value.turn != 0
+        && validAmount(value.minerals.ironium)
+        && validAmount(value.minerals.boranium)
+        && validAmount(value.minerals.germanium)
+        && validAmount(value.fleetMass);
+}
+
 void writePlayer(QDataStream& stream, const Player& value)
 {
     stream << static_cast<quint32>(value.id);
@@ -566,7 +628,8 @@ void writePlayer(QDataStream& stream, const Player& value)
         writePosition(stream, report.position);
         stream << static_cast<quint32>(report.quantity);
     }
-    stream << value.radiationTolerance << static_cast<quint8>(value.radiationImmune ? 1 : 0);
+    stream << value.race.radiationTolerance
+           << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
     for (const auto level : value.technology.levels) stream << static_cast<quint8>(level);
     for (const auto progress : value.technology.progress) stream << static_cast<quint32>(progress);
     writeEnum(stream, value.technology.focus);
@@ -574,6 +637,9 @@ void writePlayer(QDataStream& stream, const Player& value)
     stream << static_cast<quint32>(value.technology.queuedFocuses.size());
     for (const auto field : value.technology.queuedFocuses) writeEnum(stream, field);
     stream << static_cast<quint8>(value.technology.researchAllocationPercent);
+    writeEnum(stream, value.race.primaryTrait);
+    stream << static_cast<quint32>(value.history.size());
+    for (const auto& snapshot : value.history) writeEmpireTurnStatistics(stream, snapshot);
 }
 
 void readPlayer(QDataStream& stream, Player& value)
@@ -658,12 +724,13 @@ void readPlayer(QDataStream& stream, Player& value)
     }
 
     quint8 immune{};
-    stream >> value.radiationTolerance >> immune;
-    if (immune > 1) {
+    stream >> value.race.radiationTolerance >> immune;
+    if (immune > 1 || !std::isfinite(value.race.radiationTolerance)
+        || value.race.radiationTolerance < 0.0 || value.race.radiationTolerance > 1.0) {
         markCorrupt(stream);
         return;
     }
-    value.radiationImmune = immune != 0;
+    value.race.radiationImmune = immune != 0;
 
     for (auto& level : value.technology.levels) {
         quint8 stored{};
@@ -717,6 +784,31 @@ void readPlayer(QDataStream& stream, Player& value)
             return;
         }
         value.technology.researchAllocationPercent = percent;
+    }
+    value.race.primaryTrait = PrimaryRaceTrait::Generalist;
+    value.history.clear();
+    if (gReadSaveFormatVersion >= 22) {
+        if (!readEnum(
+                stream,
+                value.race.primaryTrait,
+                static_cast<quint8>(PrimaryRaceTrait::RemoteLogisticsSpecialist))) {
+            return;
+        }
+        if (!readCount(stream, count)) return;
+        value.history.reserve(count);
+        std::uint64_t previousTurn{};
+        for (quint32 index = 0; index < count; ++index) {
+            EmpireTurnStatistics snapshot;
+            readEmpireTurnStatistics(stream, snapshot);
+            if (stream.status() != QDataStream::Ok
+                || !validEmpireTurnStatistics(snapshot)
+                || (previousTurn != 0 && snapshot.turn <= previousTurn)) {
+                markCorrupt(stream);
+                return;
+            }
+            previousTurn = snapshot.turn;
+            value.history.push_back(std::move(snapshot));
+        }
     }
 }
 
@@ -933,7 +1025,8 @@ void readGameState(QDataStream& stream, GameState& value)
     if (!readVector(stream, value.shipDesigns, readShipDesign)) return;
     if (!readVector(stream, value.stars, readStar)) return;
     if (!readVector(stream, value.planets, readPlanet)) return;
-    readVector(stream, value.fleets, readFleet);
+    if (!readVector(stream, value.fleets, readFleet)) return;
+    if (gReadSaveFormatVersion < 22) record_empire_turn_statistics(value);
 }
 
 void writeGalaxyConfig(QDataStream& stream, const GalaxyConfig& value)
@@ -1501,6 +1594,12 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (loaded.state.turn == 0 || loaded.state.players.empty() || loaded.state.stars.empty()) {
         errorMessage = "The Suns! save file does not contain a valid game state.";
         return false;
+    }
+    for (const auto& player : loaded.state.players) {
+        if (!player.history.empty() && player.history.back().turn > loaded.state.turn) {
+            errorMessage = "The Suns! save file contains empire history from a future turn.";
+            return false;
+        }
     }
     if (loaded.campaignId == 0 || loaded.turnToken == 0) {
         errorMessage = "The Suns! save file has an invalid turn-exchange identity.";

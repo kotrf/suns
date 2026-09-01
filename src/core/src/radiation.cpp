@@ -11,8 +11,8 @@ bool fleet_radiation_safe(const GameState& state, const Fleet& fleet)
 
     const auto* player = find_player(state, fleet.owner);
     if (!player) return true;
-    return player->radiationImmune
-        || player->radiationTolerance + 0.000001 >= kRadiatingDriveSafeTolerance;
+    return player->race.radiationImmune
+        || player->race.radiationTolerance + 0.000001 >= kRadiatingDriveSafeTolerance;
 }
 
 std::uint64_t projected_fleet_radiation_losses(const GameState& state, const Fleet& fleet)

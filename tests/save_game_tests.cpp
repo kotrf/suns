@@ -45,6 +45,10 @@ void round_trip_preserves_communications_and_planning()
         ResearchField::Construction,
     };
     original.state.players.front().technology.researchAllocationPercent = 35;
+    original.state.players.front().race.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
+    original.state.players.front().race.radiationTolerance = 0.91;
+    original.state.players.front().race.radiationImmune = true;
+    record_empire_turn_statistics(original.state);
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
@@ -196,6 +200,13 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.queuedFocuses[0] == ResearchField::Propulsion);
     assert(technology.queuedFocuses[1] == ResearchField::Construction);
     assert(technology.researchAllocationPercent == 35);
+    assert(loaded.state.players.front().race.primaryTrait == PrimaryRaceTrait::HabitatCivilization);
+    assert(loaded.state.players.front().race.radiationTolerance == 0.91);
+    assert(loaded.state.players.front().race.radiationImmune);
+    assert(loaded.state.players.front().history.size() == 2);
+    assert(loaded.state.players.front().history.front().turn == 1);
+    assert(loaded.state.players.front().history.back().turn == 77);
+    assert(loaded.state.players.front().history.back().population == 1000);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);
