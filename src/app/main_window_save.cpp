@@ -12,6 +12,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -22,6 +23,13 @@
 namespace suns {
 
 namespace {
+
+std::uint64_t randomTurnExchangeId()
+{
+    std::uint64_t value{};
+    while (value == 0) value = QRandomGenerator::global()->generate64();
+    return value;
+}
 
 std::uint8_t legalWarpForFleet(const GameState& state, FleetId fleetId, std::uint8_t requested)
 {
@@ -116,6 +124,16 @@ bool MainWindow::installSaveMenuBootstrap()
         saveAsAction->setShortcut(QKeySequence::SaveAs);
         connect(saveAsAction, &QAction::triggered, this, [this] { saveGameAs(); });
 
+        fileMenu->addSeparator();
+
+        auto* exportOrdersAction = fileMenu->addAction("&Export pending orders…");
+        exportOrdersAction->setToolTip("Write this player's current orders to a portable .sunsorders file");
+        connect(exportOrdersAction, &QAction::triggered, this, [this] { exportTurnOrders(); });
+
+        auto* importOrdersAction = fileMenu->addAction("&Import pending orders…");
+        importOrdersAction->setToolTip("Replace this player's current orders from a matching .sunsorders file");
+        connect(importOrdersAction, &QAction::triggered, this, [this] { importTurnOrders(); });
+
         // Keep the title's turn counter current even when no save operation is
         // performed on that turn.
         connect(endTurnButton_, &QPushButton::clicked, this, [this] {
@@ -182,6 +200,8 @@ void MainWindow::openGame()
 bool MainWindow::saveGameToPath(const QString& path)
 {
     SaveGameData save;
+    save.campaignId = campaignId_;
+    save.turnToken = turnToken_;
     save.galaxyConfig = galaxyConfig_;
     save.state = state_;
     save.pendingOrders = pendingOrders_;
@@ -219,6 +239,8 @@ bool MainWindow::loadGameFromPath(const QString& path)
 
     galaxyConfig_ = loaded.galaxyConfig;
     state_ = std::move(loaded.state);
+    campaignId_ = loaded.campaignId;
+    turnToken_ = loaded.turnToken;
     resetTurnMessages();
     pendingOrders_ = std::move(loaded.pendingOrders);
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
@@ -258,6 +280,112 @@ bool MainWindow::loadGameFromPath(const QString& path)
     if (adjustedLegacyWarp) openedMessage += " — Warp adjusted to current engine limits";
     statusBar()->showMessage(openedMessage, 5000);
     return true;
+}
+
+void MainWindow::exportTurnOrders()
+{
+    const auto suggested = QString("suns-%1-turn-%2-player-%3.sunsorders")
+                               .arg(QString::number(campaignId_, 16))
+                               .arg(static_cast<qulonglong>(state_.turn))
+                               .arg(static_cast<qulonglong>(pendingOrders_.player));
+    auto path = QFileDialog::getSaveFileName(
+        this,
+        "Export Suns! Pending Orders",
+        suggested,
+        "Suns! turn orders (*.sunsorders);;All files (*)");
+    if (path.isEmpty()) return;
+    if (QFileInfo(path).suffix().isEmpty()) path += ".sunsorders";
+
+    TurnOrderFileData packet;
+    packet.campaignId = campaignId_;
+    packet.turn = state_.turn;
+    packet.turnToken = turnToken_;
+    packet.orders = pendingOrders_;
+    packet.descriptions = pendingDescriptions_;
+
+    QString error;
+    if (!write_turn_order_file(path, packet, error)) {
+        QMessageBox::warning(this, "Export Orders Failed", error);
+        statusBar()->showMessage("Order export failed", 3000);
+        return;
+    }
+
+    statusBar()->showMessage(
+        QString("Exported %1 order%2 to %3")
+            .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
+            .arg(pendingOrders_.orders.size() == 1 ? "" : "s")
+            .arg(QFileInfo(path).fileName()),
+        5000);
+}
+
+void MainWindow::importTurnOrders()
+{
+    const auto path = QFileDialog::getOpenFileName(
+        this,
+        "Import Suns! Pending Orders",
+        currentSavePath_.isEmpty() ? QString{} : QFileInfo(currentSavePath_).absolutePath(),
+        "Suns! turn orders (*.sunsorders);;All files (*)");
+    if (path.isEmpty()) return;
+
+    TurnOrderFileData packet;
+    QString error;
+    if (!read_turn_order_file(path, packet, error)) {
+        QMessageBox::warning(this, "Import Orders Failed", error);
+        statusBar()->showMessage("Order import failed", 3000);
+        return;
+    }
+
+    QString mismatch;
+    if (packet.campaignId != campaignId_) mismatch = "These orders belong to a different campaign.";
+    else if (packet.turn != state_.turn) {
+        mismatch = QString("These orders are for turn %1, but the open game is on turn %2.")
+                       .arg(static_cast<qulonglong>(packet.turn))
+                       .arg(static_cast<qulonglong>(state_.turn));
+    } else if (packet.turnToken != turnToken_) {
+        mismatch = "These orders refer to a different state of this turn.";
+    } else if (packet.orders.player != pendingOrders_.player) {
+        mismatch = QString("These orders belong to player %1, not player %2.")
+                       .arg(static_cast<qulonglong>(packet.orders.player))
+                       .arg(static_cast<qulonglong>(pendingOrders_.player));
+    }
+    if (!mismatch.isEmpty()) {
+        QMessageBox::warning(this, "Orders Do Not Match", mismatch);
+        statusBar()->showMessage("Orders do not match the open game", 4000);
+        return;
+    }
+
+    if (!pendingOrders_.orders.empty()) {
+        const auto choice = QMessageBox::question(
+            this,
+            "Replace Pending Orders?",
+            QString("Replace the %1 pending order%2 currently planned for this turn?")
+                .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
+                .arg(pendingOrders_.orders.size() == 1 ? "" : "s"),
+            QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel);
+        if (choice != QMessageBox::Yes) return;
+    }
+
+    pendingOrders_ = std::move(packet.orders);
+    pendingDescriptions_ = std::move(packet.descriptions);
+    rebuildScene();
+    statusBar()->showMessage(
+        QString("Imported %1 order%2 from %3")
+            .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
+            .arg(pendingOrders_.orders.size() == 1 ? "" : "s")
+            .arg(QFileInfo(path).fileName()),
+        5000);
+}
+
+void MainWindow::resetTurnExchangeIdentity()
+{
+    campaignId_ = randomTurnExchangeId();
+    rotateTurnExchangeToken();
+}
+
+void MainWindow::rotateTurnExchangeToken()
+{
+    turnToken_ = randomTurnExchangeId();
 }
 
 void MainWindow::updateSaveWindowTitle()

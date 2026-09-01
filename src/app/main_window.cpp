@@ -302,6 +302,7 @@ MainWindow::MainWindow(QWidget* parent)
     , galaxyConfig_()
     , state_(generate_game(galaxyConfig_))
 {
+    resetTurnExchangeIdentity();
     setWindowTitle("Suns!");
     resize(1300, 840);
 
@@ -994,8 +995,12 @@ void MainWindow::updateControls()
         && colonizer != nullptr && colonizer->colonists > 0);
 
     if (pendingOrders_.orders.empty()) ordersLabel_->setText("<b>Orders this turn:</b> none");
-    else ordersLabel_->setText(QString("<b>Orders this turn (%1):</b><br>%2")
-        .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(pendingDescriptions_.join("<br>")));
+    else {
+        auto safeDescriptions = pendingDescriptions_;
+        for (auto& description : safeDescriptions) description = description.toHtmlEscaped();
+        ordersLabel_->setText(QString("<b>Orders this turn (%1):</b><br>%2")
+            .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(safeDescriptions.join("<br>")));
+    }
 
     endTurnButton_->setText(QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
     refreshResearchPanel();
@@ -1262,6 +1267,7 @@ void MainWindow::endTurn()
 {
     auto result = processor_.process_with_events(state_, {pendingOrders_});
     state_ = std::move(result.state);
+    rotateTurnExchangeToken();
     pendingOrders_.orders.clear();
     pendingDescriptions_.clear();
     selectedStarId_.reset();
@@ -1290,6 +1296,7 @@ void MainWindow::newGalaxy()
         auto generated = generate_game(requested);
         galaxyConfig_ = requested;
         state_ = std::move(generated);
+        resetTurnExchangeIdentity();
     } catch (const std::exception& error) {
         statusBar()->showMessage(QString("Galaxy generation failed: %1").arg(error.what()));
         return;

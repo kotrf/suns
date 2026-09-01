@@ -130,6 +130,10 @@ private:
     void openGame();
     bool saveGameToPath(const QString& path);
     bool loadGameFromPath(const QString& path);
+    void exportTurnOrders();
+    void importTurnOrders();
+    void resetTurnExchangeIdentity();
+    void rotateTurnExchangeToken();
     void updateSaveWindowTitle();
     void zoomMap(double factor);
     void fitGalaxyView();
@@ -173,6 +177,8 @@ private:
     GameState state_;
     TurnProcessor processor_;
     PlayerOrders pendingOrders_{1, {}};
+    std::uint64_t campaignId_{};
+    std::uint64_t turnToken_{};
     std::optional<StarId> selectedStarId_;
     std::optional<FleetId> selectedFleetId_{1};
     std::optional<FleetId> warpControlFleetId_;

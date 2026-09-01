@@ -13,10 +13,32 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 20;
+constexpr quint32 kSaveFormatVersion = 21;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
+constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
+constexpr quint32 kTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
+
+std::uint64_t mixId(std::uint64_t value)
+{
+    value += 0x9e3779b97f4a7c15ULL;
+    value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+    value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+    return value ^ (value >> 31U);
+}
+
+std::uint64_t legacyCampaignId(const GalaxyConfig& config)
+{
+    const auto value = mixId(config.seed ^ (static_cast<std::uint64_t>(config.starCount) << 32U));
+    return value == 0 ? 1 : value;
+}
+
+std::uint64_t legacyTurnToken(std::uint64_t campaignId, std::uint64_t turn)
+{
+    const auto value = mixId(campaignId ^ mixId(turn));
+    return value == 0 ? 1 : value;
+}
 
 void markCorrupt(QDataStream& stream)
 {
@@ -1373,6 +1395,10 @@ bool stateContainsFleet(const GameState& state, FleetId id)
 bool write_save_game_file(const QString& filePath, const SaveGameData& data, QString& errorMessage)
 {
     errorMessage.clear();
+    if (data.campaignId == 0 || data.turnToken == 0) {
+        errorMessage = "Save game is missing its turn-exchange identity.";
+        return false;
+    }
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly)) {
         errorMessage = QString("Cannot open %1 for writing: %2").arg(filePath, file.errorString());
@@ -1382,6 +1408,8 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     QDataStream stream(&file);
     stream.setVersion(QDataStream::Qt_6_4);
     stream << kSaveMagic << kSaveFormatVersion;
+    stream << static_cast<quint64>(data.campaignId)
+           << static_cast<quint64>(data.turnToken);
     writeGalaxyConfig(stream, data.galaxyConfig);
     writeGameState(stream, data.state);
     writePlayerOrders(stream, data.pendingOrders);
@@ -1431,8 +1459,19 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     gReadSaveFormatVersion = version;
 
     SaveGameData loaded;
+    if (version >= 21) {
+        quint64 campaignId{};
+        quint64 turnToken{};
+        stream >> campaignId >> turnToken;
+        loaded.campaignId = static_cast<std::uint64_t>(campaignId);
+        loaded.turnToken = static_cast<std::uint64_t>(turnToken);
+    }
     readGalaxyConfig(stream, loaded.galaxyConfig);
     readGameState(stream, loaded.state);
+    if (version < 21) {
+        loaded.campaignId = legacyCampaignId(loaded.galaxyConfig);
+        loaded.turnToken = legacyTurnToken(loaded.campaignId, loaded.state.turn);
+    }
     readPlayerOrders(stream, loaded.pendingOrders);
     readDescriptions(stream, loaded.pendingDescriptions);
     readOptionalId(stream, loaded.selectedStar);
@@ -1463,6 +1502,10 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "The Suns! save file does not contain a valid game state.";
         return false;
     }
+    if (loaded.campaignId == 0 || loaded.turnToken == 0) {
+        errorMessage = "The Suns! save file has an invalid turn-exchange identity.";
+        return false;
+    }
     for (const auto& design : loaded.state.shipDesigns) {
         const auto validationError = ship_design_validation_error(design);
         if (validationError.empty()) continue;
@@ -1476,6 +1519,99 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     // keep the game loadable and simply fall back to a valid map selection.
     if (loaded.selectedStar && !stateContainsStar(loaded.state, *loaded.selectedStar)) loaded.selectedStar.reset();
     if (loaded.selectedFleet && !stateContainsFleet(loaded.state, *loaded.selectedFleet)) loaded.selectedFleet.reset();
+
+    data = std::move(loaded);
+    return true;
+}
+
+bool write_turn_order_file(const QString& filePath, const TurnOrderFileData& data, QString& errorMessage)
+{
+    errorMessage.clear();
+    if (data.campaignId == 0 || data.turn == 0 || data.turnToken == 0 || data.orders.player == 0) {
+        errorMessage = "Turn orders are missing their campaign, turn, token or player identity.";
+        return false;
+    }
+    if (data.descriptions.size() != static_cast<qsizetype>(data.orders.orders.size())) {
+        errorMessage = "Turn orders have an inconsistent description section.";
+        return false;
+    }
+
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        errorMessage = QString("Cannot open %1 for writing: %2").arg(filePath, file.errorString());
+        return false;
+    }
+
+    QDataStream stream(&file);
+    stream.setVersion(QDataStream::Qt_6_4);
+    stream << kTurnOrderMagic << kTurnOrderFormatVersion
+           << static_cast<quint64>(data.campaignId)
+           << static_cast<quint64>(data.turn)
+           << static_cast<quint64>(data.turnToken);
+    writePlayerOrders(stream, data.orders);
+    writeDescriptions(stream, data.descriptions);
+
+    if (stream.status() != QDataStream::Ok) {
+        file.cancelWriting();
+        errorMessage = QString("Failed while serializing turn orders to %1").arg(filePath);
+        return false;
+    }
+    if (!file.commit()) {
+        errorMessage = QString("Cannot commit turn orders %1: %2").arg(filePath, file.errorString());
+        return false;
+    }
+    return true;
+}
+
+bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QString& errorMessage)
+{
+    errorMessage.clear();
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        errorMessage = QString("Cannot open %1: %2").arg(filePath, file.errorString());
+        return false;
+    }
+
+    QDataStream stream(&file);
+    stream.setVersion(QDataStream::Qt_6_4);
+    quint32 magic{};
+    quint32 version{};
+    quint64 campaignId{};
+    quint64 turn{};
+    quint64 turnToken{};
+    stream >> magic >> version;
+    if (stream.status() != QDataStream::Ok || magic != kTurnOrderMagic) {
+        errorMessage = "This is not a Suns! turn-order file, or the file is damaged.";
+        return false;
+    }
+    if (version != kTurnOrderFormatVersion) {
+        errorMessage = QString("Unsupported Suns! turn-order version %1 (this build reads version %2).")
+                           .arg(version)
+                           .arg(kTurnOrderFormatVersion);
+        return false;
+    }
+
+    TurnOrderFileData loaded;
+    stream >> campaignId >> turn >> turnToken;
+    loaded.campaignId = static_cast<std::uint64_t>(campaignId);
+    loaded.turn = static_cast<std::uint64_t>(turn);
+    loaded.turnToken = static_cast<std::uint64_t>(turnToken);
+    gReadSaveFormatVersion = kSaveFormatVersion;
+    readPlayerOrders(stream, loaded.orders);
+    readDescriptions(stream, loaded.descriptions);
+
+    if (stream.status() != QDataStream::Ok) {
+        errorMessage = "The Suns! turn-order file is truncated or contains invalid data.";
+        return false;
+    }
+    if (loaded.campaignId == 0 || loaded.turn == 0 || loaded.turnToken == 0 || loaded.orders.player == 0) {
+        errorMessage = "The Suns! turn-order file has invalid campaign, turn, token or player metadata.";
+        return false;
+    }
+    if (loaded.descriptions.size() != static_cast<qsizetype>(loaded.orders.orders.size())) {
+        errorMessage = "The Suns! turn-order file has an inconsistent description section.";
+        return false;
+    }
 
     data = std::move(loaded);
     return true;
