@@ -1242,7 +1242,9 @@ void advance_fleets(GameState& state)
 
 void grow_colonies(GameState& state)
 {
-    for (auto& planet : state.planets) planet.population += projected_population_growth(planet);
+    for (auto& planet : state.planets) {
+        planet.population += projected_population_growth(state, planet, state.turn);
+    }
 }
 
 } // namespace
@@ -1460,6 +1462,7 @@ TurnResult TurnProcessor::process_with_events(
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
+    record_empire_turn_statistics(next);
     return {std::move(next), std::move(events)};
 }
 

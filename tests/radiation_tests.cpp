@@ -33,12 +33,12 @@ int main()
     assert(suns::projected_fleet_radiation_losses(state, radiating) == 100);
 
     auto tolerant = state;
-    tolerant.players.front().radiationTolerance = suns::kRadiatingDriveSafeTolerance;
+    tolerant.players.front().race.radiationTolerance = suns::kRadiatingDriveSafeTolerance;
     assert(suns::fleet_radiation_safe(tolerant, radiating));
     assert(suns::projected_fleet_radiation_losses(tolerant, radiating) == 0);
 
     auto immune = state;
-    immune.players.front().radiationImmune = true;
+    immune.players.front().race.radiationImmune = true;
     assert(suns::fleet_radiation_safe(immune, radiating));
 
     // Attrition happens only when the radiating engine actually moves the ship.

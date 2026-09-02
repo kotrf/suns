@@ -63,7 +63,8 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             else if (front.item.kind == ProductionKind::Mine) ++simulated.mines;
             remaining.erase(remaining.begin());
         }
-        simulated.population += projected_population_growth(simulated);
+        simulated.population += projected_population_growth(
+            state, simulated, state.turn + offset - 1);
     }
 
     for (const auto& item : remaining) {

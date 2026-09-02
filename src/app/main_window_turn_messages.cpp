@@ -62,6 +62,13 @@ QString event_text(const GameState& state, const GameEvent& event)
                               .arg(concentrations.germanium, 0, 'f', 1);
             }
         }
+        if (star && star_is_variable(*star) && event.surveyLevel >= SurveyLevel::OrbitalSurvey) {
+            detail += event.surveyLevel >= SurveyLevel::GeologicalSurvey
+                ? QString("\nVariable star characterized — period %1 years, luminosity amplitude ±%2%")
+                      .arg(star->variability.periodTurns)
+                      .arg(star->variability.amplitudePercent)
+                : QString("\nVariable star detected — remain in orbit to characterize its cycle");
+        }
         QString surveyName = event.surveyLevel == SurveyLevel::SystemScan
             ? "Long-range system scan"
             : "Penetrating scan";

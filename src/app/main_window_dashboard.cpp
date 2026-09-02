@@ -156,13 +156,25 @@ QString MainWindow::selectedPlanetPanelSummary() const
                  .arg(estimated ? "~" : "")
                  .arg(knownHabitability.value_or(0));
     if (estimated) lines << "Basic scan estimate — enter orbit to confirm";
+    if (const auto variability = known_stellar_variability(state_, 1, star->id);
+        variability && variability->variable) {
+        if (variability->characterized) {
+            lines << QString("<b>Variable star</b> • period %1 years • luminosity ±%2% • now %3%")
+                         .arg(variability->periodTurns)
+                         .arg(variability->amplitudePercent)
+                         .arg(qRound(stellar_luminosity(*star, state_.turn) * 100.0));
+        } else {
+            lines << "<b>Variable star detected</b> • remain in orbit to characterize its cycle";
+        }
+    }
 
     if (planet->owner == 1) {
         lines << QString("<span style='color:#85d5a5'><b>Terran colony</b></span>");
         lines << QString("Population %1 / %2 • +%3 next turn")
                      .arg(static_cast<qulonglong>(planet->population))
-                     .arg(static_cast<qulonglong>(population_capacity(*planet)))
-                     .arg(static_cast<qulonglong>(projected_population_growth(*planet)));
+                     .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)))
+                     .arg(static_cast<qulonglong>(
+                         projected_population_growth(state_, *planet, state_.turn)));
         lines << QString("Factories %1 • Mines %2 • Output %3 / turn")
                      .arg(planet->industry)
                      .arg(planet->mines)

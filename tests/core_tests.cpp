@@ -2,6 +2,7 @@
 #include "suns/turn_processor.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 
@@ -78,6 +79,42 @@ void verify_ship_designs()
 
 void verify_procedural_generation()
 {
+    assert(suns::stellar_habitability_bias(suns::StarClass::BlueWhite)
+        < suns::stellar_habitability_bias(suns::StarClass::Yellow));
+    assert(suns::stellar_habitability_bias(suns::StarClass::White)
+        < suns::stellar_habitability_bias(suns::StarClass::YellowWhite));
+    assert(std::abs(suns::stellar_habitability_bias(suns::StarClass::BlueWhite)) <= 10);
+    assert(std::abs(suns::stellar_habitability_bias(suns::StarClass::Yellow)) <= 10);
+
+    std::array<double, 6> habitabilityTotals{};
+    std::array<std::size_t, 6> classCounts{};
+    std::array<std::uint32_t, 6> classMinimums{101, 101, 101, 101, 101, 101};
+    std::array<std::uint32_t, 6> classMaximums{};
+    for (std::uint64_t seed = 1; seed <= 200; ++seed) {
+        suns::GalaxyConfig sampleConfig;
+        sampleConfig.seed = seed;
+        const auto sample = suns::generate_game(sampleConfig);
+        for (std::size_t index = 1; index < sample.stars.size(); ++index) {
+            const auto classIndex = static_cast<std::size_t>(sample.stars[index].stellarClass);
+            const auto value = sample.planets[index].habitability;
+            habitabilityTotals[classIndex] += value;
+            ++classCounts[classIndex];
+            classMinimums[classIndex] = std::min(classMinimums[classIndex], value);
+            classMaximums[classIndex] = std::max(classMaximums[classIndex], value);
+        }
+    }
+    const auto mean = [&](suns::StarClass stellarClass) {
+        const auto index = static_cast<std::size_t>(stellarClass);
+        assert(classCounts[index] > 100);
+        return habitabilityTotals[index] / static_cast<double>(classCounts[index]);
+    };
+    assert(mean(suns::StarClass::Yellow) > mean(suns::StarClass::BlueWhite) + 10.0);
+    assert(mean(suns::StarClass::Yellow) > mean(suns::StarClass::White) + 6.0);
+    assert(mean(suns::StarClass::YellowWhite) > mean(suns::StarClass::Red) + 3.0);
+    // The distributions still overlap substantially: colour is only a prior.
+    assert(classMaximums[static_cast<std::size_t>(suns::StarClass::BlueWhite)]
+        > classMinimums[static_cast<std::size_t>(suns::StarClass::Yellow)] + 30);
+
     suns::GalaxyConfig config;
     config.seed = 424242;
     config.starCount = 24;

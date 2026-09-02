@@ -65,11 +65,20 @@ enum class StarClass {
     Red,
 };
 
+struct StellarVariability {
+    // A zero period denotes a stable star. Variable stars use a deterministic
+    // sinusoidal cycle measured in planning turns.
+    std::uint16_t periodTurns{};
+    std::uint8_t amplitudePercent{};
+    std::uint16_t phaseOffset{};
+};
+
 struct StarSystem {
     StarId id{};
     std::string name;
     Position position;
     StarClass stellarClass{StarClass::Yellow};
+    StellarVariability variability;
 };
 
 struct MineralCargo {
@@ -222,6 +231,14 @@ struct SystemSurveyKnowledge {
     std::uint64_t observedTurn{};
 };
 
+struct StellarVariabilityIntel {
+    bool variable{};
+    bool characterized{};
+    std::uint16_t periodTurns{};
+    std::uint8_t amplitudePercent{};
+    std::uint16_t phaseOffset{};
+};
+
 struct PendingSurveyReport {
     StarId star{};
     FleetId sourceFleet{}; // Zero means a stationary colony sensor source.
@@ -277,6 +294,39 @@ struct TechnologyState {
     std::uint8_t researchAllocationPercent{};
 };
 
+// Stable core identity for future race creation. Traits are intentionally
+// structural choices rather than percentage modifiers; only Generalist has
+// gameplay-neutral semantics in the current slice.
+enum class PrimaryRaceTrait : std::uint8_t {
+    Generalist,
+    StargateSpecialist,
+    HabitatCivilization,
+    RemoteLogisticsSpecialist,
+};
+
+struct RaceProfile {
+    PrimaryRaceTrait primaryTrait{PrimaryRaceTrait::Generalist};
+    double radiationTolerance{0.50};
+    bool radiationImmune{};
+};
+
+// Compact player-owned history. It contains no enemy or unsurveyed truth and
+// can therefore later back statistics, PBEM exports and replay inspection.
+struct EmpireTurnStatistics {
+    std::uint64_t turn{};
+    std::uint64_t population{};
+    std::uint32_t colonies{};
+    std::uint32_t factories{};
+    std::uint32_t mines{};
+    std::uint32_t productionOutput{};
+    MineralCargo minerals;
+    std::uint32_t fleets{};
+    std::uint32_t ships{};
+    double fleetMass{};
+    std::array<std::uint8_t, kResearchFieldCount> technologyLevels{};
+    std::array<std::uint32_t, kResearchFieldCount> technologyProgress{};
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -284,9 +334,9 @@ struct Player {
     std::vector<SystemSurveyKnowledge> surveyKnowledge;
     std::vector<PendingSurveyReport> pendingSurveyReports;
     std::vector<PendingPlayerReport> pendingPlayerReports;
-    double radiationTolerance{0.50};
-    bool radiationImmune{};
+    RaceProfile race;
     TechnologyState technology;
+    std::vector<EmpireTurnStatistics> history;
 };
 
 enum class FleetRole {
@@ -527,6 +577,8 @@ void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
 [[nodiscard]] SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] std::optional<StellarVariabilityIntel> known_stellar_variability(
+    const GameState& state, PlayerId player, StarId star);
 [[nodiscard]] std::optional<std::uint32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planet);
 [[nodiscard]] bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planet);
@@ -552,8 +604,20 @@ void refresh_sensor_intel(GameState& state);
 
 [[nodiscard]] std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item);
 [[nodiscard]] std::uint64_t population_capacity(const Planet& planet);
+[[nodiscard]] std::uint64_t population_capacity(
+    const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
+[[nodiscard]] std::uint64_t projected_population_growth(
+    const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] std::uint32_t colony_output(const Planet& planet);
+[[nodiscard]] int stellar_habitability_bias(StarClass stellarClass);
+[[nodiscard]] bool star_is_variable(const StarSystem& star);
+[[nodiscard]] double stellar_luminosity(const StarSystem& star, std::uint64_t turn);
+[[nodiscard]] std::uint32_t current_planet_habitability(
+    const GameState& state, const Planet& planet, std::uint64_t turn);
+[[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
+    const GameState& state, PlayerId player);
+void record_empire_turn_statistics(GameState& state);
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();

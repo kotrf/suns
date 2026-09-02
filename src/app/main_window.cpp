@@ -113,6 +113,17 @@ QString starClassName(StarClass stellarClass)
     return "yellow";
 }
 
+QString stellarVariabilitySummary(const GameState& state, const StarSystem& star)
+{
+    const auto intel = known_stellar_variability(state, 1, star.id);
+    if (!intel || !intel->variable) return {};
+    if (!intel->characterized) return "Variable star detected — cycle not characterized";
+    return QString("Variable star — %1-turn period, ±%2% luminosity, now %3%")
+        .arg(intel->periodTurns)
+        .arg(intel->amplitudePercent)
+        .arg(qRound(stellar_luminosity(star, state.turn) * 100.0));
+}
+
 QString turnCount(std::uint32_t turns)
 {
     return QString("%1 turn%2").arg(turns).arg(turns == 1 ? "" : "s");
@@ -631,6 +642,11 @@ void MainWindow::rebuildScene()
                               .arg(QString::fromStdString(star.name))
                               .arg(starClassName(star.stellarClass));
         QString mapLabel = QString::fromStdString(star.name);
+        const auto variability = stellarVariabilitySummary(state_, star);
+        if (!variability.isEmpty()) {
+            tooltip += QString("\n%1").arg(variability);
+            mapLabel += "  [VAR]";
+        }
         if (!surveyed) {
             if (survey_level(state_, 1, star.id) >= SurveyLevel::SystemScan) {
                 tooltip += "\nOrdinary scanner contact — planetary parameters unknown";
@@ -860,13 +876,22 @@ void MainWindow::updateControls()
     } else if (star && planet) {
         const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
         const auto estimated = survey_level(state_, 1, star->id) == SurveyLevel::BasicScan;
+        const auto variability = stellarVariabilitySummary(state_, *star);
+        const auto variabilityLine = variability.isEmpty()
+            ? QString{}
+            : QString("<br><b>%1</b>").arg(variability);
+        const auto habitabilityLine = QString("Habitability: <b>%1%2%</b>%3")
+            .arg(estimated ? "~" : "")
+            .arg(knownHabitability)
+            .arg(variabilityLine);
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
         QString populationLine;
         if (planet->owner == 1) {
             populationLine = QString("Population: %1 / %2 (+%3 next turn)<br>")
                                  .arg(static_cast<qulonglong>(planet->population))
-                                 .arg(static_cast<qulonglong>(population_capacity(*planet)))
-                                 .arg(static_cast<qulonglong>(projected_population_growth(*planet)));
+                                 .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)))
+                                 .arg(static_cast<qulonglong>(
+                                     projected_population_growth(state_, *planet, state_.turn)));
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")
@@ -878,11 +903,11 @@ void MainWindow::updateControls()
                              .arg(QString::fromStdString(fleet->name)).arg(selectedWarp)
                              .arg(turnCount(selectedEta)).arg(routeFuelLine).arg(dynamicArrivalLine);
         }
-        selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>Habitability: <b>%3%4%</b><br>Status: %5<br>"
-                                          "%6Infrastructure: %7<br>Economic output: %8 / turn<br>"
-                                          "Production: <b>%9</b>%10")
+        selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>%3<br>Status: %4<br>"
+                                          "%5Infrastructure: %6<br>Economic output: %7 / turn<br>"
+                                          "Production: <b>%8</b>%9")
             .arg(QString::fromStdString(star->name)).arg(QString::fromStdString(planet->name))
-            .arg(estimated ? "~" : "").arg(knownHabitability).arg(owner).arg(populationLine).arg(planet->industry)
+            .arg(habitabilityLine).arg(owner).arg(populationLine).arg(planet->industry)
             .arg(colony_output(*planet)).arg(productionSummary(state_, *planet)).arg(travelLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
