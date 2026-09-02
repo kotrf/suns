@@ -109,6 +109,20 @@ void MainWindow::installFleetReadabilityPolish()
         QProgressBar#germaniumConcentration::chunk { background: #b99532; }
         QProgressBar#fleetFuelBar::chunk { background: #3e9dc2; }
         QProgressBar#fleetCargoBar::chunk { background: #b77d42; }
+        QProgressBar#planetTemperatureBar::chunk {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #4b9bd5, stop:0.5 #62b879, stop:1 #d66c55);
+        }
+        QProgressBar#planetTemperatureBar, QProgressBar#planetGravityBar,
+        QProgressBar#planetRadiationBar {
+            min-height: 9px;
+            max-height: 9px;
+        }
+        QProgressBar#planetGravityBar::chunk { background: #8b79c8; }
+        QProgressBar#planetRadiationBar::chunk {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #65ad72, stop:0.55 #d2b94f, stop:1 #d35c50);
+        }
 
         QDialog, QMessageBox {
             background: #0d141d;
@@ -123,7 +137,7 @@ void MainWindow::installFleetReadabilityPolish()
         QDialog QRadioButton:disabled {
             color: #8da0b3;
         }
-        QListView, QListWidget, QTreeView, QTableView,
+        QListView, QListWidget, QTreeView, QTableView, QTextBrowser,
         QComboBox QAbstractItemView {
             color: #e7f0f8;
             background: #101925;
@@ -157,10 +171,7 @@ void MainWindow::installFleetReadabilityPolish()
 
     const auto refresh = [this, fuelBar, cargoBar] {
         if (shuttingDown_) return;
-        const auto* authoritativeFleet = selectedFleet();
-        const auto visibleFleetStorage = authoritativeFleet
-            ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
-            : std::nullopt;
+        const auto visibleFleetStorage = selectedFleetPlanningView();
         const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
         if (!fleet) {
             for (auto* bar : {fuelBar, cargoBar}) {

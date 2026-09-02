@@ -38,7 +38,7 @@ void MainWindow::installPanelLayoutFixes()
     // That works for prose labels, but technical forms and compact controls can
     // still have a real minimum width. In a narrow panel those controls were
     // clipped with no way for the player to reach their right-hand side.
-    makePanelScrollable(findChild<QScrollArea*>("commandScrollArea"), 300, 520);
+    makePanelScrollable(findChild<QScrollArea*>("commandScrollArea"), 280, 520);
     makePanelScrollable(findChild<QScrollArea*>("fleetScrollArea"), 300, 560);
     makePanelScrollable(findChild<QScrollArea*>("routeProgramScrollArea"), 280, 520);
 
@@ -55,6 +55,10 @@ void MainWindow::installPanelLayoutFixes()
             dock->setMinimumWidth(280);
             dock->setMaximumWidth(520);
         }
+        if (dock->objectName() == "overviewDock" || dock->objectName() == "productionDock") {
+            dock->setMinimumWidth(280);
+            dock->setMaximumWidth(520);
+        }
     }
 
     panels->addSeparator();
@@ -66,14 +70,15 @@ void MainWindow::installPanelLayoutFixes()
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         restoreGeometry(settings.value("workspace/geometry").toByteArray());
-        restoreState(settings.value("workspace/docks").toByteArray(), 1);
+        // Version 2 discards the old asymmetric left-column geometry once.
+        restoreState(settings.value("workspace/docks").toByteArray(), 2);
     }
 }
 
 void MainWindow::resetPanelLayout()
 {
     if (auto* command = findChild<QScrollArea*>("commandScrollArea")) {
-        command->setMinimumWidth(300);
+        command->setMinimumWidth(280);
         command->setMaximumWidth(520);
         command->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         command->show();
@@ -105,7 +110,12 @@ void MainWindow::resetPanelLayout()
         if (fleet) tabifyDockWidget(fleet, route);
     }
     if (fleet) fleet->raise();
-    if (overview) resizeDocks({overview}, {330}, Qt::Horizontal);
+    if (overview && production) {
+        resizeDocks({overview, production}, {340, 340}, Qt::Horizontal);
+        resizeDocks({overview, production}, {360, 240}, Qt::Vertical);
+    } else if (overview) {
+        resizeDocks({overview}, {340}, Qt::Horizontal);
+    }
     if (fleet) resizeDocks({fleet}, {350}, Qt::Horizontal);
 
     if (auto* routeScroll = findChild<QScrollArea*>("routeProgramScrollArea")) {

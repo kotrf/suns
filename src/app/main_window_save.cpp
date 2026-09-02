@@ -209,6 +209,9 @@ bool MainWindow::saveGameToPath(const QString& path)
     save.selectedStar = selectedStarId_;
     save.selectedFleet = selectedFleetId_;
     save.showSensorRanges = showSensorRanges_;
+    save.strategicMessages = turnMessages_;
+    save.readStrategicMessageIds.assign(
+        readTurnMessageIds_.begin(), readTurnMessageIds_.end());
 
     QString error;
     if (!write_save_game_file(path, save, error)) {
@@ -242,6 +245,9 @@ bool MainWindow::loadGameFromPath(const QString& path)
     campaignId_ = loaded.campaignId;
     turnToken_ = loaded.turnToken;
     resetTurnMessages();
+    turnMessages_ = std::move(loaded.strategicMessages);
+    readTurnMessageIds_ = std::set<std::uint64_t>(
+        loaded.readStrategicMessageIds.begin(), loaded.readStrategicMessageIds.end());
     pendingOrders_ = std::move(loaded.pendingOrders);
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
     selectedStarId_ = loaded.selectedStar;
@@ -268,6 +274,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
         galaxyConfig_.height + 110.0);
 
     refreshShipDesignChoices();
+    refreshTurnMessages();
     rebuildScene();
     fitGalaxyView();
     updateSaveWindowTitle();

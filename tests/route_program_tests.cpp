@@ -131,12 +131,52 @@ void failed_colonize_on_arrival_keeps_ship()
     assert(same_position(ship->position, targetStar->position));
 }
 
+void route_and_arrival_action_are_isolated_by_fleet_id()
+{
+    auto fixture = make_arrival_fixture(250);
+    const auto targetPlanetIt = std::find_if(
+        fixture.state.planets.begin(), fixture.state.planets.end(), [&](const Planet& planet) {
+            return planet.id == fixture.targetPlanet;
+        });
+    const auto* targetPlanet = targetPlanetIt == fixture.state.planets.end() ? nullptr : &*targetPlanetIt;
+    const auto* targetStar = targetPlanet ? find_star(fixture.state, targetPlanet->star) : nullptr;
+    const auto sourceIt = std::find_if(
+        fixture.state.fleets.begin(), fixture.state.fleets.end(), [&](const Fleet& fleet) {
+            return fleet.id == fixture.colonyFleet;
+        });
+    const auto* source = sourceIt == fixture.state.fleets.end() ? nullptr : &*sourceIt;
+    assert(targetStar && source);
+
+    auto untouched = *source;
+    untouched.id = fixture.state.nextFleetId++;
+    untouched.name = "Untouched Colonizer";
+    fixture.state.fleets.push_back(untouched);
+
+    MoveFleetOrder move;
+    move.fleet = fixture.colonyFleet;
+    move.destination = targetStar->position;
+    move.warp = kColonyShipCruiseWarp;
+    move.arrivalAction.kind = FleetArrivalActionKind::Colonize;
+
+    const TurnProcessor processor;
+    const auto next = processor.process(fixture.state, {{1, {move}}});
+    const auto other = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.id == untouched.id;
+    });
+    assert(other != next.fleets.end());
+    assert(same_position(other->position, untouched.position));
+    assert(!other->destination);
+    assert(!other->arrivalAction);
+    assert(other->colonists == untouched.colonists);
+}
+
 } // namespace
 
 int main()
 {
     colonize_on_arrival_establishes_colony_and_consumes_ship();
     failed_colonize_on_arrival_keeps_ship();
+    route_and_arrival_action_are_isolated_by_fleet_id();
     std::cout << "route program tests passed\n";
     return 0;
 }

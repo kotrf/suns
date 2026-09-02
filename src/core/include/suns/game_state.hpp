@@ -206,6 +206,14 @@ struct ProductionCompletionEstimate {
     bool beyondForecastHorizon{};
 };
 
+struct PlanetEnvironment {
+    // Normalized physical indices: 50 is temperate / Earth-like for
+    // temperature and gravity; radiation runs from quiet to severe.
+    std::uint8_t temperature{50};
+    std::uint8_t gravity{50};
+    std::uint8_t radiation{15};
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -219,6 +227,7 @@ struct Planet {
     std::uint32_t mines{};
     bool productionWaitingForMinerals{};
     bool productionWaitingForShipyard{};
+    PlanetEnvironment environment;
 };
 
 enum class OrbitalStationHullType : std::uint8_t {
@@ -571,6 +580,8 @@ void normalize_ship_design_placement(ShipDesign& design);
 void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 
 [[nodiscard]] MineralCargo planet_mineral_concentration(const GameState& state, const Planet& planet);
+[[nodiscard]] PlanetEnvironment generated_planet_environment(
+    std::uint64_t galaxySeed, PlanetId planet, StarClass stellarClass);
 [[nodiscard]] MineralCargo projected_mineral_mining(const GameState& state, const Planet& planet);
 [[nodiscard]] MineralCargo projected_remote_mining(
     const GameState& state, const Planet& planet, const ShipDesign& design);

@@ -15,7 +15,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 24;
+constexpr quint32 kSaveFormatVersion = 26;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 2;
@@ -511,7 +511,10 @@ void writePlanet(QDataStream& stream, const Planet& value)
     writeMinerals(stream, value.minerals);
     stream << static_cast<quint32>(value.mines)
            << static_cast<quint8>(value.productionWaitingForMinerals ? 1 : 0)
-           << static_cast<quint8>(value.productionWaitingForShipyard ? 1 : 0);
+           << static_cast<quint8>(value.productionWaitingForShipyard ? 1 : 0)
+           << static_cast<quint8>(value.environment.temperature)
+           << static_cast<quint8>(value.environment.gravity)
+           << static_cast<quint8>(value.environment.radiation);
 }
 
 void readPlanet(QDataStream& stream, Planet& value)
@@ -568,6 +571,93 @@ void readPlanet(QDataStream& stream, Planet& value)
             return;
         }
         value.productionWaitingForShipyard = waitingForShipyard != 0;
+    }
+    if (gReadSaveFormatVersion >= 25) {
+        quint8 temperature{};
+        quint8 gravity{};
+        quint8 radiation{};
+        stream >> temperature >> gravity >> radiation;
+        if (temperature > 100 || gravity > 100 || radiation > 100) {
+            markCorrupt(stream);
+            return;
+        }
+        value.environment = {temperature, gravity, radiation};
+    }
+}
+
+void writeGameEvent(QDataStream& stream, const GameEvent& value)
+{
+    stream << static_cast<quint64>(value.id)
+           << static_cast<quint64>(value.turn)
+           << static_cast<quint64>(value.observedTurn)
+           << static_cast<quint32>(value.recipient);
+    writeEnum(stream, value.kind);
+    writeEnum(stream, value.severity);
+    stream << static_cast<quint32>(value.star)
+           << static_cast<quint32>(value.planet)
+           << static_cast<quint32>(value.fleet)
+           << static_cast<quint32>(value.shipDesign);
+    writeEnum(stream, value.productionKind);
+    stream << value.position.x << value.position.y
+           << static_cast<quint32>(value.quantity);
+    writeEnum(stream, value.surveyLevel);
+    writeEnum(stream, value.researchField);
+    stream << static_cast<quint8>(value.technologyLevel);
+}
+
+void readGameEvent(QDataStream& stream, GameEvent& value)
+{
+    quint64 id{};
+    quint64 turn{};
+    quint64 observedTurn{};
+    quint32 recipient{};
+    quint32 star{};
+    quint32 planet{};
+    quint32 fleet{};
+    quint32 shipDesign{};
+    quint32 quantity{};
+    quint8 technologyLevel{};
+    stream >> id >> turn >> observedTurn >> recipient;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(GameEventKind::ProductionWaitingForShipyard))) return;
+    if (!readEnum(stream, value.severity, static_cast<quint8>(GameEventSeverity::Critical))) return;
+    stream >> star >> planet >> fleet >> shipDesign;
+    if (!readEnum(stream, value.productionKind, static_cast<quint8>(ProductionKind::OrbitalStation))) return;
+    stream >> value.position.x >> value.position.y >> quantity;
+    if (!readEnum(stream, value.surveyLevel, static_cast<quint8>(SurveyLevel::GeologicalSurvey))) return;
+    if (!readEnum(stream, value.researchField, static_cast<quint8>(ResearchField::Weapons))) return;
+    stream >> technologyLevel;
+    if (!std::isfinite(value.position.x) || !std::isfinite(value.position.y)) {
+        markCorrupt(stream);
+        return;
+    }
+    value.id = static_cast<std::uint64_t>(id);
+    value.turn = static_cast<std::uint64_t>(turn);
+    value.observedTurn = static_cast<std::uint64_t>(observedTurn);
+    value.recipient = static_cast<PlayerId>(recipient);
+    value.star = static_cast<StarId>(star);
+    value.planet = static_cast<PlanetId>(planet);
+    value.fleet = static_cast<FleetId>(fleet);
+    value.shipDesign = static_cast<ShipDesignId>(shipDesign);
+    value.quantity = static_cast<std::uint32_t>(quantity);
+    value.technologyLevel = static_cast<std::uint8_t>(technologyLevel);
+}
+
+void writeMessageIds(QDataStream& stream, const std::vector<std::uint64_t>& ids)
+{
+    stream << static_cast<quint32>(ids.size());
+    for (const auto id : ids) stream << static_cast<quint64>(id);
+}
+
+void readMessageIds(QDataStream& stream, std::vector<std::uint64_t>& ids)
+{
+    quint32 count{};
+    if (!readCount(stream, count)) return;
+    ids.clear();
+    ids.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        quint64 id{};
+        stream >> id;
+        ids.push_back(static_cast<std::uint64_t>(id));
     }
 }
 
@@ -1137,6 +1227,15 @@ void readGameState(QDataStream& stream, GameState& value)
     if (!readVector(stream, value.shipDesigns, readShipDesign)) return;
     if (!readVector(stream, value.stars, readStar)) return;
     if (!readVector(stream, value.planets, readPlanet)) return;
+    if (gReadSaveFormatVersion < 25) {
+        for (auto& planet : value.planets) {
+            const auto* star = find_star(value, planet.star);
+            if (!star) continue;
+            planet.environment = planet.owner != 0 && planet.id == 1
+                ? PlanetEnvironment{50, 50, 8}
+                : generated_planet_environment(value.galaxySeed, planet.id, star->stellarClass);
+        }
+    }
     if (!readVector(stream, value.fleets, readFleet)) return;
     if (gReadSaveFormatVersion >= 24) {
         if (!readVector(stream, value.orbitalStations, readOrbitalStation)) return;
@@ -1630,6 +1729,9 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeOptionalId(stream, data.selectedStar);
     writeOptionalId(stream, data.selectedFleet);
     stream << static_cast<quint8>(data.showSensorRanges ? 1 : 0);
+    stream << static_cast<quint32>(data.strategicMessages.size());
+    for (const auto& event : data.strategicMessages) writeGameEvent(stream, event);
+    writeMessageIds(stream, data.readStrategicMessageIds);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -1693,6 +1795,13 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     stream >> showSensors;
     if (showSensors > 1) markCorrupt(stream);
     loaded.showSensorRanges = showSensors != 0;
+    if (version >= 26) {
+        if (!readVector(stream, loaded.strategicMessages, readGameEvent)) {
+            errorMessage = "The strategic message archive is damaged.";
+            return false;
+        }
+        readMessageIds(stream, loaded.readStrategicMessageIds);
+    }
 
     if (stream.status() != QDataStream::Ok) {
         errorMessage = "The Suns! save file is truncated or contains invalid data.";

@@ -132,6 +132,9 @@ void verify_procedural_generation()
     assert(first.fleets.front().warp == suns::kScoutCruiseWarp);
     assert(first.fleets.front().warp == 8);
     assert(suns::same_position(first.fleets.front().position, first.stars.front().position));
+    assert(first.planets.front().environment.temperature == 50);
+    assert(first.planets.front().environment.gravity == 50);
+    assert(first.planets.front().environment.radiation == 8);
 
     for (std::size_t i = 0; i < first.stars.size(); ++i) {
         assert(first.stars[i].id == repeat.stars[i].id);
@@ -139,6 +142,12 @@ void verify_procedural_generation()
         assert(first.stars[i].position.x == repeat.stars[i].position.x);
         assert(first.stars[i].position.y == repeat.stars[i].position.y);
         assert(first.planets[i].habitability == repeat.planets[i].habitability);
+        assert(first.planets[i].environment.temperature == repeat.planets[i].environment.temperature);
+        assert(first.planets[i].environment.gravity == repeat.planets[i].environment.gravity);
+        assert(first.planets[i].environment.radiation == repeat.planets[i].environment.radiation);
+        assert(first.planets[i].environment.temperature <= 100);
+        assert(first.planets[i].environment.gravity <= 100);
+        assert(first.planets[i].environment.radiation <= 100);
     }
 
     auto otherConfig = config;

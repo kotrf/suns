@@ -451,12 +451,34 @@ std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
     return targets;
 }
 
+std::vector<FleetId> MainWindow::availableOwnedFleetsForRouteProgram() const
+{
+    std::vector<FleetId> fleets;
+    for (const auto& fleet : state_.fleets) {
+        if (fleet.owner == pendingOrders_.player) fleets.push_back(fleet.id);
+    }
+    std::sort(fleets.begin(), fleets.end());
+    return fleets;
+}
+
 QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
 {
     if (const auto* fleet = findFleet(state_, fleetId)) {
         return QString("%1 (Fleet %2)").arg(QString::fromStdString(fleet->name)).arg(fleetId);
     }
     return QString("Fleet %1").arg(fleetId);
+}
+
+bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
+{
+    const auto* fleet = findFleet(state_, fleetId);
+    if (!fleet || fleet->owner != pendingOrders_.player) return false;
+    if (selectedFleetId_ == fleetId) return true;
+    selectedFleetId_ = fleetId;
+    warpControlFleetId_.reset();
+    logisticsControlFleetId_.reset();
+    rebuildScene();
+    return true;
 }
 
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)

@@ -231,7 +231,8 @@ QString MainWindow::selectedFleetPanelSummary() const
 {
     const auto* authoritativeFleet = selectedFleet();
     if (!authoritativeFleet) return "<span style='color:#8090a2'>No fleet selected.</span>";
-    const auto visibleFleet = fleet_player_view(state_, *authoritativeFleet);
+    const auto visibleFleet = selectedFleetPlanningView().value_or(
+        fleet_player_view(state_, *authoritativeFleet));
     const auto* fleet = &visibleFleet;
 
     const auto* design = fleet_design(state_, *fleet);

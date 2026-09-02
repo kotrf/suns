@@ -23,6 +23,7 @@ void round_trip_preserves_communications_and_planning()
     original.state.planets.front().mines = 17;
     original.state.planets.front().productionWaitingForMinerals = true;
     original.state.planets.front().productionWaitingForShipyard = true;
+    original.state.planets.front().environment = {63, 47, 29};
     original.state.orbitalStations.front().name = "Sol Prime Orbital Dock";
     original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
     original.state.players.front().pendingSurveyReports.push_back({
@@ -158,6 +159,19 @@ void round_trip_preserves_communications_and_planning()
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
     original.showSensorRanges = false;
+    GameEvent archivedMessage;
+    archivedMessage.id = 0x12345678ULL;
+    archivedMessage.turn = 76;
+    archivedMessage.observedTurn = 75;
+    archivedMessage.recipient = 1;
+    archivedMessage.kind = GameEventKind::ProductionCompleted;
+    archivedMessage.star = 1;
+    archivedMessage.planet = 1;
+    archivedMessage.shipDesign = kScoutDesignId;
+    archivedMessage.productionKind = ProductionKind::ColonyShip;
+    archivedMessage.position = {0.0, 0.0};
+    original.strategicMessages.push_back(archivedMessage);
+    original.readStrategicMessageIds.push_back(archivedMessage.id);
 
     QTemporaryDir directory;
     assert(directory.isValid());
@@ -177,6 +191,9 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.planets.front().mines == 17);
     assert(loaded.state.planets.front().productionWaitingForMinerals);
     assert(loaded.state.planets.front().productionWaitingForShipyard);
+    assert(loaded.state.planets.front().environment.temperature == 63);
+    assert(loaded.state.planets.front().environment.gravity == 47);
+    assert(loaded.state.planets.front().environment.radiation == 29);
     assert(loaded.state.nextOrbitalStationId == original.state.nextOrbitalStationId);
     assert(loaded.state.orbitalStations.size() == 1);
     assert(loaded.state.orbitalStations.front().id == 1);
@@ -320,6 +337,12 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
     assert(!loaded.showSensorRanges);
+    assert(loaded.strategicMessages.size() == 1);
+    assert(loaded.strategicMessages.front().id == archivedMessage.id);
+    assert(loaded.strategicMessages.front().kind == GameEventKind::ProductionCompleted);
+    assert(loaded.strategicMessages.front().planet == 1);
+    assert(loaded.strategicMessages.front().shipDesign == kScoutDesignId);
+    assert(loaded.readStrategicMessageIds == original.readStrategicMessageIds);
 }
 
 void turn_order_file_round_trip_preserves_envelope_and_orders()
