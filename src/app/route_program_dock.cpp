@@ -136,7 +136,6 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
     actionCombo->addItem("Load all available", static_cast<int>(FleetArrivalActionKind::LoadAllAvailable));
     actionCombo->addItem("Unload all", static_cast<int>(FleetArrivalActionKind::UnloadAll));
-    actionCombo->addItem("Refuel", static_cast<int>(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
     actionCombo->addItem("Remote Mining (persistent)", static_cast<int>(FleetArrivalActionKind::RemoteMining));
     actionCombo->addItem("Merge with fleet", static_cast<int>(FleetArrivalActionKind::MergeWithFleet));

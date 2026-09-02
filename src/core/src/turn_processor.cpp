@@ -753,6 +753,18 @@ void generate_fleet_fuel(GameState& state)
     }
 }
 
+void refuel_fleets_at_orbital_services(GameState& state)
+{
+    for (auto& fleet : state.fleets) {
+        const auto* colony = friendly_colony_at_fleet(state, fleet);
+        if (!colony || !colony_has_orbital_service(
+                state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot)) {
+            continue;
+        }
+        fleet.fuel = fleet_fuel_capacity(state, fleet);
+    }
+}
+
 bool fleet_ready_for_reorganization(const Fleet& fleet)
 {
     return !fleet.destination
@@ -1390,6 +1402,10 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
 
     generate_fleet_fuel(next);
+    // Friendly orbital refueling services top up every docked fleet before
+    // orders and movement are resolved. A basic dock without the module does
+    // not refuel, leaving room for cheaper station hulls later.
+    refuel_fleets_at_orbital_services(next);
     mine_colonies(next);
 
     for (const auto& submission : submitted_orders) {
@@ -1591,6 +1607,10 @@ TurnResult TurnProcessor::process_with_events(
     for (const auto& [player, points] : researchByPlayer) {
         apply_research_points(next, player, points, next.turn + 1, events);
     }
+    // Fleets which reach a serviced colony finish the year with full tanks.
+    // Running this after production also activates a newly completed depot at
+    // the planning boundary, without requiring a separate Refuel order.
+    refuel_fleets_at_orbital_services(next);
     grow_colonies(next);
 
     // The returned state is the next planning boundary. Commands arriving

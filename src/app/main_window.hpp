@@ -126,7 +126,6 @@ private:
     void queueShipDesign();
     void queueProduction(ProductionKind kind);
     void queueColonists();
-    void queueRefuel();
     void queueColonize();
     void endTurn();
     void newGalaxy();
@@ -228,7 +227,6 @@ private:
     QPushButton* buildFactoryButton_{};
     QPushButton* buildOrbitalDockButton_{};
     QPushButton* loadColonistsButton_{};
-    QPushButton* refuelButton_{};
     QPushButton* colonizeButton_{};
     QPushButton* endTurnButton_{};
     QDockWidget* turnMessagesDock_{};

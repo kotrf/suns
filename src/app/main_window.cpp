@@ -401,11 +401,9 @@ MainWindow::MainWindow(QWidget* parent)
     fleetMoveButton_ = new QPushButton("Plot selected fleet course here", sidePanel);
     fleetLoadAllButton_ = new QPushButton("Plot course + Load All on arrival", sidePanel);
     loadColonistsButton_ = new QPushButton("Set colonists aboard", sidePanel);
-    refuelButton_ = new QPushButton("Refuel selected fleet", sidePanel);
     sideLayout->addWidget(fleetMoveButton_);
     sideLayout->addWidget(fleetLoadAllButton_);
     sideLayout->addWidget(loadColonistsButton_);
-    sideLayout->addWidget(refuelButton_);
 
     shipDesignCombo_ = new QComboBox(sidePanel);
     designShipButton_ = new QPushButton("Design Ship…", sidePanel);
@@ -472,7 +470,6 @@ MainWindow::MainWindow(QWidget* parent)
         queueProduction(ProductionKind::OrbitalStation);
     });
     connect(loadColonistsButton_, &QPushButton::clicked, this, [this] { queueColonists(); });
-    connect(refuelButton_, &QPushButton::clicked, this, [this] { queueRefuel(); });
     connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
@@ -987,10 +984,12 @@ void MainWindow::updateControls()
             && colony_has_orbital_service(
                 state_, logisticsColony->id, fleet->owner, OrbitalStationModule::RefuelingDepot);
         const QString dockedLine = logisticsColony
-            ? QString("<br>Docked at <b>%1</b>: loading available; refueling %2.")
+            ? QString("<br>Docked at <b>%1</b>: loading available; %2.")
                   .arg(QString::fromStdString(logisticsColony->name))
-                  .arg(refuelingAvailable ? "available" : "requires an orbital dock")
-            : "<br>Logistics: select the friendly colony under this fleet to load/refuel.";
+                  .arg(refuelingAvailable
+                          ? "automatic refueling active"
+                          : "no automatic refueling service")
+            : "<br>Logistics: select the friendly colony under this fleet to load cargo.";
 
         QString movementPlanLine;
         if (effectiveFleet && (std::abs(effectiveFleet->fuel - fleet->fuel) > 0.000001
@@ -1071,14 +1070,6 @@ void MainWindow::updateControls()
     const bool canLoad = logisticsColony && fleet && effectiveFleet && fleet_cargo_capacity(state_, *fleet) > 0.0;
     loadColonistsButton_->setEnabled(false);
     loadColonistsButton_->setText(canLoad ? "Cargo updates immediately" : "Dock at a friendly colony to load");
-
-    const bool canRefuel = logisticsColony && fleet && effectiveFleet
-        && colony_has_orbital_service(
-            state_, logisticsColony->id, fleet->owner, OrbitalStationModule::RefuelingDepot)
-        && effectiveFleet->fuel + 0.000001 < fleet_fuel_capacity(state_, *fleet);
-    refuelButton_->setEnabled(canRefuel);
-    refuelButton_->setText(canRefuel
-        ? QString("Refuel to %1").arg(fuelValue(fleet_fuel_capacity(state_, *fleet))) : "Refuel selected fleet");
 
     const auto* colonizer = selectedColonyShipAtSelectedStar();
     colonizeButton_->setEnabled(star != nullptr
@@ -1275,18 +1266,6 @@ void MainWindow::queueColonists()
     }
 
     appendPendingOrder(SetFleetColonistsOrder{planet->id, fleet->id, target}, description);
-}
-
-void MainWindow::queueRefuel()
-{
-    const auto* planet = selectedFriendlyColonyForFleet();
-    const auto* fleet = selectedFleet();
-    if (!planet || !fleet
-        || !colony_has_orbital_service(
-            state_, planet->id, fleet->owner, OrbitalStationModule::RefuelingDepot)) return;
-
-    appendPendingOrder(RefuelFleetOrder{planet->id, fleet->id},
-        QString("Refuel %1 at %2").arg(QString::fromStdString(fleet->name)).arg(QString::fromStdString(planet->name)));
 }
 
 void MainWindow::queueColonize()

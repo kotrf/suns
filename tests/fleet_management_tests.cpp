@@ -109,7 +109,7 @@ void merge_preserves_destination_id_and_all_stacks()
     assert(fleet_ship_count(*fleet) == 3);
     assert(fleet_ship_count(*fleet, kScoutDesignId) == 2);
     assert(fleet_ship_count(*fleet, kColonyShipDesignId) == 1);
-    assert(close(fleet->fuel, 300.0));
+    assert(close(fleet->fuel, fleet_fuel_capacity(merged, *fleet)));
     assert(fleet->colonists == 300);
     assert(close(fleet->minerals.ironium, 0.3));
     assert(close(fleet->minerals.boranium, 0.3));
