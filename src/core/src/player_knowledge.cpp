@@ -225,9 +225,10 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
             if (range > 0.0 && within_range(fleet.position, star.position, range)) {
                 auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
-                    level = best_observed_level(state, fleet.owner, star.id) >= SurveyLevel::OrbitalSurvey
-                        ? SurveyLevel::GeologicalSurvey
-                        : SurveyLevel::OrbitalSurvey;
+                    const auto known = best_observed_level(state, fleet.owner, star.id);
+                    if (known < SurveyLevel::OrbitalSurvey) level = SurveyLevel::OrbitalSurvey;
+                    else if (known < SurveyLevel::GeologicalSurvey) level = SurveyLevel::GeologicalSurvey;
+                    else level = SurveyLevel::DeepSurvey;
                 } else if (within_range(
                                fleet.position,
                                star.position,
@@ -278,6 +279,9 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             const auto knownHabitability = planet
                 ? known_planet_habitability(state, player.id, planet->id).value_or(0)
                 : 0;
+            const auto artifactHint = planet && report.level >= SurveyLevel::DeepSurvey
+                ? known_precursor_artifact_hint(state, player.id, planet->id).value_or(false)
+                : false;
             events.push_back({
                 stable_event_id(report, player.id),
                 state.turn,
@@ -293,6 +297,9 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                 star ? star->position : Position{},
                 knownHabitability,
                 report.level,
+                ResearchField::Electronics,
+                0,
+                artifactHint,
             });
         }
 

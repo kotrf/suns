@@ -131,9 +131,10 @@ void remote_report_remains_in_flight_until_delivery()
     assert(find_event(turn15.events, GameEventKind::SystemSurveyed) == nullptr);
 }
 
-void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
+void arrival_and_dwell_progress_through_all_survey_stages()
 {
     auto state = survey_fixture({0.0, 0.0}, {50.0, 0.0});
+    state.planets[1].precursorArtifacts = {true, false, 0, 11};
     auto& scout = state.fleets.front();
     scout.destination = Position{50.0, 0.0};
     scout.fuel = 300.0;
@@ -143,6 +144,7 @@ void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
     assert(survey_level(arrival.state, 1, 2) == SurveyLevel::OrbitalSurvey);
     assert(known_planet_habitability(arrival.state, 1, 2) == 82);
     assert(!planet_geology_known(arrival.state, 1, 2));
+    assert(!known_precursor_artifact_hint(arrival.state, 1, 2).has_value());
     const auto* orbital = find_event(arrival.events, GameEventKind::SystemSurveyed);
     assert(orbital);
     assert(orbital->surveyLevel == SurveyLevel::OrbitalSurvey);
@@ -154,6 +156,19 @@ void arrival_and_dwell_progress_through_orbital_and_geological_surveys()
     const auto* geological = find_event(dwell.events, GameEventKind::SystemSurveyed);
     assert(geological);
     assert(geological->surveyLevel == SurveyLevel::GeologicalSurvey);
+    assert(!known_precursor_artifact_hint(dwell.state, 1, 2).has_value());
+
+    const auto deep = processor.process_with_events(dwell.state, {});
+    assert(survey_level(deep.state, 1, 2) == SurveyLevel::DeepSurvey);
+    assert(known_precursor_artifact_hint(deep.state, 1, 2) == true);
+    const auto* deepSurvey = find_event(deep.events, GameEventKind::SystemSurveyed);
+    assert(deepSurvey);
+    assert(deepSurvey->surveyLevel == SurveyLevel::DeepSurvey);
+    assert(deepSurvey->precursorArtifactHint);
+
+    const auto complete = processor.process_with_events(deep.state, {});
+    assert(survey_level(complete.state, 1, 2) == SurveyLevel::DeepSurvey);
+    assert(find_event(complete.events, GameEventKind::SystemSurveyed) == nullptr);
 }
 
 const GameEvent* find_event(const std::vector<GameEvent>& events, GameEventKind kind)
@@ -342,7 +357,7 @@ int main()
     ordinary_scanner_reports_system_contact_without_planet_data();
     penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_report_remains_in_flight_until_delivery();
-    arrival_and_dwell_progress_through_orbital_and_geological_surveys();
+    arrival_and_dwell_progress_through_all_survey_stages();
     remote_route_completion_obeys_communications_delay();
     intermediate_waypoint_emits_arrival_not_completion();
     fuel_stall_warns_once_and_only_after_delivery();

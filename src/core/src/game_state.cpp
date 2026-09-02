@@ -1143,6 +1143,19 @@ bool planet_geology_known(const GameState& state, PlayerId player, PlanetId plan
             || survey_level(state, player, planet->star) >= SurveyLevel::GeologicalSurvey);
 }
 
+std::optional<bool> known_precursor_artifact_hint(
+    const GameState& state, PlayerId player, PlanetId planetId)
+{
+    const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [planetId](const Planet& candidate) {
+        return candidate.id == planetId;
+    });
+    if (planet == state.planets.end()
+        || survey_level(state, player, planet->star) < SurveyLevel::DeepSurvey) {
+        return std::nullopt;
+    }
+    return planet->precursorArtifacts.present && !planet->precursorArtifacts.claimed;
+}
+
 void set_survey_level(
     GameState& state,
     PlayerId player,

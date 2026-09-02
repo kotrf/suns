@@ -26,9 +26,9 @@ void round_trip_preserves_communications_and_planning()
     original.state.planets.front().environment = {63, 47, 29};
     original.state.planets[1].precursorArtifacts = {true, true, 1, 13};
     original.state.orbitalStations.front().name = "Sol Prime Orbital Dock";
-    original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
+    original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::DeepSurvey, 75});
     original.state.players.front().pendingSurveyReports.push_back({
-        2, 1, 76, 79, SurveyLevel::GeologicalSurvey,
+        2, 1, 76, 79, SurveyLevel::DeepSurvey,
     });
     original.state.players.front().pendingPlayerReports.push_back({
         PlayerReportKind::FleetStalledForFuel,
@@ -174,6 +174,12 @@ void round_trip_preserves_communications_and_planning()
     archivedMessage.productionKind = ProductionKind::ColonyShip;
     archivedMessage.position = {0.0, 0.0};
     original.strategicMessages.push_back(archivedMessage);
+    auto deepSurveyMessage = archivedMessage;
+    deepSurveyMessage.id += 1;
+    deepSurveyMessage.kind = GameEventKind::SystemSurveyed;
+    deepSurveyMessage.surveyLevel = SurveyLevel::DeepSurvey;
+    deepSurveyMessage.precursorArtifactHint = true;
+    original.strategicMessages.push_back(deepSurveyMessage);
     original.readStrategicMessageIds.push_back(archivedMessage.id);
 
     QTemporaryDir directory;
@@ -218,13 +224,13 @@ void round_trip_preserves_communications_and_planning()
         loaded.state.players.front().surveyKnowledge.end(),
         [](const SystemSurveyKnowledge& entry) { return entry.star == 2; });
     assert(savedKnowledge != loaded.state.players.front().surveyKnowledge.end());
-    assert(savedKnowledge->level == SurveyLevel::OrbitalSurvey);
+    assert(savedKnowledge->level == SurveyLevel::DeepSurvey);
     assert(savedKnowledge->observedTurn == 75);
     assert(loaded.state.players.front().pendingSurveyReports.front().star == 2);
     assert(loaded.state.players.front().pendingSurveyReports.front().sourceFleet == 1);
     assert(loaded.state.players.front().pendingSurveyReports.front().observedTurn == 76);
     assert(loaded.state.players.front().pendingSurveyReports.front().deliveryTurn == 79);
-    assert(loaded.state.players.front().pendingSurveyReports.front().level == SurveyLevel::GeologicalSurvey);
+    assert(loaded.state.players.front().pendingSurveyReports.front().level == SurveyLevel::DeepSurvey);
     assert(loaded.state.players.front().pendingPlayerReports.size() == 1);
     const auto& report = loaded.state.players.front().pendingPlayerReports.front();
     assert(report.kind == PlayerReportKind::FleetStalledForFuel);
@@ -346,11 +352,13 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
     assert(!loaded.showSensorRanges);
-    assert(loaded.strategicMessages.size() == 1);
+    assert(loaded.strategicMessages.size() == 2);
     assert(loaded.strategicMessages.front().id == archivedMessage.id);
     assert(loaded.strategicMessages.front().kind == GameEventKind::ProductionCompleted);
     assert(loaded.strategicMessages.front().planet == 1);
     assert(loaded.strategicMessages.front().shipDesign == kScoutDesignId);
+    assert(loaded.strategicMessages.back().surveyLevel == SurveyLevel::DeepSurvey);
+    assert(loaded.strategicMessages.back().precursorArtifactHint);
     assert(loaded.readStrategicMessageIds == original.readStrategicMessageIds);
 }
 

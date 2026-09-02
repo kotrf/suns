@@ -15,7 +15,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 27;
+constexpr quint32 kSaveFormatVersion = 28;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 2;
@@ -623,7 +623,8 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
            << static_cast<quint32>(value.quantity);
     writeEnum(stream, value.surveyLevel);
     writeEnum(stream, value.researchField);
-    stream << static_cast<quint8>(value.technologyLevel);
+    stream << static_cast<quint8>(value.technologyLevel)
+           << static_cast<quint8>(value.precursorArtifactHint ? 1 : 0);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -647,9 +648,20 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     stream >> star >> planet >> fleet >> shipDesign;
     if (!readEnum(stream, value.productionKind, static_cast<quint8>(ProductionKind::OrbitalStation))) return;
     stream >> value.position.x >> value.position.y >> quantity;
-    if (!readEnum(stream, value.surveyLevel, static_cast<quint8>(SurveyLevel::GeologicalSurvey))) return;
+    const auto newestSurveyLevel = gReadSaveFormatVersion >= 28
+        ? SurveyLevel::DeepSurvey
+        : SurveyLevel::GeologicalSurvey;
+    if (!readEnum(stream, value.surveyLevel, static_cast<quint8>(newestSurveyLevel))) return;
     if (!readEnum(stream, value.researchField, static_cast<quint8>(ResearchField::Weapons))) return;
     stream >> technologyLevel;
+    quint8 precursorArtifactHint{};
+    if (gReadSaveFormatVersion >= 28) {
+        stream >> precursorArtifactHint;
+        if (precursorArtifactHint > 1) {
+            markCorrupt(stream);
+            return;
+        }
+    }
     if (!std::isfinite(value.position.x) || !std::isfinite(value.position.y)) {
         markCorrupt(stream);
         return;
@@ -664,6 +676,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     value.shipDesign = static_cast<ShipDesignId>(shipDesign);
     value.quantity = static_cast<std::uint32_t>(quantity);
     value.technologyLevel = static_cast<std::uint8_t>(technologyLevel);
+    value.precursorArtifactHint = precursorArtifactHint != 0;
 }
 
 void writeMessageIds(QDataStream& stream, const std::vector<std::uint64_t>& ids)
@@ -863,7 +876,10 @@ void readPlayer(QDataStream& stream, Player& value)
         quint64 observedTurn{};
         SurveyLevel level{};
         stream >> star;
-        if (!readEnum(stream, level, static_cast<quint8>(SurveyLevel::GeologicalSurvey))) return;
+        const auto newestSurveyLevel = gReadSaveFormatVersion >= 28
+            ? SurveyLevel::DeepSurvey
+            : SurveyLevel::GeologicalSurvey;
+        if (!readEnum(stream, level, static_cast<quint8>(newestSurveyLevel))) return;
         stream >> observedTurn;
         value.surveyKnowledge.push_back({
             static_cast<StarId>(star),
@@ -882,7 +898,10 @@ void readPlayer(QDataStream& stream, Player& value)
         quint64 deliveryTurn{};
         SurveyLevel level{};
         stream >> star >> sourceFleet >> observedTurn >> deliveryTurn;
-        if (!readEnum(stream, level, static_cast<quint8>(SurveyLevel::GeologicalSurvey))) return;
+        const auto newestSurveyLevel = gReadSaveFormatVersion >= 28
+            ? SurveyLevel::DeepSurvey
+            : SurveyLevel::GeologicalSurvey;
+        if (!readEnum(stream, level, static_cast<quint8>(newestSurveyLevel))) return;
         value.pendingSurveyReports.push_back({
             static_cast<StarId>(star),
             static_cast<FleetId>(sourceFleet),
