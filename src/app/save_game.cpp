@@ -15,7 +15,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 26;
+constexpr quint32 kSaveFormatVersion = 27;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 2;
@@ -514,7 +514,11 @@ void writePlanet(QDataStream& stream, const Planet& value)
            << static_cast<quint8>(value.productionWaitingForShipyard ? 1 : 0)
            << static_cast<quint8>(value.environment.temperature)
            << static_cast<quint8>(value.environment.gravity)
-           << static_cast<quint8>(value.environment.radiation);
+           << static_cast<quint8>(value.environment.radiation)
+           << static_cast<quint8>(value.precursorArtifacts.present ? 1 : 0)
+           << static_cast<quint8>(value.precursorArtifacts.claimed ? 1 : 0)
+           << static_cast<quint32>(value.precursorArtifacts.discoveredBy)
+           << static_cast<quint16>(value.precursorArtifacts.researchPoints);
 }
 
 void readPlanet(QDataStream& stream, Planet& value)
@@ -583,6 +587,23 @@ void readPlanet(QDataStream& stream, Planet& value)
         }
         value.environment = {temperature, gravity, radiation};
     }
+    if (gReadSaveFormatVersion >= 27) {
+        quint8 present{};
+        quint8 claimed{};
+        quint32 discoveredBy{};
+        quint16 researchPoints{};
+        stream >> present >> claimed >> discoveredBy >> researchPoints;
+        if (present > 1 || claimed > 1 || (claimed != 0 && present == 0)) {
+            markCorrupt(stream);
+            return;
+        }
+        value.precursorArtifacts = {
+            present != 0,
+            claimed != 0,
+            static_cast<PlayerId>(discoveredBy),
+            static_cast<std::uint16_t>(researchPoints),
+        };
+    }
 }
 
 void writeGameEvent(QDataStream& stream, const GameEvent& value)
@@ -618,7 +639,10 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     quint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    if (!readEnum(stream, value.kind, static_cast<quint8>(GameEventKind::ProductionWaitingForShipyard))) return;
+    const auto newestEventKind = gReadSaveFormatVersion >= 27
+        ? GameEventKind::PrecursorArtifactsDiscovered
+        : GameEventKind::ProductionWaitingForShipyard;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(newestEventKind))) return;
     if (!readEnum(stream, value.severity, static_cast<quint8>(GameEventSeverity::Critical))) return;
     stream >> star >> planet >> fleet >> shipDesign;
     if (!readEnum(stream, value.productionKind, static_cast<quint8>(ProductionKind::OrbitalStation))) return;
@@ -797,6 +821,8 @@ void writePlayer(QDataStream& stream, const Player& value)
         writeEnum(stream, report.productionKind);
         writePosition(stream, report.position);
         stream << static_cast<quint32>(report.quantity);
+        writeEnum(stream, report.researchField);
+        stream << static_cast<quint8>(report.technologyLevel);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -871,9 +897,11 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 24
-            ? PlayerReportKind::ProductionWaitingForShipyard
-            : PlayerReportKind::FleetsMerged;
+        const auto newestReportKind = gReadSaveFormatVersion >= 27
+            ? PlayerReportKind::ResearchLevelCompleted
+            : (gReadSaveFormatVersion >= 24
+                ? PlayerReportKind::ProductionWaitingForShipyard
+                : PlayerReportKind::FleetsMerged);
         if (!readEnum(stream, report.kind, static_cast<quint8>(newestReportKind))) return;
         quint64 observedTurn{};
         quint64 deliveryTurn{};
@@ -892,6 +920,17 @@ void readPlayer(QDataStream& stream, Player& value)
         readPosition(stream, report.position);
         quint32 quantity{};
         stream >> quantity;
+        if (gReadSaveFormatVersion >= 27) {
+            if (!readEnum(
+                    stream,
+                    report.researchField,
+                    static_cast<quint8>(ResearchField::Weapons))) {
+                return;
+            }
+            quint8 technologyLevel{};
+            stream >> technologyLevel;
+            report.technologyLevel = static_cast<std::uint8_t>(technologyLevel);
+        }
         report.observedTurn = static_cast<std::uint64_t>(observedTurn);
         report.deliveryTurn = static_cast<std::uint64_t>(deliveryTurn);
         report.star = static_cast<StarId>(star);
@@ -1234,6 +1273,16 @@ void readGameState(QDataStream& stream, GameState& value)
             planet.environment = planet.owner != 0 && planet.id == 1
                 ? PlanetEnvironment{50, 50, 8}
                 : generated_planet_environment(value.galaxySeed, planet.id, star->stellarClass);
+        }
+    }
+    if (gReadSaveFormatVersion < 27) {
+        for (auto& planet : value.planets) {
+            // Do not award discoveries retroactively on colonies from an old
+            // campaign. Only untouched worlds receive their deterministic site.
+            if (planet.owner == 0) {
+                planet.precursorArtifacts = generated_precursor_artifact_site(
+                    value.galaxySeed, planet.id);
+            }
         }
     }
     if (!readVector(stream, value.fleets, readFleet)) return;

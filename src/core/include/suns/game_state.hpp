@@ -214,6 +214,15 @@ struct PlanetEnvironment {
     std::uint8_t radiation{15};
 };
 
+struct PrecursorArtifactSite {
+    // `present` is authoritative simulation truth and must not be exposed by
+    // ordinary scans. Claimed sites are retained as planetary history.
+    bool present{};
+    bool claimed{};
+    PlayerId discoveredBy{};
+    std::uint16_t researchPoints{};
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -228,6 +237,7 @@ struct Planet {
     bool productionWaitingForMinerals{};
     bool productionWaitingForShipyard{};
     PlanetEnvironment environment;
+    PrecursorArtifactSite precursorArtifacts;
 };
 
 enum class OrbitalStationHullType : std::uint8_t {
@@ -278,6 +288,17 @@ struct PendingSurveyReport {
     SurveyLevel level{SurveyLevel::SystemScan};
 };
 
+enum class ResearchField : std::uint8_t {
+    Energy,
+    Propulsion,
+    Construction,
+    Electronics,
+    Biology,
+    Weapons,
+};
+
+inline constexpr std::size_t kResearchFieldCount = 6;
+
 enum class PlayerReportKind {
     FleetArrived,
     RouteCompleted,
@@ -288,6 +309,8 @@ enum class PlayerReportKind {
     FleetTargetLost,
     FleetsMerged,
     ProductionWaitingForShipyard,
+    PrecursorArtifactsDiscovered,
+    ResearchLevelCompleted,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -304,18 +327,9 @@ struct PendingPlayerReport {
     ProductionKind productionKind{ProductionKind::ColonyShip};
     Position position;
     std::uint32_t quantity{};
+    ResearchField researchField{ResearchField::Electronics};
+    std::uint8_t technologyLevel{};
 };
-
-enum class ResearchField : std::uint8_t {
-    Energy,
-    Propulsion,
-    Construction,
-    Electronics,
-    Biology,
-    Weapons,
-};
-
-inline constexpr std::size_t kResearchFieldCount = 6;
 
 struct TechnologyState {
     std::array<std::uint8_t, kResearchFieldCount> levels{};
@@ -582,6 +596,8 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] MineralCargo planet_mineral_concentration(const GameState& state, const Planet& planet);
 [[nodiscard]] PlanetEnvironment generated_planet_environment(
     std::uint64_t galaxySeed, PlanetId planet, StarClass stellarClass);
+[[nodiscard]] PrecursorArtifactSite generated_precursor_artifact_site(
+    std::uint64_t galaxySeed, PlanetId planet);
 [[nodiscard]] MineralCargo projected_mineral_mining(const GameState& state, const Planet& planet);
 [[nodiscard]] MineralCargo projected_remote_mining(
     const GameState& state, const Planet& planet, const ShipDesign& design);

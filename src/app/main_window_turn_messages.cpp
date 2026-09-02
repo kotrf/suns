@@ -40,6 +40,7 @@ constexpr int kMessageClassRole = Qt::UserRole + 7;
 enum class MessageTypeFilter {
     All,
     Exploration,
+    Archaeology,
     FleetMovement,
     ShipConstruction,
     Infrastructure,
@@ -116,6 +117,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::ProductionWaitingForShipyard:
         subject = QString("%1 waits for a shipyard on %2").arg(production_item_name(state, event), planetName);
         break;
+    case GameEventKind::PrecursorArtifactsDiscovered:
+        subject = QString("Precursor artifacts found on %1").arg(planetName);
+        break;
     }
     return QString("T%1  %2").arg(static_cast<qulonglong>(event.turn)).arg(subject);
 }
@@ -138,7 +142,11 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
 {
     switch (filter) {
     case MessageTypeFilter::All: return true;
-    case MessageTypeFilter::Exploration: return event.kind == GameEventKind::SystemSurveyed;
+    case MessageTypeFilter::Exploration:
+        return event.kind == GameEventKind::SystemSurveyed
+            || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
+    case MessageTypeFilter::Archaeology:
+        return event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::FleetMovement:
         return event.kind == GameEventKind::FleetArrived
             || event.kind == GameEventKind::RouteCompleted
@@ -151,7 +159,9 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind != ProductionKind::ColonyShip;
     case MessageTypeFilter::Colonization: return event.kind == GameEventKind::ColonyFounded;
-    case MessageTypeFilter::Research: return event.kind == GameEventKind::ResearchLevelCompleted;
+    case MessageTypeFilter::Research:
+        return event.kind == GameEventKind::ResearchLevelCompleted
+            || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::ProductionDelays:
         return event.kind == GameEventKind::ProductionWaitingForMinerals
             || event.kind == GameEventKind::ProductionWaitingForShipyard;
@@ -280,6 +290,17 @@ QString event_text(const GameState& state, const GameEvent& event)
         } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 1) {
             text += "\nUnlocked: Remote Mining Module";
         }
+    } else if (event.kind == GameEventKind::PrecursorArtifactsDiscovered) {
+        const auto planetName = planet
+            ? QString::fromStdString(planet->name)
+            : QString("Planet %1").arg(event.planet);
+        text = QString("Turn %1  •  Archaeological discovery on %2\n"
+                       "A precursor site yielded %3 RP to the current %4 research plan. "
+                       "The site is now exhausted and remains in the planet's history.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(planetName)
+                   .arg(event.quantity)
+                   .arg(QString::fromStdString(research_field_name(event.researchField)));
     } else {
         const auto planetName = planet
             ? QString::fromStdString(planet->name)
@@ -343,6 +364,7 @@ void MainWindow::installTurnMessages()
     turnMessageTypeFilter_->setObjectName("turnMessageTypeFilter");
     turnMessageTypeFilter_->addItem("All subjects", static_cast<int>(MessageTypeFilter::All));
     turnMessageTypeFilter_->addItem("Exploration reports", static_cast<int>(MessageTypeFilter::Exploration));
+    turnMessageTypeFilter_->addItem("Archaeological discoveries", static_cast<int>(MessageTypeFilter::Archaeology));
     turnMessageTypeFilter_->addItem("Fleet movement", static_cast<int>(MessageTypeFilter::FleetMovement));
     turnMessageTypeFilter_->addItem("Ships completed", static_cast<int>(MessageTypeFilter::ShipConstruction));
     turnMessageTypeFilter_->addItem("Infrastructure completed", static_cast<int>(MessageTypeFilter::Infrastructure));

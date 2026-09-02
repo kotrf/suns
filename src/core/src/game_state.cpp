@@ -156,6 +156,22 @@ PlanetEnvironment generated_planet_environment(
     return result;
 }
 
+PrecursorArtifactSite generated_precursor_artifact_site(
+    std::uint64_t galaxySeed, PlanetId planet)
+{
+    // Provisional balance knob: playtesting should tune this without changing
+    // the deterministic assignment algorithm or existing save files.
+    constexpr std::uint64_t chancePerThousand = 35;
+    auto mixed = mix_stellar_seed(
+        galaxySeed ^ (static_cast<std::uint64_t>(planet) * 0x8CB92BA72F3D8DD7ULL)
+        ^ 0x505245435552534FULL);
+    PrecursorArtifactSite result;
+    result.present = mixed % 1000ULL < chancePerThousand;
+    mixed = mix_stellar_seed(mixed);
+    result.researchPoints = static_cast<std::uint16_t>(8ULL + mixed % 7ULL);
+    return result;
+}
+
 const StarSystem* find_star(const GameState& state, StarId id)
 {
     const auto it = std::find_if(state.stars.begin(), state.stars.end(), [id](const StarSystem& star) {
@@ -1374,6 +1390,7 @@ GameState generate_game(const GalaxyConfig& config)
         state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(namingRng, name),
             generated_habitability(physicalRng, stellarClass), 0, 0, 1, {}});
         state.planets.back().environment = generated_planet_environment(config.seed, id, stellarClass);
+        state.planets.back().precursorArtifacts = generated_precursor_artifact_site(config.seed, id);
     }
 
     const auto* scout = find_ship_design(state, kScoutDesignId);
