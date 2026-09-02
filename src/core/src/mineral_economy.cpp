@@ -170,6 +170,7 @@ MineralCargo production_item_mineral_cost(const GameState& state, const Producti
     if (item.kind == ProductionKind::Research) return {};
     if (item.kind == ProductionKind::Factory) return {2.0, 1.0, 2.0};
     if (item.kind == ProductionKind::Mine) return {1.0, 2.0, 1.0};
+    if (item.kind == ProductionKind::OrbitalStation) return {12.0, 6.0, 8.0};
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
     if (const auto* design = find_ship_design(state, designId)) return ship_design_mineral_cost(*design);
     return {};

@@ -217,6 +217,7 @@ private:
     QPushButton* designShipButton_{};
     QPushButton* buildShipButton_{};
     QPushButton* buildFactoryButton_{};
+    QPushButton* buildOrbitalDockButton_{};
     QPushButton* loadColonistsButton_{};
     QPushButton* refuelButton_{};
     QPushButton* colonizeButton_{};

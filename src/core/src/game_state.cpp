@@ -169,6 +169,38 @@ const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id)
     return it == state.shipDesigns.end() ? nullptr : &*it;
 }
 
+const OrbitalStation* find_orbital_station(const GameState& state, OrbitalStationId id)
+{
+    const auto it = std::find_if(
+        state.orbitalStations.begin(), state.orbitalStations.end(),
+        [id](const OrbitalStation& station) { return station.id == id; });
+    return it == state.orbitalStations.end() ? nullptr : &*it;
+}
+
+const OrbitalStation* find_orbital_station_at_planet(const GameState& state, PlanetId planet)
+{
+    const auto it = std::find_if(
+        state.orbitalStations.begin(), state.orbitalStations.end(),
+        [planet](const OrbitalStation& station) { return station.planet == planet; });
+    return it == state.orbitalStations.end() ? nullptr : &*it;
+}
+
+bool orbital_station_has_module(const OrbitalStation& station, OrbitalStationModule module)
+{
+    return std::find(station.modules.begin(), station.modules.end(), module) != station.modules.end();
+}
+
+bool colony_has_orbital_service(
+    const GameState& state, PlanetId planet, PlayerId owner, OrbitalStationModule module)
+{
+    return std::any_of(
+        state.orbitalStations.begin(), state.orbitalStations.end(),
+        [&](const OrbitalStation& station) {
+            return station.planet == planet && station.owner == owner
+                && orbital_station_has_module(station, module);
+        });
+}
+
 const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet)
 {
     const auto stacks = fleet_ship_stacks(fleet);
@@ -1306,6 +1338,11 @@ GameState generate_game(const GalaxyConfig& config)
     state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
     state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, {}});
     state.planets.front().minerals = {100.0, 100.0, 100.0};
+    state.orbitalStations.push_back({
+        1, 1, 1, "Earth Orbital Dock", OrbitalStationHullType::OrbitalDock,
+        {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+    });
+    state.nextOrbitalStationId = 2;
 
     for (std::size_t index = 2; index <= starCount; ++index) {
         const auto id = static_cast<StarId>(index);
@@ -1358,6 +1395,11 @@ GameState make_demo_game()
         {8, 8, "Procyon II", 76, 0, 0, 1, {}},
     };
     state.planets.front().minerals = {100.0, 100.0, 100.0};
+    state.orbitalStations.push_back({
+        1, 1, 1, "Earth Orbital Dock", OrbitalStationHullType::OrbitalDock,
+        {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+    });
+    state.nextOrbitalStationId = 2;
     const auto* scout = find_ship_design(state, kScoutDesignId);
     const auto scoutFuel = scout ? ship_design_fuel_capacity(*scout) : 0.0;
     state.fleets.push_back({

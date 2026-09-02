@@ -235,6 +235,10 @@ QString routeForecast(
             const auto navigationCertainty = leg.targetFleet != 0
                 ? (dependsOnDynamicResult ? "projected continuous intercept" : "continuous intercept")
                 : (dependsOnDynamicResult ? "projected navigation" : "exact navigation");
+            const auto* arrivalStar = findStarAtPosition(next, arrivalPosition);
+            const auto* arrivalPlanet = arrivalStar
+                ? find_planet_at_star(next, arrivalStar->id)
+                : nullptr;
             QString outcome;
             switch (leg.arrivalAction.kind) {
             case FleetArrivalActionKind::None:
@@ -257,8 +261,12 @@ QString routeForecast(
                 outcome = "; selected cargo unloaded to the planetary surface";
                 break;
             case FleetArrivalActionKind::Refuel:
-                outcome = QString("; projected fuel after refuel: %1")
-                              .arg(after->fuel, 0, 'f', 1);
+                outcome = arrivalPlanet
+                        && colony_has_orbital_service(
+                            next, arrivalPlanet->id, fleetOwner,
+                            OrbitalStationModule::RefuelingDepot)
+                    ? QString("; projected fuel after refuel: %1").arg(after->fuel, 0, 'f', 1)
+                    : "; refueling unavailable — no friendly orbital depot";
                 break;
             case FleetArrivalActionKind::Colonize:
                 outcome = "; colonization could not be completed; fleet remains";
@@ -471,6 +479,15 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
     if (arrivalAction.kind == FleetArrivalActionKind::Colonize && !fleet_can_colonize(state_, *fleet)) {
         statusBar()->showMessage("Selected ship design has no colonization module", 3000);
         return false;
+    }
+    if (arrivalAction.kind == FleetArrivalActionKind::Refuel) {
+        const auto* planet = find_planet_at_star(state_, star->id);
+        if (!planet || !colony_has_orbital_service(
+                state_, planet->id, fleet->owner, OrbitalStationModule::RefuelingDepot)) {
+            statusBar()->showMessage(
+                "Refuel on arrival requires a friendly orbital refueling depot", 3000);
+            return false;
+        }
     }
     if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
         const auto* planet = find_planet_at_star(state_, star->id);

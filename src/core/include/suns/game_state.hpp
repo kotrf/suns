@@ -14,10 +14,12 @@ using StarId = std::uint32_t;
 using PlanetId = std::uint32_t;
 using FleetId = std::uint32_t;
 using ShipDesignId = std::uint32_t;
+using OrbitalStationId = std::uint32_t;
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
 inline constexpr std::uint32_t kFactoryCost = 6;
 inline constexpr std::uint32_t kMineCost = 5;
+inline constexpr std::uint32_t kOrbitalDockCost = 24;
 inline constexpr double kScoutTravelSpeed = 100.0;       // Legacy UI compatibility.
 inline constexpr double kColonyShipTravelSpeed = 70.0;  // Legacy UI compatibility.
 inline constexpr double kScoutSensorRange = 90.0;
@@ -190,6 +192,7 @@ enum class ProductionKind {
     Factory,
     Mine,
     Research,
+    OrbitalStation,
 };
 
 struct ProductionItem {
@@ -215,6 +218,25 @@ struct Planet {
     MineralCargo minerals;
     std::uint32_t mines{};
     bool productionWaitingForMinerals{};
+    bool productionWaitingForShipyard{};
+};
+
+enum class OrbitalStationHullType : std::uint8_t {
+    OrbitalDock,
+};
+
+enum class OrbitalStationModule : std::uint8_t {
+    Shipyard,
+    RefuelingDepot,
+};
+
+struct OrbitalStation {
+    OrbitalStationId id{};
+    PlayerId owner{};
+    PlanetId planet{};
+    std::string name;
+    OrbitalStationHullType hull{OrbitalStationHullType::OrbitalDock};
+    std::vector<OrbitalStationModule> modules;
 };
 
 enum class SurveyLevel : std::uint8_t {
@@ -256,6 +278,7 @@ enum class PlayerReportKind {
     ProductionWaitingForMinerals,
     FleetTargetLost,
     FleetsMerged,
+    ProductionWaitingForShipyard,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -462,11 +485,13 @@ struct GameState {
     std::uint64_t galaxySeed{};
     FleetId nextFleetId{1};
     ShipDesignId nextShipDesignId{kFirstCustomShipDesignId};
+    OrbitalStationId nextOrbitalStationId{1};
     std::vector<Player> players;
     std::vector<ShipDesign> shipDesigns;
     std::vector<StarSystem> stars;
     std::vector<Planet> planets;
     std::vector<Fleet> fleets;
+    std::vector<OrbitalStation> orbitalStations;
 };
 
 struct GalaxyConfig {
@@ -481,6 +506,14 @@ struct GalaxyConfig {
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
 [[nodiscard]] const Player* find_player(const GameState& state, PlayerId id);
 [[nodiscard]] const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id);
+[[nodiscard]] const OrbitalStation* find_orbital_station(
+    const GameState& state, OrbitalStationId id);
+[[nodiscard]] const OrbitalStation* find_orbital_station_at_planet(
+    const GameState& state, PlanetId planet);
+[[nodiscard]] bool orbital_station_has_module(
+    const OrbitalStation& station, OrbitalStationModule module);
+[[nodiscard]] bool colony_has_orbital_service(
+    const GameState& state, PlanetId planet, PlayerId owner, OrbitalStationModule module);
 [[nodiscard]] const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::vector<FleetShipStack> fleet_ship_stacks(const Fleet& fleet);
 [[nodiscard]] std::uint32_t fleet_ship_count(const Fleet& fleet);
@@ -598,6 +631,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::Factory: return kFactoryCost;
     case ProductionKind::Mine: return kMineCost;
     case ProductionKind::Research: return 0;
+    case ProductionKind::OrbitalStation: return kOrbitalDockCost;
     }
     return kColonyShipCost;
 }

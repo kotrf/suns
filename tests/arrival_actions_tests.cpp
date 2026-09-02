@@ -82,6 +82,11 @@ void verify_unload_and_refuel_actions()
     auto state = suns::make_demo_game();
     state.planets[1].owner = 1;
     state.planets[1].population = 1000;
+    state.orbitalStations.push_back({
+        state.nextOrbitalStationId++, 1, 2, "Centauri Orbital Dock",
+        suns::OrbitalStationHullType::OrbitalDock,
+        {suns::OrbitalStationModule::Shipyard, suns::OrbitalStationModule::RefuelingDepot},
+    });
 
     const auto* design = suns::find_ship_design(state, suns::kColonyShipDesignId);
     assert(design != nullptr);
