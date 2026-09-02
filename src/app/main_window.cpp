@@ -1018,7 +1018,7 @@ void MainWindow::updateControls()
     const bool stationPending = ownedColony
         && std::any_of(pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [planet](const Order& order) {
                const auto* queued = std::get_if<QueueProductionOrder>(&order);
-               return queued && queued->planet == planet->id
+               return queued && queued->colony == planet->id
                    && queued->kind == ProductionKind::OrbitalStation;
            });
     buildOrbitalDockButton_->setEnabled(ownedColony && !stationExists && !stationQueued && !stationPending);
