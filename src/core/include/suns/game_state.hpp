@@ -264,6 +264,7 @@ enum class SurveyLevel : std::uint8_t {
     BasicScan,
     OrbitalSurvey,
     GeologicalSurvey,
+    DeepSurvey,
 };
 
 struct SystemSurveyKnowledge {
@@ -642,6 +643,10 @@ void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 [[nodiscard]] std::optional<std::uint32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planet);
 [[nodiscard]] bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planet);
+// nullopt means that a deep survey has not been completed. A true value is a
+// deliberately vague archaeological hint, never the site's exact reward.
+[[nodiscard]] std::optional<bool> known_precursor_artifact_hint(
+    const GameState& state, PlayerId player, PlanetId planet);
 void set_survey_level(
     GameState& state,
     PlayerId player,

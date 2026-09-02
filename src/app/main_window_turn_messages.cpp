@@ -210,6 +210,11 @@ QString event_text(const GameState& state, const GameEvent& event)
                               .arg(concentrations.boranium, 0, 'f', 1)
                               .arg(concentrations.germanium, 0, 'f', 1);
             }
+            if (event.surveyLevel >= SurveyLevel::DeepSurvey) {
+                detail += event.precursorArtifactHint
+                    ? "\nPossible artificial structures detected — exact nature unknown"
+                    : "\nDeep survey complete — no unexamined unusual sites detected";
+            }
         }
         if (star && star_is_variable(*star) && event.surveyLevel >= SurveyLevel::OrbitalSurvey) {
             detail += event.surveyLevel >= SurveyLevel::GeologicalSurvey
@@ -222,7 +227,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             ? "Long-range system scan"
             : "Penetrating scan";
         if (event.surveyLevel == SurveyLevel::OrbitalSurvey) surveyName = "Orbital survey";
-        else if (event.surveyLevel >= SurveyLevel::GeologicalSurvey) surveyName = "Geological survey";
+        else if (event.surveyLevel == SurveyLevel::GeologicalSurvey) surveyName = "Geological survey";
+        else if (event.surveyLevel >= SurveyLevel::DeepSurvey) surveyName = "Deep survey";
         text = QString("Turn %1  •  %2: %3")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(surveyName, starName);

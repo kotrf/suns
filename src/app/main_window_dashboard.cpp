@@ -158,6 +158,11 @@ QString MainWindow::selectedPlanetPanelSummary() const
                  .arg(estimated ? "~" : "")
                  .arg(knownHabitability.value_or(0));
     if (estimated) lines << "Basic scan estimate — enter orbit to confirm";
+    if (const auto artifactHint = known_precursor_artifact_hint(state_, 1, planet->id)) {
+        lines << (*artifactHint
+                ? "<span style='color:#d8bd72'><b>Deep survey:</b> possible artificial structures</span>"
+                : "Deep survey complete — no unexamined unusual sites");
+    }
     if (const auto variability = known_stellar_variability(state_, 1, star->id);
         variability && variability->variable) {
         if (variability->characterized) {

@@ -44,6 +44,7 @@ struct GameEvent {
     SurveyLevel surveyLevel{SurveyLevel::Detected};
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
+    bool precursorArtifactHint{};
 };
 
 } // namespace suns
