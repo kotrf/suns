@@ -23,6 +23,7 @@ void round_trip_preserves_communications_and_planning()
     original.state.planets.front().mines = 17;
     original.state.planets.front().productionWaitingForMinerals = true;
     original.state.planets.front().productionWaitingForShipyard = true;
+    original.state.planets.front().environment = {63, 47, 29};
     original.state.orbitalStations.front().name = "Sol Prime Orbital Dock";
     original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
     original.state.players.front().pendingSurveyReports.push_back({
@@ -177,6 +178,9 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.planets.front().mines == 17);
     assert(loaded.state.planets.front().productionWaitingForMinerals);
     assert(loaded.state.planets.front().productionWaitingForShipyard);
+    assert(loaded.state.planets.front().environment.temperature == 63);
+    assert(loaded.state.planets.front().environment.gravity == 47);
+    assert(loaded.state.planets.front().environment.radiation == 29);
     assert(loaded.state.nextOrbitalStationId == original.state.nextOrbitalStationId);
     assert(loaded.state.orbitalStations.size() == 1);
     assert(loaded.state.orbitalStations.front().id == 1);

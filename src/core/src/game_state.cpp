@@ -137,6 +137,25 @@ const ShipComponentSpec* primary_engine(const ShipDesign& design, ShipComponentS
 
 } // namespace
 
+PlanetEnvironment generated_planet_environment(
+    std::uint64_t galaxySeed, PlanetId planet, StarClass stellarClass)
+{
+    auto mixed = mix_stellar_seed(
+        galaxySeed ^ (static_cast<std::uint64_t>(planet) * 0xA24BAED4963EE407ULL));
+    const auto classValue = static_cast<int>(stellarClass);
+    const int thermalBias = (2 - classValue) * 4;
+    PlanetEnvironment result;
+    result.temperature = static_cast<std::uint8_t>(std::clamp(
+        12 + static_cast<int>(mixed % 77ULL) + thermalBias, 0, 100));
+    mixed = mix_stellar_seed(mixed);
+    result.gravity = static_cast<std::uint8_t>(18 + mixed % 71ULL);
+    mixed = mix_stellar_seed(mixed);
+    const int radiationBias = std::max(0, 3 - classValue) * 5;
+    result.radiation = static_cast<std::uint8_t>(std::clamp(
+        2 + static_cast<int>(mixed % 65ULL) + radiationBias, 0, 100));
+    return result;
+}
+
 const StarSystem* find_star(const GameState& state, StarId id)
 {
     const auto it = std::find_if(state.stars.begin(), state.stars.end(), [id](const StarSystem& star) {
@@ -1337,6 +1356,7 @@ GameState generate_game(const GalaxyConfig& config)
 
     state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
     state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, {}});
+    state.planets.front().environment = {50, 50, 8};
     state.planets.front().minerals = {100.0, 100.0, 100.0};
     state.orbitalStations.push_back({
         1, 1, 1, "Earth Orbital Dock", OrbitalStationHullType::OrbitalDock,
@@ -1353,6 +1373,7 @@ GameState generate_game(const GalaxyConfig& config)
             id, name, position, stellarClass, generated_stellar_variability(config.seed, id)});
         state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(namingRng, name),
             generated_habitability(physicalRng, stellarClass), 0, 0, 1, {}});
+        state.planets.back().environment = generated_planet_environment(config.seed, id, stellarClass);
     }
 
     const auto* scout = find_ship_design(state, kScoutDesignId);

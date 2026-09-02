@@ -15,7 +15,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 24;
+constexpr quint32 kSaveFormatVersion = 25;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 2;
@@ -511,7 +511,10 @@ void writePlanet(QDataStream& stream, const Planet& value)
     writeMinerals(stream, value.minerals);
     stream << static_cast<quint32>(value.mines)
            << static_cast<quint8>(value.productionWaitingForMinerals ? 1 : 0)
-           << static_cast<quint8>(value.productionWaitingForShipyard ? 1 : 0);
+           << static_cast<quint8>(value.productionWaitingForShipyard ? 1 : 0)
+           << static_cast<quint8>(value.environment.temperature)
+           << static_cast<quint8>(value.environment.gravity)
+           << static_cast<quint8>(value.environment.radiation);
 }
 
 void readPlanet(QDataStream& stream, Planet& value)
@@ -568,6 +571,17 @@ void readPlanet(QDataStream& stream, Planet& value)
             return;
         }
         value.productionWaitingForShipyard = waitingForShipyard != 0;
+    }
+    if (gReadSaveFormatVersion >= 25) {
+        quint8 temperature{};
+        quint8 gravity{};
+        quint8 radiation{};
+        stream >> temperature >> gravity >> radiation;
+        if (temperature > 100 || gravity > 100 || radiation > 100) {
+            markCorrupt(stream);
+            return;
+        }
+        value.environment = {temperature, gravity, radiation};
     }
 }
 
@@ -1137,6 +1151,15 @@ void readGameState(QDataStream& stream, GameState& value)
     if (!readVector(stream, value.shipDesigns, readShipDesign)) return;
     if (!readVector(stream, value.stars, readStar)) return;
     if (!readVector(stream, value.planets, readPlanet)) return;
+    if (gReadSaveFormatVersion < 25) {
+        for (auto& planet : value.planets) {
+            const auto* star = find_star(value, planet.star);
+            if (!star) continue;
+            planet.environment = planet.owner != 0 && planet.id == 1
+                ? PlanetEnvironment{50, 50, 8}
+                : generated_planet_environment(value.galaxySeed, planet.id, star->stellarClass);
+        }
+    }
     if (!readVector(stream, value.fleets, readFleet)) return;
     if (gReadSaveFormatVersion >= 24) {
         if (!readVector(stream, value.orbitalStations, readOrbitalStation)) return;

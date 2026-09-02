@@ -454,7 +454,12 @@ MainWindow::MainWindow(QWidget* parent)
         rebuildScene();
     });
     connect(warpSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
-    connect(colonistLoadSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
+    connect(colonistLoadSpin_, &QSpinBox::valueChanged, this, [this](int) {
+        // Dockside cargo changes are planning-time actions: the disposable
+        // movement preview makes them effective immediately in this year's UI
+        // and the same order is resolved before movement when End Turn is used.
+        queueColonists();
+    });
     connect(arrivalReserveSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
     connect(shipDesignCombo_, &QComboBox::currentIndexChanged, this, [this](int) { updateControls(); });
     connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
@@ -501,6 +506,17 @@ const Fleet* MainWindow::selectedColonyShipAtSelectedStar() const
     const auto* fleet = selectedFleet();
     if (!star || !fleet) return nullptr;
     return fleet_can_colonize(state_, *fleet) && same_position(fleet->position, star->position) ? fleet : nullptr;
+}
+
+std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
+{
+    const auto* fleet = selectedFleet();
+    if (!fleet) return std::nullopt;
+    auto visible = fleet_player_view(state_, *fleet);
+    if (!fleet_has_instant_link(state_, *fleet)) return visible;
+    const auto preview = movementPhasePreviewState(state_, pendingOrders_, processor_);
+    if (const auto* planned = findFleet(preview, fleet->id)) visible = *planned;
+    return visible;
 }
 
 const Planet* MainWindow::selectedFriendlyColonyForFleet() const
@@ -821,7 +837,10 @@ void MainWindow::updateControls()
         warpSpin_->setEnabled(maxWarp > 0);
         selectedWarp = static_cast<std::uint8_t>(warpSpin_->value());
 
-        const auto maxColonists = static_cast<int>(std::floor(fleet_cargo_capacity(state_, *fleet) * kColonistsPerCargoUnit + 0.000001));
+        const auto colonistCapacity = std::max(
+            0.0, fleet_cargo_capacity(state_, *fleet) - mineral_cargo_mass(effectiveFleet->minerals));
+        const auto maxColonists = static_cast<int>(std::floor(
+            colonistCapacity * kColonistsPerCargoUnit + 0.000001));
         if (!logisticsControlFleetId_ || *logisticsControlFleetId_ != fleet->id) {
             const QSignalBlocker blocker(colonistLoadSpin_);
             colonistLoadSpin_->setRange(0, std::max(0, maxColonists));
@@ -1039,10 +1058,8 @@ void MainWindow::updateControls()
         : "Queue selected ship design");
 
     const bool canLoad = logisticsColony && fleet && effectiveFleet && fleet_cargo_capacity(state_, *fleet) > 0.0;
-    loadColonistsButton_->setEnabled(canLoad
-        && static_cast<std::uint64_t>(colonistLoadSpin_->value()) != effectiveFleet->colonists);
-    loadColonistsButton_->setText(canLoad
-        ? QString("Set colonists aboard to %1").arg(colonistLoadSpin_->value()) : "Set colonists aboard");
+    loadColonistsButton_->setEnabled(false);
+    loadColonistsButton_->setText(canLoad ? "Cargo updates immediately" : "Dock at a friendly colony to load");
 
     const bool canRefuel = logisticsColony && fleet && effectiveFleet
         && colony_has_orbital_service(
@@ -1227,7 +1244,7 @@ void MainWindow::queueColonists()
     if (!planet || !fleet) return;
 
     const auto target = static_cast<std::uint64_t>(colonistLoadSpin_->value());
-    const auto description = QString("Set %1 colonists aboard %2 at %3")
+    const auto description = QString("Current-year cargo: %1 colonists aboard %2 at %3")
                                  .arg(static_cast<qulonglong>(target))
                                  .arg(QString::fromStdString(fleet->name))
                                  .arg(QString::fromStdString(planet->name));

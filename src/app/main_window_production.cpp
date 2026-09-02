@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -107,7 +108,8 @@ void MainWindow::installProductionQueue()
     productionQueueTree_->setRootIsDecorated(false);
     productionQueueTree_->setAlternatingRowColors(true);
     productionQueueTree_->setSelectionMode(QAbstractItemView::SingleSelection);
-    productionQueueTree_->setMinimumHeight(210);
+    productionQueueTree_->setMinimumHeight(72);
+    productionQueueTree_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     productionQueueTree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     productionQueueTree_->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     productionQueueTree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -122,7 +124,7 @@ void MainWindow::installProductionQueue()
     moveRow->addWidget(productionMoveUpButton_);
     moveRow->addWidget(productionMoveDownButton_);
     layout->addLayout(moveRow);
-    panelLayout->addWidget(group, 1);
+    panelLayout->addWidget(group);
 
     connect(productionMoveUpButton_, &QPushButton::clicked, this,
         [this] { moveSelectedProductionItem(-1); });

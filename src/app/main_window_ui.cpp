@@ -20,6 +20,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPushButton>
+#include <QProgressBar>
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QSettings>
@@ -127,6 +128,25 @@ void MainWindow::installUiPolish()
                     planetInfo->setWordWrap(true);
                     planetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
                     planetLayout->addWidget(planetInfo);
+                    planetEnvironmentPanel_ = new QWidget(planetGroup);
+                    auto* environmentLayout = new QFormLayout(planetEnvironmentPanel_);
+                    environmentLayout->setContentsMargins(0, 2, 0, 0);
+                    environmentLayout->setVerticalSpacing(4);
+                    const auto makeEnvironmentBar = [this](const char* objectName) {
+                        auto* bar = new QProgressBar(planetEnvironmentPanel_);
+                        bar->setObjectName(objectName);
+                        bar->setRange(0, 100);
+                        bar->setTextVisible(false);
+                        bar->setFixedHeight(9);
+                        return bar;
+                    };
+                    planetTemperatureBar_ = makeEnvironmentBar("planetTemperatureBar");
+                    planetGravityBar_ = makeEnvironmentBar("planetGravityBar");
+                    planetRadiationBar_ = makeEnvironmentBar("planetRadiationBar");
+                    environmentLayout->addRow("Temperature", planetTemperatureBar_);
+                    environmentLayout->addRow("Gravity", planetGravityBar_);
+                    environmentLayout->addRow("Radiation", planetRadiationBar_);
+                    planetLayout->addWidget(planetEnvironmentPanel_);
                     sideLayout->addWidget(planetGroup);
 
                     fleetPanel = new QWidget(this);
@@ -143,9 +163,9 @@ void MainWindow::installUiPolish()
                     colonistForm->addRow("Colonists aboard", colonistLoadSpin_);
                     fleetLayout->addLayout(colonistForm);
 
-                    loadColonistsButton_->show();
-                    loadColonistsButton_->setText("Apply colonist load");
-                    fleetLayout->addWidget(loadColonistsButton_);
+                    loadColonistsButton_->hide();
+                    colonistLoadSpin_->setToolTip(
+                        "Changing this value updates the current-year dockside cargo plan immediately");
 
                     auto* quickRow = new QHBoxLayout;
                     auto* loadMaxButton = new QPushButton("Load to capacity", fleetGroup);
@@ -238,7 +258,6 @@ void MainWindow::installUiPolish()
                         const auto available = fleet->colonists + colonyAvailable;
                         const auto target = std::min(capacity, available);
                         colonistLoadSpin_->setValue(static_cast<int>(target));
-                        queueColonists();
                     });
 
                     connect(unloadButton, &QPushButton::clicked, this, [this] {
@@ -247,7 +266,6 @@ void MainWindow::installUiPolish()
                             return;
                         }
                         colonistLoadSpin_->setValue(0);
-                        queueColonists();
                     });
                     connect(cargoButton, &QPushButton::clicked, this, [this] { openCargoManifestDialog(); });
                     connect(mergeButton, &QPushButton::clicked, this, [this] { openMergeFleetsDialog(); });
@@ -612,6 +630,25 @@ void MainWindow::installUiPolish()
         if (planetInfo) planetInfo->setText(selectedPlanetPanelSummary());
         if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
 
+        const auto* environmentPlanet = selectedPlanet();
+        const auto* environmentStar = selectedStar();
+        const bool environmentKnown = environmentPlanet && environmentStar
+            && is_surveyed(state_, 1, environmentStar->id);
+        if (planetEnvironmentPanel_) planetEnvironmentPanel_->setVisible(environmentKnown);
+        if (environmentKnown) {
+            const auto setEnvironmentBar = [](QProgressBar* bar, std::uint8_t value, const QString& text) {
+                if (!bar) return;
+                bar->setValue(value);
+                bar->setToolTip(QString("%1: %2 / 100").arg(text).arg(static_cast<int>(value)));
+            };
+            setEnvironmentBar(planetTemperatureBar_, environmentPlanet->environment.temperature,
+                "Temperature (50 is temperate)");
+            setEnvironmentBar(planetGravityBar_, environmentPlanet->environment.gravity,
+                "Gravity (50 is Earth-like)");
+            setEnvironmentBar(planetRadiationBar_, environmentPlanet->environment.radiation,
+                "Radiation (higher is more severe)");
+        }
+
         const auto homePlanet = std::find_if(state_.planets.begin(), state_.planets.end(), [](const Planet& planet) {
             return planet.owner == 1;
         });
@@ -698,7 +735,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/geometry", saveGeometry());
-        settings.setValue("workspace/docks", saveState(1));
+        settings.setValue("workspace/docks", saveState(2));
     }
 
     QMainWindow::closeEvent(event);

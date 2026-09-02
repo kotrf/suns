@@ -64,6 +64,10 @@ int main(int argc, char* argv[])
             // in the offscreen path; all refresh from the selected game state.
             if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) fuel->update();
             if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) cargo->update();
+            if (auto* temperature = window.findChild<QProgressBar*>("planetTemperatureBar")) temperature->update();
+            if (auto* routeSource = window.findChild<QComboBox*>("routeSourceFleetCombo")) routeSource->update();
+            if (auto* routeHelp = window.findChild<QToolButton*>("routeProgramHelpButton")) routeHelp->update();
+            if (auto* clearMessages = window.findChild<QPushButton*>("clearTurnMessages")) clearMessages->click();
             if (auto* portrait = window.findChild<QLabel*>("fleetPortrait")) portrait->update();
             if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
             if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();

@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QStatusBar>
 #include <QVariant>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -205,9 +206,15 @@ void MainWindow::installTurnMessages()
 
     auto* nextUnread = new QPushButton("Next unread", content);
     nextUnread->setObjectName("nextUnreadTurnMessage");
+    auto* clearMessages = new QPushButton("Clear messages", content);
+    clearMessages->setObjectName("clearTurnMessages");
+    clearMessages->setToolTip("Remove all reports currently shown in this panel");
+    auto* buttonRow = new QHBoxLayout;
+    buttonRow->addWidget(nextUnread);
+    buttonRow->addWidget(clearMessages);
     layout->addWidget(turnMessagesSummary_);
     layout->addWidget(turnMessagesList_, 1);
-    layout->addWidget(nextUnread);
+    layout->addLayout(buttonRow);
     turnMessagesDock_->setWidget(content);
     addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
     turnMessagesDock_->hide();
@@ -248,6 +255,12 @@ void MainWindow::installTurnMessages()
             return;
         }
         statusBar()->showMessage("No unread turn messages", 1800);
+    });
+    connect(clearMessages, &QPushButton::clicked, this, [this] {
+        turnMessages_.clear();
+        if (turnMessagesList_) turnMessagesList_->clear();
+        if (turnMessagesSummary_) turnMessagesSummary_->setText("No strategic reports.");
+        statusBar()->showMessage("Turn messages cleared", 1800);
     });
 }
 

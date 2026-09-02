@@ -27,6 +27,7 @@ class QProgressBar;
 class QSpinBox;
 class QDockWidget;
 class QTreeWidget;
+class QWidget;
 
 namespace suns {
 
@@ -45,7 +46,9 @@ public:
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
+    [[nodiscard]] std::vector<FleetId> availableOwnedFleetsForRouteProgram() const;
     [[nodiscard]] QString fleetTargetNameForRouteProgram(FleetId fleet) const;
+    bool selectFleetForRouteProgram(FleetId fleet);
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool appendFleetTargetWaypoint(
@@ -157,6 +160,7 @@ private:
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
     [[nodiscard]] const Fleet* selectedFleet() const;
+    [[nodiscard]] std::optional<Fleet> selectedFleetPlanningView() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
     [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;
     [[nodiscard]] QString selectedPlanetPanelSummary() const;
@@ -225,6 +229,10 @@ private:
     QDockWidget* turnMessagesDock_{};
     QListWidget* turnMessagesList_{};
     QLabel* turnMessagesSummary_{};
+    QWidget* planetEnvironmentPanel_{};
+    QProgressBar* planetTemperatureBar_{};
+    QProgressBar* planetGravityBar_{};
+    QProgressBar* planetRadiationBar_{};
     QDialog* researchDialog_{};
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};

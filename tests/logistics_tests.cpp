@@ -94,6 +94,22 @@ void verify_colonist_loading_and_unloading()
     assert(planet(rejected, 1)->population == 900);
 }
 
+void verify_loading_precedes_movement_in_the_same_turn()
+{
+    const suns::TurnProcessor processor;
+    auto state = logistics_fixture();
+    const auto origin = fleet(state, 2)->position;
+
+    suns::PlayerOrders orders{1, {}};
+    orders.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 300});
+    orders.orders.emplace_back(suns::MoveFleetOrder{2, {origin.x + 20.0, origin.y}, 4});
+    const auto next = processor.process(state, {orders});
+
+    assert(fleet(next, 2)->colonists == 300);
+    assert(!suns::same_position(fleet(next, 2)->position, origin));
+    assert(planet(next, 1)->population == 700);
+}
+
 void verify_colony_cannot_be_accidentally_emptied()
 {
     const suns::TurnProcessor processor;
@@ -137,6 +153,7 @@ int main()
 {
     verify_design_production();
     verify_colonist_loading_and_unloading();
+    verify_loading_precedes_movement_in_the_same_turn();
     verify_colony_cannot_be_accidentally_emptied();
     verify_explicit_refuel();
     return 0;
