@@ -65,11 +65,20 @@ enum class StarClass {
     Red,
 };
 
+struct StellarVariability {
+    // A zero period denotes a stable star. Variable stars use a deterministic
+    // sinusoidal cycle measured in planning turns.
+    std::uint16_t periodTurns{};
+    std::uint8_t amplitudePercent{};
+    std::uint16_t phaseOffset{};
+};
+
 struct StarSystem {
     StarId id{};
     std::string name;
     Position position;
     StarClass stellarClass{StarClass::Yellow};
+    StellarVariability variability;
 };
 
 struct MineralCargo {
@@ -220,6 +229,14 @@ struct SystemSurveyKnowledge {
     StarId star{};
     SurveyLevel level{SurveyLevel::Detected};
     std::uint64_t observedTurn{};
+};
+
+struct StellarVariabilityIntel {
+    bool variable{};
+    bool characterized{};
+    std::uint16_t periodTurns{};
+    std::uint8_t amplitudePercent{};
+    std::uint16_t phaseOffset{};
 };
 
 struct PendingSurveyReport {
@@ -560,6 +577,8 @@ void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
 [[nodiscard]] SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] std::optional<StellarVariabilityIntel> known_stellar_variability(
+    const GameState& state, PlayerId player, StarId star);
 [[nodiscard]] std::optional<std::uint32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planet);
 [[nodiscard]] bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planet);
@@ -585,9 +604,17 @@ void refresh_sensor_intel(GameState& state);
 
 [[nodiscard]] std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item);
 [[nodiscard]] std::uint64_t population_capacity(const Planet& planet);
+[[nodiscard]] std::uint64_t population_capacity(
+    const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
+[[nodiscard]] std::uint64_t projected_population_growth(
+    const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] std::uint32_t colony_output(const Planet& planet);
 [[nodiscard]] int stellar_habitability_bias(StarClass stellarClass);
+[[nodiscard]] bool star_is_variable(const StarSystem& star);
+[[nodiscard]] double stellar_luminosity(const StarSystem& star, std::uint64_t turn);
+[[nodiscard]] std::uint32_t current_planet_habitability(
+    const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
     const GameState& state, PlayerId player);
 void record_empire_turn_statistics(GameState& state);

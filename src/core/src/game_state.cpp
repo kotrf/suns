@@ -29,6 +29,28 @@ StarClass generated_star_class(std::mt19937_64& rng)
     return StarClass::Red;
 }
 
+std::uint64_t mix_stellar_seed(std::uint64_t value)
+{
+    value += 0x9E3779B97F4A7C15ULL;
+    value = (value ^ (value >> 30U)) * 0xBF58476D1CE4E5B9ULL;
+    value = (value ^ (value >> 27U)) * 0x94D049BB133111EBULL;
+    return value ^ (value >> 31U);
+}
+
+StellarVariability generated_stellar_variability(std::uint64_t galaxySeed, StarId star)
+{
+    auto mixed = mix_stellar_seed(
+        galaxySeed ^ (static_cast<std::uint64_t>(star) * 0xD6E8FEB86659FD93ULL));
+    if (mixed % 20ULL != 0) return {};
+
+    mixed = mix_stellar_seed(mixed);
+    StellarVariability result;
+    result.periodTurns = static_cast<std::uint16_t>(6 + mixed % 11ULL);
+    result.amplitudePercent = static_cast<std::uint8_t>(5 + (mixed >> 8U) % 12ULL);
+    result.phaseOffset = static_cast<std::uint16_t>((mixed >> 16U) % result.periodTurns);
+    return result;
+}
+
 std::vector<std::string_view> generated_star_name_deck(std::mt19937_64& rng)
 {
     std::vector<std::string_view> deck;
@@ -984,6 +1006,27 @@ SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star)
         : SurveyLevel::Detected;
 }
 
+std::optional<StellarVariabilityIntel> known_stellar_variability(
+    const GameState& state, PlayerId player, StarId starId)
+{
+    const auto* star = find_star(state, starId);
+    if (!star) return std::nullopt;
+    const auto* planet = find_planet_at_star(state, starId);
+    const bool ownedSystem = planet && planet->owner == player;
+    const auto level = survey_level(state, player, starId);
+    if (!ownedSystem && level < SurveyLevel::OrbitalSurvey) return std::nullopt;
+
+    if (!star_is_variable(*star)) return StellarVariabilityIntel{false, true};
+    const bool characterized = ownedSystem || level >= SurveyLevel::GeologicalSurvey;
+    return StellarVariabilityIntel{
+        true,
+        characterized,
+        characterized ? star->variability.periodTurns : std::uint16_t{},
+        characterized ? star->variability.amplitudePercent : std::uint8_t{},
+        characterized ? star->variability.phaseOffset : std::uint16_t{},
+    };
+}
+
 bool is_surveyed(const GameState& state, PlayerId player, StarId star)
 {
     return survey_level(state, player, star) >= SurveyLevel::BasicScan;
@@ -999,7 +1042,18 @@ std::optional<std::uint32_t> known_planet_habitability(
 
     const auto level = survey_level(state, player, planet->star);
     if (level < SurveyLevel::BasicScan && planet->owner != player) return std::nullopt;
-    if (level >= SurveyLevel::OrbitalSurvey || planet->owner == player) return planet->habitability;
+
+    auto observationTurn = state.turn;
+    if (const auto* knownPlayer = find_player(state, player)) {
+        const auto knowledge = std::find_if(
+            knownPlayer->surveyKnowledge.begin(), knownPlayer->surveyKnowledge.end(),
+            [&](const SystemSurveyKnowledge& entry) { return entry.star == planet->star; });
+        if (knowledge != knownPlayer->surveyKnowledge.end()) observationTurn = knowledge->observedTurn;
+    }
+    const bool canForecast = planet->owner == player || level >= SurveyLevel::GeologicalSurvey;
+    const auto observedHabitability = current_planet_habitability(
+        state, *planet, canForecast ? state.turn : observationTurn);
+    if (level >= SurveyLevel::OrbitalSurvey || planet->owner == player) return observedHabitability;
 
     std::uint64_t mixed = state.galaxySeed
         ^ (static_cast<std::uint64_t>(player) << 32U)
@@ -1008,7 +1062,7 @@ std::optional<std::uint32_t> known_planet_habitability(
     mixed *= 0xBF58476D1CE4E5B9ULL;
     mixed ^= mixed >> 27U;
     const auto error = static_cast<int>((mixed % 7ULL) * 5ULL) - 15;
-    const auto rough = std::clamp(static_cast<int>(planet->habitability) + error, 0, 100);
+    const auto rough = std::clamp(static_cast<int>(observedHabitability) + error, 0, 100);
     return static_cast<std::uint32_t>((rough + 5) / 10 * 10);
 }
 
@@ -1089,12 +1143,58 @@ std::uint64_t population_capacity(const Planet& planet)
     return static_cast<std::uint64_t>(planet.habitability) * 25;
 }
 
+bool star_is_variable(const StarSystem& star)
+{
+    return star.variability.periodTurns > 0 && star.variability.amplitudePercent > 0;
+}
+
+double stellar_luminosity(const StarSystem& star, std::uint64_t turn)
+{
+    if (!star_is_variable(star)) return 1.0;
+    constexpr double tau = 6.28318530717958647692;
+    const auto period = static_cast<std::uint64_t>(star.variability.periodTurns);
+    const auto year = turn > 0 ? turn - 1 : 0;
+    const auto phase = (year % period + star.variability.phaseOffset % period) % period;
+    const auto wave = std::sin(tau * static_cast<double>(phase) / static_cast<double>(period));
+    return 1.0 + wave * static_cast<double>(star.variability.amplitudePercent) / 100.0;
+}
+
+std::uint32_t current_planet_habitability(
+    const GameState& state, const Planet& planet, std::uint64_t turn)
+{
+    const auto* star = find_star(state, planet.star);
+    if (!star) return planet.habitability;
+    const auto luminosityShift = static_cast<int>(std::lround((stellar_luminosity(*star, turn) - 1.0) * 100.0));
+    return static_cast<std::uint32_t>(
+        std::clamp(static_cast<int>(planet.habitability) + luminosityShift, 0, 100));
+}
+
+std::uint64_t population_capacity(
+    const GameState& state, const Planet& planet, std::uint64_t turn)
+{
+    return static_cast<std::uint64_t>(current_planet_habitability(state, planet, turn)) * 25;
+}
+
 std::uint64_t projected_population_growth(const Planet& planet)
 {
     if (planet.owner == 0 || planet.population == 0 || planet.habitability == 0) return 0;
     const auto capacity = population_capacity(planet);
     if (capacity == 0 || planet.population >= capacity) return 0;
     const auto rawGrowth = std::max<std::uint64_t>(1, planet.population * planet.habitability / 1000);
+    const auto headroom = capacity - planet.population;
+    auto growth = rawGrowth * headroom / capacity;
+    if (growth == 0) growth = 1;
+    return std::min(growth, headroom);
+}
+
+std::uint64_t projected_population_growth(
+    const GameState& state, const Planet& planet, std::uint64_t turn)
+{
+    const auto habitability = current_planet_habitability(state, planet, turn);
+    if (planet.owner == 0 || planet.population == 0 || habitability == 0) return 0;
+    const auto capacity = population_capacity(state, planet, turn);
+    if (capacity == 0 || planet.population >= capacity) return 0;
+    const auto rawGrowth = std::max<std::uint64_t>(1, planet.population * habitability / 1000);
     const auto headroom = capacity - planet.population;
     auto growth = rawGrowth * headroom / capacity;
     if (growth == 0) growth = 1;
@@ -1212,7 +1312,8 @@ GameState generate_game(const GalaxyConfig& config)
         const auto name = std::string(nameDeck[index - 2]);
         const auto position = generated_position(physicalRng, config, state.stars);
         const auto stellarClass = generated_star_class(physicalRng);
-        state.stars.push_back({id, name, position, stellarClass});
+        state.stars.push_back({
+            id, name, position, stellarClass, generated_stellar_variability(config.seed, id)});
         state.planets.push_back({static_cast<PlanetId>(index), id, generated_planet_name(namingRng, name),
             generated_habitability(physicalRng, stellarClass), 0, 0, 1, {}});
     }

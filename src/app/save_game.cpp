@@ -14,7 +14,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 22;
+constexpr quint32 kSaveFormatVersion = 23;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 1;
@@ -386,6 +386,9 @@ void writeStar(QDataStream& stream, const StarSystem& value)
     writeString(stream, value.name);
     writePosition(stream, value.position);
     writeEnum(stream, value.stellarClass);
+    stream << static_cast<quint16>(value.variability.periodTurns)
+           << static_cast<quint8>(value.variability.amplitudePercent)
+           << static_cast<quint16>(value.variability.phaseOffset);
 }
 
 void readStar(QDataStream& stream, StarSystem& value)
@@ -396,6 +399,24 @@ void readStar(QDataStream& stream, StarSystem& value)
     readString(stream, value.name);
     readPosition(stream, value.position);
     readEnum(stream, value.stellarClass, static_cast<quint8>(StarClass::Red));
+    value.variability = {};
+    if (gReadSaveFormatVersion >= 23) {
+        quint16 period{};
+        quint8 amplitude{};
+        quint16 phase{};
+        stream >> period >> amplitude >> phase;
+        const bool stable = period == 0 && amplitude == 0 && phase == 0;
+        const bool validVariable = period >= 2 && amplitude >= 1 && amplitude <= 50 && phase < period;
+        if (!stable && !validVariable) {
+            markCorrupt(stream);
+            return;
+        }
+        value.variability = {
+            static_cast<std::uint16_t>(period),
+            static_cast<std::uint8_t>(amplitude),
+            static_cast<std::uint16_t>(phase),
+        };
+    }
 }
 
 void writeShipDesign(QDataStream& stream, const ShipDesign& value)

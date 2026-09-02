@@ -19,6 +19,7 @@ void round_trip_preserves_communications_and_planning()
     original.galaxyConfig = GalaxyConfig{20260825, 24, 940.0, 700.0, 50.0};
     original.state = generate_game(original.galaxyConfig);
     original.state.turn = 77;
+    original.state.stars[1].variability = {13, 12, 7};
     original.state.planets.front().mines = 17;
     original.state.planets.front().productionWaitingForMinerals = true;
     original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
@@ -168,6 +169,9 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.campaignId == original.campaignId);
     assert(loaded.turnToken == original.turnToken);
     assert(loaded.state.turn == 77);
+    assert(loaded.state.stars[1].variability.periodTurns == 13);
+    assert(loaded.state.stars[1].variability.amplitudePercent == 12);
+    assert(loaded.state.stars[1].variability.phaseOffset == 7);
     assert(loaded.state.planets.front().mines == 17);
     assert(loaded.state.planets.front().productionWaitingForMinerals);
     assert(loaded.state.players.front().pendingSurveyReports.size() == 1);

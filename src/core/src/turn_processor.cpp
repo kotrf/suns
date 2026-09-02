@@ -1242,7 +1242,9 @@ void advance_fleets(GameState& state)
 
 void grow_colonies(GameState& state)
 {
-    for (auto& planet : state.planets) planet.population += projected_population_growth(planet);
+    for (auto& planet : state.planets) {
+        planet.population += projected_population_growth(state, planet, state.turn);
+    }
 }
 
 } // namespace
