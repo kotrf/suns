@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace suns {
 
@@ -21,6 +22,8 @@ struct SaveGameData {
     std::optional<StarId> selectedStar;
     std::optional<FleetId> selectedFleet;
     bool showSensorRanges{true};
+    std::vector<GameEvent> strategicMessages;
+    std::vector<std::uint64_t> readStrategicMessageIds;
 };
 
 // Transport-neutral payload for PBEM today and a host/server transport later.

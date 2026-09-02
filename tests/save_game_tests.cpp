@@ -159,6 +159,19 @@ void round_trip_preserves_communications_and_planning()
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
     original.showSensorRanges = false;
+    GameEvent archivedMessage;
+    archivedMessage.id = 0x12345678ULL;
+    archivedMessage.turn = 76;
+    archivedMessage.observedTurn = 75;
+    archivedMessage.recipient = 1;
+    archivedMessage.kind = GameEventKind::ProductionCompleted;
+    archivedMessage.star = 1;
+    archivedMessage.planet = 1;
+    archivedMessage.shipDesign = kScoutDesignId;
+    archivedMessage.productionKind = ProductionKind::ColonyShip;
+    archivedMessage.position = {0.0, 0.0};
+    original.strategicMessages.push_back(archivedMessage);
+    original.readStrategicMessageIds.push_back(archivedMessage.id);
 
     QTemporaryDir directory;
     assert(directory.isValid());
@@ -324,6 +337,12 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
     assert(!loaded.showSensorRanges);
+    assert(loaded.strategicMessages.size() == 1);
+    assert(loaded.strategicMessages.front().id == archivedMessage.id);
+    assert(loaded.strategicMessages.front().kind == GameEventKind::ProductionCompleted);
+    assert(loaded.strategicMessages.front().planet == 1);
+    assert(loaded.strategicMessages.front().shipDesign == kScoutDesignId);
+    assert(loaded.readStrategicMessageIds == original.readStrategicMessageIds);
 }
 
 void turn_order_file_round_trip_preserves_envelope_and_orders()

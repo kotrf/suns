@@ -137,7 +137,7 @@ void MainWindow::installFleetReadabilityPolish()
         QDialog QRadioButton:disabled {
             color: #8da0b3;
         }
-        QListView, QListWidget, QTreeView, QTableView,
+        QListView, QListWidget, QTreeView, QTableView, QTextBrowser,
         QComboBox QAbstractItemView {
             color: #e7f0f8;
             background: #101925;

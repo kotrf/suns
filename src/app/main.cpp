@@ -14,6 +14,7 @@
 #include <QPushButton>
 #include <QTimer>
 #include <QToolButton>
+#include <QTextBrowser>
 
 int main(int argc, char* argv[])
 {
@@ -72,6 +73,8 @@ int main(int argc, char* argv[])
             if (auto* mine = window.findChild<QPushButton*>("queueMineButton")) mine->update();
             if (auto* comm = window.findChild<QLabel*>("fleetCommunicationSummary")) comm->update();
             if (auto* messages = window.findChild<QDockWidget*>("turnMessagesDock")) messages->update();
+            if (auto* filter = window.findChild<QComboBox*>("turnMessageAgeFilter")) filter->setCurrentIndex(0);
+            if (auto* body = window.findChild<QTextBrowser*>("turnMessageBody")) body->update();
             if (auto* research = window.findChild<QDialog*>("researchDialog")) research->update();
 
             // Open the non-modal graphical Ship Designer, select an empty

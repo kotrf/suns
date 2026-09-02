@@ -11,6 +11,7 @@
 #include <QStringList>
 
 #include <optional>
+#include <set>
 #include <vector>
 
 class QCloseEvent;
@@ -28,6 +29,7 @@ class QSpinBox;
 class QDockWidget;
 class QTreeWidget;
 class QWidget;
+class QTextBrowser;
 
 namespace suns {
 
@@ -145,6 +147,7 @@ private:
     void refreshPlanetPolish();
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
+    void refreshTurnMessages();
     void openResearchDialog();
     void refreshResearchPanel();
     void queueResearchPlan();
@@ -199,6 +202,8 @@ private:
     bool shuttingDown_{};
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
     std::vector<GameEvent> turnMessages_;
+    std::set<std::uint64_t> readTurnMessageIds_;
+    std::set<QString> hiddenTurnMessageClasses_;
     QPointer<ShipDesignerDialog> shipDesigner_;
 
     QGraphicsScene* scene_{};
@@ -229,6 +234,13 @@ private:
     QDockWidget* turnMessagesDock_{};
     QListWidget* turnMessagesList_{};
     QLabel* turnMessagesSummary_{};
+    QComboBox* turnMessageAgeFilter_{};
+    QComboBox* turnMessageTypeFilter_{};
+    QComboBox* turnMessagePlanetFilter_{};
+    QTextBrowser* turnMessageBody_{};
+    QPushButton* turnMessageHideSimilarButton_{};
+    QPushButton* turnMessageShowOnMapButton_{};
+    QPushButton* turnMessageRestoreHiddenButton_{};
     QWidget* planetEnvironmentPanel_{};
     QProgressBar* planetTemperatureBar_{};
     QProgressBar* planetGravityBar_{};
