@@ -143,6 +143,14 @@ target_link_libraries(suns_production_queue_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_production_queue_tests COMMAND suns_production_queue_tests)
 
+add_executable(suns_orbital_station_tests
+    orbital_station_tests.cpp
+)
+
+target_link_libraries(suns_orbital_station_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_orbital_station_tests COMMAND suns_orbital_station_tests)
+
 add_executable(suns_history_tests
     history_tests.cpp
 )

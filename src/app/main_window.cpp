@@ -49,6 +49,7 @@ QString productionName(ProductionKind kind)
     case ProductionKind::Factory: return "Factory";
     case ProductionKind::Mine: return "Mine";
     case ProductionKind::Research: return "Research";
+    case ProductionKind::OrbitalStation: return "Orbital Dock";
     }
     return "Production";
 }
@@ -71,6 +72,10 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = "Ongoing Research";
     } else if (item.kind == ProductionKind::Factory) {
         name = "Factory";
+    } else if (item.kind == ProductionKind::Mine) {
+        name = "Mine";
+    } else if (item.kind == ProductionKind::OrbitalStation) {
+        name = "Orbital Dock";
     } else {
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
         const auto* design = find_ship_design(state, designId);
@@ -407,6 +412,8 @@ MainWindow::MainWindow(QWidget* parent)
     designShipButton_->setObjectName("openShipDesignerButton");
     buildShipButton_ = new QPushButton("Queue selected ship design", sidePanel);
     buildFactoryButton_ = new QPushButton(QString("Queue Factory (%1)").arg(kFactoryCost), sidePanel);
+    buildOrbitalDockButton_ = new QPushButton(
+        QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost), sidePanel);
     colonizeButton_ = new QPushButton("Colonize selected world with selected ship", sidePanel);
 
     auto* productionForm = new QFormLayout;
@@ -415,6 +422,7 @@ MainWindow::MainWindow(QWidget* parent)
     sideLayout->addWidget(designShipButton_);
     sideLayout->addWidget(buildShipButton_);
     sideLayout->addWidget(buildFactoryButton_);
+    sideLayout->addWidget(buildOrbitalDockButton_);
     sideLayout->addWidget(colonizeButton_);
 
     ordersLabel_ = new QLabel(sidePanel);
@@ -455,6 +463,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(designShipButton_, &QPushButton::clicked, this, [this] { openShipDesigner(); });
     connect(buildShipButton_, &QPushButton::clicked, this, [this] { queueShipDesign(); });
     connect(buildFactoryButton_, &QPushButton::clicked, this, [this] { queueProduction(ProductionKind::Factory); });
+    connect(buildOrbitalDockButton_, &QPushButton::clicked, this, [this] {
+        queueProduction(ProductionKind::OrbitalStation);
+    });
     connect(loadColonistsButton_, &QPushButton::clicked, this, [this] { queueColonists(); });
     connect(refuelButton_, &QPushButton::clicked, this, [this] { queueRefuel(); });
     connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
@@ -942,8 +953,13 @@ void MainWindow::updateControls()
         if (fleet_radiation_hazard(state_, *fleet) > 0.0) {
             radiationLine = "<br><b>Radiating drive fitted</b> — colonist effect pending race-tolerance rules.";
         }
+        const bool refuelingAvailable = logisticsColony
+            && colony_has_orbital_service(
+                state_, logisticsColony->id, fleet->owner, OrbitalStationModule::RefuelingDepot);
         const QString dockedLine = logisticsColony
-            ? QString("<br>Docked at <b>%1</b>: loading/refuel available.").arg(QString::fromStdString(logisticsColony->name))
+            ? QString("<br>Docked at <b>%1</b>: loading available; refueling %2.")
+                  .arg(QString::fromStdString(logisticsColony->name))
+                  .arg(refuelingAvailable ? "available" : "requires an orbital dock")
             : "<br>Logistics: select the friendly colony under this fleet to load/refuel.";
 
         QString movementPlanLine;
@@ -994,9 +1010,30 @@ void MainWindow::updateControls()
     buildFactoryButton_->setEnabled(ownedColony);
     designShipButton_->setEnabled(true);
 
+    const bool stationExists = ownedColony && find_orbital_station_at_planet(state_, planet->id);
+    const bool stationQueued = ownedColony
+        && std::any_of(planet->productionQueue.begin(), planet->productionQueue.end(), [](const ProductionItem& item) {
+               return item.kind == ProductionKind::OrbitalStation;
+           });
+    const bool stationPending = ownedColony
+        && std::any_of(pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [planet](const Order& order) {
+               const auto* queued = std::get_if<QueueProductionOrder>(&order);
+               return queued && queued->planet == planet->id
+                   && queued->kind == ProductionKind::OrbitalStation;
+           });
+    buildOrbitalDockButton_->setEnabled(ownedColony && !stationExists && !stationQueued && !stationPending);
+    buildOrbitalDockButton_->setText(stationExists
+        ? "Orbital Dock already operational"
+        : stationQueued || stationPending
+            ? "Orbital Dock already planned"
+            : QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost));
+
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto* buildDesign = find_ship_design(state_, designId);
     buildShipButton_->setEnabled(ownedColony && buildDesign != nullptr && buildDesign->owner == 1);
+    buildShipButton_->setToolTip(stationExists
+        ? "Add this ship to the selected colony's production queue"
+        : "The ship may be queued now, but production waits until an Orbital Dock is completed first");
     buildShipButton_->setText(buildDesign
         ? QString("Queue %1 (%2)").arg(QString::fromStdString(buildDesign->name)).arg(ship_design_cost(*buildDesign))
         : "Queue selected ship design");
@@ -1008,6 +1045,8 @@ void MainWindow::updateControls()
         ? QString("Set colonists aboard to %1").arg(colonistLoadSpin_->value()) : "Set colonists aboard");
 
     const bool canRefuel = logisticsColony && fleet && effectiveFleet
+        && colony_has_orbital_service(
+            state_, logisticsColony->id, fleet->owner, OrbitalStationModule::RefuelingDepot)
         && effectiveFleet->fuel + 0.000001 < fleet_fuel_capacity(state_, *fleet);
     refuelButton_->setEnabled(canRefuel);
     refuelButton_->setText(canRefuel
@@ -1214,7 +1253,9 @@ void MainWindow::queueRefuel()
 {
     const auto* planet = selectedFriendlyColonyForFleet();
     const auto* fleet = selectedFleet();
-    if (!planet || !fleet) return;
+    if (!planet || !fleet
+        || !colony_has_orbital_service(
+            state_, planet->id, fleet->owner, OrbitalStationModule::RefuelingDepot)) return;
 
     appendPendingOrder(RefuelFleetOrder{planet->id, fleet->id},
         QString("Refuel %1 at %2").arg(QString::fromStdString(fleet->name)).arg(QString::fromStdString(planet->name)));

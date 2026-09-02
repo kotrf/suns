@@ -36,6 +36,8 @@ QString productionLine(const GameState& state, const Planet& planet)
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
+    } else if (item.kind == ProductionKind::OrbitalStation) {
+        name = "Orbital Dock";
     } else {
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
         if (const auto* design = find_ship_design(state, designId)) name = QString::fromStdString(design->name);
@@ -179,6 +181,20 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(planet->industry)
                      .arg(planet->mines)
                      .arg(colony_output(*planet));
+        if (const auto* station = find_orbital_station_at_planet(state_, planet->id)) {
+            QStringList services;
+            if (orbital_station_has_module(*station, OrbitalStationModule::Shipyard)) {
+                services << "shipyard";
+            }
+            if (orbital_station_has_module(*station, OrbitalStationModule::RefuelingDepot)) {
+                services << "refueling depot";
+            }
+            lines << QString("Orbital station: <b>%1</b> • %2")
+                         .arg(QString::fromStdString(station->name))
+                         .arg(services.isEmpty() ? "no services" : services.join(" • "));
+        } else {
+            lines << "Orbital station: <span style='color:#e4b77d'><b>none</b></span> • ships cannot be built or refueled";
+        }
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
         lines << QString("Mineral stocks — I %1 • B %2 • G %3")
                      .arg(planet->minerals.ironium, 0, 'f', 1)

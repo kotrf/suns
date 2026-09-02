@@ -24,6 +24,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::Factory: return "Factory";
     case ProductionKind::Mine: return "Mine";
     case ProductionKind::Research: return "Legacy Research item";
+    case ProductionKind::OrbitalStation: return "Orbital Dock";
     case ProductionKind::ColonyShip:
         if (const auto* design = find_ship_design(
                 state, item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId)) {
@@ -56,6 +57,8 @@ std::vector<ProductionItem> plannedQueue(
                     queue.push_back({ProductionKind::Factory, kFactoryCost, 0});
                 } else if (concrete.kind == ProductionKind::Mine) {
                     queue.push_back({ProductionKind::Mine, kMineCost, 0});
+                } else if (concrete.kind == ProductionKind::OrbitalStation) {
+                    queue.push_back({ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                 } else if (concrete.kind == ProductionKind::ColonyShip) {
                     addDefaultShip();
                 }
@@ -185,10 +188,16 @@ void MainWindow::refreshProductionQueue()
             .arg(static_cast<qulonglong>(queue.size()))
             .arg(queue.size() == 1 ? "" : "s"));
 
+    bool shipyardAvailable = colony_has_orbital_service(
+        state_, planet->id, planet->owner, OrbitalStationModule::Shipyard);
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
         QString remaining = QString::number(item.remainingCost);
-        if (item.remainingCost == 0
+        const bool waitingForShipyard = item.kind == ProductionKind::ColonyShip
+            && !shipyardAvailable;
+        if (waitingForShipyard) {
+            remaining = "shipyard";
+        } else if (item.remainingCost == 0
             && !mineral_cargo_sufficient(planet->minerals, production_item_mineral_cost(state_, item))) {
             remaining = "minerals";
         }
@@ -198,7 +207,7 @@ void MainWindow::refreshProductionQueue()
             completion = QString("Turn %1 (+%2)")
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn))
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn - state_.turn));
-        } else completion = "beyond forecast";
+        } else completion = waitingForShipyard ? "waiting for dock" : "beyond forecast";
 
         auto* row = new QTreeWidgetItem(productionQueueTree_);
         row->setText(0, QString::number(index + 1));
@@ -206,6 +215,7 @@ void MainWindow::refreshProductionQueue()
         row->setText(2, remaining);
         row->setText(3, completion);
         row->setData(0, Qt::UserRole, static_cast<qulonglong>(index));
+        if (item.kind == ProductionKind::OrbitalStation) shipyardAvailable = true;
     }
 
     if (!queue.empty()) {

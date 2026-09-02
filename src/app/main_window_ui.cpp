@@ -193,9 +193,11 @@ void MainWindow::installUiPolish()
                     productionLayout->addLayout(productionForm);
                     buildShipButton_->show();
                     buildFactoryButton_->show();
+                    buildOrbitalDockButton_->show();
                     buildShipButton_->setText("Queue selected ship");
                     productionLayout->addWidget(buildShipButton_);
                     productionLayout->addWidget(buildFactoryButton_);
+                    productionLayout->addWidget(buildOrbitalDockButton_);
                     productionPanelLayout->addWidget(productionGroup);
 
                     auto* viewGroup = makeGroup("Map display", "viewGroup", commandPanel);

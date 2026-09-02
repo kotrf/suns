@@ -16,6 +16,7 @@ std::uint32_t production_item_cost(const GameState& state, const ProductionItem&
     if (item.kind == ProductionKind::Research) return 0;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
+    if (item.kind == ProductionKind::OrbitalStation) return kOrbitalDockCost;
     if (item.shipDesign != 0) {
         if (const auto* design = find_ship_design(state, item.shipDesign)) return ship_design_cost(*design);
     }
@@ -169,7 +170,8 @@ void mine_colonies(GameState& state)
     }
 }
 
-std::optional<FleetId> complete_production(GameState& state, Planet& planet, const ProductionItem& item)
+std::optional<std::uint32_t> complete_production(
+    GameState& state, Planet& planet, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Research) return std::nullopt;
     if (item.kind == ProductionKind::Factory) {
@@ -179,6 +181,19 @@ std::optional<FleetId> complete_production(GameState& state, Planet& planet, con
     if (item.kind == ProductionKind::Mine) {
         ++planet.mines;
         return FleetId{0};
+    }
+    if (item.kind == ProductionKind::OrbitalStation) {
+        if (find_orbital_station_at_planet(state, planet.id)) return std::nullopt;
+        const auto id = state.nextOrbitalStationId++;
+        state.orbitalStations.push_back({
+            id,
+            planet.owner,
+            planet.id,
+            planet.name + " Orbital Dock",
+            OrbitalStationHullType::OrbitalDock,
+            {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+        });
+        return id;
     }
 
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
@@ -222,6 +237,31 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
     std::uint32_t available = output - allocated;
     while (!planet.productionQueue.empty()) {
         auto& item = planet.productionQueue.front();
+        if (item.kind == ProductionKind::ColonyShip
+            && !colony_has_orbital_service(
+                state, planet.id, planet.owner, OrbitalStationModule::Shipyard)) {
+            if (!planet.productionWaitingForShipyard) {
+                if (const auto* star = find_star(state, planet.star)) {
+                    const auto blockedDesign = item.shipDesign != 0
+                        ? item.shipDesign
+                        : kColonyShipDesignId;
+                    queue_player_report(
+                        state,
+                        planet.owner,
+                        PlayerReportKind::ProductionWaitingForShipyard,
+                        star->position,
+                        state.turn + 1,
+                        planet.star,
+                        planet.id,
+                        0,
+                        blockedDesign,
+                        item.kind);
+                }
+            }
+            planet.productionWaitingForShipyard = true;
+            break;
+        }
+        planet.productionWaitingForShipyard = false;
         if (item.remainingCost > 0) {
             planet.productionWaitingForMinerals = false;
             if (available == 0) break;
@@ -260,15 +300,15 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
 
         const auto completed = item;
         planet.productionQueue.erase(planet.productionQueue.begin());
-        const auto completedFleet = complete_production(state, planet, completed);
-        if (!completedFleet) continue;
+        const auto completedObject = complete_production(state, planet, completed);
+        if (!completedObject) continue;
 
         const auto* star = find_star(state, planet.star);
         if (!star) continue;
         std::uint32_t quantity = 0;
         if (completed.kind == ProductionKind::Factory) quantity = planet.industry;
         else if (completed.kind == ProductionKind::Mine) quantity = planet.mines;
-        else quantity = *completedFleet;
+        else quantity = *completedObject;
         const auto completedDesign = completed.kind == ProductionKind::ColonyShip
             ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId)
             : ShipDesignId{0};
@@ -280,12 +320,15 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
             state.turn + 1,
             planet.star,
             planet.id,
-            *completedFleet,
+            completed.kind == ProductionKind::ColonyShip ? *completedObject : FleetId{0},
             completedDesign,
             completed.kind,
             quantity);
     }
-    if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
+    if (planet.productionQueue.empty()) {
+        planet.productionWaitingForMinerals = false;
+        planet.productionWaitingForShipyard = false;
+    }
     if (researchActive) researchProduced += available;
     return researchProduced;
 }
@@ -548,7 +591,10 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
     }
     case FleetArrivalActionKind::Refuel: {
         auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony) return false;
+        if (!colony || !colony_has_orbital_service(
+                state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot)) {
+            return false;
+        }
         fleet.fuel = fleet_fuel_capacity(state, fleet);
         return false;
     }
@@ -1292,6 +1338,16 @@ TurnResult TurnProcessor::process_with_events(
                             planet->productionQueue.push_back({ProductionKind::Factory, kFactoryCost, 0});
                         } else if (concreteOrder.kind == ProductionKind::Mine) {
                             planet->productionQueue.push_back({ProductionKind::Mine, kMineCost, 0});
+                        } else if (concreteOrder.kind == ProductionKind::OrbitalStation) {
+                            const bool alreadyQueued = std::any_of(
+                                planet->productionQueue.begin(), planet->productionQueue.end(),
+                                [](const ProductionItem& item) {
+                                    return item.kind == ProductionKind::OrbitalStation;
+                                });
+                            if (!find_orbital_station_at_planet(next, planet->id) && !alreadyQueued) {
+                                planet->productionQueue.push_back({
+                                    ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
+                            }
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
                         } else if (const auto* design = find_ship_design(next, kColonyShipDesignId);
@@ -1407,6 +1463,11 @@ TurnResult TurnProcessor::process_with_events(
                         });
                         if (planet == next.planets.end() || fleet == next.fleets.end()) return;
                         if (!fleet_at_planet(next, *fleet, *planet)) return;
+                        if (!colony_has_orbital_service(
+                                next, planet->id, submission.player,
+                                OrbitalStationModule::RefuelingDepot)) {
+                            return;
+                        }
                         fleet->fuel = fleet_fuel_capacity(next, *fleet);
                     } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {

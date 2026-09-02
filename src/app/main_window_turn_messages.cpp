@@ -107,6 +107,7 @@ QString event_text(const GameState& state, const GameEvent& event)
         QString itemName;
         if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
+        else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital Dock";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
             itemName = QString::fromStdString(design->name);
         } else {
@@ -147,14 +148,18 @@ QString event_text(const GameState& state, const GameEvent& event)
         QString itemName;
         if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
+        else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital Dock";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
             itemName = QString::fromStdString(design->name);
         } else {
             itemName = "Ship";
         }
-        text = QString("Turn %1  •  Warning: %2 on %3 is waiting for minerals")
+        const auto reason = event.kind == GameEventKind::ProductionWaitingForShipyard
+            ? "requires an orbital shipyard"
+            : "is waiting for minerals";
+        text = QString("Turn %1  •  Warning: %2 on %3 %4")
                    .arg(static_cast<qulonglong>(event.turn))
-                   .arg(itemName, planetName);
+                   .arg(itemName, planetName, reason);
     }
 
     const auto delay = event.turn > event.observedTurn ? event.turn - event.observedTurn : 0;

@@ -22,6 +22,8 @@ void round_trip_preserves_communications_and_planning()
     original.state.stars[1].variability = {13, 12, 7};
     original.state.planets.front().mines = 17;
     original.state.planets.front().productionWaitingForMinerals = true;
+    original.state.planets.front().productionWaitingForShipyard = true;
+    original.state.orbitalStations.front().name = "Sol Prime Orbital Dock";
     original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
     original.state.players.front().pendingSurveyReports.push_back({
         2, 1, 76, 79, SurveyLevel::GeologicalSurvey,
@@ -174,6 +176,17 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.stars[1].variability.phaseOffset == 7);
     assert(loaded.state.planets.front().mines == 17);
     assert(loaded.state.planets.front().productionWaitingForMinerals);
+    assert(loaded.state.planets.front().productionWaitingForShipyard);
+    assert(loaded.state.nextOrbitalStationId == original.state.nextOrbitalStationId);
+    assert(loaded.state.orbitalStations.size() == 1);
+    assert(loaded.state.orbitalStations.front().id == 1);
+    assert(loaded.state.orbitalStations.front().owner == 1);
+    assert(loaded.state.orbitalStations.front().planet == 1);
+    assert(loaded.state.orbitalStations.front().name == "Sol Prime Orbital Dock");
+    assert(orbital_station_has_module(
+        loaded.state.orbitalStations.front(), OrbitalStationModule::Shipyard));
+    assert(orbital_station_has_module(
+        loaded.state.orbitalStations.front(), OrbitalStationModule::RefuelingDepot));
     assert(loaded.state.players.front().pendingSurveyReports.size() == 1);
     assert(loaded.state.players.front().surveyKnowledge.size() >= 2);
     const auto savedKnowledge = std::find_if(
@@ -325,10 +338,10 @@ void turn_order_file_round_trip_preserves_envelope_and_orders()
     original.turnToken = 0x55aa55aa12344321ULL;
     original.orders = {2, {
         move,
-        QueueProductionOrder{3, ProductionKind::Factory},
+        QueueProductionOrder{3, ProductionKind::OrbitalStation},
         SetResearchAllocationOrder{30},
     }};
-    original.descriptions = {"intercept and merge", "build factory", "research 30%"};
+    original.descriptions = {"intercept and merge", "build orbital dock", "research 30%"};
 
     QTemporaryDir directory;
     assert(directory.isValid());
@@ -356,7 +369,8 @@ void turn_order_file_round_trip_preserves_envelope_and_orders()
     assert(loadedMove->queuedWaypoints.front().arrivalAction.kind == FleetArrivalActionKind::Refuel);
 
     const auto* production = std::get_if<QueueProductionOrder>(&loaded.orders.orders[1]);
-    assert(production && production->colony == 3 && production->kind == ProductionKind::Factory);
+    assert(production && production->colony == 3
+        && production->kind == ProductionKind::OrbitalStation);
     const auto* allocation = std::get_if<SetResearchAllocationOrder>(&loaded.orders.orders[2]);
     assert(allocation && allocation->percent == 30);
 }

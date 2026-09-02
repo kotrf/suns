@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -14,10 +15,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 23;
+constexpr quint32 kSaveFormatVersion = 24;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 1;
+constexpr quint32 kTurnOrderFormatVersion = 2;
+constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
 
@@ -483,7 +485,10 @@ void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 
 void readProductionItem(QDataStream& stream, ProductionItem& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Research))) return;
+    const auto newestKind = gReadSaveFormatVersion >= 24
+        ? ProductionKind::OrbitalStation
+        : ProductionKind::Research;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(newestKind))) return;
     quint32 cost{};
     quint32 design{};
     stream >> cost >> design;
@@ -505,7 +510,8 @@ void writePlanet(QDataStream& stream, const Planet& value)
     for (const auto& item : value.productionQueue) writeProductionItem(stream, item);
     writeMinerals(stream, value.minerals);
     stream << static_cast<quint32>(value.mines)
-           << static_cast<quint8>(value.productionWaitingForMinerals ? 1 : 0);
+           << static_cast<quint8>(value.productionWaitingForMinerals ? 1 : 0)
+           << static_cast<quint8>(value.productionWaitingForShipyard ? 1 : 0);
 }
 
 void readPlanet(QDataStream& stream, Planet& value)
@@ -553,6 +559,59 @@ void readPlanet(QDataStream& stream, Planet& value)
     }
     value.mines = static_cast<std::uint32_t>(mines);
     value.productionWaitingForMinerals = waitingForMinerals != 0;
+    value.productionWaitingForShipyard = false;
+    if (gReadSaveFormatVersion >= 24) {
+        quint8 waitingForShipyard{};
+        stream >> waitingForShipyard;
+        if (waitingForShipyard > 1) {
+            markCorrupt(stream);
+            return;
+        }
+        value.productionWaitingForShipyard = waitingForShipyard != 0;
+    }
+}
+
+void writeOrbitalStation(QDataStream& stream, const OrbitalStation& value)
+{
+    stream << static_cast<quint32>(value.id)
+           << static_cast<quint32>(value.owner)
+           << static_cast<quint32>(value.planet);
+    writeString(stream, value.name);
+    writeEnum(stream, value.hull);
+    stream << static_cast<quint32>(value.modules.size());
+    for (const auto module : value.modules) writeEnum(stream, module);
+}
+
+void readOrbitalStation(QDataStream& stream, OrbitalStation& value)
+{
+    quint32 id{};
+    quint32 owner{};
+    quint32 planet{};
+    stream >> id >> owner >> planet;
+    value.id = static_cast<OrbitalStationId>(id);
+    value.owner = static_cast<PlayerId>(owner);
+    value.planet = static_cast<PlanetId>(planet);
+    readString(stream, value.name);
+    if (!readEnum(
+            stream, value.hull, static_cast<quint8>(OrbitalStationHullType::OrbitalDock))) {
+        return;
+    }
+    quint32 count{};
+    if (!readCount(stream, count)) return;
+    value.modules.clear();
+    value.modules.reserve(count);
+    for (quint32 index = 0; index < count; ++index) {
+        OrbitalStationModule module{};
+        if (!readEnum(
+                stream, module, static_cast<quint8>(OrbitalStationModule::RefuelingDepot))) {
+            return;
+        }
+        if (std::find(value.modules.begin(), value.modules.end(), module) != value.modules.end()) {
+            markCorrupt(stream);
+            return;
+        }
+        value.modules.push_back(module);
+    }
 }
 
 void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& value)
@@ -722,7 +781,10 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        if (!readEnum(stream, report.kind, static_cast<quint8>(PlayerReportKind::FleetsMerged))) return;
+        const auto newestReportKind = gReadSaveFormatVersion >= 24
+            ? PlayerReportKind::ProductionWaitingForShipyard
+            : PlayerReportKind::FleetsMerged;
+        if (!readEnum(stream, report.kind, static_cast<quint8>(newestReportKind))) return;
         quint64 observedTurn{};
         quint64 deliveryTurn{};
         quint32 star{};
@@ -730,7 +792,13 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 fleet{};
         quint32 shipDesign{};
         stream >> observedTurn >> deliveryTurn >> star >> planet >> fleet >> shipDesign;
-        if (!readEnum(stream, report.productionKind, static_cast<quint8>(ProductionKind::Research))) return;
+        const auto newestProductionKind = gReadSaveFormatVersion >= 24
+            ? ProductionKind::OrbitalStation
+            : ProductionKind::Research;
+        if (!readEnum(
+                stream, report.productionKind, static_cast<quint8>(newestProductionKind))) {
+            return;
+        }
         readPosition(stream, report.position);
         quint32 quantity{};
         stream >> quantity;
@@ -1017,17 +1085,37 @@ bool readVector(QDataStream& stream, std::vector<Value>& values, Reader reader)
     return true;
 }
 
+void addLegacyOrbitalStations(GameState& state)
+{
+    state.orbitalStations.clear();
+    state.nextOrbitalStationId = 1;
+    for (const auto& planet : state.planets) {
+        if (planet.owner == 0) continue;
+        const auto id = state.nextOrbitalStationId++;
+        state.orbitalStations.push_back({
+            id,
+            planet.owner,
+            planet.id,
+            planet.name + " Orbital Dock",
+            OrbitalStationHullType::OrbitalDock,
+            {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+        });
+    }
+}
+
 void writeGameState(QDataStream& stream, const GameState& value)
 {
     stream << static_cast<quint64>(value.turn)
            << static_cast<quint64>(value.galaxySeed)
            << static_cast<quint32>(value.nextFleetId)
-           << static_cast<quint32>(value.nextShipDesignId);
+           << static_cast<quint32>(value.nextShipDesignId)
+           << static_cast<quint32>(value.nextOrbitalStationId);
     writeVector(stream, value.players, writePlayer);
     writeVector(stream, value.shipDesigns, writeShipDesign);
     writeVector(stream, value.stars, writeStar);
     writeVector(stream, value.planets, writePlanet);
     writeVector(stream, value.fleets, writeFleet);
+    writeVector(stream, value.orbitalStations, writeOrbitalStation);
 }
 
 void readGameState(QDataStream& stream, GameState& value)
@@ -1036,17 +1124,25 @@ void readGameState(QDataStream& stream, GameState& value)
     quint64 seed{};
     quint32 nextFleet{};
     quint32 nextDesign{};
+    quint32 nextStation{1};
     stream >> turn >> seed >> nextFleet >> nextDesign;
+    if (gReadSaveFormatVersion >= 24) stream >> nextStation;
     value.turn = static_cast<std::uint64_t>(turn);
     value.galaxySeed = static_cast<std::uint64_t>(seed);
     value.nextFleetId = static_cast<FleetId>(nextFleet);
     value.nextShipDesignId = static_cast<ShipDesignId>(nextDesign);
+    value.nextOrbitalStationId = static_cast<OrbitalStationId>(nextStation);
 
     if (!readVector(stream, value.players, readPlayer)) return;
     if (!readVector(stream, value.shipDesigns, readShipDesign)) return;
     if (!readVector(stream, value.stars, readStar)) return;
     if (!readVector(stream, value.planets, readPlanet)) return;
     if (!readVector(stream, value.fleets, readFleet)) return;
+    if (gReadSaveFormatVersion >= 24) {
+        if (!readVector(stream, value.orbitalStations, readOrbitalStation)) return;
+    } else {
+        addLegacyOrbitalStations(value);
+    }
     if (gReadSaveFormatVersion < 22) record_empire_turn_statistics(value);
 }
 
@@ -1196,7 +1292,10 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         stream >> colony;
         value.colony = static_cast<PlanetId>(colony);
-        if (!readEnum(stream, value.kind, static_cast<quint8>(ProductionKind::Research))) return false;
+        const auto newestKind = gReadSaveFormatVersion >= 24
+            ? ProductionKind::OrbitalStation
+            : ProductionKind::Research;
+        if (!readEnum(stream, value.kind, static_cast<quint8>(newestKind))) return false;
         order = value;
         return true;
     }
@@ -1634,6 +1733,33 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
                                QString::fromStdString(validationError));
         return false;
     }
+    OrbitalStationId maximumStationId{};
+    for (std::size_t index = 0; index < loaded.state.orbitalStations.size(); ++index) {
+        const auto& station = loaded.state.orbitalStations[index];
+        const auto planet = std::find_if(
+            loaded.state.planets.begin(), loaded.state.planets.end(),
+            [&](const Planet& candidate) { return candidate.id == station.planet; });
+        const bool duplicateId = std::any_of(
+            loaded.state.orbitalStations.begin(),
+            loaded.state.orbitalStations.begin() + static_cast<std::ptrdiff_t>(index),
+            [&](const OrbitalStation& candidate) { return candidate.id == station.id; });
+        const bool duplicateOrbit = std::any_of(
+            loaded.state.orbitalStations.begin(),
+            loaded.state.orbitalStations.begin() + static_cast<std::ptrdiff_t>(index),
+            [&](const OrbitalStation& candidate) { return candidate.planet == station.planet; });
+        if (station.id == 0 || station.owner == 0 || station.planet == 0 || station.name.empty()
+            || planet == loaded.state.planets.end() || planet->owner != station.owner
+            || duplicateId || duplicateOrbit) {
+            errorMessage = "The Suns! save file contains an invalid orbital station.";
+            return false;
+        }
+        maximumStationId = std::max(maximumStationId, station.id);
+    }
+    if (loaded.state.nextOrbitalStationId == 0
+        || loaded.state.nextOrbitalStationId <= maximumStationId) {
+        errorMessage = "The Suns! save file contains an invalid orbital-station identity sequence.";
+        return false;
+    }
 
     // UI context is expendable. If a later build removes a selected object,
     // keep the game loadable and simply fall back to a valid map selection.
@@ -1704,9 +1830,10 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
         errorMessage = "This is not a Suns! turn-order file, or the file is damaged.";
         return false;
     }
-    if (version != kTurnOrderFormatVersion) {
-        errorMessage = QString("Unsupported Suns! turn-order version %1 (this build reads version %2).")
+    if (version < kOldestSupportedTurnOrderFormatVersion || version > kTurnOrderFormatVersion) {
+        errorMessage = QString("Unsupported Suns! turn-order version %1 (this build reads versions %2-%3).")
                            .arg(version)
+                           .arg(kOldestSupportedTurnOrderFormatVersion)
                            .arg(kTurnOrderFormatVersion);
         return false;
     }
@@ -1716,7 +1843,9 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.campaignId = static_cast<std::uint64_t>(campaignId);
     loaded.turn = static_cast<std::uint64_t>(turn);
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
-    gReadSaveFormatVersion = kSaveFormatVersion;
+    // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
+    // matches the save-v23 order payload and remains importable.
+    gReadSaveFormatVersion = version >= 2 ? kSaveFormatVersion : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
 

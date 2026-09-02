@@ -32,6 +32,8 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     const auto allocationPercent = player && player->technology.researchActive
         ? player->technology.researchAllocationPercent
         : 0;
+    bool hasShipyard = colony_has_orbital_service(
+        state, planet.id, planet.owner, OrbitalStationModule::Shipyard);
     for (std::uint32_t offset = 1; offset <= maximumTurns && !remaining.empty(); ++offset) {
         const auto mined = projected_mineral_mining(state, simulated);
         simulated.minerals.ironium += mined.ironium;
@@ -48,6 +50,7 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
                 remaining.erase(remaining.begin());
                 continue;
             }
+            if (front.item.kind == ProductionKind::ColonyShip && !hasShipyard) break;
 
             const auto spent = std::min(available, front.item.remainingCost);
             available -= spent;
@@ -61,6 +64,7 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             result[front.originalIndex].completionTurn = state.turn + offset;
             if (front.item.kind == ProductionKind::Factory) ++simulated.industry;
             else if (front.item.kind == ProductionKind::Mine) ++simulated.mines;
+            else if (front.item.kind == ProductionKind::OrbitalStation) hasShipyard = true;
             remaining.erase(remaining.begin());
         }
         simulated.population += projected_population_growth(
