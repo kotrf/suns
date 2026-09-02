@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 
 namespace {
 using namespace suns;
@@ -108,6 +109,47 @@ void station_loss_removes_refueling_service()
     assert(next.fleets.front().fuel == fleet_fuel_capacity(next, next.fleets.front()));
 }
 
+void station_refuels_before_departure_and_after_arrival()
+{
+    TurnProcessor processor;
+    auto departure = make_demo_game();
+    auto& departingFleet = departure.fleets.front();
+    const auto departureCapacity = fleet_fuel_capacity(departure, departingFleet);
+    departingFleet.fuel = 0.0;
+    departingFleet.destination = Position{1.0, 0.0};
+    departingFleet.warp = 1;
+
+    const auto underway = processor.process(departure, {});
+    const auto& moved = underway.fleets.front();
+    assert(same_position(moved.position, Position{1.0, 0.0}));
+    assert(moved.fuel > 0.0);
+    assert(moved.fuel < departureCapacity);
+
+    auto arrival = make_demo_game();
+    auto& arrivingFleet = arrival.fleets.front();
+    const auto arrivalCapacity = fleet_fuel_capacity(arrival, arrivingFleet);
+    arrivingFleet.position = {1.0, 0.0};
+    arrivingFleet.destination = arrival.stars.front().position;
+    arrivingFleet.warp = 1;
+    arrivingFleet.fuel = arrivalCapacity / 2.0;
+
+    const auto docked = processor.process(arrival, {});
+    assert(same_position(docked.fleets.front().position, arrival.stars.front().position));
+    assert(!docked.fleets.front().destination);
+    assert(std::abs(docked.fleets.front().fuel - arrivalCapacity) < 0.000001);
+}
+
+void station_without_refueling_module_does_not_refuel()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    state.orbitalStations.front().modules = {OrbitalStationModule::Shipyard};
+    state.fleets.front().fuel = 12.0;
+
+    const auto next = processor.process(state, {});
+    assert(std::abs(next.fleets.front().fuel - 12.0) < 0.000001);
+}
+
 void production_forecast_understands_shipyard_dependency()
 {
     auto state = make_demo_game();
@@ -137,5 +179,7 @@ int main()
     ship_production_waits_without_a_shipyard();
     dock_then_ship_can_complete_in_queue_order();
     station_loss_removes_refueling_service();
+    station_refuels_before_departure_and_after_arrival();
+    station_without_refueling_module_does_not_refuel();
     production_forecast_understands_shipyard_dependency();
 }

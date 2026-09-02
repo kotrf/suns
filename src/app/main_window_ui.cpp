@@ -175,10 +175,6 @@ void MainWindow::installUiPolish()
                     quickRow->addWidget(unloadButton);
                     fleetLayout->addLayout(quickRow);
 
-                    refuelButton_->show();
-                    refuelButton_->setText("Refuel now");
-                    fleetLayout->addWidget(refuelButton_);
-
                     auto* cargoButton = new QPushButton("Transfer cargo…", fleetGroup);
                     cargoButton->setToolTip(
                         "Transfer colonists and minerals between the planetary surface and friendly fleets at this system");
