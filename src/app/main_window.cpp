@@ -915,6 +915,10 @@ void MainWindow::updateControls()
             .arg(knownHabitability)
             .arg(variabilityLine);
         const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
+        const auto artifactLine = planet->precursorArtifacts.claimed
+            ? QString("<br><span style='color:#d8bd72'><b>History:</b> precursor site excavated (+%1 RP)</span>")
+                  .arg(planet->precursorArtifacts.researchPoints)
+            : QString{};
         QString populationLine;
         if (planet->owner == 1) {
             populationLine = QString("Population: %1 / %2 (+%3 next turn)<br>")
@@ -935,10 +939,10 @@ void MainWindow::updateControls()
         }
         selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>%3<br>Status: %4<br>"
                                           "%5Infrastructure: %6<br>Economic output: %7 / turn<br>"
-                                          "Production: <b>%8</b>%9")
+                                          "Production: <b>%8</b>%9%10")
             .arg(QString::fromStdString(star->name)).arg(QString::fromStdString(planet->name))
             .arg(habitabilityLine).arg(owner).arg(populationLine).arg(planet->industry)
-            .arg(colony_output(*planet)).arg(productionSummary(state_, *planet)).arg(travelLine));
+            .arg(colony_output(*planet)).arg(productionSummary(state_, *planet)).arg(travelLine).arg(artifactLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
     }

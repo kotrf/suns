@@ -175,6 +175,14 @@ target_link_libraries(suns_variable_star_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_variable_star_tests COMMAND suns_variable_star_tests)
 
+add_executable(suns_precursor_artifact_tests
+    precursor_artifact_tests.cpp
+)
+
+target_link_libraries(suns_precursor_artifact_tests PRIVATE Suns::Core)
+
+add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_tests)
+
 if(SUNS_BUILD_APP)
     add_executable(suns_save_game_tests
         save_game_tests.cpp

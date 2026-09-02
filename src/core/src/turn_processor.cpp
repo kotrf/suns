@@ -110,6 +110,72 @@ void apply_research_points(
     }
 }
 
+void apply_precursor_research(
+    GameState& state,
+    PlayerId playerId,
+    Planet& planet,
+    Position sourcePosition,
+    std::uint32_t points,
+    ResearchField initialField)
+{
+    auto* player = mutable_player(state, playerId);
+    if (!player) return;
+
+    queue_player_report(
+        state,
+        playerId,
+        PlayerReportKind::PrecursorArtifactsDiscovered,
+        sourcePosition,
+        state.turn + 1,
+        planet.star,
+        planet.id,
+        0,
+        0,
+        ProductionKind::Research,
+        planet.precursorArtifacts.researchPoints,
+        initialField);
+
+    while (points > 0) {
+        const auto field = player->technology.focus;
+        if (!valid_research_field(field)) return;
+        const auto index = static_cast<std::size_t>(field);
+        const auto level = player->technology.levels[index];
+        if (level == std::numeric_limits<std::uint8_t>::max()) return;
+
+        const auto nextLevel = static_cast<std::uint8_t>(level + 1);
+        const auto cost = research_level_cost(field, nextLevel);
+        auto& progress = player->technology.progress[index];
+        const auto remaining = cost > progress ? cost - progress : 0;
+        const auto spent = std::min(points, remaining);
+        progress += spent;
+        points -= spent;
+        if (progress < cost) break;
+
+        progress = 0;
+        player->technology.levels[index] = nextLevel;
+        queue_player_report(
+            state,
+            playerId,
+            PlayerReportKind::ResearchLevelCompleted,
+            sourcePosition,
+            state.turn + 1,
+            planet.star,
+            planet.id,
+            0,
+            0,
+            ProductionKind::Research,
+            0,
+            field,
+            nextLevel);
+
+        if (!player->technology.queuedFocuses.empty()) {
+            player->technology.focus = player->technology.queuedFocuses.front();
+            player->technology.queuedFocuses.erase(player->technology.queuedFocuses.begin());
+        }
+    }
+
+}
+
 FleetRole presentation_role_for_design(const ShipDesign& design)
 {
     return ship_design_can_colonize(design) ? FleetRole::ColonyShip : FleetRole::Scout;
@@ -499,6 +565,21 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
             planet.id,
             fleet.id,
             colonizerDesign);
+
+        auto& artifacts = planet.precursorArtifacts;
+        if (artifacts.present && !artifacts.claimed) {
+            artifacts.claimed = true;
+            artifacts.discoveredBy = fleet.owner;
+            const auto* player = find_player(state, fleet.owner);
+            const auto field = player ? player->technology.focus : ResearchField::Electronics;
+            apply_precursor_research(
+                state,
+                fleet.owner,
+                planet,
+                star->position,
+                artifacts.researchPoints,
+                field);
+        }
     }
 
     // Successful colonization dismantles the entire fleet. Cargo minerals are

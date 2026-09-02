@@ -40,7 +40,9 @@ void queue_player_report(
     FleetId fleet = 0,
     ShipDesignId shipDesign = 0,
     ProductionKind productionKind = ProductionKind::ColonyShip,
-    std::uint32_t quantity = 0);
+    std::uint32_t quantity = 0,
+    ResearchField researchField = ResearchField::Electronics,
+    std::uint8_t technologyLevel = 0);
 
 [[nodiscard]] std::vector<GameEvent> deliver_due_player_reports(GameState& state);
 

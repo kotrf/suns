@@ -24,6 +24,7 @@ void round_trip_preserves_communications_and_planning()
     original.state.planets.front().productionWaitingForMinerals = true;
     original.state.planets.front().productionWaitingForShipyard = true;
     original.state.planets.front().environment = {63, 47, 29};
+    original.state.planets[1].precursorArtifacts = {true, true, 1, 13};
     original.state.orbitalStations.front().name = "Sol Prime Orbital Dock";
     original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::OrbitalSurvey, 75});
     original.state.players.front().pendingSurveyReports.push_back({
@@ -40,6 +41,8 @@ void round_trip_preserves_communications_and_planning()
         ProductionKind::ColonyShip,
         {420.0, 10.0},
         0,
+        ResearchField::Biology,
+        3,
     });
     original.state.players.front().technology.levels[3] = 1;
     original.state.players.front().technology.progress[3] = 7;
@@ -194,6 +197,10 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.planets.front().environment.temperature == 63);
     assert(loaded.state.planets.front().environment.gravity == 47);
     assert(loaded.state.planets.front().environment.radiation == 29);
+    assert(loaded.state.planets[1].precursorArtifacts.present);
+    assert(loaded.state.planets[1].precursorArtifacts.claimed);
+    assert(loaded.state.planets[1].precursorArtifacts.discoveredBy == 1);
+    assert(loaded.state.planets[1].precursorArtifacts.researchPoints == 13);
     assert(loaded.state.nextOrbitalStationId == original.state.nextOrbitalStationId);
     assert(loaded.state.orbitalStations.size() == 1);
     assert(loaded.state.orbitalStations.front().id == 1);
@@ -225,6 +232,8 @@ void round_trip_preserves_communications_and_planning()
     assert(report.deliveryTurn == 79);
     assert(report.fleet == 1);
     assert(same_position(report.position, {420.0, 10.0}));
+    assert(report.researchField == ResearchField::Biology);
+    assert(report.technologyLevel == 3);
     const auto& technology = loaded.state.players.front().technology;
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 7);

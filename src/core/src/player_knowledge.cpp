@@ -64,6 +64,10 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::FleetsMerged: return GameEventKind::FleetsMerged;
     case PlayerReportKind::ProductionWaitingForShipyard:
         return GameEventKind::ProductionWaitingForShipyard;
+    case PlayerReportKind::PrecursorArtifactsDiscovered:
+        return GameEventKind::PrecursorArtifactsDiscovered;
+    case PlayerReportKind::ResearchLevelCompleted:
+        return GameEventKind::ResearchLevelCompleted;
     }
     return GameEventKind::FleetArrived;
 }
@@ -97,6 +101,8 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     mix(report.shipDesign);
     mix(static_cast<std::uint64_t>(report.productionKind));
     mix(report.quantity);
+    mix(static_cast<std::uint64_t>(report.researchField));
+    mix(report.technologyLevel);
     return hash;
 }
 
@@ -151,7 +157,9 @@ void queue_player_report(
     FleetId fleet,
     ShipDesignId shipDesign,
     ProductionKind productionKind,
-    std::uint32_t quantity)
+    std::uint32_t quantity,
+    ResearchField researchField,
+    std::uint8_t technologyLevel)
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
@@ -168,6 +176,8 @@ void queue_player_report(
         productionKind,
         sourcePosition,
         quantity,
+        researchField,
+        technologyLevel,
     });
 }
 
@@ -323,6 +333,9 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.productionKind,
                 report.position,
                 report.quantity,
+                SurveyLevel::Detected,
+                report.researchField,
+                report.technologyLevel,
             });
         }
 

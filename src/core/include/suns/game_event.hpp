@@ -18,6 +18,7 @@ enum class GameEventKind {
     FleetTargetLost,
     FleetsMerged,
     ProductionWaitingForShipyard,
+    PrecursorArtifactsDiscovered,
 };
 
 enum class GameEventSeverity {
