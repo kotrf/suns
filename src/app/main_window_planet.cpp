@@ -152,6 +152,11 @@ QProgressBar* makeMineralBar(const QString& name, const char* objectName, QWidge
     return bar;
 }
 
+QPixmap compactPortrait(const QPixmap& portrait)
+{
+    return portrait.scaled(108, 108, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
 } // namespace
 
 void MainWindow::installPlanetPolish()
@@ -201,16 +206,24 @@ void MainWindow::installPlanetPolish()
             auto* portrait = new QLabel(planetGroup);
             portrait->setObjectName("planetPortrait");
             portrait->setAlignment(Qt::AlignCenter);
-            portrait->setMinimumHeight(160);
-            portrait->setPixmap(unknownPortrait());
+            portrait->setFixedHeight(112);
+            portrait->setPixmap(compactPortrait(unknownPortrait()));
             layout->insertWidget(0, portrait);
+
+            planetPopulationBar_ = new QProgressBar(planetGroup);
+            planetPopulationBar_->setObjectName("planetPopulationBar");
+            planetPopulationBar_->setRange(0, 100);
+            planetPopulationBar_->setTextVisible(true);
+            planetPopulationBar_->setFormat("Population — no colony");
+            planetPopulationBar_->hide();
+            layout->insertWidget(2, planetPopulationBar_);
 
             auto* mineralsTitle = new QLabel("<b>Mineral geology</b>", planetGroup);
             mineralsTitle->setObjectName("mineralGeologyTitle");
-            layout->insertWidget(2, mineralsTitle);
-            layout->insertWidget(3, makeMineralBar("Ironium", "ironiumConcentration", planetGroup));
-            layout->insertWidget(4, makeMineralBar("Boranium", "boraniumConcentration", planetGroup));
-            layout->insertWidget(5, makeMineralBar("Germanium", "germaniumConcentration", planetGroup));
+            layout->insertWidget(3, mineralsTitle);
+            layout->insertWidget(4, makeMineralBar("Ironium", "ironiumConcentration", planetGroup));
+            layout->insertWidget(5, makeMineralBar("Boranium", "boraniumConcentration", planetGroup));
+            layout->insertWidget(6, makeMineralBar("Germanium", "germaniumConcentration", planetGroup));
         }
     }
 
@@ -237,7 +250,8 @@ void MainWindow::refreshPlanetPolish()
     const auto* planet = selectedPlanet();
     const auto level = star ? survey_level(state_, 1, star->id) : SurveyLevel::Detected;
     if (!star || !planet || level < SurveyLevel::OrbitalSurvey) {
-        portrait->setPixmap(unknownPortrait());
+        portrait->setPixmap(compactPortrait(unknownPortrait()));
+        if (planetPopulationBar_) planetPopulationBar_->hide();
         for (auto* bar : {ironium, boranium, germanium}) {
             bar->setValue(0);
             bar->setFormat(level >= SurveyLevel::BasicScan
@@ -248,7 +262,31 @@ void MainWindow::refreshPlanetPolish()
         return;
     }
 
-    portrait->setPixmap(renderPlanetPortrait(*planet, star->stellarClass, state_.galaxySeed));
+    portrait->setPixmap(compactPortrait(
+        renderPlanetPortrait(*planet, star->stellarClass, state_.galaxySeed)));
+
+    if (planetPopulationBar_) {
+        const bool friendlyColony = planet->owner == 1;
+        planetPopulationBar_->setVisible(friendlyColony);
+        if (friendlyColony) {
+            const auto capacity = population_capacity(state_, *planet, state_.turn);
+            const auto growth = projected_population_growth(state_, *planet, state_.turn);
+            const auto percent = capacity == 0
+                ? 0
+                : std::clamp(static_cast<int>(std::lround(
+                    100.0 * static_cast<double>(planet->population) / static_cast<double>(capacity))), 0, 100);
+            planetPopulationBar_->setValue(percent);
+            planetPopulationBar_->setFormat(
+                QString("Population %1 / %2 • +%3")
+                    .arg(static_cast<qulonglong>(planet->population))
+                    .arg(static_cast<qulonglong>(capacity))
+                    .arg(static_cast<qulonglong>(growth)));
+            planetPopulationBar_->setToolTip(
+                QString("Population uses %1% of current capacity. Projected growth next turn: +%2.")
+                    .arg(percent)
+                    .arg(static_cast<qulonglong>(growth)));
+        }
+    }
     if (level < SurveyLevel::GeologicalSurvey && planet->owner != 1) {
         for (auto* bar : {ironium, boranium, germanium}) {
             bar->setValue(0);

@@ -243,6 +243,7 @@ private:
     QProgressBar* planetTemperatureBar_{};
     QProgressBar* planetGravityBar_{};
     QProgressBar* planetRadiationBar_{};
+    QProgressBar* planetPopulationBar_{};
     QDialog* researchDialog_{};
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};

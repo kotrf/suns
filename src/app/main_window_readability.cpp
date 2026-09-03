@@ -109,6 +109,7 @@ void MainWindow::installFleetReadabilityPolish()
         QProgressBar#germaniumConcentration::chunk { background: #b99532; }
         QProgressBar#fleetFuelBar::chunk { background: #3e9dc2; }
         QProgressBar#fleetCargoBar::chunk { background: #b77d42; }
+        QProgressBar#planetPopulationBar::chunk { background: #56a875; }
         QProgressBar#planetTemperatureBar::chunk {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                 stop:0 #4b9bd5, stop:0.5 #62b879, stop:1 #d66c55);
@@ -146,6 +147,32 @@ void MainWindow::installFleetReadabilityPolish()
             outline: 0;
             selection-color: #ffffff;
             selection-background-color: #315f88;
+        }
+        QAbstractItemView {
+            gridline-color: #2b4155;
+        }
+        QHeaderView {
+            color: #f1f6fb;
+            background: #111a25;
+        }
+        QHeaderView::section {
+            padding: 4px 6px;
+            color: #f1f6fb;
+            background: #1c2c3b;
+            border: 0;
+            border-right: 1px solid #344d63;
+            border-bottom: 1px solid #4c6d87;
+            font-weight: 700;
+        }
+        QTableCornerButton::section {
+            background: #1c2c3b;
+            border: 0;
+            border-right: 1px solid #344d63;
+            border-bottom: 1px solid #4c6d87;
+        }
+        QListView::item, QListWidget::item, QTreeView::item, QTableView::item {
+            min-height: 20px;
+            padding: 1px 4px;
         }
         QComboBox QAbstractItemView::item {
             min-height: 24px;
@@ -194,20 +221,36 @@ void MainWindow::installFleetReadabilityPolish()
         } else {
             fuelBar->setFormat("Fuel — no tank capacity");
         }
+        fuelBar->setToolTip(
+            QString("Fuel aboard: %1 / %2\nFleet gross mass: %3 kt")
+                .arg(fleet->fuel, 0, 'f', 1)
+                .arg(fuelCapacity, 0, 'f', 1)
+                .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1));
 
         const double cargoCapacity = fleet_cargo_capacity(state_, *fleet);
         const double cargoUsed = fleet_cargo_used(state_, *fleet);
         cargoBar->setEnabled(cargoCapacity > 0.000001);
         cargoBar->setValue(percentOf(cargoUsed, cargoCapacity));
         if (cargoCapacity > 0.000001) {
-            cargoBar->setFormat(
-                QString("Cargo %1 / %2 • %3%")
+            QString format = QString("Cargo %1 / %2 • %3%")
                     .arg(cargoUsed, 0, 'f', 1)
                     .arg(cargoCapacity, 0, 'f', 1)
-                    .arg(percentOf(cargoUsed, cargoCapacity)));
+                    .arg(percentOf(cargoUsed, cargoCapacity));
+            if (fleet->colonists > 0) {
+                format += QString(" • %1 colonists").arg(static_cast<qulonglong>(fleet->colonists));
+            }
+            cargoBar->setFormat(format);
         } else {
             cargoBar->setFormat("Cargo hold — no cargo capacity");
         }
+        cargoBar->setToolTip(
+            QString("Shared hold: %1 / %2 cargo units\nColonists: %3\nMinerals: I %4 / B %5 / G %6")
+                .arg(cargoUsed, 0, 'f', 1)
+                .arg(cargoCapacity, 0, 'f', 1)
+                .arg(static_cast<qulonglong>(fleet->colonists))
+                .arg(fleet->minerals.ironium, 0, 'f', 1)
+                .arg(fleet->minerals.boranium, 0, 'f', 1)
+                .arg(fleet->minerals.germanium, 0, 'f', 1));
     };
 
     auto* refreshTimer = new QTimer(this);

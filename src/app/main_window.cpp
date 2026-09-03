@@ -147,6 +147,20 @@ const Fleet* findFleet(const GameState& state, FleetId id)
     return it == state.fleets.end() ? nullptr : &*it;
 }
 
+QPointF fleetMapAnchor(const GameState& state, const Fleet& fleet)
+{
+    const auto visible = fleet_player_view(state, fleet);
+    int coLocatedBefore = 0;
+    for (const auto& candidate : state.fleets) {
+        if (candidate.id == fleet.id) break;
+        const auto candidateVisible = fleet_player_view(state, candidate);
+        if (same_position(candidateVisible.position, visible.position)) ++coLocatedBefore;
+    }
+    return QPointF(
+        visible.position.x,
+        visible.position.y + 15.0 + static_cast<double>(coLocatedBefore) * 13.0);
+}
+
 const StarSystem* findStarAtPosition(const GameState& state, Position position)
 {
     const auto it = std::find_if(state.stars.begin(), state.stars.end(), [&](const StarSystem& star) {
@@ -238,10 +252,11 @@ QColor fleetColor(FleetRole role, int alpha = 255)
         : QColor(195, 123, 234, alpha);
 }
 
-void addTravelLabel(QGraphicsScene* scene, Position from, Position to, const QString& text, const QColor& color)
+void addTravelLabel(
+    QGraphicsScene* scene, QPointF from, QPointF to, const QString& text, const QColor& color)
 {
     auto* label = scene->addText(text);
-    label->setPos((from.x + to.x) / 2.0 + 5.0, (from.y + to.y) / 2.0 - 10.0);
+    label->setPos((from.x() + to.x()) / 2.0 + 5.0, (from.y() + to.y()) / 2.0 - 10.0);
     label->setDefaultTextColor(color);
     label->setScale(0.72);
     label->setZValue(-8.0);
@@ -596,24 +611,32 @@ void MainWindow::rebuildScene()
         const auto visibleFleet = fleet_player_view(state_, fleet);
         if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
         auto routeDestination = *visibleFleet.destination;
+        const auto routeStart = fleetMapAnchor(state_, fleet);
+        QPointF routeEnd(routeDestination.x, routeDestination.y);
         if (visibleFleet.targetFleet != 0) {
             if (const auto* target = findFleet(state_, visibleFleet.targetFleet)) {
                 routeDestination = fleet_player_view(state_, *target).position;
+                routeEnd = fleetMapAnchor(state_, *target);
             }
         }
         const auto routeColor = fleetColor(fleet.role, 105);
         QPen routePen(routeColor);
-        routePen.setWidthF(1.15);
+        routePen.setWidthF(0.8);
+        routePen.setCosmetic(true);
         routePen.setStyle(Qt::DotLine);
-        auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
-            routeDestination.x, routeDestination.y, routePen);
+        auto* route = scene_->addLine(
+            routeStart.x(), routeStart.y(), routeEnd.x(), routeEnd.y(), routePen);
         route->setZValue(-20.0);
         QString routeText = visibleFleet.targetFleet != 0
             ? QString("W%1 • intercept ETA ~%2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
             : QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         if (visibleFleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
         if (visibleFleet.targetFleet != 0) routeText += QString(" • pursuing Fleet %1").arg(visibleFleet.targetFleet);
-        addTravelLabel(scene_, visibleFleet.position, routeDestination, routeText, fleetColor(fleet.role, 155));
+        route->setToolTip(routeText);
+        const auto routeLabel = visibleFleet.targetFleet != 0
+            ? QString("W%1 • intercept ~%2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
+            : QString("W%1 • %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
+        addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet.role, 155));
     }
 
     for (const auto& order : pendingOrders_.orders) {
@@ -624,17 +647,21 @@ void MainWindow::rebuildScene()
                 if (!fleet) return;
                 const auto visibleFleet = fleet_player_view(state_, *fleet);
                 auto routeDestination = concreteOrder.destination;
+                const auto routeStart = fleetMapAnchor(state_, *fleet);
+                QPointF routeEnd(routeDestination.x, routeDestination.y);
                 if (concreteOrder.targetFleet != 0) {
                     if (const auto* target = findFleet(state_, concreteOrder.targetFleet)) {
                         routeDestination = fleet_player_view(state_, *target).position;
+                        routeEnd = fleetMapAnchor(state_, *target);
                     }
                 }
                 const auto routeColor = fleetColor(fleet->role, 190);
                 QPen routePen(routeColor);
-                routePen.setWidthF(1.45);
+                routePen.setWidthF(1.0);
+                routePen.setCosmetic(true);
                 routePen.setStyle(Qt::DashLine);
-                auto* route = scene_->addLine(visibleFleet.position.x, visibleFleet.position.y,
-                    routeDestination.x, routeDestination.y, routePen);
+                auto* route = scene_->addLine(
+                    routeStart.x(), routeStart.y(), routeEnd.x(), routeEnd.y(), routePen);
                 route->setZValue(-18.0);
                 const auto routeWarp = concreteOrder.warp == 0 ? visibleFleet.warp : concreteOrder.warp;
                 const auto eta = travel_turns(visibleFleet.position, routeDestination, warp_distance(routeWarp));
@@ -645,7 +672,11 @@ void MainWindow::rebuildScene()
                 if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
                     routeText += QString(" • %1").arg(arrivalActionSummary(concreteOrder.arrivalAction));
                 }
-                addTravelLabel(scene_, visibleFleet.position, routeDestination, routeText, fleetColor(fleet->role, 210));
+                route->setToolTip(routeText);
+                const auto routeLabel = concreteOrder.targetFleet != 0
+                    ? QString("W%1 • intercept ~%2").arg(routeWarp).arg(turnCount(eta))
+                    : QString("W%1 • %2").arg(routeWarp).arg(turnCount(eta));
+                addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet->role, 210));
             }
         }, order);
     }
@@ -705,30 +736,31 @@ void MainWindow::rebuildScene()
         label->setZValue(5.0);
     }
 
-    int fleetOffset = 0;
     for (const auto& fleet : state_.fleets) {
         const auto visibleFleet = fleet_player_view(state_, fleet);
-        const double y = visibleFleet.position.y + 15.0 + fleetOffset * 13.0;
+        const auto anchor = fleetMapAnchor(state_, fleet);
+        const double x = anchor.x();
+        const double y = anchor.y();
         const auto color = fleetColor(fleet.role);
         const bool selected = selectedFleetId_ && *selectedFleetId_ == fleet.id;
 
         QPolygonF shape;
         if (fleet.role == FleetRole::Scout) {
-            shape << QPointF(visibleFleet.position.x + 6.0, y)
-                  << QPointF(visibleFleet.position.x - 5.0, y - 4.0)
-                  << QPointF(visibleFleet.position.x - 2.0, y)
-                  << QPointF(visibleFleet.position.x - 5.0, y + 4.0);
+            shape << QPointF(x + 6.0, y)
+                  << QPointF(x - 5.0, y - 4.0)
+                  << QPointF(x - 2.0, y)
+                  << QPointF(x - 5.0, y + 4.0);
         } else {
-            shape << QPointF(visibleFleet.position.x, y - 5.0)
-                  << QPointF(visibleFleet.position.x + 5.0, y)
-                  << QPointF(visibleFleet.position.x, y + 5.0)
-                  << QPointF(visibleFleet.position.x - 5.0, y);
+            shape << QPointF(x, y - 5.0)
+                  << QPointF(x + 5.0, y)
+                  << QPointF(x, y + 5.0)
+                  << QPointF(x - 5.0, y);
         }
 
         if (selected) {
             QPen selectionPen(color.lighter(150));
             selectionPen.setWidthF(1.4);
-            auto* ring = scene_->addEllipse(visibleFleet.position.x - 9.0, y - 9.0, 18.0, 18.0, selectionPen, Qt::NoBrush);
+            auto* ring = scene_->addEllipse(x - 9.0, y - 9.0, 18.0, 18.0, selectionPen, Qt::NoBrush);
             ring->setZValue(9.0);
         }
 
@@ -756,13 +788,11 @@ void MainWindow::rebuildScene()
 
         QString fleetText = QString::fromStdString(fleet.name);
         if (selected) fleetText = QString("▶ %1").arg(fleetText);
-        if (visibleFleet.destination) fleetText += QString("  [W%1 • %2]").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         auto* label = scene_->addText(fleetText);
-        label->setPos(visibleFleet.position.x + 9.0, y - 8.0);
+        label->setPos(x + 9.0, y - 8.0);
         label->setDefaultTextColor(selected ? color.lighter(165) : color.lighter(135));
         label->setScale(0.85);
         label->setZValue(11.0);
-        ++fleetOffset;
     }
 
     updateControls();

@@ -43,27 +43,28 @@ void MainWindow::installCommunicationStatus()
         const bool connected = fleet_has_instant_link(state_, *fleet) && age == 0;
 
         QString text = connected
-            ? "<b>Communications:</b> <b>CONNECTED</b> — real-time relay link"
-            : QString("<b>Communications:</b> <b>DELAYED</b> — confirmed telemetry is %1 turn%2 old")
+            ? "<b>Comms:</b> <span style='color:#83c99a'><b>LIVE</b></span>"
+            : QString("<b>Comms:</b> <span style='color:#e4b77d'><b>DELAYED</b></span> • telemetry %1 turn%2 old")
                   .arg(static_cast<qulonglong>(age))
                   .arg(age == 1 ? "" : "s");
 
-        text += QString("<br>Last confirmed: turn %1 at (%2, %3)")
-                    .arg(static_cast<qulonglong>(telemetry.observedTurn == 0 ? state_.turn : telemetry.observedTurn))
-                    .arg(telemetry.position.x, 0, 'f', 1)
-                    .arg(telemetry.position.y, 0, 'f', 1);
-
-        if (!connected) {
-            text += QString("<br>Estimated now: (%1, %2) — model prediction, not ground truth")
-                        .arg(projected.x, 0, 'f', 1)
-                        .arg(projected.y, 0, 'f', 1);
-            text += QString("<br>Estimated new-command latency: %1 turn%2")
-                        .arg(estimatedDelay)
-                        .arg(estimatedDelay == 1 ? "" : "s");
-            text += "<br>Command reception is not confirmed until delayed telemetry reports it.";
-        }
-
         summary->setText(text);
+        QString details = QString("Last confirmed: turn %1 at (%2, %3)")
+                              .arg(static_cast<qulonglong>(
+                                  telemetry.observedTurn == 0 ? state_.turn : telemetry.observedTurn))
+                              .arg(telemetry.position.x, 0, 'f', 1)
+                              .arg(telemetry.position.y, 0, 'f', 1);
+        if (connected) {
+            details += "\nReal-time relay link; orders arrive immediately.";
+        } else {
+            details += QString("\nEstimated current position: (%1, %2)\nNew-command latency: %3 turn%4\n"
+                               "Reception is not confirmed until delayed telemetry reports it.")
+                           .arg(projected.x, 0, 'f', 1)
+                           .arg(projected.y, 0, 'f', 1)
+                           .arg(estimatedDelay)
+                           .arg(estimatedDelay == 1 ? "" : "s");
+        }
+        summary->setToolTip(details);
         if (fleetMoveButton_) {
             fleetMoveButton_->setToolTip(estimatedDelay == 0
                 ? "Command will reach this fleet immediately."

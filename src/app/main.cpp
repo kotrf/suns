@@ -66,6 +66,7 @@ int main(int argc, char* argv[])
             if (auto* fuel = window.findChild<QProgressBar*>("fleetFuelBar")) fuel->update();
             if (auto* cargo = window.findChild<QProgressBar*>("fleetCargoBar")) cargo->update();
             if (auto* temperature = window.findChild<QProgressBar*>("planetTemperatureBar")) temperature->update();
+            if (auto* population = window.findChild<QProgressBar*>("planetPopulationBar")) population->update();
             if (auto* routeSource = window.findChild<QComboBox*>("routeSourceFleetCombo")) routeSource->update();
             if (auto* routeHelp = window.findChild<QToolButton*>("routeProgramHelpButton")) routeHelp->update();
             if (auto* clearMessages = window.findChild<QPushButton*>("clearTurnMessages")) clearMessages->click();
@@ -80,8 +81,8 @@ int main(int argc, char* argv[])
             // Open the non-modal graphical Ship Designer, select an empty
             // general slot and fit a Fuel Tank through the keyboard-accessible
             // button path. Drag/drop uses the same placement operation.
-            if (auto* openDesigner = window.findChild<QPushButton*>("openShipDesignerButton")) {
-                openDesigner->click();
+            if (auto* openDesigner = window.findChild<QAction*>("openShipDesignerToolAction")) {
+                openDesigner->trigger();
                 if (auto* hull = window.findChild<QComboBox*>("shipHullCatalog")) {
                     hull->setCurrentIndex(hull->findData(static_cast<int>(suns::ShipHullType::Utility)));
                 }

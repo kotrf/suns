@@ -96,11 +96,8 @@ void MainWindow::installUiPolish()
             if (commandPanel && !qobject_cast<QScrollArea*>(commandPanel)) {
                 if (auto* sideLayout = qobject_cast<QVBoxLayout*>(commandPanel->layout())) {
                     clearLayoutPreservingWidgets(sideLayout);
-                    sideLayout->setContentsMargins(8, 8, 8, 8);
-                    sideLayout->setSpacing(8);
-
-                    auto* title = new QLabel("<h2>Suns!</h2><span style='color:#8394a8'>Command console</span>", commandPanel);
-                    sideLayout->addWidget(title);
+                    sideLayout->setContentsMargins(5, 5, 5, 5);
+                    sideLayout->setSpacing(5);
 
                     auto* empireGroup = makeGroup("Empire", "empireGroup", commandPanel);
                     auto* empireLayout = new QVBoxLayout(empireGroup);
@@ -151,6 +148,8 @@ void MainWindow::installUiPolish()
 
                     fleetPanel = new QWidget(this);
                     auto* fleetPanelLayout = new QVBoxLayout(fleetPanel);
+                    fleetPanelLayout->setContentsMargins(5, 5, 5, 5);
+                    fleetPanelLayout->setSpacing(5);
                     auto* fleetGroup = makeGroup("Selected fleet", "fleetGroup", fleetPanel);
                     auto* fleetLayout = new QVBoxLayout(fleetGroup);
                     fleetInfo = new QLabel(fleetGroup);
@@ -193,14 +192,17 @@ void MainWindow::installUiPolish()
                     colonizeButton_->setText("Colonize selected world…");
                     colonizeButton_->setToolTip("Dismantles the entire selected fleet and recovers one third of its construction minerals");
                     fleetLayout->addWidget(colonizeButton_);
-                    designShipButton_->show();
-                    designShipButton_->setText("Ship designer…");
-                    fleetLayout->addWidget(designShipButton_);
+                    // The designer is a setup tool, not live fleet telemetry.
+                    // Keep its legacy button alive for compatibility, but use
+                    // the permanent toolbar/menu entry instead of dock space.
+                    designShipButton_->hide();
                     fleetPanelLayout->addWidget(fleetGroup);
                     fleetPanelLayout->addStretch(1);
 
                     productionPanel = new QWidget(this);
                     auto* productionPanelLayout = new QVBoxLayout(productionPanel);
+                    productionPanelLayout->setContentsMargins(5, 5, 5, 5);
+                    productionPanelLayout->setSpacing(5);
                     auto* productionGroup = makeGroup("Add to queue", "productionGroup", productionPanel);
                     auto* productionLayout = new QVBoxLayout(productionGroup);
                     auto* productionForm = new QFormLayout;
@@ -216,11 +218,7 @@ void MainWindow::installUiPolish()
                     productionLayout->addWidget(buildOrbitalDockButton_);
                     productionPanelLayout->addWidget(productionGroup);
 
-                    auto* viewGroup = makeGroup("Map display", "viewGroup", commandPanel);
-                    auto* viewLayout = new QVBoxLayout(viewGroup);
-                    sensorRangesCheck_->show();
-                    viewLayout->addWidget(sensorRangesCheck_);
-                    sideLayout->addWidget(viewGroup);
+                    sensorRangesCheck_->hide();
                     sideLayout->addStretch(1);
 
                     // Legacy summary/course widgets remain alive because the
@@ -351,8 +349,8 @@ void MainWindow::installUiPolish()
             color: #cfdae7;
         }
         QGroupBox {
-            margin-top: 10px;
-            padding: 7px 5px 5px 5px;
+            margin-top: 9px;
+            padding: 5px 4px 4px 4px;
             border: 1px solid #2a4056;
             border-radius: 5px;
             font-weight: 600;
@@ -403,7 +401,7 @@ void MainWindow::installUiPolish()
             background: #142333;
         }
         QPushButton:disabled {
-            color: #617286;
+            color: #8294a7;
             background: #101821;
             border-color: #202f3d;
         }
@@ -615,6 +613,15 @@ void MainWindow::installUiPolish()
     fit->setToolTip("Fit the whole generated galaxy into the map viewport");
     fit->setShortcut(Qt::Key_Home);
     connect(fit, &QAction::triggered, this, [this] { fitGalaxyView(); });
+
+    mapToolbar->addSeparator();
+    auto* sensorRangesAction = mapToolbar->addAction("Sensors");
+    sensorRangesAction->setObjectName("showSensorRangesAction");
+    sensorRangesAction->setCheckable(true);
+    sensorRangesAction->setChecked(sensorRangesCheck_->isChecked());
+    sensorRangesAction->setToolTip("Show or hide colony and fleet sensor coverage on the map");
+    connect(sensorRangesAction, &QAction::toggled, sensorRangesCheck_, &QCheckBox::setChecked);
+    connect(sensorRangesCheck_, &QCheckBox::toggled, sensorRangesAction, &QAction::setChecked);
 
     // Stars! style homeworld range stays in one fixed status-bar location so
     // selecting systems never makes the player hunt for the distance readout.
