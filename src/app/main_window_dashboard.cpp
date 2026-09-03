@@ -69,16 +69,6 @@ QString productionLine(const GameState& state, const Planet& planet)
     return text;
 }
 
-QString componentLine(const ShipDesign* design)
-{
-    if (!design || design->components.empty()) return "none";
-    QStringList names;
-    for (const auto component : design->components) {
-        names << QString::fromStdString(component_spec(component).name);
-    }
-    return names.join(", ");
-}
-
 QString arrivalName(const FleetArrivalAction& action)
 {
     const auto cargo = [&] {
@@ -177,11 +167,6 @@ QString MainWindow::selectedPlanetPanelSummary() const
 
     if (planet->owner == 1) {
         lines << QString("<span style='color:#85d5a5'><b>Terran colony</b></span>");
-        lines << QString("Population %1 / %2 • +%3 next turn")
-                     .arg(static_cast<qulonglong>(planet->population))
-                     .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)))
-                     .arg(static_cast<qulonglong>(
-                         projected_population_growth(state_, *planet, state_.turn)));
         lines << QString("Factories %1 • Mines %2 • Output %3 / turn")
                      .arg(planet->industry)
                      .arg(planet->mines)
@@ -201,20 +186,12 @@ QString MainWindow::selectedPlanetPanelSummary() const
             lines << "Orbital station: <span style='color:#e4b77d'><b>none</b></span> • ships cannot be built or refueled";
         }
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
-        lines << QString("Mineral stocks — I %1 • B %2 • G %3")
-                     .arg(planet->minerals.ironium, 0, 'f', 1)
-                     .arg(planet->minerals.boranium, 0, 'f', 1)
-                     .arg(planet->minerals.germanium, 0, 'f', 1);
     } else if (planet->owner == 0) {
         lines << "<span style='color:#c6b57c'><b>Uncolonized</b></span>";
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
                      .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * 25ULL);
         if (planet_geology_known(state_, 1, planet->id)) {
-            lines << QString("Surface stockpiles — I %1 • B %2 • G %3")
-                         .arg(planet->minerals.ironium, 0, 'f', 1)
-                         .arg(planet->minerals.boranium, 0, 'f', 1)
-                         .arg(planet->minerals.germanium, 0, 'f', 1);
             const auto remoteYield = remoteMiningAtPlanet(state_, 1, *planet);
             if (mineral_cargo_mass(remoteYield) > 0.000001) {
                 lines << QString("Remote extraction / turn — I %1 • B %2 • G %3")
@@ -240,7 +217,6 @@ QString MainWindow::selectedFleetPanelSummary() const
         fleet_player_view(state_, *authoritativeFleet));
     const auto* fleet = &visibleFleet;
 
-    const auto* design = fleet_design(state_, *fleet);
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(fleet->name));
     QStringList composition;
@@ -252,12 +228,14 @@ QString MainWindow::selectedFleetPanelSummary() const
                                ? QString::fromStdString(stackDesign->name)
                                : QString("Design %1").arg(stack.design));
     }
-    lines << QString("Ships: <b>%1</b> • %2 design%3 • max W%4")
+    lines << QString("Ships: <b>%1</b> • %2 design%3 • max W%4 • %5 kt")
                  .arg(fleet_ship_count(*fleet))
                  .arg(static_cast<qulonglong>(composition.size()))
                  .arg(composition.size() == 1 ? "" : "s")
-                 .arg(fleet_max_warp(state_, *fleet));
-    lines << composition.join(" • ");
+                 .arg(fleet_max_warp(state_, *fleet))
+                 .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1);
+    if (composition.size() > 1) lines << composition.join(" • ");
+    else if (!composition.isEmpty()) lines.last() += QString(" • %1").arg(composition.front());
 
     if (fleet->destination) {
         const auto* target = findStarAtPosition(state_, *fleet->destination);
@@ -275,19 +253,6 @@ QString MainWindow::selectedFleetPanelSummary() const
     } else {
         lines << "Route: stationary";
     }
-
-    lines << QString("Fuel %1 / %2 • Gross mass %3 kt")
-                 .arg(fleet->fuel, 0, 'f', 1)
-                 .arg(fleet_fuel_capacity(state_, *fleet), 0, 'f', 1)
-                 .arg(fleet_gross_mass(state_, *fleet), 0, 'f', 1);
-    lines << QString("Cargo %1 / %2 • Colonists %3")
-                 .arg(fleet_cargo_used(state_, *fleet), 0, 'f', 1)
-                 .arg(fleet_cargo_capacity(state_, *fleet), 0, 'f', 1)
-                 .arg(static_cast<qulonglong>(fleet->colonists));
-    lines << QString("Minerals — I %1 • B %2 • G %3")
-                 .arg(fleet->minerals.ironium, 0, 'f', 0)
-                 .arg(fleet->minerals.boranium, 0, 'f', 0)
-                 .arg(fleet->minerals.germanium, 0, 'f', 0);
 
     if (fleet->task == FleetTask::RemoteMining) {
         const auto* star = findStarAtPosition(state_, fleet->position);
@@ -337,7 +302,6 @@ QString MainWindow::selectedFleetPanelSummary() const
         }
     }
 
-    if (composition.size() == 1) lines << QString("Components: %1").arg(componentLine(design));
     return lines.join("<br>");
 }
 

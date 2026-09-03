@@ -277,10 +277,16 @@ void MainWindow::installFleetPortraitPolish()
         }
 
         portrait->setPixmap(renderShipPortrait(*design));
+        QStringList components;
+        for (const auto component : design->components) {
+            components << QString::fromStdString(component_spec(component).name);
+        }
         portrait->setToolTip(
-            QString("%1 — %2\nGenerated from hull and fitted components; future multi-ship fleets will show a composite portrait.")
+            QString("%1 — %2\nHull: %3\nComponents: %4")
                 .arg(QString::fromStdString(fleet->name))
-                .arg(QString::fromStdString(design->name)));
+                .arg(QString::fromStdString(design->name))
+                .arg(QString::fromStdString(hull_spec(design->hull).name))
+                .arg(components.isEmpty() ? "none" : components.join(", ")));
     };
 
     auto* refreshTimer = new QTimer(this);
