@@ -73,6 +73,13 @@ void MainWindow::installPanelLayoutFixes()
         // Version 2 discards the old asymmetric left-column geometry once.
         restoreState(settings.value("workspace/docks").toByteArray(), 2);
     }
+
+    // Layout setup is the last module allowed to create a top-level menu.
+    // Reinsert Help here so it remains last regardless of construction order.
+    if (auto* help = menuBar()->findChild<QMenu*>("sunsHelpMenu")) {
+        menuBar()->removeAction(help->menuAction());
+        menuBar()->addAction(help->menuAction());
+    }
 }
 
 void MainWindow::resetPanelLayout()

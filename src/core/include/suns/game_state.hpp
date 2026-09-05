@@ -160,6 +160,9 @@ struct ShipComponentSpec {
     double engineThrust{};
     std::uint8_t maxWarp{};
     std::array<double, kMaxWarp + 1> fuelPer100MassLy{};
+    // Hull damage added by one full turn of travel at each Warp setting.
+    // Entries above maxWarp are engine-specific emergency overdrive ratings.
+    std::array<double, kMaxWarp + 1> overdriveDamagePercent{};
 
     double sensorRange{};
     bool penetratesPlanets{};
@@ -351,10 +354,20 @@ enum class PrimaryRaceTrait : std::uint8_t {
     RemoteLogisticsSpecialist,
 };
 
+struct RaceEnvironmentRange {
+    std::uint8_t minimum{};
+    std::uint8_t maximum{100};
+};
+
 struct RaceProfile {
     PrimaryRaceTrait primaryTrait{PrimaryRaceTrait::Generalist};
     double radiationTolerance{0.50};
     bool radiationImmune{};
+    // Inclusive physical ranges that this race regards as naturally habitable.
+    // They are stored independently from propulsion-radiation tolerance.
+    RaceEnvironmentRange habitableTemperature{25, 75};
+    RaceEnvironmentRange habitableGravity{30, 70};
+    RaceEnvironmentRange habitableRadiation{0, 40};
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and
@@ -456,6 +469,7 @@ struct FleetTelemetry {
     std::vector<FleetWaypoint> routeTemplate;
     std::vector<FleetShipStack> ships;
     FleetId targetFleet{};
+    double damagePercent{};
 };
 
 struct PendingFleetCommand {
@@ -502,6 +516,7 @@ struct Fleet {
     // Non-zero means the active route follows this FleetId. `destination`
     // remains a resolved position snapshot for rendering and compatibility.
     FleetId targetFleet{};
+    double damagePercent{};
 };
 
 struct GameState {
@@ -569,6 +584,8 @@ void normalize_ship_design_placement(ShipDesign& design);
 [[nodiscard]] bool ship_design_can_remote_mine(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp);
+[[nodiscard]] double ship_design_overdrive_damage(
+    const ShipDesign& design, std::uint8_t warp);
 [[nodiscard]] double ship_design_fuel_capacity(const ShipDesign& design);
 [[nodiscard]] double ship_design_cargo_capacity(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_generation(const ShipDesign& design);
@@ -629,6 +646,8 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] double fleet_gross_mass(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_rate(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance);
+[[nodiscard]] double fleet_overdrive_damage_rate(
+    const GameState& state, const Fleet& fleet, std::uint8_t warp);
 [[nodiscard]] bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp);
 [[nodiscard]] bool fleet_radiation_safe(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint64_t projected_fleet_radiation_losses(const GameState& state, const Fleet& fleet);

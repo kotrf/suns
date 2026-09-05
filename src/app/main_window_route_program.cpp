@@ -5,6 +5,7 @@
 #include <QStatusBar>
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 namespace suns {
@@ -220,6 +221,12 @@ QString routeForecast(
             break;
         }
 
+        if (after->damagePercent >= 100.0) {
+            lines << QString("<b>T+%1: critical hull damage (100%); fleet immobilized before completing its program.</b>")
+                         .arg(step);
+            return lines.join("<br>");
+        }
+
         const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
             + after->waypointQueue.size();
         const auto expectedRemaining = legs.size() - legIndex - 1;
@@ -281,12 +288,13 @@ QString routeForecast(
                 break;
             }
 
-            lines << QString("%1. %2 — T+%3, W%4, fuel %5, colonists %6 — <b>%7</b>%8")
+            lines << QString("%1. %2 — T+%3, W%4, fuel %5, damage %6%, colonists %7 — <b>%8</b>%9")
                          .arg(static_cast<qulonglong>(legIndex + 1))
                          .arg(waypointName(state, leg.destination, leg.targetFleet))
                          .arg(step)
                          .arg(leg.warp)
                          .arg(after->fuel, 0, 'f', 1)
+                         .arg(after->damagePercent, 0, 'f', 1)
                          .arg(static_cast<qulonglong>(after->colonists))
                          .arg(navigationCertainty)
                          .arg(outcome);
@@ -350,7 +358,14 @@ std::uint8_t MainWindow::selectedFleetSuggestedWarpForRouteProgram() const
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet) return 1;
     const auto maxWarp = selectedFleetMaxWarpForRouteProgram();
-    return maxWarp == 0 ? 1 : std::clamp<std::uint8_t>(fleet->warp, 1, maxWarp);
+    return maxWarp == 0 ? 1 : std::clamp<std::uint8_t>(fleet->warp, 1, kMaxWarp);
+}
+
+double MainWindow::selectedFleetOverdriveDamageForRouteProgram(std::uint8_t warp) const
+{
+    const auto* fleet = selectedFleet();
+    if (!fleet) return 0.0;
+    return fleet_overdrive_damage_rate(state_, fleet_player_view(state_, *fleet), warp);
 }
 
 bool MainWindow::selectedFleetRepeatOrdersForRouteProgram() const
@@ -387,31 +402,52 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     }
 
     QStringList lines;
-    lines << QString("<b>%1 route — %2 leg%3%4</b>")
+    lines << QString("<b>%1 — %2 route point%3%4</b>")
                  .arg(QString::fromStdString(fleet->name))
                  .arg(static_cast<qulonglong>(1 + route->queuedWaypoints.size()))
                  .arg(route->queuedWaypoints.empty() ? "" : "s")
                  .arg(route->repeatOrders ? " — Repeat Orders" : "");
 
-    lines << QString("1. %1 — W%2 — %3 <b>[active]</b>")
-                 .arg(waypointName(state_, route->destination, route->targetFleet))
-                 .arg(route->warp)
-                 .arg(actionName(route->arrivalAction));
-
-    std::size_t index = 2;
-    for (const auto& waypoint : route->queuedWaypoints) {
-        lines << QString("%1. %2 — W%3 — %4")
-                     .arg(static_cast<qulonglong>(index++))
-                     .arg(waypointName(state_, waypoint.destination, waypoint.targetFleet))
-                     .arg(waypoint.warp)
-                     .arg(actionName(waypoint.arrivalAction));
-    }
-
     if (pendingMove(pendingOrders_, fleet->id)) {
         lines << "<i>Pending program is transmitted on End Turn; a remote fleet keeps its known onboard program until the command arrives.</i>";
     }
-    lines << routeForecast(state_, pendingOrders_, processor_, fleet->id, *route);
     return lines.join("<br>");
+}
+
+QString MainWindow::selectedFleetRouteProgramForecast() const
+{
+    const auto* authoritative = selectedFleet();
+    if (!authoritative) return "Select a fleet first.";
+    const auto fleet = fleet_player_view(state_, *authoritative);
+    const auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (!route || routeIsClearIntent(fleet, *route)) return "No route to forecast.";
+    return routeForecast(state_, pendingOrders_, processor_, fleet.id, *route);
+}
+
+std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() const
+{
+    const auto* authoritativeFleet = selectedFleet();
+    const auto visibleFleetStorage = authoritativeFleet
+        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
+        : std::nullopt;
+    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
+    if (!fleet) return {};
+    const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
+    if (!route || routeIsClearIntent(*fleet, *route)) return {};
+
+    std::vector<RouteProgramDisplayRow> rows;
+    const auto legs = routeLegs(*route);
+    rows.reserve(legs.size());
+    for (std::size_t index = 0; index < legs.size(); ++index) {
+        const auto& leg = legs[index];
+        rows.push_back({
+            waypointName(state_, leg.destination, leg.targetFleet),
+            actionName(leg.arrivalAction),
+            leg.warp,
+            index == 0,
+        });
+    }
+    return rows;
 }
 
 std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
@@ -474,6 +510,7 @@ bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
     const auto* fleet = findFleet(state_, fleetId);
     if (!fleet || fleet->owner != pendingOrders_.player) return false;
     if (selectedFleetId_ == fleetId) return true;
+    rememberMapSelection(2, fleetId);
     selectedFleetId_ = fleetId;
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
@@ -632,6 +669,86 @@ bool MainWindow::appendRouteWaypoint(
     MoveFleetOrder route{fleet->id, destination, warp, arrivalAction, {}, false, targetFleet};
     appendPendingOrder(route, routeDescription(state_, *fleet, route));
     return true;
+}
+
+bool MainWindow::stageSelectedFleetRoute(
+    const Fleet& fleet, MoveFleetOrder route, const QString& statusMessage)
+{
+    if (auto* pending = pendingMove(pendingOrders_, fleet.id)) {
+        *pending = std::move(route);
+        for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
+            const auto* candidate = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
+            if (!candidate || candidate->fleet != fleet.id) continue;
+            if (index < static_cast<std::size_t>(pendingDescriptions_.size())) {
+                pendingDescriptions_[static_cast<int>(index)] =
+                    routeDescription(state_, fleet, *candidate);
+            }
+            break;
+        }
+        rebuildScene();
+    } else {
+        appendPendingOrder(route, routeDescription(state_, fleet, route));
+    }
+    statusBar()->showMessage(statusMessage, 2500);
+    return true;
+}
+
+bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int direction)
+{
+    const auto fleetStorage = selectedFleetPlanningView();
+    const auto* fleet = fleetStorage ? &*fleetStorage : nullptr;
+    if (!fleet || direction == 0) return false;
+    auto route = effectiveRoute(state_, pendingOrders_, *fleet);
+    if (!route || routeIsClearIntent(*fleet, *route)) return false;
+    auto legs = routeLegs(*route);
+    const auto target = static_cast<std::ptrdiff_t>(index) + direction;
+    if (index >= legs.size() || target < 0
+        || target >= static_cast<std::ptrdiff_t>(legs.size())) return false;
+
+    std::swap(legs[index], legs[static_cast<std::size_t>(target)]);
+    const auto terminal = [](const FleetArrivalAction& action) {
+        return action.kind == FleetArrivalActionKind::Colonize
+            || action.kind == FleetArrivalActionKind::RemoteMining
+            || action.kind == FleetArrivalActionKind::MergeWithFleet;
+    };
+    if (std::any_of(legs.begin(), std::prev(legs.end()), [&](const FleetWaypoint& leg) {
+            return terminal(leg.arrivalAction);
+        })) {
+        statusBar()->showMessage("Colonize, Remote Mining and Merge must remain the final route point", 3000);
+        return false;
+    }
+
+    route->destination = legs.front().destination;
+    route->warp = legs.front().warp;
+    route->arrivalAction = legs.front().arrivalAction;
+    route->targetFleet = legs.front().targetFleet;
+    route->queuedWaypoints.assign(std::next(legs.begin()), legs.end());
+    return stageSelectedFleetRoute(*fleet, *route, "Fleet route point moved");
+}
+
+bool MainWindow::removeSelectedFleetRouteProgramLeg(std::size_t index)
+{
+    const auto fleetStorage = selectedFleetPlanningView();
+    const auto* fleet = fleetStorage ? &*fleetStorage : nullptr;
+    if (!fleet) return false;
+    auto route = effectiveRoute(state_, pendingOrders_, *fleet);
+    if (!route || routeIsClearIntent(*fleet, *route)) return false;
+    auto legs = routeLegs(*route);
+    if (index >= legs.size()) return false;
+    legs.erase(legs.begin() + static_cast<std::ptrdiff_t>(index));
+    if (legs.empty()) return clearSelectedFleetRouteProgram();
+
+    route->destination = legs.front().destination;
+    route->warp = legs.front().warp;
+    route->arrivalAction = legs.front().arrivalAction;
+    route->targetFleet = legs.front().targetFleet;
+    route->queuedWaypoints.assign(std::next(legs.begin()), legs.end());
+    if (std::none_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),
+            [&](const FleetWaypoint& leg) {
+                return leg.targetFleet != route->targetFleet
+                    || !same_position(leg.destination, route->destination);
+            })) route->repeatOrders = false;
+    return stageSelectedFleetRoute(*fleet, *route, "Fleet route point removed");
 }
 
 bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)

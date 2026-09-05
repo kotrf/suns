@@ -791,6 +791,8 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
         || !fleet_ready_for_reorganization(*source)) return false;
 
     const auto sourceId = source->id;
+    const auto destinationShips = fleet_ship_count(*destination);
+    const auto sourceShipCount = fleet_ship_count(*source);
     auto sourceShips = fleet_ship_stacks(*source);
     sync_fleet_presentation(state, *destination);
     destination->ships.insert(destination->ships.end(), sourceShips.begin(), sourceShips.end());
@@ -799,6 +801,12 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     destination->minerals.ironium += source->minerals.ironium;
     destination->minerals.boranium += source->minerals.boranium;
     destination->minerals.germanium += source->minerals.germanium;
+    if (destinationShips + sourceShipCount > 0) {
+        destination->damagePercent =
+            (destination->damagePercent * destinationShips
+                + source->damagePercent * sourceShipCount)
+            / (destinationShips + sourceShipCount);
+    }
     sync_fleet_presentation(state, *destination);
     destination->warp = std::min(destination->warp, fleet_max_warp(state, *destination));
     destination->fuel = std::min(destination->fuel, fleet_fuel_capacity(state, *destination));
@@ -994,6 +1002,8 @@ void abandon_lost_fleet_target(GameState& state, Fleet& fleet)
 void merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
 {
     const auto sourceId = source.id;
+    const auto destinationShips = fleet_ship_count(destination);
+    const auto sourceShipCount = fleet_ship_count(source);
     auto sourceShips = fleet_ship_stacks(source);
     sync_fleet_presentation(state, destination);
     destination.ships.insert(destination.ships.end(), sourceShips.begin(), sourceShips.end());
@@ -1002,6 +1012,12 @@ void merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     destination.minerals.ironium += source.minerals.ironium;
     destination.minerals.boranium += source.minerals.boranium;
     destination.minerals.germanium += source.minerals.germanium;
+    if (destinationShips + sourceShipCount > 0) {
+        destination.damagePercent =
+            (destination.damagePercent * destinationShips
+                + source.damagePercent * sourceShipCount)
+            / (destinationShips + sourceShipCount);
+    }
     sync_fleet_presentation(state, destination);
     destination.warp = std::min(destination.warp, fleet_max_warp(state, destination));
     destination.fuel = std::min(destination.fuel, fleet_fuel_capacity(state, destination));
@@ -1063,6 +1079,11 @@ Position projected_movement_endpoint(
         warp_distance(fleet.warp) * std::clamp(turnFraction, 0.0, 1.0));
     const auto fuelPerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
     if (fuelPerLy > 0.000001) distance = std::min(distance, fleet.fuel / fuelPerLy);
+    const auto damageRate = fleet_overdrive_damage_rate(state, fleet, fleet.warp);
+    if (damageRate > 0.0) {
+        distance = std::min(distance,
+            warp_distance(fleet.warp) * (100.0 - fleet.damagePercent) / damageRate);
+    }
     if (distance <= 0.000001) return fleet.position;
     if (distance >= remaining - 0.000001) return destination;
 
@@ -1076,6 +1097,29 @@ Position projected_movement_endpoint(
 Position projected_turn_endpoint(const GameState& state, const Fleet& fleet, Position destination)
 {
     return projected_movement_endpoint(state, fleet, destination, 1.0);
+}
+
+void apply_overdrive_damage(
+    const GameState& state, Fleet& fleet, double travelledDistance)
+{
+    const auto rate = fleet_overdrive_damage_rate(state, fleet, fleet.warp);
+    const auto fullTurnDistance = warp_distance(fleet.warp);
+    if (rate <= 0.0 || travelledDistance <= 0.0 || fullTurnDistance <= 0.0) return;
+
+    const auto exposure = std::clamp(travelledDistance / fullTurnDistance, 0.0, 1.0);
+    fleet.damagePercent = std::clamp(
+        fleet.damagePercent + rate * exposure, 0.0, 100.0);
+    if (fleet.damagePercent < 100.0 - 0.000001) return;
+    fleet.damagePercent = 100.0;
+
+    // Critically damaged fleets remain on the map for recovery mechanics and
+    // future combat work, but their engines can no longer execute a route.
+    fleet.destination.reset();
+    fleet.arrivalAction.reset();
+    fleet.waypointQueue.clear();
+    fleet.repeatOrders = false;
+    fleet.routeTemplate.clear();
+    fleet.targetFleet = 0;
 }
 
 void continue_merged_fleet_route(
@@ -1120,8 +1164,10 @@ void continue_merged_fleet_route(
     fleet.position = endpoint;
     fleet.fuelStalled = false;
     observe_fleet_sensor_sweep(state, fleet, start, endpoint, state.turn + 1);
+    apply_overdrive_damage(state, fleet, travelled);
 
-    if (fleet.targetFleet == 0 && same_position(endpoint, destination)) {
+    if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
+        && same_position(endpoint, destination)) {
         fleet.destination.reset();
         (void)finish_fleet_arrival(state, fleet, consumedFleets);
     }
@@ -1319,8 +1365,10 @@ void advance_fleets(GameState& state)
 
         observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
         apply_fleet_radiation_attrition(state, fleet);
+        apply_overdrive_damage(state, fleet, remaining);
 
-        if (plan->routed && !plan->intercepted && fleet.targetFleet == 0
+        if (fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
+            && fleet.targetFleet == 0
             && same_position(endpoint, plan->destination)) {
             fixedArrivals.push_back(fleet.id);
         }

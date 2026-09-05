@@ -332,7 +332,8 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 3;
         spec.engineThrust = 595.0;
         spec.maxWarp = 8;
-        spec.fuelPer100MassLy = {0.0, 0.05, 0.07, 0.10, 0.15, 0.23, 0.36, 0.60, 1.00, 0.0, 0.0};
+        spec.fuelPer100MassLy = {0.0, 0.05, 0.07, 0.10, 0.15, 0.23, 0.36, 0.60, 1.00, 1.65, 2.70};
+        spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 12.0, 35.0};
         break;
     case ShipComponentType::RamScoopDrive:
         spec.name = "Ram Scoop Drive";
@@ -341,7 +342,8 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 5;
         spec.engineThrust = 520.0;
         spec.maxWarp = 9;
-        spec.fuelPer100MassLy = {0.0, -0.08, -0.08, -0.06, -0.03, 0.0, 0.05, 0.13, 0.30, 0.68, 0.0};
+        spec.fuelPer100MassLy = {0.0, -0.08, -0.08, -0.06, -0.03, 0.0, 0.05, 0.13, 0.30, 0.68, 1.25};
+        spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 18.0};
         break;
     case ShipComponentType::RadiatingRamScoopDrive:
         spec.name = "Radiating Ram Scoop";
@@ -350,7 +352,8 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 4;
         spec.engineThrust = 560.0;
         spec.maxWarp = 9;
-        spec.fuelPer100MassLy = {0.0, -0.12, -0.12, -0.10, -0.07, -0.03, 0.0, 0.07, 0.18, 0.42, 0.0};
+        spec.fuelPer100MassLy = {0.0, -0.12, -0.12, -0.10, -0.07, -0.03, 0.0, 0.07, 0.18, 0.42, 0.90};
+        spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 14.0};
         spec.radiationHazard = 1.0;
         break;
     case ShipComponentType::AdvancedFusionDrive:
@@ -360,7 +363,8 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 7;
         spec.engineThrust = 650.0;
         spec.maxWarp = 9;
-        spec.fuelPer100MassLy = {0.0, 0.04, 0.05, 0.07, 0.10, 0.16, 0.24, 0.38, 0.62, 0.88, 0.0};
+        spec.fuelPer100MassLy = {0.0, 0.04, 0.05, 0.07, 0.10, 0.16, 0.24, 0.38, 0.62, 0.88, 1.45};
+        spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0};
         break;
     case ShipComponentType::LongRangeScanner:
         spec.name = "Long Range Scanner";
@@ -737,8 +741,16 @@ double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp)
     if (warp == 0 || warp > kMaxWarp) return 0.0;
     ShipComponentSpec engine;
     const auto* spec = primary_engine(design, engine);
-    if (!spec || warp > spec->maxWarp) return 0.0;
+    if (!spec) return 0.0;
     return spec->fuelPer100MassLy[warp];
+}
+
+double ship_design_overdrive_damage(const ShipDesign& design, std::uint8_t warp)
+{
+    if (warp == 0 || warp > kMaxWarp) return 0.0;
+    ShipComponentSpec engine;
+    const auto* spec = primary_engine(design, engine);
+    return spec ? spec->overdriveDamagePercent[warp] : 0.0;
 }
 
 double ship_design_fuel_capacity(const ShipDesign& design)
@@ -1041,9 +1053,24 @@ double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet
     return fleet_fuel_rate(state, fleet) * (fleet_gross_mass(state, fleet) / 100.0) * distance;
 }
 
+double fleet_overdrive_damage_rate(
+    const GameState& state, const Fleet& fleet, std::uint8_t warp)
+{
+    double result = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design)) {
+            // A heterogeneous fleet must respect its least tolerant engine.
+            result = std::max(result, ship_design_overdrive_damage(*design, warp));
+        }
+    }
+    return result;
+}
+
 bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp)
 {
-    return warp >= 1 && warp <= fleet_max_warp(state, fleet);
+    return warp >= 1 && warp <= kMaxWarp
+        && fleet_max_warp(state, fleet) > 0
+        && fleet.damagePercent < 100.0;
 }
 
 bool within_range(Position source, Position target, double range)
@@ -1359,6 +1386,7 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.destination = fleet.destination;
     fleet.telemetry.warp = fleet.warp;
     fleet.telemetry.fuel = fleet.fuel;
+    fleet.telemetry.damagePercent = fleet.damagePercent;
     fleet.telemetry.colonists = fleet.colonists;
     fleet.telemetry.arrivalAction = fleet.arrivalAction;
     fleet.telemetry.waypointQueue = fleet.waypointQueue;

@@ -35,6 +35,13 @@ namespace suns {
 
 class ShipDesignerDialog;
 
+struct RouteProgramDisplayRow {
+    QString destination;
+    QString arrivalAction;
+    std::uint8_t warp{};
+    bool active{};
+};
+
 class MainWindow final : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
@@ -44,8 +51,11 @@ public:
     [[nodiscard]] FleetId selectedFleetForRouteProgram() const;
     [[nodiscard]] std::uint8_t selectedFleetMaxWarpForRouteProgram() const;
     [[nodiscard]] std::uint8_t selectedFleetSuggestedWarpForRouteProgram() const;
+    [[nodiscard]] double selectedFleetOverdriveDamageForRouteProgram(std::uint8_t warp) const;
     [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
+    [[nodiscard]] QString selectedFleetRouteProgramForecast() const;
+    [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
     [[nodiscard]] std::vector<FleetId> availableOwnedFleetsForRouteProgram() const;
@@ -56,6 +66,8 @@ public:
     bool appendFleetTargetWaypoint(
         FleetId targetFleet, std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool setSelectedFleetRepeatOrdersForRouteProgram(bool enabled);
+    bool moveSelectedFleetRouteProgramLeg(std::size_t index, int direction);
+    bool removeSelectedFleetRouteProgramLeg(std::size_t index);
     bool clearSelectedFleetRouteProgram();
 
     // Dockside cargo editor entrypoint. Implemented separately from the map UI
@@ -156,6 +168,8 @@ private:
     void removeSelectedResearchPlanItem();
     void refreshProductionQueue();
     void moveSelectedProductionItem(int direction);
+    void rememberMapSelection(int kind, std::uint32_t id);
+    [[nodiscard]] QString selectedObjectDistanceSummary() const;
     [[nodiscard]] bool confirmFleetColonization(
         const Fleet& fleet, const Planet& planet, bool scheduledRoute);
 
@@ -172,6 +186,8 @@ private:
         FleetId targetFleet,
         std::uint8_t warp,
         FleetArrivalAction arrivalAction);
+    bool stageSelectedFleetRoute(
+        const Fleet& fleet, MoveFleetOrder route, const QString& statusMessage);
 
     void appendPendingOrder(Order order, const QString& description);
     void replacePendingFleetMove(
@@ -191,6 +207,10 @@ private:
     std::optional<FleetId> selectedFleetId_{1};
     std::optional<FleetId> warpControlFleetId_;
     std::optional<FleetId> logisticsControlFleetId_;
+    int currentDistanceSelectionKind_{};
+    std::uint32_t currentDistanceSelectionId_{};
+    int previousDistanceSelectionKind_{};
+    std::uint32_t previousDistanceSelectionId_{};
     QStringList pendingDescriptions_;
     QString currentSavePath_;
     int mapDisplayMode_{};

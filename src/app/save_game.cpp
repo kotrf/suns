@@ -15,7 +15,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 28;
+constexpr quint32 kSaveFormatVersion = 30;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 2;
@@ -257,6 +257,7 @@ void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
     writeOptionalPosition(stream, value.destination);
     stream << static_cast<quint8>(value.warp)
            << value.fuel
+           << value.damagePercent
            << static_cast<quint64>(value.colonists);
     stream << static_cast<quint8>(value.arrivalAction.has_value() ? 1 : 0);
     if (value.arrivalAction) writeArrivalAction(stream, *value.arrivalAction);
@@ -281,7 +282,15 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
 
     quint8 warp{};
     quint64 colonists{};
-    stream >> warp >> value.fuel >> colonists;
+    stream >> warp >> value.fuel;
+    value.damagePercent = 0.0;
+    if (gReadSaveFormatVersion >= 30) stream >> value.damagePercent;
+    stream >> colonists;
+    if (!std::isfinite(value.damagePercent)
+        || value.damagePercent < 0.0 || value.damagePercent > 100.0) {
+        markCorrupt(stream);
+        return;
+    }
     value.warp = static_cast<std::uint8_t>(warp);
     value.colonists = static_cast<std::uint64_t>(colonists);
 
@@ -847,6 +856,12 @@ void writePlayer(QDataStream& stream, const Player& value)
     for (const auto field : value.technology.queuedFocuses) writeEnum(stream, field);
     stream << static_cast<quint8>(value.technology.researchAllocationPercent);
     writeEnum(stream, value.race.primaryTrait);
+    stream << static_cast<quint8>(value.race.habitableTemperature.minimum)
+           << static_cast<quint8>(value.race.habitableTemperature.maximum)
+           << static_cast<quint8>(value.race.habitableGravity.minimum)
+           << static_cast<quint8>(value.race.habitableGravity.maximum)
+           << static_cast<quint8>(value.race.habitableRadiation.minimum)
+           << static_cast<quint8>(value.race.habitableRadiation.maximum);
     stream << static_cast<quint32>(value.history.size());
     for (const auto& snapshot : value.history) writeEmpireTurnStatistics(stream, snapshot);
 }
@@ -1023,6 +1038,9 @@ void readPlayer(QDataStream& stream, Player& value)
         value.technology.researchAllocationPercent = percent;
     }
     value.race.primaryTrait = PrimaryRaceTrait::Generalist;
+    value.race.habitableTemperature = {25, 75};
+    value.race.habitableGravity = {30, 70};
+    value.race.habitableRadiation = {0, 40};
     value.history.clear();
     if (gReadSaveFormatVersion >= 22) {
         if (!readEnum(
@@ -1030,6 +1048,29 @@ void readPlayer(QDataStream& stream, Player& value)
                 value.race.primaryTrait,
                 static_cast<quint8>(PrimaryRaceTrait::RemoteLogisticsSpecialist))) {
             return;
+        }
+        if (gReadSaveFormatVersion >= 29) {
+            quint8 temperatureMinimum{};
+            quint8 temperatureMaximum{};
+            quint8 gravityMinimum{};
+            quint8 gravityMaximum{};
+            quint8 radiationMinimum{};
+            quint8 radiationMaximum{};
+            stream >> temperatureMinimum >> temperatureMaximum
+                   >> gravityMinimum >> gravityMaximum
+                   >> radiationMinimum >> radiationMaximum;
+            const auto validRange = [](quint8 minimum, quint8 maximum) {
+                return minimum <= maximum && maximum <= 100;
+            };
+            if (!validRange(temperatureMinimum, temperatureMaximum)
+                || !validRange(gravityMinimum, gravityMaximum)
+                || !validRange(radiationMinimum, radiationMaximum)) {
+                markCorrupt(stream);
+                return;
+            }
+            value.race.habitableTemperature = {temperatureMinimum, temperatureMaximum};
+            value.race.habitableGravity = {gravityMinimum, gravityMaximum};
+            value.race.habitableRadiation = {radiationMinimum, radiationMaximum};
         }
         if (!readCount(stream, count)) return;
         value.history.reserve(count);
@@ -1063,6 +1104,7 @@ void writeFleet(QDataStream& stream, const Fleet& value)
 
     stream << static_cast<quint8>(value.warp)
            << value.fuel
+           << value.damagePercent
            << static_cast<quint64>(value.colonists);
 
     stream << static_cast<quint8>(value.arrivalAction.has_value() ? 1 : 0);
@@ -1116,7 +1158,15 @@ void readFleet(QDataStream& stream, Fleet& value)
 
     quint8 warp{};
     quint64 colonists{};
-    stream >> warp >> value.fuel >> colonists;
+    stream >> warp >> value.fuel;
+    value.damagePercent = 0.0;
+    if (gReadSaveFormatVersion >= 30) stream >> value.damagePercent;
+    stream >> colonists;
+    if (!std::isfinite(value.damagePercent)
+        || value.damagePercent < 0.0 || value.damagePercent > 100.0) {
+        markCorrupt(stream);
+        return;
+    }
     value.warp = static_cast<std::uint8_t>(warp);
     value.colonists = static_cast<std::uint64_t>(colonists);
 

@@ -290,6 +290,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.destination = fleet.destination;
     result.warp = fleet.warp;
     result.fuel = fleet.fuel;
+    result.damagePercent = fleet.damagePercent;
     result.colonists = fleet.colonists;
     result.arrivalAction = fleet.arrivalAction;
     result.waypointQueue = fleet.waypointQueue;
@@ -454,6 +455,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.destination = telemetry.destination;
     view.warp = telemetry.warp;
     view.fuel = telemetry.fuel;
+    view.damagePercent = telemetry.damagePercent;
     view.colonists = telemetry.colonists;
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;

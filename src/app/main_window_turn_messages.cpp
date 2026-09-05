@@ -461,8 +461,15 @@ void MainWindow::installTurnMessages()
         const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
             return candidate.id == event->fleet;
         });
-        if (star) selectedStarId_ = starId;
-        if (fleet != state_.fleets.end()) selectedFleetId_ = fleet->id;
+        if (star) {
+            selectedStarId_ = starId;
+        }
+        if (fleet != state_.fleets.end()) {
+            selectedFleetId_ = fleet->id;
+            rememberMapSelection(2, fleet->id);
+        } else if (star) {
+            rememberMapSelection(1, starId);
+        }
         rebuildScene();
         if (star) view_->centerOn(star->position.x, star->position.y);
         else view_->centerOn(event->position.x, event->position.y);

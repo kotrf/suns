@@ -19,6 +19,8 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
+#include <QPaintEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QProgressBar>
 #include <QScrollArea>
@@ -26,8 +28,11 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QStyle>
+#include <QStyleOptionProgressBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QWidget>
@@ -77,6 +82,51 @@ QGroupBox* makeGroup(const QString& title, const char* objectName, QWidget* pare
     return group;
 }
 
+class EnvironmentRangeBar final : public QProgressBar {
+public:
+    explicit EnvironmentRangeBar(QWidget* parent = nullptr)
+        : QProgressBar(parent)
+    {
+    }
+
+    void setHabitableRange(RaceEnvironmentRange range)
+    {
+        lower_ = std::clamp<int>(range.minimum, minimum(), maximum());
+        upper_ = std::clamp<int>(range.maximum, minimum(), maximum());
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QProgressBar::paintEvent(event);
+
+        QStyleOptionProgressBar option;
+        initStyleOption(&option);
+        auto area = style()->subElementRect(QStyle::SE_ProgressBarContents, &option, this);
+        area.adjust(1, 1, -1, -1);
+        if (area.width() <= 1 || area.height() <= 1 || maximum() <= minimum()) return;
+
+        const auto markerX = [&](int value) {
+            const auto fraction = static_cast<double>(value - minimum())
+                / static_cast<double>(maximum() - minimum());
+            return area.left() + qRound(fraction * static_cast<double>(area.width() - 1));
+        };
+        QPainter painter(this);
+        for (const auto value : {lower_, upper_}) {
+            const auto x = markerX(value);
+            painter.setPen(QPen(QColor("#081018"), 3.0));
+            painter.drawLine(x, area.top(), x, area.bottom());
+            painter.setPen(QPen(QColor("#f4d36c"), 1.0));
+            painter.drawLine(x, area.top(), x, area.bottom());
+        }
+    }
+
+private:
+    int lower_{};
+    int upper_{100};
+};
+
 } // namespace
 
 void MainWindow::installUiPolish()
@@ -112,11 +162,8 @@ void MainWindow::installUiPolish()
                     auto* ordersGroup = makeGroup("Orders this turn", "ordersGroup", commandPanel);
                     auto* ordersLayout = new QVBoxLayout(ordersGroup);
                     ordersLabel_->show();
-                    endTurnButton_->show();
-                    endTurnButton_->setText("End Turn — resolve orders");
-                    endTurnButton_->setObjectName("primaryTurnButton");
+                    endTurnButton_->hide();
                     ordersLayout->addWidget(ordersLabel_);
-                    ordersLayout->addWidget(endTurnButton_);
                     sideLayout->addWidget(ordersGroup);
 
                     auto* planetGroup = makeGroup("Selected system / planet", "planetGroup", commandPanel);
@@ -130,7 +177,7 @@ void MainWindow::installUiPolish()
                     environmentLayout->setContentsMargins(0, 2, 0, 0);
                     environmentLayout->setVerticalSpacing(4);
                     const auto makeEnvironmentBar = [this](const char* objectName) {
-                        auto* bar = new QProgressBar(planetEnvironmentPanel_);
+                        auto* bar = new EnvironmentRangeBar(planetEnvironmentPanel_);
                         bar->setObjectName(objectName);
                         bar->setRange(0, 100);
                         bar->setTextVisible(false);
@@ -405,14 +452,16 @@ void MainWindow::installUiPolish()
             background: #101821;
             border-color: #202f3d;
         }
-        QPushButton#primaryTurnButton {
+        QToolButton#primaryTurnToolButton {
             min-height: 29px;
+            padding-left: 12px;
+            padding-right: 12px;
             font-weight: 700;
             color: #fff0dc;
             background: #5a3d25;
             border-color: #a8794b;
         }
-        QPushButton#primaryTurnButton:hover {
+        QToolButton#primaryTurnToolButton:hover {
             background: #704b2d;
             border-color: #d09b62;
         }
@@ -480,7 +529,7 @@ void MainWindow::installUiPolish()
             border-color: #70b9e8;
             border-bottom: 3px solid #70b9e8;
         }
-        QLabel#homeworldDistance {
+        QLabel#selectionDistance {
             padding: 2px 8px;
             color: #f0d59d;
             border-left: 1px solid #45566a;
@@ -517,6 +566,17 @@ void MainWindow::installUiPolish()
     // Rare galaxy creation controls live in a menu rather than occupying prime
     // command-panel space for the entire game.
     auto* gameMenu = menuBar()->addMenu("&Game");
+    auto* endTurnAction = new QAction("End Turn", this);
+    endTurnAction->setObjectName("endTurnAction");
+    endTurnAction->setToolTip("Resolve all submitted orders and advance to the next year");
+    endTurnAction->setShortcuts({
+        QKeySequence("Ctrl+Return"),
+        QKeySequence("Ctrl+Enter"),
+    });
+    connect(endTurnAction, &QAction::triggered, this, [this] { endTurn(); });
+    gameMenu->addAction(endTurnAction);
+    gameMenu->addSeparator();
+
     auto* newGalaxyAction = gameMenu->addAction("New galaxy…");
     newGalaxyAction->setShortcut(QKeySequence::New);
     connect(newGalaxyAction, &QAction::triggered, this, [this] {
@@ -566,10 +626,16 @@ void MainWindow::installUiPolish()
     auto* designerAction = fleetMenu->addAction("Ship designer…");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
 
-    auto* dialogToolbar = addToolBar("Dialogs");
+    auto* dialogToolbar = addToolBar("Main");
     dialogToolbar->setObjectName("dialogToolbar");
     dialogToolbar->setMovable(false);
     dialogToolbar->setToolButtonStyle(Qt::ToolButtonTextOnly);
+
+    dialogToolbar->addAction(endTurnAction);
+    dialogToolbar->addSeparator();
+    if (auto* turnButton = qobject_cast<QToolButton*>(dialogToolbar->widgetForAction(endTurnAction))) {
+        turnButton->setObjectName("primaryTurnToolButton");
+    }
 
     auto* designerToolAction = dialogToolbar->addAction("Designer");
     designerToolAction->setObjectName("openShipDesignerToolAction");
@@ -623,13 +689,14 @@ void MainWindow::installUiPolish()
     connect(sensorRangesAction, &QAction::toggled, sensorRangesCheck_, &QCheckBox::setChecked);
     connect(sensorRangesCheck_, &QCheckBox::toggled, sensorRangesAction, &QAction::setChecked);
 
-    // Stars! style homeworld range stays in one fixed status-bar location so
-    // selecting systems never makes the player hunt for the distance readout.
-    auto* homeworldDistance = new QLabel(statusBar());
-    homeworldDistance->setObjectName("homeworldDistance");
-    statusBar()->addPermanentWidget(homeworldDistance);
+    // Stars! style selection range stays in one fixed status-bar location.
+    auto* selectionDistance = new QLabel(statusBar());
+    selectionDistance->setObjectName("selectionDistance");
+    statusBar()->addPermanentWidget(selectionDistance);
 
-    auto updateCommandContext = [this, homeworldDistance, planetInfo, fleetInfo] {
+    auto updateCommandContext = [this, selectionDistance, planetInfo, fleetInfo, endTurnAction] {
+        endTurnAction->setText(
+            QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
         if (planetInfo) planetInfo->setText(selectedPlanetPanelSummary());
         if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
 
@@ -639,42 +706,43 @@ void MainWindow::installUiPolish()
             && is_surveyed(state_, 1, environmentStar->id);
         if (planetEnvironmentPanel_) planetEnvironmentPanel_->setVisible(environmentKnown);
         if (environmentKnown) {
-            const auto setEnvironmentBar = [](QProgressBar* bar, std::uint8_t value, const QString& text) {
+            const auto* player = find_player(state_, 1);
+            const auto race = player ? player->race : RaceProfile{};
+            const auto raceName = player
+                ? QString::fromStdString(player->name)
+                : QString("Terrans");
+            const auto setEnvironmentBar = [&raceName](
+                                               QProgressBar* bar,
+                                               std::uint8_t value,
+                                               RaceEnvironmentRange habitable,
+                                               const QString& text) {
                 if (!bar) return;
                 bar->setValue(value);
-                bar->setToolTip(QString("%1: %2 / 100").arg(text).arg(static_cast<int>(value)));
+                if (auto* ranged = dynamic_cast<EnvironmentRangeBar*>(bar)) {
+                    ranged->setHabitableRange(habitable);
+                }
+                const bool inside = value >= habitable.minimum && value <= habitable.maximum;
+                bar->setToolTip(
+                    QString("%1: %2 / 100\nNatural range for %3: %4–%5 (%6)")
+                        .arg(text)
+                        .arg(static_cast<int>(value))
+                        .arg(raceName)
+                        .arg(static_cast<int>(habitable.minimum))
+                        .arg(static_cast<int>(habitable.maximum))
+                        .arg(inside ? "inside" : "outside"));
             };
             setEnvironmentBar(planetTemperatureBar_, environmentPlanet->environment.temperature,
+                race.habitableTemperature,
                 "Temperature (50 is temperate)");
             setEnvironmentBar(planetGravityBar_, environmentPlanet->environment.gravity,
+                race.habitableGravity,
                 "Gravity (50 is Earth-like)");
             setEnvironmentBar(planetRadiationBar_, environmentPlanet->environment.radiation,
+                race.habitableRadiation,
                 "Radiation (higher is more severe)");
         }
 
-        const auto homePlanet = std::find_if(state_.planets.begin(), state_.planets.end(), [](const Planet& planet) {
-            return planet.owner == 1;
-        });
-        if (homePlanet == state_.planets.end()) {
-            homeworldDistance->setText("Homeworld: —");
-            return;
-        }
-        const auto* homeStar = find_star(state_, homePlanet->star);
-        if (!homeStar) {
-            homeworldDistance->setText("Homeworld: —");
-            return;
-        }
-
-        const auto* star = selectedStar();
-        QString text = QString("Homeworld: %1 / %2")
-                           .arg(QString::fromStdString(homePlanet->name))
-                           .arg(QString::fromStdString(homeStar->name));
-        if (star) {
-            text += QString("  •  %1 ly to %2")
-                        .arg(distance_between(homeStar->position, star->position), 0, 'f', 1)
-                        .arg(QString::fromStdString(star->name));
-        }
-        homeworldDistance->setText(text);
+        selectionDistance->setText(selectedObjectDistanceSummary());
     };
     updateCommandContext();
     auto* contextTimer = new QTimer(this);

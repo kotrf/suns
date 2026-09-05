@@ -55,3 +55,18 @@ An assistant can inspect the known empire state and return a `.sunsorders` file
 for import. This works naturally as asynchronous PBEM. A chat session should not
 be treated as a permanently connected autonomous client, so a hosted live bot
 would use the same protocol through a separate service process.
+
+## Computer opponents
+
+An in-process computer player should consume the same fog-of-war-safe
+`PlayerView` intended for multiplayer clients and emit ordinary `PlayerOrders`.
+It must never inspect authoritative hidden planets, enemy fleets or unresolved
+orders. This makes the opponent deterministic, replayable and unable to cheat
+accidentally.
+
+The first useful opponent should be deliberately simple: keep colonies
+productive, maintain fuel and cargo logistics, explore unknown systems, and
+colonize the best confirmed world it can reach. Later policy layers can add
+ship design, research planning, threat assessment, diplomacy and combat.
+Difficulty should primarily change planning depth, risk tolerance and strategic
+goals rather than grant hidden information or arbitrary production bonuses.

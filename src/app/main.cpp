@@ -60,6 +60,7 @@ int main(int argc, char* argv[])
             if (auto* reset = window.findChild<QAction*>("resetPanelLayoutAction")) {
                 reset->trigger();
             }
+            if (auto* endTurn = window.findChild<QToolButton*>("primaryTurnToolButton")) endTurn->update();
 
             // Touch the dashboard gauges plus generated portrait/mining widgets
             // in the offscreen path; all refresh from the selected game state.

@@ -1,8 +1,12 @@
 #include "main_window.hpp"
+#include "suns/communications.hpp"
 
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QTimer>
+
+#include <algorithm>
+#include <optional>
 
 namespace suns {
 
@@ -12,6 +16,48 @@ constexpr int kMapItemStar = 1;
 constexpr int kMapItemFleet = 2;
 
 } // namespace
+
+void MainWindow::rememberMapSelection(int kind, std::uint32_t id)
+{
+    if ((kind != kMapItemStar && kind != kMapItemFleet) || id == 0) return;
+    if (currentDistanceSelectionKind_ == kind && currentDistanceSelectionId_ == id) return;
+    previousDistanceSelectionKind_ = currentDistanceSelectionKind_;
+    previousDistanceSelectionId_ = currentDistanceSelectionId_;
+    currentDistanceSelectionKind_ = kind;
+    currentDistanceSelectionId_ = id;
+}
+
+QString MainWindow::selectedObjectDistanceSummary() const
+{
+    struct ObjectView {
+        QString name;
+        Position position;
+    };
+    const auto resolve = [this](int kind, std::uint32_t id) -> std::optional<ObjectView> {
+        if (kind == kMapItemStar) {
+            if (const auto* star = find_star(state_, static_cast<StarId>(id))) {
+                return ObjectView{QString::fromStdString(star->name), star->position};
+            }
+        } else if (kind == kMapItemFleet) {
+            const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [id](const Fleet& candidate) {
+                return candidate.id == static_cast<FleetId>(id);
+            });
+            if (fleet != state_.fleets.end()) {
+                const auto visible = fleet_player_view(state_, *fleet);
+                return ObjectView{QString::fromStdString(visible.name), visible.position};
+            }
+        }
+        return std::nullopt;
+    };
+
+    const auto current = resolve(currentDistanceSelectionKind_, currentDistanceSelectionId_);
+    const auto previous = resolve(previousDistanceSelectionKind_, previousDistanceSelectionId_);
+    if (!current) return "Distance: select an object";
+    if (!previous) return QString("Distance: select another object after %1").arg(current->name);
+    return QString("Distance: %1 ↔ %2 • %3 ly")
+        .arg(previous->name, current->name)
+        .arg(distance_between(previous->position, current->position), 0, 'f', 1);
+}
 
 void MainWindow::installDeferredMapSelectionHandler()
 {
@@ -31,13 +77,15 @@ void MainWindow::installDeferredMapSelectionHandler()
 
         const auto* item = selected.front();
         const auto kind = item->data(1).toInt();
+        const auto id = static_cast<std::uint32_t>(item->data(0).toUInt());
         if (kind == kMapItemStar) {
-            selectedStarId_ = static_cast<StarId>(item->data(0).toUInt());
+            selectedStarId_ = static_cast<StarId>(id);
         } else if (kind == kMapItemFleet) {
-            selectedFleetId_ = static_cast<FleetId>(item->data(0).toUInt());
+            selectedFleetId_ = static_cast<FleetId>(id);
         } else {
             return;
         }
+        rememberMapSelection(kind, id);
 
         // Never clear/delete QGraphicsItems while Qt is still delivering the
         // selectionChanged event that references them. Multiple changes in the

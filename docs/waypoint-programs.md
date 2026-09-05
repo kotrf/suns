@@ -20,7 +20,7 @@ A `MoveFleetOrder` represents the player's complete route intent:
 
 1. the order replaces the active leg;
 2. it replaces the entire future waypoint queue atomically;
-3. all leg Warp values are validated against the fitted ship design before the order is accepted;
+3. all leg Warp values must be within 1–10 and the fleet must have working engines; speeds above its safe rating incur overdrive damage;
 4. the active leg moves during the normal movement phase;
 5. on arrival its task executes against the actual arrival-time `GameState`;
 6. the next queued waypoint is promoted to the active leg;
@@ -54,9 +54,13 @@ can be issued in advance without pretending that future colony populations are a
 
 Plotting a new direct course replaces both the active leg and all queued future legs. This prevents stale waypoint actions from surviving a change of intent.
 
+## Route editor
+
+The route dock presents the active leg and future waypoints in a single queue with destination, Warp and arrival-action columns. Move up, Move down and Remove replace the selected fleet's complete pending program. The first leg can be moved or removed. Colonization, remote mining and merge must remain terminal. Removing points disables repetition if fewer than two distinct destinations remain. Remote edits still obey command-delivery delay. A separate Route forecast dialog contains detailed fuel, damage and arrival predictions.
+
 ## Future work
 
-The first implementation keeps the active leg separate from the queued legs for compatibility. A later route editor can present the whole program as a single ordered list without requiring a simulation-model rewrite.
+The simulation keeps the active leg separate from the queued legs for compatibility; the editor combines them for display.
 
 Possible later rules include:
 
