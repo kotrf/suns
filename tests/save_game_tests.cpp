@@ -19,6 +19,7 @@ void round_trip_preserves_communications_and_planning()
     original.galaxyConfig = GalaxyConfig{20260825, 24, 940.0, 700.0, 50.0};
     original.state = generate_game(original.galaxyConfig);
     original.state.turn = 77;
+    original.state.fleets.front().damagePercent = 23.5;
     original.state.stars[1].variability = {13, 12, 7};
     original.state.planets.front().mines = 17;
     original.state.planets.front().productionWaitingForMinerals = true;
@@ -55,6 +56,9 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().race.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
     original.state.players.front().race.radiationTolerance = 0.91;
     original.state.players.front().race.radiationImmune = true;
+    original.state.players.front().race.habitableTemperature = {18, 64};
+    original.state.players.front().race.habitableGravity = {27, 73};
+    original.state.players.front().race.habitableRadiation = {4, 52};
     record_empire_turn_statistics(original.state);
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
@@ -108,6 +112,8 @@ void round_trip_preserves_communications_and_planning()
         {{300.0, 10.0}, 8, {}},
     };
     scout.telemetry.ships = scout.ships;
+    scout.telemetry.damagePercent = 7.5;
+    scout.telemetryInTransit.front().telemetry.damagePercent = 18.0;
     scout.telemetryInTransit.front().telemetry.ships = scout.ships;
     scout.fuelStalled = true;
     scout.task = FleetTask::RemoteMining;
@@ -194,6 +200,7 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.campaignId == original.campaignId);
     assert(loaded.turnToken == original.turnToken);
     assert(loaded.state.turn == 77);
+    assert(loaded.state.fleets.front().damagePercent == 23.5);
     assert(loaded.state.stars[1].variability.periodTurns == 13);
     assert(loaded.state.stars[1].variability.amplitudePercent == 12);
     assert(loaded.state.stars[1].variability.phaseOffset == 7);
@@ -252,6 +259,12 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().race.primaryTrait == PrimaryRaceTrait::HabitatCivilization);
     assert(loaded.state.players.front().race.radiationTolerance == 0.91);
     assert(loaded.state.players.front().race.radiationImmune);
+    assert(loaded.state.players.front().race.habitableTemperature.minimum == 18);
+    assert(loaded.state.players.front().race.habitableTemperature.maximum == 64);
+    assert(loaded.state.players.front().race.habitableGravity.minimum == 27);
+    assert(loaded.state.players.front().race.habitableGravity.maximum == 73);
+    assert(loaded.state.players.front().race.habitableRadiation.minimum == 4);
+    assert(loaded.state.players.front().race.habitableRadiation.maximum == 52);
     assert(loaded.state.players.front().history.size() == 2);
     assert(loaded.state.players.front().history.front().turn == 1);
     assert(loaded.state.players.front().history.back().turn == 77);
@@ -304,6 +317,8 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet_ship_count(fleet, kScoutDesignId) == 2);
     assert(fleet_ship_count(fleet, 3) == 1);
     assert(fleet.telemetry.ships.size() == 2);
+    assert(fleet.telemetry.damagePercent == 7.5);
+    assert(fleet.telemetryInTransit.front().telemetry.damagePercent == 18.0);
     assert(fleet.telemetryInTransit.front().telemetry.ships.size() == 2);
 
     assert(loaded.pendingOrders.orders.size() == 10);

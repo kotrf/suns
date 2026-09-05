@@ -38,9 +38,8 @@ std::uint8_t legalWarpForFleet(const GameState& state, FleetId fleetId, std::uin
     });
     if (fleet == state.fleets.end()) return requested;
 
-    const auto maxWarp = fleet_max_warp(state, *fleet);
-    if (maxWarp == 0) return requested;
-    return static_cast<std::uint8_t>(std::clamp<int>(requested, 1, maxWarp));
+    if (fleet_max_warp(state, *fleet) == 0) return requested;
+    return static_cast<std::uint8_t>(std::clamp<int>(requested, 1, kMaxWarp));
 }
 
 bool normalizeLoadedWarpLimits(GameState& state, PlayerOrders& pendingOrders)
@@ -51,14 +50,14 @@ bool normalizeLoadedWarpLimits(GameState& state, PlayerOrders& pendingOrders)
         const auto maxWarp = fleet_max_warp(state, fleet);
         if (maxWarp == 0) continue;
 
-        const auto legal = static_cast<std::uint8_t>(std::clamp<int>(fleet.warp, 1, maxWarp));
+        const auto legal = static_cast<std::uint8_t>(std::clamp<int>(fleet.warp, 1, kMaxWarp));
         if (legal != fleet.warp) {
             fleet.warp = legal;
             adjusted = true;
         }
 
         for (auto& waypoint : fleet.waypointQueue) {
-            const auto waypointWarp = static_cast<std::uint8_t>(std::clamp<int>(waypoint.warp, 1, maxWarp));
+            const auto waypointWarp = static_cast<std::uint8_t>(std::clamp<int>(waypoint.warp, 1, kMaxWarp));
             if (waypointWarp != waypoint.warp) {
                 waypoint.warp = waypointWarp;
                 adjusted = true;
@@ -85,7 +84,7 @@ bool normalizeLoadedWarpLimits(GameState& state, PlayerOrders& pendingOrders)
         if (maxWarp == 0) continue;
 
         for (auto& waypoint : move->queuedWaypoints) {
-            const auto legal = static_cast<std::uint8_t>(std::clamp<int>(waypoint.warp, 1, maxWarp));
+            const auto legal = static_cast<std::uint8_t>(std::clamp<int>(waypoint.warp, 1, kMaxWarp));
             if (legal != waypoint.warp) {
                 waypoint.warp = legal;
                 adjusted = true;
@@ -252,6 +251,10 @@ bool MainWindow::loadGameFromPath(const QString& path)
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
     selectedStarId_ = loaded.selectedStar;
     selectedFleetId_ = loaded.selectedFleet;
+    currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
+    currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
+    if (selectedStarId_) rememberMapSelection(1, *selectedStarId_);
+    else if (selectedFleetId_) rememberMapSelection(2, *selectedFleetId_);
     showSensorRanges_ = loaded.showSensorRanges;
     currentSavePath_ = QFileInfo(path).absoluteFilePath();
 

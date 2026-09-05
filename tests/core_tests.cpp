@@ -49,7 +49,9 @@ void verify_ship_designs()
     assert(suns::ship_design_max_warp(*scout) == 8);
     assert(std::abs(suns::ship_design_fuel_rate(*scout, 7) - 0.60) < 0.000001);
     assert(std::abs(suns::ship_design_fuel_rate(*scout, 8) - 1.00) < 0.000001);
-    assert(suns::ship_design_fuel_rate(*scout, 9) == 0.0);
+    assert(suns::ship_design_fuel_rate(*scout, 9) > 1.00);
+    assert(suns::ship_design_overdrive_damage(*scout, 8) == 0.0);
+    assert(suns::ship_design_overdrive_damage(*scout, 9) == 12.0);
 
     assert(std::abs(suns::ship_design_mass(*colony) - 85.0) < 0.000001);
     assert(std::abs(suns::ship_design_speed(*colony) - 70.0) < 0.000001);
@@ -68,7 +70,8 @@ void verify_ship_designs()
     auto radiatingScout = *scout;
     radiatingScout.components.front() = suns::ShipComponentType::RadiatingRamScoopDrive;
     assert(suns::ship_design_max_warp(radiatingScout) == 9);
-    assert(suns::ship_design_fuel_rate(radiatingScout, 10) == 0.0);
+    assert(suns::ship_design_fuel_rate(radiatingScout, 10) > 0.0);
+    assert(suns::ship_design_overdrive_damage(radiatingScout, 10) == 14.0);
 
     auto mismatched = state.fleets.front();
     mismatched.role = suns::FleetRole::ColonyShip;

@@ -10,15 +10,15 @@ Map distance is interpreted as light-years. A fleet travels at most:
 
 Therefore Warp 6 covers 36 ly/turn, Warp 9 covers 81 ly/turn and Warp 10 covers 100 ly/turn.
 
-Warp is a property of an active fleet course, not a permanent ship speed. A `MoveFleetOrder` may specify Warp explicitly; `warp = 0` means keep the fleet's current setting. The current Qt UI still uses the initial cruise Warp and will get an explicit Warp selector in a UI-focused follow-up.
+Warp is a property of an active fleet course, not a permanent ship speed. A `MoveFleetOrder` may specify Warp explicitly; `warp = 0` means keep the fleet's current setting. The route dock uses a clickable progress bar, also operable with arrow keys, for Warp 1–10.
 
-The starting Scout cruises at Warp 8. The starting Colony Ship cruises at Warp 7. Warp 10 remains part of the global movement scale but is reserved for later high-technology engines.
+The starting Scout cruises at Warp 8. The starting Colony Ship cruises at Warp 7. Every fitted engine may be ordered through Warp 10, including emergency speeds above its safe rating. The selector turns red above the fleet's safe rating and displays the hull damage rate; the adjacent question-mark button explains overdrive.
 
 ## Engine fuel curves
 
 Each engine component provides:
 
-- maximum Warp;
+- safe Warp (the legacy API name remains `maxWarp`);
 - a signed fuel rate for Warp 1..10, measured as fuel units per 100 kt of gross ship mass per light-year;
 - optional radiation hazard metadata.
 
@@ -31,7 +31,22 @@ The current catalog contains four drives:
 - **Ram Scoop Drive** — fuel-positive at low Warp, economical at moderate Warp, maximum Warp 9;
 - **Radiating Ram Scoop** — stronger scoop behaviour and Warp 9 capability, but carries a radiation hazard for transported colonists.
 
-No current engine provides Warp 10. That step is deliberately reserved for future propulsion technology rather than being safe starter equipment.
+No current engine provides safe Warp 10; all can reach it using damaging overdrive.
+
+## Overdrive damage
+
+Initial balance values, in percentage points of hull damage per full turn of travel:
+
+| Engine | Safe Warp | Warp 9 | Warp 10 |
+| --- | --- | --- | --- |
+| Fusion Drive | 8 | 12% | 35% |
+| Advanced Fusion Drive | 9 | 0% | 10% |
+| Ram Scoop Drive | 9 | 0% | 18% |
+| Radiating Ram Scoop | 9 | 0% | 14% |
+
+Damage is deterministic and proportional to distance travelled divided by Warp squared. Short legs and fuel-limited movement therefore incur only their actual exposure. Safe flight adds no damage. At 100% damage the fleet stops at the point where integrity runs out and its route is cleared; it remains on the map. Repair mechanics are a follow-up, not part of this slice.
+
+The initial model stores one shared damage percentage per fleet. A mixed fleet uses the highest damage rate among its engines. Merge averages damage by ship count; split preserves the same percentage in both resulting fleets. A future per-ship hull model can replace this approximation. Damage is carried in confirmed and delayed telemetry and saved in format 30; older saves begin with zero damage. Restoring a save preserves unsafe Warp orders.
 
 The numeric curves are tuning placeholders. Their strategic shape is intentional.
 

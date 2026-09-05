@@ -228,7 +228,7 @@ QString MainWindow::selectedFleetPanelSummary() const
                                ? QString::fromStdString(stackDesign->name)
                                : QString("Design %1").arg(stack.design));
     }
-    lines << QString("Ships: <b>%1</b> • %2 design%3 • max W%4 • %5 kt")
+    lines << QString("Ships: <b>%1</b> • %2 design%3 • safe W%4 • %5 kt")
                  .arg(fleet_ship_count(*fleet))
                  .arg(static_cast<qulonglong>(composition.size()))
                  .arg(composition.size() == 1 ? "" : "s")

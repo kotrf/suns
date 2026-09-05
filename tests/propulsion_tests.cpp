@@ -151,6 +151,41 @@ void verify_invalid_warp_order_is_rejected()
     assert(fleet.warp == original.warp);
 }
 
+void verify_unsafe_warp_accumulates_engine_damage()
+{
+    auto state = suns::make_demo_game();
+    state.planets.clear();
+    auto& scout = state.fleets.front();
+    scout.position = {0.0, 0.0};
+    scout.destination.reset();
+    scout.fuel = suns::fleet_fuel_capacity(state, scout);
+
+    assert(suns::fleet_max_warp(state, scout) == 8);
+    assert(suns::fleet_warp_valid(state, scout, 10));
+    assert(suns::fleet_overdrive_damage_rate(state, scout, 10) == 35.0);
+
+    suns::PlayerOrders orders{1, {}};
+    orders.orders.emplace_back(suns::MoveFleetOrder{scout.id, {100.0, 0.0}, 10});
+    const suns::TurnProcessor processor;
+    const auto next = processor.process(state, {orders});
+    assert(near(next.fleets.front().position.x, 100.0));
+    assert(near(next.fleets.front().damagePercent, 35.0));
+
+    // A short leg exposes the engines for only part of the year.
+    auto shortOrders = orders;
+    std::get<suns::MoveFleetOrder>(shortOrders.orders.front()).destination = {50.0, 0.0};
+    const auto shortLeg = processor.process(state, {shortOrders});
+    assert(near(shortLeg.fleets.front().damagePercent, 17.5));
+
+    // Critical damage stops travel at the point where hull integrity runs out.
+    state.fleets.front().damagePercent = 82.5;
+    const auto disabled = processor.process(state, {orders});
+    assert(near(disabled.fleets.front().position.x, 50.0));
+    assert(near(disabled.fleets.front().damagePercent, 100.0));
+    assert(!disabled.fleets.front().destination);
+    assert(!suns::fleet_warp_valid(disabled, disabled.fleets.front(), 1));
+}
+
 } // namespace
 
 int main()
@@ -162,5 +197,6 @@ int main()
     verify_antimatter_generator_and_radiating_drive_metadata();
     verify_advanced_fusion_drive();
     verify_invalid_warp_order_is_rejected();
+    verify_unsafe_warp_accumulates_engine_damage();
     return 0;
 }

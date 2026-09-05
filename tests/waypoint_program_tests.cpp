@@ -114,7 +114,7 @@ void verify_invalid_future_warp_rejects_program()
     suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
 
-    // Temporarily give the Scout design the W9-limited ram-scoop engine.
+    // The ram-scoop is safe to W9, but emergency W10 is now legal.
     auto& design = state.shipDesigns.front();
     design.components[0] = suns::ShipComponentType::RamScoopDrive;
     assert(suns::ship_design_max_warp(design) == 9);
@@ -126,7 +126,7 @@ void verify_invalid_future_warp_rejects_program()
         8,
         {},
         {
-            {state.stars[2].position, 10, {}}, // Impossible future leg.
+            {state.stars[2].position, 11, {}}, // Beyond the global Warp limit.
         },
     });
 
@@ -135,6 +135,30 @@ void verify_invalid_future_warp_rejects_program()
     assert(unchanged != nullptr);
     assert(!unchanged->destination.has_value());
     assert(unchanged->waypointQueue.empty());
+}
+
+void verify_overdrive_future_leg_is_accepted_and_causes_damage()
+{
+    auto state = suns::make_demo_game();
+    state.shipDesigns.front().components[0] = suns::ShipComponentType::RamScoopDrive;
+    state.stars[1].position = {32.0, 0.0};
+    state.stars[2].position = {100.0, 0.0};
+    suns::MoveFleetOrder route{
+        1, state.stars[1].position, 8, {},
+        {{state.stars[2].position, 10, {}}},
+    };
+    const suns::TurnProcessor processor;
+    const auto first = processor.process(state, {{1, {route}}});
+    const auto* prepared = fleet(first, 1);
+    assert(prepared && prepared->destination);
+    assert(prepared->warp == 10);
+    assert(prepared->damagePercent == 0.0);
+    const auto second = processor.process(first, {});
+    const auto* arrived = fleet(second, 1);
+    assert(arrived);
+    assert(suns::same_position(arrived->position, state.stars[2].position));
+    assert(arrived->damagePercent > 0.0);
+    assert(arrived->damagePercent < 18.0); // Partial turn at unsafe W10.
 }
 
 void verify_repeat_orders_restarts_the_complete_program()
@@ -210,6 +234,7 @@ int main()
     verify_waypoints_advance_one_leg_per_turn();
     verify_replot_replaces_future_program();
     verify_invalid_future_warp_rejects_program();
+    verify_overdrive_future_leg_is_accepted_and_causes_damage();
     verify_repeat_orders_restarts_the_complete_program();
     verify_invalid_repeat_programs_are_rejected();
     return 0;

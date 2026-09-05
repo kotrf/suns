@@ -10,25 +10,113 @@
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGroupBox>
+#include <QHeaderView>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QMessageBox>
+#include <QMouseEvent>
 #include <QPen>
+#include <QProgressBar>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QSpinBox>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QTimer>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <optional>
 
 namespace suns {
 
 namespace {
 
 constexpr int kRouteOverlayDataKey = 73;
+
+class WarpSelector final : public QProgressBar {
+public:
+    explicit WarpSelector(QWidget* parent = nullptr) : QProgressBar(parent)
+    {
+        setObjectName("routeWarpSelector");
+        setRange(1, kMaxWarp);
+        setValue(1);
+        setFocusPolicy(Qt::StrongFocus);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setMinimumHeight(23);
+        connect(this, &QProgressBar::valueChanged, this, [this] { updateAppearance(); });
+        updateAppearance();
+    }
+
+    void setSafeWarp(int warp)
+    {
+        safeWarp_ = std::clamp(warp, 0, static_cast<int>(kMaxWarp));
+        updateAppearance();
+    }
+
+    void setDamageRate(double damageRate)
+    {
+        damageRate_ = std::max(0.0, damageRate);
+        updateAppearance();
+    }
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (!isEnabled() || event->button() != Qt::LeftButton) {
+            QProgressBar::mousePressEvent(event);
+            return;
+        }
+        const auto width = std::max(1, contentsRect().width());
+        const auto fraction = std::clamp(
+            (event->position().x() - contentsRect().left()) / static_cast<double>(width),
+            0.0, 1.0);
+        setValue(std::clamp(
+            minimum() + static_cast<int>(std::lround(fraction * (maximum() - minimum()))),
+            minimum(), maximum()));
+        event->accept();
+    }
+
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        switch (event->key()) {
+        case Qt::Key_Left:
+        case Qt::Key_Down: setValue(std::max(minimum(), value() - 1)); return;
+        case Qt::Key_Right:
+        case Qt::Key_Up: setValue(std::min(maximum(), value() + 1)); return;
+        case Qt::Key_Home: setValue(minimum()); return;
+        case Qt::Key_End: setValue(maximum()); return;
+        default: QProgressBar::keyPressEvent(event); return;
+        }
+    }
+
+private:
+    void updateAppearance()
+    {
+        const bool unsafe = safeWarp_ > 0 && value() > safeWarp_;
+        if (property("unsafe").toBool() != unsafe) {
+            setProperty("unsafe", unsafe);
+            style()->unpolish(this);
+            style()->polish(this);
+        }
+        setFormat(unsafe
+            ? QString("Warp %1 • +%2% damage/turn").arg(value()).arg(damageRate_, 0, 'f', 0)
+            : QString("Warp %1 • safe to W%2").arg(value()).arg(safeWarp_));
+        setToolTip(unsafe
+            ? QString("Unsafe overdrive: rated W%1, selected W%2. Hull damage accumulates while moving.")
+                  .arg(safeWarp_).arg(value())
+            : QString("Selected W%1; fleet safe limit W%2.").arg(value()).arg(safeWarp_));
+    }
+
+    int safeWarp_{1};
+    double damageRate_{};
+};
 
 void clearRouteOverlay(QGraphicsScene* scene)
 {
@@ -115,18 +203,77 @@ void attachRouteProgramDock(MainWindow& window)
     auto* routeGroup = new QGroupBox("Current program", panel);
     routeGroup->setObjectName("routeSummaryGroup");
     auto* routeLayout = new QVBoxLayout(routeGroup);
+    auto* routeTree = new QTreeWidget(routeGroup);
+    routeTree->setObjectName("routeProgramQueue");
+    routeTree->setColumnCount(4);
+    routeTree->setHeaderLabels({"#", "Destination", "Warp", "On arrival"});
+    routeTree->setRootIsDecorated(false);
+    routeTree->setAlternatingRowColors(true);
+    routeTree->setSelectionMode(QAbstractItemView::SingleSelection);
+    routeTree->setSelectionBehavior(QAbstractItemView::SelectRows);
+    routeTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(3, QHeaderView::Interactive);
+    routeTree->header()->resizeSection(3, 130);
+    routeTree->setMinimumHeight(118);
+    routeLayout->addWidget(routeTree);
+    auto* routeButtons = new QHBoxLayout;
+    auto* moveUpButton = new QPushButton("Move up", routeGroup);
+    auto* moveDownButton = new QPushButton("Move down", routeGroup);
+    auto* removeButton = new QPushButton("Remove", routeGroup);
+    routeButtons->addWidget(moveUpButton);
+    routeButtons->addWidget(moveDownButton);
+    routeButtons->addWidget(removeButton);
+    moveUpButton->setEnabled(false);
+    moveDownButton->setEnabled(false);
+    removeButton->setEnabled(false);
+    routeLayout->addLayout(routeButtons);
     auto* routeLabel = new QLabel(routeGroup);
     routeLabel->setWordWrap(true);
     routeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     routeLayout->addWidget(routeLabel);
+    auto* forecastButton = new QPushButton("Route forecast…", routeGroup);
+    routeLayout->addWidget(forecastButton);
+    QObject::connect(forecastButton, &QPushButton::clicked, panel, [&window] {
+        QMessageBox dialog(&window);
+        dialog.setWindowTitle("Route forecast");
+        dialog.setTextFormat(Qt::RichText);
+        dialog.setText(window.selectedFleetRouteProgramForecast());
+        dialog.exec();
+    });
     layout->addWidget(routeGroup);
 
     auto* waypointGroup = new QGroupBox("Add waypoint", panel);
     waypointGroup->setObjectName("routeWaypointGroup");
     auto* waypointLayout = new QVBoxLayout(waypointGroup);
 
-    auto* warpSpin = new QSpinBox(waypointGroup);
-    warpSpin->setRange(1, kMaxWarp);
+    auto* warpSelector = new WarpSelector(waypointGroup);
+    QObject::connect(warpSelector, &QProgressBar::valueChanged, panel,
+        [&window, warpSelector](int warp) {
+            warpSelector->setDamageRate(window.selectedFleetOverdriveDamageForRouteProgram(
+                static_cast<std::uint8_t>(warp)));
+        });
+    warpSelector->setStyleSheet(R"(
+        QProgressBar#routeWarpSelector {
+            color: #eef6ff;
+            background: #0b131d;
+            border: 1px solid #3b5870;
+            border-radius: 3px;
+            text-align: center;
+        }
+        QProgressBar#routeWarpSelector::chunk { background: #409bc5; }
+        QProgressBar#routeWarpSelector[unsafe="true"]::chunk { background: #c94747; }
+    )");
+    auto* warpHelpButton = new QToolButton(waypointGroup);
+    warpHelpButton->setText("?");
+    warpHelpButton->setAccessibleName("Unsafe Warp explanation");
+    warpHelpButton->setToolTip("Why does the Warp selector turn red?");
+    auto* warpRow = new QWidget(waypointGroup);
+    auto* warpRowLayout = new QHBoxLayout(warpRow);
+    warpRowLayout->setContentsMargins(0, 0, 0, 0);
+    warpRowLayout->addWidget(warpSelector, 1);
+    warpRowLayout->addWidget(warpHelpButton);
     auto* targetTypeCombo = new QComboBox(waypointGroup);
     targetTypeCombo->addItem("Selected star", 0);
     targetTypeCombo->addItem("Friendly fleet", 1);
@@ -153,7 +300,7 @@ void attachRouteProgramDock(MainWindow& window)
     auto* form = new QFormLayout;
     form->addRow("Target type", targetTypeCombo);
     form->addRow("Target fleet", targetFleetCombo);
-    form->addRow("Waypoint Warp", warpSpin);
+    form->addRow("Waypoint Warp", warpRow);
     form->addRow("On arrival", actionCombo);
     form->addRow("Cargo", cargoCombo);
     form->addRow("Leave on colony", reserveSpin);
@@ -200,12 +347,21 @@ void attachRouteProgramDock(MainWindow& window)
                 actionCombo->findData(static_cast<int>(FleetArrivalActionKind::None)));
         }
     });
+    QObject::connect(warpHelpButton, &QToolButton::clicked, panel, [&window] {
+        QMessageBox::information(
+            &window,
+            "Unsafe Warp overdrive",
+            "Every fleet has a safe Warp limit set by the least tolerant engine in its ships. "
+            "You may still order any speed through Warp 10. Above the safe limit the selector turns red: "
+            "fuel use rises sharply and hull damage accumulates on every turn spent moving. "
+            "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized.");
+    });
 
     QObject::connect(appendButton, &QPushButton::clicked, panel,
-        [&window, sourceFleetCombo, warpSpin, actionCombo, cargoCombo, reserveSpin, targetTypeCombo, targetFleetCombo] {
+        [&window, sourceFleetCombo, warpSelector, actionCombo, cargoCombo, reserveSpin, targetTypeCombo, targetFleetCombo] {
             const auto source = static_cast<FleetId>(sourceFleetCombo->currentData().toUInt());
             if (!window.selectFleetForRouteProgram(source)) return;
-            const auto warp = static_cast<std::uint8_t>(warpSpin->value());
+            const auto warp = static_cast<std::uint8_t>(warpSelector->value());
             const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin);
             if (targetTypeCombo->currentData().toInt() == 1) {
                 window.appendFleetTargetWaypoint(
@@ -213,6 +369,29 @@ void attachRouteProgramDock(MainWindow& window)
             } else {
                 window.appendSelectedStarWaypoint(warp, action);
             }
+    });
+
+    const auto selectedRouteIndex = [&window, routeTree]() -> std::optional<std::size_t> {
+        if (routeTree->property("fleetId").toUInt() != window.selectedFleetForRouteProgram()) {
+            return std::nullopt;
+        }
+        const auto selected = routeTree->selectedItems();
+        if (selected.isEmpty()) return std::nullopt;
+        const auto row = routeTree->indexOfTopLevelItem(selected.front());
+        return row >= 0 ? std::optional<std::size_t>{static_cast<std::size_t>(row)} : std::nullopt;
+    };
+    QObject::connect(moveUpButton, &QPushButton::clicked, panel, [&window, routeTree, selectedRouteIndex] {
+        if (const auto row = selectedRouteIndex(); row && window.moveSelectedFleetRouteProgramLeg(*row, -1)) {
+            routeTree->setCurrentItem(routeTree->topLevelItem(static_cast<int>(*row) - 1));
+        }
+    });
+    QObject::connect(moveDownButton, &QPushButton::clicked, panel, [&window, routeTree, selectedRouteIndex] {
+        if (const auto row = selectedRouteIndex(); row && window.moveSelectedFleetRouteProgramLeg(*row, 1)) {
+            routeTree->setCurrentItem(routeTree->topLevelItem(static_cast<int>(*row) + 1));
+        }
+    });
+    QObject::connect(removeButton, &QPushButton::clicked, panel, [&window, selectedRouteIndex] {
+        if (const auto row = selectedRouteIndex()) window.removeSelectedFleetRouteProgramLeg(*row);
     });
 
     QObject::connect(repeatCheck, &QCheckBox::clicked, panel, [&window, sourceFleetCombo](bool enabled) {
@@ -236,9 +415,11 @@ void attachRouteProgramDock(MainWindow& window)
     auto* timer = new QTimer(dock);
     timer->setInterval(180);
     QObject::connect(timer, &QTimer::timeout, dock,
-        [&window, routeLabel, warpSpin, appendButton, clearButton, repeatCheck,
+        [&window, routeLabel, routeTree, moveUpButton, moveDownButton, removeButton,
+            warpSelector, appendButton, clearButton, repeatCheck,
             targetTypeCombo, targetFleetCombo, sourceFleetCombo,
-            lastFleet = FleetId{}, lastSources = std::vector<FleetId>{}, lastTargets = std::vector<FleetId>{}]() mutable {
+            lastFleet = FleetId{}, lastSources = std::vector<FleetId>{},
+            lastTargets = std::vector<FleetId>{}, lastRouteSignature = QString{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
 
@@ -261,11 +442,13 @@ void attachRouteProgramDock(MainWindow& window)
             if (selectedFleet != lastFleet) {
                 lastFleet = selectedFleet;
                 const auto suggested = window.selectedFleetSuggestedWarpForRouteProgram();
-                warpSpin->setValue(std::max<int>(1, suggested));
+                warpSelector->setValue(std::max<int>(1, suggested));
             }
 
-            warpSpin->setMaximum(std::max<int>(1, maxWarp));
-            warpSpin->setEnabled(selectedFleet != 0 && maxWarp > 0);
+            warpSelector->setSafeWarp(maxWarp);
+            warpSelector->setDamageRate(window.selectedFleetOverdriveDamageForRouteProgram(
+                static_cast<std::uint8_t>(warpSelector->value())));
+            warpSelector->setEnabled(selectedFleet != 0 && maxWarp > 0);
             const auto targets = window.availableFleetTargetsForRouteProgram();
             if (targets != lastTargets) {
                 const auto previous = static_cast<FleetId>(targetFleetCombo->currentData().toUInt());
@@ -289,6 +472,45 @@ void attachRouteProgramDock(MainWindow& window)
                 const QSignalBlocker blocker(repeatCheck);
                 repeatCheck->setChecked(window.selectedFleetRepeatOrdersForRouteProgram());
             }
+            const auto rows = window.selectedFleetRouteProgramRows();
+            QString signature = QString::number(selectedFleet) + ':';
+            for (const auto& row : rows) {
+                signature += QString("%1\x1f%2\x1f%3\x1f%4\x1e")
+                    .arg(row.destination, row.arrivalAction)
+                    .arg(row.warp)
+                    .arg(row.active);
+            }
+            if (signature != lastRouteSignature) {
+                const auto previousRow = routeTree->currentIndex().row();
+                routeTree->clear();
+                routeTree->setProperty("fleetId", static_cast<quint32>(selectedFleet));
+                for (std::size_t index = 0; index < rows.size(); ++index) {
+                    const auto& row = rows[index];
+                    auto* item = new QTreeWidgetItem(routeTree, {
+                        row.active ? QString("%1 ▶").arg(static_cast<qulonglong>(index + 1))
+                                   : QString::number(static_cast<qulonglong>(index + 1)),
+                        row.destination,
+                        QString("W%1").arg(row.warp),
+                        row.arrivalAction,
+                    });
+                    if (row.active) {
+                        item->setToolTip(0, "Current route leg; edits replace the fleet program");
+                    }
+                    item->setToolTip(1, row.destination);
+                    item->setToolTip(3, row.arrivalAction);
+                    if (row.warp > maxWarp) item->setForeground(2, QColor("#ff8787"));
+                }
+                if (!rows.empty()) {
+                    routeTree->setCurrentItem(routeTree->topLevelItem(
+                        std::clamp(previousRow, 0, static_cast<int>(rows.size()) - 1)));
+                }
+                lastRouteSignature = signature;
+            }
+            const auto selectedRow = routeTree->currentIndex().row();
+            const auto rowCount = routeTree->topLevelItemCount();
+            moveUpButton->setEnabled(selectedRow > 0);
+            moveDownButton->setEnabled(selectedRow >= 0 && selectedRow + 1 < rowCount);
+            removeButton->setEnabled(selectedRow >= 0);
             routeLabel->setText(window.selectedFleetRouteProgramSummary());
             drawRouteOverlay(window);
         });

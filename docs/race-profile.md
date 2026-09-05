@@ -4,6 +4,14 @@ Each player owns a serialized `RaceProfile`. Radiation tolerance and immunity,
 which already affect colonists transported by hazardous drives, now belong to
 that profile instead of being loose fields on `Player`.
 
+The profile also stores inclusive natural-habitat ranges for temperature,
+gravity and planetary radiation. The initial Terran placeholder ranges are
+25–75, 30–70 and 0–40 respectively. Planet environment gauges draw both range
+boundaries, while hover text reports whether the selected world is inside the
+range. These axes are intentionally separate from propulsion-radiation
+tolerance. A later gameplay slice will make the physical ranges contribute to
+habitability; until then the existing scalar habitability remains authoritative.
+
 The profile also stores one stable `PrimaryRaceTrait`:
 
 - Generalist;

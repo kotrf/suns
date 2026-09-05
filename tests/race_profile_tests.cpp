@@ -9,6 +9,12 @@ int main()
     assert(race.primaryTrait == suns::PrimaryRaceTrait::Generalist);
     assert(race.radiationTolerance == 0.50);
     assert(!race.radiationImmune);
+    assert(race.habitableTemperature.minimum == 25);
+    assert(race.habitableTemperature.maximum == 75);
+    assert(race.habitableGravity.minimum == 30);
+    assert(race.habitableGravity.maximum == 70);
+    assert(race.habitableRadiation.minimum == 0);
+    assert(race.habitableRadiation.maximum == 40);
 
     race.primaryTrait = suns::PrimaryRaceTrait::StargateSpecialist;
     race.radiationTolerance = 0.85;

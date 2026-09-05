@@ -854,12 +854,12 @@ void MainWindow::updateControls()
         const auto maxWarp = fleet_max_warp(state_, *fleet);
         if (!warpControlFleetId_ || *warpControlFleetId_ != fleet->id) {
             const QSignalBlocker blocker(warpSpin_);
-            warpSpin_->setRange(1, std::max<int>(1, maxWarp));
-            warpSpin_->setValue(std::clamp<int>(fleet->warp, 1, std::max<int>(1, maxWarp)));
+            warpSpin_->setRange(1, kMaxWarp);
+            warpSpin_->setValue(std::clamp<int>(fleet->warp, 1, kMaxWarp));
             warpControlFleetId_ = fleet->id;
         } else {
             const QSignalBlocker blocker(warpSpin_);
-            warpSpin_->setMaximum(std::max<int>(1, maxWarp));
+            warpSpin_->setMaximum(kMaxWarp);
         }
         warpSpin_->setEnabled(maxWarp > 0);
         selectedWarp = static_cast<std::uint8_t>(warpSpin_->value());
@@ -1031,7 +1031,7 @@ void MainWindow::updateControls()
         }
 
         fleetLabel_->setText(QString("<hr><b>Selected fleet:</b> %1<br>Design: %2 &nbsp; Hull: %3<br>"
-                                     "Warp now: %4 (max %5) &nbsp; Planned: <b>W%6</b> = %7 ly/turn<br>"
+                                     "Warp now: %4 (safe %5) &nbsp; Planned: <b>W%6</b> = %7 ly/turn<br>"
                                      "Fuel: %8 / %9 &nbsp; Gross mass: %10 kt<br>"
                                      "Colonists: %11 &nbsp; Cargo: %12 / %13<br>"
                                      "Survey sensor: %14<br>Components: %15<br>Status: %16%17%18%19")
@@ -1410,6 +1410,9 @@ void MainWindow::newGalaxy()
     pendingDescriptions_.clear();
     selectedStarId_.reset();
     selectedFleetId_ = 1;
+    currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
+    currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
+    rememberMapSelection(2, 1);
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
     refreshShipDesignChoices();

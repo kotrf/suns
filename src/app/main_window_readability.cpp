@@ -51,6 +51,7 @@ void MainWindow::installFleetReadabilityPolish()
 
     QProgressBar* fuelBar = nullptr;
     QProgressBar* cargoBar = nullptr;
+    QProgressBar* damageBar = nullptr;
     if (auto* fleetGroup = findChild<QGroupBox*>("fleetGroup")) {
         if (auto* layout = qobject_cast<QVBoxLayout*>(fleetGroup->layout())) {
             fuelBar = makeFleetGauge(
@@ -61,8 +62,13 @@ void MainWindow::installFleetReadabilityPolish()
                 "fleetCargoBar",
                 "Shared cargo-hold usage. Colonists and Ironium/Boranium/Germanium all occupy this same capacity.",
                 fleetGroup);
+            damageBar = makeFleetGauge(
+                "fleetDamageBar",
+                "Accumulated hull damage. At 100% the fleet is immobilized.",
+                fleetGroup);
             layout->insertWidget(1, fuelBar);
             layout->insertWidget(2, cargoBar);
+            layout->insertWidget(3, damageBar);
         }
     }
 
@@ -109,6 +115,7 @@ void MainWindow::installFleetReadabilityPolish()
         QProgressBar#germaniumConcentration::chunk { background: #b99532; }
         QProgressBar#fleetFuelBar::chunk { background: #3e9dc2; }
         QProgressBar#fleetCargoBar::chunk { background: #b77d42; }
+        QProgressBar#fleetDamageBar::chunk { background: #c84b4b; }
         QProgressBar#planetPopulationBar::chunk { background: #56a875; }
         QProgressBar#planetTemperatureBar::chunk {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -194,14 +201,14 @@ void MainWindow::installFleetReadabilityPolish()
         }
     )");
 
-    if (!fuelBar || !cargoBar) return;
+    if (!fuelBar || !cargoBar || !damageBar) return;
 
-    const auto refresh = [this, fuelBar, cargoBar] {
+    const auto refresh = [this, fuelBar, cargoBar, damageBar] {
         if (shuttingDown_) return;
         const auto visibleFleetStorage = selectedFleetPlanningView();
         const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
         if (!fleet) {
-            for (auto* bar : {fuelBar, cargoBar}) {
+            for (auto* bar : {fuelBar, cargoBar, damageBar}) {
                 bar->setValue(0);
                 bar->setEnabled(false);
                 bar->setFormat("No fleet selected");
@@ -251,6 +258,14 @@ void MainWindow::installFleetReadabilityPolish()
                 .arg(fleet->minerals.ironium, 0, 'f', 1)
                 .arg(fleet->minerals.boranium, 0, 'f', 1)
                 .arg(fleet->minerals.germanium, 0, 'f', 1));
+
+        const auto damage = std::clamp(fleet->damagePercent, 0.0, 100.0);
+        damageBar->setEnabled(true);
+        damageBar->setValue(static_cast<int>(std::lround(damage)));
+        damageBar->setFormat(QString("Hull damage %1%").arg(damage, 0, 'f', 1));
+        damageBar->setToolTip(damage >= 100.0
+            ? "Critical hull damage: this fleet is immobilized."
+            : "Damage accumulates when travelling above the fleet's safe Warp limit.");
     };
 
     auto* refreshTimer = new QTimer(this);
