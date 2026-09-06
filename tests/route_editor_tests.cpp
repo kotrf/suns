@@ -62,8 +62,13 @@ struct MainWindowTestAccess {
     static bool rightClick(MainWindow& window, QGraphicsItem* item)
     {
         assert(window.view_ && item);
-        const auto viewportPosition =
-            window.view_->mapFromScene(item->sceneBoundingRect().center());
+        auto scenePosition = item->sceneBoundingRect().center();
+        if (item->data(1).toInt() == 2) {
+            // Fleet markers sit over the star's intentionally generous hit
+            // rectangle. Aim inside the fleet polygon's pointed half.
+            scenePosition.rx() += 3.0;
+        }
+        const auto viewportPosition = window.view_->mapFromScene(scenePosition);
         QMouseEvent press(
             QEvent::MouseButtonPress,
             QPointF(viewportPosition),
@@ -281,8 +286,7 @@ int main(int argc, char* argv[])
     assert(quickPursuit.arrivalAction.kind == suns::FleetArrivalActionKind::MergeWithFleet);
 
     // Enemy targets are distinguished from friendly moving targets. The route
-    // goes to the enemy's currently observed position with No action; combat
-    // resolution remains a game rule rather than an arrival action.
+    // goes to the enemy's currently observed position with No action.
     suns::MainWindowTestAccess::installTwoFleets(window);
     const auto enemyFleet = destination->itemData(2, Qt::UserRole + 1).toUInt();
     QGraphicsItem* enemyTargetItem{};
