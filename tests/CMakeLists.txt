@@ -193,3 +193,12 @@ if(SUNS_BUILD_APP)
     target_link_libraries(suns_save_game_tests PRIVATE Qt6::Core Suns::Core)
     add_test(NAME suns_save_game_tests COMMAND suns_save_game_tests)
 endif()
+
+if(SUNS_BUILD_APP)
+    add_executable(suns_route_editor_tests route_editor_tests.cpp)
+    target_link_libraries(suns_route_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_route_editor_tests COMMAND suns_route_editor_tests)
+    set_tests_properties(suns_route_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 20)
+endif()

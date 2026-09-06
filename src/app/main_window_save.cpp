@@ -251,6 +251,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
     selectedStarId_ = loaded.selectedStar;
     selectedFleetId_ = loaded.selectedFleet;
+    emit routeProgramContextChanged(true);
     currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
     currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
     if (selectedStarId_) rememberMapSelection(1, *selectedStarId_);

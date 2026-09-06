@@ -67,3 +67,13 @@ Possible later rules include:
 - continuing onto the next leg with unused same-turn travel distance;
 - conditional waypoints;
 - projected versus exact fuel/load forecasts across future dynamic legs.
+
+## Waypoint editor isolation
+
+The Add waypoint controls are a draft for one source fleet. Arrival action,
+cargo, colony reserve, Warp and target are remembered independently for each
+FleetId while the game is open. A fleet without a draft starts with No action.
+Switching fleets through the source selector or map restores that fleet's draft
+immediately. The draft becomes an order only when Add is clicked; existing
+route rows retain their own actions. Starting or loading a game clears drafts,
+so reused fleet IDs cannot inherit settings from the previous game.
