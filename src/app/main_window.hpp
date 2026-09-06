@@ -43,6 +43,7 @@ struct RouteProgramDisplayRow {
 };
 
 class MainWindow final : public QMainWindow {
+    Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
@@ -124,11 +125,16 @@ public:
     // Ordered colony build list with completion forecasts and move controls.
     void installProductionQueue();
 
+signals:
+    // Editor context updates immediately, even while map redraw is deferred.
+    void routeProgramContextChanged(bool resetDrafts = false);
+
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
 
 private:
+    friend struct MainWindowTestAccess;
     void rebuildScene();
     void updateControls();
     void refreshShipDesignChoices();

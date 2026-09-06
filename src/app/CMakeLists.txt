@@ -1,5 +1,4 @@
-qt_add_executable(suns_app
-    main.cpp
+add_library(suns_app_ui STATIC
     main_window.cpp
     main_window.hpp
     main_window_cargo.cpp
@@ -29,7 +28,11 @@ qt_add_executable(suns_app
     star_item.hpp
 )
 
-target_link_libraries(suns_app PRIVATE Qt6::Widgets Suns::Core)
+target_link_libraries(suns_app_ui PUBLIC Qt6::Widgets Suns::Core)
+target_include_directories(suns_app_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+qt_add_executable(suns_app main.cpp)
+target_link_libraries(suns_app PRIVATE suns_app_ui)
 
 set_target_properties(suns_app PROPERTIES
     OUTPUT_NAME "suns"

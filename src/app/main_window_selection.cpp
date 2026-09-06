@@ -86,6 +86,7 @@ void MainWindow::installDeferredMapSelectionHandler()
             return;
         }
         rememberMapSelection(kind, id);
+        emit routeProgramContextChanged();
 
         // Never clear/delete QGraphicsItems while Qt is still delivering the
         // selectionChanged event that references them. Multiple changes in the

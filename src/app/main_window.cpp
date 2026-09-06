@@ -796,6 +796,7 @@ void MainWindow::rebuildScene()
     }
 
     updateControls();
+    emit routeProgramContextChanged();
 }
 
 void MainWindow::updateControls()
@@ -1410,6 +1411,7 @@ void MainWindow::newGalaxy()
     pendingDescriptions_.clear();
     selectedStarId_.reset();
     selectedFleetId_ = 1;
+    emit routeProgramContextChanged(true);
     currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
     currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
     rememberMapSelection(2, 1);
