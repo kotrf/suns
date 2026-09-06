@@ -2,6 +2,7 @@
 
 #include "suns/communications.hpp"
 
+#include <QGraphicsView>
 #include <QStatusBar>
 
 #include <algorithm>
@@ -516,6 +517,47 @@ bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
     logisticsControlFleetId_.reset();
     rebuildScene();
     return true;
+}
+
+bool MainWindow::beginRouteProgramMapTargetPick()
+{
+    if (!selectedFleet()) {
+        statusBar()->showMessage("Select a source fleet before choosing a route target", 3000);
+        return false;
+    }
+    if (routeProgramMapTargetPickActive_) return true;
+    routeProgramMapTargetPickActive_ = true;
+    if (view_ && view_->viewport()) view_->viewport()->setCursor(Qt::CrossCursor);
+    emit routeProgramMapTargetPickChanged(true);
+    statusBar()->showMessage("Route target mode: click a star or another friendly fleet; Esc cancels");
+    return true;
+}
+
+void MainWindow::cancelRouteProgramMapTargetPick()
+{
+    if (!routeProgramMapTargetPickActive_) return;
+    routeProgramMapTargetPickActive_ = false;
+    if (view_ && view_->viewport()) view_->viewport()->unsetCursor();
+    emit routeProgramMapTargetPickChanged(false);
+}
+
+bool MainWindow::routeProgramMapTargetPickActive() const
+{
+    return routeProgramMapTargetPickActive_;
+}
+
+QString MainWindow::routeProgramMapTargetName(int kind, std::uint32_t id) const
+{
+    if (kind == 1) {
+        if (const auto* star = find_star(state_, static_cast<StarId>(id))) {
+            return QString::fromStdString(star->name);
+        }
+    } else if (kind == 2) {
+        if (const auto* fleet = findFleet(state_, static_cast<FleetId>(id))) {
+            return QString::fromStdString(fleet->name);
+        }
+    }
+    return "unknown target";
 }
 
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)

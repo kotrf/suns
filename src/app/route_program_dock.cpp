@@ -21,6 +21,7 @@
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QSignalBlocker>
+#include <QShortcut>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
@@ -180,7 +181,8 @@ void attachRouteProgramDock(MainWindow& window)
     auto* layout = new QVBoxLayout(panel);
 
     const auto helpText = QString(
-        "Select the fleet to program, select a destination star, choose Warp and an arrival action, then add the waypoint.\n\n"
+        "Select the fleet to program, click Pick target on map, then click a star or another friendly fleet. "
+        "Choose Warp and an arrival action, then add the waypoint. Esc cancels map-target mode.\n\n"
         "Each leg keeps its own Warp and arrival action. Fleet targets are resolved every turn. Merge absorbs the pursuing fleet into the target fleet. "
         "Remote Mining is a persistent terminal task. Load and unload use the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
         "Colonization dismantles the entire fleet and recovers 33% of its ship minerals. Dockside loading and refuelling are in Fleet Logistics.");
@@ -314,6 +316,18 @@ void attachRouteProgramDock(MainWindow& window)
     form->addRow("Leave on colony", reserveSpin);
     waypointLayout->addLayout(form);
 
+    auto* pickTargetButton = new QPushButton("Pick target on map…", waypointGroup);
+    pickTargetButton->setObjectName("routePickTargetButton");
+    pickTargetButton->setCheckable(true);
+    pickTargetButton->setToolTip(
+        "Keep the source fleet selected while choosing a star or another friendly fleet on the map");
+    waypointLayout->addWidget(pickTargetButton);
+    auto* pickedTargetLabel = new QLabel(
+        "Tip: use this button when the destination is another fleet.", waypointGroup);
+    pickedTargetLabel->setObjectName("routePickedTargetLabel");
+    pickedTargetLabel->setWordWrap(true);
+    waypointLayout->addWidget(pickedTargetLabel);
+
     auto* appendButton = new QPushButton("Add selected star to route", waypointGroup);
     appendButton->setObjectName("routeAddButton");
     waypointLayout->addWidget(appendButton);
@@ -417,6 +431,13 @@ void attachRouteProgramDock(MainWindow& window)
             targetFleetCombo->setCurrentIndex(targetFleetCombo->findData(static_cast<quint32>(draft.targetFleet)));
             warpSelector->setValue(draft.warp);
             editor->fleet = fleet;
+            if (draft.targetType == 1 && draft.targetFleet != 0) {
+                pickedTargetLabel->setText(QString("Target: <b>%1</b>")
+                    .arg(window.routeProgramMapTargetName(2, draft.targetFleet).toHtmlEscaped()));
+            } else {
+                pickedTargetLabel->setText(
+                    "Tip: use Pick target on map when the destination is another fleet.");
+            }
         }
         const bool fleetTarget = targetTypeCombo->currentData().toInt() == 1;
         targetFleetCombo->setEnabled(fleet != 0 && fleetTarget && targetFleetCombo->count() > 0);
@@ -430,6 +451,7 @@ void attachRouteProgramDock(MainWindow& window)
         }
         actionCombo->setEnabled(fleet != 0);
         targetTypeCombo->setEnabled(fleet != 0);
+        pickTargetButton->setEnabled(fleet != 0);
         if (fleet == 0) {
             cargoCombo->setEnabled(false);
             reserveSpin->setEnabled(false);
@@ -445,6 +467,48 @@ void attachRouteProgramDock(MainWindow& window)
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, syncEditor);
     syncEditor(false);
 
+    QObject::connect(pickTargetButton, &QPushButton::clicked, panel,
+        [&window, pickTargetButton](bool enabled) {
+            if (enabled) {
+                if (!window.beginRouteProgramMapTargetPick()) {
+                    const QSignalBlocker blocker(pickTargetButton);
+                    pickTargetButton->setChecked(false);
+                }
+            } else {
+                window.cancelRouteProgramMapTargetPick();
+            }
+        });
+    QObject::connect(&window, &MainWindow::routeProgramMapTargetPickChanged, panel,
+        [pickTargetButton, pickedTargetLabel](bool active) {
+            const QSignalBlocker blocker(pickTargetButton);
+            pickTargetButton->setChecked(active);
+            pickTargetButton->setText(active ? "Cancel target picking" : "Pick target on map…");
+            if (active) {
+                pickedTargetLabel->setText(
+                    "Click a star or another friendly fleet on the map. Esc cancels.");
+            } else if (pickedTargetLabel->text().startsWith("Click a star")) {
+                pickedTargetLabel->setText("Target picking canceled; current target unchanged.");
+            }
+        });
+    QObject::connect(&window, &MainWindow::routeProgramMapTargetPicked, panel,
+        [=, &window](int kind, std::uint32_t id) {
+            const int targetType = kind == 2 ? 1 : 0;
+            targetTypeCombo->setCurrentIndex(targetTypeCombo->findData(targetType));
+            if (kind == 2) {
+                targetFleetCombo->setCurrentIndex(
+                    targetFleetCombo->findData(static_cast<quint32>(id)));
+            }
+            pickedTargetLabel->setText(QString("Target: <b>%1</b>")
+                .arg(window.routeProgramMapTargetName(kind, id).toHtmlEscaped()));
+        });
+    auto* cancelTargetShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), dock);
+    QObject::connect(cancelTargetShortcut, &QShortcut::activated, panel,
+        [&window] { window.cancelRouteProgramMapTargetPick(); });
+    QObject::connect(dock, &QDockWidget::visibilityChanged, panel,
+        [&window](bool visible) {
+            if (!visible) window.cancelRouteProgramMapTargetPick();
+        });
+
     QObject::connect(warpHelpButton, &QToolButton::clicked, panel, [&window] {
         QMessageBox::information(
             &window,
@@ -457,6 +521,7 @@ void attachRouteProgramDock(MainWindow& window)
 
     QObject::connect(appendButton, &QPushButton::clicked, panel,
         [&window, sourceFleetCombo, warpSelector, actionCombo, cargoCombo, reserveSpin, targetTypeCombo, targetFleetCombo] {
+            window.cancelRouteProgramMapTargetPick();
             const auto source = static_cast<FleetId>(sourceFleetCombo->currentData().toUInt());
             if (source == 0 || source != window.selectedFleetForRouteProgram()) return;
             const auto warp = static_cast<std::uint8_t>(warpSelector->value());
@@ -506,6 +571,7 @@ void attachRouteProgramDock(MainWindow& window)
 
     QObject::connect(sourceFleetCombo, &QComboBox::currentIndexChanged, panel,
         [&window, sourceFleetCombo](int) {
+            window.cancelRouteProgramMapTargetPick();
             window.selectFleetForRouteProgram(
                 static_cast<FleetId>(sourceFleetCombo->currentData().toUInt()));
         });

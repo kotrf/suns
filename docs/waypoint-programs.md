@@ -77,3 +77,14 @@ Switching fleets through the source selector or map restores that fleet's draft
 immediately. The draft becomes an order only when Add is clicked; existing
 route rows retain their own actions. Starting or loading a game clears drafts,
 so reused fleet IDs cannot inherit settings from the previous game.
+
+## Choosing a moving fleet target
+
+The source fleet and map target have separate roles while plotting a route.
+After selecting the source fleet, **Pick target on map** temporarily arms the
+galaxy map. Clicking a star captures a fixed destination; clicking another
+friendly fleet captures its stable FleetId as a moving destination and selects
+the Merge action by default. The player may change that action to No action to
+follow/rendezvous without merging. The source fleet remains selected throughout.
+Pressing Esc, closing the Route Program dock, changing the source fleet, or
+ending/loading a game cancels target-picking mode.

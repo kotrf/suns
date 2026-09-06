@@ -3,6 +3,7 @@
 
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QStatusBar>
 #include <QTimer>
 
 #include <algorithm>
@@ -78,6 +79,40 @@ void MainWindow::installDeferredMapSelectionHandler()
         const auto* item = selected.front();
         const auto kind = item->data(1).toInt();
         const auto id = static_cast<std::uint32_t>(item->data(0).toUInt());
+        if (routeProgramMapTargetPickActive_) {
+            if (kind == kMapItemFleet) {
+                const auto target = std::find_if(
+                    state_.fleets.begin(), state_.fleets.end(), [id](const Fleet& fleet) {
+                        return fleet.id == static_cast<FleetId>(id);
+                    });
+                const auto source = selectedFleet();
+                if (target == state_.fleets.end() || target->owner != pendingOrders_.player
+                    || (source && target->id == source->id)) {
+                    statusBar()->showMessage(
+                        "Choose another friendly fleet, or press Esc to cancel", 3000);
+                    return;
+                }
+            } else if (kind == kMapItemStar) {
+                selectedStarId_ = static_cast<StarId>(id);
+            } else {
+                return;
+            }
+
+            rememberMapSelection(kind, id);
+            cancelRouteProgramMapTargetPick();
+            emit routeProgramMapTargetPicked(kind, id);
+
+            // Restore the source-fleet highlight after the target item caused
+            // QGraphicsScene's ordinary selection to move to itself.
+            if (!mapSelectionRebuildPending_) {
+                mapSelectionRebuildPending_ = true;
+                QTimer::singleShot(0, this, [this] {
+                    mapSelectionRebuildPending_ = false;
+                    if (!shuttingDown_) rebuildScene();
+                });
+            }
+            return;
+        }
         if (kind == kMapItemStar) {
             selectedStarId_ = static_cast<StarId>(id);
         } else if (kind == kMapItemFleet) {

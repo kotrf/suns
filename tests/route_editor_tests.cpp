@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QLabel>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
@@ -53,7 +54,10 @@ int main(int argc, char* argv[])
     auto* add = window.findChild<QPushButton*>("routeAddButton");
     auto* targetType = window.findChild<QComboBox*>("routeTargetTypeCombo");
     auto* target = window.findChild<QComboBox*>("routeTargetFleetCombo");
-    assert(source && action && cargo && reserve && warp && add && targetType && target);
+    auto* pickTarget = window.findChild<QPushButton*>("routePickTargetButton");
+    auto* pickedTarget = window.findChild<QLabel*>("routePickedTargetLabel");
+    assert(source && action && cargo && reserve && warp && add && targetType && target
+        && pickTarget && pickedTarget);
     const auto none = static_cast<int>(suns::FleetArrivalActionKind::None);
     const auto load = static_cast<int>(suns::FleetArrivalActionKind::LoadAllAvailable);
     const auto unload = static_cast<int>(suns::FleetArrivalActionKind::UnloadAll);
@@ -132,6 +136,61 @@ int main(int argc, char* argv[])
     assert(action->currentData().toInt() == none);
     assert(targetType->currentData().toInt() == 0);
     assert(reserve->value() == 1000);
+
+    // Map target mode keeps the first fleet as the source while a click on
+    // another fleet captures that second FleetId as the moving destination.
+    window.selectFleetForRouteProgram(fleets[0]);
+    pickTarget->click();
+    assert(window.routeProgramMapTargetPickActive());
+    window.routeProgramScene()->clearSelection();
+    for (auto* item : window.routeProgramScene()->items()) {
+        if (item->data(1).toInt() == 2 && item->data(0).toUInt() == fleets[1]) {
+            item->setSelected(true);
+            break;
+        }
+    }
+    assert(!window.routeProgramMapTargetPickActive());
+    assert(!pickTarget->isChecked());
+    assert(window.selectedFleetForRouteProgram() == fleets[0]);
+    assert(source->currentData().toUInt() == fleets[0]);
+    assert(targetType->currentData().toInt() == 1);
+    assert(target->currentData().toUInt() == fleets[1]);
+    assert(action->currentData().toInt()
+        == static_cast<int>(suns::FleetArrivalActionKind::MergeWithFleet));
+    assert(pickedTarget->text().contains("Second fleet"));
+    add->click();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+    const auto& pursuit = std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front());
+    assert(pursuit.fleet == fleets[0]);
+    assert(pursuit.targetFleet == fleets[1]);
+    assert(pursuit.arrivalAction.kind == suns::FleetArrivalActionKind::MergeWithFleet);
+
+    // A picked star likewise leaves the source fleet intact and uses the
+    // ordinary fixed-destination path.
+    suns::MainWindowTestAccess::installTwoFleets(window);
+    pickTarget->click();
+    assert(window.routeProgramMapTargetPickActive());
+    window.routeProgramScene()->clearSelection();
+    const auto targetStar = window.routeProgramScene()->items();
+    bool pickedStar{};
+    for (auto* item : targetStar) {
+        if (item->data(1).toInt() == 1) {
+            item->setSelected(true);
+            pickedStar = true;
+            break;
+        }
+    }
+    assert(pickedStar);
+    assert(!window.routeProgramMapTargetPickActive());
+    assert(window.selectedFleetForRouteProgram() == fleets[0]);
+    assert(targetType->currentData().toInt() == 0);
+    assert(action->currentData().toInt() == none);
+    add->click();
+    const auto& starRoute = std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front());
+    assert(starRoute.fleet == fleets[0]);
+    assert(starRoute.targetFleet == 0);
 
     std::cout << "route editor tests passed\n";
 }
