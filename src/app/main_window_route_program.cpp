@@ -482,7 +482,7 @@ std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
     const auto source = selectedFleetForRouteProgram();
     std::vector<FleetId> targets;
     for (const auto& fleet : state_.fleets) {
-        if (fleet.owner == pendingOrders_.player && fleet.id != source) targets.push_back(fleet.id);
+        if (fleet.id != source) targets.push_back(fleet.id);
     }
     std::sort(targets.begin(), targets.end());
     return targets;
@@ -504,6 +504,36 @@ QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
         return QString("%1 (Fleet %2)").arg(QString::fromStdString(fleet->name)).arg(fleetId);
     }
     return QString("Fleet %1").arg(fleetId);
+}
+
+std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedSystem() const
+{
+    const auto* star = selectedStar();
+    if (!star) return {};
+
+    std::vector<RouteProgramTargetOption> targets;
+    targets.push_back({
+        QString("System — %1").arg(QString::fromStdString(star->name)),
+        1,
+        star->id,
+        false,
+    });
+
+    const auto source = selectedFleetForRouteProgram();
+    for (const auto& fleet : state_.fleets) {
+        if (fleet.id == source) continue;
+        const auto visible = fleet_player_view(state_, fleet);
+        if (!same_position(visible.position, star->position)) continue;
+        const bool enemy = fleet.owner != pendingOrders_.player;
+        targets.push_back({
+            QString(enemy ? "Enemy fleet — %1" : "Fleet — %1")
+                .arg(QString::fromStdString(visible.name)),
+            enemy ? 3 : 2,
+            fleet.id,
+            enemy,
+        });
+    }
+    return targets;
 }
 
 bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
@@ -529,7 +559,7 @@ bool MainWindow::beginRouteProgramMapTargetPick()
     routeProgramMapTargetPickActive_ = true;
     if (view_ && view_->viewport()) view_->viewport()->setCursor(Qt::CrossCursor);
     emit routeProgramMapTargetPickChanged(true);
-    statusBar()->showMessage("Route target mode: click a star or another friendly fleet; Esc cancels");
+    statusBar()->showMessage("Route target mode: click a star or another fleet; Esc cancels");
     return true;
 }
 
@@ -552,12 +582,43 @@ QString MainWindow::routeProgramMapTargetName(int kind, std::uint32_t id) const
         if (const auto* star = find_star(state_, static_cast<StarId>(id))) {
             return QString::fromStdString(star->name);
         }
-    } else if (kind == 2) {
+    } else if (kind == 2 || kind == 3) {
         if (const auto* fleet = findFleet(state_, static_cast<FleetId>(id))) {
             return QString::fromStdString(fleet->name);
         }
     }
     return "unknown target";
+}
+
+bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
+{
+    const auto* source = selectedFleet();
+    if (!source) {
+        statusBar()->showMessage("Select a source fleet before choosing a route target", 3000);
+        return false;
+    }
+
+    if (kind == 1) {
+        if (!find_star(state_, static_cast<StarId>(id))) {
+            statusBar()->showMessage("The selected star is no longer available", 3000);
+            return false;
+        }
+        selectedStarId_ = static_cast<StarId>(id);
+    } else if (kind == 2 || kind == 3) {
+        const auto* target = findFleet(state_, static_cast<FleetId>(id));
+        if (!target || target->id == source->id) {
+            statusBar()->showMessage(
+                "Choose another fleet as the route target", 3000);
+            return false;
+        }
+        kind = target->owner == pendingOrders_.player ? 2 : 3;
+    } else {
+        return false;
+    }
+
+    rememberMapSelection(kind == 3 ? 2 : kind, id);
+    emit routeProgramMapTargetPicked(kind, id);
+    return true;
 }
 
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)
@@ -626,10 +687,19 @@ bool MainWindow::appendFleetTargetWaypoint(
 {
     const auto* source = selectedFleet();
     const auto* target = findFleet(state_, targetFleetId);
-    if (!source || !target || source->owner != target->owner || source->id == target->id
+    if (!source || !target || source->id == target->id
         || !fleet_warp_valid(state_, *source, warp)) {
-        statusBar()->showMessage("Select another friendly fleet as the moving target", 3000);
+        statusBar()->showMessage("Select another fleet as the target", 3000);
         return false;
+    }
+    if (source->owner != target->owner) {
+        if (arrivalAction.kind != FleetArrivalActionKind::None) {
+            statusBar()->showMessage(
+                "An enemy fleet target uses No action and its currently observed position", 3000);
+            return false;
+        }
+        return appendRouteWaypoint(
+            fleet_player_view(state_, *target).position, 0, warp, arrivalAction);
     }
     if (arrivalAction.kind != FleetArrivalActionKind::None
         && arrivalAction.kind != FleetArrivalActionKind::MergeWithFleet) {
