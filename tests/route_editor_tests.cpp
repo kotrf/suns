@@ -62,13 +62,27 @@ struct MainWindowTestAccess {
     static bool rightClick(MainWindow& window, QGraphicsItem* item)
     {
         assert(window.view_ && item);
-        auto scenePosition = item->sceneBoundingRect().center();
-        if (item->data(1).toInt() == 2) {
-            // Fleet markers sit over the star's intentionally generous hit
-            // rectangle. Aim inside the fleet polygon's pointed half.
-            scenePosition.rx() += 3.0;
+        const auto wantedKind = item->data(1).toInt();
+        const auto wantedId = item->data(0).toUInt();
+        QPoint viewportPosition;
+        bool foundVisiblePixel{};
+        const auto center = item->sceneBoundingRect().center();
+        for (auto dy = -5; dy <= 5 && !foundVisiblePixel; ++dy) {
+            for (auto dx = -6; dx <= 6 && !foundVisiblePixel; ++dx) {
+                const auto candidate = window.view_->mapFromScene(
+                    center + QPointF(dx, dy));
+                for (auto* hit : window.view_->items(candidate)) {
+                    const auto kind = hit->data(1).toInt();
+                    if (kind != 1 && kind != 2) continue;
+                    if (kind == wantedKind && hit->data(0).toUInt() == wantedId) {
+                        viewportPosition = candidate;
+                        foundVisiblePixel = true;
+                    }
+                    break;
+                }
+            }
         }
-        const auto viewportPosition = window.view_->mapFromScene(scenePosition);
+        assert(foundVisiblePixel);
         QMouseEvent press(
             QEvent::MouseButtonPress,
             QPointF(viewportPosition),
