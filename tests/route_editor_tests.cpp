@@ -25,6 +25,12 @@ struct MainWindowTestAccess {
         other.id = window.state_.nextFleetId++;
         other.name = "Second fleet";
         other.position = window.state_.stars.at(1).position;
+        other.telemetry = {};
+        other.telemetry.observedTurn = window.state_.turn;
+        other.telemetry.position = other.position;
+        other.telemetry.warp = other.warp;
+        other.telemetry.fuel = other.fuel;
+        other.telemetry.ships = other.ships;
         window.state_.fleets.push_back(other);
         auto enemy = other;
         enemy.id = window.state_.nextFleetId++;
