@@ -10,6 +10,7 @@
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QGroupBox>
