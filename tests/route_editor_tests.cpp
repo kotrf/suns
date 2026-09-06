@@ -53,6 +53,12 @@ struct MainWindowTestAccess {
 
     static const PlayerOrders& orders(const MainWindow& window) { return window.pendingOrders_; }
 
+    static void selectStar(MainWindow& window, std::size_t index)
+    {
+        window.selectedStarId_ = window.state_.stars.at(index).id;
+        emit window.routeProgramContextChanged();
+    }
+
     static bool rightClick(MainWindow& window, QGraphicsItem* item)
     {
         assert(window.view_ && item);
@@ -124,6 +130,7 @@ int main(int argc, char* argv[])
 
     // Reset before checking that editor drafts remain isolated per source.
     suns::MainWindowTestAccess::installTwoFleets(window);
+    suns::MainWindowTestAccess::selectStar(window, 0);
 
     action->setCurrentIndex(action->findData(load));
     reserve->setValue(4321);
