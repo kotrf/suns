@@ -30,6 +30,12 @@ struct MainWindowTestAccess {
         enemy.id = window.state_.nextFleetId++;
         enemy.owner = 2;
         enemy.name = "Enemy raiders";
+        enemy.telemetry = {};
+        enemy.telemetry.observedTurn = window.state_.turn;
+        enemy.telemetry.position = enemy.position;
+        enemy.telemetry.warp = enemy.warp;
+        enemy.telemetry.fuel = enemy.fuel;
+        enemy.telemetry.ships = enemy.ships;
         window.state_.fleets.push_back(enemy);
         window.pendingOrders_ = PlayerOrders{1, {}};
         window.pendingDescriptions_.clear();
