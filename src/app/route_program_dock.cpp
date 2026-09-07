@@ -2,6 +2,7 @@
 
 #include "main_window.hpp"
 
+#include <QBrush>
 #include <QColor>
 #include <QCheckBox>
 #include <QComboBox>
@@ -21,6 +22,7 @@
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QSignalBlocker>
+#include <QShortcut>
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
@@ -180,8 +182,11 @@ void attachRouteProgramDock(MainWindow& window)
     auto* layout = new QVBoxLayout(panel);
 
     const auto helpText = QString(
-        "Select the fleet to program, select a destination star, choose Warp and an arrival action, then add the waypoint.\n\n"
-        "Each leg keeps its own Warp and arrival action. Fleet targets are resolved every turn. Merge absorbs the pursuing fleet into the target fleet. "
+        "Select the fleet to program, click Pick target on map, then click a star or another fleet. "
+        "Choose Warp and an arrival action, then add the waypoint. Esc cancels map-target mode. "
+        "For a faster order, right-click a star or fleet to append it immediately with the current settings. "
+        "Selecting a system lists it and all visible orbiting fleets in Destination; enemies are red.\n\n"
+        "Each leg keeps its own Warp and arrival action. Friendly moving targets are resolved every turn. Merge absorbs the pursuing fleet into the target fleet. "
         "Remote Mining is a persistent terminal task. Load and unload use the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
         "Colonization dismantles the entire fleet and recovers 33% of its ship minerals. Dockside loading and refuelling are in Fleet Logistics.");
     auto* headingRow = new QHBoxLayout;
@@ -280,9 +285,14 @@ void attachRouteProgramDock(MainWindow& window)
     targetTypeCombo->setObjectName("routeTargetTypeCombo");
     targetTypeCombo->addItem("Selected star", 0);
     targetTypeCombo->addItem("Friendly fleet", 1);
+    targetTypeCombo->addItem("Enemy fleet position", 2);
     auto* targetFleetCombo = new QComboBox(waypointGroup);
     targetFleetCombo->setObjectName("routeTargetFleetCombo");
     targetFleetCombo->setEnabled(false);
+    auto* destinationCombo = new QComboBox(waypointGroup);
+    destinationCombo->setObjectName("routeDestinationCombo");
+    destinationCombo->setToolTip(
+        "The selected system and all visible fleets currently orbiting it; enemy fleets are red");
     auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->setObjectName("routeArrivalActionCombo");
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
@@ -305,14 +315,25 @@ void attachRouteProgramDock(MainWindow& window)
     reserveSpin->setEnabled(false);
 
     auto* form = new QFormLayout;
-    form->addRow("Target type", targetTypeCombo);
-    form->addRow("Target fleet", targetFleetCombo);
+    form->addRow("Destination", destinationCombo);
     form->addRow("Waypoint Warp", warpRow);
     form->addRow("On arrival", actionCombo);
     actionCombo->setToolTip("Action for the new waypoint of this fleet. Add the waypoint to apply it; existing route rows keep their own actions.");
     form->addRow("Cargo", cargoCombo);
     form->addRow("Leave on colony", reserveSpin);
     waypointLayout->addLayout(form);
+
+    auto* pickTargetButton = new QPushButton("Pick target on map…", waypointGroup);
+    pickTargetButton->setObjectName("routePickTargetButton");
+    pickTargetButton->setCheckable(true);
+    pickTargetButton->setToolTip(
+        "Keep the source fleet selected while choosing a star or another fleet on the map");
+    waypointLayout->addWidget(pickTargetButton);
+    auto* pickedTargetLabel = new QLabel(
+        "Tip: use this button when the destination is another fleet.", waypointGroup);
+    pickedTargetLabel->setObjectName("routePickedTargetLabel");
+    pickedTargetLabel->setWordWrap(true);
+    waypointLayout->addWidget(pickedTargetLabel);
 
     auto* appendButton = new QPushButton("Add selected star to route", waypointGroup);
     appendButton->setObjectName("routeAddButton");
@@ -343,18 +364,83 @@ void attachRouteProgramDock(MainWindow& window)
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
     QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
     QObject::connect(targetTypeCombo, &QComboBox::currentIndexChanged, panel, [=](int) {
-        const bool fleetTarget = targetTypeCombo->currentData().toInt() == 1;
+        const auto targetType = targetTypeCombo->currentData().toInt();
+        const bool fleetTarget = targetType != 0;
+        const bool friendlyFleetTarget = targetType == 1;
         targetFleetCombo->setEnabled(fleetTarget);
-        appendButton->setText(fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+        appendButton->setText(targetType == 2
+            ? "Add enemy position to route"
+            : fleetTarget ? "Add fleet target to route" : "Add selected star to route");
         const auto currentAction = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
-        if (fleetTarget) {
+        if (friendlyFleetTarget) {
             actionCombo->setCurrentIndex(
                 actionCombo->findData(static_cast<int>(FleetArrivalActionKind::MergeWithFleet)));
-        } else if (currentAction == FleetArrivalActionKind::MergeWithFleet) {
+        } else if (targetType == 2
+            || currentAction == FleetArrivalActionKind::MergeWithFleet) {
             actionCombo->setCurrentIndex(
                 actionCombo->findData(static_cast<int>(FleetArrivalActionKind::None)));
         }
     });
+    const auto applyDestinationChoice = [=] {
+        const auto index = destinationCombo->currentIndex();
+        if (index < 0) return;
+        const auto kind = destinationCombo->itemData(index, Qt::UserRole).toInt();
+        const auto id = destinationCombo->itemData(index, Qt::UserRole + 1).toUInt();
+        targetTypeCombo->setCurrentIndex(
+            targetTypeCombo->findData(kind == 3 ? 2 : kind == 2 ? 1 : 0));
+        if (kind == 2 || kind == 3) {
+            targetFleetCombo->setCurrentIndex(
+                targetFleetCombo->findData(static_cast<quint32>(id)));
+        }
+    };
+    const auto rebuildDestinationChoices =
+        [=, &window](int preferredKind, std::uint32_t preferredId) {
+            const QSignalBlocker blocker(destinationCombo);
+            destinationCombo->clear();
+            const auto options = window.routeProgramTargetsAtSelectedSystem();
+            for (const auto& option : options) {
+                destinationCombo->addItem(option.label);
+                const auto index = destinationCombo->count() - 1;
+                destinationCombo->setItemData(index, option.kind, Qt::UserRole);
+                destinationCombo->setItemData(
+                    index, static_cast<quint32>(option.id), Qt::UserRole + 1);
+                if (option.enemy) {
+                    destinationCombo->setItemData(
+                        index, QBrush(QColor("#e05252")), Qt::ForegroundRole);
+                }
+            }
+
+            auto preferredIndex = -1;
+            for (auto index = 0; index < destinationCombo->count(); ++index) {
+                const auto kind = destinationCombo->itemData(index, Qt::UserRole).toInt();
+                const auto id = destinationCombo->itemData(index, Qt::UserRole + 1).toUInt();
+                if (kind == preferredKind
+                    && (preferredKind == 1 || id == preferredId)) {
+                    preferredIndex = index;
+                    break;
+                }
+            }
+            if ((preferredKind == 2 || preferredKind == 3)
+                && preferredId != 0 && preferredIndex < 0) {
+                destinationCombo->addItem(QString(preferredKind == 3
+                    ? "Enemy fleet — %1" : "Fleet — %1")
+                    .arg(window.routeProgramMapTargetName(2, preferredId)));
+                preferredIndex = destinationCombo->count() - 1;
+                destinationCombo->setItemData(preferredIndex, preferredKind, Qt::UserRole);
+                destinationCombo->setItemData(
+                    preferredIndex, static_cast<quint32>(preferredId), Qt::UserRole + 1);
+                if (preferredKind == 3) {
+                    destinationCombo->setItemData(
+                        preferredIndex, QBrush(QColor("#e05252")), Qt::ForegroundRole);
+                }
+            }
+            destinationCombo->setCurrentIndex(
+                preferredIndex >= 0 ? preferredIndex
+                                    : (destinationCombo->count() > 0 ? 0 : -1));
+            applyDestinationChoice();
+        };
+    QObject::connect(destinationCombo, &QComboBox::currentIndexChanged, panel,
+        [=](int) { applyDestinationChoice(); });
     // These controls describe an unsent waypoint, not a global arrival policy.
     // Keep the complete draft under its source FleetId, and switch it before
     // another UI action can run (the map itself may redraw later).
@@ -417,10 +503,26 @@ void attachRouteProgramDock(MainWindow& window)
             targetFleetCombo->setCurrentIndex(targetFleetCombo->findData(static_cast<quint32>(draft.targetFleet)));
             warpSelector->setValue(draft.warp);
             editor->fleet = fleet;
+            if (draft.targetType == 1 && draft.targetFleet != 0) {
+                pickedTargetLabel->setText(QString("Target: <b>%1</b>")
+                    .arg(window.routeProgramMapTargetName(2, draft.targetFleet).toHtmlEscaped()));
+            } else {
+                pickedTargetLabel->setText(
+                    "Tip: use Pick target on map when the destination is another fleet.");
+            }
         }
-        const bool fleetTarget = targetTypeCombo->currentData().toInt() == 1;
+        const auto targetType = targetTypeCombo->currentData().toInt();
+        const auto preferredKind = targetType == 2 ? 3 : targetType == 1 ? 2 : 1;
+        const auto preferredId = preferredKind == 2 || preferredKind == 3
+            ? static_cast<std::uint32_t>(targetFleetCombo->currentData().toUInt())
+            : 0U;
+        rebuildDestinationChoices(preferredKind, preferredId);
+        const auto currentTargetType = targetTypeCombo->currentData().toInt();
+        const bool fleetTarget = currentTargetType != 0;
         targetFleetCombo->setEnabled(fleet != 0 && fleetTarget && targetFleetCombo->count() > 0);
-        appendButton->setText(fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+        appendButton->setText(currentTargetType == 2
+            ? "Add enemy position to route"
+            : fleetTarget ? "Add fleet target to route" : "Add selected star to route");
         updateCargoControls();
         clearButton->setEnabled(fleet != 0);
         repeatCheck->setEnabled(fleet != 0);
@@ -430,6 +532,8 @@ void attachRouteProgramDock(MainWindow& window)
         }
         actionCombo->setEnabled(fleet != 0);
         targetTypeCombo->setEnabled(fleet != 0);
+        destinationCombo->setEnabled(fleet != 0 && destinationCombo->count() > 0);
+        pickTargetButton->setEnabled(fleet != 0);
         if (fleet == 0) {
             cargoCombo->setEnabled(false);
             reserveSpin->setEnabled(false);
@@ -440,10 +544,48 @@ void attachRouteProgramDock(MainWindow& window)
             static_cast<std::uint8_t>(warpSelector->value())));
         warpSelector->setEnabled(fleet != 0 && maxWarp > 0);
         appendButton->setEnabled(fleet != 0 && maxWarp > 0
+            && destinationCombo->currentIndex() >= 0
             && (!fleetTarget || targetFleetCombo->currentIndex() >= 0));
     };
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, syncEditor);
     syncEditor(false);
+
+    QObject::connect(pickTargetButton, &QPushButton::clicked, panel,
+        [&window, pickTargetButton](bool enabled) {
+            if (enabled) {
+                if (!window.beginRouteProgramMapTargetPick()) {
+                    const QSignalBlocker blocker(pickTargetButton);
+                    pickTargetButton->setChecked(false);
+                }
+            } else {
+                window.cancelRouteProgramMapTargetPick();
+            }
+        });
+    QObject::connect(&window, &MainWindow::routeProgramMapTargetPickChanged, panel,
+        [pickTargetButton, pickedTargetLabel](bool active) {
+            const QSignalBlocker blocker(pickTargetButton);
+            pickTargetButton->setChecked(active);
+            pickTargetButton->setText(active ? "Cancel target picking" : "Pick target on map…");
+            if (active) {
+                pickedTargetLabel->setText(
+                    "Click a star or another fleet on the map. Esc cancels.");
+            } else if (pickedTargetLabel->text().startsWith("Click a star")) {
+                pickedTargetLabel->setText("Target picking canceled; current target unchanged.");
+            }
+        });
+    QObject::connect(&window, &MainWindow::routeProgramMapTargetPicked, panel,
+        [=, &window](int kind, std::uint32_t id) {
+            rebuildDestinationChoices(kind, id);
+            pickedTargetLabel->setText(QString("Target: <b>%1</b>")
+                .arg(window.routeProgramMapTargetName(kind, id).toHtmlEscaped()));
+        });
+    auto* cancelTargetShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), dock);
+    QObject::connect(cancelTargetShortcut, &QShortcut::activated, panel,
+        [&window] { window.cancelRouteProgramMapTargetPick(); });
+    QObject::connect(dock, &QDockWidget::visibilityChanged, panel,
+        [&window](bool visible) {
+            if (!visible) window.cancelRouteProgramMapTargetPick();
+        });
 
     QObject::connect(warpHelpButton, &QToolButton::clicked, panel, [&window] {
         QMessageBox::information(
@@ -455,19 +597,24 @@ void attachRouteProgramDock(MainWindow& window)
             "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized.");
     });
 
-    QObject::connect(appendButton, &QPushButton::clicked, panel,
-        [&window, sourceFleetCombo, warpSelector, actionCombo, cargoCombo, reserveSpin, targetTypeCombo, targetFleetCombo] {
+    const auto appendCurrentTarget =
+        [&window, sourceFleetCombo, warpSelector, actionCombo, cargoCombo,
+            reserveSpin, targetTypeCombo, targetFleetCombo] {
+            window.cancelRouteProgramMapTargetPick();
             const auto source = static_cast<FleetId>(sourceFleetCombo->currentData().toUInt());
             if (source == 0 || source != window.selectedFleetForRouteProgram()) return;
             const auto warp = static_cast<std::uint8_t>(warpSelector->value());
             const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin);
-            if (targetTypeCombo->currentData().toInt() == 1) {
+            if (targetTypeCombo->currentData().toInt() != 0) {
                 window.appendFleetTargetWaypoint(
                     static_cast<FleetId>(targetFleetCombo->currentData().toUInt()), warp, action);
             } else {
                 window.appendSelectedStarWaypoint(warp, action);
             }
-    });
+        };
+    QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
+    QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
+        [appendCurrentTarget](int, std::uint32_t) { appendCurrentTarget(); });
 
     const auto selectedRouteIndex = [&window, routeTree]() -> std::optional<std::size_t> {
         if (routeTree->property("fleetId").toUInt() != window.selectedFleetForRouteProgram()) {
@@ -506,6 +653,7 @@ void attachRouteProgramDock(MainWindow& window)
 
     QObject::connect(sourceFleetCombo, &QComboBox::currentIndexChanged, panel,
         [&window, sourceFleetCombo](int) {
+            window.cancelRouteProgramMapTargetPick();
             window.selectFleetForRouteProgram(
                 static_cast<FleetId>(sourceFleetCombo->currentData().toUInt()));
         });
@@ -516,6 +664,7 @@ void attachRouteProgramDock(MainWindow& window)
         [&window, routeLabel, routeTree, moveUpButton, moveDownButton, removeButton,
             warpSelector, appendButton, clearButton, repeatCheck,
             targetTypeCombo, targetFleetCombo,
+            destinationCombo,
             lastTargets = std::vector<FleetId>{}, lastRouteSignature = QString{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
@@ -537,9 +686,10 @@ void attachRouteProgramDock(MainWindow& window)
                 targetFleetCombo->setCurrentIndex(previousIndex);
                 lastTargets = targets;
             }
-            const bool wantsFleetTarget = targetTypeCombo->currentData().toInt() == 1;
+            const bool wantsFleetTarget = targetTypeCombo->currentData().toInt() != 0;
             targetFleetCombo->setEnabled(wantsFleetTarget && !targets.empty());
             appendButton->setEnabled(selectedFleet != 0 && maxWarp > 0
+                && destinationCombo->currentIndex() >= 0
                 && (!wantsFleetTarget || targetFleetCombo->currentIndex() >= 0));
             clearButton->setEnabled(selectedFleet != 0);
             repeatCheck->setEnabled(selectedFleet != 0);

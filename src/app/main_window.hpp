@@ -42,6 +42,13 @@ struct RouteProgramDisplayRow {
     bool active{};
 };
 
+struct RouteProgramTargetOption {
+    QString label;
+    int kind{};
+    std::uint32_t id{};
+    bool enemy{};
+};
+
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -61,11 +68,17 @@ public:
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
     [[nodiscard]] std::vector<FleetId> availableOwnedFleetsForRouteProgram() const;
     [[nodiscard]] QString fleetTargetNameForRouteProgram(FleetId fleet) const;
+    [[nodiscard]] std::vector<RouteProgramTargetOption> routeProgramTargetsAtSelectedSystem() const;
     bool selectFleetForRouteProgram(FleetId fleet);
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool appendFleetTargetWaypoint(
         FleetId targetFleet, std::uint8_t warp, FleetArrivalAction arrivalAction);
+    bool beginRouteProgramMapTargetPick();
+    void cancelRouteProgramMapTargetPick();
+    [[nodiscard]] bool routeProgramMapTargetPickActive() const;
+    [[nodiscard]] QString routeProgramMapTargetName(int kind, std::uint32_t id) const;
+    bool selectRouteProgramMapTarget(int kind, std::uint32_t id);
     bool setSelectedFleetRepeatOrdersForRouteProgram(bool enabled);
     bool moveSelectedFleetRouteProgramLeg(std::size_t index, int direction);
     bool removeSelectedFleetRouteProgramLeg(std::size_t index);
@@ -128,6 +141,9 @@ public:
 signals:
     // Editor context updates immediately, even while map redraw is deferred.
     void routeProgramContextChanged(bool resetDrafts = false);
+    void routeProgramMapTargetPicked(int kind, std::uint32_t id);
+    void routeProgramQuickTargetRequested(int kind, std::uint32_t id);
+    void routeProgramMapTargetPickChanged(bool active);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -222,6 +238,7 @@ private:
     int mapDisplayMode_{};
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
+    bool routeProgramMapTargetPickActive_{};
     bool mapDisplayApplyPending_{};
     bool planetPolishRefreshPending_{};
     bool shuttingDown_{};

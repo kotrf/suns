@@ -1369,6 +1369,7 @@ bool MainWindow::confirmFleetColonization(
 
 void MainWindow::endTurn()
 {
+    cancelRouteProgramMapTargetPick();
     auto result = processor_.process_with_events(state_, {pendingOrders_});
     state_ = std::move(result.state);
     rotateTurnExchangeToken();
@@ -1385,6 +1386,7 @@ void MainWindow::endTurn()
 
 void MainWindow::newGalaxy()
 {
+    cancelRouteProgramMapTargetPick();
     bool ok = false;
     const auto parsedSeed = seedEdit_->text().trimmed().toULongLong(&ok);
     if (!ok) {

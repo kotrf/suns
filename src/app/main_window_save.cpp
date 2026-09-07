@@ -231,6 +231,7 @@ bool MainWindow::saveGameToPath(const QString& path)
 
 bool MainWindow::loadGameFromPath(const QString& path)
 {
+    cancelRouteProgramMapTargetPick();
     SaveGameData loaded;
     QString error;
     if (!read_save_game_file(path, loaded, error)) {

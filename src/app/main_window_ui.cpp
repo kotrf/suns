@@ -10,6 +10,7 @@
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QGroupBox>
@@ -19,6 +20,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPushButton>
@@ -776,6 +778,21 @@ void MainWindow::fitGalaxyView()
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (!shuttingDown_ && view_ && watched == view_->viewport()
+        && event->type() == QEvent::MouseButtonPress) {
+        const auto* mouse = static_cast<QMouseEvent*>(event);
+        if (mouse->button() == Qt::RightButton) {
+            for (auto* item : view_->items(mouse->position().toPoint())) {
+                const auto kind = item->data(1).toInt();
+                const auto id = static_cast<std::uint32_t>(item->data(0).toUInt());
+                if ((kind != 1 && kind != 2) || id == 0) continue;
+                if (!selectRouteProgramMapTarget(kind, id)) return true;
+                cancelRouteProgramMapTargetPick();
+                emit routeProgramQuickTargetRequested(kind, id);
+                return true;
+            }
+        }
+    }
     if (!shuttingDown_ && view_ && watched == view_->viewport() && event->type() == QEvent::Wheel) {
         const auto* wheel = static_cast<QWheelEvent*>(event);
         const int delta = wheel->angleDelta().y() != 0

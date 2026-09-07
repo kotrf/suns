@@ -77,3 +77,28 @@ Switching fleets through the source selector or map restores that fleet's draft
 immediately. The draft becomes an order only when Add is clicked; existing
 route rows retain their own actions. Starting or loading a game clears drafts,
 so reused fleet IDs cannot inherit settings from the previous game.
+
+## Choosing a moving fleet target
+
+The source fleet and map target have separate roles while plotting a route.
+After selecting the source fleet, **Pick target on map** temporarily arms the
+galaxy map. Clicking a star captures a fixed destination; clicking another
+friendly fleet captures its stable FleetId as a moving destination and selects
+the Merge action by default. An enemy fleet is marked red and uses its currently
+observed position as a fixed destination with No action rather than the friendly
+Merge action. The player may change a friendly fleet's action to No action to
+follow/rendezvous without merging. The source fleet remains selected throughout.
+Pressing Esc, closing the Route Program dock, changing the source fleet, or
+ending/loading a game cancels target-picking mode.
+
+Selecting a system also fills one **Destination** combo with the system itself
+and every other visible fleet currently in its orbit. Enemy entries are labeled
+and drawn in red. This is the precise path when several markers overlap: choose
+the intended system or fleet, adjust Warp and the arrival action, then press Add.
+
+Right-clicking a star or another fleet is the fast path. It immediately
+appends that object to the selected source fleet's route using the editor's
+current Warp, cargo and arrival-action settings. A fleet target defaults to
+Merge; an enemy fleet uses No action and its observed position. Use the
+Destination combo and choose No action before Add when the intent is a friendly
+rendezvous/pursuit without merging.
