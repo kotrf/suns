@@ -62,6 +62,11 @@ struct MainWindowTestAccess {
     static bool rightClick(MainWindow& window, QGraphicsItem* item)
     {
         assert(window.view_ && item);
+        // The constructor fits the galaxy before the window is laid out.
+        // In an unshown offscreen window that can shrink fleet markers below
+        // one viewport pixel. Test hit detection at a real, explicit scale.
+        window.view_->resetTransform();
+        window.view_->centerOn(item);
         const auto wantedKind = item->data(1).toInt();
         const auto wantedId = item->data(0).toUInt();
         QPoint viewportPosition;
@@ -102,6 +107,9 @@ int main(int argc, char* argv[])
     window.installDeferredMapSelectionHandler();
     suns::MainWindowTestAccess::installTwoFleets(window);
     suns::attachRouteProgramDock(window);
+    window.resize(1400, 900);
+    window.show();
+    QApplication::processEvents();
 
     const auto fleets = window.availableOwnedFleetsForRouteProgram();
     assert(fleets.size() == 2);
