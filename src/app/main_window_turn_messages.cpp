@@ -543,7 +543,7 @@ void MainWindow::appendTurnMessages(const std::vector<GameEvent>& events)
 
     std::size_t added = 0;
     for (const auto& event : events) {
-        if (event.recipient != 1) continue;
+        if (event.recipient != pendingOrders_.player) continue;
         const auto duplicate = std::any_of(turnMessages_.begin(), turnMessages_.end(), [&](const GameEvent& existing) {
             return existing.id == event.id;
         });

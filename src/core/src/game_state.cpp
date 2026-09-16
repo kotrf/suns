@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/campaign.hpp"
 #include "star_name_pool.hpp"
 
 #include <algorithm>
@@ -633,22 +634,11 @@ std::uint32_t research_level_cost(ResearchField, std::uint8_t level)
 bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component)
 {
-    switch (component) {
-    case ShipComponentType::AntimatterGenerator:
-        return technology_level(state, player, ResearchField::Energy) >= 1;
-    case ShipComponentType::AdvancedFusionDrive:
-        return technology_level(state, player, ResearchField::Propulsion) >= 1;
-    case ShipComponentType::ExtendedRangeScanner:
-        return technology_level(state, player, ResearchField::Electronics) >= 2;
-    case ShipComponentType::CompactLongRangeScanner:
-        return technology_level(state, player, ResearchField::Electronics) >= 1;
-    case ShipComponentType::PenetratingScanner:
-        return technology_level(state, player, ResearchField::Electronics) >= 3;
-    case ShipComponentType::RemoteMiningModule:
-        return technology_level(state, player, ResearchField::Construction) >= 1;
-    default:
-        return true;
-    }
+    if (!find_player(state, player)) return false;
+    for (const auto& unlock : research_unlocks())
+        if (unlock.component == component)
+            return technology_level(state, player, unlock.field) >= unlock.level;
+    return true;
 }
 
 bool ship_design_available_to_player(
@@ -1136,6 +1126,7 @@ std::optional<std::uint32_t> known_planet_habitability(
 
     const auto level = survey_level(state, player, planet->star);
     if (level < SurveyLevel::BasicScan && planet->owner != player) return std::nullopt;
+    if (planet->observedHabitability) return planet->observedHabitability;
 
     auto observationTurn = state.turn;
     if (const auto* knownPlayer = find_player(state, player)) {
@@ -1145,8 +1136,8 @@ std::optional<std::uint32_t> known_planet_habitability(
         if (knowledge != knownPlayer->surveyKnowledge.end()) observationTurn = knowledge->observedTurn;
     }
     const bool canForecast = planet->owner == player || level >= SurveyLevel::GeologicalSurvey;
-    const auto observedHabitability = current_planet_habitability(
-        state, *planet, canForecast ? state.turn : observationTurn);
+    const auto observedHabitability = player_planet_habitability(
+        state, player, *planet, canForecast ? state.turn : observationTurn);
     if (level >= SurveyLevel::OrbitalSurvey || planet->owner == player) return observedHabitability;
 
     std::uint64_t mixed = state.galaxySeed
@@ -1269,11 +1260,7 @@ double stellar_luminosity(const StarSystem& star, std::uint64_t turn)
 std::uint32_t current_planet_habitability(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
-    const auto* star = find_star(state, planet.star);
-    if (!star) return planet.habitability;
-    const auto luminosityShift = static_cast<int>(std::lround((stellar_luminosity(*star, turn) - 1.0) * 100.0));
-    return static_cast<std::uint32_t>(
-        std::clamp(static_cast<int>(planet.habitability) + luminosityShift, 0, 100));
+    return player_planet_habitability(state, planet.owner, planet, turn);
 }
 
 std::uint64_t population_capacity(

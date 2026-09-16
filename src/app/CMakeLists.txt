@@ -1,5 +1,6 @@
 add_library(suns_app_ui STATIC
     main_window.cpp
+    main_window_campaign.cpp
     main_window.hpp
     main_window_cargo.cpp
     main_window_communications.cpp

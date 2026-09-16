@@ -107,10 +107,10 @@ void MainWindow::applyMapDisplayMode()
         const auto* star = find_star(state_, starId);
         if (!star) continue;
 
-        const bool surveyed = is_surveyed(state_, 1, starId);
+        const bool surveyed = is_surveyed(state_, pendingOrders_.player, starId);
         const auto* planet = find_planet_at_star(state_, starId);
         const auto knownHabitability = planet
-            ? known_planet_habitability(state_, 1, planet->id)
+            ? known_planet_habitability(state_, pendingOrders_.player, planet->id)
             : std::optional<std::uint32_t>{};
 
         QColor color = spectralColor(star->stellarClass);
@@ -118,13 +118,13 @@ void MainWindow::applyMapDisplayMode()
 
         if (mapDisplayMode_ == 1) {
             color = knownHabitability ? habitabilityColor(*knownHabitability) : QColor("#687381");
-            if (survey_level(state_, 1, starId) == SurveyLevel::BasicScan) color = color.darker(145);
+            if (survey_level(state_, pendingOrders_.player, starId) == SurveyLevel::BasicScan) color = color.darker(145);
         } else if (mapDisplayMode_ == 2) {
             if (!surveyed) {
                 color = QColor("#687381");
                 scale = 0.58;
             } else if (planet && planet->owner != 0) {
-                color = planet->owner == 1 ? QColor("#67d796") : QColor("#d77777");
+                color = planet->owner == pendingOrders_.player ? QColor("#67d796") : QColor("#d77777");
                 scale = populationScale(planet->population);
             } else {
                 color = QColor("#7f8997");

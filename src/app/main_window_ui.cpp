@@ -705,10 +705,10 @@ void MainWindow::installUiPolish()
         const auto* environmentPlanet = selectedPlanet();
         const auto* environmentStar = selectedStar();
         const bool environmentKnown = environmentPlanet && environmentStar
-            && is_surveyed(state_, 1, environmentStar->id);
+            && is_surveyed(state_, pendingOrders_.player, environmentStar->id);
         if (planetEnvironmentPanel_) planetEnvironmentPanel_->setVisible(environmentKnown);
         if (environmentKnown) {
-            const auto* player = find_player(state_, 1);
+            const auto* player = find_player(state_, pendingOrders_.player);
             const auto race = player ? player->race : RaceProfile{};
             const auto raceName = player
                 ? QString::fromStdString(player->name)

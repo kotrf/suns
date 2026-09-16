@@ -1,4 +1,5 @@
 add_library(suns_core
+    src/campaign.cpp
     src/game_state.cpp
     src/communications.cpp
     src/mineral_economy.cpp

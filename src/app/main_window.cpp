@@ -118,9 +118,9 @@ QString starClassName(StarClass stellarClass)
     return "yellow";
 }
 
-QString stellarVariabilitySummary(const GameState& state, const StarSystem& star)
+QString stellarVariabilitySummary(const GameState& state, const StarSystem& star, PlayerId player)
 {
-    const auto intel = known_stellar_variability(state, 1, star.id);
+    const auto intel = known_stellar_variability(state, player, star.id);
     if (!intel || !intel->variable) return {};
     if (!intel->characterized) return "Variable star detected — cycle not characterized";
     return QString("Variable star — %1-turn period, ±%2% luminosity, now %3%")
@@ -509,7 +509,7 @@ const Fleet* MainWindow::selectedFleet() const
 {
     if (!selectedFleetId_) return nullptr;
     const auto* fleet = findFleet(state_, *selectedFleetId_);
-    return fleet && fleet->owner == 1 ? fleet : nullptr;
+    return fleet && fleet->owner == pendingOrders_.player ? fleet : nullptr;
 }
 
 const Fleet* MainWindow::selectedColonyShipAtSelectedStar() const
@@ -550,7 +550,7 @@ void MainWindow::refreshShipDesignChoices()
 
     int restoreIndex = -1;
     for (const auto& design : state_.shipDesigns) {
-        if (design.owner != 1) continue;
+        if (design.owner != pendingOrders_.player) continue;
         const auto index = shipDesignCombo_->count();
         const auto hull = hull_spec(design.hull);
         const auto text = QString("%1 — %2, cost %3, W%4, fuel %5, cargo %6")
@@ -573,8 +573,8 @@ void MainWindow::rebuildScene()
     const auto selectionToRestore = selectedStarId_;
 
     if (!selectedFleet()) {
-        const auto fallback = std::find_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& fleet) {
-            return fleet.owner == 1;
+        const auto fallback = std::find_if(state_.fleets.begin(), state_.fleets.end(), [this](const Fleet& fleet) {
+            return fleet.owner == pendingOrders_.player;
         });
         selectedFleetId_ = fallback == state_.fleets.end()
             ? std::optional<FleetId>{}
@@ -590,14 +590,14 @@ void MainWindow::rebuildScene()
 
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
-            if (planet.owner != 1) continue;
+            if (planet.owner != pendingOrders_.player) continue;
             if (const auto* sourceStar = find_star(state_, planet.star)) {
                 addSensorRange(scene_, sourceStar->position, kColonySensorRange,
                     QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
             }
         }
         for (const auto& fleet : state_.fleets) {
-            if (fleet.owner != 1) continue;
+            if (fleet.owner != pendingOrders_.player) continue;
             const auto visibleFleet = fleet_player_view(state_, fleet);
             const auto range = fleet_sensor_range(state_, visibleFleet);
             if (range > 0.0) {
@@ -682,9 +682,9 @@ void MainWindow::rebuildScene()
     }
 
     for (const auto& star : state_.stars) {
-        const bool surveyed = is_surveyed(state_, 1, star.id);
+        const bool surveyed = is_surveyed(state_, pendingOrders_.player, star.id);
         const auto* planet = find_planet_at_star(state_, star.id);
-        const bool colony = planet && planet->owner == 1;
+        const bool colony = planet && planet->owner == pendingOrders_.player;
 
         auto* marker = new StarItem(star.id, starColor(star.stellarClass), surveyed, colony);
         marker->setData(1, kMapItemStar);
@@ -697,13 +697,13 @@ void MainWindow::rebuildScene()
                               .arg(QString::fromStdString(star.name))
                               .arg(starClassName(star.stellarClass));
         QString mapLabel = QString::fromStdString(star.name);
-        const auto variability = stellarVariabilitySummary(state_, star);
+        const auto variability = stellarVariabilitySummary(state_, star, pendingOrders_.player);
         if (!variability.isEmpty()) {
             tooltip += QString("\n%1").arg(variability);
             mapLabel += "  [VAR]";
         }
         if (!surveyed) {
-            if (survey_level(state_, 1, star.id) >= SurveyLevel::SystemScan) {
+            if (survey_level(state_, pendingOrders_.player, star.id) >= SurveyLevel::SystemScan) {
                 tooltip += "\nOrdinary scanner contact — planetary parameters unknown";
                 mapLabel += "  [SCAN]";
             } else {
@@ -711,8 +711,8 @@ void MainWindow::rebuildScene()
                 mapLabel += "  [?]";
             }
         } else if (planet) {
-            const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
-            const auto estimated = survey_level(state_, 1, star.id) == SurveyLevel::BasicScan;
+            const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
+            const auto estimated = survey_level(state_, pendingOrders_.player, star.id) == SurveyLevel::BasicScan;
             tooltip += QString("\n%1 — habitability %2%3% — %4 capacity %5")
                            .arg(QString::fromStdString(planet->name))
                            .arg(estimated ? "~" : "")
@@ -808,7 +808,7 @@ void MainWindow::updateControls()
         ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
-    const bool surveyed = star && is_surveyed(state_, 1, star->id);
+    const bool surveyed = star && is_surveyed(state_, pendingOrders_.player, star->id);
     const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
     const auto* plannedFleet = authoritativeFleet ? findFleet(movementPreview, authoritativeFleet->id) : nullptr;
     const bool instantLink = authoritativeFleet && fleet_has_instant_link(state_, *authoritativeFleet);
@@ -823,7 +823,7 @@ void MainWindow::updateControls()
     std::uint64_t population = 0;
     std::uint32_t output = 0;
     for (const auto& candidate : state_.planets) {
-        if (candidate.owner == 1) {
+        if (candidate.owner == pendingOrders_.player) {
             ++colonies;
             population += candidate.population;
             output += colony_output(candidate);
@@ -831,14 +831,14 @@ void MainWindow::updateControls()
     }
 
     const auto colonyShips = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
-        return candidate.owner == 1 && fleet_can_colonize(state_, candidate);
+        return candidate.owner == pendingOrders_.player && fleet_can_colonize(state_, candidate);
     }));
     const auto inTransit = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& candidate) {
-        return candidate.owner == 1 && candidate.destination.has_value();
+        return candidate.owner == pendingOrders_.player && candidate.destination.has_value();
     }));
-    const auto* player = find_player(state_, 1);
+    const auto* player = find_player(state_, pendingOrders_.player);
     const auto surveyedCount = player ? player->surveyedStars.size() : 0;
-    empireLabel_->setText(QString("<b>Terrans</b><br>Surveyed: %1 / %2 &nbsp; Colonies: %3<br>"
+    empireLabel_->setText(QString("<b>%9</b><br>Surveyed: %1 / %2 &nbsp; Colonies: %3<br>"
                                   "Population: %4 &nbsp; Output: %5 / turn<br>"
                                   "Designs: %6 &nbsp; Colonizers: %7 &nbsp; In transit: %8")
         .arg(static_cast<qulonglong>(surveyedCount))
@@ -848,7 +848,8 @@ void MainWindow::updateControls()
         .arg(output)
         .arg(static_cast<qulonglong>(state_.shipDesigns.size()))
         .arg(static_cast<qulonglong>(colonyShips))
-        .arg(static_cast<qulonglong>(inTransit)));
+        .arg(static_cast<qulonglong>(inTransit))
+        .arg(player ? QString::fromStdString(player->name).toHtmlEscaped() : QString("Empire")));
 
     std::uint8_t selectedWarp = 1;
     if (fleet) {
@@ -916,7 +917,7 @@ void MainWindow::updateControls()
         : QString{};
 
     if (star && !surveyed) {
-        const bool systemContact = survey_level(state_, 1, star->id) >= SurveyLevel::SystemScan;
+        const bool systemContact = survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::SystemScan;
         QString travelLine;
         if (fleet) {
             travelLine = QString("<br>%1 at Warp %2: <b>%3</b> (%4 ly/turn).%5")
@@ -932,9 +933,9 @@ void MainWindow::updateControls()
                     ? "Enter orbit or use a penetrating scanner to study the planet."
                     : "The system is detected as soon as it enters friendly sensor coverage."));
     } else if (star && planet) {
-        const auto knownHabitability = known_planet_habitability(state_, 1, planet->id).value_or(0);
-        const auto estimated = survey_level(state_, 1, star->id) == SurveyLevel::BasicScan;
-        const auto variability = stellarVariabilitySummary(state_, *star);
+        const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
+        const auto estimated = survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan;
+        const auto variability = stellarVariabilitySummary(state_, *star, pendingOrders_.player);
         const auto variabilityLine = variability.isEmpty()
             ? QString{}
             : QString("<br><b>%1</b>").arg(variability);
@@ -942,19 +943,19 @@ void MainWindow::updateControls()
             .arg(estimated ? "~" : "")
             .arg(knownHabitability)
             .arg(variabilityLine);
-        const QString owner = planet->owner == 1 ? "Terran colony" : "Uncolonized";
+        const QString owner = planet->owner == pendingOrders_.player ? "Your colony" : "Uncolonized";
         const auto artifactLine = planet->precursorArtifacts.claimed
             ? QString("<br><span style='color:#d8bd72'><b>History:</b> precursor site excavated (+%1 RP)</span>")
                   .arg(planet->precursorArtifacts.researchPoints)
             : QString{};
         QString deepSurveyLine;
-        if (const auto artifactHint = known_precursor_artifact_hint(state_, 1, planet->id)) {
+        if (const auto artifactHint = known_precursor_artifact_hint(state_, pendingOrders_.player, planet->id)) {
             deepSurveyLine = *artifactHint
                 ? "<br><span style='color:#d8bd72'><b>Deep survey:</b> possible artificial structures</span>"
                 : "<br>Deep survey complete — no unexamined unusual sites";
         }
         QString populationLine;
-        if (planet->owner == 1) {
+        if (planet->owner == pendingOrders_.player) {
             populationLine = QString("Population: %1 / %2 (+%3 next turn)<br>")
                                  .arg(static_cast<qulonglong>(planet->population))
                                  .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)))
@@ -1065,7 +1066,7 @@ void MainWindow::updateControls()
         ? QString("Plot course + Load All (leave %1)").arg(arrivalReserveSpin_->value())
         : "Plot course + Load All on arrival");
 
-    const bool ownedColony = surveyed && planet != nullptr && planet->owner == 1;
+    const bool ownedColony = surveyed && planet != nullptr && planet->owner == pendingOrders_.player;
     shipDesignCombo_->setEnabled(ownedColony && shipDesignCombo_->count() > 0);
     buildFactoryButton_->setEnabled(ownedColony);
     designShipButton_->setEnabled(true);
@@ -1090,7 +1091,7 @@ void MainWindow::updateControls()
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto* buildDesign = find_ship_design(state_, designId);
-    buildShipButton_->setEnabled(ownedColony && buildDesign != nullptr && buildDesign->owner == 1);
+    buildShipButton_->setEnabled(ownedColony && buildDesign != nullptr && buildDesign->owner == pendingOrders_.player);
     buildShipButton_->setToolTip(stationExists
         ? "Add this ship to the selected colony's production queue"
         : "The ship may be queued now, but production waits until an Orbital Dock is completed first");
@@ -1104,8 +1105,9 @@ void MainWindow::updateControls()
 
     const auto* colonizer = selectedColonyShipAtSelectedStar();
     colonizeButton_->setEnabled(star != nullptr
-        && survey_level(state_, 1, star->id) >= SurveyLevel::OrbitalSurvey
+        && survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::OrbitalSurvey
         && planet != nullptr && planet->owner == 0
+        && known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0) > 0
         && colonizer != nullptr && colonizer->colonists > 0);
 
     if (pendingOrders_.orders.empty()) ordersLabel_->setText("<b>Orders this turn:</b> none");
@@ -1116,7 +1118,11 @@ void MainWindow::updateControls()
             .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(safeDescriptions.join("<br>")));
     }
 
-    endTurnButton_->setText(QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
+    endTurnButton_->setText(sessionMode_ == SessionMode::PlayerTurn ? "Export orders…"
+        : sessionMode_ == SessionMode::Host
+        ? QString("Resolve turn %1 — %2/%3 remote orders").arg(qulonglong(state_.turn))
+            .arg(qulonglong(inbox_.size())).arg(qulonglong(state_.players.size() - 1))
+        : QString("End Turn %1").arg(qulonglong(state_.turn)));
     refreshResearchPanel();
 }
 
@@ -1155,7 +1161,7 @@ void MainWindow::openShipDesigner()
         return;
     }
 
-    auto* dialog = new ShipDesignerDialog(state_, 1, this);
+    auto* dialog = new ShipDesignerDialog(state_, pendingOrders_.player, this);
     shipDesigner_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModal(false);
@@ -1163,7 +1169,7 @@ void MainWindow::openShipDesigner()
         const auto draft = dialog->draft();
         const auto duplicateInState = std::any_of(
             state_.shipDesigns.begin(), state_.shipDesigns.end(), [&](const ShipDesign& design) {
-                return design.owner == 1 && design.name == draft.name;
+                return design.owner == pendingOrders_.player && design.name == draft.name;
             });
         if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
             statusBar()->showMessage("A ship design with that name already exists or is pending");
@@ -1218,7 +1224,7 @@ void MainWindow::queueFleetLoadAll()
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     const auto* fleet = selectedFleet();
-    if (!star || !planet || !fleet || !is_surveyed(state_, 1, star->id)
+    if (!star || !planet || !fleet || !is_surveyed(state_, pendingOrders_.player, star->id)
         || planet->owner != fleet->owner || fleet_cargo_capacity(state_, *fleet) <= 0.0) {
         return;
     }
@@ -1249,11 +1255,11 @@ void MainWindow::queueShipDesign()
 {
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 1) return;
+    if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto* design = find_ship_design(state_, designId);
-    if (!design || design->owner != 1) return;
+    if (!design || design->owner != pendingOrders_.player) return;
 
     appendPendingOrder(QueueShipDesignOrder{planet->id, design->id},
         QString("Queue %1 at %2 — cost %3")
@@ -1264,7 +1270,7 @@ void MainWindow::queueProduction(ProductionKind kind)
 {
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 1) return;
+    if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
 
     appendPendingOrder(QueueProductionOrder{planet->id, kind},
         QString("Queue %1 at %2").arg(productionName(kind)).arg(QString::fromStdString(planet->name)));
@@ -1304,7 +1310,7 @@ void MainWindow::queueColonize()
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     const auto* ship = selectedColonyShipAtSelectedStar();
-    if (!star || survey_level(state_, 1, star->id) < SurveyLevel::OrbitalSurvey
+    if (!star || survey_level(state_, pendingOrders_.player, star->id) < SurveyLevel::OrbitalSurvey
         || !planet || planet->owner != 0 || !ship || ship->colonists == 0) return;
     if (!confirmFleetColonization(*ship, *planet, false)) return;
 
@@ -1317,6 +1323,12 @@ void MainWindow::queueColonize()
 bool MainWindow::confirmFleetColonization(
     const Fleet& fleet, const Planet& planet, bool scheduledRoute)
 {
+    const auto* empire = find_player(state_, pendingOrders_.player);
+    if (empire && empire->race.environmentBased
+        && known_planet_habitability(state_, empire->id, planet.id).value_or(0) == 0) {
+        statusBar()->showMessage("This environment is incompatible. Research Biology habitats or choose another world.", 6000);
+        return false;
+    }
     QStringList composition;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state_, stack.design);
@@ -1370,7 +1382,17 @@ bool MainWindow::confirmFleetColonization(
 void MainWindow::endTurn()
 {
     cancelRouteProgramMapTargetPick();
-    auto result = processor_.process_with_events(state_, {pendingOrders_});
+    if (sessionMode_ == SessionMode::PlayerTurn) { exportTurnOrders(); return; }
+    if (sessionMode_ == SessionMode::Host && inbox_.size() + 1 != state_.players.size()) {
+        statusBar()->showMessage("Waiting for orders from every remote player. An empty submission is a pass.", 6000);
+        return;
+    }
+    auto submissions = inbox_;
+    submissions.push_back(pendingOrders_);
+    auto result = resolve_campaign_turn(state_, std::move(submissions));
+    inbox_.clear();
+    if (sessionMode_ == SessionMode::Host)
+        campaignMessages_.insert(campaignMessages_.end(), result.events.begin(), result.events.end());
     state_ = std::move(result.state);
     rotateTurnExchangeToken();
     pendingOrders_.orders.clear();
@@ -1380,6 +1402,8 @@ void MainWindow::endTurn()
     refreshShipDesignChoices();
     rebuildScene();
     appendTurnMessages(result.events);
+    updateSaveWindowTitle();
+    if (sessionMode_ == SessionMode::Host && !currentSavePath_.isEmpty()) saveGameToPath(currentSavePath_);
     statusBar()->showMessage(QString("Turn %1 — orders, designs, logistics, Warp travel, arrival actions, sensors and economy resolved")
         .arg(static_cast<qulonglong>(state_.turn)));
 }
@@ -1399,7 +1423,13 @@ void MainWindow::newGalaxy()
     requested.starCount = static_cast<std::size_t>(starCountSpin_->value());
 
     try {
-        auto generated = generate_game(requested);
+        auto generated = empireSetups_.empty() ? generate_game(requested) : generate_campaign(requested, empireSetups_);
+        sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
+        pendingOrders_ = {1, {}};
+        inbox_.clear();
+        campaignMessages_.clear();
+        currentSavePath_.clear();
+        if (shipDesigner_) shipDesigner_->close();
         galaxyConfig_ = requested;
         state_ = std::move(generated);
         resetTurnExchangeIdentity();

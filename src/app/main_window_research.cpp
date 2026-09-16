@@ -74,6 +74,30 @@ void MainWindow::installResearch()
     researchUnlock_->setWordWrap(true);
     layout->addWidget(researchUnlock_);
 
+    auto* technologies = new QTreeWidget(content);
+    technologies->setObjectName("technologyCatalog");
+    technologies->setHeaderLabels({"Technology", "Requirement", "Status", "Capability"});
+    technologies->setRootIsDecorated(false);
+    technologies->setAlternatingRowColors(true);
+    technologies->setMinimumHeight(160);
+    technologies->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    technologies->header()->setSectionResizeMode(3, QHeaderView::Stretch);
+    technologies->setToolTip("Double-click a locked technology to queue the required levels.");
+    layout->addWidget(technologies);
+    connect(technologies, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
+        const auto field = static_cast<ResearchField>(item->data(0, Qt::UserRole).toInt());
+        const int target = item->data(0, Qt::UserRole + 1).toInt();
+        int planned = technology_level(state_, pendingOrders_.player, field);
+        for (int row = 0; row < researchPlanTree_->topLevelItemCount(); ++row)
+            if (researchPlanTree_->topLevelItem(row)->data(0, Qt::UserRole).toInt() == int(field)) ++planned;
+        if (planned >= target) return;
+        for (; planned < target; ++planned) {
+            auto* row = new QTreeWidgetItem(researchPlanTree_);
+            row->setData(0, Qt::UserRole, int(field));
+        }
+        queueResearchPlan();
+    });
+
     auto* allocationRow = new QHBoxLayout;
     allocationRow->addWidget(new QLabel("Guaranteed research allocation", content));
     researchAllocationSpin_ = new QSpinBox(content);
@@ -165,7 +189,7 @@ void MainWindow::openResearchDialog()
 void MainWindow::refreshResearchPanel()
 {
     if (!researchDialog_) return;
-    const auto* player = find_player(state_, 1);
+    const auto* player = find_player(state_, pendingOrders_.player);
     if (!player) return;
 
     auto planActive = player->technology.researchActive;
@@ -221,22 +245,25 @@ void MainWindow::refreshResearchPanel()
         researchProgress_->setFormat("Research paused — add a field to the plan");
     }
 
-    QString unlock = "No concrete unlock is assigned to the next level in this first slice.";
-    if (!planActive) {
-        unlock = "No research target is selected. Accumulated RP is preserved in each field.";
-    } else if (focus == ResearchField::Energy && level == 0) {
-        unlock = "Next unlock: Antimatter Generator — onboard fuel production plus 200 units of reserve capacity.";
-    } else if (focus == ResearchField::Propulsion && level == 0) {
-        unlock = "Next unlock: Advanced Fusion Drive — a light, safe Warp-9 engine that consumes fuel instead of scooping it.";
-    } else if (focus == ResearchField::Electronics) {
-        if (level == 0) unlock = "Next unlock: Compact Long Range Scanner — lighter and cheaper, with a 55 ly field.";
-        else if (level == 1) unlock = "Next unlock: Extended Range Scanner — a heavy 160 ly ordinary sensor for deep-space coverage.";
-        else if (level == 2) unlock = "Next unlock: Penetrating Scanner — approximate planetary data without entering orbit.";
-        else unlock = "Higher Electronics levels will later support communications, classification and electronic warfare.";
-    } else if (focus == ResearchField::Construction && level == 0) {
-        unlock = "Next unlock: Remote Mining Module — mines uncolonized worlds into surface stockpiles for cargo fleets to collect.";
+    QStringList nextUnlocks;
+    auto* catalog = researchDialog_->findChild<QTreeWidget*>("technologyCatalog");
+    catalog->clear();
+    for (const auto& unlock : research_unlocks()) {
+        const auto current = technology_level(state_, player->id, unlock.field);
+        auto* row = new QTreeWidgetItem(catalog);
+        row->setText(0, QString::fromStdString(unlock.name));
+        row->setText(1, QString("%1 %2").arg(fieldName(unlock.field)).arg(unlock.level));
+        const bool applicable = unlock.field != ResearchField::Biology || player->race.environmentBased;
+        row->setText(2, !applicable ? "Legacy rules" : current >= unlock.level ? "Available" : "Locked");
+        row->setText(3, QString::fromStdString(unlock.description));
+        row->setData(0, Qt::UserRole, int(unlock.field));
+        row->setData(0, Qt::UserRole + 1, int(unlock.level));
+        if (unlock.field == focus && unlock.level == level + 1)
+            nextUnlocks << QString::fromStdString(unlock.name);
     }
-    researchUnlock_->setText(unlock);
+    researchUnlock_->setText(!planActive ? "Research paused; accumulated RP is preserved."
+        : nextUnlocks.isEmpty() ? "No implemented capability at the next level. Weapons awaits combat rules."
+        : "Next unlock: " + nextUnlocks.join(", "));
 
     const auto previousRow = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());
     researchPlanTree_->clear();

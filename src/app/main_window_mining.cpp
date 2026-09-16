@@ -48,7 +48,7 @@ void MainWindow::installMiningInfrastructure()
     connect(queueMineButton, &QPushButton::clicked, this, [this] {
         const auto* star = selectedStar();
         const auto* planet = selectedPlanet();
-        if (!star || !is_surveyed(state_, 1, star->id) || !planet || planet->owner != 1) return;
+        if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
         appendPendingOrder(
             QueueProductionOrder{planet->id, ProductionKind::Mine},
             QString("Queue Mine at %1").arg(QString::fromStdString(planet->name)));
@@ -60,9 +60,9 @@ void MainWindow::installMiningInfrastructure()
         const auto* star = selectedStar();
         const auto* planet = selectedPlanet();
         const bool friendlyColony = star
-            && is_surveyed(state_, 1, star->id)
+            && is_surveyed(state_, pendingOrders_.player, star->id)
             && planet
-            && planet->owner == 1;
+            && planet->owner == pendingOrders_.player;
 
         queueMineButton->setEnabled(friendlyColony);
         if (!friendlyColony) {

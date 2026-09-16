@@ -1,4 +1,5 @@
 #include "save_game.hpp"
+#include "suns/campaign.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -9,13 +10,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
+#include <stdexcept>
 
 namespace suns {
 
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 30;
+constexpr quint32 kSaveFormatVersion = 31;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 2;
@@ -97,6 +99,8 @@ void writePosition(QDataStream& stream, const Position& value)
 void readPosition(QDataStream& stream, Position& value)
 {
     stream >> value.x >> value.y;
+    if (!std::isfinite(value.x) || !std::isfinite(value.y)
+        || std::abs(value.x) > 1e9 || std::abs(value.y) > 1e9) markCorrupt(stream);
 }
 
 void writeMinerals(QDataStream& stream, const MineralCargo& value)
@@ -107,6 +111,8 @@ void writeMinerals(QDataStream& stream, const MineralCargo& value)
 void readMinerals(QDataStream& stream, MineralCargo& value)
 {
     stream >> value.ironium >> value.boranium >> value.germanium;
+    for (const double amount : {value.ironium, value.boranium, value.germanium})
+        if (!std::isfinite(amount) || amount < 0 || amount > 1e15) markCorrupt(stream);
 }
 
 void writeShipStacks(QDataStream& stream, const std::vector<FleetShipStack>& values)
@@ -528,6 +534,10 @@ void writePlanet(QDataStream& stream, const Planet& value)
            << static_cast<quint8>(value.precursorArtifacts.claimed ? 1 : 0)
            << static_cast<quint32>(value.precursorArtifacts.discoveredBy)
            << static_cast<quint16>(value.precursorArtifacts.researchPoints);
+    stream << quint8(value.observedHabitability.has_value());
+    if (value.observedHabitability) stream << quint32(*value.observedHabitability);
+    stream << quint8(value.observedConcentration.has_value());
+    if (value.observedConcentration) writeMinerals(stream, *value.observedConcentration);
 }
 
 void readPlanet(QDataStream& stream, Planet& value)
@@ -613,6 +623,27 @@ void readPlanet(QDataStream& stream, Planet& value)
             static_cast<std::uint16_t>(researchPoints),
         };
     }
+    if (gReadSaveFormatVersion >= 31) {
+        quint8 hasHabitability{}, hasConcentration{};
+        stream >> hasHabitability;
+        if (hasHabitability > 1) { markCorrupt(stream); return; }
+        if (hasHabitability) {
+            quint32 valueRead{};
+            stream >> valueRead;
+            if (valueRead > 100) { markCorrupt(stream); return; }
+            value.observedHabitability = valueRead;
+        }
+        stream >> hasConcentration;
+        if (hasConcentration > 1) { markCorrupt(stream); return; }
+        if (hasConcentration) {
+            MineralCargo concentration;
+            readMinerals(stream, concentration);
+            for (double v : {concentration.ironium, concentration.boranium, concentration.germanium})
+                if (!std::isfinite(v) || v < 0 || v > 100) { markCorrupt(stream); return; }
+            value.observedConcentration = concentration;
+        }
+    }
+
 }
 
 void writeGameEvent(QDataStream& stream, const GameEvent& value)
@@ -864,6 +895,7 @@ void writePlayer(QDataStream& stream, const Player& value)
            << static_cast<quint8>(value.race.habitableRadiation.maximum);
     stream << static_cast<quint32>(value.history.size());
     for (const auto& snapshot : value.history) writeEmpireTurnStatistics(stream, snapshot);
+    stream << quint8(value.race.environmentBased);
 }
 
 void readPlayer(QDataStream& stream, Player& value)
@@ -1088,6 +1120,13 @@ void readPlayer(QDataStream& stream, Player& value)
             value.history.push_back(std::move(snapshot));
         }
     }
+    if (gReadSaveFormatVersion >= 31) {
+        quint8 environmentBased{};
+        stream >> environmentBased;
+        if (environmentBased > 1) { markCorrupt(stream); return; }
+        value.race.environmentBased = environmentBased != 0;
+    }
+
 }
 
 void writeFleet(QDataStream& stream, const Fleet& value)
@@ -1850,6 +1889,10 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     stream << static_cast<quint32>(data.strategicMessages.size());
     for (const auto& event : data.strategicMessages) writeGameEvent(stream, event);
     writeMessageIds(stream, data.readStrategicMessageIds);
+    writeEnum(stream, data.mode);
+    stream << quint32(data.playerTokens.size());
+    for (const auto& [player, token] : data.playerTokens) stream << quint32(player) << quint64(token);
+    writeVector(stream, data.inbox, writePlayerOrders);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -1921,6 +1964,20 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         readMessageIds(stream, loaded.readStrategicMessageIds);
     }
 
+    if (version >= 31) {
+        if (!readEnum(stream, loaded.mode, quint8(SessionMode::PlayerTurn))) return false;
+        quint32 count{};
+        if (!readCount(stream, count)) return false;
+        for (quint32 i = 0; i < count; ++i) {
+            quint32 player{};
+            quint64 token{};
+            stream >> player >> token;
+            if (token == 0 || !find_player(loaded.state, player)
+                || !loaded.playerTokens.emplace(player, token).second) markCorrupt(stream);
+        }
+        if (!readVector(stream, loaded.inbox, readPlayerOrders)) return false;
+    }
+
     if (stream.status() != QDataStream::Ok) {
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
@@ -1985,6 +2042,36 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (loaded.state.nextOrbitalStationId == 0
         || loaded.state.nextOrbitalStationId <= maximumStationId) {
         errorMessage = "The Suns! save file contains an invalid orbital-station identity sequence.";
+        return false;
+    }
+
+    if (!find_player(loaded.state, loaded.pendingOrders.player)) {
+        errorMessage = "The planning player does not exist.";
+        return false;
+    }
+    if (loaded.mode == SessionMode::Host) {
+        if (loaded.playerTokens.size() != loaded.state.players.size()) {
+            errorMessage = "The host is missing player turn identities.";
+            return false;
+        }
+        std::vector<PlayerId> accepted;
+        for (const auto& orders : loaded.inbox) {
+            if (!find_player(loaded.state, orders.player)
+                || orders.player == loaded.pendingOrders.player
+                || std::find(accepted.begin(), accepted.end(), orders.player) != accepted.end()) {
+                errorMessage = "Invalid host inbox.";
+                return false;
+            }
+            accepted.push_back(orders.player);
+        }
+    } else if (!loaded.playerTokens.empty() || !loaded.inbox.empty()) {
+        errorMessage = "Only host saves may contain an inbox or player tokens.";
+        return false;
+    }
+    if (loaded.mode == SessionMode::PlayerTurn
+        && (loaded.state.galaxySeed != 0 || loaded.galaxyConfig.seed != 0
+            || loaded.state.players.size() != 1)) {
+        errorMessage = "Invalid player turn projection.";
         return false;
     }
 
@@ -2091,6 +2178,39 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
 
     data = std::move(loaded);
     return true;
+}
+
+QString validate_turn_submission(const SaveGameData& host, const TurnOrderFileData& packet)
+{
+    if (host.mode != SessionMode::Host) return "Open the host campaign to collect player orders.";
+    if (packet.campaignId != host.campaignId) return "These orders belong to another campaign.";
+    if (packet.turn != host.state.turn) return "These orders belong to another turn.";
+    const auto token = host.playerTokens.find(packet.orders.player);
+    if (token == host.playerTokens.end()) return "Unknown player.";
+    if (token->second != packet.turnToken) return "These orders use an expired or incorrect player token.";
+    if (packet.orders.player == host.pendingOrders.player) return "Use the host's local planning controls for this player.";
+    return {};
+}
+
+SaveGameData make_player_turn(const SaveGameData& host, PlayerId player)
+{
+    if (host.mode != SessionMode::Host) throw std::invalid_argument("Only a host exports player turns");
+    const auto view = make_player_view(host.state, player);
+    SaveGameData packet;
+    packet.mode = SessionMode::PlayerTurn;
+    packet.campaignId = host.campaignId;
+    packet.turnToken = host.playerTokens.at(player);
+    packet.galaxyConfig = host.galaxyConfig;
+    packet.galaxyConfig.seed = 0;
+    packet.state = view.state;
+    packet.pendingOrders = {player, {}};
+    for (const auto& event : host.strategicMessages)
+        if (event.recipient == player) packet.strategicMessages.push_back(event);
+    for (const auto& fleet : packet.state.fleets) if (fleet.owner == player) {
+        packet.selectedFleet = fleet.id;
+        break;
+    }
+    return packet;
 }
 
 } // namespace suns

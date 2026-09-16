@@ -2,6 +2,8 @@
 
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/campaign.hpp"
+#include "save_game.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -163,6 +165,9 @@ private:
     void queueColonize();
     void endTurn();
     void newGalaxy();
+    void newCampaign();
+    void exportPlayerTurns();
+    [[nodiscard]] SaveGameData campaignSnapshot() const;
     [[nodiscard]] bool installSaveMenuBootstrap();
     void saveGame();
     void saveGameAs();
@@ -223,6 +228,11 @@ private:
     GameState state_;
     TurnProcessor processor_;
     PlayerOrders pendingOrders_{1, {}};
+    SessionMode sessionMode_{SessionMode::Solo};
+    std::vector<EmpireSetup> empireSetups_;
+    std::map<PlayerId, std::uint64_t> playerTokens_;
+    std::vector<PlayerOrders> inbox_;
+    std::vector<GameEvent> campaignMessages_;
     std::uint64_t campaignId_{};
     std::uint64_t turnToken_{};
     std::optional<StarId> selectedStarId_;

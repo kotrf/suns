@@ -241,6 +241,9 @@ struct Planet {
     bool productionWaitingForShipyard{};
     PlanetEnvironment environment;
     PrecursorArtifactSite precursorArtifacts;
+    // Values delivered in a player turn; absent in the authoritative simulation.
+    std::optional<std::uint32_t> observedHabitability;
+    std::optional<MineralCargo> observedConcentration;
 };
 
 enum class OrbitalStationHullType : std::uint8_t {
@@ -368,6 +371,7 @@ struct RaceProfile {
     RaceEnvironmentRange habitableTemperature{25, 75};
     RaceEnvironmentRange habitableGravity{30, 70};
     RaceEnvironmentRange habitableRadiation{0, 40};
+    bool environmentBased{}; // Legacy campaigns retain their scalar habitability.
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and

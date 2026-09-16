@@ -124,8 +124,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));
 
-    if (!is_surveyed(state_, 1, star->id)) {
-        if (survey_level(state_, 1, star->id) >= SurveyLevel::SystemScan) {
+    if (!is_surveyed(state_, pendingOrders_.player, star->id)) {
+        if (survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::SystemScan) {
             lines << "<b>SYSTEM CONTACT</b> — ordinary scanner data received";
             lines << "Planetary parameters require orbit or a penetrating scanner.";
         } else {
@@ -141,19 +141,19 @@ QString MainWindow::selectedPlanetPanelSummary() const
         return lines.join("<br>");
     }
 
-    const auto knownHabitability = known_planet_habitability(state_, 1, planet->id);
-    const auto estimated = survey_level(state_, 1, star->id) == SurveyLevel::BasicScan;
+    const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id);
+    const auto estimated = survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan;
     lines << QString("%1 • Habitability <b>%2%3%</b>")
                  .arg(QString::fromStdString(planet->name))
                  .arg(estimated ? "~" : "")
                  .arg(knownHabitability.value_or(0));
     if (estimated) lines << "Basic scan estimate — enter orbit to confirm";
-    if (const auto artifactHint = known_precursor_artifact_hint(state_, 1, planet->id)) {
+    if (const auto artifactHint = known_precursor_artifact_hint(state_, pendingOrders_.player, planet->id)) {
         lines << (*artifactHint
                 ? "<span style='color:#d8bd72'><b>Deep survey:</b> possible artificial structures</span>"
                 : "Deep survey complete — no unexamined unusual sites");
     }
-    if (const auto variability = known_stellar_variability(state_, 1, star->id);
+    if (const auto variability = known_stellar_variability(state_, pendingOrders_.player, star->id);
         variability && variability->variable) {
         if (variability->characterized) {
             lines << QString("<b>Variable star</b> • period %1 years • luminosity ±%2% • now %3%")
@@ -165,8 +165,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
         }
     }
 
-    if (planet->owner == 1) {
-        lines << QString("<span style='color:#85d5a5'><b>Terran colony</b></span>");
+    if (planet->owner == pendingOrders_.player) {
+        lines << QString("<span style='color:#85d5a5'><b>Your colony</b></span>");
         lines << QString("Factories %1 • Mines %2 • Output %3 / turn")
                      .arg(planet->industry)
                      .arg(planet->mines)
@@ -191,8 +191,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
                      .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * 25ULL);
-        if (planet_geology_known(state_, 1, planet->id)) {
-            const auto remoteYield = remoteMiningAtPlanet(state_, 1, *planet);
+        if (planet_geology_known(state_, pendingOrders_.player, planet->id)) {
+            const auto remoteYield = remoteMiningAtPlanet(state_, pendingOrders_.player, *planet);
             if (mineral_cargo_mass(remoteYield) > 0.000001) {
                 lines << QString("Remote extraction / turn — I %1 • B %2 • G %3")
                              .arg(remoteYield.ironium, 0, 'f', 2)

@@ -111,6 +111,7 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required)
 
 MineralCargo planet_mineral_concentration(const GameState& state, const Planet& planet)
 {
+    if (planet.observedConcentration) return *planet.observedConcentration;
     const auto* star = find_star(state, planet.star);
     const auto bias = star ? classBias(star->stellarClass) : MineralCargo{};
     const auto root = state.galaxySeed ^ (static_cast<std::uint64_t>(planet.id) * 0xD6E8FEB86659FD93ULL);
