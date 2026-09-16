@@ -47,6 +47,19 @@ int main(int argc, char** argv)
     assert(packet.playerTokens.empty() && packet.inbox.empty());
     assert(packet.turnToken == 222 && packet.mode == SessionMode::PlayerTurn);
     assert(write_save_game_file(turnPath, packet, error));
+    // Hidden changes cannot change the bytes delivered to the remote player.
+    auto altered = host;
+    altered.state.players[0].technology.levels.fill(9);
+    altered.state.planets[0].population = 999999;
+    altered.state.planets[0].productionQueue.push_back({ProductionKind::Factory, 1, 0});
+    altered.state.planets[0].precursorArtifacts = {true, false, 0, 999};
+    altered.state.fleets[0].colonists = 54321;
+    altered.state.fleets[0].destination = Position{123, 456};
+    const auto alteredPath = directory.filePath("altered.sunsturn");
+    assert(write_save_game_file(alteredPath, make_player_turn(altered, 2), error));
+    QFile originalBytes(turnPath), changedBytes(alteredPath);
+    assert(originalBytes.open(QIODevice::ReadOnly) && changedBytes.open(QIODevice::ReadOnly));
+    assert(originalBytes.readAll() == changedBytes.readAll());
     SaveGameData loaded;
     assert(read_save_game_file(turnPath, loaded, error));
     assert(loaded.state.players.size() == 1 && loaded.pendingOrders.player == 2);

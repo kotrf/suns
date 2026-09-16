@@ -833,7 +833,7 @@ void MainWindow::updateControls()
     const auto colonyShips = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
         return candidate.owner == pendingOrders_.player && fleet_can_colonize(state_, candidate);
     }));
-    const auto inTransit = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [](const Fleet& candidate) {
+    const auto inTransit = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [this](const Fleet& candidate) {
         return candidate.owner == pendingOrders_.player && candidate.destination.has_value();
     }));
     const auto* player = find_player(state_, pendingOrders_.player);
@@ -1123,6 +1123,15 @@ void MainWindow::updateControls()
         ? QString("Resolve turn %1 — %2/%3 remote orders").arg(qulonglong(state_.turn))
             .arg(qulonglong(inbox_.size())).arg(qulonglong(state_.players.size() - 1))
         : QString("End Turn %1").arg(qulonglong(state_.turn)));
+    QStringList readiness;
+    if (sessionMode_ == SessionMode::Host) for (const auto& player : state_.players) {
+        if (player.id == pendingOrders_.player) continue;
+        const bool ready = std::any_of(inbox_.begin(), inbox_.end(), [&](const PlayerOrders& orders) {
+            return orders.player == player.id;
+        });
+        readiness << QString("%1: %2").arg(QString::fromStdString(player.name), ready ? "received" : "waiting");
+    }
+    endTurnButton_->setToolTip(readiness.join("\n"));
     refreshResearchPanel();
 }
 
@@ -1410,6 +1419,10 @@ void MainWindow::endTurn()
 
 void MainWindow::newGalaxy()
 {
+    if (sessionMode_ == SessionMode::PlayerTurn && empireSetups_.empty()) {
+        statusBar()->showMessage("A player turn cannot restart the host's galaxy. Use File → New campaign.", 5000);
+        return;
+    }
     cancelRouteProgramMapTargetPick();
     bool ok = false;
     const auto parsedSeed = seedEdit_->text().trimmed().toULongLong(&ok);

@@ -256,6 +256,16 @@ bool MainWindow::loadGameFromPath(const QString& path)
     campaignMessages_ = sessionMode_ == SessionMode::Host ? loaded.strategicMessages : std::vector<GameEvent>{};
     galaxyConfig_ = loaded.galaxyConfig;
     state_ = std::move(loaded.state);
+    if (sessionMode_ != SessionMode::PlayerTurn
+        && std::all_of(state_.players.begin(), state_.players.end(), [](const Player& player) {
+            return player.race.environmentBased;
+        })) {
+        for (const auto& player : state_.players) {
+            const auto preset = player.race.radiationImmune ? RacePreset::Radiotroph
+                : player.race.habitableTemperature.minimum == 0 ? RacePreset::Cryophile : RacePreset::Terran;
+            empireSetups_.push_back({player.name, preset});
+        }
+    }
     campaignId_ = loaded.campaignId;
     turnToken_ = loaded.turnToken;
     resetTurnMessages();

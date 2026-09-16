@@ -199,8 +199,17 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 known.owner = planet.owner;
                 known.environment = planet.environment;
             } else known.environment = {};
-            if (level >= SurveyLevel::GeologicalSurvey && planet.owner == 0)
-                known.minerals = planet.minerals;
+            // Surface stocks change through other empires' mining/cargo orders.
+            // Only an immediately connected fleet on site knows today's stock.
+            if (level >= SurveyLevel::GeologicalSurvey && planet.owner == 0) {
+                const auto* star = find_star(host, planet.star);
+                const bool onSite = star && std::any_of(host.fleets.begin(), host.fleets.end(),
+                    [&](const Fleet& fleet) {
+                        return fleet.owner == playerId && same_position(fleet.position, star->position)
+                            && fleet_has_instant_link(host, fleet);
+                    });
+                if (onSite) known.minerals = planet.minerals;
+            }
         }
         known.observedHabitability = known_planet_habitability(host, playerId, planet.id);
         known.habitability = known.observedHabitability.value_or(0);
@@ -216,6 +225,10 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     }
     for (const auto& fleet : host.fleets) if (fleet.owner == playerId) {
         auto known = fleet_player_view(host, fleet);
+        // fleet_player_view supports legacy UI fixtures; do not let its fallback
+        // to current composition disclose undelivered changes to a remote fleet.
+        if (known.telemetry.ships.empty()) known.ships = {{known.design, 1}};
+        known.fuelStalled = false;
         known.pendingCommands.clear();
         known.telemetryInTransit.clear();
         state.fleets.push_back(known);
