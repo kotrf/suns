@@ -741,7 +741,8 @@ void MainWindow::rebuildScene()
         const auto anchor = fleetMapAnchor(state_, fleet);
         const double x = anchor.x();
         const double y = anchor.y();
-        const auto color = fleetColor(fleet.role);
+        const bool enemyContact = fleet.owner != pendingOrders_.player;
+        const auto color = enemyContact ? QColor("#dd7777") : fleetColor(fleet.role);
         const bool selected = selectedFleetId_ && *selectedFleetId_ == fleet.id;
 
         QPolygonF shape;
@@ -783,6 +784,11 @@ void MainWindow::rebuildScene()
         }
         if (visibleFleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(visibleFleet)));
         if (visibleFleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
+        if (enemyContact && sessionMode_ == SessionMode::PlayerTurn) {
+            tooltip = QString("%1\nEmpire %2 contact\nPosition: %3, %4\nShip details unknown")
+                .arg(QString::fromStdString(fleet.name)).arg(fleet.owner)
+                .arg(visibleFleet.position.x, 0, 'f', 1).arg(visibleFleet.position.y, 0, 'f', 1);
+        }
         marker->setToolTip(tooltip);
         marker->setZValue(10.0);
 
@@ -943,7 +949,9 @@ void MainWindow::updateControls()
             .arg(estimated ? "~" : "")
             .arg(knownHabitability)
             .arg(variabilityLine);
-        const QString owner = planet->owner == pendingOrders_.player ? "Your colony" : "Uncolonized";
+        const QString owner = planet->owner == pendingOrders_.player ? "Your colony"
+            : planet->owner != 0 ? QString("Empire %1 colony").arg(planet->owner)
+            : estimated ? "Ownership unknown" : "Uncolonized";
         const auto artifactLine = planet->precursorArtifacts.claimed
             ? QString("<br><span style='color:#d8bd72'><b>History:</b> precursor site excavated (+%1 RP)</span>")
                   .arg(planet->precursorArtifacts.researchPoints)

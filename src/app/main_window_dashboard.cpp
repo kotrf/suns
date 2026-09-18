@@ -187,7 +187,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
         }
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
     } else if (planet->owner == 0) {
-        lines << "<span style='color:#c6b57c'><b>Uncolonized</b></span>";
+        lines << (estimated ? "<b>Ownership unknown</b>"
+            : "<span style='color:#c6b57c'><b>Uncolonized</b></span>");
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
                      .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * 25ULL);

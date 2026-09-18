@@ -34,6 +34,34 @@ int main()
     assert(race_habitability(hot, {70, 65, 100}, 0) == 100);
     assert(race_habitability(hot, {50, 50, 20}, 0) == 0);
 
+    // The host enforces racial colonization constraints; habitat research
+    // changes which worlds can actually be settled, not just their UI color.
+    auto colonyTrial = state;
+    auto& target = *std::find_if(colonyTrial.planets.begin(), colonyTrial.planets.end(),
+        [](const Planet& planet) { return planet.owner == 0; });
+    const auto targetId = target.id;
+    target.environment = {20, 50, 20};
+    auto& trialStar = *std::find_if(colonyTrial.stars.begin(), colonyTrial.stars.end(),
+        [&](const StarSystem& star) { return star.id == target.star; });
+    trialStar.variability = {};
+    colonyTrial.players[0].surveyKnowledge.push_back({target.star, SurveyLevel::OrbitalSurvey, 1});
+    colonyTrial.players[0].surveyedStars.push_back(target.star);
+    colonyTrial.fleets[0].design = 2;
+    colonyTrial.fleets[0].position = trialStar.position;
+    colonyTrial.fleets[0].colonists = 100;
+    const auto rejectedColony = resolve_campaign_turn(colonyTrial,
+        {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
+    assert(find_planet_at_star(rejectedColony, target.star)->owner == 0);
+    colonyTrial.players[0].technology.levels[static_cast<std::size_t>(ResearchField::Biology)] = 1;
+    const auto founded = resolve_campaign_turn(colonyTrial,
+        {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
+    assert(find_planet_at_star(founded, target.star)->owner == 1);
+
+    auto legacy = make_demo_game();
+    legacy.planets[0].habitability = 0;
+    legacy.stars[0].variability = {4, 20, 1};
+    assert(current_planet_habitability(legacy, legacy.planets[0], 1) == 20);
+
     bool rejected = false;
     try { (void)resolve_campaign_turn(state, {{1, {}}, {2, {}}}); }
     catch (const std::invalid_argument&) { rejected = true; }
@@ -83,6 +111,23 @@ int main()
     const auto* physical = find_planet_at_star(state, home.star);
     assert(planet_mineral_concentration(view.state, home).ironium
         == planet_mineral_concentration(state, *physical).ironium);
+
+    auto& surveyedPlanet = *std::find_if(state.planets.begin(), state.planets.end(),
+        [](const Planet& planet) { return planet.owner == 0; });
+    surveyedPlanet.precursorArtifacts = {true, false, 0, 123};
+    set_survey_level(state, 2, surveyedPlanet.star, SurveyLevel::DeepSurvey, state.turn);
+    auto surveyedView = make_player_view(state, 2);
+    assert(known_precursor_artifact_hint(surveyedView.state, 2, surveyedPlanet.id).value_or(false));
+    assert(find_planet_at_star(surveyedView.state, surveyedPlanet.star)->precursorArtifacts.researchPoints == 0);
+    auto& variableStar = *std::find_if(state.stars.begin(), state.stars.end(),
+        [&](const StarSystem& star) { return star.id == surveyedPlanet.star; });
+    variableStar.variability = {12, 17, 5};
+    for (auto& knowledge : state.players[1].surveyKnowledge)
+        if (knowledge.star == variableStar.id) knowledge.level = SurveyLevel::OrbitalSurvey;
+    surveyedView = make_player_view(state, 2);
+    const auto variability = known_stellar_variability(surveyedView.state, 2, variableStar.id);
+    assert(variability && variability->variable && !variability->characterized);
+    assert(variability->periodTurns == 0 && variability->amplitudePercent == 0);
 
     // A detected enemy exposes only its contact position, never cargo or route.
     state.fleets[0].position = state.fleets[1].position;

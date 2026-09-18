@@ -78,7 +78,7 @@ std::uint32_t player_planet_habitability(
     const auto* star = find_star(state, planet.star);
     const int shift = star ? int(std::lround((stellar_luminosity(*star, turn) - 1.0) * 100.0)) : 0;
     // Stellar variation cannot make a wholly incompatible environment habitable.
-    if (baseline == 0) return 0;
+    if (baseline == 0 && empire && empire->race.environmentBased) return 0;
     return static_cast<std::uint32_t>(std::clamp(int(baseline) + shift, 0, 100));
 }
 
@@ -182,6 +182,11 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         StarSystem publicStar{star.id, star.name, star.position, star.stellarClass};
         const auto intel = known_stellar_variability(host, playerId, star.id);
         if (intel && intel->characterized) publicStar.variability = star.variability;
+        else if (intel && intel->variable) {
+            // Detection-only sentinel. Orbital knowledge exposes the variable
+            // flag, while known_stellar_variability withholds all cycle values.
+            publicStar.variability = {1, 1, 0};
+        }
         state.stars.push_back(publicStar);
     }
     for (const auto& planet : host.planets) {
@@ -216,7 +221,12 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         if (owned || level >= SurveyLevel::GeologicalSurvey)
             known.observedConcentration = planet_mineral_concentration(host, planet);
         else known.observedConcentration = MineralCargo{};
-        if (!owned) known.precursorArtifacts = {};
+        if (!owned) {
+            known.precursorArtifacts = {};
+            known.precursorArtifacts.researchPoints = 0;
+            known.precursorArtifacts.present = known_precursor_artifact_hint(
+                host, playerId, planet.id).value_or(false);
+        }
         state.planets.push_back(known);
     }
     for (const auto& design : host.shipDesigns) if (design.owner == playerId) {
