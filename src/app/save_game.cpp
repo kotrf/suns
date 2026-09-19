@@ -18,10 +18,10 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 32;
+constexpr quint32 kSaveFormatVersion = 33;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 3;
+constexpr quint32 kTurnOrderFormatVersion = 4;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -1511,6 +1511,8 @@ void writeOrder(QDataStream& stream, const Order& order)
                    << static_cast<quint32>(concrete.toIndex);
         } else if constexpr (std::is_same_v<T, SetResearchAllocationOrder>) {
             stream << quint8{15} << static_cast<quint8>(concrete.percent);
+        } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
+            stream << quint8{16} << quint32(concrete.colony) << quint32(concrete.index);
         }
     }, order);
 }
@@ -1790,6 +1792,13 @@ bool readOrder(QDataStream& stream, Order& order)
         }
         value.percent = percent;
         order = value;
+        return stream.status() == QDataStream::Ok;
+    }
+    case 16: {
+        if (gReadSaveFormatVersion < 33) { markCorrupt(stream); return false; }
+        quint32 colony{}, index{};
+        stream >> colony >> index;
+        order = CancelProductionOrder{colony, index};
         return stream.status() == QDataStream::Ok;
     }
     default:
@@ -2179,7 +2188,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 3 ? 32 : version == 2 ? 31 : 23;
+    gReadSaveFormatVersion = version >= 4 ? 33 : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
 

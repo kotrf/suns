@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSizePolicy>
+#include <QShortcut>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -44,7 +45,10 @@ std::vector<ProductionItem> plannedQueue(
         return item.kind == ProductionKind::Research;
     });
     const auto addDefaultShip = [&] {
-        if (const auto* design = find_ship_design(state, kColonyShipDesignId)) {
+        const auto design = std::find_if(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& candidate) {
+            return candidate.owner == pending.player && ship_design_can_colonize(candidate);
+        });
+        if (design != state.shipDesigns.end()) {
             queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
         }
     };
@@ -59,14 +63,22 @@ std::vector<ProductionItem> plannedQueue(
                 } else if (concrete.kind == ProductionKind::Mine) {
                     queue.push_back({ProductionKind::Mine, kMineCost, 0});
                 } else if (concrete.kind == ProductionKind::OrbitalStation) {
-                    queue.push_back({ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
+                    if (!find_orbital_station_at_planet(state, planet.id)
+                        && std::none_of(queue.begin(), queue.end(), [](const ProductionItem& item) {
+                            return item.kind == ProductionKind::OrbitalStation;
+                        })) queue.push_back({ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                 } else if (concrete.kind == ProductionKind::ColonyShip) {
                     addDefaultShip();
                 }
             } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                 if (concrete.colony != planet.id) return;
-                if (const auto* design = find_ship_design(state, concrete.design)) {
+                if (const auto* design = find_ship_design(state, concrete.design);
+                    design && design->owner == pending.player && ship_design_valid(*design)) {
                     queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
+                }
+            } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
+                if (concrete.colony == planet.id && concrete.index < queue.size()) {
+                    queue.erase(queue.begin() + concrete.index);
                 }
             } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
                 if (concrete.colony != planet.id
@@ -85,6 +97,11 @@ std::vector<ProductionItem> plannedQueue(
 }
 
 } // namespace
+
+std::vector<ProductionItem> MainWindow::plannedProductionQueue(const Planet& planet) const
+{
+    return plannedQueue(state_, planet, pendingOrders_);
+}
 
 void MainWindow::installProductionQueue()
 {
@@ -119,10 +136,14 @@ void MainWindow::installProductionQueue()
     auto* moveRow = new QHBoxLayout;
     productionMoveUpButton_ = new QPushButton("Move up", group);
     productionMoveDownButton_ = new QPushButton("Move down", group);
+    productionRemoveButton_ = new QPushButton("Remove", group);
+    productionRemoveButton_->setObjectName("productionRemoveButton");
+    productionRemoveButton_->setToolTip("Remove the selected build (Delete). Production already spent is lost; minerals are charged only on completion.");
     productionMoveUpButton_->setToolTip("Move the selected item one position earlier");
     productionMoveDownButton_->setToolTip("Move the selected item one position later");
     moveRow->addWidget(productionMoveUpButton_);
     moveRow->addWidget(productionMoveDownButton_);
+    moveRow->addWidget(productionRemoveButton_);
     layout->addLayout(moveRow);
     panelLayout->addWidget(group);
 
@@ -130,9 +151,14 @@ void MainWindow::installProductionQueue()
         [this] { moveSelectedProductionItem(-1); });
     connect(productionMoveDownButton_, &QPushButton::clicked, this,
         [this] { moveSelectedProductionItem(1); });
+    connect(productionRemoveButton_, &QPushButton::clicked, this, &MainWindow::removeSelectedProductionItem);
+    auto* removeShortcut = new QShortcut(QKeySequence(Qt::Key_Delete), productionQueueTree_);
+    removeShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(removeShortcut, &QShortcut::activated, this, &MainWindow::removeSelectedProductionItem);
     connect(productionQueueTree_, &QTreeWidget::itemSelectionChanged, this, [this] {
         const auto row = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
         productionMoveUpButton_->setEnabled(row > 0);
+        productionRemoveButton_->setEnabled(row >= 0);
         productionMoveDownButton_->setEnabled(
             row >= 0 && row + 1 < productionQueueTree_->topLevelItemCount());
     });
@@ -149,16 +175,19 @@ void MainWindow::refreshProductionQueue()
     if (shuttingDown_ || !productionQueueTree_ || !productionQueueSummary_) return;
     const auto previousRow = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
     productionQueueTree_->clear();
+    productionQueuePlanet_.reset();
 
     const auto* planet = selectedPlanet();
     if (!planet || planet->owner != pendingOrders_.player) {
         productionQueueSummary_->setText("Select a friendly colony to inspect its production plan.");
         productionMoveUpButton_->setEnabled(false);
         productionMoveDownButton_->setEnabled(false);
+        productionRemoveButton_->setEnabled(false);
         return;
     }
 
-    const auto queue = plannedQueue(state_, *planet, pendingOrders_);
+    productionQueuePlanet_ = planet->id;
+    const auto queue = plannedProductionQueue(*planet);
     auto forecastState = state_;
     const auto forecastPlayerIt = std::find_if(
         forecastState.players.begin(), forecastState.players.end(), [this](const Player& player) {
@@ -227,12 +256,31 @@ void MainWindow::refreshProductionQueue()
     const auto row = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
     productionMoveUpButton_->setEnabled(row > 0);
     productionMoveDownButton_->setEnabled(row >= 0 && row + 1 < static_cast<int>(queue.size()));
+    productionRemoveButton_->setEnabled(row >= 0);
+}
+
+void MainWindow::removeSelectedProductionItem()
+{
+    const auto* planet = selectedPlanet();
+    if (!planet || planet->owner != pendingOrders_.player || !productionQueueTree_
+        || productionQueuePlanet_ != planet->id) return;
+    const auto row = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
+    if (row < 0) return;
+    const auto queue = plannedProductionQueue(*planet);
+    if (static_cast<std::size_t>(row) >= queue.size()) return;
+    appendPendingOrder(
+        CancelProductionOrder{planet->id, static_cast<std::uint32_t>(row)},
+        QString("Cancel %1 at %2")
+            .arg(productionItemName(state_, queue[row]))
+            .arg(QString::fromStdString(planet->name)));
+    refreshProductionQueue();
 }
 
 void MainWindow::moveSelectedProductionItem(int direction)
 {
     const auto* planet = selectedPlanet();
-    if (!planet || planet->owner != pendingOrders_.player || !productionQueueTree_) return;
+    if (!planet || planet->owner != pendingOrders_.player || !productionQueueTree_
+        || productionQueuePlanet_ != planet->id) return;
     const auto from = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
     const auto to = from + direction;
     if (from < 0 || to < 0 || to >= productionQueueTree_->topLevelItemCount()) return;

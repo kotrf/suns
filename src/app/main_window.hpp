@@ -196,6 +196,8 @@ private:
     void removeSelectedResearchPlanItem();
     void refreshProductionQueue();
     void moveSelectedProductionItem(int direction);
+    void removeSelectedProductionItem();
+    std::vector<ProductionItem> plannedProductionQueue(const Planet& planet) const;
     void rememberMapSelection(int kind, std::uint32_t id);
     [[nodiscard]] QString selectedObjectDistanceSummary() const;
     [[nodiscard]] bool confirmFleetColonization(
@@ -317,6 +319,8 @@ private:
     QLabel* productionQueueSummary_{};
     QPushButton* productionMoveUpButton_{};
     QPushButton* productionMoveDownButton_{};
+    QPushButton* productionRemoveButton_{};
+    std::optional<PlanetId> productionQueuePlanet_;
 };
 
 } // namespace suns

@@ -212,6 +212,15 @@ if(SUNS_BUILD_APP)
 endif()
 
 if(SUNS_BUILD_APP)
+    add_executable(suns_production_editor_tests production_editor_tests.cpp)
+    target_link_libraries(suns_production_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_production_editor_tests COMMAND suns_production_editor_tests)
+    set_tests_properties(suns_production_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 20)
+endif()
+
+if(SUNS_BUILD_APP)
     add_executable(suns_multiplayer_tests multiplayer_tests.cpp)
     target_link_libraries(suns_multiplayer_tests PRIVATE suns_app_ui)
     add_test(NAME suns_multiplayer_tests COMMAND suns_multiplayer_tests)

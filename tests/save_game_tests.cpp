@@ -507,6 +507,31 @@ void old_format_is_rejected_cleanly()
     assert(error.contains("Unsupported Suns! save version"));
 }
 
+void cancellation_round_trips_in_save_and_turn_packet()
+{
+    QTemporaryDir directory;
+    QString error;
+    SaveGameData saved;
+    saved.campaignId = 12;
+    saved.turnToken = 34;
+    saved.state = make_demo_game();
+    saved.pendingOrders = {1, {CancelProductionOrder{1, 2}}};
+    saved.pendingDescriptions = {"Cancel third build"};
+    const auto path = directory.filePath("cancel.suns");
+    assert(write_save_game_file(path, saved, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    const auto savedCancel = std::get<CancelProductionOrder>(loaded.pendingOrders.orders.at(0));
+    assert(savedCancel.colony == 1 && savedCancel.index == 2);
+    TurnOrderFileData packet{12, saved.state.turn, 34, saved.pendingOrders, saved.pendingDescriptions};
+    const auto ordersPath = directory.filePath("cancel.sunsorders");
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData read;
+    assert(read_turn_order_file(ordersPath, read, error));
+    const auto packetCancel = std::get<CancelProductionOrder>(read.orders.orders.at(0));
+    assert(packetCancel.colony == 1 && packetCancel.index == 2);
+}
+
 } // namespace
 
 int main()
@@ -515,6 +540,7 @@ int main()
     turn_order_file_round_trip_preserves_envelope_and_orders();
     old_format_is_rejected_cleanly();
     population_migration_and_clear_orders();
+    cancellation_round_trips_in_save_and_turn_packet();
     std::cout << "save game tests passed\n";
     return 0;
 }
