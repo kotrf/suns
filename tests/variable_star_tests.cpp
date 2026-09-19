@@ -30,8 +30,8 @@ int main()
     assert(suns::current_planet_habitability(state, planet, 1) == 70);
     assert(suns::current_planet_habitability(state, planet, 2) == 90);
     assert(suns::current_planet_habitability(state, planet, 4) == 50);
-    assert(suns::population_capacity(state, planet, 2) == 2250);
-    assert(suns::population_capacity(state, planet, 4) == 1250);
+    assert(suns::population_capacity(state, planet, 2) == 2'250'000);
+    assert(suns::population_capacity(state, planet, 4) == 1'250'000);
     planet.owner = 1;
     planet.population = 500;
     assert(suns::projected_population_growth(state, planet, 2)

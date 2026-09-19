@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "save_game.hpp"
+#include "ship_designer_dialog.hpp"
 
 #include <QAction>
 #include <QCheckBox>
@@ -108,6 +109,13 @@ bool MainWindow::installSaveMenuBootstrap()
         const auto existingMenus = menuBar()->actions();
         menuBar()->insertMenu(existingMenus.empty() ? nullptr : existingMenus.front(), fileMenu);
 
+        auto* campaignAction = fileMenu->addAction("New campaign (races / multiplayer)…");
+        campaignAction->setObjectName("newCampaignAction");
+        connect(campaignAction, &QAction::triggered, this, &MainWindow::newCampaign);
+        auto* playerTurnsAction = fileMenu->addAction("Export player turns…");
+        playerTurnsAction->setObjectName("exportPlayerTurnsAction");
+        connect(playerTurnsAction, &QAction::triggered, this, &MainWindow::exportPlayerTurns);
+        fileMenu->addSeparator();
         auto* openAction = fileMenu->addAction("&Open game…");
         openAction->setShortcut(QKeySequence::Open);
         openAction->setToolTip("Open a .suns save game");
@@ -191,14 +199,14 @@ void MainWindow::openGame()
         this,
         "Open Suns! Game",
         currentSavePath_.isEmpty() ? QString{} : QFileInfo(currentSavePath_).absolutePath(),
-        "Suns! save games (*.suns);;All files (*)");
+        "Suns! games and player turns (*.suns *.sunsturn);;All files (*)");
     if (path.isEmpty()) return;
     loadGameFromPath(path);
 }
 
 bool MainWindow::saveGameToPath(const QString& path)
 {
-    SaveGameData save;
+    SaveGameData save = campaignSnapshot();
     save.campaignId = campaignId_;
     save.turnToken = turnToken_;
     save.galaxyConfig = galaxyConfig_;
@@ -208,7 +216,7 @@ bool MainWindow::saveGameToPath(const QString& path)
     save.selectedStar = selectedStarId_;
     save.selectedFleet = selectedFleetId_;
     save.showSensorRanges = showSensorRanges_;
-    save.strategicMessages = turnMessages_;
+    save.strategicMessages = sessionMode_ == SessionMode::Host ? campaignMessages_ : turnMessages_;
     save.readStrategicMessageIds.assign(
         readTurnMessageIds_.begin(), readTurnMessageIds_.end());
 
@@ -240,8 +248,24 @@ bool MainWindow::loadGameFromPath(const QString& path)
         return false;
     }
 
+    if (shipDesigner_) shipDesigner_->close();
+    sessionMode_ = loaded.mode;
+    empireSetups_.clear();
+    playerTokens_ = std::move(loaded.playerTokens);
+    inbox_ = std::move(loaded.inbox);
+    campaignMessages_ = sessionMode_ == SessionMode::Host ? loaded.strategicMessages : std::vector<GameEvent>{};
     galaxyConfig_ = loaded.galaxyConfig;
     state_ = std::move(loaded.state);
+    if (sessionMode_ != SessionMode::PlayerTurn
+        && std::all_of(state_.players.begin(), state_.players.end(), [](const Player& player) {
+            return player.race.environmentBased;
+        })) {
+        for (const auto& player : state_.players) {
+            const auto preset = player.race.radiationImmune ? RacePreset::Radiotroph
+                : player.race.habitableTemperature.minimum == 0 ? RacePreset::Cryophile : RacePreset::Terran;
+            empireSetups_.push_back({player.name, preset});
+        }
+    }
     campaignId_ = loaded.campaignId;
     turnToken_ = loaded.turnToken;
     resetTurnMessages();
@@ -249,6 +273,9 @@ bool MainWindow::loadGameFromPath(const QString& path)
     readTurnMessageIds_ = std::set<std::uint64_t>(
         loaded.readStrategicMessageIds.begin(), loaded.readStrategicMessageIds.end());
     pendingOrders_ = std::move(loaded.pendingOrders);
+    std::erase_if(turnMessages_, [this](const GameEvent& event) {
+        return event.recipient != pendingOrders_.player;
+    });
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
     selectedStarId_ = loaded.selectedStar;
     selectedFleetId_ = loaded.selectedFleet;
@@ -289,6 +316,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
                                 .arg(static_cast<qulonglong>(state_.turn))
                                 .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
                                 .arg(pendingOrders_.orders.size() == 1 ? "" : "s");
+    if (loaded.migratedPopulation) openedMessage += " — population converted to people; existing cargo mass preserved";
     if (adjustedLegacyWarp) openedMessage += " — Warp adjusted to current engine limits";
     statusBar()->showMessage(openedMessage, 5000);
     return true;
@@ -347,6 +375,28 @@ void MainWindow::importTurnOrders()
         return;
     }
 
+    if (sessionMode_ == SessionMode::Host && packet.orders.player != pendingOrders_.player) {
+        const auto mismatch = validate_turn_submission(campaignSnapshot(), packet);
+        if (!mismatch.isEmpty()) {
+            QMessageBox::warning(this, "Orders Do Not Match", mismatch);
+            return;
+        }
+        auto existing = std::find_if(inbox_.begin(), inbox_.end(), [&](const PlayerOrders& orders) {
+            return orders.player == packet.orders.player;
+        });
+        if (existing != inbox_.end()) {
+            if (QMessageBox::question(this, "Replace submitted orders?",
+                QString("Replace player %1's accepted submission for this turn?").arg(packet.orders.player),
+                QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes) return;
+            *existing = std::move(packet.orders);
+        } else inbox_.push_back(std::move(packet.orders));
+        updateControls();
+        if (!currentSavePath_.isEmpty()) saveGameToPath(currentSavePath_);
+        statusBar()->showMessage(QString("Orders received: %1 / %2 remote players")
+            .arg(qulonglong(inbox_.size())).arg(qulonglong(state_.players.size() - 1)), 5000);
+        return;
+    }
+
     QString mismatch;
     if (packet.campaignId != campaignId_) mismatch = "These orders belong to a different campaign.";
     else if (packet.turn != state_.turn) {
@@ -398,10 +448,22 @@ void MainWindow::resetTurnExchangeIdentity()
 void MainWindow::rotateTurnExchangeToken()
 {
     turnToken_ = randomTurnExchangeId();
+    playerTokens_.clear();
+    if (sessionMode_ == SessionMode::Host) {
+        for (const auto& player : state_.players) playerTokens_[player.id] = randomTurnExchangeId();
+        turnToken_ = playerTokens_.at(pendingOrders_.player);
+    }
 }
 
 void MainWindow::updateSaveWindowTitle()
 {
+    const auto session = sessionMode_ == SessionMode::Host ? "Host" :
+        sessionMode_ == SessionMode::PlayerTurn ? "Player turn" : "Solo";
+    if (sessionMode_ != SessionMode::Solo) {
+        setWindowTitle(QString("Suns! — %1 — Player %2 — Turn %3")
+            .arg(session).arg(pendingOrders_.player).arg(qulonglong(state_.turn)));
+        return;
+    }
     if (currentSavePath_.isEmpty()) {
         setWindowTitle(QString("Suns! — Turn %1").arg(static_cast<qulonglong>(state_.turn)));
         return;

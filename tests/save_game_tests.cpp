@@ -268,7 +268,7 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.size() == 2);
     assert(loaded.state.players.front().history.front().turn == 1);
     assert(loaded.state.players.front().history.back().turn == 77);
-    assert(loaded.state.players.front().history.back().population == 1000);
+    assert(loaded.state.players.front().history.back().population == 1'000'000);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);
@@ -430,6 +430,65 @@ void turn_order_file_round_trip_preserves_envelope_and_orders()
     assert(allocation && allocation->percent == 30);
 }
 
+void population_migration_and_clear_orders()
+{
+    QTemporaryDir directory;
+    QString error;
+    SaveGameData legacy;
+    legacy.campaignId = 12;
+    legacy.turnToken = 34;
+    legacy.state = make_demo_game();
+    legacy.state.planets[0].population = 1000;
+    legacy.state.players[0].history[0].population = 1000;
+    legacy.state.fleets[0].design = kColonyShipDesignId;
+    legacy.state.fleets[0].colonists = 300;
+    legacy.state.fleets[0].telemetry.colonists = 200;
+    legacy.state.fleets[0].arrivalAction = FleetArrivalAction{FleetArrivalActionKind::LoadAllAvailable, 100};
+    legacy.pendingOrders = {1, {SetFleetColonistsOrder{1, 1, 400}}};
+    legacy.pendingDescriptions = {"Load legacy cargo"};
+    const auto path = directory.filePath("v31.suns");
+    assert(write_save_game_file(path, legacy, error));
+    // v31 and v32 layouts are identical for this no-MoveFleetOrder fixture.
+    {
+        QFile file(path);
+        assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+        QDataStream stream(&file);
+        stream << quint32{31};
+    }
+    SaveGameData migrated;
+    assert(read_save_game_file(path, migrated, error));
+    assert(migrated.migratedPopulation);
+    assert(migrated.state.planets[0].population == 1'000'000);
+    assert(migrated.state.players[0].history[0].population == 1'000'000);
+    assert(migrated.state.fleets[0].colonists == 30'000);
+    assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 3.0);
+    assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
+    assert(migrated.state.fleets[0].arrivalAction->reservePopulation == 100'000);
+    assert(std::get<SetFleetColonistsOrder>(migrated.pendingOrders.orders[0]).colonists == 40'000);
+    assert(write_save_game_file(path, migrated, error));
+    assert(read_save_game_file(path, migrated, error));
+    assert(!migrated.migratedPopulation && migrated.state.planets[0].population == 1'000'000);
+
+    const auto ordersPath = directory.filePath("orders.sunsorders");
+    TurnOrderFileData packet{12, 1, 34, {1, {SetFleetColonistsOrder{1, 1, 400}}}, {"Legacy load"}};
+    assert(write_turn_order_file(ordersPath, packet, error));
+    {
+        QFile file(ordersPath);
+        assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+        QDataStream stream(&file);
+        stream << quint32{2};
+    }
+    assert(read_turn_order_file(ordersPath, packet, error));
+    assert(std::get<SetFleetColonistsOrder>(packet.orders.orders[0]).colonists == 40'000);
+    MoveFleetOrder stop{1, {999, 999}, 5};
+    stop.clearRoute = true;
+    packet.orders.orders = {stop};
+    packet.descriptions = {"Stop"};
+    assert(write_turn_order_file(ordersPath, packet, error));
+    assert(read_turn_order_file(ordersPath, packet, error));
+    assert(std::get<MoveFleetOrder>(packet.orders.orders[0]).clearRoute);
+}
+
 void old_format_is_rejected_cleanly()
 {
     QTemporaryDir directory;
@@ -455,6 +514,7 @@ int main()
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();
     old_format_is_rejected_cleanly();
+    population_migration_and_clear_orders();
     std::cout << "save game tests passed\n";
     return 0;
 }

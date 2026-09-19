@@ -119,10 +119,10 @@ std::optional<MoveFleetOrder> effectiveRoute(const GameState&, const PlayerOrder
 
 bool routeIsClearIntent(const Fleet& fleet, const MoveFleetOrder& move)
 {
-    return same_position(fleet.position, move.destination)
+    return move.clearRoute || (same_position(fleet.position, move.destination)
         && move.targetFleet == 0
         && move.arrivalAction.kind == FleetArrivalActionKind::None
-        && move.queuedWaypoints.empty();
+        && move.queuedWaypoints.empty());
 }
 
 QString routeDescription(const GameState& state, const Fleet& fleet, const MoveFleetOrder& route)
@@ -155,11 +155,13 @@ QString routeForecast(
     const PlayerOrders& pending,
     const TurnProcessor& processor,
     FleetId fleetId,
-    const MoveFleetOrder& route)
+    const MoveFleetOrder& route,
+    std::vector<std::optional<std::uint32_t>>* arrivalTurns = nullptr)
 {
     constexpr std::uint32_t kForecastHorizon = 96;
     const auto legs = routeLegs(route);
     if (legs.empty()) return {};
+    if (arrivalTurns) arrivalTurns->assign(legs.size(), std::nullopt);
 
     GameState simulated = state;
     if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
@@ -195,6 +197,7 @@ QString routeForecast(
                              .arg(waypointName(state, leg.destination, leg.targetFleet))
                              .arg(step)
                              .arg(leg.warp);
+                if (arrivalTurns) (*arrivalTurns)[legIndex] = step;
                 legIndex = legs.size();
                 simulated = std::move(next);
                 break;
@@ -211,6 +214,7 @@ QString routeForecast(
                     if (legIndex + 1 < legs.size()) {
                         lines << "<i>Later waypoints cannot execute because successful colonization dismantles the fleet.</i>";
                     }
+                    if (arrivalTurns) (*arrivalTurns)[legIndex] = step;
                     legIndex = legs.size();
                     simulated = std::move(next);
                     break;
@@ -240,6 +244,7 @@ QString routeForecast(
             && remainingLegs == expectedAfterRepeatRestart;
 
         if (arrived) {
+            if (arrivalTurns) (*arrivalTurns)[legIndex] = step;
             const auto navigationCertainty = leg.targetFleet != 0
                 ? (dependsOnDynamicResult ? "projected continuous intercept" : "continuous intercept")
                 : (dependsOnDynamicResult ? "projected navigation" : "exact navigation");
@@ -439,6 +444,11 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
     std::vector<RouteProgramDisplayRow> rows;
     const auto legs = routeLegs(*route);
     rows.reserve(legs.size());
+    if (routeEtaRevision_ != planningRevision_ || routeEtaFleet_ != fleet->id) {
+        (void)routeForecast(state_, pendingOrders_, processor_, fleet->id, *route, &routeEtas_);
+        routeEtaRevision_ = planningRevision_;
+        routeEtaFleet_ = fleet->id;
+    }
     for (std::size_t index = 0; index < legs.size(); ++index) {
         const auto& leg = legs[index];
         rows.push_back({
@@ -446,6 +456,8 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             actionName(leg.arrivalAction),
             leg.warp,
             index == 0,
+            index < routeEtas_.size() && routeEtas_[index]
+                ? QString("~%1").arg(*routeEtas_[index]) : QString("—"),
         });
     }
     return rows;
@@ -653,11 +665,8 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
     }
     if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
         const auto* planet = find_planet_at_star(state_, star->id);
-        if (survey_level(state_, fleet->owner, star->id) < SurveyLevel::OrbitalSurvey) {
-            statusBar()->showMessage("Complete an orbital survey before programming colonization", 3000);
-            return false;
-        }
-        if (!planet || planet->owner != 0) {
+        if (planet && survey_level(state_, fleet->owner, star->id) >= SurveyLevel::OrbitalSurvey
+            && planet->owner != 0) {
             statusBar()->showMessage("Selected destination has no unowned world to colonize", 3000);
             return false;
         }
@@ -676,7 +685,11 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
 
     if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
         const auto* planet = find_planet_at_star(state_, star->id);
-        if (!planet || !confirmFleetColonization(*fleet, *planet, true)) return false;
+        Planet unknown;
+        unknown.star = star->id;
+        unknown.name = "world at " + star->name;
+        const bool known = planet && survey_level(state_, fleet->owner, star->id) >= SurveyLevel::BasicScan;
+        if (!confirmFleetColonization(*fleet, known ? *planet : unknown, true)) return false;
     }
 
     return appendRouteWaypoint(star->position, 0, warp, arrivalAction);
@@ -742,6 +755,7 @@ bool MainWindow::appendRouteWaypoint(
 
     if (auto* move = pendingMove(pendingOrders_, fleet->id)) {
         if (routeIsClearIntent(*fleet, *move)) {
+            move->clearRoute = false;
             move->destination = destination;
             move->targetFleet = targetFleet;
             move->warp = warp;
@@ -807,7 +821,8 @@ bool MainWindow::stageSelectedFleetRoute(
 
 bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int direction)
 {
-    const auto fleetStorage = selectedFleetPlanningView();
+    const auto* sourceFleet = selectedFleet();
+    const auto fleetStorage = sourceFleet ? std::optional<Fleet>{fleet_player_view(state_, *sourceFleet)} : std::nullopt;
     const auto* fleet = fleetStorage ? &*fleetStorage : nullptr;
     if (!fleet || direction == 0) return false;
     auto route = effectiveRoute(state_, pendingOrders_, *fleet);
@@ -840,7 +855,8 @@ bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int directi
 
 bool MainWindow::removeSelectedFleetRouteProgramLeg(std::size_t index)
 {
-    const auto fleetStorage = selectedFleetPlanningView();
+    const auto* sourceFleet = selectedFleet();
+    const auto fleetStorage = sourceFleet ? std::optional<Fleet>{fleet_player_view(state_, *sourceFleet)} : std::nullopt;
     const auto* fleet = fleetStorage ? &*fleetStorage : nullptr;
     if (!fleet) return false;
     auto route = effectiveRoute(state_, pendingOrders_, *fleet);
@@ -941,6 +957,7 @@ bool MainWindow::clearSelectedFleetRouteProgram()
         {},
     };
 
+    clear.clearRoute = true;
     for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
         if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
             move && move->fleet == fleet->id) {
@@ -952,12 +969,8 @@ bool MainWindow::clearSelectedFleetRouteProgram()
         }
     }
 
-    if (!fleet->destination && fleet->waypointQueue.empty()) {
-        statusBar()->showMessage("Selected fleet has no route program");
-        return false;
-    }
-
     appendPendingOrder(clear, routeDescription(state_, *fleet, clear));
+    statusBar()->showMessage("Stop queued; the fleet cancels its program when the command arrives", 4000);
     return true;
 }
 

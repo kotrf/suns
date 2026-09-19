@@ -697,18 +697,18 @@ void MainWindow::installUiPolish()
     statusBar()->addPermanentWidget(selectionDistance);
 
     auto updateCommandContext = [this, selectionDistance, planetInfo, fleetInfo, endTurnAction] {
-        endTurnAction->setText(
-            QString("End Turn %1").arg(static_cast<qulonglong>(state_.turn)));
+        endTurnAction->setText(endTurnButton_->text());
         if (planetInfo) planetInfo->setText(selectedPlanetPanelSummary());
         if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
 
         const auto* environmentPlanet = selectedPlanet();
         const auto* environmentStar = selectedStar();
         const bool environmentKnown = environmentPlanet && environmentStar
-            && is_surveyed(state_, 1, environmentStar->id);
+            && (environmentPlanet->owner == pendingOrders_.player
+                || survey_level(state_, pendingOrders_.player, environmentStar->id) >= SurveyLevel::OrbitalSurvey);
         if (planetEnvironmentPanel_) planetEnvironmentPanel_->setVisible(environmentKnown);
         if (environmentKnown) {
-            const auto* player = find_player(state_, 1);
+            const auto* player = find_player(state_, pendingOrders_.player);
             const auto race = player ? player->race : RaceProfile{};
             const auto raceName = player
                 ? QString::fromStdString(player->name)

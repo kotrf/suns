@@ -2,6 +2,8 @@
 
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/campaign.hpp"
+#include "save_game.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -40,6 +42,7 @@ struct RouteProgramDisplayRow {
     QString arrivalAction;
     std::uint8_t warp{};
     bool active{};
+    QString eta;
 };
 
 struct RouteProgramTargetOption {
@@ -163,6 +166,9 @@ private:
     void queueColonize();
     void endTurn();
     void newGalaxy();
+    void newCampaign();
+    void exportPlayerTurns();
+    [[nodiscard]] SaveGameData campaignSnapshot() const;
     [[nodiscard]] bool installSaveMenuBootstrap();
     void saveGame();
     void saveGameAs();
@@ -222,7 +228,16 @@ private:
     GalaxyConfig galaxyConfig_;
     GameState state_;
     TurnProcessor processor_;
+    std::uint64_t planningRevision_{};
+    mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
+    mutable FleetId routeEtaFleet_{};
+    mutable std::vector<std::optional<std::uint32_t>> routeEtas_;
     PlayerOrders pendingOrders_{1, {}};
+    SessionMode sessionMode_{SessionMode::Solo};
+    std::vector<EmpireSetup> empireSetups_;
+    std::map<PlayerId, std::uint64_t> playerTokens_;
+    std::vector<PlayerOrders> inbox_;
+    std::vector<GameEvent> campaignMessages_;
     std::uint64_t campaignId_{};
     std::uint64_t turnToken_{};
     std::optional<StarId> selectedStarId_;

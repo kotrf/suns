@@ -21,7 +21,7 @@ int main()
     assert(initialHistory.size() == 1);
     assert(initialHistory.front().turn == 1);
     assert(initialHistory.front().colonies == 1);
-    assert(initialHistory.front().population == 1000);
+    assert(initialHistory.front().population == 1'000'000);
     assert(initialHistory.front().factories == 4);
     assert(initialHistory.front().fleets == 1);
     assert(initialHistory.front().ships == 1);
@@ -34,7 +34,7 @@ int main()
     assert(first.turn == 2);
     assert(first.players.front().history.size() == 2);
     assert(first.players.front().history.back().turn == 2);
-    assert(first.players.front().history.back().population > 1000);
+    assert(first.players.front().history.back().population > 1'000'000);
     assert(first.players.front().history.back().population
         == replay.players.front().history.back().population);
     assert(close(

@@ -1,4 +1,5 @@
 #include "suns/turn_processor.hpp"
+#include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
 
@@ -528,7 +529,11 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
 bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
 {
     if (planet.owner != 0 || fleet.colonists == 0 || !fleet_can_colonize(state, fleet)) return false;
-    if (survey_level(state, fleet.owner, planet.star) < SurveyLevel::OrbitalSurvey) return false;
+    const auto* empire = find_player(state, fleet.owner);
+    if (empire && empire->race.environmentBased
+        && player_planet_habitability(state, fleet.owner, planet, state.turn) == 0) return false;
+    // A fleet physically in orbit can survey and settle locally without
+    // waiting for the observation to reach the empire's communication mesh.
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
 
@@ -1472,7 +1477,8 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.arrivalAction,
                             concreteOrder.queuedWaypoints,
                             concreteOrder.repeatOrders,
-                            concreteOrder.targetFleet);
+                            concreteOrder.targetFleet,
+                            concreteOrder.clearRoute);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -1495,9 +1501,13 @@ TurnResult TurnProcessor::process_with_events(
                             }
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
-                        } else if (const auto* design = find_ship_design(next, kColonyShipDesignId);
-                                   design && design->owner == submission.player) {
-                            planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
+                        } else {
+                            const auto design = std::find_if(next.shipDesigns.begin(), next.shipDesigns.end(),
+                                [&](const ShipDesign& candidate) {
+                                    return candidate.owner == submission.player && ship_design_can_colonize(candidate);
+                                });
+                            if (design != next.shipDesigns.end())
+                                planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                         }
                     } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {

@@ -39,3 +39,11 @@ The direct-course UI keeps `Plot course + Load All` as a colonist shortcut with 
 This is the first step toward persistent multi-waypoint fleet programs such as:
 
 `fly -> load all leaving 1000 -> fly -> unload all -> refuel -> continue`.
+
+
+Colonize on arrival performs the orbital assessment aboard the fleet and can
+settle a suitable unowned world on its first arrival. It does not wait for HQ to
+receive an orbital survey report. Physical presence, colony module, colonists,
+cargo capacity, world ownership and racial habitability are still enforced.
+Players may schedule an attempt at an unsurveyed system; unknown conditions are
+checked locally on arrival. Success dismantles the fleet as before.

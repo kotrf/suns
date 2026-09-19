@@ -30,7 +30,12 @@ inline constexpr ShipDesignId kFirstCustomShipDesignId = 3;
 inline constexpr std::uint8_t kMaxWarp = 10;
 inline constexpr std::uint8_t kScoutCruiseWarp = 8;
 inline constexpr std::uint8_t kColonyShipCruiseWarp = 7;
-inline constexpr double kColonistsPerCargoUnit = 100.0;
+// Cargo and ship mass are in kilotonnes (1 kt = 1,000,000 kg).
+inline constexpr double kColonistMassKg = 100.0;
+inline constexpr double kColonistsPerCargoUnit = 1'000'000.0 / kColonistMassKg;
+inline constexpr std::uint64_t kInitialHomePopulation = 1'000'000;
+inline constexpr std::uint64_t kPopulationPerHabitability = 25'000;
+inline constexpr std::uint64_t kPopulationPerProductionUnit = 500'000;
 inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
 inline constexpr std::uint32_t kFirstResearchLevelCost = 18;
@@ -241,6 +246,9 @@ struct Planet {
     bool productionWaitingForShipyard{};
     PlanetEnvironment environment;
     PrecursorArtifactSite precursorArtifacts;
+    // Values delivered in a player turn; absent in the authoritative simulation.
+    std::optional<std::uint32_t> observedHabitability;
+    std::optional<MineralCargo> observedConcentration;
 };
 
 enum class OrbitalStationHullType : std::uint8_t {
@@ -368,6 +376,7 @@ struct RaceProfile {
     RaceEnvironmentRange habitableTemperature{25, 75};
     RaceEnvironmentRange habitableGravity{30, 70};
     RaceEnvironmentRange habitableRadiation{0, 40};
+    bool environmentBased{}; // Legacy campaigns retain their scalar habitability.
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and

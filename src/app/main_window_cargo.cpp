@@ -173,7 +173,9 @@ void MainWindow::openCargoManifestDialog()
 
     auto* colonistSlider = new QSlider(Qt::Horizontal, &dialog);
     auto* colonistSpin = new QSpinBox(&dialog);
-    colonistSpin->setSingleStep(100);
+    colonistSpin->setSingleStep(1000);
+    colonistSpin->setGroupSeparatorShown(true);
+    colonistSpin->setToolTip("People, at 100 kg per colonist (10,000 people per kt of cargo).");
     transferGrid->addWidget(new QLabel("Colonists", &dialog), 1, 0);
     transferGrid->addWidget(colonistSlider, 1, 1);
     transferGrid->addWidget(colonistSpin, 1, 2);

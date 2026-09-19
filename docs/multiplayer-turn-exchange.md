@@ -1,72 +1,80 @@
-# Multiplayer Turn Exchange
+# Multiplayer turn exchange
 
-Suns! resolves a planning year from one authoritative `GameState` and a set of
-`PlayerOrders`. Multiplayer therefore uses an authoritative host model: players
-submit orders, the host validates all envelopes, resolves the year once, and
-produces the next player-specific turn. Peers never merge competing copies of
-the complete game state.
+## Playing a campaign
 
-## First transport: order files
+1. The host chooses **File → New campaign (races / multiplayer)**, sets the seed,
+   galaxy size, and 1–8 human empires with names and race presets. Player 1 plays
+   locally; each other empire receives its own turn file. Homeworlds are chosen
+   far apart and start with equal population, industry, minerals, orbital services
+   and two basic ship designs with globally unique IDs.
+2. Choose **File → Export player turns**. The app first saves the host `.suns`
+   campaign, including its turn identities, then writes one `.sunsturn` file per
+   remote player into the selected folder. Send each participant only their file.
+3. Participants open their file with **File → Open game**, plan normally, and
+   choose **Export orders** (also the main turn button). They can save an unfinished
+   draft as `.suns`; its player-turn mode survives saving and reopening. A player
+   view cannot resolve the authoritative turn.
+4. The host imports the returned `.sunsorders` files. The inbox retains one
+   accepted submission per remote empire. Reimport prompts before replacing it;
+   imported orders and tokens are saved with the host campaign. Empty orders are
+   an explicit pass.
+5. Once every participant has submitted, the host resolves the turn. Resolution
+   sorts submissions by player ID, applies ownership/technology validation in the
+   core, rotates all player tokens, clears the inbox and saves the new boundary.
+   Export and distribute the next player turns.
 
-The desktop app can export and import `.sunsorders` files from the File menu.
-An order envelope contains:
+This is asynchronous file multiplayer with a trusted host. There is no deployed
+server, matchmaking, network login, signature verification or combat yet.
+Copying a token gives its holder the ability to submit for that player that turn;
+use a private channel for each participant's files. Keep the host save private.
 
-- a stable random campaign id;
-- the planning turn number;
-- a random token for the exact planning boundary;
-- the issuing player id;
-- that player's typed `PlayerOrders` and UI descriptions.
+## Envelopes and persistence
 
-Campaign id, turn and token are persisted in `.suns` saves. The token changes
-after a turn is resolved, while restarting a galaxy creates a new campaign id.
-Import rejects a packet from another campaign, turn, planning boundary or
-player before it can replace the local pending orders. The token prevents
-ordinary stale-file mistakes; it is not yet authentication or a cryptographic
-signature.
+`.sunsorders` includes campaign ID, turn, a random player-specific token, issuing
+player ID, typed orders and display descriptions. It contains no game state.
+The host rejects another campaign/turn/player or an incorrect/expired token.
+All players resolve together, and missing submissions never silently become passes.
+The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 
-The order format deliberately does **not** contain `GameState`. An authoritative
-save includes hidden planetary information, other players' orders and future
-simulation state, so distributing it as a player turn would expose secrets.
+Save v31 stores session mode, host inbox, player tokens, racial environment rules
+and projected observations. Earlier saves (v12–30) remain readable with their
+original scalar habitability. Multiplayer clients should use the same build.
+Reopening and restarting a new-style host campaign preserves its preset choices;
+a restart creates a new campaign identity.
 
-## Transport boundary
+## Player view boundary
 
-`.sunsorders` is the serialized turn envelope, not PBEM-specific game logic. A
-future directory watcher, HTTP client or hosted server can carry the same bytes
-and feed the same validation path. WebSockets may later provide notifications
-or chat, but turn resolution does not require a permanent connection.
+`make_player_view` constructs a separate `PlayerView` for serialization into a
+`.sunsturn`. The renderer reuses `GameState` containers for known entities; these
+are a projection, not simulation authority:
 
-## Planned layers
+- Only the recipient's race, technology, history and ship designs are included.
+- The galaxy seed is omitted. Public stellar positions/names/classes remain.
+- Unknown planets are absent. A basic scan delivers an estimated habitability;
+  orbital survey adds physical environment and ownership, but never foreign
+  population, industry, production, cargo stocks or artifact-site internals.
+- Known mineral concentrations and habitability are materialized observations,
+  so clients do not need the generation seed to reproduce the displayed values.
+  Unowned surface stocks are current only with an immediately connected fleet
+  on site; otherwise the projection does not expose their changing host value.
+- Own fleets use delivered telemetry/projection, with physical pending command
+  and telemetry queues removed. Undelivered survey/operational reports are absent.
+- Enemy contacts appear only in the connected sensor mesh, with ID, owner and
+  position. Their design, fuel, cargo, destination and route are omitted. They
+  can be selected as fixed-position route targets, as in the existing route UI.
+- Only own orbital station internals and own delivered messages are exported.
 
-1. Introduce a fog-of-war-safe `PlayerView` data-transfer object and export a
-   `.sunsturn` packet containing only knowledge available to its recipient.
-2. Add a host inbox that collects one accepted envelope per player, shows who
-   is ready, and passes the complete order set to `TurnProcessor`.
-3. Persist an append-only resolution ledger: initial state identity, accepted
-   order envelopes, resulting turn hashes and host version. This supports audit,
-   deterministic replay and recovery.
-4. Put file and network implementations behind one `TurnTransport` interface.
-5. Add authenticated HTTPS exchange; use signatures or server-issued credentials
-   so a player cannot submit orders as another player.
+Known limitations: detached scouts do not yet deliver delayed enemy-contact
+reports; there is no historical foreign-colony ownership/contact cache. Static
+orbital/geological observations follow the existing survey-level model. Host
+UI uses authoritative state because the host is trusted. No claim is made that
+an untrusted host cannot inspect or alter a campaign.
 
-## Playing with an AI assistant
+## Remaining layers
 
-Once the player-safe `.sunsturn` packet exists, it can be attached to a chat.
-An assistant can inspect the known empire state and return a `.sunsorders` file
-for import. This works naturally as asynchronous PBEM. A chat session should not
-be treated as a permanently connected autonomous client, so a hosted live bot
-would use the same protocol through a separate service process.
-
-## Computer opponents
-
-An in-process computer player should consume the same fog-of-war-safe
-`PlayerView` intended for multiplayer clients and emit ordinary `PlayerOrders`.
-It must never inspect authoritative hidden planets, enemy fleets or unresolved
-orders. This makes the opponent deterministic, replayable and unable to cheat
-accidentally.
-
-The first useful opponent should be deliberately simple: keep colonies
-productive, maintain fuel and cargo logistics, explore unknown systems, and
-colonize the best confirmed world it can reach. Later policy layers can add
-ship design, research planning, threat assessment, diplomacy and combat.
-Difficulty should primarily change planning depth, risk tolerance and strategic
-goals rather than grant hidden information or arbitrary production bonuses.
+- Append-only resolution ledger with accepted envelopes, result hashes and host
+  version, for audit/replay and recovery after crashes.
+- A transport interface and authenticated network exchange.
+- Delayed enemy-contact snapshots and richer opponent intel.
+- Computer opponents consuming `PlayerView` and emitting ordinary `PlayerOrders`.
+- Combat/diplomacy and genuinely asymmetric primary racial traits.

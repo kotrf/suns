@@ -70,3 +70,21 @@ Close simply returns to the galaxy map.
 Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Compact Long Range Scanner.
 
 Future scientific expeditions and reverse engineering can add discovery or artifact requirements alongside field levels. The first slice does not implement those systems and does not assume that RP alone must unlock every late technology.
+
+
+## Campaign technology catalog
+
+The research window now lists the shared core unlock catalog with prerequisites,
+availability and capability descriptions. Double-clicking a locked technology
+appends its missing field levels to the plan, accounting for already queued
+levels. Component legality uses that same catalog on the host.
+
+For environment-based campaigns, Biology 1/2/3 unlock Sealed, Adaptive and Extreme
+Habitats. These extend each applicable racial environment range by 5/10/15 points,
+opening previously incompatible worlds. Legacy campaigns preserve their scalar
+habitability and the catalog labels these unlocks as legacy rules.
+
+Weapons and levels beyond the listed unlocks remain researchable but have no
+implemented capability yet; the UI explicitly says so. This is not a complete
+combat technology tree. Each empire researches independently, including remote
+players whose settings arrive through turn-order envelopes.

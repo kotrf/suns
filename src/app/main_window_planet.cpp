@@ -184,7 +184,7 @@ void MainWindow::installPlanetPolish()
             "<b>Distance:</b> light-years (ly)<br>"
             "<b>Movement:</b> Warp² light-years per turn<br>"
             "<b>Fuel:</b> engine rate × gross mass / 100 × distance<br>"
-            "<b>Cargo:</b> colonists and minerals share the same hold; 100 colonists = 1 cargo unit<br>"
+            "<b>Cargo:</b> colonists and minerals share the same hold; 100 kg per colonist; 10,000 colonists = 1 kt<br>"
             "<b>Sensors:</b> ordinary fly-bys detect systems; penetrating scanners estimate planets; arrival confirms habitability; one turn in orbit reveals geology<br>"
             "<b>Minerals:</b> concentration controls automatic colony extraction. Ship and factory completion consumes I/B/G stocks.<br>"
             "<b>Orders:</b> commands are queued and resolved together at End Turn<br><br>"
@@ -248,7 +248,7 @@ void MainWindow::refreshPlanetPolish()
 
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
-    const auto level = star ? survey_level(state_, 1, star->id) : SurveyLevel::Detected;
+    const auto level = star ? survey_level(state_, pendingOrders_.player, star->id) : SurveyLevel::Detected;
     if (!star || !planet || level < SurveyLevel::OrbitalSurvey) {
         portrait->setPixmap(compactPortrait(unknownPortrait()));
         if (planetPopulationBar_) planetPopulationBar_->hide();
@@ -266,7 +266,7 @@ void MainWindow::refreshPlanetPolish()
         renderPlanetPortrait(*planet, star->stellarClass, state_.galaxySeed)));
 
     if (planetPopulationBar_) {
-        const bool friendlyColony = planet->owner == 1;
+        const bool friendlyColony = planet->owner == pendingOrders_.player;
         planetPopulationBar_->setVisible(friendlyColony);
         if (friendlyColony) {
             const auto capacity = population_capacity(state_, *planet, state_.turn);
@@ -287,7 +287,7 @@ void MainWindow::refreshPlanetPolish()
                     .arg(static_cast<qulonglong>(growth)));
         }
     }
-    if (level < SurveyLevel::GeologicalSurvey && planet->owner != 1) {
+    if (level < SurveyLevel::GeologicalSurvey && planet->owner != pendingOrders_.player) {
         for (auto* bar : {ironium, boranium, germanium}) {
             bar->setValue(0);
             bar->setFormat("Unknown until geological survey");

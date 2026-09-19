@@ -212,8 +212,8 @@ void attachRouteProgramDock(MainWindow& window)
     auto* routeLayout = new QVBoxLayout(routeGroup);
     auto* routeTree = new QTreeWidget(routeGroup);
     routeTree->setObjectName("routeProgramQueue");
-    routeTree->setColumnCount(4);
-    routeTree->setHeaderLabels({"#", "Destination", "Warp", "On arrival"});
+    routeTree->setColumnCount(5);
+    routeTree->setHeaderLabels({"#", "Destination", "Warp", "On arrival", "ETA (years)"});
     routeTree->setRootIsDecorated(false);
     routeTree->setAlternatingRowColors(true);
     routeTree->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -223,6 +223,7 @@ void attachRouteProgramDock(MainWindow& window)
     routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     routeTree->header()->setSectionResizeMode(3, QHeaderView::Interactive);
     routeTree->header()->resizeSection(3, 130);
+    routeTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     routeTree->setMinimumHeight(118);
     routeLayout->addWidget(routeTree);
     auto* routeButtons = new QHBoxLayout;
@@ -700,10 +701,10 @@ void attachRouteProgramDock(MainWindow& window)
             const auto rows = window.selectedFleetRouteProgramRows();
             QString signature = QString::number(selectedFleet) + ':';
             for (const auto& row : rows) {
-                signature += QString("%1\x1f%2\x1f%3\x1f%4\x1e")
+                signature += QString("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1e")
                     .arg(row.destination, row.arrivalAction)
                     .arg(row.warp)
-                    .arg(row.active);
+                    .arg(row.active).arg(row.eta);
             }
             if (signature != lastRouteSignature) {
                 const auto previousRow = routeTree->currentIndex().row();
@@ -717,12 +718,16 @@ void attachRouteProgramDock(MainWindow& window)
                         row.destination,
                         QString("W%1").arg(row.warp),
                         row.arrivalAction,
+                        row.eta,
                     });
                     if (row.active) {
                         item->setToolTip(0, "Current route leg; edits replace the fleet program");
                     }
                     item->setToolTip(1, row.destination);
                     item->setToolTip(3, row.arrivalAction);
+                    item->setToolTip(4, "Years from the current planning turn, including previous waypoints and command delivery. "
+                        "~ is a forecast with no further orders; — means no arrival predicted within 96 years. "
+                        "Fuel, cargo operations and target movement can change the result.");
                     if (row.warp > maxWarp) item->setForeground(2, QColor("#ff8787"));
                 }
                 if (!rows.empty()) {

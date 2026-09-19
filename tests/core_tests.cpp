@@ -216,7 +216,7 @@ int main()
     const suns::TurnProcessor processor;
     const auto initial = suns::make_demo_game();
     const auto& earth = planet(initial, 1);
-    assert(suns::population_capacity(earth) == 2500);
+    assert(suns::population_capacity(earth) == 2'500'000);
     assert(suns::colony_output(earth) == 6);
 
     const auto* vega = suns::find_star(initial, 4);
@@ -295,7 +295,7 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{readyShip->id, 2});
     const auto expanded = processor.process(destinationSurveyed, {colonize});
     assert(planet(expanded, 2).owner == 1);
-    assert(planet(expanded, 2).population == 267);
+    assert(planet(expanded, 2).population == 269);
     assert(colony_ship(expanded) == nullptr);
 
     return 0;

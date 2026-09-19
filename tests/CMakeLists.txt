@@ -2,6 +2,14 @@ add_executable(suns_core_tests
     core_tests.cpp
 )
 
+add_executable(suns_campaign_tests campaign_tests.cpp)
+target_link_libraries(suns_campaign_tests PRIVATE Suns::Core)
+add_test(NAME suns_campaign_tests COMMAND suns_campaign_tests)
+
+add_executable(suns_route_regression_tests route_regression_tests.cpp)
+target_link_libraries(suns_route_regression_tests PRIVATE Suns::Core)
+add_test(NAME suns_route_regression_tests COMMAND suns_route_regression_tests)
+
 target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_core_tests COMMAND suns_core_tests)
@@ -201,4 +209,13 @@ if(SUNS_BUILD_APP)
     set_tests_properties(suns_route_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 20)
+endif()
+
+if(SUNS_BUILD_APP)
+    add_executable(suns_multiplayer_tests multiplayer_tests.cpp)
+    target_link_libraries(suns_multiplayer_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_multiplayer_tests COMMAND suns_multiplayer_tests)
+    set_tests_properties(suns_multiplayer_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 30)
 endif()
