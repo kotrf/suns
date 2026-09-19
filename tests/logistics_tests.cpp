@@ -76,22 +76,22 @@ void verify_colonist_loading_and_unloading()
     auto state = logistics_fixture();
 
     suns::PlayerOrders load{1, {}};
-    load.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 300});
+    load.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 30000});
     const auto loaded = processor.process(state, {load});
-    assert(fleet(loaded, 2)->colonists == 300);
-    assert(planet(loaded, 1)->population == 700);
+    assert(fleet(loaded, 2)->colonists == 30000);
+    assert(planet(loaded, 1)->population == 970000);
 
     suns::PlayerOrders unload{1, {}};
-    unload.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 100});
+    unload.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 10000});
     const auto unloaded = processor.process(loaded, {unload});
-    assert(fleet(unloaded, 2)->colonists == 100);
-    assert(planet(unloaded, 1)->population == 900);
+    assert(fleet(unloaded, 2)->colonists == 10000);
+    assert(planet(unloaded, 1)->population == 990000);
 
     suns::PlayerOrders overload{1, {}};
-    overload.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 600});
+    overload.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 60000});
     const auto rejected = processor.process(unloaded, {overload});
-    assert(fleet(rejected, 2)->colonists == 100);
-    assert(planet(rejected, 1)->population == 900);
+    assert(fleet(rejected, 2)->colonists == 10000);
+    assert(planet(rejected, 1)->population == 990000);
 }
 
 void verify_loading_precedes_movement_in_the_same_turn()
@@ -101,13 +101,13 @@ void verify_loading_precedes_movement_in_the_same_turn()
     const auto origin = fleet(state, 2)->position;
 
     suns::PlayerOrders orders{1, {}};
-    orders.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 300});
+    orders.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 30000});
     orders.orders.emplace_back(suns::MoveFleetOrder{2, {origin.x + 20.0, origin.y}, 4});
     const auto next = processor.process(state, {orders});
 
-    assert(fleet(next, 2)->colonists == 300);
+    assert(fleet(next, 2)->colonists == 30000);
     assert(!suns::same_position(fleet(next, 2)->position, origin));
-    assert(planet(next, 1)->population == 700);
+    assert(planet(next, 1)->population == 970000);
 }
 
 void verify_colony_cannot_be_accidentally_emptied()

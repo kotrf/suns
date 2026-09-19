@@ -30,6 +30,7 @@ struct SaveGameData {
     SessionMode mode{SessionMode::Solo};
     std::map<PlayerId, std::uint64_t> playerTokens;
     std::vector<PlayerOrders> inbox;
+    bool migratedPopulation{}; // Read-time information; not persisted.
 };
 
 // Transport-neutral payload for PBEM today and a host/server transport later.

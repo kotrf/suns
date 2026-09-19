@@ -139,7 +139,7 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
     // building another mine on this particular world is worth the production.
     constexpr double extractionUnitsPerMine = 0.75;
     const auto extractionUnits = 1.0
-        + static_cast<double>(planet.population) / 750.0
+        + static_cast<double>(planet.population) / 750000.0
         + static_cast<double>(planet.mines) * extractionUnitsPerMine;
     return {
         extractionUnits * concentration.ironium / 100.0,

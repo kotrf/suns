@@ -36,7 +36,7 @@ QColor habitabilityColor(std::uint32_t habitability)
 qreal populationScale(std::uint64_t population)
 {
     if (population == 0) return 0.58;
-    constexpr double referencePopulation = 2500.0;
+    constexpr double referencePopulation = 2500000.0;
     const auto normalized = std::clamp(static_cast<double>(population) / referencePopulation, 0.0, 1.0);
     return static_cast<qreal>(0.68 + 1.20 * std::sqrt(normalized));
 }

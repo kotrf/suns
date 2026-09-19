@@ -32,6 +32,7 @@
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -406,7 +407,8 @@ MainWindow::MainWindow(QWidget* parent)
     colonistLoadSpin_->setRange(0, 0);
     arrivalReserveSpin_ = new QSpinBox(sidePanel);
     arrivalReserveSpin_->setRange(1, 1000000000);
-    arrivalReserveSpin_->setValue(100);
+    arrivalReserveSpin_->setValue(100000);
+    arrivalReserveSpin_->setGroupSeparatorShown(true);
     auto* fleetForm = new QFormLayout;
     fleetForm->addRow("Course Warp", warpSpin_);
     fleetForm->addRow("Target colonists", colonistLoadSpin_);
@@ -570,6 +572,7 @@ void MainWindow::refreshShipDesignChoices()
 
 void MainWindow::rebuildScene()
 {
+    ++planningRevision_;
     const auto selectionToRestore = selectedStarId_;
 
     if (!selectedFleet()) {
@@ -718,7 +721,7 @@ void MainWindow::rebuildScene()
                            .arg(estimated ? "~" : "")
                            .arg(knownHabitability)
                            .arg(estimated ? "estimated" : "potential")
-                           .arg(static_cast<qulonglong>(knownHabitability) * 25ULL);
+                           .arg(static_cast<qulonglong>(knownHabitability) * kPopulationPerHabitability);
             if (colony) {
                 mapLabel += "  [COLONY]";
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
@@ -874,8 +877,9 @@ void MainWindow::updateControls()
 
         const auto colonistCapacity = std::max(
             0.0, fleet_cargo_capacity(state_, *fleet) - mineral_cargo_mass(effectiveFleet->minerals));
-        const auto maxColonists = static_cast<int>(std::floor(
-            colonistCapacity * kColonistsPerCargoUnit + 0.000001));
+        const auto maxColonists = static_cast<int>(std::min(
+            std::floor(colonistCapacity * kColonistsPerCargoUnit + 0.000001),
+            static_cast<double>(std::numeric_limits<int>::max())));
         if (!logisticsControlFleetId_ || *logisticsControlFleetId_ != fleet->id) {
             const QSignalBlocker blocker(colonistLoadSpin_);
             colonistLoadSpin_->setRange(0, std::max(0, maxColonists));
@@ -972,7 +976,7 @@ void MainWindow::updateControls()
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")
-                                 .arg(static_cast<qulonglong>(knownHabitability) * 25ULL);
+                                 .arg(static_cast<qulonglong>(knownHabitability) * kPopulationPerHabitability);
         }
         QString travelLine;
         if (fleet) {
@@ -1342,6 +1346,7 @@ bool MainWindow::confirmFleetColonization(
 {
     const auto* empire = find_player(state_, pendingOrders_.player);
     if (empire && empire->race.environmentBased
+        && survey_level(state_, empire->id, planet.star) >= SurveyLevel::OrbitalSurvey
         && known_planet_habitability(state_, empire->id, planet.id).value_or(0) == 0) {
         statusBar()->showMessage("This environment is incompatible. Research Biology habitats or choose another world.", 6000);
         return false;
@@ -1389,7 +1394,7 @@ bool MainWindow::confirmFleetColonization(
             .arg(delivered.boranium, 0, 'f', 0)
             .arg(delivered.germanium, 0, 'f', 0)
             .arg(scheduledRoute
-                ? "\n\nThis is a route preview; cargo and colonists may change before arrival."
+                ? "\n\nThis is a route preview; cargo and colonists may change before arrival. The fleet checks ownership and environmental suitability locally on arrival."
                 : ""));
     warning.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
     warning.setDefaultButton(QMessageBox::Cancel);

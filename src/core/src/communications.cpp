@@ -202,15 +202,6 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
 
 bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram& program)
 {
-    if (!route_tasks_valid(program)) return false;
-    const auto requestedWarp = program.warp == 0 ? fleet.warp : program.warp;
-    if (!fleet_warp_valid(state, fleet, requestedWarp)) return false;
-    if (std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
-            [&](const FleetWaypoint& waypoint) { return !fleet_warp_valid(state, fleet, waypoint.warp); })) {
-        return false;
-    }
-
-    fleet.warp = requestedWarp;
     if (program.clearRoute) {
         fleet.destination.reset();
         fleet.arrivalAction.reset();
@@ -221,6 +212,15 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         fleet.targetFleet = 0;
         return true;
     }
+    if (!route_tasks_valid(program)) return false;
+    const auto requestedWarp = program.warp == 0 ? fleet.warp : program.warp;
+    if (!fleet_warp_valid(state, fleet, requestedWarp)) return false;
+    if (std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
+            [&](const FleetWaypoint& waypoint) { return !fleet_warp_valid(state, fleet, waypoint.warp); })) {
+        return false;
+    }
+
+    fleet.warp = requestedWarp;
 
     // A travel programme replaces stationary work. Delayed movement commands
     // cancel mining only when they physically reach the fleet.
@@ -480,7 +480,8 @@ bool submit_fleet_route_command(
     FleetArrivalAction arrivalAction,
     const std::vector<FleetWaypoint>& queuedWaypoints,
     bool repeatOrders,
-    FleetId targetFleet)
+    FleetId targetFleet,
+    bool clearRoute)
 {
     const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
         return candidate.id == fleetId && candidate.owner == player;
@@ -503,18 +504,21 @@ bool submit_fleet_route_command(
         return false;
     }
     const auto visiblePosition = projected_fleet_position(state, *fleet);
-    program.clearRoute = targetFleet == 0 && same_position(destination, visiblePosition)
+    program.clearRoute = clearRoute || (targetFleet == 0 && same_position(destination, visiblePosition)
         && arrivalAction.kind == FleetArrivalActionKind::None
-        && queuedWaypoints.empty();
+        && queuedWaypoints.empty());
     const auto requestedWarp = warp == 0 ? fleet->warp : warp;
-    if (!fleet_warp_valid(state, *fleet, requestedWarp)) return false;
+    if (!program.clearRoute && !fleet_warp_valid(state, *fleet, requestedWarp)) return false;
     if (std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
             [&](const FleetWaypoint& waypoint) { return !fleet_warp_valid(state, *fleet, waypoint.warp); })) {
         return false;
     }
 
     const auto delay = communication_delay_turns(state, player, fleet->position);
-    if (delay == 0) return apply_route_program(state, *fleet, program);
+    if (delay == 0) {
+        if (program.clearRoute) fleet->pendingCommands.clear();
+        return apply_route_program(state, *fleet, program);
+    }
 
     fleet->pendingCommands.push_back(PendingFleetCommand{
         state.turn,
@@ -556,13 +560,19 @@ void deliver_due_fleet_commands(GameState& state)
                 return lhs.issuedTurn < rhs.issuedTurn;
             });
 
+        std::optional<std::uint64_t> stoppedThrough;
         for (const auto& pending : fleet.pendingCommands) {
             if (pending.deliveryTurn > state.turn) break;
+            if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
             if (pending.task) apply_task_program(state, fleet, *pending.task);
-            else apply_route_program(state, fleet, pending.program);
+            else {
+                apply_route_program(state, fleet, pending.program);
+                if (pending.program.clearRoute) stoppedThrough = pending.issuedTurn;
+            }
         }
         std::erase_if(fleet.pendingCommands, [&](const PendingFleetCommand& pending) {
-            return pending.deliveryTurn <= state.turn;
+            return pending.deliveryTurn <= state.turn
+                || (stoppedThrough && pending.issuedTurn <= *stoppedThrough);
         });
     }
 }

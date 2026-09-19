@@ -122,7 +122,7 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.star == home->id; });
         planet.owner = id;
-        planet.population = 1000;
+        planet.population = kInitialHomePopulation;
         planet.industry = 4;
         planet.habitability = 100;
         planet.minerals = {100, 100, 100};

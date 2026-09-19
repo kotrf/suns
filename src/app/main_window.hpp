@@ -42,6 +42,7 @@ struct RouteProgramDisplayRow {
     QString arrivalAction;
     std::uint8_t warp{};
     bool active{};
+    QString eta;
 };
 
 struct RouteProgramTargetOption {
@@ -227,6 +228,10 @@ private:
     GalaxyConfig galaxyConfig_;
     GameState state_;
     TurnProcessor processor_;
+    std::uint64_t planningRevision_{};
+    mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
+    mutable FleetId routeEtaFleet_{};
+    mutable std::vector<std::optional<std::uint32_t>> routeEtas_;
     PlayerOrders pendingOrders_{1, {}};
     SessionMode sessionMode_{SessionMode::Solo};
     std::vector<EmpireSetup> empireSetups_;

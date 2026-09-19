@@ -32,14 +32,14 @@ void verify_default_propulsion_and_cargo()
     assert(suns::ship_design_fuel_capacity(*scoutDesign) == 300.0);
     assert(suns::ship_design_fuel_capacity(*colonyDesign) == 400.0);
     assert(suns::ship_design_cargo_capacity(*colonyDesign) == 5.0);
-    assert(suns::colonist_cargo_mass(250) == 2.5);
+    assert(suns::colonist_cargo_mass(25'000) == 2.5);
 
     suns::Fleet empty{
         2, 1, "Empty Colony Ship", suns::FleetRole::ColonyShip,
         suns::kColonyShipDesignId, {0.0, 0.0}, std::nullopt, 8, 400.0, 0,
     };
     auto loaded = empty;
-    loaded.colonists = 250;
+    loaded.colonists = 25'000;
 
     assert(suns::fleet_gross_mass(state, loaded) > suns::fleet_gross_mass(state, empty));
     assert(suns::fleet_fuel_change_for_distance(state, loaded, 64.0)

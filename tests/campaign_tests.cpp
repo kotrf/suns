@@ -20,7 +20,7 @@ int main()
             [&](const Planet& p) { return p.owner == player.id; });
         assert(colony != state.planets.end());
         assert(current_planet_habitability(state, *colony, state.turn) == 100);
-        assert(population_capacity(state, *colony, state.turn) == 2500);
+        assert(population_capacity(state, *colony, state.turn) == 2'500'000);
         assert(colony_has_orbital_service(state, colony->id, player.id, OrbitalStationModule::Shipyard));
         assert(state.fleets[player.id - 1].owner == player.id);
         assert(fleet_design(state, state.fleets[player.id - 1])->owner == player.id);

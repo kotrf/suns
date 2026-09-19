@@ -6,6 +6,10 @@ add_executable(suns_campaign_tests campaign_tests.cpp)
 target_link_libraries(suns_campaign_tests PRIVATE Suns::Core)
 add_test(NAME suns_campaign_tests COMMAND suns_campaign_tests)
 
+add_executable(suns_route_regression_tests route_regression_tests.cpp)
+target_link_libraries(suns_route_regression_tests PRIVATE Suns::Core)
+add_test(NAME suns_route_regression_tests COMMAND suns_route_regression_tests)
+
 target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_core_tests COMMAND suns_core_tests)

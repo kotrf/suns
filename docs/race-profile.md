@@ -16,7 +16,7 @@ use physical environments for racial habitability. Three presets are playable:
 Axes are normalized 0–100. A value outside any applicable range gives zero
 habitability. Within ranges, suitability decreases from the center toward the
 edges; the mean of the three axes determines habitability. Radiation immunity
-makes that axis fully suitable. Capacity is 25 × current habitability; growth
+makes that axis fully suitable. Capacity is 25,000 × current habitability; growth
 uses the same owner-specific value. Stellar variability still changes the
 result, but cannot make an incompatible world habitable. Colonization of an
 incompatible world is rejected by the host, including arrival programs.

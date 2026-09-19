@@ -51,7 +51,7 @@ int main()
     hauler.position = {0.0, 0.0};
     hauler.warp = 6;
     hauler.fuel = suns::ship_design_fuel_capacity(state.shipDesigns.back());
-    hauler.colonists = 1000; // 10 cargo units.
+    hauler.colonists = 100'000; // 10 cargo units.
     state.fleets = {hauler};
 
     assert(close(suns::fleet_cargo_capacity(state, state.fleets.front()), 50.0));
@@ -104,12 +104,12 @@ int main()
         1,
     };
     const auto dynamicallyLoaded = processor.process(dynamic, {});
-    assert(fleet(dynamicallyLoaded, 2).colonists == 999); // keep one colonist at the source colony.
+    assert(fleet(dynamicallyLoaded, 2).colonists == 100'000); // the remaining 10 kt fills before the colony is depleted.
 
     // Waypoint mineral policies use the real surface stockpile at arrival and
     // fill only the space left in the shared hold.
     auto mineralPolicy = state;
-    mineralPolicy.fleets.front().colonists = 1000; // 10/50 cargo units used.
+    mineralPolicy.fleets.front().colonists = 100'000; // 10/50 cargo units used.
     mineralPolicy.fleets.front().destination = suns::Position{0.0, 0.0};
     mineralPolicy.fleets.front().arrivalAction = suns::FleetArrivalAction{
         suns::FleetArrivalActionKind::LoadAllAvailable,
@@ -202,16 +202,16 @@ int main()
     // Capacity, location and unowned-world population rules reject the whole
     // mixed transfer without partially moving another cargo type.
     auto overloadTransferState = transferState;
-    overloadTransferState.fleets[0].colonists = 6000;
+    overloadTransferState.fleets[0].colonists = 600'000;
     suns::PlayerOrders transferOverload{1, {}};
     transferOverload.orders.emplace_back(suns::TransferCargoOrder{
         {0, 2},
         {0, 3},
-        6000,
+        600'000,
         {1.0, 0.0, 0.0},
     });
     const auto transferRejected = processor.process(overloadTransferState, {transferOverload});
-    assert(fleet(transferRejected, 2).colonists == 6000);
+    assert(fleet(transferRejected, 2).colonists == 600'000);
     assert(fleet(transferRejected, 3).colonists == 0);
     assert(close(fleet(transferRejected, 2).minerals.ironium, 10.0));
 

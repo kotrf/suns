@@ -1238,7 +1238,7 @@ void refresh_sensor_intel(GameState& state)
 
 std::uint64_t population_capacity(const Planet& planet)
 {
-    return static_cast<std::uint64_t>(planet.habitability) * 25;
+    return static_cast<std::uint64_t>(planet.habitability) * kPopulationPerHabitability;
 }
 
 bool star_is_variable(const StarSystem& star)
@@ -1266,7 +1266,7 @@ std::uint32_t current_planet_habitability(
 std::uint64_t population_capacity(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
-    return static_cast<std::uint64_t>(current_planet_habitability(state, planet, turn)) * 25;
+    return static_cast<std::uint64_t>(current_planet_habitability(state, planet, turn)) * kPopulationPerHabitability;
 }
 
 std::uint64_t projected_population_growth(const Planet& planet)
@@ -1298,7 +1298,7 @@ std::uint64_t projected_population_growth(
 std::uint32_t colony_output(const Planet& planet)
 {
     if (planet.owner == 0) return 0;
-    return planet.industry + static_cast<std::uint32_t>(planet.population / 500);
+    return planet.industry + static_cast<std::uint32_t>(planet.population / kPopulationPerProductionUnit);
 }
 
 int stellar_habitability_bias(StarClass stellarClass)
@@ -1399,7 +1399,7 @@ GameState generate_game(const GalaxyConfig& config)
     state.planets.reserve(starCount);
 
     state.stars.push_back({1, "Sol", {0.0, 0.0}, StarClass::Yellow});
-    state.planets.push_back({1, 1, "Earth", 100, 1, 1000, 4, {}});
+    state.planets.push_back({1, 1, "Earth", 100, 1, kInitialHomePopulation, 4, {}});
     state.planets.front().environment = {50, 50, 8};
     state.planets.front().minerals = {100.0, 100.0, 100.0};
     state.orbitalStations.push_back({
@@ -1451,7 +1451,7 @@ GameState make_demo_game()
         {8, "Procyon", {-168.0, -34.0}, StarClass::YellowWhite},
     };
     state.planets = {
-        {1, 1, "Earth", 100, 1, 1000, 4, {}},
+        {1, 1, "Earth", 100, 1, kInitialHomePopulation, 4, {}},
         {2, 2, "Centauri II", 82, 0, 0, 1, {}},
         {3, 3, "Sirius III", 48, 0, 0, 1, {}},
         {4, 4, "Vega II", 71, 0, 0, 1, {}},

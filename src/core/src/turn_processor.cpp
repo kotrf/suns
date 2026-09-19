@@ -532,7 +532,8 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     const auto* empire = find_player(state, fleet.owner);
     if (empire && empire->race.environmentBased
         && player_planet_habitability(state, fleet.owner, planet, state.turn) == 0) return false;
-    if (survey_level(state, fleet.owner, planet.star) < SurveyLevel::OrbitalSurvey) return false;
+    // A fleet physically in orbit can survey and settle locally without
+    // waiting for the observation to reach the empire's communication mesh.
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
 
@@ -1476,7 +1477,8 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.arrivalAction,
                             concreteOrder.queuedWaypoints,
                             concreteOrder.repeatOrders,
-                            concreteOrder.targetFleet);
+                            concreteOrder.targetFleet,
+                            concreteOrder.clearRoute);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

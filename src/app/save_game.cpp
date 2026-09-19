@@ -11,16 +11,17 @@
 #include <cstdint>
 #include <type_traits>
 #include <stdexcept>
+#include <limits>
 
 namespace suns {
 
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 31;
+constexpr quint32 kSaveFormatVersion = 32;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 2;
+constexpr quint32 kTurnOrderFormatVersion = 3;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -48,6 +49,18 @@ std::uint64_t legacyTurnToken(std::uint64_t campaignId, std::uint64_t turn)
 void markCorrupt(QDataStream& stream)
 {
     stream.setStatus(QDataStream::ReadCorruptData);
+}
+
+// Surface population changes scale by 1000. Existing cargo and numeric loading
+// orders change by 100, preserving their previous kt occupancy at 100 kg/person.
+std::uint64_t migratedPopulation(QDataStream& stream, quint64 value, std::uint64_t factor)
+{
+    if (gReadSaveFormatVersion >= 32) return value;
+    if (value > std::numeric_limits<std::uint64_t>::max() / factor) {
+        markCorrupt(stream);
+        return 0;
+    }
+    return value * factor;
 }
 
 bool readCount(QDataStream& stream, quint32& count)
@@ -154,7 +167,7 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
     if (!readEnum(stream, value.kind, static_cast<quint8>(FleetArrivalActionKind::MergeWithFleet))) return;
     quint64 reserve{};
     stream >> reserve;
-    value.reservePopulation = static_cast<std::uint64_t>(reserve);
+    value.reservePopulation = migratedPopulation(stream, reserve, 1000);
     readEnum(stream, value.cargo, static_cast<quint8>(FleetCargoKind::Germanium));
 }
 
@@ -298,7 +311,7 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
         return;
     }
     value.warp = static_cast<std::uint8_t>(warp);
-    value.colonists = static_cast<std::uint64_t>(colonists);
+    value.colonists = migratedPopulation(stream, colonists, 100);
 
     quint8 hasArrival{};
     stream >> hasArrival;
@@ -561,7 +574,7 @@ void readPlanet(QDataStream& stream, Planet& value)
     value.star = static_cast<StarId>(star);
     value.habitability = static_cast<std::uint32_t>(habitability);
     value.owner = static_cast<PlayerId>(owner);
-    value.population = static_cast<std::uint64_t>(population);
+    value.population = migratedPopulation(stream, population, 1000);
     value.industry = static_cast<std::uint32_t>(industry);
 
     quint32 count{};
@@ -807,7 +820,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
     quint32 productionOutput{};
     stream >> turn >> population >> colonies >> factories >> mines >> productionOutput;
     value.turn = static_cast<std::uint64_t>(turn);
-    value.population = static_cast<std::uint64_t>(population);
+    value.population = migratedPopulation(stream, population, 1000);
     value.colonies = static_cast<std::uint32_t>(colonies);
     value.factories = static_cast<std::uint32_t>(factories);
     value.mines = static_cast<std::uint32_t>(mines);
@@ -1207,7 +1220,7 @@ void readFleet(QDataStream& stream, Fleet& value)
         return;
     }
     value.warp = static_cast<std::uint8_t>(warp);
-    value.colonists = static_cast<std::uint64_t>(colonists);
+    value.colonists = migratedPopulation(stream, colonists, 100);
 
     quint8 hasArrivalAction{};
     stream >> hasArrivalAction;
@@ -1432,7 +1445,7 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << static_cast<quint32>(concrete.queuedWaypoints.size());
             for (const auto& waypoint : concrete.queuedWaypoints) writeWaypoint(stream, waypoint);
             stream << static_cast<quint8>(concrete.repeatOrders ? 1 : 0);
-            stream << static_cast<quint32>(concrete.targetFleet);
+            stream << static_cast<quint32>(concrete.targetFleet) << quint8(concrete.clearRoute);
         } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
             stream << quint8{1} << static_cast<quint32>(concrete.colony);
             writeEnum(stream, concrete.kind);
@@ -1540,6 +1553,12 @@ bool readOrder(QDataStream& stream, Order& order)
             stream >> targetFleet;
             value.targetFleet = static_cast<FleetId>(targetFleet);
         }
+        if (gReadSaveFormatVersion >= 32) {
+            quint8 clear{};
+            stream >> clear;
+            if (clear > 1) { markCorrupt(stream); return false; }
+            value.clearRoute = clear != 0;
+        }
         order = std::move(value);
         return stream.status() == QDataStream::Ok;
     }
@@ -1609,7 +1628,7 @@ bool readOrder(QDataStream& stream, Order& order)
         stream >> colony >> fleet >> colonists;
         value.colony = static_cast<PlanetId>(colony);
         value.fleet = static_cast<FleetId>(fleet);
-        value.colonists = static_cast<std::uint64_t>(colonists);
+        value.colonists = migratedPopulation(stream, colonists, 100);
         order = value;
         return stream.status() == QDataStream::Ok;
     }
@@ -1725,7 +1744,7 @@ bool readOrder(QDataStream& stream, Order& order)
             static_cast<PlanetId>(destinationPlanet),
             static_cast<FleetId>(destinationFleet),
         };
-        value.colonists = static_cast<std::uint64_t>(colonists);
+        value.colonists = migratedPopulation(stream, colonists, 100);
         readMinerals(stream, value.minerals);
         order = value;
         return stream.status() == QDataStream::Ok;
@@ -1935,6 +1954,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     gReadSaveFormatVersion = version;
 
     SaveGameData loaded;
+    loaded.migratedPopulation = version < 32;
     if (version >= 21) {
         quint64 campaignId{};
         quint64 turnToken{};
@@ -2159,7 +2179,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 2 ? kSaveFormatVersion : 23;
+    gReadSaveFormatVersion = version >= 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
 

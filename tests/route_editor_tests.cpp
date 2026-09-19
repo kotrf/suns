@@ -53,6 +53,19 @@ struct MainWindowTestAccess {
 
     static const PlayerOrders& orders(const MainWindow& window) { return window.pendingOrders_; }
 
+    static void installNavigationFixture(MainWindow& window)
+    {
+        window.state_ = make_demo_game();
+        window.state_.stars[1].position = {25, 0};
+        window.state_.stars[2].position = {75, 0};
+        window.pendingOrders_ = {1, {}};
+        window.pendingDescriptions_.clear();
+        window.selectedFleetId_ = 1;
+        window.selectedStarId_ = 2;
+        window.rebuildScene();
+    }
+    static void advance(MainWindow& window) { window.endTurn(); }
+
     static void selectStar(MainWindow& window, std::size_t index)
     {
         window.selectedStarId_ = window.state_.stars.at(index).id;
@@ -343,5 +356,30 @@ int main(int argc, char* argv[])
     assert(quickStarRoute.fleet == fleets[0]);
     assert(quickStarRoute.targetFleet == 0);
 
+    // Editing committed navigation must not use the logistics preview (which
+    // clears destinations). ETAs are cumulative from the current planning year.
+    suns::MainWindowTestAccess::installNavigationFixture(window);
+    assert(window.appendSelectedStarWaypoint(5, {}));
+    suns::MainWindowTestAccess::selectStar(window, 2);
+    assert(window.appendSelectedStarWaypoint(5, {}));
+    auto rows = window.selectedFleetRouteProgramRows();
+    assert(rows.size() == 2 && rows[0].eta == "~1" && rows[1].eta == "~3");
+    suns::MainWindowTestAccess::advance(window);
+    assert(suns::MainWindowTestAccess::orders(window).orders.empty());
+    rows = window.selectedFleetRouteProgramRows();
+    assert(rows.size() == 1 && rows[0].eta == "~2");
+    assert(window.removeSelectedFleetRouteProgramLeg(0));
+    const auto& stop = std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front());
+    assert(stop.clearRoute);
+    assert(window.selectedFleetRouteProgramRows().empty());
+    suns::MainWindowTestAccess::advance(window);
+    assert(window.selectedFleetRouteProgramRows().empty());
+
+    // Clear can be replaced with a fresh route before submitting the turn.
+    suns::MainWindowTestAccess::selectStar(window, 2);
+    assert(window.appendSelectedStarWaypoint(5, {}));
+    assert(window.clearSelectedFleetRouteProgram());
+    assert(window.appendSelectedStarWaypoint(5, {}));
+    assert(!std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front()).clearRoute);
     std::cout << "route editor tests passed\n";
 }

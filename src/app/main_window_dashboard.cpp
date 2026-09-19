@@ -191,7 +191,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
             : "<span style='color:#c6b57c'><b>Uncolonized</b></span>");
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
-                     .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * 25ULL);
+                     .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * kPopulationPerHabitability);
         if (planet_geology_known(state_, pendingOrders_.player, planet->id)) {
             const auto remoteYield = remoteMiningAtPlanet(state_, pendingOrders_.player, *planet);
             if (mineral_cargo_mass(remoteYield) > 0.000001) {

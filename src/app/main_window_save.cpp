@@ -316,6 +316,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
                                 .arg(static_cast<qulonglong>(state_.turn))
                                 .arg(static_cast<qulonglong>(pendingOrders_.orders.size()))
                                 .arg(pendingOrders_.orders.size() == 1 ? "" : "s");
+    if (loaded.migratedPopulation) openedMessage += " — population converted to people; existing cargo mass preserved";
     if (adjustedLegacyWarp) openedMessage += " — Warp adjusted to current engine limits";
     statusBar()->showMessage(openedMessage, 5000);
     return true;

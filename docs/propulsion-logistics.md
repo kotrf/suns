@@ -83,7 +83,7 @@ Fuel itself is intentionally not counted as kt-scale ship mass because its game 
 
 Colonists are real cargo. The current conversion is:
 
-`100 colonists = 1 cargo unit`
+`10,000 colonists = 1 kt of cargo (100 kg per person)`
 
 The starting Colony Ship has 5 cargo units of built-in capacity and currently launches with 250 colonists, so colonization transfers the colonists actually carried by that fleet rather than creating a fixed population from nowhere.
 
@@ -110,3 +110,26 @@ The earlier `engineThrust / mass` speed metric remains only as a temporary Qt pr
 5. Add hull slots and a player-facing ship designer where tanks, cargo pods, engines, scanners and later combat equipment compete for space/mass/cost.
 
 The guiding rule remains the same: every component should create a strategic decision, not merely add another statistic.
+
+
+## Population units and migration (save v32 / order v3)
+
+Population is a count of people. A homeworld starts with 1,000,000 inhabitants;
+100% habitability supports 2,500,000. Population output uses one point per 500,000
+people, and the mining workforce denominator is 750,000. Relative growth rates,
+starting production/research output and extraction therefore retain their prior
+scale. Every transported person is 100 kg; the 5 kt starting colony ship fits
+50,000 people if no minerals occupy its hold.
+
+When reading v12–31 saves, planetary population and population-history samples
+are multiplied by 1,000. Existing fleet/telemetry colonists and numeric loading
+or transfer orders are multiplied by 100: this preserves their previous cargo
+mass and avoids silently overloading existing ships. Load All population reserves
+scale by 1,000. This is an intentional distinction between surface population
+rescaling and cargo-unit conversion, not a population-conservation simulation
+step. Old order envelopes receive the same conversion. Re-saving as v32 prevents
+any repeat conversion. The UI announces the conversion after loading.
+
+MoveFleetOrder now has an explicit `clearRoute` flag, stored in v32 saves and v3
+order envelopes. Older formats retain their coordinate-based clear convention.
+All multiplayer participants should update to the same build before continuing.

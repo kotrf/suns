@@ -6,7 +6,7 @@ Suns! uses one physical cargo hold for population and minerals. Cargo is deliber
 
 The current manifest contains:
 
-- colonists: 100 colonists = 1 cargo unit;
+- colonists: 10,000 colonists = 1 kt of cargo (100 kg per person);
 - Ironium: 1 unit = 1 cargo unit;
 - Boranium: 1 unit = 1 cargo unit;
 - Germanium: 1 unit = 1 cargo unit.
