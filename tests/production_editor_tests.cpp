@@ -19,7 +19,13 @@ struct MainWindowTestAccess {
         w.rebuildScene();
         w.refreshProductionQueue();
     }
-    static void advance(MainWindow& w) { w.endTurn(); w.refreshProductionQueue(); }
+    static void advance(MainWindow& w)
+    {
+        w.endTurn();
+        w.selectedStarId_ = w.state_.planets.front().star;
+        w.rebuildScene();
+        w.refreshProductionQueue();
+    }
     static const Planet& colony(const MainWindow& w) { return w.state_.planets.front(); }
     static void moveUp(MainWindow& w) { w.moveSelectedProductionItem(-1); }
     static void dockFixture(MainWindow& w)
@@ -37,6 +43,8 @@ int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
     suns::MainWindow window;
+    window.installUiPolish();
+    window.installProductionQueue();
     suns::MainWindowTestAccess::install(window);
     auto* tree = window.findChild<QTreeWidget*>("productionQueueTree");
     auto* remove = window.findChild<QPushButton*>("productionRemoveButton");
