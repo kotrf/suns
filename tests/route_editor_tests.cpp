@@ -74,6 +74,8 @@ struct MainWindowTestAccess {
         auto& fleet = window.state_.fleets.front();
         fleet.position = atDepot ? Position{0, 0} : Position{50, 0};
         fleet.fuel = fuel;
+        fleet.telemetry.position = fleet.position;
+        fleet.telemetry.fuel = fuel;
         window.state_.stars[1].position = {100, 0};
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();
