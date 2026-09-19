@@ -36,3 +36,15 @@ cancels navigation, repeated waypoints and stationary tasks when delivered;
 older command packets still in transit cannot restart that canceled program.
 Stop semantics do not depend on an estimated fleet coordinate and also work
 for an immobilized fleet.
+# Compact route table and fuel warning
+
+The Current program table shows destination, Warp and cumulative ETA. Selecting
+a row displays its arrival action below the table; the destination tooltip also
+includes the action.
+
+Waypoint Warp turns red for unsafe overdrive or a predicted fuel shortage while
+following the current program plus the candidate waypoint. A `low fuel` suffix
+and tooltip distinguish fuel shortage from hull-damage risk. The forecast uses
+turn processing, including cargo changes, command delays, fuel generation and
+orbital refuelling, up to 96 years. It is cached until the plan or candidate
+changes. Absence of a warning does not guarantee arrival beyond that horizon.

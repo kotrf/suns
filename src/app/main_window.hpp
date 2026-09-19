@@ -66,6 +66,8 @@ public:
     [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] QString selectedFleetRouteProgramForecast() const;
+    [[nodiscard]] QString selectedFleetWaypointFuelWarning(
+        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action) const;
     [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
@@ -234,6 +236,8 @@ private:
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
     mutable FleetId routeEtaFleet_{};
     mutable std::vector<std::optional<std::uint32_t>> routeEtas_;
+    mutable QString waypointFuelKey_;
+    mutable QString waypointFuelWarning_;
     PlayerOrders pendingOrders_{1, {}};
     SessionMode sessionMode_{SessionMode::Solo};
     std::vector<EmpireSetup> empireSetups_;

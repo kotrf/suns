@@ -11,6 +11,8 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTimer>
+#include <QTreeWidget>
 
 #include <cassert>
 #include <iostream>
@@ -65,6 +67,28 @@ struct MainWindowTestAccess {
         window.rebuildScene();
     }
     static void advance(MainWindow& window) { window.endTurn(); }
+
+    static void installFuelFixture(MainWindow& window, double fuel, bool atDepot = false)
+    {
+        window.state_ = make_demo_game();
+        auto& fleet = window.state_.fleets.front();
+        fleet.position = atDepot ? Position{0, 0} : Position{50, 0};
+        fleet.fuel = fuel;
+        window.state_.stars[1].position = {100, 0};
+        window.pendingOrders_ = {1, {}};
+        window.pendingDescriptions_.clear();
+        window.selectedFleetId_ = fleet.id;
+        window.selectedStarId_ = 2;
+        window.rebuildScene();
+        emit window.routeProgramContextChanged(true);
+    }
+
+    static void prependShortFuelLeg(MainWindow& window)
+    {
+        window.pendingOrders_ = {1, {MoveFleetOrder{1, {51, 0}, 8}}};
+        window.pendingDescriptions_ = {"Short first leg"};
+        window.rebuildScene();
+    }
 
     static void selectStar(MainWindow& window, std::size_t index)
     {
@@ -381,5 +405,37 @@ int main(int argc, char* argv[])
     assert(window.clearSelectedFleetRouteProgram());
     assert(window.appendSelectedStarWaypoint(5, {}));
     assert(!std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front()).clearRoute);
+    // Arrival actions remain inspectable after removing their table column.
+    suns::MainWindowTestAccess::installNavigationFixture(window);
+    assert(window.appendSelectedStarWaypoint(5, {}));
+    suns::MainWindowTestAccess::selectStar(window, 2);
+    assert(window.appendSelectedStarWaypoint(5, {suns::FleetArrivalActionKind::UnloadAll}));
+    auto* routeTree = window.findChild<QTreeWidget*>("routeProgramQueue");
+    auto* routeTimer = window.findChild<QTimer*>("routeProgramRefreshTimer");
+    auto* arrivalDetails = window.findChild<QLabel*>("routeSelectedArrivalAction");
+    assert(routeTree && routeTimer && arrivalDetails);
+    assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
+    assert(routeTree->columnCount() == 4 && routeTree->topLevelItemCount() == 2);
+    assert(routeTree->headerItem()->text(3) == "ETA (years)");
+    routeTree->setCurrentItem(routeTree->topLevelItem(0));
+    assert(arrivalDetails->text().contains("no action"));
+    routeTree->setCurrentItem(routeTree->topLevelItem(1));
+    assert(arrivalDetails->text().contains("Unload all colonists"));
+
+    suns::MainWindowTestAccess::installFuelFixture(window, 2);
+    warp->setValue(8);
+    assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
+    assert(warp->property("fuelLimited").toBool());
+    assert(warp->toolTip().contains("Fuel shortage"));
+    warp->setValue(1);
+    assert(window.selectedFleetWaypointFuelWarning(1, 0, {}).isEmpty());
+    assert(!warp->property("fuelLimited").toBool());
+    suns::MainWindowTestAccess::installFuelFixture(window, 1);
+    suns::MainWindowTestAccess::prependShortFuelLeg(window);
+    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).contains("waypoint 2"));
+    suns::MainWindowTestAccess::installFuelFixture(window, 300);
+    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
+    suns::MainWindowTestAccess::installFuelFixture(window, 0, true);
+    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty()); // depot tops up first
     std::cout << "route editor tests passed\n";
 }

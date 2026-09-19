@@ -70,6 +70,12 @@ public:
         updateAppearance();
     }
 
+    void setFuelWarning(const QString& warning)
+    {
+        fuelWarning_ = warning;
+        updateAppearance();
+    }
+
 protected:
     void mousePressEvent(QMouseEvent* event) override
     {
@@ -104,22 +110,27 @@ private:
     void updateAppearance()
     {
         const bool unsafe = safeWarp_ > 0 && value() > safeWarp_;
-        if (property("unsafe").toBool() != unsafe) {
+        const bool fuelLimited = !fuelWarning_.isEmpty();
+        if (property("unsafe").toBool() != unsafe || property("fuelLimited").toBool() != fuelLimited) {
             setProperty("unsafe", unsafe);
+            setProperty("fuelLimited", fuelLimited);
             style()->unpolish(this);
             style()->polish(this);
         }
-        setFormat(unsafe
+        setFormat((unsafe
             ? QString("Warp %1 • +%2% damage/turn").arg(value()).arg(damageRate_, 0, 'f', 0)
-            : QString("Warp %1 • safe to W%2").arg(value()).arg(safeWarp_));
-        setToolTip(unsafe
+            : QString("Warp %1 • safe to W%2").arg(value()).arg(safeWarp_))
+            + (fuelLimited ? " • low fuel" : ""));
+        setToolTip((unsafe
             ? QString("Unsafe overdrive: rated W%1, selected W%2. Hull damage accumulates while moving.")
                   .arg(safeWarp_).arg(value())
-            : QString("Selected W%1; fleet safe limit W%2.").arg(value()).arg(safeWarp_));
+            : QString("Selected W%1; fleet safe limit W%2.").arg(value()).arg(safeWarp_))
+            + (fuelLimited ? "\n" + fuelWarning_ : "\nFuel preview covers up to 96 years; no warning does not guarantee arrival."));
     }
 
     int safeWarp_{1};
     double damageRate_{};
+    QString fuelWarning_;
 };
 
 void clearRouteOverlay(QGraphicsScene* scene)
@@ -212,8 +223,8 @@ void attachRouteProgramDock(MainWindow& window)
     auto* routeLayout = new QVBoxLayout(routeGroup);
     auto* routeTree = new QTreeWidget(routeGroup);
     routeTree->setObjectName("routeProgramQueue");
-    routeTree->setColumnCount(5);
-    routeTree->setHeaderLabels({"#", "Destination", "Warp", "On arrival", "ETA (years)"});
+    routeTree->setColumnCount(4);
+    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA (years)"});
     routeTree->setRootIsDecorated(false);
     routeTree->setAlternatingRowColors(true);
     routeTree->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -221,11 +232,20 @@ void attachRouteProgramDock(MainWindow& window)
     routeTree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     routeTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    routeTree->header()->setSectionResizeMode(3, QHeaderView::Interactive);
-    routeTree->header()->resizeSection(3, 130);
-    routeTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     routeTree->setMinimumHeight(118);
     routeLayout->addWidget(routeTree);
+    auto* selectedAction = new QLabel("Select a waypoint to view its arrival action.", routeGroup);
+    selectedAction->setObjectName("routeSelectedArrivalAction");
+    selectedAction->setWordWrap(true);
+    selectedAction->setTextFormat(Qt::PlainText);
+    routeLayout->addWidget(selectedAction);
+    QObject::connect(routeTree, &QTreeWidget::itemSelectionChanged, panel, [=] {
+        const auto selected = routeTree->selectedItems();
+        selectedAction->setText(selected.isEmpty()
+            ? "Select a waypoint to view its arrival action."
+            : QString("On arrival: %1").arg(selected.front()->data(0, Qt::UserRole).toString()));
+    });
     auto* routeButtons = new QHBoxLayout;
     auto* moveUpButton = new QPushButton("Move up", routeGroup);
     auto* moveDownButton = new QPushButton("Move down", routeGroup);
@@ -272,6 +292,7 @@ void attachRouteProgramDock(MainWindow& window)
         }
         QProgressBar#routeWarpSelector::chunk { background: #409bc5; }
         QProgressBar#routeWarpSelector[unsafe="true"]::chunk { background: #c94747; }
+        QProgressBar#routeWarpSelector[fuelLimited="true"]::chunk { background: #c94747; }
     )");
     auto* warpHelpButton = new QToolButton(waypointGroup);
     warpHelpButton->setText("?");
@@ -551,6 +572,27 @@ void attachRouteProgramDock(MainWindow& window)
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, syncEditor);
     syncEditor(false);
 
+    const auto refreshFuelWarning = [=, &window] {
+        const bool fleetTarget = targetTypeCombo->currentData().toInt() != 0;
+        if (window.selectedFleetForRouteProgram() == 0 || destinationCombo->currentIndex() < 0
+            || (fleetTarget && targetFleetCombo->currentIndex() < 0)) {
+            warpSelector->setFuelWarning({});
+            return;
+        }
+        warpSelector->setFuelWarning(window.selectedFleetWaypointFuelWarning(
+            static_cast<std::uint8_t>(warpSelector->value()),
+            fleetTarget ? static_cast<FleetId>(targetFleetCombo->currentData().toUInt()) : 0,
+            actionFromControls(actionCombo, cargoCombo, reserveSpin)));
+    };
+    QObject::connect(warpSelector, &QProgressBar::valueChanged, panel, refreshFuelWarning);
+    QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
+    QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
+    QObject::connect(reserveSpin, &QSpinBox::valueChanged, panel, refreshFuelWarning);
+    QObject::connect(destinationCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
+    QObject::connect(targetFleetCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
+    QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, refreshFuelWarning);
+    refreshFuelWarning();
+
     QObject::connect(pickTargetButton, &QPushButton::clicked, panel,
         [&window, pickTargetButton](bool enabled) {
             if (enabled) {
@@ -595,7 +637,9 @@ void attachRouteProgramDock(MainWindow& window)
             "Every fleet has a safe Warp limit set by the least tolerant engine in its ships. "
             "You may still order any speed through Warp 10. Above the safe limit the selector turns red: "
             "fuel use rises sharply and hull damage accumulates on every turn spent moving. "
-            "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized.");
+            "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized.\n\n"
+            "Red also warns when the next waypoint's route preview predicts a fuel shortage. "
+            "Hover over the selector for the predicted turn and waypoint. The preview includes earlier route legs and refuelling, up to 96 years.");
     });
 
     const auto appendCurrentTarget =
@@ -660,12 +704,13 @@ void attachRouteProgramDock(MainWindow& window)
         });
 
     auto* timer = new QTimer(dock);
+    timer->setObjectName("routeProgramRefreshTimer");
     timer->setInterval(180);
     QObject::connect(timer, &QTimer::timeout, dock,
         [&window, routeLabel, routeTree, moveUpButton, moveDownButton, removeButton,
             warpSelector, appendButton, clearButton, repeatCheck,
             targetTypeCombo, targetFleetCombo,
-            destinationCombo,
+            destinationCombo, refreshFuelWarning,
             lastTargets = std::vector<FleetId>{}, lastRouteSignature = QString{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
@@ -717,15 +762,14 @@ void attachRouteProgramDock(MainWindow& window)
                                    : QString::number(static_cast<qulonglong>(index + 1)),
                         row.destination,
                         QString("W%1").arg(row.warp),
-                        row.arrivalAction,
                         row.eta,
                     });
+                    item->setData(0, Qt::UserRole, row.arrivalAction);
                     if (row.active) {
                         item->setToolTip(0, "Current route leg; edits replace the fleet program");
                     }
-                    item->setToolTip(1, row.destination);
-                    item->setToolTip(3, row.arrivalAction);
-                    item->setToolTip(4, "Years from the current planning turn, including previous waypoints and command delivery. "
+                    item->setToolTip(1, row.destination + "\nOn arrival: " + row.arrivalAction);
+                    item->setToolTip(3, "Years from the current planning turn, including previous waypoints and command delivery. "
                         "~ is a forecast with no further orders; — means no arrival predicted within 96 years. "
                         "Fuel, cargo operations and target movement can change the result.");
                     if (row.warp > maxWarp) item->setForeground(2, QColor("#ff8787"));
@@ -742,6 +786,7 @@ void attachRouteProgramDock(MainWindow& window)
             moveDownButton->setEnabled(selectedRow >= 0 && selectedRow + 1 < rowCount);
             removeButton->setEnabled(selectedRow >= 0);
             routeLabel->setText(window.selectedFleetRouteProgramSummary());
+            refreshFuelWarning();
             drawRouteOverlay(window);
         });
     timer->start();
