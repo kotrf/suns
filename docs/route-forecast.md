@@ -24,8 +24,9 @@ The forecast is intentionally phrased as "if no further orders are issued". Futu
 
 The route table shows `ETA (years)` for each point: cumulative years from the
 current planning boundary, including preceding legs, cargo/refuel actions and
-command delivery. The same simulation powers the detailed forecast. `~N` denotes
-an estimate with no further orders; `—` means arrival is not predicted inside
+command delivery. The same simulation powers the detailed forecast. `N` denotes
+the whole number of game turns until arrival, assuming no further orders. No
+approximation prefix is displayed; `—` means arrival is not predicted inside
 96 turns (for example, insufficient fuel or an unreachable moving target).
 Repeating programs show the next traversal. The result is cached until the
 planning state or selected fleet changes.

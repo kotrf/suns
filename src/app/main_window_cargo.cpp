@@ -247,6 +247,8 @@ void MainWindow::openCargoManifestDialog()
             ? std::max(0.0, fleet_cargo_capacity(planned, *destination.fleet)
                 - fleet_cargo_used(planned, *destination.fleet))
             : std::numeric_limits<double>::infinity();
+        const auto sliderHold = destination.fleet ? freeHold
+            : fleet_cargo_capacity(planned, *source.fleet);
         auto availableColonists = endpointColonists(source);
         if (source.planet) {
             availableColonists = source.planet->owner == pendingOrders_.player && availableColonists > 0
@@ -258,11 +260,17 @@ void MainWindow::openCargoManifestDialog()
             static_cast<double>(availableColonists),
             std::floor(colonistRoom * kColonistsPerCargoUnit + kEpsilon),
             static_cast<double>(std::numeric_limits<int>::max())}));
+        const auto colonistScale = static_cast<int>(std::min(
+            std::floor(std::max(0.0, sliderHold - mineral_cargo_mass(transferMinerals()))
+                * kColonistsPerCargoUnit + kEpsilon),
+            static_cast<double>(std::numeric_limits<int>::max())));
         {
             const QSignalBlocker blockSlider(colonistSlider), blockSpin(colonistSpin);
             colonistSpin->setRange(0, colonistMaximum);
-            colonistSlider->setRange(0, colonistMaximum);
+            colonistSlider->setRange(0, colonistScale);
             colonistSlider->setValue(colonistSpin->value());
+            colonistSlider->setToolTip(QString("Hold scale: %1 people; available to transfer: %2 people")
+                .arg(colonistScale).arg(colonistMaximum));
         }
         const auto availableMinerals = endpointMinerals(source);
         for (int index = 0; index < 3; ++index) {
@@ -274,8 +282,11 @@ void MainWindow::openCargoManifestDialog()
             const auto& control = mineralControls[index];
             const QSignalBlocker blockSlider(control.slider), blockSpin(control.spin);
             control.spin->setRange(0.0, static_cast<double>(maximum) / kMineralScale);
-            control.slider->setRange(0, maximum);
+            control.slider->setRange(0, sliderMaximum(std::max(0.0, sliderHold - otherCargo)));
             control.slider->setValue(static_cast<int>(std::lround(control.spin->value() * kMineralScale)));
+            control.slider->setToolTip(QString("Hold scale: %1 kt; available to transfer: %2 kt")
+                .arg(static_cast<double>(control.slider->maximum()) / kMineralScale, 0, 'f', 2)
+                .arg(control.spin->maximum(), 0, 'f', 2));
         }
         const auto colonists = static_cast<std::uint64_t>(colonistSpin->value());
         const auto minerals = transferMinerals();

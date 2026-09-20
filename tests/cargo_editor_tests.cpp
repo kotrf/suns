@@ -64,7 +64,10 @@ int main(int argc, char** argv)
         };
         distinct();
         assert(people->maximum() == 30'000); // 5 kt hold, 2 kt already aboard
-        assert(iron->maximum() == 300 && boron->maximum() == 25);
+        assert(iron->maximum() == 300 && boron->maximum() == 300);
+        boron->setValue(boron->maximum());
+        assert(boron->value() == 25 && boron->maximum() == 300); // stock limits handle, not scale
+        boron->setValue(0);
         iron->setValue(iron->maximum());
         assert(exactIron->value() == 3 && people->maximum() == 0 && boron->maximum() == 0);
         exactIron->setValue(1);
@@ -72,19 +75,26 @@ int main(int argc, char** argv)
         people->setValue(people->maximum());
         assert(exactPeople->value() == 20'000 && boron->maximum() == 0);
         exactPeople->setValue(10'000);
-        assert(iron->maximum() == 200 && boron->maximum() == 25);
+        assert(iron->maximum() == 200 && boron->maximum() == 100);
 
         // Selecting the old destination as source rebuilds the destination list.
         source->setCurrentIndex(source->findData(1));
         distinct();
         destination->setCurrentIndex(destination->findData(0)); // unload to planet
-        assert(people->maximum() == 10'000 && iron->maximum() == 100);
+        assert(people->maximum() == 50'000 && iron->maximum() == 500);
+        people->setValue(people->maximum());
+        assert(people->value() == 10'000 && people->maximum() == 50'000);
         destination->setCurrentIndex(destination->findData(2)); // fleet-to-fleet
         distinct();
-        assert(people->maximum() == 10'000 && iron->maximum() == 100);
+        assert(people->maximum() == 50'000 && iron->maximum() == 500);
+        iron->setValue(iron->maximum());
+        assert(iron->value() == 100 && iron->maximum() == 500);
         source->setCurrentIndex(source->findData(2));
         distinct();
-        assert(people->maximum() == 0 && iron->maximum() == 0);
+        assert(people->maximum() == 50'000 && iron->maximum() == 500);
+        people->setValue(people->maximum());
+        iron->setValue(iron->maximum());
+        assert(people->value() == 0 && iron->value() == 0);
         assert(!buttons->button(QDialogButtonBox::Ok)->isEnabled());
 
         source->setCurrentIndex(source->findData(0));

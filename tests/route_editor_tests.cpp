@@ -389,11 +389,11 @@ int main(int argc, char* argv[])
     suns::MainWindowTestAccess::selectStar(window, 2);
     assert(window.appendSelectedStarWaypoint(5, {}));
     auto rows = window.selectedFleetRouteProgramRows();
-    assert(rows.size() == 2 && rows[0].eta == "~1" && rows[1].eta == "~3");
+    assert(rows.size() == 2 && rows[0].eta == "1" && rows[1].eta == "3");
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::orders(window).orders.empty());
     rows = window.selectedFleetRouteProgramRows();
-    assert(rows.size() == 1 && rows[0].eta == "~2");
+    assert(rows.size() == 1 && rows[0].eta == "2");
     assert(window.removeSelectedFleetRouteProgramLeg(0));
     const auto& stop = std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front());
     assert(stop.clearRoute);

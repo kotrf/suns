@@ -510,7 +510,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             leg.warp,
             index == 0,
             index < routeEtas_.size() && routeEtas_[index]
-                ? QString("~%1").arg(*routeEtas_[index]) : QString("—"),
+                ? QString::number(*routeEtas_[index]) : QString("—"),
         });
     }
     return rows;

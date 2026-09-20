@@ -770,7 +770,7 @@ void attachRouteProgramDock(MainWindow& window)
                     }
                     item->setToolTip(1, row.destination + "\nOn arrival: " + row.arrivalAction);
                     item->setToolTip(3, "Years from the current planning turn, including previous waypoints and command delivery. "
-                        "~ is a forecast with no further orders; — means no arrival predicted within 96 years. "
+                        "Whole game turns assuming no further orders; — means no arrival predicted within 96 years. "
                         "Fuel, cargo operations and target movement can change the result.");
                     if (row.warp > maxWarp) item->setForeground(2, QColor("#ff8787"));
                 }

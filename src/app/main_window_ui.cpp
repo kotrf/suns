@@ -215,14 +215,6 @@ void MainWindow::installUiPolish()
                     colonistLoadSpin_->setToolTip(
                         "Changing this value updates the current-year dockside cargo plan immediately");
 
-                    auto* quickRow = new QHBoxLayout;
-                    auto* loadMaxButton = new QPushButton("Load to capacity", fleetGroup);
-                    loadMaxButton->setToolTip("Fill remaining cargo with colonists, leaving at least one colonist on the colony");
-                    auto* unloadButton = new QPushButton("Unload colonists", fleetGroup);
-                    quickRow->addWidget(loadMaxButton);
-                    quickRow->addWidget(unloadButton);
-                    fleetLayout->addLayout(quickRow);
-
                     auto* cargoButton = new QPushButton("Transfer cargo…", fleetGroup);
                     cargoButton->setToolTip(
                         "Transfer colonists and minerals between the planetary surface and friendly fleets at this system");
@@ -284,32 +276,6 @@ void MainWindow::installUiPolish()
                     starCountSpin_->hide();
                     newGalaxyButton_->hide();
 
-                    connect(loadMaxButton, &QPushButton::clicked, this, [this] {
-                        const auto* fleet = selectedFleet();
-                        const auto* colony = selectedFriendlyColonyForFleet();
-                        if (!fleet || !colony) {
-                            statusBar()->showMessage("Select a fleet docked at the selected friendly colony first", 2500);
-                            return;
-                        }
-
-                        const auto freeForColonists = std::max(
-                            0.0,
-                            fleet_cargo_capacity(state_, *fleet) - mineral_cargo_mass(fleet->minerals));
-                        const auto capacity = static_cast<std::uint64_t>(
-                            std::floor(freeForColonists * kColonistsPerCargoUnit + 0.000001));
-                        const auto colonyAvailable = colony->population > 1 ? colony->population - 1 : 0;
-                        const auto available = fleet->colonists + colonyAvailable;
-                        const auto target = std::min(capacity, available);
-                        colonistLoadSpin_->setValue(static_cast<int>(target));
-                    });
-
-                    connect(unloadButton, &QPushButton::clicked, this, [this] {
-                        if (!selectedFriendlyColonyForFleet()) {
-                            statusBar()->showMessage("Select a fleet docked at the selected friendly colony first", 2500);
-                            return;
-                        }
-                        colonistLoadSpin_->setValue(0);
-                    });
                     connect(cargoButton, &QPushButton::clicked, this, [this] { openCargoManifestDialog(); });
                     connect(mergeButton, &QPushButton::clicked, this, [this] { openMergeFleetsDialog(); });
                     connect(splitButton, &QPushButton::clicked, this, [this] { openSplitFleetDialog(); });
