@@ -433,6 +433,7 @@ enum class FleetCargoKind {
     Ironium,
     Boranium,
     Germanium,
+    All,
 };
 
 struct FleetArrivalAction {

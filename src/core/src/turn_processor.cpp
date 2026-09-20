@@ -651,6 +651,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         case FleetCargoKind::Ironium: source = &surface->minerals.ironium; destination = &fleet.minerals.ironium; break;
         case FleetCargoKind::Boranium: source = &surface->minerals.boranium; destination = &fleet.minerals.boranium; break;
         case FleetCargoKind::Germanium: source = &surface->minerals.germanium; destination = &fleet.minerals.germanium; break;
+        case FleetCargoKind::All: break;
         }
         if (!source || !destination) return false;
         const auto load = std::min(*source, freeSpace);
@@ -659,12 +660,14 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         return false;
     }
     case FleetArrivalActionKind::UnloadAll: {
-        if (action.cargo == FleetCargoKind::Colonists) {
+        if (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All) {
             auto* colony = friendly_colony_at_fleet(state, fleet);
-            if (!colony) return false;
-            colony->population += fleet.colonists;
-            fleet.colonists = 0;
-            return false;
+            if (colony) {
+                colony->population += fleet.colonists;
+                fleet.colonists = 0;
+            } else if (action.cargo == FleetCargoKind::Colonists) {
+                return false;
+            }
         }
         auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
             return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
@@ -683,6 +686,12 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         case FleetCargoKind::Germanium:
             surface->minerals.germanium += fleet.minerals.germanium;
             fleet.minerals.germanium = 0.0;
+            break;
+        case FleetCargoKind::All:
+            surface->minerals.ironium += fleet.minerals.ironium;
+            surface->minerals.boranium += fleet.minerals.boranium;
+            surface->minerals.germanium += fleet.minerals.germanium;
+            fleet.minerals = {};
             break;
         }
         return false;
@@ -793,6 +802,21 @@ bool fleet_ready_for_reorganization(const Fleet& fleet)
         && fleet.routeTemplate.empty();
 }
 
+void refresh_merged_fleet_manifest(Fleet& fleet)
+{
+    // A merge keeps the destination FleetId so its route and every reference
+    // to it remain valid. Give the result an unambiguous fleet name and update
+    // the last confirmed manifest immediately: otherwise a delayed telemetry
+    // snapshot can make the absorbed ships appear to have vanished.
+    fleet.name = "Fleet #" + std::to_string(fleet.id);
+    fleet.telemetry.ships = fleet.ships;
+    fleet.telemetry.fuel = fleet.fuel;
+    fleet.telemetry.damagePercent = fleet.damagePercent;
+    fleet.telemetry.colonists = fleet.colonists;
+    fleet.telemetry.minerals = fleet.minerals;
+    fleet.telemetryInTransit.clear();
+}
+
 bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& order)
 {
     if (order.destination == order.source) return false;
@@ -827,8 +851,7 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     sync_fleet_presentation(state, *destination);
     destination->warp = std::min(destination->warp, fleet_max_warp(state, *destination));
     destination->fuel = std::min(destination->fuel, fleet_fuel_capacity(state, *destination));
-    destination->telemetry = {};
-    destination->telemetryInTransit.clear();
+    refresh_merged_fleet_manifest(*destination);
     std::erase_if(state.fleets, [&](const Fleet& fleet) { return fleet.id == sourceId; });
     return true;
 }
@@ -1038,6 +1061,7 @@ void merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     sync_fleet_presentation(state, destination);
     destination.warp = std::min(destination.warp, fleet_max_warp(state, destination));
     destination.fuel = std::min(destination.fuel, fleet_fuel_capacity(state, destination));
+    refresh_merged_fleet_manifest(destination);
 
     queue_player_report(
         state,

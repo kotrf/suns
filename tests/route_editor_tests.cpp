@@ -7,6 +7,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QLabel>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QProgressBar>
 #include <QPushButton>
@@ -14,6 +15,7 @@
 #include <QTimer>
 #include <QTreeWidget>
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 
@@ -66,6 +68,41 @@ struct MainWindowTestAccess {
         window.selectedStarId_ = 2;
         window.rebuildScene();
     }
+
+    static void installArrivalActionFixture(MainWindow& window, bool friendlyDestination)
+    {
+        window.state_ = make_demo_game();
+        window.state_.stars[1].position = {10, 0};
+        auto& fleet = window.state_.fleets.front();
+        fleet.design = kColonyShipDesignId;
+        fleet.role = FleetRole::ColonyShip;
+        fleet.ships = {{kColonyShipDesignId, 1}};
+        fleet.fuel = fleet_fuel_capacity(window.state_, fleet);
+        fleet.colonists = 10'000;
+        fleet.minerals = friendlyDestination ? MineralCargo{1, 1, 1} : MineralCargo{};
+        fleet.telemetry = {};
+        fleet.telemetry.observedTurn = window.state_.turn;
+        fleet.telemetry.position = fleet.position;
+        fleet.telemetry.warp = fleet.warp;
+        fleet.telemetry.fuel = fleet.fuel;
+        fleet.telemetry.colonists = fleet.colonists;
+        fleet.telemetry.minerals = fleet.minerals;
+        fleet.telemetry.ships = fleet.ships;
+        set_survey_level(window.state_, 1, window.state_.stars[1].id,
+            SurveyLevel::OrbitalSurvey, window.state_.turn);
+        if (friendlyDestination) {
+            window.state_.planets[1].owner = 1;
+            window.state_.planets[1].population = 1000;
+        }
+        window.pendingOrders_ = {1, {}};
+        window.pendingDescriptions_.clear();
+        window.selectedFleetId_ = fleet.id;
+        window.selectedStarId_ = window.state_.stars[1].id;
+        window.rebuildScene();
+        emit window.routeProgramContextChanged(true);
+    }
+
+    static const GameState& state(const MainWindow& window) { return window.state_; }
     static void advance(MainWindow& window) { window.endTurn(); }
 
     static void installFuelFixture(MainWindow& window, double fuel, bool atDepot = false)
@@ -181,6 +218,7 @@ int main(int argc, char* argv[])
     assert(destination->itemText(2).contains("Enemy"));
     assert(destination->itemData(2, Qt::ForegroundRole).value<QBrush>().color()
         == QColor("#e05252"));
+    assert(cargo->findData(static_cast<int>(suns::FleetCargoKind::All)) >= 0);
 
     // Choosing the red enemy entry through Destination prepares a fixed route
     // to its observed orbital position. Merge is never carried across.
@@ -215,7 +253,7 @@ int main(int argc, char* argv[])
     assert(secondOrder.arrivalAction.kind == suns::FleetArrivalActionKind::None);
 
     action->setCurrentIndex(action->findData(unload));
-    cargo->setCurrentIndex(cargo->findData(static_cast<int>(suns::FleetCargoKind::Germanium)));
+    cargo->setCurrentIndex(cargo->findData(static_cast<int>(suns::FleetCargoKind::All)));
     warp->setValue(5);
     source->setCurrentIndex(source->findData(static_cast<quint32>(fleets[0])));
     assert(action->currentData().toInt() == load);
@@ -242,7 +280,7 @@ int main(int argc, char* argv[])
     assert(window.selectedFleetForRouteProgram() == fleets[1]);
     assert(source->currentData().toUInt() == fleets[1]);
     assert(action->currentData().toInt() == unload);
-    assert(cargo->currentData().toInt() == static_cast<int>(suns::FleetCargoKind::Germanium));
+    assert(cargo->currentData().toInt() == static_cast<int>(suns::FleetCargoKind::All));
     assert(warp->value() == 5);
     add->click();
     const auto& secondUpdated = std::get<suns::MoveFleetOrder>(
@@ -251,7 +289,7 @@ int main(int argc, char* argv[])
     assert(secondUpdated.arrivalAction.kind == suns::FleetArrivalActionKind::None);
     assert(secondUpdated.queuedWaypoints.size() == 1);
     assert(secondUpdated.queuedWaypoints.front().arrivalAction.kind == suns::FleetArrivalActionKind::UnloadAll);
-    assert(secondUpdated.queuedWaypoints.front().arrivalAction.cargo == suns::FleetCargoKind::Germanium);
+    assert(secondUpdated.queuedWaypoints.front().arrivalAction.cargo == suns::FleetCargoKind::All);
     assert(std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.back())
         .queuedWaypoints.empty());
 
@@ -439,5 +477,44 @@ int main(int argc, char* argv[])
     assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
     suns::MainWindowTestAccess::installFuelFixture(window, 0, true);
     assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty()); // depot tops up first
+
+    // Exercise the real dock controls all the way through End Turn. This
+    // catches arrival actions that look correct in the table but are not
+    // actually attached to the submitted route.
+    suns::MainWindowTestAccess::installArrivalActionFixture(window, false);
+    warp->setValue(5);
+    action->setCurrentIndex(action->findData(
+        static_cast<int>(suns::FleetArrivalActionKind::Colonize)));
+    QTimer::singleShot(0, [] {
+        auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        assert(warning);
+        warning->done(QMessageBox::Yes);
+    });
+    add->click();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+    assert(std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front()).arrivalAction.kind
+        == suns::FleetArrivalActionKind::Colonize);
+    suns::MainWindowTestAccess::advance(window);
+    assert(suns::MainWindowTestAccess::state(window).planets[1].owner == 1);
+    assert(std::none_of(
+        suns::MainWindowTestAccess::state(window).fleets.begin(),
+        suns::MainWindowTestAccess::state(window).fleets.end(),
+        [](const suns::Fleet& fleet) { return fleet.id == 1; }));
+
+    suns::MainWindowTestAccess::installArrivalActionFixture(window, true);
+    warp->setValue(5);
+    action->setCurrentIndex(action->findData(unload));
+    cargo->setCurrentIndex(cargo->findData(static_cast<int>(suns::FleetCargoKind::All)));
+    add->click();
+    const auto& unloadOrder = std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front());
+    assert(unloadOrder.arrivalAction.kind == suns::FleetArrivalActionKind::UnloadAll);
+    assert(unloadOrder.arrivalAction.cargo == suns::FleetCargoKind::All);
+    suns::MainWindowTestAccess::advance(window);
+    const auto& unloaded = suns::MainWindowTestAccess::state(window).fleets.front();
+    assert(unloaded.colonists == 0);
+    assert(suns::mineral_cargo_mass(unloaded.minerals) == 0);
+    assert(suns::MainWindowTestAccess::state(window).planets[1].population > 11'000);
     std::cout << "route editor tests passed\n";
 }

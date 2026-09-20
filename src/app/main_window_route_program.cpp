@@ -59,6 +59,7 @@ QString actionName(const FleetArrivalAction& action)
         case FleetCargoKind::Ironium: return QString("Ironium");
         case FleetCargoKind::Boranium: return QString("Boranium");
         case FleetCargoKind::Germanium: return QString("Germanium");
+        case FleetCargoKind::All: return QString("cargo");
         }
         return QString("cargo");
     };
@@ -276,7 +277,7 @@ QString routeForecast(
                 if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
                     outcome = QString("; projected colonists aboard: %1")
                                   .arg(static_cast<qulonglong>(after->colonists));
-                } else {
+                } else if (leg.arrivalAction.cargo != FleetCargoKind::All) {
                     const auto amount = leg.arrivalAction.cargo == FleetCargoKind::Ironium
                         ? after->minerals.ironium
                         : leg.arrivalAction.cargo == FleetCargoKind::Boranium
@@ -286,7 +287,9 @@ QString routeForecast(
                 }
                 break;
             case FleetArrivalActionKind::UnloadAll:
-                outcome = "; selected cargo unloaded to the planetary surface";
+                outcome = leg.arrivalAction.cargo == FleetCargoKind::All
+                    ? "; all cargo unloaded to the planetary surface"
+                    : "; selected cargo unloaded to the planetary surface";
                 break;
             case FleetArrivalActionKind::Refuel:
                 outcome = arrivalPlanet

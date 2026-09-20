@@ -168,7 +168,7 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
     quint64 reserve{};
     stream >> reserve;
     value.reservePopulation = migratedPopulation(stream, reserve, 1000);
-    readEnum(stream, value.cargo, static_cast<quint8>(FleetCargoKind::Germanium));
+    readEnum(stream, value.cargo, static_cast<quint8>(FleetCargoKind::All));
 }
 
 void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)

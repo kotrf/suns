@@ -90,10 +90,12 @@ int main()
     assert(!fleet(second, 1));
     const auto* merged = fleet(second, 2);
     assert(merged);
+    assert(merged->name == "Fleet #2");
     assert(near(merged->position.x, 82.0));
     assert(merged->destination && near(merged->destination->x, 200.0));
     assert(fleet_ship_count(*merged, kScoutDesignId) == 2);
     assert(fleet_ship_count(*merged, kColonyShipDesignId) == 1);
+    assert(fleet_ship_count(fleet_player_view(second, *merged)) == 3);
 
     // If the target's destination is close enough, the merged fleet completes
     // that route leg during the unused fraction of the same turn.

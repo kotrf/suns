@@ -329,6 +329,7 @@ void attachRouteProgramDock(MainWindow& window)
     cargoCombo->addItem("Ironium", static_cast<int>(FleetCargoKind::Ironium));
     cargoCombo->addItem("Boranium", static_cast<int>(FleetCargoKind::Boranium));
     cargoCombo->addItem("Germanium", static_cast<int>(FleetCargoKind::Germanium));
+    cargoCombo->addItem("All cargo", static_cast<int>(FleetCargoKind::All));
     cargoCombo->setEnabled(false);
     auto* reserveSpin = new QSpinBox(waypointGroup);
     reserveSpin->setObjectName("routeReserveSpin");
@@ -376,7 +377,13 @@ void attachRouteProgramDock(MainWindow& window)
 
     const auto updateCargoControls = [=] {
         const auto action = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
-        const auto cargo = static_cast<FleetCargoKind>(cargoCombo->currentData().toInt());
+        auto cargo = static_cast<FleetCargoKind>(cargoCombo->currentData().toInt());
+        if (action == FleetArrivalActionKind::LoadAllAvailable && cargo == FleetCargoKind::All) {
+            const QSignalBlocker blocker(cargoCombo);
+            cargoCombo->setCurrentIndex(
+                cargoCombo->findData(static_cast<int>(FleetCargoKind::Colonists)));
+            cargo = FleetCargoKind::Colonists;
+        }
         const auto transfersCargo = action == FleetArrivalActionKind::LoadAllAvailable
             || action == FleetArrivalActionKind::UnloadAll;
         cargoCombo->setEnabled(transfersCargo);

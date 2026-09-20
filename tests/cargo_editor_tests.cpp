@@ -63,6 +63,21 @@ int main(int argc, char** argv)
             assert(destination->count() == source->count() - 1);
         };
         distinct();
+        // A selected fleet that already carries cargo opens in unloading
+        // direction. The sliders still span the full hold; source stock only
+        // limits the handle, not the scale.
+        assert(source->currentData().toInt() == 1);
+        assert(destination->currentData().toInt() == 0);
+        assert(people->maximum() == 50'000);
+        assert(iron->maximum() == 500);
+        people->setValue(people->maximum());
+        assert(people->value() == 10'000);
+        iron->setValue(iron->maximum());
+        assert(iron->value() == 100);
+
+        source->setCurrentIndex(source->findData(0));
+        destination->setCurrentIndex(destination->findData(1));
+        distinct();
         assert(people->maximum() == 30'000); // 5 kt hold, 2 kt already aboard
         assert(iron->maximum() == 300 && boron->maximum() == 300);
         boron->setValue(boron->maximum());
@@ -117,7 +132,10 @@ int main(int argc, char** argv)
         assert(dialog);
         auto* people = dialog->findChild<QSlider*>("cargoColonistSlider");
         auto* iron = dialog->findChild<QSlider*>("cargoMineralSlider0");
-        assert(people->maximum() == 10'000 && iron->maximum() == 100); // prior order uses 2 more kt
+        auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+        auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+        assert(source->currentData().toInt() == 1 && destination->currentData().toInt() == 0);
+        assert(people->maximum() == 50'000 && iron->maximum() == 500);
         dialog->reject();
     });
     window.openCargoManifestDialog();

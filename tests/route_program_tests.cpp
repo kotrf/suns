@@ -131,6 +131,43 @@ void failed_colonize_on_arrival_keeps_ship()
     assert(same_position(ship->position, targetStar->position));
 }
 
+void cargo_loaded_and_colonize_route_in_same_turn_executes_on_arrival()
+{
+    auto fixture = make_arrival_fixture(0);
+    const auto home = std::find_if(
+        fixture.state.planets.begin(), fixture.state.planets.end(), [](const Planet& planet) {
+            return planet.owner == 1;
+        });
+    const auto target = std::find_if(
+        fixture.state.planets.begin(), fixture.state.planets.end(), [&](const Planet& planet) {
+            return planet.id == fixture.targetPlanet;
+        });
+    assert(home != fixture.state.planets.end() && target != fixture.state.planets.end());
+    const auto* targetStar = find_star(fixture.state, target->star);
+    assert(targetStar);
+
+    MoveFleetOrder move;
+    move.fleet = fixture.colonyFleet;
+    move.destination = targetStar->position;
+    move.warp = kColonyShipCruiseWarp;
+    move.arrivalAction.kind = FleetArrivalActionKind::Colonize;
+
+    PlayerOrders orders{1, {}};
+    orders.orders.emplace_back(TransferCargoOrder{
+        {home->id, 0}, {0, fixture.colonyFleet}, 250, {}});
+    orders.orders.emplace_back(move);
+    const auto next = TurnProcessor{}.process(fixture.state, {orders});
+
+    const auto colonized = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& planet) {
+        return planet.id == fixture.targetPlanet;
+    });
+    assert(colonized != next.planets.end() && colonized->owner == 1);
+    assert(colonized->population >= 250);
+    assert(std::none_of(next.fleets.begin(), next.fleets.end(), [&](const Fleet& fleet) {
+        return fleet.id == fixture.colonyFleet;
+    }));
+}
+
 void route_and_arrival_action_are_isolated_by_fleet_id()
 {
     auto fixture = make_arrival_fixture(250);
@@ -176,6 +213,7 @@ int main()
 {
     colonize_on_arrival_establishes_colony_and_consumes_ship();
     failed_colonize_on_arrival_keeps_ship();
+    cargo_loaded_and_colonize_route_in_same_turn_executes_on_arrival();
     route_and_arrival_action_are_isolated_by_fleet_id();
     std::cout << "route program tests passed\n";
     return 0;
