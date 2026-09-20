@@ -227,7 +227,8 @@ GameState movementPhasePreviewState(
 {
     // Let the real TurnProcessor validate and resolve logistics on a disposable
     // copy. Clearing destinations prevents this preview turn from actually
-    // moving fleets; keeping only logistics orders avoids unrelated actions.
+    // moving fleets; keeping only logistics and fleet-organization orders
+    // avoids unrelated actions.
     // The processor still applies turn-start onboard fuel generation, exactly
     // as it will before the real orders and movement phase.
     GameState preview = state;
@@ -238,7 +239,9 @@ GameState movementPhasePreviewState(
         if (std::holds_alternative<SetFleetColonistsOrder>(order)
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)
-            || std::holds_alternative<RefuelFleetOrder>(order)) {
+            || std::holds_alternative<RefuelFleetOrder>(order)
+            || std::holds_alternative<MergeFleetsOrder>(order)
+            || std::holds_alternative<SplitFleetOrder>(order)) {
             logistics.orders.push_back(order);
         }
     }

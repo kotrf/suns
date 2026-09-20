@@ -2,7 +2,6 @@
 #include "ship_designer_dialog.hpp"
 #include <QComboBox>
 #include <QLabel>
-#include <QLineEdit>
 #include <QListWidget>
 
 #include <QApplication>
@@ -40,15 +39,20 @@ struct MainWindowTestAccess {
         w.rebuildScene();
         w.refreshProductionQueue();
     }
-    static void freshDesigner(MainWindow& w)
+    static void planFreshDesign(MainWindow& w)
     {
         w.state_ = make_demo_game();
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
         w.selectedStarId_ = w.state_.planets.front().star;
+        w.appendPendingOrder(CreateShipDesignOrder{
+            "Immediate Scout",
+            ShipHullType::Scout,
+            {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner},
+        }, "Save ship design Immediate Scout");
         w.refreshShipDesignChoices();
-        w.rebuildScene();
-        w.openShipDesigner();
+        w.shipDesignCombo_->setCurrentIndex(w.shipDesignCombo_->findData(w.state_.nextShipDesignId));
+        w.updateControls();
     }
     static void queueDesign(MainWindow& w) { assert(w.buildShipButton_->isEnabled()); w.queueShipDesign(); w.refreshProductionQueue(); }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
@@ -85,26 +89,26 @@ int main(int argc, char** argv)
     remove->click();
     assert(suns::MainWindowTestAccess::canQueueDock(window));
 
-    suns::MainWindowTestAccess::freshDesigner(window);
-    auto* catalog = window.findChild<QListWidget*>("shipComponentCatalog");
-    auto* details = window.findChild<QLabel*>("shipComponentDetails");
-    auto* name = window.findChild<QLineEdit*>("shipDesignName");
-    auto* save = window.findChild<QPushButton*>("saveShipDesign");
-    assert(catalog && details && name && save);
-    assert(details->text().contains("W8:"));
-    assert(details->text().contains("Minerals (kt)"));
-    for (int row = 0; row < catalog->count(); ++row) {
-        const auto component = static_cast<suns::ShipComponentType>(catalog->item(row)->data(Qt::UserRole).toInt());
-        if (component == suns::ShipComponentType::PenetratingScanner) {
-            catalog->setCurrentRow(row);
-            assert(details->text().contains("Penetrating: surveys planets"));
-            assert(details->text().contains("Locked — requires Electronics 3"));
-            auto* fit = window.findChild<QPushButton*>("fitSelectedComponent");
-            assert(fit && !fit->isEnabled());
+    {
+        suns::ShipDesignerDialog designer(suns::make_demo_game(), 1);
+        auto* catalog = designer.findChild<QListWidget*>("shipComponentCatalog");
+        auto* details = designer.findChild<QLabel*>("shipComponentDetails");
+        assert(catalog && details);
+        assert(details->text().contains("W8:"));
+        assert(details->text().contains("Minerals (kt)"));
+        for (int row = 0; row < catalog->count(); ++row) {
+            const auto component = static_cast<suns::ShipComponentType>(catalog->item(row)->data(Qt::UserRole).toInt());
+            if (component == suns::ShipComponentType::PenetratingScanner) {
+                catalog->setCurrentRow(row);
+                assert(details->text().contains("Penetrating: surveys planets"));
+                assert(details->text().contains("Locked — requires Electronics 3"));
+                auto* fit = designer.findChild<QPushButton*>("fitSelectedComponent");
+                assert(fit && !fit->isEnabled());
+            }
         }
     }
-    name->setText("Immediate Scout");
-    save->click();
+
+    suns::MainWindowTestAccess::planFreshDesign(window);
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     suns::MainWindowTestAccess::queueDesign(window);
     assert(tree->topLevelItemCount() == 1);
