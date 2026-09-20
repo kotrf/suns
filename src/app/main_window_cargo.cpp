@@ -165,7 +165,11 @@ void MainWindow::openCargoManifestDialog()
             break;
         }
     }
-    sourceCombo->setCurrentIndex(0);
+    const auto selectedFleetHasCargo = selectedFleetIndex >= 0
+        && (endpointColonists(endpoints[static_cast<std::size_t>(selectedFleetIndex)]) > 0
+            || mineral_cargo_mass(endpointMinerals(
+                   endpoints[static_cast<std::size_t>(selectedFleetIndex)])) > kEpsilon);
+    sourceCombo->setCurrentIndex(selectedFleetHasCargo ? selectedFleetIndex : 0);
     const auto rebuildDestinations = [&](int preferred) {
         const QSignalBlocker blocker(destinationCombo);
         destinationCombo->clear();
@@ -177,7 +181,7 @@ void MainWindow::openCargoManifestDialog()
         const auto preferredRow = destinationCombo->findData(preferred);
         destinationCombo->setCurrentIndex(preferredRow >= 0 ? preferredRow : 0);
     };
-    rebuildDestinations(selectedFleetIndex > 0 ? selectedFleetIndex : 1);
+    rebuildDestinations(selectedFleetHasCargo ? 0 : (selectedFleetIndex > 0 ? selectedFleetIndex : 1));
 
     auto* transferGrid = new QGridLayout;
     transferGrid->addWidget(new QLabel("Cargo", &dialog), 0, 0);

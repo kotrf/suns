@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/communications.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
@@ -105,6 +106,7 @@ void merge_preserves_destination_id_and_all_stacks()
     assert(merged.fleets.size() == 1);
     const auto* fleet = find_fleet(merged, 1);
     assert(fleet);
+    assert(fleet->name == "Fleet #1");
     assert(find_fleet(merged, 2) == nullptr);
     assert(fleet_ship_count(*fleet) == 3);
     assert(fleet_ship_count(*fleet, kScoutDesignId) == 2);
@@ -114,6 +116,7 @@ void merge_preserves_destination_id_and_all_stacks()
     assert(close(fleet->minerals.ironium, 0.3));
     assert(close(fleet->minerals.boranium, 0.3));
     assert(close(fleet->minerals.germanium, 0.3));
+    assert(fleet_ship_count(fleet_player_view(merged, *fleet)) == 3);
 
     // The same guarantee holds when the first vector entry is consumed into
     // the second FleetId. This was the ordering behind an old "ship vanished"
@@ -123,10 +126,12 @@ void merge_preserves_destination_id_and_all_stacks()
     const auto* reverseFleet = find_fleet(reversed, 2);
     assert(reversed.fleets.size() == 1);
     assert(reverseFleet);
+    assert(reverseFleet->name == "Fleet #2");
     assert(!find_fleet(reversed, 1));
     assert(fleet_ship_count(*reverseFleet) == 3);
     assert(fleet_ship_count(*reverseFleet, kScoutDesignId) == 2);
     assert(fleet_ship_count(*reverseFleet, kColonyShipDesignId) == 1);
+    assert(fleet_ship_count(fleet_player_view(reversed, *reverseFleet)) == 3);
 }
 
 void split_preserves_source_id_and_resources()

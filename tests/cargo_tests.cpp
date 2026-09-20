@@ -131,6 +131,26 @@ int main()
     assert(close(fleet(policyUnloaded, 2).minerals.ironium, 0.0));
     assert(planet(policyUnloaded, 1).minerals.ironium > surfaceBeforeUnload + 39.9);
 
+    // "All cargo" really means the complete mixed manifest, not a cargo type
+    // chosen in another control.
+    auto unloadEverything = state;
+    unloadEverything.fleets.front().colonists = 100'000;
+    unloadEverything.fleets.front().minerals = {10.0, 5.0, 5.0};
+    unloadEverything.fleets.front().destination = suns::Position{0.0, 0.0};
+    unloadEverything.fleets.front().arrivalAction = suns::FleetArrivalAction{
+        suns::FleetArrivalActionKind::UnloadAll,
+        1,
+        suns::FleetCargoKind::All,
+    };
+    const auto surfaceBeforeAll = planet(unloadEverything, 1);
+    const auto allUnloaded = processor.process(unloadEverything, {});
+    assert(fleet(allUnloaded, 2).colonists == 0);
+    assert(close(suns::mineral_cargo_mass(fleet(allUnloaded, 2).minerals), 0.0));
+    assert(planet(allUnloaded, 1).population > surfaceBeforeAll.population + 100'000);
+    assert(planet(allUnloaded, 1).minerals.ironium >= surfaceBeforeAll.minerals.ironium + 10.0);
+    assert(planet(allUnloaded, 1).minerals.boranium >= surfaceBeforeAll.minerals.boranium + 5.0);
+    assert(planet(allUnloaded, 1).minerals.germanium >= surfaceBeforeAll.minerals.germanium + 5.0);
+
     // The source/destination transfer primitive moves mixed cargo atomically
     // between a planetary surface and any friendly fleet at that system.
     auto transferState = suns::make_demo_game();
