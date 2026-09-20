@@ -444,6 +444,11 @@ void population_migration_and_clear_orders()
     legacy.campaignId = 12;
     legacy.turnToken = 34;
     legacy.state = make_demo_game();
+    // This fixture is downgraded by rewriting only the version header, so
+    // keep v35-only variable-length survey payloads empty. The remaining
+    // fields deliberately retain the v31-compatible byte layout.
+    legacy.state.players[0].surveyKnowledge.clear();
+    legacy.state.players[0].pendingSurveyReports.clear();
     legacy.state.planets[0].population = 1000;
     legacy.state.players[0].history[0].population = 1000;
     legacy.state.fleets[0].design = kColonyShipDesignId;
