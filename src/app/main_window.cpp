@@ -706,13 +706,8 @@ void MainWindow::rebuildScene()
             mapLabel += "  [VAR]";
         }
         if (!surveyed) {
-            if (survey_level(state_, pendingOrders_.player, star.id) >= SurveyLevel::SystemScan) {
-                tooltip += "\nOrdinary scanner contact — planetary parameters unknown";
-                mapLabel += "  [SCAN]";
-            } else {
-                tooltip += "\nUnsurveyed system — outside all sensor history";
-                mapLabel += "  [?]";
-            }
+            tooltip += "\nPlanetary parameters unknown — requires orbit or a penetrating scanner";
+            mapLabel += "  [?]";
         } else if (planet) {
             const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
             const auto estimated = survey_level(state_, pendingOrders_.player, star.id) == SurveyLevel::BasicScan;

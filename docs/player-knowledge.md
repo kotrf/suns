@@ -9,6 +9,7 @@ A scanner physically observing a system does not directly mutate player knowledg
 The first staged model separates ordinary detection from planetary penetration:
 
 - `SystemScan`: an ordinary scanner footprint records a system contact, but no planetary parameters;
+- Map labels use `[?]` while planetary parameters are unknown, including after `SystemScan`; ordinary scanner contact does not add a separate label suffix.
 - `BasicScan`: a penetrating-scanner footprint reveals a deterministic rough habitability estimate;
 - `OrbitalSurvey`: arriving at the system confirms exact habitability and population suitability;
 - `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
