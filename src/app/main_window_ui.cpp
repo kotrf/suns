@@ -14,6 +14,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QGroupBox>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QKeySequence>
 #include <QLabel>
@@ -35,6 +36,7 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QWidget>
@@ -205,6 +207,20 @@ void MainWindow::installUiPolish()
                     fleetInfo->setWordWrap(true);
                     fleetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
                     fleetLayout->addWidget(fleetInfo);
+
+                    fleetCompositionTree_ = new QTreeWidget(fleetGroup);
+                    fleetCompositionTree_->setObjectName("fleetCompositionTree");
+                    fleetCompositionTree_->setColumnCount(3);
+                    fleetCompositionTree_->setHeaderLabels({"Ship design", "Ships", "Hull"});
+                    fleetCompositionTree_->setRootIsDecorated(false);
+                    fleetCompositionTree_->setAlternatingRowColors(true);
+                    fleetCompositionTree_->setSelectionMode(QAbstractItemView::NoSelection);
+                    fleetCompositionTree_->setMinimumHeight(78);
+                    fleetCompositionTree_->setMaximumHeight(150);
+                    fleetCompositionTree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+                    fleetCompositionTree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+                    fleetCompositionTree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+                    fleetLayout->addWidget(fleetCompositionTree_);
 
                     auto* colonistForm = new QFormLayout;
                     colonistLoadSpin_->show();
@@ -666,6 +682,7 @@ void MainWindow::installUiPolish()
         endTurnAction->setText(endTurnButton_->text());
         if (planetInfo) planetInfo->setText(selectedPlanetPanelSummary());
         if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
+        refreshFleetCompositionTable();
 
         const auto* environmentPlanet = selectedPlanet();
         const auto* environmentStar = selectedStar();

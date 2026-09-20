@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/campaign.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <algorithm>
@@ -326,6 +327,53 @@ void verify_custom_design_can_enter_production()
     assert(built.planets.front().productionQueue.empty());
 }
 
+void verify_same_turn_designs_in_multiplayer()
+{
+    using namespace suns;
+    auto state = generate_campaign(GalaxyConfig{}, {{"One", RacePreset::Terran}, {"Two", RacePreset::Terran}});
+    for (auto& planet : state.planets) if (planet.owner) {
+        planet.population = 0; // no mining: exact mineral accounting
+        planet.industry = 100;
+        planet.minerals = {100, 100, 100};
+    }
+    for (auto& player : state.players) player.technology.researchActive = false;
+    std::vector<PlayerOrders> submissions;
+    for (PlayerId player : {2U, 1U}) {
+        const auto colony = std::find_if(state.planets.begin(), state.planets.end(),
+            [&](const Planet& p) { return p.owner == player; });
+        PlayerOrders orders{player, {
+            CreateShipDesignOrder{"Same name", ShipHullType::Scout, {ShipComponentType::FusionDrive}},
+            QueueShipDesignOrder{colony->id, 0, "Same name"}}};
+        const auto preview = planned_ship_design_state(state, orders);
+        assert(preview.turn == state.turn);
+        assert(preview.shipDesigns.size() == state.shipDesigns.size() + 1);
+        assert(colony->minerals.ironium == 100);
+        submissions.push_back(orders);
+    }
+    const auto result = TurnProcessor{}.process(state, submissions);
+    for (const auto& orders : submissions) {
+        const auto* design = resolve_ship_design_order(result, orders.player,
+            std::get<QueueShipDesignOrder>(orders.orders.back()));
+        assert(design && design->owner == orders.player);
+        assert(std::any_of(result.fleets.begin(), result.fleets.end(),
+            [&](const Fleet& fleet) { return fleet.owner == orders.player && fleet.design == design->id; }));
+        const auto colony = std::find_if(result.planets.begin(), result.planets.end(),
+            [&](const Planet& p) { return p.owner == orders.player; });
+        const auto cost = ship_design_mineral_cost(*design);
+        assert(colony->productionQueue.empty());
+        assert(colony->minerals.ironium == 100 - cost.ironium);
+        assert(colony->minerals.boranium == 100 - cost.boranium);
+        assert(colony->minerals.germanium == 100 - cost.germanium);
+        assert(!resolve_ship_design_order(result, orders.player, {colony->id, design->id, "Missing"}));
+    }
+    // An invalid creation must not make its queue order build some other design.
+    PlayerOrders invalid{1, {CreateShipDesignOrder{"Invalid", ShipHullType::Scout, {}},
+        QueueShipDesignOrder{1, state.nextShipDesignId, "Invalid"}}};
+    const auto rejected = TurnProcessor{}.process(state, {invalid});
+    assert(rejected.shipDesigns.size() == state.shipDesigns.size());
+    assert(rejected.fleets.size() == state.fleets.size());
+}
+
 } // namespace
 
 int main()
@@ -334,5 +382,6 @@ int main()
     verify_component_tradeoffs();
     verify_create_design_order();
     verify_custom_design_can_enter_production();
+    verify_same_turn_designs_in_multiplayer();
     return 0;
 }

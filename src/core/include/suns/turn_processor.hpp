@@ -51,6 +51,8 @@ struct CreateShipDesignOrder {
 struct QueueShipDesignOrder {
     PlanetId colony{};
     ShipDesignId design{};
+    // Pending designs use an owner-scoped name, never a predicted global ID.
+    std::string pendingDesignName;
 };
 
 struct ReorderProductionQueueOrder {
@@ -141,6 +143,11 @@ struct PlayerOrders {
     PlayerId player{};
     std::vector<Order> orders;
 };
+
+// Apply design creation only, without advancing the year or spending resources.
+[[nodiscard]] GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending);
+[[nodiscard]] const ShipDesign* resolve_ship_design_order(
+    const GameState& state, PlayerId player, const QueueShipDesignOrder& order);
 
 struct TurnResult {
     GameState state;

@@ -2,6 +2,8 @@
 
 #include "suns/communications.hpp"
 
+#include <QTreeWidget>
+
 #include <algorithm>
 
 namespace suns {
@@ -304,6 +306,36 @@ QString MainWindow::selectedFleetPanelSummary() const
     }
 
     return lines.join("<br>");
+}
+
+void MainWindow::refreshFleetCompositionTable()
+{
+    if (!fleetCompositionTree_) return;
+    fleetCompositionTree_->clear();
+    const auto planningView = selectedFleetPlanningView();
+    if (!planningView) {
+        fleetCompositionTree_->setToolTip("Select a fleet to inspect every ship in it.");
+        return;
+    }
+
+    const auto& fleet = *planningView;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state_, stack.design);
+        auto* row = new QTreeWidgetItem(fleetCompositionTree_);
+        row->setText(0, design
+            ? QString::fromStdString(design->name)
+            : QString("Design %1").arg(stack.design));
+        row->setText(1, QString::number(stack.count));
+        row->setTextAlignment(1, Qt::AlignCenter);
+        row->setText(2, design
+            ? QString::fromStdString(hull_spec(design->hull).name)
+            : QString("Unknown"));
+    }
+    fleetCompositionTree_->setToolTip(
+        QString("%1 ship%2 in FleetId %3. This table includes current-year merge and split orders.")
+            .arg(fleet_ship_count(fleet))
+            .arg(fleet_ship_count(fleet) == 1 ? "" : "s")
+            .arg(fleet.id));
 }
 
 } // namespace suns

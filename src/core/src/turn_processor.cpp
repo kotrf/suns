@@ -205,6 +205,18 @@ bool design_name_exists(const GameState& state, PlayerId owner, const std::strin
     });
 }
 
+void create_ship_design(GameState& state, PlayerId player, const CreateShipDesignOrder& order)
+{
+    ShipDesign candidate{state.nextShipDesignId, player, order.name,
+        order.hull, order.components, order.placements};
+    if (!ship_design_valid(candidate)
+        || !ship_design_available_to_player(state, player, candidate)
+        || design_name_exists(state, player, candidate.name)) return;
+    normalize_ship_design_placement(candidate);
+    state.shipDesigns.push_back(std::move(candidate));
+    ++state.nextShipDesignId;
+}
+
 bool valid_mineral_cargo(const MineralCargo& cargo)
 {
     return cargo.ironium >= 0.0 && cargo.boranium >= 0.0 && cargo.germanium >= 0.0;
@@ -1441,6 +1453,29 @@ void grow_colonies(GameState& state)
 
 } // namespace
 
+GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending)
+{
+    auto result = state;
+    for (const auto& order : pending.orders) {
+        if (const auto* create = std::get_if<CreateShipDesignOrder>(&order))
+            create_ship_design(result, pending.player, *create);
+    }
+    return result;
+}
+
+const ShipDesign* resolve_ship_design_order(
+    const GameState& state, PlayerId player, const QueueShipDesignOrder& order)
+{
+    if (!order.pendingDesignName.empty()) {
+        const auto it = std::find_if(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& design) {
+            return design.owner == player && design.name == order.pendingDesignName;
+        });
+        return it == state.shipDesigns.end() ? nullptr : &*it;
+    }
+    const auto* design = find_ship_design(state, order.design);
+    return design && design->owner == player ? design : nullptr;
+}
+
 TurnResult TurnProcessor::process_with_events(
     const GameState& current,
     const std::vector<PlayerOrders>& submitted_orders) const
@@ -1536,19 +1571,12 @@ TurnResult TurnProcessor::process_with_events(
                         if (!player || concreteOrder.percent > 100) return;
                         player->technology.researchAllocationPercent = concreteOrder.percent;
                     } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
-                        ShipDesign candidate{next.nextShipDesignId, submission.player, concreteOrder.name,
-                            concreteOrder.hull, concreteOrder.components, concreteOrder.placements};
-                        if (!ship_design_valid(candidate)
-                            || !ship_design_available_to_player(next, submission.player, candidate)
-                            || design_name_exists(next, submission.player, candidate.name)) return;
-                        normalize_ship_design_placement(candidate);
-                        next.shipDesigns.push_back(std::move(candidate));
-                        ++next.nextShipDesignId;
+                        create_ship_design(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
                         });
-                        const auto* design = find_ship_design(next, concreteOrder.design);
+                        const auto* design = resolve_ship_design_order(next, submission.player, concreteOrder);
                         if (planet == next.planets.end() || !design || design->owner != submission.player
                             || !ship_design_valid(*design)) return;
                         planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});

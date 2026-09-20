@@ -87,6 +87,11 @@ void addMinerals(MineralCargo& target, const MineralCargo& add)
 
 } // namespace
 
+MineralCargo component_mineral_cost(ShipComponentType component)
+{
+    return componentMineralCost(component);
+}
+
 MineralCargo ship_design_mineral_cost(const ShipDesign& design)
 {
     auto cost = hullMineralCost(design.hull);

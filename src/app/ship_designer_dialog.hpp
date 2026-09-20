@@ -37,6 +37,7 @@ private:
     void removeComponent(ShipSlotId slot);
     void selectSlot(ShipSlotId slot);
     void updatePreview();
+    void updateComponentDetails();
     [[nodiscard]] ShipDesign previewDesign() const;
     [[nodiscard]] std::optional<ShipComponentType> selectedCatalogComponent() const;
 
@@ -46,6 +47,7 @@ private:
     QLineEdit* nameEdit_{};
     QComboBox* hullCombo_{};
     QListWidget* componentCatalog_{};
+    QLabel* componentDetails_{};
     QWidget* slotPanel_{};
     QGridLayout* slotGrid_{};
     QLabel* fitMessage_{};

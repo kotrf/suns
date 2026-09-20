@@ -213,6 +213,7 @@ private:
     [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;
     [[nodiscard]] QString selectedPlanetPanelSummary() const;
     [[nodiscard]] QString selectedFleetPanelSummary() const;
+    void refreshFleetCompositionTable();
     bool appendRouteWaypoint(
         Position destination,
         FleetId targetFleet,
@@ -308,6 +309,7 @@ private:
     QProgressBar* planetGravityBar_{};
     QProgressBar* planetRadiationBar_{};
     QProgressBar* planetPopulationBar_{};
+    QTreeWidget* fleetCompositionTree_{};
     QDialog* researchDialog_{};
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};
@@ -321,6 +323,7 @@ private:
     QSpinBox* researchAllocationSpin_{};
     QTreeWidget* productionQueueTree_{};
     QLabel* productionQueueSummary_{};
+    QLabel* productionMineralDetails_{};
     QPushButton* productionMoveUpButton_{};
     QPushButton* productionMoveDownButton_{};
     QPushButton* productionRemoveButton_{};

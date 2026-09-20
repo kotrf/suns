@@ -20,6 +20,12 @@
 namespace suns {
 namespace {
 
+QString mineralAmounts(const MineralCargo& minerals)
+{
+    return QString("I %1 / B %2 / G %3 kt")
+        .arg(minerals.ironium, 0, 'f', 1).arg(minerals.boranium, 0, 'f', 1).arg(minerals.germanium, 0, 'f', 1);
+}
+
 QString productionItemName(const GameState& state, const ProductionItem& item)
 {
     switch (item.kind) {
@@ -72,7 +78,7 @@ std::vector<ProductionItem> plannedQueue(
                 }
             } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                 if (concrete.colony != planet.id) return;
-                if (const auto* design = find_ship_design(state, concrete.design);
+                if (const auto* design = resolve_ship_design_order(state, pending.player, concrete);
                     design && design->owner == pending.player && ship_design_valid(*design)) {
                     queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                 }
@@ -100,7 +106,7 @@ std::vector<ProductionItem> plannedQueue(
 
 std::vector<ProductionItem> MainWindow::plannedProductionQueue(const Planet& planet) const
 {
-    return plannedQueue(state_, planet, pendingOrders_);
+    return plannedQueue(planned_ship_design_state(state_, pendingOrders_), planet, pendingOrders_);
 }
 
 void MainWindow::installProductionQueue()
@@ -132,6 +138,11 @@ void MainWindow::installProductionQueue()
     productionQueueTree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     productionQueueTree_->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     layout->addWidget(productionQueueTree_, 1);
+    productionMineralDetails_ = new QLabel(group);
+    productionMineralDetails_->setObjectName("productionMineralDetails");
+    productionMineralDetails_->setTextFormat(Qt::PlainText);
+    productionMineralDetails_->setWordWrap(true);
+    layout->addWidget(productionMineralDetails_);
 
     auto* moveRow = new QHBoxLayout;
     productionMoveUpButton_ = new QPushButton("Move up", group);
@@ -157,6 +168,8 @@ void MainWindow::installProductionQueue()
     connect(removeShortcut, &QShortcut::activated, this, &MainWindow::removeSelectedProductionItem);
     connect(productionQueueTree_, &QTreeWidget::itemSelectionChanged, this, [this] {
         const auto row = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
+        productionMineralDetails_->setText(row >= 0
+            ? productionQueueTree_->currentItem()->data(0, Qt::UserRole + 1).toString() : QString{});
         productionMoveUpButton_->setEnabled(row > 0);
         productionRemoveButton_->setEnabled(row >= 0);
         productionMoveDownButton_->setEnabled(
@@ -175,6 +188,7 @@ void MainWindow::refreshProductionQueue()
     if (shuttingDown_ || !productionQueueTree_ || !productionQueueSummary_) return;
     const auto previousRow = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
     productionQueueTree_->clear();
+    productionMineralDetails_->clear();
     productionQueuePlanet_.reset();
 
     const auto* planet = selectedPlanet();
@@ -188,7 +202,7 @@ void MainWindow::refreshProductionQueue()
 
     productionQueuePlanet_ = planet->id;
     const auto queue = plannedProductionQueue(*planet);
-    auto forecastState = state_;
+    auto forecastState = planned_ship_design_state(state_, pendingOrders_);
     const auto forecastPlayerIt = std::find_if(
         forecastState.players.begin(), forecastState.players.end(), [this](const Player& player) {
             return player.id == pendingOrders_.player;
@@ -219,6 +233,15 @@ void MainWindow::refreshProductionQueue()
             .arg(static_cast<qulonglong>(queue.size()))
             .arg(queue.size() == 1 ? "" : "s"));
 
+    MineralCargo total;
+    for (const auto& item : queue) {
+        const auto cost = production_item_mineral_cost(forecastState, item);
+        total.ironium += cost.ironium; total.boranium += cost.boranium; total.germanium += cost.germanium;
+    }
+    productionQueueSummary_->setText(productionQueueSummary_->text()
+        + QString("<br>Stock: %1<br>Mining/turn: %2<br>Queue minerals: %3<br>Minerals are spent on completion.")
+            .arg(mineralAmounts(planet->minerals), mineralAmounts(projected_mineral_mining(state_, *planet)), mineralAmounts(total)));
+
     bool shipyardAvailable = colony_has_orbital_service(
         state_, planet->id, planet->owner, OrbitalStationModule::Shipyard);
     for (std::size_t index = 0; index < queue.size(); ++index) {
@@ -229,7 +252,7 @@ void MainWindow::refreshProductionQueue()
         if (waitingForShipyard) {
             remaining = "shipyard";
         } else if (item.remainingCost == 0
-            && !mineral_cargo_sufficient(planet->minerals, production_item_mineral_cost(state_, item))) {
+            && !mineral_cargo_sufficient(planet->minerals, production_item_mineral_cost(forecastState, item))) {
             remaining = "minerals";
         }
 
@@ -242,10 +265,19 @@ void MainWindow::refreshProductionQueue()
 
         auto* row = new QTreeWidgetItem(productionQueueTree_);
         row->setText(0, QString::number(index + 1));
-        row->setText(1, productionItemName(state_, item));
+        row->setText(1, productionItemName(forecastState, item));
         row->setText(2, remaining);
         row->setText(3, completion);
         row->setData(0, Qt::UserRole, static_cast<qulonglong>(index));
+        const auto cost = production_item_mineral_cost(forecastState, item);
+        const MineralCargo missing{std::max(0.0, cost.ironium - planet->minerals.ironium),
+            std::max(0.0, cost.boranium - planet->minerals.boranium),
+            std::max(0.0, cost.germanium - planet->minerals.germanium)};
+        const auto details = QString("%1 — minerals charged on completion: %2\n"
+                                     "Shortfall against current stock before other builds: %3")
+            .arg(productionItemName(forecastState, item), mineralAmounts(cost), mineralAmounts(missing));
+        row->setData(0, Qt::UserRole + 1, details);
+        for (int column = 0; column < 4; ++column) row->setToolTip(column, details);
         if (item.kind == ProductionKind::OrbitalStation) shipyardAvailable = true;
     }
 
@@ -271,7 +303,7 @@ void MainWindow::removeSelectedProductionItem()
     appendPendingOrder(
         CancelProductionOrder{planet->id, static_cast<std::uint32_t>(row)},
         QString("Cancel %1 at %2")
-            .arg(productionItemName(state_, queue[row]))
+            .arg(productionItemName(planned_ship_design_state(state_, pendingOrders_), queue[row]))
             .arg(QString::fromStdString(planet->name)));
     refreshProductionQueue();
 }

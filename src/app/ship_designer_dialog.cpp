@@ -19,6 +19,7 @@
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QStandardItemModel>
+#include <QScrollArea>
 #include <QStringList>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -79,14 +80,34 @@ QString componentTooltip(ShipComponentType component)
         QString("Mass %1 kt").arg(spec.mass, 0, 'f', 1),
         QString("Cost %1").arg(spec.buildCost),
     };
-    if (spec.maxWarp > 0) facts << QString("Maximum Warp %1").arg(spec.maxWarp);
-    if (spec.sensorRange > 0.0) facts << QString("Scanner %1 ly").arg(spec.sensorRange, 0, 'f', 0);
+    const auto minerals = component_mineral_cost(component);
+    facts << QString("Minerals (kt): I %1 / B %2 / G %3")
+        .arg(minerals.ironium).arg(minerals.boranium).arg(minerals.germanium);
+    if (spec.maxWarp > 0) {
+        facts << QString("Safe maximum Warp %1 • Thrust %2").arg(spec.maxWarp).arg(spec.engineThrust);
+        facts << "One engine model fills the entire propulsion bank. Costs and mass above are per engine.";
+        facts << "Fuel per 100 kt per ly (gain means fuel collected):";
+        for (std::uint8_t warp = 1; warp <= kMaxWarp; ++warp) {
+            auto line = QString("W%1: %2").arg(warp).arg(signedFuelRate(spec.fuelPer100MassLy[warp]));
+            if (spec.overdriveDamagePercent[warp] > 0.0)
+                line += QString(" • hull damage %1%/turn").arg(spec.overdriveDamagePercent[warp]);
+            facts << line;
+        }
+    }
+    if (spec.sensorRange > 0.0) {
+        facts << QString("Scanner range %1 ly").arg(spec.sensorRange, 0, 'f', 0);
+        facts << (spec.penetratesPlanets
+            ? "Penetrating: surveys planets; does not extend the communications network."
+            : "Ordinary: detects ships and extends the communications network; does not survey planets.");
+    }
     if (spec.fuelCapacity > 0.0) facts << QString("Fuel capacity +%1").arg(spec.fuelCapacity, 0, 'f', 0);
     if (spec.fuelGenerationPerTurn > 0.0) {
         facts << QString("Fuel generation +%1/turn").arg(spec.fuelGenerationPerTurn, 0, 'f', 0);
     }
-    if (spec.cargoCapacity > 0.0) facts << QString("Cargo +%1").arg(spec.cargoCapacity, 0, 'f', 0);
-    if (spec.remoteMiningUnits > 0.0) facts << "Remote mining equipment";
+    if (spec.cargoCapacity > 0.0) facts << QString("Cargo +%1 kt").arg(spec.cargoCapacity, 0, 'f', 0);
+    if (spec.remoteMiningUnits > 0.0)
+        facts << "Remote mining: 1.25 extraction units per turn × concentration of each mineral, on unowned planets.";
+    if (spec.radiationHazard > 0.0) facts << "Radiation hazard: 10% colonist losses per travel turn unless the race is immune or has radiation tolerance ≥ 85%.";
     if (spec.enablesColonization) facts << "Enables colonization";
     return facts.join("\n");
 }
@@ -128,7 +149,7 @@ protected:
     void startDrag(Qt::DropActions) override
     {
         const auto* item = currentItem();
-        if (!item || !(item->flags() & Qt::ItemIsEnabled)) return;
+        if (!item || !item->data(Qt::UserRole + 1).toBool()) return;
         auto* mime = new QMimeData;
         mime->setData(kComponentMimeType,
             encodeComponentDrag(static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt())));
@@ -296,6 +317,18 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     componentCatalog_->setDragEnabled(true);
     componentCatalog_->setDragDropMode(QAbstractItemView::DragOnly);
     catalogLayout->addWidget(componentCatalog_, 1);
+    auto* detailsScroll = new QScrollArea(catalogGroup);
+    detailsScroll->setWidgetResizable(true);
+    detailsScroll->setMinimumHeight(160);
+    componentDetails_ = new QLabel(detailsScroll);
+    componentDetails_->setObjectName("shipComponentDetails");
+    componentDetails_->setTextFormat(Qt::PlainText);
+    componentDetails_->setWordWrap(true);
+    componentDetails_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    componentDetails_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    componentDetails_->setMargin(6);
+    detailsScroll->setWidget(componentDetails_);
+    catalogLayout->addWidget(detailsScroll, 1);
     fitButton_ = new QPushButton("Fit selected →", catalogGroup);
     fitButton_->setObjectName("fitSelectedComponent");
     fitButton_->setEnabled(false);
@@ -325,9 +358,10 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
         auto* item = new QListWidgetItem(label, componentCatalog_);
         item->setData(Qt::UserRole, static_cast<int>(component));
+        item->setData(Qt::UserRole + 1, available);
         item->setToolTip(componentTooltip(component)
             + (available ? QString{} : QString("\nLocked — requires %1").arg(unlockRequirement(component))));
-        if (!available) item->setFlags(item->flags() & ~Qt::ItemIsEnabled & ~Qt::ItemIsDragEnabled);
+        if (!available) item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
     }
     componentCatalog_->setCurrentRow(0);
 
@@ -393,6 +427,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     });
     connect(componentCatalog_, &QListWidget::currentItemChanged, this, [this] {
         fitButton_->setEnabled(selectedSlot_ != 0 && selectedCatalogComponent().has_value());
+        updateComponentDetails();
     });
     connect(componentCatalog_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) {
         const auto component = selectedCatalogComponent();
@@ -429,13 +464,23 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
 
     rebuildSlotGrid();
     updatePreview();
+    updateComponentDetails();
 }
 
 std::optional<ShipComponentType> ShipDesignerDialog::selectedCatalogComponent() const
 {
     const auto* item = componentCatalog_->currentItem();
-    if (!item || !(item->flags() & Qt::ItemIsEnabled)) return std::nullopt;
+    if (!item || !item->data(Qt::UserRole + 1).toBool()) return std::nullopt;
     return static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
+}
+
+void ShipDesignerDialog::updateComponentDetails()
+{
+    const auto* item = componentCatalog_->currentItem();
+    if (!item) { componentDetails_->clear(); return; }
+    const auto component = static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
+    componentDetails_->setText(QString::fromStdString(component_spec(component).name)
+        + "\n" + item->toolTip());
 }
 
 void ShipDesignerDialog::selectSlot(ShipSlotId slot)
@@ -452,6 +497,11 @@ void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 void ShipDesignerDialog::fitComponent(
     ShipComponentType component, ShipSlotId target, ShipSlotId source)
 {
+    for (int row = 0; row < componentCatalog_->count(); ++row) {
+        const auto* item = componentCatalog_->item(row);
+        if (item->data(Qt::UserRole).toInt() == static_cast<int>(component)
+            && !item->data(Qt::UserRole + 1).toBool()) return;
+    }
     const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
     const auto targetSlot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
         return slot.id == target;

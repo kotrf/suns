@@ -584,6 +584,7 @@ void normalize_ship_design_placement(ShipDesign& design);
     const GameState& state, PlayerId player, const ShipDesign& design);
 [[nodiscard]] double ship_design_mass(const ShipDesign& design);
 [[nodiscard]] std::uint32_t ship_design_cost(const ShipDesign& design);
+[[nodiscard]] MineralCargo component_mineral_cost(ShipComponentType component);
 [[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
