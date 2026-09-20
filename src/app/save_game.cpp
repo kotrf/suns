@@ -18,10 +18,10 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 33;
+constexpr quint32 kSaveFormatVersion = 34;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 4;
+constexpr quint32 kTurnOrderFormatVersion = 5;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -1462,7 +1462,7 @@ void writeOrder(QDataStream& stream, const Order& order)
             }
         } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
             stream << quint8{3} << static_cast<quint32>(concrete.colony)
-                   << static_cast<quint32>(concrete.design);
+                   << static_cast<quint32>(concrete.design) << QString::fromStdString(concrete.pendingDesignName);
         } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
             stream << quint8{4} << static_cast<quint32>(concrete.colony)
                    << static_cast<quint32>(concrete.fleet)
@@ -1617,6 +1617,11 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         quint32 design{};
         stream >> colony >> design;
+        if (gReadSaveFormatVersion >= 34) {
+            QString name;
+            stream >> name;
+            value.pendingDesignName = name.toStdString();
+        }
         value.colony = static_cast<PlanetId>(colony);
         value.design = static_cast<ShipDesignId>(design);
         order = value;
@@ -2188,7 +2193,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 4 ? 33 : version == 3 ? 32 : version == 2 ? 31 : 23;
+    gReadSaveFormatVersion = version >= 5 ? 34 : version == 4 ? 33 : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
 

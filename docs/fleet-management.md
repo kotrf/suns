@@ -27,4 +27,11 @@ Both fleets must be stationary and idle, with no waypoint program, persistent ta
 
 Fuel is divided in proportion to fuel capacity. Colonists and minerals are divided in proportion to cargo capacity. This deterministic rule keeps both resulting fleets within their physical capacities whenever the original fleet was valid.
 
-The Qt **Fleet** menu and unified dockable Fleet area expose logistics, colonization, ship design, **Merge fleets…** and **Split fleet…**. Its Overview & Logistics and Route Program tabs share one dock zone by default, but can be detached like the other workspace panels. The fleet dashboard lists the complete composition and reports aggregate capacities, sensors and maximum Warp.
+The Qt **Fleet** menu and unified dockable Fleet area expose logistics,
+colonization, ship design, **Merge fleets…** and **Split fleet…**. Its Overview
+& Logistics and Route Program tabs share one dock zone by default, but can be
+detached like the other workspace panels. A permanent composition table lists
+every design, ship count and hull in the selected FleetId. It previews pending
+merge and split orders, so the absorbed fleet marker may disappear without
+hiding where its ships went. The fleet dashboard also reports aggregate
+capacities, sensors and maximum Warp.

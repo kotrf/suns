@@ -227,7 +227,8 @@ GameState movementPhasePreviewState(
 {
     // Let the real TurnProcessor validate and resolve logistics on a disposable
     // copy. Clearing destinations prevents this preview turn from actually
-    // moving fleets; keeping only logistics orders avoids unrelated actions.
+    // moving fleets; keeping only logistics and fleet-organization orders
+    // avoids unrelated actions.
     // The processor still applies turn-start onboard fuel generation, exactly
     // as it will before the real orders and movement phase.
     GameState preview = state;
@@ -238,7 +239,9 @@ GameState movementPhasePreviewState(
         if (std::holds_alternative<SetFleetColonistsOrder>(order)
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)
-            || std::holds_alternative<RefuelFleetOrder>(order)) {
+            || std::holds_alternative<RefuelFleetOrder>(order)
+            || std::holds_alternative<MergeFleetsOrder>(order)
+            || std::holds_alternative<SplitFleetOrder>(order)) {
             logistics.orders.push_back(order);
         }
     }
@@ -427,6 +430,8 @@ MainWindow::MainWindow(QWidget* parent)
     designShipButton_->setObjectName("openShipDesignerButton");
     buildShipButton_ = new QPushButton("Queue selected ship design", sidePanel);
     buildFactoryButton_ = new QPushButton(QString("Queue Factory (%1)").arg(kFactoryCost), sidePanel);
+    buildFactoryButton_->setToolTip(
+        "Minerals charged on completion: I 2 / B 1 / G 2 kt");
     buildOrbitalDockButton_ = new QPushButton(
         QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost), sidePanel);
     colonizeButton_ = new QPushButton("Colonize selected world with selected ship", sidePanel);
@@ -551,7 +556,8 @@ void MainWindow::refreshShipDesignChoices()
     shipDesignCombo_->clear();
 
     int restoreIndex = -1;
-    for (const auto& design : state_.shipDesigns) {
+    const auto planning = planned_ship_design_state(state_, pendingOrders_);
+    for (const auto& design : planning.shipDesigns) {
         if (design.owner != pendingOrders_.player) continue;
         const auto index = shipDesignCombo_->count();
         const auto hull = hull_spec(design.hull);
@@ -563,6 +569,9 @@ void MainWindow::refreshShipDesignChoices()
                               .arg(ship_design_fuel_capacity(design), 0, 'f', 0)
                               .arg(ship_design_cargo_capacity(design), 0, 'f', 0);
         shipDesignCombo_->addItem(text, static_cast<unsigned int>(design.id));
+        const auto minerals = ship_design_mineral_cost(design);
+        shipDesignCombo_->setItemData(index, QString("Minerals: I %1 / B %2 / G %3 kt; charged on completion")
+            .arg(minerals.ironium).arg(minerals.boranium).arg(minerals.germanium), Qt::ToolTipRole);
         if (design.id == previous) restoreIndex = index;
     }
 
@@ -1090,13 +1099,23 @@ void MainWindow::updateControls()
         : stationQueued
             ? "Orbital Dock already planned"
             : QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost));
+    buildOrbitalDockButton_->setToolTip(
+        "Minerals charged on completion: I 12 / B 6 / G 8 kt");
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
-    const auto* buildDesign = find_ship_design(state_, designId);
+    const auto planning = planned_ship_design_state(state_, pendingOrders_);
+    const auto* buildDesign = find_ship_design(planning, designId);
     buildShipButton_->setEnabled(ownedColony && buildDesign != nullptr && buildDesign->owner == pendingOrders_.player);
-    buildShipButton_->setToolTip(stationExists
+    const auto shipMaterialTip = buildDesign
+        ? QString("\nMinerals charged on completion: I %1 / B %2 / G %3 kt")
+              .arg(ship_design_mineral_cost(*buildDesign).ironium)
+              .arg(ship_design_mineral_cost(*buildDesign).boranium)
+              .arg(ship_design_mineral_cost(*buildDesign).germanium)
+        : QString{};
+    buildShipButton_->setToolTip((stationExists
         ? "Add this ship to the selected colony's production queue"
-        : "The ship may be queued now, but production waits until an Orbital Dock is completed first");
+        : "The ship may be queued now, but production waits until an Orbital Dock is completed first")
+        + shipMaterialTip);
     buildShipButton_->setText(buildDesign
         ? QString("Queue %1 (%2)").arg(QString::fromStdString(buildDesign->name)).arg(ship_design_cost(*buildDesign))
         : "Queue selected ship design");
@@ -1188,8 +1207,15 @@ void MainWindow::openShipDesigner()
         }
         appendPendingOrder(
             CreateShipDesignOrder{draft.name, draft.hull, draft.components, draft.placements},
-            QString("Save ship design %1 — available after End Turn")
+            QString("Save ship design %1")
                 .arg(QString::fromStdString(draft.name)));
+        refreshShipDesignChoices();
+        const auto planning = planned_ship_design_state(state_, pendingOrders_);
+        const auto it = std::find_if(planning.shipDesigns.begin(), planning.shipDesigns.end(), [&](const ShipDesign& design) {
+            return design.owner == pendingOrders_.player && design.name == draft.name;
+        });
+        if (it != planning.shipDesigns.end()) shipDesignCombo_->setCurrentIndex(shipDesignCombo_->findData(it->id));
+        updateControls();
     });
     connect(dialog, &QDialog::finished, dialog, &QObject::deleteLater);
     connect(dialog, &QObject::destroyed, this, [this] { shipDesigner_.clear(); });
@@ -1269,10 +1295,13 @@ void MainWindow::queueShipDesign()
     if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
-    const auto* design = find_ship_design(state_, designId);
+    const auto planning = planned_ship_design_state(state_, pendingOrders_);
+    const auto* design = find_ship_design(planning, designId);
     if (!design || design->owner != pendingOrders_.player) return;
 
-    appendPendingOrder(QueueShipDesignOrder{planet->id, design->id},
+    appendPendingOrder(QueueShipDesignOrder{planet->id,
+            find_ship_design(state_, design->id) ? design->id : 0,
+            find_ship_design(state_, design->id) ? std::string{} : design->name},
         QString("Queue %1 at %2 — cost %3")
             .arg(QString::fromStdString(design->name)).arg(QString::fromStdString(planet->name)).arg(ship_design_cost(*design)));
 }

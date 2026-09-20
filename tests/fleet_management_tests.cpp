@@ -114,6 +114,19 @@ void merge_preserves_destination_id_and_all_stacks()
     assert(close(fleet->minerals.ironium, 0.3));
     assert(close(fleet->minerals.boranium, 0.3));
     assert(close(fleet->minerals.germanium, 0.3));
+
+    // The same guarantee holds when the first vector entry is consumed into
+    // the second FleetId. This was the ordering behind an old "ship vanished"
+    // symptom: the source marker disappears, but its ship must survive.
+    const auto reversed = processor.process(
+        two_fleet_fixture(), {{1, {MergeFleetsOrder{2, 1}}}});
+    const auto* reverseFleet = find_fleet(reversed, 2);
+    assert(reversed.fleets.size() == 1);
+    assert(reverseFleet);
+    assert(!find_fleet(reversed, 1));
+    assert(fleet_ship_count(*reverseFleet) == 3);
+    assert(fleet_ship_count(*reverseFleet, kScoutDesignId) == 2);
+    assert(fleet_ship_count(*reverseFleet, kColonyShipDesignId) == 1);
 }
 
 void split_preserves_source_id_and_resources()

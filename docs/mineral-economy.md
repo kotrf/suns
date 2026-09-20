@@ -16,7 +16,7 @@ Every settled world has baseline extraction capacity from its population. Yield 
 
 Baseline extraction units are:
 
-`1 + population / 750`
+`1 + population / 750,000`
 
 A built **Mine** adds another `0.75` extraction units permanently. Because this capacity is still multiplied by mineral concentration, the same Mine is much more valuable on a geologically rich world than on a poor one. The colony UI therefore shows both current extraction and the marginal I/B/G gain from the next Mine before the player queues it.
 
@@ -40,6 +40,12 @@ Factory mineral bill: `2 I / 1 B / 2 G`.
 Mine mineral bill: `1 I / 2 B / 1 G`.
 
 Ship mineral bills are derived from hull plus fitted components. This makes ship design affect industrial logistics as well as mass, fuel, cargo, sensing, and mission capability.
+
+The production dock exposes this constraint before it blocks construction: it
+shows current stocks, extraction per turn, the whole queue's material bill and
+the selected item's current shortfall. Component and complete-design bills are
+also visible in Ship Designer. The completion forecast uses the same mining,
+queue order and atomic-spending rules as turn resolution.
 
 ## Save compatibility
 

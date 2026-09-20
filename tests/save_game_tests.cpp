@@ -515,14 +515,15 @@ void cancellation_round_trips_in_save_and_turn_packet()
     saved.campaignId = 12;
     saved.turnToken = 34;
     saved.state = make_demo_game();
-    saved.pendingOrders = {1, {CancelProductionOrder{1, 2}}};
-    saved.pendingDescriptions = {"Cancel third build"};
+    saved.pendingOrders = {1, {CancelProductionOrder{1, 2}, QueueShipDesignOrder{1, 0, "New Surveyor"}}};
+    saved.pendingDescriptions = {"Cancel third build", "Queue new Surveyor"};
     const auto path = directory.filePath("cancel.suns");
     assert(write_save_game_file(path, saved, error));
     SaveGameData loaded;
     assert(read_save_game_file(path, loaded, error));
     const auto savedCancel = std::get<CancelProductionOrder>(loaded.pendingOrders.orders.at(0));
     assert(savedCancel.colony == 1 && savedCancel.index == 2);
+    assert(std::get<QueueShipDesignOrder>(loaded.pendingOrders.orders.at(1)).pendingDesignName == "New Surveyor");
     TurnOrderFileData packet{12, saved.state.turn, 34, saved.pendingOrders, saved.pendingDescriptions};
     const auto ordersPath = directory.filePath("cancel.sunsorders");
     assert(write_turn_order_file(ordersPath, packet, error));
@@ -530,6 +531,7 @@ void cancellation_round_trips_in_save_and_turn_packet()
     assert(read_turn_order_file(ordersPath, read, error));
     const auto packetCancel = std::get<CancelProductionOrder>(read.orders.orders.at(0));
     assert(packetCancel.colony == 1 && packetCancel.index == 2);
+    assert(std::get<QueueShipDesignOrder>(read.orders.orders.at(1)).pendingDesignName == "New Surveyor");
 }
 
 } // namespace

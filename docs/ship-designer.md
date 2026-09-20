@@ -38,7 +38,15 @@ The first designer exposes these components:
 
 Engines occupy the dedicated engine cells. Selecting or dropping an engine model in the designer fills the complete required bank, and removing one engine cell removes the bank; mixed or incomplete banks are never saved. Remote Mining Modules occupy dedicated `Mining` slots. Every other installed component consumes one general slot. Fuel tanks, cargo pods and generators may be fitted more than once when the hull has room.
 
-The dialog previews derived mass, build cost, maximum Warp, fuel capacity/generation, cargo capacity, scanner range, colonization capability, radiation hazard and the engine's Warp-by-Warp fuel curve.
+Selecting any catalog row opens a persistent detail card below the catalog. It
+shows the compatible slot category, mass, production cost, I/B/G bill and the
+component's actual effect. Engines include thrust, safe Warp, fuel use or gain
+at every Warp and overdrive damage; scanners explain both range and whether
+they survey planets or extend communications. Locked components remain
+selectable for inspection, but cannot be fitted. The complete design preview
+shows derived mass, build cost and mineral bill, maximum Warp, fuel
+capacity/generation, cargo capacity, scanner range, mission capability,
+radiation hazard and the engine fuel curve.
 
 ## Logical fitting layout
 
@@ -80,14 +88,25 @@ existing window instead of creating competing drafts.
 
 ## Turn architecture
 
-Saving a design does not mutate `GameState` directly from Qt. The UI queues a `CreateShipDesignOrder`. During turn resolution the core:
+Saving a design does not mutate authoritative `GameState` directly from Qt. The
+UI queues a `CreateShipDesignOrder`, builds a deterministic planning view, and
+immediately offers the pending design in the production selector. A production
+order for such a design carries its owner-scoped name instead of guessing the
+future global `ShipDesignId`. This matters in multiplayer because other players
+may create designs in the same turn and consume IDs in host submission order.
+
+During turn resolution the core:
 
 1. assigns the next stable `ShipDesignId`;
 2. validates hull slots, the engine requirement and component technology prerequisites again;
 3. rejects duplicate names for the same player;
-4. stores the design in `GameState`.
+4. stores the design in `GameState`;
+5. resolves later production orders from that player by the newly stored name.
 
-The design therefore becomes available for production after `End Turn`, using the same order-processing path intended for future PBEM/server play and AI players.
+The design can therefore enter a colony queue in the same planning turn while
+still using the ordinary PBEM/server order path. Invalid or unavailable designs
+never resolve to a build order. Save format 34 and turn-order format 5 persist
+the pending-design reference; older supported files remain readable.
 
 ## Strategic intent
 
