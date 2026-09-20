@@ -706,13 +706,8 @@ void MainWindow::rebuildScene()
             mapLabel += "  [VAR]";
         }
         if (!surveyed) {
-            if (survey_level(state_, pendingOrders_.player, star.id) >= SurveyLevel::SystemScan) {
-                tooltip += "\nOrdinary scanner contact — planetary parameters unknown";
-                mapLabel += "  [SCAN]";
-            } else {
-                tooltip += "\nUnsurveyed system — outside all sensor history";
-                mapLabel += "  [?]";
-            }
+            tooltip += "\nPlanetary parameters unknown — requires orbit or a penetrating scanner";
+            mapLabel += "  [?]";
         } else if (planet) {
             const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
             const auto estimated = survey_level(state_, pendingOrders_.player, star.id) == SurveyLevel::BasicScan;
@@ -1084,20 +1079,15 @@ void MainWindow::updateControls()
     designShipButton_->setEnabled(true);
 
     const bool stationExists = ownedColony && find_orbital_station_at_planet(state_, planet->id);
+    const auto buildPlan = ownedColony ? plannedProductionQueue(*planet) : std::vector<ProductionItem>{};
     const bool stationQueued = ownedColony
-        && std::any_of(planet->productionQueue.begin(), planet->productionQueue.end(), [](const ProductionItem& item) {
+        && std::any_of(buildPlan.begin(), buildPlan.end(), [](const ProductionItem& item) {
                return item.kind == ProductionKind::OrbitalStation;
            });
-    const bool stationPending = ownedColony
-        && std::any_of(pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [planet](const Order& order) {
-               const auto* queued = std::get_if<QueueProductionOrder>(&order);
-               return queued && queued->colony == planet->id
-                   && queued->kind == ProductionKind::OrbitalStation;
-           });
-    buildOrbitalDockButton_->setEnabled(ownedColony && !stationExists && !stationQueued && !stationPending);
+    buildOrbitalDockButton_->setEnabled(ownedColony && !stationExists && !stationQueued);
     buildOrbitalDockButton_->setText(stationExists
         ? "Orbital Dock already operational"
-        : stationQueued || stationPending
+        : stationQueued
             ? "Orbital Dock already planned"
             : QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost));
 

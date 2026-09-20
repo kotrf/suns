@@ -80,7 +80,7 @@ void MainWindow::openCargoManifestDialog()
         || !same_position(authoritativeFleet->position, selectedStar->position)) {
         QMessageBox::information(
             this,
-            "Cargo Transfer",
+            "Transfer cargo",
             "Select a friendly fleet currently stationed at the selected star system.");
         return;
     }
@@ -126,13 +126,14 @@ void MainWindow::openCargoManifestDialog()
     if (endpoints.size() < 2) {
         QMessageBox::information(
             this,
-            "Cargo Transfer",
+            "Transfer cargo",
             "Cargo transfer needs a friendly or uncolonized planetary surface and/or at least two friendly fleets at this system.");
         return;
     }
 
     QDialog dialog(this);
-    dialog.setWindowTitle(QString("Cargo Transfer — %1").arg(QString::fromStdString(star->name)));
+    dialog.setObjectName("cargoTransferDialog");
+    dialog.setWindowTitle(QString("Transfer cargo — %1").arg(QString::fromStdString(star->name)));
     dialog.setMinimumWidth(650);
 
     auto* layout = new QVBoxLayout(&dialog);
@@ -146,9 +147,10 @@ void MainWindow::openCargoManifestDialog()
     auto* endpointForm = new QGridLayout;
     auto* sourceCombo = new QComboBox(&dialog);
     auto* destinationCombo = new QComboBox(&dialog);
-    for (const auto& endpoint : endpoints) {
-        sourceCombo->addItem(endpoint.name);
-        destinationCombo->addItem(endpoint.name);
+    sourceCombo->setObjectName("cargoSourceCombo");
+    destinationCombo->setObjectName("cargoDestinationCombo");
+    for (std::size_t index = 0; index < endpoints.size(); ++index) {
+        sourceCombo->addItem(endpoints[index].name, static_cast<int>(index));
     }
     endpointForm->addWidget(new QLabel("Source", &dialog), 0, 0);
     endpointForm->addWidget(sourceCombo, 0, 1);
@@ -164,7 +166,18 @@ void MainWindow::openCargoManifestDialog()
         }
     }
     sourceCombo->setCurrentIndex(0);
-    destinationCombo->setCurrentIndex(selectedFleetIndex > 0 ? selectedFleetIndex : 1);
+    const auto rebuildDestinations = [&](int preferred) {
+        const QSignalBlocker blocker(destinationCombo);
+        destinationCombo->clear();
+        for (std::size_t index = 0; index < endpoints.size(); ++index) {
+            if (static_cast<int>(index) != sourceCombo->currentData().toInt()) {
+                destinationCombo->addItem(endpoints[index].name, static_cast<int>(index));
+            }
+        }
+        const auto preferredRow = destinationCombo->findData(preferred);
+        destinationCombo->setCurrentIndex(preferredRow >= 0 ? preferredRow : 0);
+    };
+    rebuildDestinations(selectedFleetIndex > 0 ? selectedFleetIndex : 1);
 
     auto* transferGrid = new QGridLayout;
     transferGrid->addWidget(new QLabel("Cargo", &dialog), 0, 0);
@@ -173,6 +186,8 @@ void MainWindow::openCargoManifestDialog()
 
     auto* colonistSlider = new QSlider(Qt::Horizontal, &dialog);
     auto* colonistSpin = new QSpinBox(&dialog);
+    colonistSlider->setObjectName("cargoColonistSlider");
+    colonistSpin->setObjectName("cargoColonistSpin");
     colonistSpin->setSingleStep(1000);
     colonistSpin->setGroupSeparatorShown(true);
     colonistSpin->setToolTip("People, at 100 kg per colonist (10,000 people per kt of cargo).");
@@ -185,6 +200,8 @@ void MainWindow::openCargoManifestDialog()
     for (int index = 0; index < 3; ++index) {
         auto* slider = new QSlider(Qt::Horizontal, &dialog);
         auto* spin = new QDoubleSpinBox(&dialog);
+        slider->setObjectName(QString("cargoMineralSlider%1").arg(index));
+        spin->setObjectName(QString("cargoMineralSpin%1").arg(index));
         spin->setDecimals(2);
         spin->setSingleStep(1.0);
         transferGrid->addWidget(new QLabel(mineralNames[index], &dialog), index + 2, 0);
@@ -218,11 +235,59 @@ void MainWindow::openCargoManifestDialog()
     };
 
     const auto refresh = [&] {
-        const auto sourceIndex = sourceCombo->currentIndex();
-        const auto destinationIndex = destinationCombo->currentIndex();
-        if (sourceIndex < 0 || destinationIndex < 0) return;
+        if (sourceCombo->currentIndex() < 0 || destinationCombo->currentIndex() < 0) return;
+        const auto sourceIndex = sourceCombo->currentData().toInt();
+        const auto destinationIndex = destinationCombo->currentData().toInt();
         const auto& source = endpoints[static_cast<std::size_t>(sourceIndex)];
         const auto& destination = endpoints[static_cast<std::size_t>(destinationIndex)];
+
+        // Every cargo type shares the same hold. Its right edge is the amount
+        // that fits after existing cargo and the other selected transfers.
+        const auto freeHold = destination.fleet
+            ? std::max(0.0, fleet_cargo_capacity(planned, *destination.fleet)
+                - fleet_cargo_used(planned, *destination.fleet))
+            : std::numeric_limits<double>::infinity();
+        const auto sliderHold = destination.fleet ? freeHold
+            : fleet_cargo_capacity(planned, *source.fleet);
+        auto availableColonists = endpointColonists(source);
+        if (source.planet) {
+            availableColonists = source.planet->owner == pendingOrders_.player && availableColonists > 0
+                ? availableColonists - 1 : 0;
+        }
+        if (destination.planet && destination.planet->owner != pendingOrders_.player) availableColonists = 0;
+        const auto colonistRoom = std::max(0.0, freeHold - mineral_cargo_mass(transferMinerals()));
+        const auto colonistMaximum = static_cast<int>(std::min({
+            static_cast<double>(availableColonists),
+            std::floor(colonistRoom * kColonistsPerCargoUnit + kEpsilon),
+            static_cast<double>(std::numeric_limits<int>::max())}));
+        const auto colonistScale = static_cast<int>(std::min(
+            std::floor(std::max(0.0, sliderHold - mineral_cargo_mass(transferMinerals()))
+                * kColonistsPerCargoUnit + kEpsilon),
+            static_cast<double>(std::numeric_limits<int>::max())));
+        {
+            const QSignalBlocker blockSlider(colonistSlider), blockSpin(colonistSpin);
+            colonistSpin->setRange(0, colonistMaximum);
+            colonistSlider->setRange(0, colonistScale);
+            colonistSlider->setValue(colonistSpin->value());
+            colonistSlider->setToolTip(QString("Hold scale: %1 people; available to transfer: %2 people")
+                .arg(colonistScale).arg(colonistMaximum));
+        }
+        const auto availableMinerals = endpointMinerals(source);
+        for (int index = 0; index < 3; ++index) {
+            const auto selected = transferMinerals();
+            const auto otherCargo = colonist_cargo_mass(static_cast<std::uint64_t>(colonistSpin->value()))
+                + mineral_cargo_mass(selected) - mineralValue(selected, index);
+            const auto maximum = sliderMaximum(std::min(
+                std::max(0.0, mineralValue(availableMinerals, index)), std::max(0.0, freeHold - otherCargo)));
+            const auto& control = mineralControls[index];
+            const QSignalBlocker blockSlider(control.slider), blockSpin(control.spin);
+            control.spin->setRange(0.0, static_cast<double>(maximum) / kMineralScale);
+            control.slider->setRange(0, sliderMaximum(std::max(0.0, sliderHold - otherCargo)));
+            control.slider->setValue(static_cast<int>(std::lround(control.spin->value() * kMineralScale)));
+            control.slider->setToolTip(QString("Hold scale: %1 kt; available to transfer: %2 kt")
+                .arg(static_cast<double>(control.slider->maximum()) / kMineralScale, 0, 'f', 2)
+                .arg(control.spin->maximum(), 0, 'f', 2));
+        }
         const auto colonists = static_cast<std::uint64_t>(colonistSpin->value());
         const auto minerals = transferMinerals();
 
@@ -255,7 +320,7 @@ void MainWindow::openCargoManifestDialog()
             const auto capacity = fleet_cargo_capacity(planned, *destination.fleet);
             const auto grossMass = fleet_gross_mass(planned, *destination.fleet) + added;
             capacityValid = used <= capacity + kEpsilon;
-            capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2 cargo units • gross mass %3 kt")
+            capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2 kt • gross mass %3 kt")
                 .arg(used, 0, 'f', 2)
                 .arg(capacity, 0, 'f', 2)
                 .arg(grossMass, 0, 'f', 2));
@@ -279,37 +344,15 @@ void MainWindow::openCargoManifestDialog()
     };
 
     const auto configureSource = [&] {
-        const auto sourceIndex = sourceCombo->currentIndex();
-        const auto destinationIndex = destinationCombo->currentIndex();
-        if (sourceIndex < 0 || destinationIndex < 0) return;
-        const auto& source = endpoints[static_cast<std::size_t>(sourceIndex)];
-        const auto& destination = endpoints[static_cast<std::size_t>(destinationIndex)];
-
-        std::uint64_t availableColonists = endpointColonists(source);
-        if (source.planet) {
-            availableColonists = source.planet->owner == pendingOrders_.player && availableColonists > 0
-                ? availableColonists - 1
-                : 0;
-        }
-        if (destination.planet && destination.planet->owner != pendingOrders_.player) availableColonists = 0;
-        const auto colonistMaximum = static_cast<int>(std::min<std::uint64_t>(
-            availableColonists, static_cast<std::uint64_t>(std::numeric_limits<int>::max())));
         {
             const QSignalBlocker blockSlider(colonistSlider);
             const QSignalBlocker blockSpin(colonistSpin);
-            colonistSlider->setRange(0, colonistMaximum);
-            colonistSpin->setRange(0, colonistMaximum);
             colonistSlider->setValue(0);
             colonistSpin->setValue(0);
         }
-
-        const auto minerals = endpointMinerals(source);
         for (int index = 0; index < 3; ++index) {
-            const auto available = std::max(0.0, mineralValue(minerals, index));
             const QSignalBlocker blockSlider(mineralControls[index].slider);
             const QSignalBlocker blockSpin(mineralControls[index].spin);
-            mineralControls[index].slider->setRange(0, sliderMaximum(available));
-            mineralControls[index].spin->setRange(0.0, available);
             mineralControls[index].slider->setValue(0);
             mineralControls[index].spin->setValue(0.0);
         }
@@ -338,7 +381,10 @@ void MainWindow::openCargoManifestDialog()
             refresh();
         });
     }
-    connect(sourceCombo, &QComboBox::currentIndexChanged, &dialog, [=](int) { configureSource(); });
+    connect(sourceCombo, &QComboBox::currentIndexChanged, &dialog, [=](int) {
+        rebuildDestinations(destinationCombo->currentData().toInt());
+        configureSource();
+    });
     connect(destinationCombo, &QComboBox::currentIndexChanged, &dialog, [=](int) { configureSource(); });
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -346,8 +392,8 @@ void MainWindow::openCargoManifestDialog()
     configureSource();
     if (dialog.exec() != QDialog::Accepted) return;
 
-    const auto& source = endpoints[static_cast<std::size_t>(sourceCombo->currentIndex())];
-    const auto& destination = endpoints[static_cast<std::size_t>(destinationCombo->currentIndex())];
+    const auto& source = endpoints[static_cast<std::size_t>(sourceCombo->currentData().toInt())];
+    const auto& destination = endpoints[static_cast<std::size_t>(destinationCombo->currentData().toInt())];
     const auto colonists = static_cast<std::uint64_t>(colonistSpin->value());
     const auto minerals = transferMinerals();
     appendPendingOrder(

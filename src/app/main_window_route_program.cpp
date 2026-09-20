@@ -156,12 +156,14 @@ QString routeForecast(
     const TurnProcessor& processor,
     FleetId fleetId,
     const MoveFleetOrder& route,
-    std::vector<std::optional<std::uint32_t>>* arrivalTurns = nullptr)
+    std::vector<std::optional<std::uint32_t>>* arrivalTurns = nullptr,
+    QString* fuelWarning = nullptr)
 {
     constexpr std::uint32_t kForecastHorizon = 96;
     const auto legs = routeLegs(route);
     if (legs.empty()) return {};
     if (arrivalTurns) arrivalTurns->assign(legs.size(), std::nullopt);
+    if (fuelWarning) fuelWarning->clear();
 
     GameState simulated = state;
     if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
@@ -230,6 +232,19 @@ QString routeForecast(
             lines << QString("<b>T+%1: critical hull damage (100%); fleet immobilized before completing its program.</b>")
                          .arg(step);
             return lines.join("<br>");
+        }
+
+        if (fuelWarning && after->destination
+            && (after->fuelStalled || (after->fuel <= 0.000001
+                && fleet_fuel_change_for_distance(next, *after, 1.0) > 0.000001
+                && distance_between(beforeFleet->position, after->position) + 0.000001 < warp_distance(after->warp)
+                && same_position(*after->destination, leg.destination)))) {
+            *fuelWarning = QString("Fuel shortage forecast at T+%1, before waypoint %2 (%3). "
+                "This preview includes earlier legs, cargo changes, fuel generation and orbital refuelling. "
+                "Reduce Warp or add a refuelling stop.")
+                .arg(step).arg(static_cast<qulonglong>(legIndex + 1))
+                .arg(waypointName(state, leg.destination, leg.targetFleet));
+            break;
         }
 
         const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
@@ -430,6 +445,44 @@ QString MainWindow::selectedFleetRouteProgramForecast() const
     return routeForecast(state_, pendingOrders_, processor_, fleet.id, *route);
 }
 
+QString MainWindow::selectedFleetWaypointFuelWarning(
+    std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action) const
+{
+    const auto key = QString("%1:%2:%3:%4:%5:%6:%7:%8")
+        .arg(planningRevision_).arg(selectedFleetForRouteProgram())
+        .arg(selectedStarId_.value_or(0)).arg(warp).arg(targetFleet)
+        .arg(static_cast<int>(action.kind)).arg(action.reservePopulation)
+        .arg(static_cast<int>(action.cargo));
+    if (key == waypointFuelKey_) return waypointFuelWarning_;
+    waypointFuelKey_ = key;
+    waypointFuelWarning_.clear();
+    const auto* source = selectedFleet();
+    if (!source) return {};
+    const auto fleet = fleet_player_view(state_, *source);
+    Position destination;
+    if (targetFleet != 0) {
+        const auto* target = findFleet(state_, targetFleet);
+        if (!target || targetFleet == fleet.id) return {};
+        destination = fleet_player_view(state_, *target).position;
+        if (target->owner != fleet.owner) targetFleet = 0;
+    } else {
+        const auto* star = selectedStar();
+        if (!star) return {};
+        destination = star->position;
+    }
+    auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (!route || routeIsClearIntent(fleet, *route)) {
+        route = MoveFleetOrder{fleet.id, destination, warp, action, {}, false, targetFleet};
+    } else {
+        route->queuedWaypoints.push_back({destination, warp, action, targetFleet});
+    }
+    auto pending = pendingOrders_;
+    if (auto* existing = pendingMove(pending, fleet.id)) *existing = *route;
+    else pending.orders.push_back(*route);
+    (void)routeForecast(state_, pending, processor_, fleet.id, *route, nullptr, &waypointFuelWarning_);
+    return waypointFuelWarning_;
+}
+
 std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() const
 {
     const auto* authoritativeFleet = selectedFleet();
@@ -457,7 +510,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             leg.warp,
             index == 0,
             index < routeEtas_.size() && routeEtas_[index]
-                ? QString("~%1").arg(*routeEtas_[index]) : QString("—"),
+                ? QString::number(*routeEtas_[index]) : QString("—"),
         });
     }
     return rows;

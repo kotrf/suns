@@ -68,9 +68,55 @@ void guaranteed_research_allocation_reduces_local_production()
 
 } // namespace
 
+void cancellation_obeys_order_sequence_and_ownership()
+{
+    using namespace suns;
+    auto state = make_demo_game();
+    state.players.front().technology.researchAllocationPercent = 100;
+    auto& colony = state.planets.front();
+    colony.productionQueue = {{ProductionKind::Factory, 2, 0}, {ProductionKind::Mine, 4, 0}};
+    colony.productionWaitingForMinerals = true;
+    colony.productionWaitingForShipyard = true;
+    const auto planetId = colony.id;
+    const auto next = TurnProcessor{}.process(state, {{1, {
+        QueueShipDesignOrder{planetId, kScoutDesignId},
+        ReorderProductionQueueOrder{planetId, 2, 0},
+        CancelProductionOrder{planetId, 1}, // partially built factory, after reorder
+        CancelProductionOrder{planetId, 0}, // freshly queued ship
+        CancelProductionOrder{planetId, 99}, // invalid index is harmless
+    }}, {2, {CancelProductionOrder{planetId, 0}}}});
+    assert(next.planets.front().productionQueue.size() == 1);
+    assert(next.planets.front().productionQueue.front().kind == ProductionKind::Mine);
+    assert(next.planets.front().productionQueue.front().remainingCost == 4);
+    assert(next.planets.front().industry == colony.industry);
+    assert(!next.planets.front().productionWaitingForMinerals);
+    assert(!next.planets.front().productionWaitingForShipyard);
+    const auto cleared = TurnProcessor{}.process(next, {{1, {CancelProductionOrder{planetId, 0}}}});
+    assert(cleared.planets.front().productionQueue.empty());
+}
+
+void cancelled_build_does_not_spend_minerals_or_complete()
+{
+    using namespace suns;
+    auto state = make_demo_game();
+    auto& colony = state.planets.front();
+    colony.productionQueue = {{ProductionKind::Factory, 0, 0}};
+    auto empty = state;
+    empty.planets.front().productionQueue.clear();
+    const auto cancelled = TurnProcessor{}.process(state, {{1, {CancelProductionOrder{colony.id, 0}}}});
+    const auto idle = TurnProcessor{}.process(empty, {});
+    assert(cancelled.planets.front().productionQueue.empty());
+    assert(cancelled.planets.front().industry == colony.industry);
+    assert(cancelled.planets.front().minerals.ironium == idle.planets.front().minerals.ironium);
+    assert(cancelled.planets.front().minerals.boranium == idle.planets.front().minerals.boranium);
+    assert(cancelled.planets.front().minerals.germanium == idle.planets.front().minerals.germanium);
+}
+
 int main()
 {
     reorder_is_applied_before_production();
     forecast_matches_resolved_completion_turns();
     guaranteed_research_allocation_reduces_local_production();
+    cancellation_obeys_order_sequence_and_ownership();
+    cancelled_build_does_not_spend_minerals_or_complete();
 }

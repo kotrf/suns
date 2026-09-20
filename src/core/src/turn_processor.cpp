@@ -1568,6 +1568,16 @@ TurnResult TurnProcessor::process_with_events(
                         planet->productionQueue.insert(
                             planet->productionQueue.begin() + concreteOrder.toIndex,
                             std::move(item));
+                    } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
+                        });
+                        if (planet == next.planets.end() || concreteOrder.index >= planet->productionQueue.size()) return;
+                        planet->productionQueue.erase(planet->productionQueue.begin() + concreteOrder.index);
+                        if (concreteOrder.index == 0) {
+                            planet->productionWaitingForMinerals = false;
+                            planet->productionWaitingForShipyard = false;
+                        }
                     } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

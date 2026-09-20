@@ -55,7 +55,9 @@ void MainWindow::installCommunicationStatus()
                               .arg(telemetry.position.x, 0, 'f', 1)
                               .arg(telemetry.position.y, 0, 'f', 1);
         if (connected) {
-            details += "\nReal-time relay link; orders arrive immediately.";
+            details += "\nReal-time relay link; orders arrive immediately."
+                "\nFriendly ordinary-scanner fields relay through overlapping circles to a colony. "
+                "The fleet can be outside a colony's own radar circle and still have LIVE communications.";
         } else {
             details += QString("\nEstimated current position: (%1, %2)\nNew-command latency: %3 turn%4\n"
                                "Reception is not confirmed until delayed telemetry reports it.")

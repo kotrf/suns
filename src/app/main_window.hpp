@@ -66,6 +66,8 @@ public:
     [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] QString selectedFleetRouteProgramForecast() const;
+    [[nodiscard]] QString selectedFleetWaypointFuelWarning(
+        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action) const;
     [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
@@ -196,6 +198,8 @@ private:
     void removeSelectedResearchPlanItem();
     void refreshProductionQueue();
     void moveSelectedProductionItem(int direction);
+    void removeSelectedProductionItem();
+    std::vector<ProductionItem> plannedProductionQueue(const Planet& planet) const;
     void rememberMapSelection(int kind, std::uint32_t id);
     [[nodiscard]] QString selectedObjectDistanceSummary() const;
     [[nodiscard]] bool confirmFleetColonization(
@@ -232,6 +236,8 @@ private:
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
     mutable FleetId routeEtaFleet_{};
     mutable std::vector<std::optional<std::uint32_t>> routeEtas_;
+    mutable QString waypointFuelKey_;
+    mutable QString waypointFuelWarning_;
     PlayerOrders pendingOrders_{1, {}};
     SessionMode sessionMode_{SessionMode::Solo};
     std::vector<EmpireSetup> empireSetups_;
@@ -317,6 +323,8 @@ private:
     QLabel* productionQueueSummary_{};
     QPushButton* productionMoveUpButton_{};
     QPushButton* productionMoveDownButton_{};
+    QPushButton* productionRemoveButton_{};
+    std::optional<PlanetId> productionQueuePlanet_;
 };
 
 } // namespace suns

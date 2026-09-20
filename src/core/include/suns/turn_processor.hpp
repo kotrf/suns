@@ -59,6 +59,11 @@ struct ReorderProductionQueueOrder {
     std::uint32_t toIndex{};
 };
 
+struct CancelProductionOrder {
+    PlanetId colony{};
+    std::uint32_t index{};
+};
+
 struct SetFleetColonistsOrder {
     PlanetId colony{};
     FleetId fleet{};
@@ -129,7 +134,8 @@ using Order = std::variant<
     ColonizePlanetOrder,
     SetRemoteMiningOrder,
     MergeFleetsOrder,
-    SplitFleetOrder>;
+    SplitFleetOrder,
+    CancelProductionOrder>;
 
 struct PlayerOrders {
     PlayerId player{};
