@@ -27,8 +27,12 @@ QColor spectralColor(StarClass stellarClass)
     return QColor("#ffd36b");
 }
 
-QColor habitabilityColor(std::uint32_t habitability)
+QColor habitabilityColor(std::int32_t habitability)
 {
+    if (habitability < 0) {
+        const auto severity = std::clamp(static_cast<double>(-habitability) / 100.0, 0.0, 1.0);
+        return QColor::fromHsvF(0.0, 0.72 + 0.23 * severity, 0.82 - 0.22 * severity);
+    }
     const auto normalized = std::clamp(static_cast<double>(habitability) / 100.0, 0.0, 1.0);
     return QColor::fromHsvF(normalized / 3.0, 0.78, 0.95);
 }
@@ -43,7 +47,7 @@ qreal populationScale(std::uint64_t population)
 
 QString modeLegend(int mode)
 {
-    if (mode == 1) return "red 0%  ·  yellow 50%  ·  green 100%  ·  dim estimated  ·  grey unknown";
+    if (mode == 1) return "dark red negative  ·  red 0%  ·  yellow 50%  ·  green 100%  ·  dim estimated  ·  grey unknown";
     if (mode == 2) return "marker size = population  ·  green = your colony  ·  grey = empty/unknown";
     return "stellar spectral class colours";
 }
@@ -111,7 +115,7 @@ void MainWindow::applyMapDisplayMode()
         const auto* planet = find_planet_at_star(state_, starId);
         const auto knownHabitability = planet
             ? known_planet_habitability(state_, pendingOrders_.player, planet->id)
-            : std::optional<std::uint32_t>{};
+            : std::optional<std::int32_t>{};
 
         QColor color = spectralColor(star->stellarClass);
         qreal scale = 1.0;
@@ -120,12 +124,17 @@ void MainWindow::applyMapDisplayMode()
             color = knownHabitability ? habitabilityColor(*knownHabitability) : QColor("#687381");
             if (survey_level(state_, pendingOrders_.player, starId) == SurveyLevel::BasicScan) color = color.darker(145);
         } else if (mapDisplayMode_ == 2) {
+            const auto knownOwner = planet
+                ? known_planet_owner(state_, pendingOrders_.player, planet->id)
+                : std::optional<PlayerId>{};
             if (!surveyed) {
                 color = QColor("#687381");
                 scale = 0.58;
-            } else if (planet && planet->owner != 0) {
-                color = planet->owner == pendingOrders_.player ? QColor("#67d796") : QColor("#d77777");
-                scale = populationScale(planet->population);
+            } else if (planet && knownOwner && *knownOwner != 0) {
+                const bool reportedOwn = *knownOwner == pendingOrders_.player;
+                color = reportedOwn ? QColor("#67d796") : QColor("#d77777");
+                scale = reportedOwn && planet->owner == pendingOrders_.player
+                    ? populationScale(planet->population) : 0.9;
             } else {
                 color = QColor("#7f8997");
                 scale = 0.62;

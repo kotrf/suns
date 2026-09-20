@@ -11,12 +11,19 @@ The first staged model separates ordinary detection from planetary penetration:
 - `SystemScan`: an ordinary scanner footprint records a system contact, but no planetary parameters;
 - Map labels use `[?]` while planetary parameters are unknown, including after `SystemScan`; ordinary scanner contact does not add a separate label suffix.
 - `BasicScan`: a penetrating-scanner footprint reveals a deterministic rough habitability estimate;
-- `OrbitalSurvey`: arriving at the system confirms exact habitability and population suitability;
+- `OrbitalSurvey`: arriving at the system confirms exact habitability and snapshots ownership;
 - `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
 
 The starting Scout carries an ordinary 90 ly Long Range Scanner, while colonies project a stronger stationary 150 ly field. `CompactLongRangeScanner` unlocks at Electronics 1, the heavy 160 ly `ExtendedRangeScanner` at Electronics 2, and `PenetratingScanner` at Electronics 3. Penetration remains distinct from ordinary detection, so early exploration still rewards entering systems and spending time in orbit.
 
 Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
+
+Per-system knowledge records the observation turn. The status bar and Overview
+show the age of the selected system's planetary intelligence. Repeated scans
+refresh that age without generating duplicate discovery messages. Ownership is
+the value observed at orbital-scan time: a colony founded after the last report
+does not appear through host-state leakage, and delayed reports retain the owner
+that was seen when the scan happened.
 
 Reports use the same ordinary-scanner components and physical transceiver-to-transceiver subspace-hop calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
@@ -46,7 +53,9 @@ A blocked production item emits `ProductionWaitingForMinerals` only when it firs
 
 Successful colonization emits `ColonyFounded` from the new colony. Both direct colonization orders and programmed arrival actions pass through the same core operation, so they cannot diverge in event behavior.
 
-The save format persists pending operational reports, fleet fuel-stall transitions and colony mineral-wait transitions.
+Save v35 persists intelligence age and observed ownership in both permanent and
+in-flight survey reports. The save format also persists pending operational
+reports, fleet fuel-stall transitions and colony mineral-wait transitions.
 
 ## Turn Messages
 

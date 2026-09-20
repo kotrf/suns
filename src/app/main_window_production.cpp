@@ -79,7 +79,9 @@ std::vector<ProductionItem> plannedQueue(
             } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                 if (concrete.colony != planet.id) return;
                 if (const auto* design = resolve_ship_design_order(state, pending.player, concrete);
-                    design && design->owner == pending.player && ship_design_valid(*design)) {
+                    design && design->owner == pending.player && ship_design_valid(*design)
+                    && colony_has_orbital_service(state, planet.id, pending.player,
+                        OrbitalStationModule::Shipyard)) {
                     queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                 }
             } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {

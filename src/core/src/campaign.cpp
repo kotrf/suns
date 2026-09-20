@@ -47,14 +47,15 @@ const std::vector<ResearchUnlock>& research_unlocks()
     return unlocks;
 }
 
-std::uint32_t race_habitability(
+std::int32_t race_habitability(
     const RaceProfile& race, PlanetEnvironment environment, std::uint8_t biology)
 {
     const int adaptation = 5 * std::min<int>(biology, 3);
     auto suitability = [adaptation](int value, RaceEnvironmentRange range) {
         const int lo = std::max(0, int(range.minimum) - adaptation);
         const int hi = std::min(100, int(range.maximum) + adaptation);
-        if (value < lo || value > hi) return 0;
+        if (value < lo) return -std::clamp((lo - value) * 5, 1, 100);
+        if (value > hi) return -std::clamp((value - hi) * 5, 1, 100);
         const double center = (int(range.minimum) + int(range.maximum)) / 2.0;
         const double halfWidth = std::max(1.0, (hi - lo) / 2.0);
         return std::clamp(int(std::lround(100 - 50 * std::abs(value - center) / halfWidth)), 1, 100);
@@ -62,11 +63,12 @@ std::uint32_t race_habitability(
     const int temperature = suitability(environment.temperature, race.habitableTemperature);
     const int gravity = suitability(environment.gravity, race.habitableGravity);
     const int radiation = race.radiationImmune ? 100 : suitability(environment.radiation, race.habitableRadiation);
-    if (!temperature || !gravity || !radiation) return 0;
-    return static_cast<std::uint32_t>((temperature + gravity + radiation) / 3);
+    if (temperature < 0 || gravity < 0 || radiation < 0)
+        return std::min({temperature, gravity, radiation});
+    return (temperature + gravity + radiation) / 3;
 }
 
-std::uint32_t player_planet_habitability(
+std::int32_t player_planet_habitability(
     const GameState& state, PlayerId player, const Planet& planet, std::uint64_t turn)
 {
     if (planet.observedHabitability) return *planet.observedHabitability;
@@ -77,9 +79,7 @@ std::uint32_t player_planet_habitability(
         : planet.habitability;
     const auto* star = find_star(state, planet.star);
     const int shift = star ? int(std::lround((stellar_luminosity(*star, turn) - 1.0) * 100.0)) : 0;
-    // Stellar variation cannot make a wholly incompatible environment habitable.
-    if (baseline == 0 && empire && empire->race.environmentBased) return 0;
-    return static_cast<std::uint32_t>(std::clamp(int(baseline) + shift, 0, 100));
+    return static_cast<std::int32_t>(std::clamp(int(baseline) + shift, -100, 100));
 }
 
 GameState generate_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
@@ -201,7 +201,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             known.name = level >= SurveyLevel::OrbitalSurvey ? planet.name : "Unsurveyed planet";
             known.industry = 0;
             if (level >= SurveyLevel::OrbitalSurvey) {
-                known.owner = planet.owner;
+                known.owner = known_planet_owner(host, playerId, planet.id).value_or(0);
                 known.environment = planet.environment;
             } else known.environment = {};
             // Surface stocks change through other empires' mining/cargo orders.

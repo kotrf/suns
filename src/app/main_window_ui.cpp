@@ -237,10 +237,14 @@ void MainWindow::installUiPolish()
                     fleetLayout->addWidget(cargoButton);
 
                     auto* organizationRow = new QHBoxLayout;
+                    auto* renameButton = new QPushButton("Rename…", fleetGroup);
+                    renameButton->setObjectName("renameFleetButton");
+                    renameButton->setToolTip("Give the selected fleet a new name");
                     auto* mergeButton = new QPushButton("Merge fleets…", fleetGroup);
                     mergeButton->setToolTip("Merge another co-located stationary friendly fleet into this FleetId");
                     auto* splitButton = new QPushButton("Split fleet…", fleetGroup);
                     splitButton->setToolTip("Move selected ships into a newly allocated FleetId");
+                    organizationRow->addWidget(renameButton);
                     organizationRow->addWidget(mergeButton);
                     organizationRow->addWidget(splitButton);
                     fleetLayout->addLayout(organizationRow);
@@ -293,6 +297,7 @@ void MainWindow::installUiPolish()
                     newGalaxyButton_->hide();
 
                     connect(cargoButton, &QPushButton::clicked, this, [this] { openCargoManifestDialog(); });
+                    connect(renameButton, &QPushButton::clicked, this, [this] { openRenameFleetDialog(); });
                     connect(mergeButton, &QPushButton::clicked, this, [this] { openMergeFleetsDialog(); });
                     connect(splitButton, &QPushButton::clicked, this, [this] { openSplitFleetDialog(); });
                 }
@@ -602,6 +607,8 @@ void MainWindow::installUiPolish()
     auto* fleetMenu = menuBar()->addMenu("&Fleet");
     auto* cargoAction = fleetMenu->addAction("Transfer cargo…");
     connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
+    auto* renameAction = fleetMenu->addAction("Rename fleet…");
+    connect(renameAction, &QAction::triggered, this, [this] { openRenameFleetDialog(); });
     auto* mergeAction = fleetMenu->addAction("Merge fleets…");
     connect(mergeAction, &QAction::triggered, this, [this] { openMergeFleetsDialog(); });
     auto* splitAction = fleetMenu->addAction("Split fleet…");
@@ -727,7 +734,17 @@ void MainWindow::installUiPolish()
                 "Radiation (higher is more severe)");
         }
 
-        selectionDistance->setText(selectedObjectDistanceSummary());
+        auto status = selectedObjectDistanceSummary();
+        if (const auto* selected = selectedStar()) {
+            const auto age = system_intel_age(state_, pendingOrders_.player, selected->id);
+            status += age
+                ? (*age == 0
+                    ? " • Intel: current"
+                    : QString(" • Intel: %1 year%2 old")
+                          .arg(static_cast<qulonglong>(*age)).arg(*age == 1 ? "" : "s"))
+                : " • Intel: never scanned";
+        }
+        selectionDistance->setText(status);
     };
     updateCommandContext();
     auto* contextTimer = new QTimer(this);

@@ -126,6 +126,14 @@ QString MainWindow::selectedPlanetPanelSummary() const
 
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));
+    if (const auto age = system_intel_age(state_, pendingOrders_.player, star->id)) {
+        lines << (*age == 0
+                ? "Planetary intelligence: <b>current</b>"
+                : QString("Planetary intelligence: <b>%1 year%2 old</b>")
+                      .arg(static_cast<qulonglong>(*age)).arg(*age == 1 ? "" : "s"));
+    } else {
+        lines << "Planetary intelligence: <b>never scanned</b>";
+    }
 
     if (!is_surveyed(state_, pendingOrders_.player, star->id)) {
         if (survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::SystemScan) {
@@ -145,6 +153,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
     }
 
     const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id);
+    const auto knownOwner = known_planet_owner(state_, pendingOrders_.player, planet->id);
     const auto estimated = survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan;
     lines << QString("%1 • Habitability <b>%2%3%</b>")
                  .arg(QString::fromStdString(planet->name))
@@ -189,12 +198,16 @@ QString MainWindow::selectedPlanetPanelSummary() const
             lines << "Orbital station: <span style='color:#e4b77d'><b>none</b></span> • ships cannot be built or refueled";
         }
         lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
-    } else if (planet->owner == 0) {
+    } else if (knownOwner == pendingOrders_.player) {
+        lines << "<span style='color:#85d5a5'><b>Your colony at last report</b></span>";
+        lines << "Current colony details unavailable until the system is scanned again.";
+    } else if (knownOwner && *knownOwner == 0) {
         lines << (estimated ? "<b>Ownership unknown</b>"
             : "<span style='color:#c6b57c'><b>Uncolonized</b></span>");
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
-                     .arg(static_cast<qulonglong>(knownHabitability.value_or(0)) * kPopulationPerHabitability);
+                     .arg(static_cast<qulonglong>(std::max(0, knownHabitability.value_or(0)))
+                         * kPopulationPerHabitability);
         if (planet_geology_known(state_, pendingOrders_.player, planet->id)) {
             const auto remoteYield = remoteMiningAtPlanet(state_, pendingOrders_.player, *planet);
             if (mineral_cargo_mass(remoteYield) > 0.000001) {
@@ -206,8 +219,10 @@ QString MainWindow::selectedPlanetPanelSummary() const
         } else {
             lines << "Mineral geology unknown — remain in orbit for a geological survey";
         }
-    } else {
+    } else if (knownOwner) {
         lines << "<b>Foreign world</b>";
+    } else {
+        lines << "<b>Ownership unknown</b>";
     }
 
     return lines.join("<br>");

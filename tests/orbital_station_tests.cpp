@@ -64,6 +64,17 @@ void ship_production_waits_without_a_shipyard()
     }));
 }
 
+void ships_cannot_be_queued_without_a_shipyard()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    auto& colony = establish_test_colony(state);
+    assert(!find_orbital_station_at_planet(state, colony.id));
+    const auto next = processor.process(
+        state, {{1, {QueueShipDesignOrder{colony.id, kScoutDesignId}}}});
+    assert(next.planets.at(1).productionQueue.empty());
+}
+
 void dock_then_ship_can_complete_in_queue_order()
 {
     TurnProcessor processor;
@@ -177,6 +188,7 @@ int main()
 {
     homeworld_starts_with_basic_orbital_services();
     ship_production_waits_without_a_shipyard();
+    ships_cannot_be_queued_without_a_shipyard();
     dock_then_ship_can_complete_in_queue_order();
     station_loss_removes_refueling_service();
     station_refuels_before_departure_and_after_arrival();

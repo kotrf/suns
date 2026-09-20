@@ -18,10 +18,10 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 34;
+constexpr quint32 kSaveFormatVersion = 35;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 5;
+constexpr quint32 kTurnOrderFormatVersion = 6;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -529,7 +529,7 @@ void writePlanet(QDataStream& stream, const Planet& value)
     stream << static_cast<quint32>(value.id)
            << static_cast<quint32>(value.star);
     writeString(stream, value.name);
-    stream << static_cast<quint32>(value.habitability)
+    stream << static_cast<qint32>(value.habitability)
            << static_cast<quint32>(value.owner)
            << static_cast<quint64>(value.population)
            << static_cast<quint32>(value.industry);
@@ -548,7 +548,7 @@ void writePlanet(QDataStream& stream, const Planet& value)
            << static_cast<quint32>(value.precursorArtifacts.discoveredBy)
            << static_cast<quint16>(value.precursorArtifacts.researchPoints);
     stream << quint8(value.observedHabitability.has_value());
-    if (value.observedHabitability) stream << quint32(*value.observedHabitability);
+    if (value.observedHabitability) stream << qint32(*value.observedHabitability);
     stream << quint8(value.observedConcentration.has_value());
     if (value.observedConcentration) writeMinerals(stream, *value.observedConcentration);
 }
@@ -557,7 +557,7 @@ void readPlanet(QDataStream& stream, Planet& value)
 {
     quint32 id{};
     quint32 star{};
-    quint32 habitability{};
+    qint32 habitability{};
     quint32 owner{};
     quint64 population{};
     quint32 industry{};
@@ -572,7 +572,7 @@ void readPlanet(QDataStream& stream, Planet& value)
 
     value.id = static_cast<PlanetId>(id);
     value.star = static_cast<StarId>(star);
-    value.habitability = static_cast<std::uint32_t>(habitability);
+    value.habitability = static_cast<std::int32_t>(habitability);
     value.owner = static_cast<PlayerId>(owner);
     value.population = migratedPopulation(stream, population, 1000);
     value.industry = static_cast<std::uint32_t>(industry);
@@ -641,9 +641,9 @@ void readPlanet(QDataStream& stream, Planet& value)
         stream >> hasHabitability;
         if (hasHabitability > 1) { markCorrupt(stream); return; }
         if (hasHabitability) {
-            quint32 valueRead{};
+            qint32 valueRead{};
             stream >> valueRead;
-            if (valueRead > 100) { markCorrupt(stream); return; }
+            if (valueRead < -100 || valueRead > 100) { markCorrupt(stream); return; }
             value.observedHabitability = valueRead;
         }
         stream >> hasConcentration;
@@ -673,7 +673,7 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
            << static_cast<quint32>(value.shipDesign);
     writeEnum(stream, value.productionKind);
     stream << value.position.x << value.position.y
-           << static_cast<quint32>(value.quantity);
+           << static_cast<qint32>(value.quantity);
     writeEnum(stream, value.surveyLevel);
     writeEnum(stream, value.researchField);
     stream << static_cast<quint8>(value.technologyLevel)
@@ -690,7 +690,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     quint32 planet{};
     quint32 fleet{};
     quint32 shipDesign{};
-    quint32 quantity{};
+    qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
     const auto newestEventKind = gReadSaveFormatVersion >= 27
@@ -727,7 +727,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     value.planet = static_cast<PlanetId>(planet);
     value.fleet = static_cast<FleetId>(fleet);
     value.shipDesign = static_cast<ShipDesignId>(shipDesign);
-    value.quantity = static_cast<std::uint32_t>(quantity);
+    value.quantity = static_cast<std::int32_t>(quantity);
     value.technologyLevel = static_cast<std::uint8_t>(technologyLevel);
     value.precursorArtifactHint = precursorArtifactHint != 0;
 }
@@ -866,6 +866,8 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint32>(knowledge.star);
         writeEnum(stream, knowledge.level);
         stream << static_cast<quint64>(knowledge.observedTurn);
+        stream << quint8(knowledge.observedOwner.has_value());
+        if (knowledge.observedOwner) stream << quint32(*knowledge.observedOwner);
     }
     stream << static_cast<quint32>(value.pendingSurveyReports.size());
     for (const auto& report : value.pendingSurveyReports) {
@@ -874,6 +876,8 @@ void writePlayer(QDataStream& stream, const Player& value)
                << static_cast<quint64>(report.observedTurn)
                << static_cast<quint64>(report.deliveryTurn);
         writeEnum(stream, report.level);
+        stream << quint8(report.observedOwner.has_value());
+        if (report.observedOwner) stream << quint32(*report.observedOwner);
     }
     stream << static_cast<quint32>(value.pendingPlayerReports.size());
     for (const auto& report : value.pendingPlayerReports) {
@@ -941,10 +945,22 @@ void readPlayer(QDataStream& stream, Player& value)
             : SurveyLevel::GeologicalSurvey;
         if (!readEnum(stream, level, static_cast<quint8>(newestSurveyLevel))) return;
         stream >> observedTurn;
+        std::optional<PlayerId> observedOwner;
+        if (gReadSaveFormatVersion >= 35) {
+            quint8 hasOwner{};
+            stream >> hasOwner;
+            if (hasOwner > 1) { markCorrupt(stream); return; }
+            if (hasOwner) {
+                quint32 owner{};
+                stream >> owner;
+                observedOwner = static_cast<PlayerId>(owner);
+            }
+        }
         value.surveyKnowledge.push_back({
             static_cast<StarId>(star),
             level,
             static_cast<std::uint64_t>(observedTurn),
+            observedOwner,
         });
     }
 
@@ -962,12 +978,24 @@ void readPlayer(QDataStream& stream, Player& value)
             ? SurveyLevel::DeepSurvey
             : SurveyLevel::GeologicalSurvey;
         if (!readEnum(stream, level, static_cast<quint8>(newestSurveyLevel))) return;
+        std::optional<PlayerId> observedOwner;
+        if (gReadSaveFormatVersion >= 35) {
+            quint8 hasOwner{};
+            stream >> hasOwner;
+            if (hasOwner > 1) { markCorrupt(stream); return; }
+            if (hasOwner) {
+                quint32 owner{};
+                stream >> owner;
+                observedOwner = static_cast<PlayerId>(owner);
+            }
+        }
         value.pendingSurveyReports.push_back({
             static_cast<StarId>(star),
             static_cast<FleetId>(sourceFleet),
             static_cast<std::uint64_t>(observedTurn),
             static_cast<std::uint64_t>(deliveryTurn),
             level,
+            observedOwner,
         });
     }
 
@@ -1513,6 +1541,9 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << quint8{15} << static_cast<quint8>(concrete.percent);
         } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
             stream << quint8{16} << quint32(concrete.colony) << quint32(concrete.index);
+        } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
+            stream << quint8{17} << quint32(concrete.fleet);
+            writeString(stream, concrete.name);
         }
     }, order);
 }
@@ -1804,6 +1835,16 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{}, index{};
         stream >> colony >> index;
         order = CancelProductionOrder{colony, index};
+        return stream.status() == QDataStream::Ok;
+    }
+    case 17: {
+        if (gReadSaveFormatVersion < 35) { markCorrupt(stream); return false; }
+        quint32 fleet{};
+        std::string name;
+        stream >> fleet;
+        readString(stream, name);
+        if (name.empty() || name.size() > 80) { markCorrupt(stream); return false; }
+        order = RenameFleetOrder{static_cast<FleetId>(fleet), std::move(name)};
         return stream.status() == QDataStream::Ok;
     }
     default:
@@ -2193,7 +2234,8 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 5 ? 34 : version == 4 ? 33 : version == 3 ? 32 : version == 2 ? 31 : 23;
+    gReadSaveFormatVersion = version >= 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+        : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
 

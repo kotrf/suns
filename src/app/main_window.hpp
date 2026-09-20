@@ -94,6 +94,7 @@ public:
     void openCargoManifestDialog();
     void openMergeFleetsDialog();
     void openSplitFleetDialog();
+    void openRenameFleetDialog();
 
     // Replace the constructor's legacy synchronous scene-selection callback
     // with a deferred rebuild. Rebuilding QGraphicsScene while Qt is still

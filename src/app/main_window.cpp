@@ -242,7 +242,8 @@ GameState movementPhasePreviewState(
             || std::holds_alternative<TransferCargoOrder>(order)
             || std::holds_alternative<RefuelFleetOrder>(order)
             || std::holds_alternative<MergeFleetsOrder>(order)
-            || std::holds_alternative<SplitFleetOrder>(order)) {
+            || std::holds_alternative<SplitFleetOrder>(order)
+            || std::holds_alternative<RenameFleetOrder>(order)) {
             logistics.orders.push_back(order);
         }
     }
@@ -726,7 +727,8 @@ void MainWindow::rebuildScene()
                            .arg(estimated ? "~" : "")
                            .arg(knownHabitability)
                            .arg(estimated ? "estimated" : "potential")
-                           .arg(static_cast<qulonglong>(knownHabitability) * kPopulationPerHabitability);
+                           .arg(static_cast<qulonglong>(std::max(0, knownHabitability))
+                               * kPopulationPerHabitability);
             if (colony) {
                 mapLabel += "  [COLONY]";
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
@@ -958,9 +960,10 @@ void MainWindow::updateControls()
             .arg(estimated ? "~" : "")
             .arg(knownHabitability)
             .arg(variabilityLine);
-        const QString owner = planet->owner == pendingOrders_.player ? "Your colony"
-            : planet->owner != 0 ? QString("Empire %1 colony").arg(planet->owner)
-            : estimated ? "Ownership unknown" : "Uncolonized";
+        const auto knownOwner = known_planet_owner(state_, pendingOrders_.player, planet->id);
+        const QString owner = knownOwner == pendingOrders_.player ? "Your colony"
+            : knownOwner && *knownOwner != 0 ? QString("Empire %1 colony").arg(*knownOwner)
+            : !knownOwner || estimated ? "Ownership unknown" : "Uncolonized";
         const auto artifactLine = planet->precursorArtifacts.claimed
             ? QString("<br><span style='color:#d8bd72'><b>History:</b> precursor site excavated (+%1 RP)</span>")
                   .arg(planet->precursorArtifacts.researchPoints)
@@ -973,15 +976,17 @@ void MainWindow::updateControls()
         }
         QString populationLine;
         if (planet->owner == pendingOrders_.player) {
-            populationLine = QString("Population: %1 / %2 (+%3 next turn)<br>")
+            const auto populationChange = projected_population_growth(state_, *planet, state_.turn);
+            populationLine = QString("Population: %1 / %2 (%3%4 next turn)<br>")
                                  .arg(static_cast<qulonglong>(planet->population))
                                  .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)))
-                                 .arg(static_cast<qulonglong>(
-                                     projected_population_growth(state_, *planet, state_.turn)));
+                                 .arg(populationChange > 0 ? "+" : "")
+                                 .arg(static_cast<qlonglong>(populationChange));
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")
-                                 .arg(static_cast<qulonglong>(knownHabitability) * kPopulationPerHabitability);
+                                 .arg(static_cast<qulonglong>(std::max(0, knownHabitability))
+                                     * kPopulationPerHabitability);
         }
         QString travelLine;
         if (fleet) {
@@ -1084,11 +1089,12 @@ void MainWindow::updateControls()
         : "Plot course + Load All on arrival");
 
     const bool ownedColony = surveyed && planet != nullptr && planet->owner == pendingOrders_.player;
-    shipDesignCombo_->setEnabled(ownedColony && shipDesignCombo_->count() > 0);
     buildFactoryButton_->setEnabled(ownedColony);
     designShipButton_->setEnabled(true);
 
-    const bool stationExists = ownedColony && find_orbital_station_at_planet(state_, planet->id);
+    const bool stationExists = ownedColony && colony_has_orbital_service(
+        state_, planet->id, pendingOrders_.player, OrbitalStationModule::Shipyard);
+    shipDesignCombo_->setEnabled(stationExists && shipDesignCombo_->count() > 0);
     const auto buildPlan = ownedColony ? plannedProductionQueue(*planet) : std::vector<ProductionItem>{};
     const bool stationQueued = ownedColony
         && std::any_of(buildPlan.begin(), buildPlan.end(), [](const ProductionItem& item) {
@@ -1106,7 +1112,8 @@ void MainWindow::updateControls()
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto planning = planned_ship_design_state(state_, pendingOrders_);
     const auto* buildDesign = find_ship_design(planning, designId);
-    buildShipButton_->setEnabled(ownedColony && buildDesign != nullptr && buildDesign->owner == pendingOrders_.player);
+    buildShipButton_->setEnabled(stationExists && buildDesign != nullptr
+        && buildDesign->owner == pendingOrders_.player);
     const auto shipMaterialTip = buildDesign
         ? QString("\nMinerals charged on completion: I %1 / B %2 / G %3 kt")
               .arg(ship_design_mineral_cost(*buildDesign).ironium)
@@ -1115,7 +1122,7 @@ void MainWindow::updateControls()
         : QString{};
     buildShipButton_->setToolTip((stationExists
         ? "Add this ship to the selected colony's production queue"
-        : "The ship may be queued now, but production waits until an Orbital Dock is completed first")
+        : "Build an Orbital Dock before ships can be added to the production queue")
         + shipMaterialTip);
     buildShipButton_->setText(buildDesign
         ? QString("Queue %1 (%2)").arg(QString::fromStdString(buildDesign->name)).arg(ship_design_cost(*buildDesign))
@@ -1128,8 +1135,8 @@ void MainWindow::updateControls()
     const auto* colonizer = selectedColonyShipAtSelectedStar();
     colonizeButton_->setEnabled(star != nullptr
         && survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::OrbitalSurvey
-        && planet != nullptr && planet->owner == 0
-        && known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0) > 0
+        && planet != nullptr
+        && known_planet_owner(state_, pendingOrders_.player, planet->id) == PlayerId{0}
         && colonizer != nullptr && colonizer->colonists > 0);
 
     if (pendingOrders_.orders.empty()) ordersLabel_->setText("<b>Orders this turn:</b> none");
@@ -1298,7 +1305,9 @@ void MainWindow::queueShipDesign()
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto planning = planned_ship_design_state(state_, pendingOrders_);
     const auto* design = find_ship_design(planning, designId);
-    if (!design || design->owner != pendingOrders_.player) return;
+    if (!design || design->owner != pendingOrders_.player
+        || !colony_has_orbital_service(state_, planet->id, pendingOrders_.player,
+            OrbitalStationModule::Shipyard)) return;
 
     appendPendingOrder(QueueShipDesignOrder{planet->id,
             find_ship_design(state_, design->id) ? design->id : 0,
@@ -1352,7 +1361,8 @@ void MainWindow::queueColonize()
     const auto* planet = selectedPlanet();
     const auto* ship = selectedColonyShipAtSelectedStar();
     if (!star || survey_level(state_, pendingOrders_.player, star->id) < SurveyLevel::OrbitalSurvey
-        || !planet || planet->owner != 0 || !ship || ship->colonists == 0) return;
+        || !planet || known_planet_owner(state_, pendingOrders_.player, planet->id) != PlayerId{0}
+        || !ship || ship->colonists == 0) return;
     if (!confirmFleetColonization(*ship, *planet, false)) return;
 
     appendPendingOrder(ColonizePlanetOrder{ship->id, planet->id},
@@ -1364,13 +1374,8 @@ void MainWindow::queueColonize()
 bool MainWindow::confirmFleetColonization(
     const Fleet& fleet, const Planet& planet, bool scheduledRoute)
 {
-    const auto* empire = find_player(state_, pendingOrders_.player);
-    if (empire && empire->race.environmentBased
-        && survey_level(state_, empire->id, planet.star) >= SurveyLevel::OrbitalSurvey
-        && known_planet_habitability(state_, empire->id, planet.id).value_or(0) == 0) {
-        statusBar()->showMessage("This environment is incompatible. Research Biology habitats or choose another world.", 6000);
-        return false;
-    }
+    const auto habitability = known_planet_habitability(
+        state_, pendingOrders_.player, planet.id).value_or(0);
     QStringList composition;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state_, stack.design);
@@ -1399,7 +1404,7 @@ bool MainWindow::confirmFleetColonization(
                 "Cargo deposited: I %5 / B %6 / G %7\n"
                 "33% ship salvage: I %8 / B %9 / G %10\n"
                 "Total added to colony: I %11 / B %12 / G %13\n\n"
-                "Fuel and production points are not recovered.%14")
+                "Fuel and production points are not recovered.%14%15")
             .arg(fleet_ship_count(fleet))
             .arg(fleet.id)
             .arg(composition.join(", "))
@@ -1415,7 +1420,12 @@ bool MainWindow::confirmFleetColonization(
             .arg(delivered.germanium, 0, 'f', 0)
             .arg(scheduledRoute
                 ? "\n\nThis is a route preview; cargo and colonists may change before arrival. The fleet checks ownership and environmental suitability locally on arrival."
-                : ""));
+                : "")
+            .arg(habitability < 0
+                ? QString("\n\nWarning: habitability is %1%. Population will decline every year until conditions improve.").arg(habitability)
+                : habitability == 0
+                    ? "\n\nHabitability is 0%. Population will neither grow nor decline."
+                    : ""));
     warning.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
     warning.setDefaultButton(QMessageBox::Cancel);
     return warning.exec() == QMessageBox::Yes;

@@ -170,6 +170,19 @@ void moving_fleets_cannot_be_reorganized()
     assert(find_fleet(result, 2));
 }
 
+void fleets_can_be_renamed_by_their_owner()
+{
+    const TurnProcessor processor;
+    auto state = two_fleet_fixture();
+    const auto renamed = processor.process(state, {{1, {RenameFleetOrder{1, "Pathfinder"}}}});
+    assert(find_fleet(renamed, 1)->name == "Pathfinder");
+
+    const auto rejected = processor.process(state, {{2, {RenameFleetOrder{1, "Stolen"}}}});
+    assert(find_fleet(rejected, 1)->name == state.fleets.front().name);
+    const auto blank = processor.process(state, {{1, {RenameFleetOrder{1, "   "}}}});
+    assert(find_fleet(blank, 1)->name == state.fleets.front().name);
+}
+
 void colonization_dismantles_entire_fleet_and_recovers_minerals()
 {
     const TurnProcessor processor;
@@ -201,5 +214,6 @@ int main()
     merge_preserves_destination_id_and_all_stacks();
     split_preserves_source_id_and_resources();
     moving_fleets_cannot_be_reorganized();
+    fleets_can_be_renamed_by_their_owner();
     colonization_dismantles_entire_fleet_and_recovers_minerals();
 }

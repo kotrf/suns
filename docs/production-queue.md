@@ -26,3 +26,8 @@ unused output to the common research pool. Production points do not carry over
 between turns.
 
 Mineral-short construction remains in the queue with zero production remaining. The completion forecast simulates future planetary mining as well as I/B/G construction bills; very long estimates are reported as beyond the forecast horizon rather than inventing a date.
+
+Ships can be added to a colony's queue only while an operational Orbital Dock
+with a shipyard is present. The ship selector and queue button are disabled
+without one, and the host rejects forged or stale ship orders. Ship items already
+present in an older save still wait safely for a replacement shipyard.

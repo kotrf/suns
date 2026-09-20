@@ -91,8 +91,8 @@ void verify_procedural_generation()
 
     std::array<double, 6> habitabilityTotals{};
     std::array<std::size_t, 6> classCounts{};
-    std::array<std::uint32_t, 6> classMinimums{101, 101, 101, 101, 101, 101};
-    std::array<std::uint32_t, 6> classMaximums{};
+    std::array<std::int32_t, 6> classMinimums{101, 101, 101, 101, 101, 101};
+    std::array<std::int32_t, 6> classMaximums{};
     for (std::uint64_t seed = 1; seed <= 200; ++seed) {
         suns::GalaxyConfig sampleConfig;
         sampleConfig.seed = seed;
