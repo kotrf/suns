@@ -28,14 +28,19 @@ int main()
     const auto terran = race_preset(RacePreset::Terran);
     const auto ice = race_preset(RacePreset::Cryophile);
     const auto hot = race_preset(RacePreset::Radiotroph);
-    assert(race_habitability(terran, {20, 50, 20}, 0) == 0);
+    assert(race_habitability(terran, {20, 50, 20}, 0) < 0);
     assert(race_habitability(terran, {20, 50, 20}, 1) > 0);
     assert(race_habitability(ice, {20, 40, 20}, 0) == 100);
     assert(race_habitability(hot, {70, 65, 100}, 0) == 100);
-    assert(race_habitability(hot, {50, 50, 20}, 0) == 0);
+    assert(race_habitability(hot, {50, 50, 20}, 0) < 0);
+    const auto hostileForTerrans = std::count_if(
+        state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+            return race_habitability(terran, planet.environment, 0) < 0;
+        });
+    assert(hostileForTerrans > static_cast<decltype(hostileForTerrans)>(state.planets.size() / 3));
 
-    // The host enforces racial colonization constraints; habitat research
-    // changes which worlds can actually be settled, not just their UI color.
+    // Hostile worlds may be settled, but their population declines until
+    // Biology adaptation expands the race's viable range.
     auto colonyTrial = state;
     auto& target = *std::find_if(colonyTrial.planets.begin(), colonyTrial.planets.end(),
         [](const Planet& planet) { return planet.owner == 0; });
@@ -49,13 +54,37 @@ int main()
     colonyTrial.fleets[0].design = 2;
     colonyTrial.fleets[0].position = trialStar.position;
     colonyTrial.fleets[0].colonists = 100;
-    const auto rejectedColony = resolve_campaign_turn(colonyTrial,
+    const auto hostileColony = resolve_campaign_turn(colonyTrial,
         {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
-    assert(find_planet_at_star(rejectedColony, target.star)->owner == 0);
+    assert(find_planet_at_star(hostileColony, target.star)->owner == 1);
+    assert(find_planet_at_star(hostileColony, target.star)->population < 100);
     colonyTrial.players[0].technology.levels[static_cast<std::size_t>(ResearchField::Biology)] = 1;
     const auto founded = resolve_campaign_turn(colonyTrial,
         {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
     assert(find_planet_at_star(founded, target.star)->owner == 1);
+    assert(find_planet_at_star(founded, target.star)->population > 100);
+
+    auto populationRules = make_demo_game();
+    populationRules.planets[0].population = 1000;
+    populationRules.planets[0].habitability = -50;
+    auto declining = TurnProcessor{}.process(populationRules, {});
+    assert(declining.planets[0].population == 950);
+    populationRules.planets[0].habitability = 0;
+    auto stable = TurnProcessor{}.process(populationRules, {});
+    assert(stable.planets[0].population == 1000);
+
+    auto intel = make_demo_game();
+    intel.turn = 10;
+    intel.players.front().surveyKnowledge.clear();
+    intel.players.front().surveyedStars.clear();
+    intel.planets[1].owner = 0;
+    set_survey_level(intel, 1, intel.planets[1].star, SurveyLevel::OrbitalSurvey, 4);
+    intel.planets[1].owner = 2;
+    assert(system_intel_age(intel, 1, intel.planets[1].star) == 6);
+    assert(known_planet_owner(intel, 1, intel.planets[1].id) == PlayerId{0});
+    set_survey_level(intel, 1, intel.planets[1].star, SurveyLevel::OrbitalSurvey, 10);
+    assert(system_intel_age(intel, 1, intel.planets[1].star) == 0);
+    assert(known_planet_owner(intel, 1, intel.planets[1].id) == PlayerId{2});
 
     auto legacy = make_demo_game();
     legacy.planets[0].habitability = 0;

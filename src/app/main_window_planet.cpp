@@ -277,14 +277,16 @@ void MainWindow::refreshPlanetPolish()
                     100.0 * static_cast<double>(planet->population) / static_cast<double>(capacity))), 0, 100);
             planetPopulationBar_->setValue(percent);
             planetPopulationBar_->setFormat(
-                QString("Population %1 / %2 • +%3")
+                QString("Population %1 / %2 • %3%4")
                     .arg(static_cast<qulonglong>(planet->population))
                     .arg(static_cast<qulonglong>(capacity))
-                    .arg(static_cast<qulonglong>(growth)));
+                    .arg(growth > 0 ? "+" : "")
+                    .arg(static_cast<qlonglong>(growth)));
             planetPopulationBar_->setToolTip(
-                QString("Population uses %1% of current capacity. Projected growth next turn: +%2.")
+                QString("Population uses %1% of current capacity. Projected population change next turn: %2%3.")
                     .arg(percent)
-                    .arg(static_cast<qulonglong>(growth)));
+                    .arg(growth > 0 ? "+" : "")
+                    .arg(static_cast<qlonglong>(growth)));
         }
     }
     if (level < SurveyLevel::GeologicalSurvey && planet->owner != pendingOrders_.player) {

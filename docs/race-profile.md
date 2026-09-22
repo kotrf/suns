@@ -13,21 +13,31 @@ use physical environments for racial habitability. Three presets are playable:
 | Cryophile | 0–40 | 15–65 | 0–40 | Cold and lower-gravity worlds |
 | Radiotroph | 55–85 | 50–80 | immune | Narrow hot/heavy environments; safe hazardous-drive transport |
 
-Axes are normalized 0–100. A value outside any applicable range gives zero
-habitability. Within ranges, suitability decreases from the center toward the
-edges; the mean of the three axes determines habitability. Radiation immunity
-makes that axis fully suitable. Capacity is 25,000 × current habitability; growth
-uses the same owner-specific value. Stellar variability still changes the
-result, but cannot make an incompatible world habitable. Colonization of an
-incompatible world is rejected by the host, including arrival programs.
+Axes are normalized 0–100. A value outside any applicable range produces
+negative habitability, scaled by its distance beyond the range. Within ranges,
+suitability decreases from the center toward the edges; the mean of the three
+axes determines positive habitability. Radiation immunity makes that axis fully
+suitable. Capacity is 25,000 × positive current habitability. Positive values
+grow population, zero holds it steady, and negative values kill a proportional
+share each year. Hostile worlds may still be colonized, with an explicit UI
+warning. Here "hostile" means environmentally hostile: the world must still be
+unowned. An enemy colony cannot be colonized and must first be conquered.
+
+Ground invasion is a separate future mechanic. The intended rule is to invade
+by unloading colonists onto an enemy colony; the attacking and defending
+populations then fight, with numerical superiority strongly improving the
+attacker's odds but not making the outcome fully deterministic.
 
 Biology 1/2/3 unlock Sealed/Adaptive/Extreme Habitats: tolerance extends by
 5/10/15 points on each nonimmune axis, bounded by 0–100. This is automatic colony
-adaptation, not terraforming or the future mobile-habitat primary trait.
+adaptation rather than a planet-specific terraforming project; it can move a
+borderline world from negative through zero into positive habitability. A future
+terraforming project can use the same signed scale.
 Natural-range gauges remain unchanged, so they show the race's original limits.
 The map's habitability value includes unlocked adaptations for the viewer.
 
-Save v31 adds `RaceProfile::environmentBased`. Old campaigns and the legacy
+Save v35 stores signed habitability values. Save v31 adds
+`RaceProfile::environmentBased`. Old campaigns and the legacy
 quick-generate action keep this false, preserving their original scalar
 habitability. Use the new-campaign dialog to opt into the new rules. Presets
 are an initial balance pass; there is no point-buy editor yet.

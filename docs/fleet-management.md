@@ -17,7 +17,7 @@ Colonization dismantles the complete fleet and removes its `FleetId`. Transporte
 
 ## Merge order
 
-`MergeFleetsOrder{destination, source}` combines two co-located friendly fleets. The destination `FleetId` and name survive, every ship stack and carried resource is retained, duplicate design stacks are consolidated, and the source fleet is removed.
+`MergeFleetsOrder{destination, source}` combines two co-located friendly fleets. The destination `FleetId` survives and the result receives the unambiguous name `Fleet #<id>`; every ship stack and carried resource is retained, duplicate design stacks are consolidated, and the source fleet is removed.
 
 Both fleets must be stationary and idle, with no waypoint program, persistent task or command packet in flight. For fleets that are already moving, Route Program can instead target a friendly FleetId and use `Merge with fleet`. The target fleet keeps its identity and onboard program after the actual rendezvous; the pursuing source is absorbed.
 
@@ -27,8 +27,16 @@ Both fleets must be stationary and idle, with no waypoint program, persistent ta
 
 Fuel is divided in proportion to fuel capacity. Colonists and minerals are divided in proportion to cargo capacity. This deterministic rule keeps both resulting fleets within their physical capacities whenever the original fleet was valid.
 
+## Rename order
+
+`RenameFleetOrder{fleet, name}` changes an owned fleet's display name. Blank,
+oversized and foreign-fleet requests are rejected by the host. The Fleet dock
+and menu expose **Rename…**, and the pending name is visible immediately through
+the same planning preview used for merge and split. Save v35 and turn-order v6
+persist the order for local and PBEM turns.
+
 The Qt **Fleet** menu and unified dockable Fleet area expose logistics,
-colonization, ship design, **Merge fleets…** and **Split fleet…**. Its Overview
+colonization, ship design, **Rename…**, **Merge fleets…** and **Split fleet…**. Its Overview
 & Logistics and Route Program tabs share one dock zone by default, but can be
 detached like the other workspace panels. A permanent composition table lists
 every design, ship count and hull in the selected FleetId. It previews pending

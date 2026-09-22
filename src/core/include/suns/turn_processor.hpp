@@ -120,6 +120,11 @@ struct SplitFleetOrder {
     std::vector<FleetShipStack> ships;
 };
 
+struct RenameFleetOrder {
+    FleetId fleet{};
+    std::string name;
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -137,7 +142,8 @@ using Order = std::variant<
     SetRemoteMiningOrder,
     MergeFleetsOrder,
     SplitFleetOrder,
-    CancelProductionOrder>;
+    CancelProductionOrder,
+    RenameFleetOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

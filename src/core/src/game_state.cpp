@@ -71,12 +71,12 @@ std::string generated_planet_name(std::mt19937_64& rng, const std::string& starN
     return starName + " " + numerals[bounded(rng, numerals.size())];
 }
 
-std::uint32_t generated_habitability(std::mt19937_64& rng, StarClass stellarClass)
+std::int32_t generated_habitability(std::mt19937_64& rng, StarClass stellarClass)
 {
     const auto a = bounded(rng, 86);
     const auto b = bounded(rng, 86);
     const auto baseline = static_cast<int>(15 + (a + b) / 2);
-    return static_cast<std::uint32_t>(
+    return static_cast<std::int32_t>(
         std::clamp(baseline + stellar_habitability_bias(stellarClass), 5, 100));
 }
 
@@ -1090,6 +1090,45 @@ SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star)
         : SurveyLevel::Detected;
 }
 
+std::optional<std::uint64_t> system_intel_age(
+    const GameState& state, PlayerId player, StarId star)
+{
+    const auto* planet = find_planet_at_star(state, star);
+    if (planet && planet->owner == player) return 0;
+    const auto* knownPlayer = find_player(state, player);
+    if (!knownPlayer) return std::nullopt;
+    const auto knowledge = std::find_if(
+        knownPlayer->surveyKnowledge.begin(), knownPlayer->surveyKnowledge.end(),
+        [star](const SystemSurveyKnowledge& entry) { return entry.star == star; });
+    if (knowledge != knownPlayer->surveyKnowledge.end())
+        return state.turn > knowledge->observedTurn ? state.turn - knowledge->observedTurn : 0;
+    if (std::find(knownPlayer->surveyedStars.begin(), knownPlayer->surveyedStars.end(), star)
+        != knownPlayer->surveyedStars.end()) return 0;
+    return std::nullopt;
+}
+
+std::optional<PlayerId> known_planet_owner(
+    const GameState& state, PlayerId player, PlanetId planetId)
+{
+    const auto planetIt = std::find_if(state.planets.begin(), state.planets.end(),
+        [planetId](const Planet& candidate) { return candidate.id == planetId; });
+    if (planetIt == state.planets.end()) return std::nullopt;
+    const auto* planet = &*planetIt;
+    if (planet->owner == player) return player;
+    if (survey_level(state, player, planet->star) < SurveyLevel::OrbitalSurvey)
+        return std::nullopt;
+    const auto* knownPlayer = find_player(state, player);
+    if (!knownPlayer) return std::nullopt;
+    const auto knowledge = std::find_if(
+        knownPlayer->surveyKnowledge.begin(), knownPlayer->surveyKnowledge.end(),
+        [&](const SystemSurveyKnowledge& entry) { return entry.star == planet->star; });
+    if (knowledge != knownPlayer->surveyKnowledge.end() && knowledge->observedOwner)
+        return knowledge->observedOwner;
+    // Legacy knowledge has no ownership snapshot; require a fresh scan rather
+    // than leaking the authoritative owner into the player view.
+    return std::nullopt;
+}
+
 std::optional<StellarVariabilityIntel> known_stellar_variability(
     const GameState& state, PlayerId player, StarId starId)
 {
@@ -1116,7 +1155,7 @@ bool is_surveyed(const GameState& state, PlayerId player, StarId star)
     return survey_level(state, player, star) >= SurveyLevel::BasicScan;
 }
 
-std::optional<std::uint32_t> known_planet_habitability(
+std::optional<std::int32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planetId)
 {
     const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [planetId](const Planet& candidate) {
@@ -1147,8 +1186,8 @@ std::optional<std::uint32_t> known_planet_habitability(
     mixed *= 0xBF58476D1CE4E5B9ULL;
     mixed ^= mixed >> 27U;
     const auto error = static_cast<int>((mixed % 7ULL) * 5ULL) - 15;
-    const auto rough = std::clamp(static_cast<int>(observedHabitability) + error, 0, 100);
-    return static_cast<std::uint32_t>((rough + 5) / 10 * 10);
+    const auto rough = std::clamp(static_cast<int>(observedHabitability) + error, -100, 100);
+    return static_cast<std::int32_t>((rough >= 0 ? rough + 5 : rough - 5) / 10 * 10);
 }
 
 bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planetId)
@@ -1189,12 +1228,21 @@ void set_survey_level(
     const auto knowledge = std::find_if(it->surveyKnowledge.begin(), it->surveyKnowledge.end(),
         [star](const SystemSurveyKnowledge& entry) { return entry.star == star; });
     if (knowledge == it->surveyKnowledge.end()) {
-        it->surveyKnowledge.push_back({star, level, observedTurn});
+        it->surveyKnowledge.push_back({star, level, observedTurn, std::nullopt});
     } else if (level > knowledge->level) {
         knowledge->level = level;
-        knowledge->observedTurn = observedTurn;
+        knowledge->observedTurn = std::max(knowledge->observedTurn, observedTurn);
     } else if (level == knowledge->level) {
         knowledge->observedTurn = std::max(knowledge->observedTurn, observedTurn);
+    } else if (level >= SurveyLevel::OrbitalSurvey) {
+        knowledge->observedTurn = std::max(knowledge->observedTurn, observedTurn);
+    }
+
+    const auto updated = std::find_if(it->surveyKnowledge.begin(), it->surveyKnowledge.end(),
+        [star](const SystemSurveyKnowledge& entry) { return entry.star == star; });
+    if (updated != it->surveyKnowledge.end() && level >= SurveyLevel::OrbitalSurvey
+        && observedTurn >= updated->observedTurn) {
+        if (const auto* planet = find_planet_at_star(state, star)) updated->observedOwner = planet->owner;
     }
 
     if (level >= SurveyLevel::BasicScan
@@ -1238,7 +1286,7 @@ void refresh_sensor_intel(GameState& state)
 
 std::uint64_t population_capacity(const Planet& planet)
 {
-    return static_cast<std::uint64_t>(planet.habitability) * kPopulationPerHabitability;
+    return static_cast<std::uint64_t>(std::max(0, planet.habitability)) * kPopulationPerHabitability;
 }
 
 bool star_is_variable(const StarSystem& star)
@@ -1257,7 +1305,7 @@ double stellar_luminosity(const StarSystem& star, std::uint64_t turn)
     return 1.0 + wave * static_cast<double>(star.variability.amplitudePercent) / 100.0;
 }
 
-std::uint32_t current_planet_habitability(
+std::int32_t current_planet_habitability(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
     return player_planet_habitability(state, planet.owner, planet, turn);
@@ -1266,33 +1314,44 @@ std::uint32_t current_planet_habitability(
 std::uint64_t population_capacity(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
-    return static_cast<std::uint64_t>(current_planet_habitability(state, planet, turn)) * kPopulationPerHabitability;
+    return static_cast<std::uint64_t>(std::max(0, current_planet_habitability(state, planet, turn)))
+        * kPopulationPerHabitability;
 }
 
-std::uint64_t projected_population_growth(const Planet& planet)
+std::int64_t projected_population_growth(const Planet& planet)
 {
     if (planet.owner == 0 || planet.population == 0 || planet.habitability == 0) return 0;
+    if (planet.habitability < 0) {
+        const auto loss = std::max<std::uint64_t>(
+            1, planet.population * static_cast<std::uint64_t>(-planet.habitability) / 1000);
+        return -static_cast<std::int64_t>(std::min(loss, planet.population));
+    }
     const auto capacity = population_capacity(planet);
     if (capacity == 0 || planet.population >= capacity) return 0;
     const auto rawGrowth = std::max<std::uint64_t>(1, planet.population * planet.habitability / 1000);
     const auto headroom = capacity - planet.population;
     auto growth = rawGrowth * headroom / capacity;
     if (growth == 0) growth = 1;
-    return std::min(growth, headroom);
+    return static_cast<std::int64_t>(std::min(growth, headroom));
 }
 
-std::uint64_t projected_population_growth(
+std::int64_t projected_population_growth(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
     const auto habitability = current_planet_habitability(state, planet, turn);
     if (planet.owner == 0 || planet.population == 0 || habitability == 0) return 0;
+    if (habitability < 0) {
+        const auto loss = std::max<std::uint64_t>(
+            1, planet.population * static_cast<std::uint64_t>(-habitability) / 1000);
+        return -static_cast<std::int64_t>(std::min(loss, planet.population));
+    }
     const auto capacity = population_capacity(state, planet, turn);
     if (capacity == 0 || planet.population >= capacity) return 0;
     const auto rawGrowth = std::max<std::uint64_t>(1, planet.population * habitability / 1000);
     const auto headroom = capacity - planet.population;
     auto growth = rawGrowth * headroom / capacity;
     if (growth == 0) growth = 1;
-    return std::min(growth, headroom);
+    return static_cast<std::int64_t>(std::min(growth, headroom));
 }
 
 std::uint32_t colony_output(const Planet& planet)

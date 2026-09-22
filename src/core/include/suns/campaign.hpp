@@ -19,9 +19,9 @@ struct ResearchUnlock {
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);
 [[nodiscard]] const std::vector<ResearchUnlock>& research_unlocks();
-[[nodiscard]] std::uint32_t race_habitability(
+[[nodiscard]] std::int32_t race_habitability(
     const RaceProfile& race, PlanetEnvironment environment, std::uint8_t biology);
-[[nodiscard]] std::uint32_t player_planet_habitability(
+[[nodiscard]] std::int32_t player_planet_habitability(
     const GameState& state, PlayerId player, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] GameState generate_campaign(
     const GalaxyConfig& config, const std::vector<EmpireSetup>& empires);

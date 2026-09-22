@@ -40,7 +40,7 @@ struct GameEvent {
     ShipDesignId shipDesign{};
     ProductionKind productionKind{ProductionKind::ColonyShip};
     Position position;
-    std::uint32_t quantity{};
+    std::int32_t quantity{};
     SurveyLevel surveyLevel{SurveyLevel::Detected};
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};

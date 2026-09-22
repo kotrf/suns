@@ -235,7 +235,7 @@ struct Planet {
     PlanetId id{};
     StarId star{};
     std::string name;
-    std::uint32_t habitability{};
+    std::int32_t habitability{};
     PlayerId owner{};
     std::uint64_t population{};
     std::uint32_t industry{1};
@@ -247,7 +247,7 @@ struct Planet {
     PlanetEnvironment environment;
     PrecursorArtifactSite precursorArtifacts;
     // Values delivered in a player turn; absent in the authoritative simulation.
-    std::optional<std::uint32_t> observedHabitability;
+    std::optional<std::int32_t> observedHabitability;
     std::optional<MineralCargo> observedConcentration;
 };
 
@@ -282,6 +282,9 @@ struct SystemSurveyKnowledge {
     StarId star{};
     SurveyLevel level{SurveyLevel::Detected};
     std::uint64_t observedTurn{};
+    // Ownership is a snapshot from the last orbital-quality observation, not
+    // a live view into the authoritative simulation.
+    std::optional<PlayerId> observedOwner;
 };
 
 struct StellarVariabilityIntel {
@@ -298,6 +301,7 @@ struct PendingSurveyReport {
     std::uint64_t observedTurn{};
     std::uint64_t deliveryTurn{};
     SurveyLevel level{SurveyLevel::SystemScan};
+    std::optional<PlayerId> observedOwner;
 };
 
 enum class ResearchField : std::uint8_t {
@@ -668,9 +672,13 @@ void apply_fleet_radiation_attrition(GameState& state, Fleet& fleet);
 [[nodiscard]] std::uint32_t travel_turns(Position from, Position to, double speed);
 [[nodiscard]] bool is_surveyed(const GameState& state, PlayerId player, StarId star);
 [[nodiscard]] SurveyLevel survey_level(const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] std::optional<std::uint64_t> system_intel_age(
+    const GameState& state, PlayerId player, StarId star);
+[[nodiscard]] std::optional<PlayerId> known_planet_owner(
+    const GameState& state, PlayerId player, PlanetId planet);
 [[nodiscard]] std::optional<StellarVariabilityIntel> known_stellar_variability(
     const GameState& state, PlayerId player, StarId star);
-[[nodiscard]] std::optional<std::uint32_t> known_planet_habitability(
+[[nodiscard]] std::optional<std::int32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planet);
 [[nodiscard]] bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planet);
 // nullopt means that a deep survey has not been completed. A true value is a
@@ -702,14 +710,14 @@ void refresh_sensor_intel(GameState& state);
 [[nodiscard]] std::uint64_t population_capacity(const Planet& planet);
 [[nodiscard]] std::uint64_t population_capacity(
     const GameState& state, const Planet& planet, std::uint64_t turn);
-[[nodiscard]] std::uint64_t projected_population_growth(const Planet& planet);
-[[nodiscard]] std::uint64_t projected_population_growth(
+[[nodiscard]] std::int64_t projected_population_growth(const Planet& planet);
+[[nodiscard]] std::int64_t projected_population_growth(
     const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] std::uint32_t colony_output(const Planet& planet);
 [[nodiscard]] int stellar_habitability_bias(StarClass stellarClass);
 [[nodiscard]] bool star_is_variable(const StarSystem& star);
 [[nodiscard]] double stellar_luminosity(const StarSystem& star, std::uint64_t turn);
-[[nodiscard]] std::uint32_t current_planet_habitability(
+[[nodiscard]] std::int32_t current_planet_habitability(
     const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
     const GameState& state, PlayerId player);

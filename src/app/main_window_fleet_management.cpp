@@ -5,6 +5,8 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QLabel>
+#include <QInputDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -40,6 +42,29 @@ QString compositionText(const GameState& state, const Fleet& fleet)
 }
 
 } // namespace
+
+void MainWindow::openRenameFleetDialog()
+{
+    const auto fleet = selectedFleetPlanningView();
+    if (!fleet) {
+        statusBar()->showMessage("Select a fleet to rename", 3000);
+        return;
+    }
+
+    bool accepted = false;
+    const auto name = QInputDialog::getText(
+        this, "Rename fleet", "New fleet name", QLineEdit::Normal,
+        QString::fromStdString(fleet->name), &accepted).trimmed();
+    if (!accepted || name.isEmpty()) return;
+    if (name.toUtf8().size() > 80) {
+        QMessageBox::warning(this, "Rename fleet", "Fleet names may contain at most 80 UTF-8 bytes.");
+        return;
+    }
+    appendPendingOrder(
+        RenameFleetOrder{fleet->id, name.toStdString()},
+        QString("Rename fleet %1 to %2").arg(fleet->id).arg(name));
+    rebuildScene();
+}
 
 void MainWindow::openMergeFleetsDialog()
 {

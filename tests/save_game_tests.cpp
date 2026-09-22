@@ -25,11 +25,13 @@ void round_trip_preserves_communications_and_planning()
     original.state.planets.front().productionWaitingForMinerals = true;
     original.state.planets.front().productionWaitingForShipyard = true;
     original.state.planets.front().environment = {63, 47, 29};
+    original.state.planets[1].habitability = -45;
+    original.state.planets[1].observedHabitability = -35;
     original.state.planets[1].precursorArtifacts = {true, true, 1, 13};
     original.state.orbitalStations.front().name = "Sol Prime Orbital Dock";
-    original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::DeepSurvey, 75});
+    original.state.players.front().surveyKnowledge.push_back({2, SurveyLevel::DeepSurvey, 75, PlayerId{0}});
     original.state.players.front().pendingSurveyReports.push_back({
-        2, 1, 76, 79, SurveyLevel::DeepSurvey,
+        2, 1, 76, 79, SurveyLevel::DeepSurvey, PlayerId{2},
     });
     original.state.players.front().pendingPlayerReports.push_back({
         PlayerReportKind::FleetStalledForFuel,
@@ -210,6 +212,8 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.planets.front().environment.temperature == 63);
     assert(loaded.state.planets.front().environment.gravity == 47);
     assert(loaded.state.planets.front().environment.radiation == 29);
+    assert(loaded.state.planets[1].habitability == -45);
+    assert(loaded.state.planets[1].observedHabitability == -35);
     assert(loaded.state.planets[1].precursorArtifacts.present);
     assert(loaded.state.planets[1].precursorArtifacts.claimed);
     assert(loaded.state.planets[1].precursorArtifacts.discoveredBy == 1);
@@ -233,11 +237,13 @@ void round_trip_preserves_communications_and_planning()
     assert(savedKnowledge != loaded.state.players.front().surveyKnowledge.end());
     assert(savedKnowledge->level == SurveyLevel::DeepSurvey);
     assert(savedKnowledge->observedTurn == 75);
+    assert(savedKnowledge->observedOwner == PlayerId{0});
     assert(loaded.state.players.front().pendingSurveyReports.front().star == 2);
     assert(loaded.state.players.front().pendingSurveyReports.front().sourceFleet == 1);
     assert(loaded.state.players.front().pendingSurveyReports.front().observedTurn == 76);
     assert(loaded.state.players.front().pendingSurveyReports.front().deliveryTurn == 79);
     assert(loaded.state.players.front().pendingSurveyReports.front().level == SurveyLevel::DeepSurvey);
+    assert(loaded.state.players.front().pendingSurveyReports.front().observedOwner == PlayerId{2});
     assert(loaded.state.players.front().pendingPlayerReports.size() == 1);
     const auto& report = loaded.state.players.front().pendingPlayerReports.front();
     assert(report.kind == PlayerReportKind::FleetStalledForFuel);
@@ -438,6 +444,11 @@ void population_migration_and_clear_orders()
     legacy.campaignId = 12;
     legacy.turnToken = 34;
     legacy.state = make_demo_game();
+    // This fixture is downgraded by rewriting only the version header, so
+    // keep v35-only variable-length survey payloads empty. The remaining
+    // fields deliberately retain the v31-compatible byte layout.
+    legacy.state.players[0].surveyKnowledge.clear();
+    legacy.state.players[0].pendingSurveyReports.clear();
     legacy.state.planets[0].population = 1000;
     legacy.state.players[0].history[0].population = 1000;
     legacy.state.fleets[0].design = kColonyShipDesignId;
@@ -515,8 +526,9 @@ void cancellation_round_trips_in_save_and_turn_packet()
     saved.campaignId = 12;
     saved.turnToken = 34;
     saved.state = make_demo_game();
-    saved.pendingOrders = {1, {CancelProductionOrder{1, 2}, QueueShipDesignOrder{1, 0, "New Surveyor"}}};
-    saved.pendingDescriptions = {"Cancel third build", "Queue new Surveyor"};
+    saved.pendingOrders = {1, {CancelProductionOrder{1, 2}, QueueShipDesignOrder{1, 0, "New Surveyor"},
+        RenameFleetOrder{1, "Trailblazer"}}};
+    saved.pendingDescriptions = {"Cancel third build", "Queue new Surveyor", "Rename fleet"};
     const auto path = directory.filePath("cancel.suns");
     assert(write_save_game_file(path, saved, error));
     SaveGameData loaded;
@@ -524,6 +536,7 @@ void cancellation_round_trips_in_save_and_turn_packet()
     const auto savedCancel = std::get<CancelProductionOrder>(loaded.pendingOrders.orders.at(0));
     assert(savedCancel.colony == 1 && savedCancel.index == 2);
     assert(std::get<QueueShipDesignOrder>(loaded.pendingOrders.orders.at(1)).pendingDesignName == "New Surveyor");
+    assert(std::get<RenameFleetOrder>(loaded.pendingOrders.orders.at(2)).name == "Trailblazer");
     TurnOrderFileData packet{12, saved.state.turn, 34, saved.pendingOrders, saved.pendingDescriptions};
     const auto ordersPath = directory.filePath("cancel.sunsorders");
     assert(write_turn_order_file(ordersPath, packet, error));
@@ -532,6 +545,7 @@ void cancellation_round_trips_in_save_and_turn_packet()
     const auto packetCancel = std::get<CancelProductionOrder>(read.orders.orders.at(0));
     assert(packetCancel.colony == 1 && packetCancel.index == 2);
     assert(std::get<QueueShipDesignOrder>(read.orders.orders.at(1)).pendingDesignName == "New Surveyor");
+    assert(std::get<RenameFleetOrder>(read.orders.orders.at(2)).name == "Trailblazer");
 }
 
 } // namespace

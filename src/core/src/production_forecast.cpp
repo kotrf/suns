@@ -67,8 +67,13 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             else if (front.item.kind == ProductionKind::OrbitalStation) hasShipyard = true;
             remaining.erase(remaining.begin());
         }
-        simulated.population += projected_population_growth(
+        const auto populationChange = projected_population_growth(
             state, simulated, state.turn + offset - 1);
+        if (populationChange >= 0)
+            simulated.population += static_cast<std::uint64_t>(populationChange);
+        else
+            simulated.population -= std::min(
+                simulated.population, static_cast<std::uint64_t>(-populationChange));
     }
 
     for (const auto& item : remaining) {

@@ -4,6 +4,7 @@
 #include "suns/player_knowledge.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <string>
@@ -541,9 +542,6 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
 bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
 {
     if (planet.owner != 0 || fleet.colonists == 0 || !fleet_can_colonize(state, fleet)) return false;
-    const auto* empire = find_player(state, fleet.owner);
-    if (empire && empire->race.environmentBased
-        && player_planet_habitability(state, fleet.owner, planet, state.turn) == 0) return false;
     // A fleet physically in orbit can survey and settle locally without
     // waiting for the observation to reach the empire's communication mesh.
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
@@ -1471,7 +1469,10 @@ void advance_fleets(GameState& state)
 void grow_colonies(GameState& state)
 {
     for (auto& planet : state.planets) {
-        planet.population += projected_population_growth(state, planet, state.turn);
+        const auto change = projected_population_growth(state, planet, state.turn);
+        if (change >= 0) planet.population += static_cast<std::uint64_t>(change);
+        else planet.population -= std::min(
+            planet.population, static_cast<std::uint64_t>(-change));
     }
 }
 
@@ -1561,6 +1562,8 @@ TurnResult TurnProcessor::process_with_events(
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
                         } else {
+                            if (!colony_has_orbital_service(next, planet->id, submission.player,
+                                    OrbitalStationModule::Shipyard)) return;
                             const auto design = std::find_if(next.shipDesigns.begin(), next.shipDesigns.end(),
                                 [&](const ShipDesign& candidate) {
                                     return candidate.owner == submission.player && ship_design_can_colonize(candidate);
@@ -1602,6 +1605,8 @@ TurnResult TurnProcessor::process_with_events(
                         });
                         const auto* design = resolve_ship_design_order(next, submission.player, concreteOrder);
                         if (planet == next.planets.end() || !design || design->owner != submission.player
+                            || !colony_has_orbital_service(next, planet->id, submission.player,
+                                OrbitalStationModule::Shipyard)
                             || !ship_design_valid(*design)) return;
                         planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                     } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
@@ -1705,6 +1710,17 @@ TurnResult TurnProcessor::process_with_events(
                         (void)merge_fleets(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
                         (void)split_fleet(next, submission.player, concreteOrder);
+                    } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
+                            [&](const Fleet& candidate) {
+                                return candidate.id == concreteOrder.fleet
+                                    && candidate.owner == submission.player;
+                            });
+                        const bool hasVisibleCharacter = std::any_of(
+                            concreteOrder.name.begin(), concreteOrder.name.end(),
+                            [](unsigned char value) { return !std::isspace(value); });
+                        if (fleet != next.fleets.end() && hasVisibleCharacter
+                            && concreteOrder.name.size() <= 80) fleet->name = concreteOrder.name;
                     }
                 },
                 order);

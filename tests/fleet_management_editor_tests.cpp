@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 
 #include <QApplication>
+#include <QPushButton>
 #include <QTreeWidget>
 
 #include <cassert>
@@ -55,6 +56,8 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::install(window);
 
     auto* table = window.findChild<QTreeWidget*>("fleetCompositionTree");
+    auto* rename = window.findChild<QPushButton*>("renameFleetButton");
+    assert(rename && rename->text().contains("Rename"));
     assert(table && table->topLevelItemCount() == 1);
     assert(table->topLevelItem(0)->text(0) == "Scout");
     assert(table->topLevelItem(0)->text(1) == "1");
