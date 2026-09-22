@@ -20,7 +20,13 @@ axes determines positive habitability. Radiation immunity makes that axis fully
 suitable. Capacity is 25,000 × positive current habitability. Positive values
 grow population, zero holds it steady, and negative values kill a proportional
 share each year. Hostile worlds may still be colonized, with an explicit UI
-warning.
+warning. Here "hostile" means environmentally hostile: the world must still be
+unowned. An enemy colony cannot be colonized and must first be conquered.
+
+Ground invasion is a separate future mechanic. The intended rule is to invade
+by unloading colonists onto an enemy colony; the attacking and defending
+populations then fight, with numerical superiority strongly improving the
+attacker's odds but not making the outcome fully deterministic.
 
 Biology 1/2/3 unlock Sealed/Adaptive/Extreme Habitats: tolerance extends by
 5/10/15 points on each nonimmune axis, bounded by 0–100. This is automatic colony

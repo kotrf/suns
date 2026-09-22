@@ -205,6 +205,33 @@ void colonization_dismantles_entire_fleet_and_recovers_minerals()
     assert(close(result.planets[1].minerals.germanium, before.germanium + 0.5 + salvage.germanium));
 }
 
+void enemy_colonies_cannot_be_colonized()
+{
+    const TurnProcessor processor;
+    auto state = make_demo_game();
+    auto& target = state.planets[1];
+    target.owner = 2;
+    target.population = 500;
+
+    auto& fleet = state.fleets.front();
+    fleet.position = state.stars[1].position;
+    fleet.ships = {{kColonyShipDesignId, 1}};
+    fleet.design = kColonyShipDesignId;
+    fleet.colonists = 100;
+    fleet.minerals = {0.5, 0.5, 0.5};
+    const auto beforeCargo = fleet.minerals;
+
+    const auto result = processor.process(state, {{1, {ColonizePlanetOrder{fleet.id, target.id}}}});
+    const auto* survivingFleet = find_fleet(result, fleet.id);
+    assert(target.owner == 2);
+    assert(result.planets[1].owner == 2);
+    assert(survivingFleet);
+    assert(survivingFleet->colonists == 100);
+    assert(close(survivingFleet->minerals.ironium, beforeCargo.ironium));
+    assert(close(survivingFleet->minerals.boranium, beforeCargo.boranium));
+    assert(close(survivingFleet->minerals.germanium, beforeCargo.germanium));
+}
+
 } // namespace
 
 int main()
@@ -216,4 +243,5 @@ int main()
     moving_fleets_cannot_be_reorganized();
     fleets_can_be_renamed_by_their_owner();
     colonization_dismantles_entire_fleet_and_recovers_minerals();
+    enemy_colonies_cannot_be_colonized();
 }
