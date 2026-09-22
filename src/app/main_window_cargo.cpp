@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 
 #include <QComboBox>
+#include <QColor>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -104,13 +105,15 @@ void MainWindow::openCargoManifestDialog()
     if (!star) return;
 
     std::vector<CargoEndpointView> endpoints;
-    if (const auto* planet = find_planet_at_star(planned, star->id);
-        planet && (planet->owner == 0 || planet->owner == pendingOrders_.player)) {
+    if (const auto* planet = find_planet_at_star(planned, star->id); planet) {
+        const auto prefix = planet->owner != 0 && planet->owner != pendingOrders_.player
+            ? QString("Enemy colony")
+            : QString("Planetary surface");
         endpoints.push_back({
             {planet->id, 0},
             planet,
             nullptr,
-            QString("Planetary surface — %1").arg(QString::fromStdString(planet->name)),
+            QString("%1 — %2").arg(prefix, QString::fromStdString(planet->name)),
         });
     }
     for (const auto& fleet : planned.fleets) {
@@ -127,7 +130,7 @@ void MainWindow::openCargoManifestDialog()
         QMessageBox::information(
             this,
             "Transfer cargo",
-            "Cargo transfer needs a friendly or uncolonized planetary surface and/or at least two friendly fleets at this system.");
+            "Cargo transfer needs a planetary surface and a friendly fleet, or at least two friendly fleets at this system.");
         return;
     }
 
@@ -150,6 +153,11 @@ void MainWindow::openCargoManifestDialog()
     sourceCombo->setObjectName("cargoSourceCombo");
     destinationCombo->setObjectName("cargoDestinationCombo");
     for (std::size_t index = 0; index < endpoints.size(); ++index) {
+        if (endpoints[index].planet
+            && endpoints[index].planet->owner != 0
+            && endpoints[index].planet->owner != pendingOrders_.player) {
+            continue;
+        }
         sourceCombo->addItem(endpoints[index].name, static_cast<int>(index));
     }
     endpointForm->addWidget(new QLabel("Source", &dialog), 0, 0);
@@ -169,13 +177,21 @@ void MainWindow::openCargoManifestDialog()
         && (endpointColonists(endpoints[static_cast<std::size_t>(selectedFleetIndex)]) > 0
             || mineral_cargo_mass(endpointMinerals(
                    endpoints[static_cast<std::size_t>(selectedFleetIndex)])) > kEpsilon);
-    sourceCombo->setCurrentIndex(selectedFleetHasCargo ? selectedFleetIndex : 0);
+    const auto selectedFleetRow = sourceCombo->findData(selectedFleetIndex);
+    sourceCombo->setCurrentIndex(selectedFleetHasCargo && selectedFleetRow >= 0
+        ? selectedFleetRow : 0);
     const auto rebuildDestinations = [&](int preferred) {
         const QSignalBlocker blocker(destinationCombo);
         destinationCombo->clear();
         for (std::size_t index = 0; index < endpoints.size(); ++index) {
             if (static_cast<int>(index) != sourceCombo->currentData().toInt()) {
                 destinationCombo->addItem(endpoints[index].name, static_cast<int>(index));
+                if (endpoints[index].planet
+                    && endpoints[index].planet->owner != 0
+                    && endpoints[index].planet->owner != pendingOrders_.player) {
+                    destinationCombo->setItemData(
+                        destinationCombo->count() - 1, QColor("#e08d7c"), Qt::ForegroundRole);
+                }
             }
         }
         const auto preferredRow = destinationCombo->findData(preferred);
@@ -244,6 +260,9 @@ void MainWindow::openCargoManifestDialog()
         const auto destinationIndex = destinationCombo->currentData().toInt();
         const auto& source = endpoints[static_cast<std::size_t>(sourceIndex)];
         const auto& destination = endpoints[static_cast<std::size_t>(destinationIndex)];
+        const bool invasion = destination.planet
+            && destination.planet->owner != 0
+            && destination.planet->owner != pendingOrders_.player;
 
         // Every cargo type shares the same hold. Its right edge is the amount
         // that fits after existing cargo and the other selected transfers.
@@ -258,7 +277,7 @@ void MainWindow::openCargoManifestDialog()
             availableColonists = source.planet->owner == pendingOrders_.player && availableColonists > 0
                 ? availableColonists - 1 : 0;
         }
-        if (destination.planet && destination.planet->owner != pendingOrders_.player) availableColonists = 0;
+        if (destination.planet && destination.planet->owner == 0) availableColonists = 0;
         const auto colonistRoom = std::max(0.0, freeHold - mineral_cargo_mass(transferMinerals()));
         const auto colonistMaximum = static_cast<int>(std::min({
             static_cast<double>(availableColonists),
@@ -276,7 +295,7 @@ void MainWindow::openCargoManifestDialog()
             colonistSlider->setToolTip(QString("Hold scale: %1 people; available to transfer: %2 people")
                 .arg(colonistScale).arg(colonistMaximum));
         }
-        const auto availableMinerals = endpointMinerals(source);
+        const auto availableMinerals = invasion ? MineralCargo{} : endpointMinerals(source);
         for (int index = 0; index < 3; ++index) {
             const auto selected = transferMinerals();
             const auto otherCargo = colonist_cargo_mass(static_cast<std::uint64_t>(colonistSpin->value()))
@@ -313,9 +332,20 @@ void MainWindow::openCargoManifestDialog()
         sourceAfter->setText(QString("<b>Source after:</b> %1 — %2")
             .arg(source.name)
             .arg(cargoValues(sourceCurrentColonists - colonists, sourceRemainder)));
-        destinationAfter->setText(QString("<b>Destination after:</b> %1 — %2")
-            .arg(destination.name)
-            .arg(cargoValues(destinationCurrentColonists + colonists, destinationResult)));
+        if (invasion) {
+            const auto chance = ground_invasion_success_chance(
+                colonists, destinationCurrentColonists) * 100.0;
+            destinationAfter->setText(QString(
+                "<b>Ground invasion:</b> %1 attackers vs %2 defenders — estimated success chance %3%. "
+                "The selected landing force is committed; the winner keeps its survivors.")
+                .arg(static_cast<qulonglong>(colonists))
+                .arg(static_cast<qulonglong>(destinationCurrentColonists))
+                .arg(chance, 0, 'f', 1));
+        } else {
+            destinationAfter->setText(QString("<b>Destination after:</b> %1 — %2")
+                .arg(destination.name)
+                .arg(cargoValues(destinationCurrentColonists + colonists, destinationResult)));
+        }
 
         bool capacityValid = true;
         if (destination.fleet) {
@@ -334,14 +364,22 @@ void MainWindow::openCargoManifestDialog()
 
         const bool distinct = sourceIndex != destinationIndex;
         const bool hasCargo = colonists > 0 || mineral_cargo_mass(minerals) > kEpsilon;
-        const bool valid = distinct && hasCargo && capacityValid;
+        const bool valid = distinct && hasCargo && capacityValid
+            && (!invasion || (colonists > 0 && mineral_cargo_mass(minerals) <= kEpsilon));
         acceptButton->setEnabled(valid);
+        acceptButton->setText(invasion ? "Queue invasion" : "Queue transfer");
         if (!distinct) {
             validation->setText("<span style='color:#e4b77d'><b>Choose two different endpoints.</b></span>");
         } else if (!hasCargo) {
             validation->setText("Choose at least one cargo amount to transfer.");
+        } else if (invasion && colonists == 0) {
+            validation->setText("<span style='color:#e08d7c'><b>An invasion requires colonists.</b></span>");
+        } else if (invasion && mineral_cargo_mass(minerals) > kEpsilon) {
+            validation->setText("<span style='color:#e08d7c'><b>Minerals cannot be transferred during an invasion.</b></span>");
         } else if (!capacityValid) {
             validation->setText("<span style='color:#e08d7c'><b>The destination fleet would exceed its shared cargo capacity.</b></span>");
+        } else if (invasion) {
+            validation->setText("<span style='color:#e08d7c'><b>This order starts ground combat against the colony.</b></span>");
         } else {
             validation->setText("<span style='color:#85d5a5'><b>Transfer is valid.</b></span>");
         }

@@ -327,6 +327,10 @@ enum class PlayerReportKind {
     ProductionWaitingForShipyard,
     PrecursorArtifactsDiscovered,
     ResearchLevelCompleted,
+    GroundInvasionWon,
+    GroundInvasionLost,
+    GroundDefenseWon,
+    ColonyLost,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -622,6 +626,11 @@ void normalize_ship_design_placement(ShipDesign& design);
     double encounterRadius = kFleetEncounterRadius);
 [[nodiscard]] double warp_distance(std::uint8_t warp);
 [[nodiscard]] double colonist_cargo_mass(std::uint64_t colonists);
+// The first ground-combat slice deliberately uses a compact population-only
+// model. Equal forces have even odds; a numerical advantage grows rapidly but
+// never guarantees victory while both sides have population remaining.
+[[nodiscard]] double ground_invasion_success_chance(
+    std::uint64_t attackers, std::uint64_t defenders);
 [[nodiscard]] double mineral_cargo_mass(const MineralCargo& minerals);
 [[nodiscard]] bool mineral_cargo_sufficient(const MineralCargo& available, const MineralCargo& required);
 void subtract_minerals(MineralCargo& available, const MineralCargo& required);

@@ -68,16 +68,22 @@ GameEventKind event_kind(PlayerReportKind kind)
         return GameEventKind::PrecursorArtifactsDiscovered;
     case PlayerReportKind::ResearchLevelCompleted:
         return GameEventKind::ResearchLevelCompleted;
+    case PlayerReportKind::GroundInvasionWon: return GameEventKind::GroundInvasionWon;
+    case PlayerReportKind::GroundInvasionLost: return GameEventKind::GroundInvasionLost;
+    case PlayerReportKind::GroundDefenseWon: return GameEventKind::GroundDefenseWon;
+    case PlayerReportKind::ColonyLost: return GameEventKind::ColonyLost;
     }
     return GameEventKind::FleetArrived;
 }
 
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
+    if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
     return kind == PlayerReportKind::FleetStalledForFuel
             || kind == PlayerReportKind::FleetTargetLost
             || kind == PlayerReportKind::ProductionWaitingForMinerals
             || kind == PlayerReportKind::ProductionWaitingForShipyard
+            || kind == PlayerReportKind::GroundInvasionLost
         ? GameEventSeverity::Warning
         : GameEventSeverity::Information;
 }

@@ -34,7 +34,7 @@ void round_trip_preserves_communications_and_planning()
         2, 1, 76, 79, SurveyLevel::DeepSurvey, PlayerId{2},
     });
     original.state.players.front().pendingPlayerReports.push_back({
-        PlayerReportKind::FleetStalledForFuel,
+        PlayerReportKind::ColonyLost,
         76,
         79,
         2,
@@ -188,6 +188,12 @@ void round_trip_preserves_communications_and_planning()
     deepSurveyMessage.surveyLevel = SurveyLevel::DeepSurvey;
     deepSurveyMessage.precursorArtifactHint = true;
     original.strategicMessages.push_back(deepSurveyMessage);
+    auto invasionMessage = archivedMessage;
+    invasionMessage.id += 2;
+    invasionMessage.kind = GameEventKind::GroundInvasionWon;
+    invasionMessage.planet = 2;
+    invasionMessage.quantity = 731;
+    original.strategicMessages.push_back(invasionMessage);
     original.readStrategicMessageIds.push_back(archivedMessage.id);
 
     QTemporaryDir directory;
@@ -246,7 +252,7 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().pendingSurveyReports.front().observedOwner == PlayerId{2});
     assert(loaded.state.players.front().pendingPlayerReports.size() == 1);
     const auto& report = loaded.state.players.front().pendingPlayerReports.front();
-    assert(report.kind == PlayerReportKind::FleetStalledForFuel);
+    assert(report.kind == PlayerReportKind::ColonyLost);
     assert(report.observedTurn == 76);
     assert(report.deliveryTurn == 79);
     assert(report.fleet == 1);
@@ -373,13 +379,15 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
     assert(!loaded.showSensorRanges);
-    assert(loaded.strategicMessages.size() == 2);
+    assert(loaded.strategicMessages.size() == 3);
     assert(loaded.strategicMessages.front().id == archivedMessage.id);
     assert(loaded.strategicMessages.front().kind == GameEventKind::ProductionCompleted);
     assert(loaded.strategicMessages.front().planet == 1);
     assert(loaded.strategicMessages.front().shipDesign == kScoutDesignId);
-    assert(loaded.strategicMessages.back().surveyLevel == SurveyLevel::DeepSurvey);
-    assert(loaded.strategicMessages.back().precursorArtifactHint);
+    assert(loaded.strategicMessages[1].surveyLevel == SurveyLevel::DeepSurvey);
+    assert(loaded.strategicMessages[1].precursorArtifactHint);
+    assert(loaded.strategicMessages.back().kind == GameEventKind::GroundInvasionWon);
+    assert(loaded.strategicMessages.back().quantity == 731);
     assert(loaded.readStrategicMessageIds == original.readStrategicMessageIds);
 }
 

@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 35;
+constexpr quint32 kSaveFormatVersion = 36;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 6;
@@ -693,9 +693,11 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 27
-        ? GameEventKind::PrecursorArtifactsDiscovered
-        : GameEventKind::ProductionWaitingForShipyard;
+    const auto newestEventKind = gReadSaveFormatVersion >= 36
+        ? GameEventKind::ColonyLost
+        : gReadSaveFormatVersion >= 27
+            ? GameEventKind::PrecursorArtifactsDiscovered
+            : GameEventKind::ProductionWaitingForShipyard;
     if (!readEnum(stream, value.kind, static_cast<quint8>(newestEventKind))) return;
     if (!readEnum(stream, value.severity, static_cast<quint8>(GameEventSeverity::Critical))) return;
     stream >> star >> planet >> fleet >> shipDesign;
@@ -1004,11 +1006,13 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 27
-            ? PlayerReportKind::ResearchLevelCompleted
-            : (gReadSaveFormatVersion >= 24
-                ? PlayerReportKind::ProductionWaitingForShipyard
-                : PlayerReportKind::FleetsMerged);
+        const auto newestReportKind = gReadSaveFormatVersion >= 36
+            ? PlayerReportKind::ColonyLost
+            : gReadSaveFormatVersion >= 27
+                ? PlayerReportKind::ResearchLevelCompleted
+                : (gReadSaveFormatVersion >= 24
+                    ? PlayerReportKind::ProductionWaitingForShipyard
+                    : PlayerReportKind::FleetsMerged);
         if (!readEnum(stream, report.kind, static_cast<quint8>(newestReportKind))) return;
         quint64 observedTurn{};
         quint64 deliveryTurn{};

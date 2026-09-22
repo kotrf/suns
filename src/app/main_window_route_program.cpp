@@ -3,6 +3,7 @@
 #include "suns/communications.hpp"
 
 #include <QGraphicsView>
+#include <QMessageBox>
 #include <QStatusBar>
 
 #include <algorithm>
@@ -184,6 +185,12 @@ QString routeForecast(
             break;
         }
         const auto fleetOwner = beforeFleet->owner;
+        PlayerId targetOwnerBeforeTurn{};
+        if (const auto* targetStar = findStarAtPosition(simulated, legs[legIndex].destination)) {
+            if (const auto* targetPlanet = find_planet_at_star(simulated, targetStar->id)) {
+                targetOwnerBeforeTurn = targetPlanet->owner;
+            }
+        }
 
         std::vector<PlayerOrders> submissions;
         if (firstTurn && !pending.orders.empty()) submissions.push_back(pending);
@@ -269,6 +276,7 @@ QString routeForecast(
                 ? find_planet_at_star(next, arrivalStar->id)
                 : nullptr;
             QString outcome;
+            bool invasionOutcomeUncertain = false;
             switch (leg.arrivalAction.kind) {
             case FleetArrivalActionKind::None:
                 if (leg.targetFleet != 0) outcome = "; moving-target rendezvous completed";
@@ -287,9 +295,17 @@ QString routeForecast(
                 }
                 break;
             case FleetArrivalActionKind::UnloadAll:
-                outcome = leg.arrivalAction.cargo == FleetCargoKind::All
-                    ? "; all cargo unloaded to the planetary surface"
-                    : "; selected cargo unloaded to the planetary surface";
+                if ((leg.arrivalAction.cargo == FleetCargoKind::Colonists
+                        || leg.arrivalAction.cargo == FleetCargoKind::All)
+                    && targetOwnerBeforeTurn != 0
+                    && targetOwnerBeforeTurn != fleetOwner) {
+                    outcome = "; ground invasion attempted; outcome hidden because the defending population may change before arrival";
+                    invasionOutcomeUncertain = true;
+                } else {
+                    outcome = leg.arrivalAction.cargo == FleetCargoKind::All
+                        ? "; all cargo unloaded to the planetary surface"
+                        : "; selected cargo unloaded to the planetary surface";
+                }
                 break;
             case FleetArrivalActionKind::Refuel:
                 outcome = arrivalPlanet
@@ -327,6 +343,12 @@ QString routeForecast(
                 dependsOnDynamicResult = true;
             }
             ++legIndex;
+            if (invasionOutcomeUncertain) {
+                lines << "<i>Later route results depend on the ground battle, so the forecast stops here.</i>";
+                legIndex = legs.size();
+                simulated = std::move(next);
+                break;
+            }
         }
 
         simulated = std::move(next);
@@ -736,6 +758,25 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         if (!planet || planet->owner != 0) {
             statusBar()->showMessage("Remote Mining requires an uncolonized destination world", 3000);
             return false;
+        }
+    }
+
+    if (arrivalAction.kind == FleetArrivalActionKind::UnloadAll
+        && (arrivalAction.cargo == FleetCargoKind::Colonists
+            || arrivalAction.cargo == FleetCargoKind::All)) {
+        const auto* planet = find_planet_at_star(state_, star->id);
+        const auto knownOwner = planet
+            ? known_planet_owner(state_, fleet->owner, planet->id)
+            : std::optional<PlayerId>{};
+        if (knownOwner && *knownOwner != 0 && *knownOwner != fleet->owner) {
+            const auto answer = QMessageBox::warning(
+                this,
+                "Queue ground invasion",
+                "Unloading colonists at this enemy colony will commit them to ground combat. "
+                "The result is probabilistic and the entire landing force leaves the fleet. Continue?",
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+            if (answer != QMessageBox::Yes) return false;
         }
     }
 
