@@ -200,6 +200,9 @@ QString event_text(const GameState& state, const GameEvent& event)
 {
     const auto* star = find_star(state, event.star);
     const auto* planet = event.planet != 0 ? find_planet_at_star(state, event.star) : nullptr;
+    const auto battlePlanetName = planet
+        ? QString::fromStdString(planet->name)
+        : QString("Planet %1").arg(event.planet);
     const auto starName = star
         ? QString::fromStdString(star->name)
         : QString("deep space (%1, %2)").arg(event.position.x, 0, 'f', 0).arg(event.position.y, 0, 'f', 0);
@@ -300,25 +303,25 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  Ground invasion succeeded on %2\n"
                        "The colony was captured; %3 attacking colonists survived.")
                    .arg(static_cast<qulonglong>(event.turn))
-                   .arg(planetName)
+                   .arg(battlePlanetName)
                    .arg(event.quantity);
     } else if (event.kind == GameEventKind::GroundInvasionLost) {
         text = QString("Turn %1  •  Warning: ground invasion was repelled on %2\n"
                        "%3 defending colonists remain.")
                    .arg(static_cast<qulonglong>(event.turn))
-                   .arg(planetName)
+                   .arg(battlePlanetName)
                    .arg(event.quantity);
     } else if (event.kind == GameEventKind::GroundDefenseWon) {
         text = QString("Turn %1  •  Ground defenses held on %2\n"
                        "%3 defending colonists remain.")
                    .arg(static_cast<qulonglong>(event.turn))
-                   .arg(planetName)
+                   .arg(battlePlanetName)
                    .arg(event.quantity);
     } else if (event.kind == GameEventKind::ColonyLost) {
         text = QString("Turn %1  •  Critical: %2 was captured by an enemy ground invasion\n"
                        "%3 enemy colonists survived the battle.")
                    .arg(static_cast<qulonglong>(event.turn))
-                   .arg(planetName)
+                   .arg(battlePlanetName)
                    .arg(event.quantity);
     } else if (event.kind == GameEventKind::ResearchLevelCompleted) {
         text = QString("Turn %1  •  Research completed: %2 %3")
