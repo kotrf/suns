@@ -305,8 +305,12 @@ void MainWindow::openCargoManifestDialog()
             const auto& control = mineralControls[index];
             const QSignalBlocker blockSlider(control.slider), blockSpin(control.spin);
             control.spin->setRange(0.0, static_cast<double>(maximum) / kMineralScale);
-            control.slider->setRange(0, sliderMaximum(std::max(0.0, sliderHold - otherCargo)));
+            control.slider->setRange(
+                0,
+                invasion ? 0 : sliderMaximum(std::max(0.0, sliderHold - otherCargo)));
             control.slider->setValue(static_cast<int>(std::lround(control.spin->value() * kMineralScale)));
+            control.slider->setEnabled(!invasion);
+            control.spin->setEnabled(!invasion);
             control.slider->setToolTip(QString("Hold scale: %1 kt; available to transfer: %2 kt")
                 .arg(static_cast<double>(control.slider->maximum()) / kMineralScale, 0, 'f', 2)
                 .arg(control.spin->maximum(), 0, 'f', 2));
