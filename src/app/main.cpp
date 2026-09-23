@@ -61,6 +61,9 @@ int main(int argc, char* argv[])
             if (auto* reset = window.findChild<QAction*>("resetPanelLayoutAction")) {
                 reset->trigger();
             }
+            if (auto* map = window.findChild<QAction*>("mapWorkspaceAction")) map->trigger();
+            if (auto* fleet = window.findChild<QAction*>("fleetWorkspaceAction")) fleet->trigger();
+            if (auto* empire = window.findChild<QAction*>("empireWorkspaceAction")) empire->trigger();
             if (auto* endTurn = window.findChild<QToolButton*>("primaryTurnToolButton")) endTurn->update();
 
             // Touch the dashboard gauges plus generated portrait/mining widgets
