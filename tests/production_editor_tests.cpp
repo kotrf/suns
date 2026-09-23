@@ -108,6 +108,35 @@ int main(int argc, char** argv)
         }
     }
 
+    {
+        auto state = suns::make_demo_game();
+        const suns::ShipDesign archived{
+            state.nextShipDesignId++, 1, "Archive", suns::ShipHullType::Scout,
+            {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FuelTank,
+                suns::ShipComponentType::LongRangeScanner},
+            {{100, suns::ShipComponentType::FusionDrive},
+                {200, suns::ShipComponentType::FuelTank},
+                {201, suns::ShipComponentType::LongRangeScanner}},
+        };
+        state.shipDesigns.push_back(archived);
+        auto foreign = archived;
+        foreign.id = state.nextShipDesignId++;
+        foreign.owner = 2;
+        foreign.name = "Hidden design";
+        state.shipDesigns.push_back(foreign);
+        suns::ShipDesignerDialog designer(state, 1);
+        auto* source = designer.findChild<QComboBox*>("shipDesignTemplate");
+        assert(source && source->findData(archived.id) >= 0);
+        assert(source->findData(foreign.id) < 0);
+        source->setCurrentIndex(source->findData(archived.id));
+        const auto draft = designer.draft();
+        assert(draft.name == "Archive Copy");
+        assert(draft.hull == archived.hull);
+        assert(draft.components == archived.components);
+        assert(draft.placements == archived.placements);
+        assert(state.shipDesigns[state.shipDesigns.size() - 2].name == "Archive");
+    }
+
     suns::MainWindowTestAccess::planFreshDesign(window);
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     suns::MainWindowTestAccess::queueDesign(window);

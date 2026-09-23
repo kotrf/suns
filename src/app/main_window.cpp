@@ -1199,7 +1199,8 @@ void MainWindow::openShipDesigner()
         return;
     }
 
-    auto* dialog = new ShipDesignerDialog(state_, pendingOrders_.player, this);
+    auto* dialog = new ShipDesignerDialog(planned_ship_design_state(state_, pendingOrders_),
+        pendingOrders_.player, this);
     shipDesigner_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModal(false);
