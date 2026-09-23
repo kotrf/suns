@@ -95,7 +95,7 @@ void MainWindow::resetPanelLayout()
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
     auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
-    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_}) {
+    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, historyDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -124,6 +124,12 @@ void MainWindow::resetPanelLayout()
         resizeDocks({overview}, {340}, Qt::Horizontal);
     }
     if (fleet) resizeDocks({fleet}, {350}, Qt::Horizontal);
+    if (turnMessagesDock_) addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
+    if (historyDock_) {
+        addDockWidget(Qt::BottomDockWidgetArea, historyDock_);
+        if (turnMessagesDock_) tabifyDockWidget(turnMessagesDock_, historyDock_);
+    }
+    if (turnMessagesDock_) turnMessagesDock_->raise();
 
     if (auto* routeScroll = findChild<QScrollArea*>("routeProgramScrollArea")) {
         routeScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
