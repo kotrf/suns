@@ -67,6 +67,78 @@ void MainWindow::installPanelLayoutFixes()
     reset->setToolTip("Restore the default docked workspace around the galaxy map");
     connect(reset, &QAction::triggered, this, &MainWindow::resetPanelLayout);
 
+    panels->addSeparator();
+    panels->addSection("Workspaces");
+    // Presets always start from the same recoverable layout. They change only
+    // window placement and visibility, never campaign state or orders.
+    const auto preset = [this](int choice) {
+        resetPanelLayout();
+        auto* overview = findChild<QDockWidget*>("overviewDock");
+        auto* production = findChild<QDockWidget*>("productionDock");
+        auto* fleet = findChild<QDockWidget*>("fleetDock");
+        auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
+        auto* history = findChild<QDockWidget*>("empireHistoryDock");
+        const auto show = [](QDockWidget* dock, bool visible) {
+            if (dock) dock->setVisible(visible);
+        };
+        for (auto* dock : findChildren<QDockWidget*>()) dock->hide();
+        switch (choice) {
+        case 0: // Unobstructed map, with every panel recoverable through View.
+            break;
+        case 1: // Fleet operations.
+            show(fleet, true);
+            show(route, true);
+            if (fleet) fleet->raise();
+            break;
+        case 2: // Empire management and reports.
+            show(overview, true);
+            show(production, true);
+            show(turnMessagesDock_, true);
+            show(history, true);
+            if (turnMessagesDock_) turnMessagesDock_->raise();
+            break;
+        case 3: // An engineering desk with the non-modal designer.
+            openShipDesigner();
+            break;
+        }
+    };
+    const auto addPreset = [this, panels, &preset](const char* label, const char* name, int choice) {
+        auto* action = panels->addAction(label);
+        action->setObjectName(name);
+        connect(action, &QAction::triggered, this, [preset, choice] { preset(choice); });
+    };
+    addPreset("Map", "mapWorkspaceAction", 0);
+    addPreset("Fleet Operations", "fleetWorkspaceAction", 1);
+    addPreset("Empire", "empireWorkspaceAction", 2);
+    addPreset("Ship Design", "designWorkspaceAction", 3);
+
+    panels->addSeparator();
+    auto* saveCustom = panels->addAction("Save current as Custom");
+    saveCustom->setObjectName("saveCustomWorkspaceAction");
+    auto* restoreCustom = panels->addAction("Restore Custom");
+    restoreCustom->setObjectName("restoreCustomWorkspaceAction");
+    const auto hasCustom = [] {
+        QSettings settings("SunsProject", "Suns");
+        return !settings.value("workspace/customDocks").toByteArray().isEmpty();
+    };
+    restoreCustom->setEnabled(hasCustom());
+    connect(saveCustom, &QAction::triggered, this, [this, restoreCustom] {
+        QSettings settings("SunsProject", "Suns");
+        settings.setValue("workspace/customGeometry", saveGeometry());
+        settings.setValue("workspace/customDocks", saveState(2));
+        restoreCustom->setEnabled(true);
+        statusBar()->showMessage("Custom workspace saved", 1800);
+    });
+    connect(restoreCustom, &QAction::triggered, this, [this] {
+        QSettings settings("SunsProject", "Suns");
+        const auto docks = settings.value("workspace/customDocks").toByteArray();
+        if (docks.isEmpty()) return;
+        const auto geometry = settings.value("workspace/customGeometry").toByteArray();
+        if (!geometry.isEmpty()) restoreGeometry(geometry);
+        statusBar()->showMessage(restoreState(docks, 2)
+            ? "Custom workspace restored" : "Saved workspace could not be restored", 2400);
+    });
+
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         restoreGeometry(settings.value("workspace/geometry").toByteArray());
@@ -95,7 +167,7 @@ void MainWindow::resetPanelLayout()
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
     auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
-    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_}) {
+    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, historyDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -124,6 +196,12 @@ void MainWindow::resetPanelLayout()
         resizeDocks({overview}, {340}, Qt::Horizontal);
     }
     if (fleet) resizeDocks({fleet}, {350}, Qt::Horizontal);
+    if (turnMessagesDock_) addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
+    if (historyDock_) {
+        addDockWidget(Qt::BottomDockWidgetArea, historyDock_);
+        if (turnMessagesDock_) tabifyDockWidget(turnMessagesDock_, historyDock_);
+    }
+    if (turnMessagesDock_) turnMessagesDock_->raise();
 
     if (auto* routeScroll = findChild<QScrollArea*>("routeProgramScrollArea")) {
         routeScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);

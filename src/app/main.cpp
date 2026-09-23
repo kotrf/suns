@@ -32,6 +32,7 @@ int main(int argc, char* argv[])
     window.installCommunicationStatus();
     window.installTurnMessages();
     window.installResearch();
+    window.installEmpireHistory();
     window.installPanelLayoutFixes();
 
     window.show();
@@ -60,6 +61,9 @@ int main(int argc, char* argv[])
             if (auto* reset = window.findChild<QAction*>("resetPanelLayoutAction")) {
                 reset->trigger();
             }
+            if (auto* map = window.findChild<QAction*>("mapWorkspaceAction")) map->trigger();
+            if (auto* fleet = window.findChild<QAction*>("fleetWorkspaceAction")) fleet->trigger();
+            if (auto* empire = window.findChild<QAction*>("empireWorkspaceAction")) empire->trigger();
             if (auto* endTurn = window.findChild<QToolButton*>("primaryTurnToolButton")) endTurn->update();
 
             // Touch the dashboard gauges plus generated portrait/mining widgets
@@ -78,6 +82,8 @@ int main(int argc, char* argv[])
             if (auto* filter = window.findChild<QComboBox*>("turnMessageAgeFilter")) filter->setCurrentIndex(0);
             if (auto* body = window.findChild<QTextBrowser*>("turnMessageBody")) body->update();
             if (auto* research = window.findChild<QDialog*>("researchDialog")) research->update();
+            if (auto* history = window.findChild<QDockWidget*>("empireHistoryDock")) history->show();
+            if (auto* metric = window.findChild<QComboBox*>("historyMetric")) metric->setCurrentIndex(3);
 
             // Open the non-modal graphical Ship Designer, select an empty
             // general slot and fit a Fuel Tank through the keyboard-accessible
