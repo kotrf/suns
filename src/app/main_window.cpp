@@ -1446,6 +1446,7 @@ void MainWindow::endTurn()
     if (sessionMode_ == SessionMode::Host)
         campaignMessages_.insert(campaignMessages_.end(), result.events.begin(), result.events.end());
     state_ = std::move(result.state);
+    refreshEmpireHistory();
     rotateTurnExchangeToken();
     pendingOrders_.orders.clear();
     pendingDescriptions_.clear();
@@ -1488,6 +1489,8 @@ void MainWindow::newGalaxy()
         if (shipDesigner_) shipDesigner_->close();
         galaxyConfig_ = requested;
         state_ = std::move(generated);
+        historyRangeInitialized_ = false;
+        refreshEmpireHistory();
         resetTurnExchangeIdentity();
     } catch (const std::exception& error) {
         statusBar()->showMessage(QString("Galaxy generation failed: %1").arg(error.what()));

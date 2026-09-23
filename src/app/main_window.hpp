@@ -141,6 +141,9 @@ public:
     // Empire research allocation and ordered technology plan.
     void installResearch();
 
+    // Player-owned turn history, presented without exposing other empires.
+    void installEmpireHistory();
+
     // Ordered colony build list with completion forecasts and move controls.
     void installProductionQueue();
 
@@ -192,6 +195,7 @@ private:
     void refreshTurnMessages();
     void openResearchDialog();
     void refreshResearchPanel();
+    void refreshEmpireHistory();
     void queueResearchPlan();
     void queueResearchAllocation(int percent);
     void addResearchPlanItem();
@@ -296,6 +300,13 @@ private:
     QPushButton* colonizeButton_{};
     QPushButton* endTurnButton_{};
     QDockWidget* turnMessagesDock_{};
+    QDockWidget* historyDock_{};
+    QComboBox* historyMetric_{};
+    QSpinBox* historyFirstTurn_{};
+    QSpinBox* historyLastTurn_{};
+    QLabel* historySummary_{};
+    QWidget* historyChart_{};
+    bool historyRangeInitialized_{};
     QListWidget* turnMessagesList_{};
     QLabel* turnMessagesSummary_{};
     QComboBox* turnMessageAgeFilter_{};

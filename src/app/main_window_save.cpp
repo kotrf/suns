@@ -273,6 +273,8 @@ bool MainWindow::loadGameFromPath(const QString& path)
     readTurnMessageIds_ = std::set<std::uint64_t>(
         loaded.readStrategicMessageIds.begin(), loaded.readStrategicMessageIds.end());
     pendingOrders_ = std::move(loaded.pendingOrders);
+    historyRangeInitialized_ = false;
+    refreshEmpireHistory();
     std::erase_if(turnMessages_, [this](const GameEvent& event) {
         return event.recipient != pendingOrders_.player;
     });
