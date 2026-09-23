@@ -45,6 +45,7 @@ enum class MessageTypeFilter {
     ShipConstruction,
     Infrastructure,
     Colonization,
+    Combat,
     Research,
     ProductionDelays,
     Warnings,
@@ -120,6 +121,18 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::PrecursorArtifactsDiscovered:
         subject = QString("Precursor artifacts found on %1").arg(planetName);
         break;
+    case GameEventKind::GroundInvasionWon:
+        subject = QString("Ground invasion captured %1").arg(planetName);
+        break;
+    case GameEventKind::GroundInvasionLost:
+        subject = QString("Ground invasion repelled on %1").arg(planetName);
+        break;
+    case GameEventKind::GroundDefenseWon:
+        subject = QString("Ground defense held on %1").arg(planetName);
+        break;
+    case GameEventKind::ColonyLost:
+        subject = QString("Colony lost on %1").arg(planetName);
+        break;
     }
     return QString("T%1  %2").arg(static_cast<qulonglong>(event.turn)).arg(subject);
 }
@@ -159,6 +172,11 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind != ProductionKind::ColonyShip;
     case MessageTypeFilter::Colonization: return event.kind == GameEventKind::ColonyFounded;
+    case MessageTypeFilter::Combat:
+        return event.kind == GameEventKind::GroundInvasionWon
+            || event.kind == GameEventKind::GroundInvasionLost
+            || event.kind == GameEventKind::GroundDefenseWon
+            || event.kind == GameEventKind::ColonyLost;
     case MessageTypeFilter::Research:
         return event.kind == GameEventKind::ResearchLevelCompleted
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
@@ -182,6 +200,9 @@ QString event_text(const GameState& state, const GameEvent& event)
 {
     const auto* star = find_star(state, event.star);
     const auto* planet = event.planet != 0 ? find_planet_at_star(state, event.star) : nullptr;
+    const auto battlePlanetName = planet
+        ? QString::fromStdString(planet->name)
+        : QString("Planet %1").arg(event.planet);
     const auto starName = star
         ? QString::fromStdString(star->name)
         : QString("deep space (%1, %2)").arg(event.position.x, 0, 'f', 0).arg(event.position.y, 0, 'f', 0);
@@ -278,6 +299,30 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  New colony founded on %2")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(planetName);
+    } else if (event.kind == GameEventKind::GroundInvasionWon) {
+        text = QString("Turn %1  •  Ground invasion succeeded on %2\n"
+                       "The colony was captured; %3 attacking colonists survived.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(battlePlanetName)
+                   .arg(event.quantity);
+    } else if (event.kind == GameEventKind::GroundInvasionLost) {
+        text = QString("Turn %1  •  Warning: ground invasion was repelled on %2\n"
+                       "%3 defending colonists remain.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(battlePlanetName)
+                   .arg(event.quantity);
+    } else if (event.kind == GameEventKind::GroundDefenseWon) {
+        text = QString("Turn %1  •  Ground defenses held on %2\n"
+                       "%3 defending colonists remain.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(battlePlanetName)
+                   .arg(event.quantity);
+    } else if (event.kind == GameEventKind::ColonyLost) {
+        text = QString("Turn %1  •  Critical: %2 was captured by an enemy ground invasion\n"
+                       "%3 enemy colonists survived the battle.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(battlePlanetName)
+                   .arg(event.quantity);
     } else if (event.kind == GameEventKind::ResearchLevelCompleted) {
         text = QString("Turn %1  •  Research completed: %2 %3")
                    .arg(static_cast<qulonglong>(event.turn))
@@ -375,6 +420,7 @@ void MainWindow::installTurnMessages()
     turnMessageTypeFilter_->addItem("Ships completed", static_cast<int>(MessageTypeFilter::ShipConstruction));
     turnMessageTypeFilter_->addItem("Infrastructure completed", static_cast<int>(MessageTypeFilter::Infrastructure));
     turnMessageTypeFilter_->addItem("New colonies", static_cast<int>(MessageTypeFilter::Colonization));
+    turnMessageTypeFilter_->addItem("Ground combat", static_cast<int>(MessageTypeFilter::Combat));
     turnMessageTypeFilter_->addItem("Research completed", static_cast<int>(MessageTypeFilter::Research));
     turnMessageTypeFilter_->addItem("Production delays", static_cast<int>(MessageTypeFilter::ProductionDelays));
     turnMessageTypeFilter_->addItem("Warnings", static_cast<int>(MessageTypeFilter::Warnings));

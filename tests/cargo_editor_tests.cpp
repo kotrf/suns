@@ -36,6 +36,16 @@ struct MainWindowTestAccess {
         w.selectedFleetId_ = 1;
         w.rebuildScene();
     }
+    static void installEnemyColony(MainWindow& w)
+    {
+        install(w);
+        w.state_.players.push_back({2, "Enemy"});
+        w.state_.planets.front().owner = 2;
+        w.state_.planets.front().population = 8'000;
+        w.pendingOrders_ = {1, {}};
+        w.pendingDescriptions_.clear();
+        w.rebuildScene();
+    }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
 };
 }
@@ -140,4 +150,32 @@ int main(int argc, char** argv)
     });
     window.openCargoManifestDialog();
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+
+    suns::MainWindowTestAccess::installEnemyColony(window);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+        auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+        auto* people = dialog->findChild<QSlider*>("cargoColonistSlider");
+        auto* iron = dialog->findChild<QSlider*>("cargoMineralSlider0");
+        auto* buttons = dialog->findChild<QDialogButtonBox*>();
+        assert(source && destination && people && iron && buttons);
+        assert(source->findData(0) == -1); // Enemy surface is never a cargo source.
+        assert(destination->findData(0) >= 0);
+        destination->setCurrentIndex(destination->findData(0));
+        assert(iron->maximum() == 0);
+        people->setValue(people->maximum());
+        assert(people->value() == 10'000);
+        assert(buttons->button(QDialogButtonBox::Ok)->text() == "Queue invasion");
+        assert(buttons->button(QDialogButtonBox::Ok)->isEnabled());
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    window.openCargoManifestDialog();
+    const auto& invasionOrders = suns::MainWindowTestAccess::orders(window).orders;
+    assert(invasionOrders.size() == 1);
+    const auto& invasion = std::get<suns::TransferCargoOrder>(invasionOrders.front());
+    assert(invasion.source.fleet == 1 && invasion.destination.planet == 1);
+    assert(invasion.colonists == 10'000);
+    assert(suns::mineral_cargo_mass(invasion.minerals) == 0.0);
 }

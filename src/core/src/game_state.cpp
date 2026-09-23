@@ -861,6 +861,17 @@ double colonist_cargo_mass(std::uint64_t colonists)
     return static_cast<double>(colonists) / kColonistsPerCargoUnit;
 }
 
+double ground_invasion_success_chance(std::uint64_t attackers, std::uint64_t defenders)
+{
+    if (attackers == 0) return 0.0;
+    if (defenders == 0) return 1.0;
+    const auto attackingPower = static_cast<long double>(attackers)
+        * static_cast<long double>(attackers);
+    const auto defendingPower = static_cast<long double>(defenders)
+        * static_cast<long double>(defenders);
+    return static_cast<double>(attackingPower / (attackingPower + defendingPower));
+}
+
 double mineral_cargo_mass(const MineralCargo& minerals)
 {
     return std::max(0.0, minerals.ironium)

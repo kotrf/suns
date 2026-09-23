@@ -19,6 +19,10 @@ enum class GameEventKind {
     FleetsMerged,
     ProductionWaitingForShipyard,
     PrecursorArtifactsDiscovered,
+    GroundInvasionWon,
+    GroundInvasionLost,
+    GroundDefenseWon,
+    ColonyLost,
 };
 
 enum class GameEventSeverity {

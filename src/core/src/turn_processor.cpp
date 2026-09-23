@@ -432,8 +432,7 @@ std::optional<CargoEndpointRef> resolve_cargo_endpoint(
 
     if (endpoint.planet != 0) {
         const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
-            return candidate.id == endpoint.planet
-                && (candidate.owner == player || candidate.owner == 0);
+            return candidate.id == endpoint.planet;
         });
         if (planet == state.planets.end()) return std::nullopt;
         const auto* star = find_star(state, planet->star);
@@ -446,6 +445,113 @@ std::optional<CargoEndpointRef> resolve_cargo_endpoint(
     });
     if (fleet == state.fleets.end()) return std::nullopt;
     return CargoEndpointRef{nullptr, &*fleet, fleet->position};
+}
+
+std::uint64_t ground_combat_random(
+    const GameState& state,
+    const Fleet& fleet,
+    const Planet& planet,
+    std::uint64_t attackers,
+    std::uint64_t defenders,
+    std::uint64_t salt)
+{
+    auto value = state.galaxySeed ^ (state.turn * 0x9e3779b97f4a7c15ULL);
+    const auto mix = [&](std::uint64_t part) {
+        value ^= part + 0x9e3779b97f4a7c15ULL + (value << 6U) + (value >> 2U);
+        value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+        value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+        value ^= value >> 31U;
+    };
+    mix(fleet.id);
+    mix(fleet.owner);
+    mix(planet.id);
+    mix(planet.owner);
+    mix(attackers);
+    mix(defenders);
+    mix(salt);
+    return value;
+}
+
+double unit_random(std::uint64_t value)
+{
+    return static_cast<double>(value >> 11U) * (1.0 / 9007199254740992.0);
+}
+
+std::uint32_t report_population(std::uint64_t population)
+{
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(
+        population, static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())));
+}
+
+bool invade_colony(
+    GameState& state, Fleet& fleet, Planet& planet, std::uint64_t attackingPopulation)
+{
+    if (attackingPopulation == 0 || attackingPopulation > fleet.colonists
+        || planet.owner == 0 || planet.owner == fleet.owner
+        || !fleet_at_planet(state, fleet, planet)) {
+        return false;
+    }
+
+    const auto defender = planet.owner;
+    const auto defendingPopulation = planet.population;
+    const auto chance = ground_invasion_success_chance(attackingPopulation, defendingPopulation);
+    const auto outcomeRoll = unit_random(ground_combat_random(
+        state, fleet, planet, attackingPopulation, defendingPopulation, 0x494e564153494f4eULL));
+    const bool attackerWon = outcomeRoll < chance;
+    const auto casualtyFactor = 0.65 + 0.35 * unit_random(ground_combat_random(
+        state, fleet, planet, attackingPopulation, defendingPopulation, 0x43415355414c5459ULL));
+
+    fleet.colonists -= attackingPopulation;
+    std::uint64_t survivors{};
+    if (attackerWon) {
+        const auto losses = std::min(
+            attackingPopulation - 1,
+            static_cast<std::uint64_t>(std::llround(
+                static_cast<long double>(defendingPopulation) * casualtyFactor)));
+        survivors = attackingPopulation - losses;
+        planet.owner = fleet.owner;
+        planet.population = survivors;
+        planet.productionQueue.clear();
+        planet.productionWaitingForMinerals = false;
+        planet.productionWaitingForShipyard = false;
+        set_survey_level(
+            state, fleet.owner, planet.star, SurveyLevel::GeologicalSurvey, state.turn + 1);
+    } else {
+        const auto losses = defendingPopulation == 0 ? std::uint64_t{0} : std::min(
+            defendingPopulation - 1,
+            static_cast<std::uint64_t>(std::llround(
+                static_cast<long double>(attackingPopulation) * casualtyFactor)));
+        survivors = defendingPopulation - losses;
+        planet.population = survivors;
+    }
+
+    if (const auto* star = find_star(state, planet.star)) {
+        queue_player_report(
+            state,
+            fleet.owner,
+            attackerWon ? PlayerReportKind::GroundInvasionWon : PlayerReportKind::GroundInvasionLost,
+            star->position,
+            state.turn + 1,
+            planet.star,
+            planet.id,
+            fleet.id,
+            fleet.design,
+            ProductionKind::ColonyShip,
+            report_population(survivors));
+        queue_player_report(
+            state,
+            defender,
+            attackerWon ? PlayerReportKind::ColonyLost : PlayerReportKind::GroundDefenseWon,
+            star->position,
+            state.turn + 1,
+            planet.star,
+            planet.id,
+            fleet.id,
+            fleet.design,
+            ProductionKind::ColonyShip,
+            report_population(survivors));
+    }
+    return true;
 }
 
 std::uint64_t endpoint_colonists(const CargoEndpointRef& endpoint)
@@ -469,6 +575,23 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
         return false;
     }
     if (!valid_mineral_cargo(order.minerals)) return false;
+
+    const bool enemyDestination = destination->planet
+        && destination->planet->owner != 0
+        && destination->planet->owner != player;
+    if (enemyDestination) {
+        // Population may be unloaded onto an enemy colony only as an explicit
+        // ground invasion. Minerals never move as a side effect of combat.
+        if (!source->fleet || source->fleet->owner != player || order.colonists == 0
+            || mineral_cargo_mass(order.minerals) > epsilon) {
+            return false;
+        }
+        return invade_colony(state, *source->fleet, *destination->planet, order.colonists);
+    }
+
+    if (source->planet && source->planet->owner != 0 && source->planet->owner != player) {
+        return false;
+    }
 
     // Population belongs only to friendly colonies. Loading from a colony
     // retains one colonist, matching the existing exact-manifest order.
@@ -663,8 +786,17 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
             if (colony) {
                 colony->population += fleet.colonists;
                 fleet.colonists = 0;
-            } else if (action.cargo == FleetCargoKind::Colonists) {
-                return false;
+            } else {
+                const auto enemy = std::find_if(
+                    state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+                        return planet.owner != 0 && planet.owner != fleet.owner
+                            && fleet_at_planet(state, fleet, planet);
+                    });
+                if (enemy != state.planets.end() && fleet.colonists > 0) {
+                    (void)invade_colony(state, fleet, *enemy, fleet.colonists);
+                } else if (action.cargo == FleetCargoKind::Colonists) {
+                    return false;
+                }
             }
         }
         auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {

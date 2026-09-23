@@ -57,6 +57,11 @@ Save v35 persists intelligence age and observed ownership in both permanent and
 in-flight survey reports. The save format also persists pending operational
 reports, fleet fuel-stall transitions and colony mineral-wait transitions.
 
+Save v36 adds delayed ground-invasion and colony-loss report kinds. Combat
+results use the same communication-delay pipeline as movement, production and
+research reports; a remote invasion therefore does not appear instantly in the
+empire briefing.
+
 ## Turn Messages
 
 The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. Survey text distinguishes basic, orbital and geological results. Planet panels, tooltips and the habitability map use only the delivered knowledge level: estimated values are marked and dimmed, exact habitability waits for orbit, and geology remains hidden until the deep survey. New items are unread, Next unread navigates through them, activating a report centers its star or recorded position, and warning severity is visually distinct.
