@@ -85,6 +85,12 @@ malformed layout bypasses the UI.
 Ship Designer is a non-modal top-level dialog. The galaxy map and other docks
 remain usable while it is open, and attempting to open it again raises the
 existing window instead of creating competing drafts.
+The Start from selector loads one of the current player's saved or planned
+designs as a new draft, preserving each component's logical cell. The proposed
+name gets a Copy suffix; creating the draft never edits the original design or
+ships already built from it. Locked components are dimmed, compatible drag
+targets turn green and incompatible ones red; dropping on a red cell gives a
+persistent reason. The detached window remembers its geometry across launches.
 
 ## Turn architecture
 

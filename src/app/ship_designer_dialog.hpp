@@ -28,6 +28,7 @@ struct ShipDesignDraft {
 class ShipDesignerDialog final : public QDialog {
 public:
     ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent = nullptr);
+    ~ShipDesignerDialog() override;
 
     [[nodiscard]] ShipDesignDraft draft() const;
 
@@ -46,6 +47,8 @@ private:
 
     QLineEdit* nameEdit_{};
     QComboBox* hullCombo_{};
+    QComboBox* templateCombo_{};
+    std::vector<ShipDesign> templates_;
     QListWidget* componentCatalog_{};
     QLabel* componentDetails_{};
     QWidget* slotPanel_{};

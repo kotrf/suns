@@ -2,11 +2,16 @@
 
 #include <QAbstractItemView>
 #include <QApplication>
+#include <QBrush>
 #include <QComboBox>
+#include <QColor>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -20,6 +25,8 @@
 #include <QPushButton>
 #include <QStandardItemModel>
 #include <QScrollArea>
+#include <QSettings>
+#include <QSignalBlocker>
 #include <QStringList>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -183,10 +190,11 @@ public:
         setObjectName(QString("shipSlot_%1").arg(slot_.id));
         setFocusPolicy(Qt::StrongFocus);
         setMinimumSize(150, 72);
-        setStyleSheet(chosen
+        baseStyle_ = chosen
                 ? "QToolButton { border: 2px solid #52b6d9; background: #193346; padding: 5px; }"
                 : "QToolButton { border: 1px solid #52677a; background: #142433; padding: 5px; }"
-                  "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }");
+                  "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
+        setStyleSheet(baseStyle_);
         refreshText();
         connect(this, &QToolButton::clicked, this, [this] { selected_(slot_.id); });
     }
@@ -195,15 +203,32 @@ protected:
     void dragEnterEvent(QDragEnterEvent* event) override
     {
         const auto payload = decodeComponentDrag(event->mimeData());
-        if (payload && ship_component_slot_category(payload->component) == slot_.category) {
-            event->acceptProposedAction();
-        }
+        if (!payload) return;
+        const bool compatible = ship_component_slot_category(payload->component) == slot_.category;
+        setStyleSheet(compatible
+            ? "QToolButton { border: 3px solid #66d69b; background: #193a31; padding: 5px; }"
+            : "QToolButton { border: 3px solid #e07575; background: #3c222a; padding: 5px; }");
+        // Accept the drop even on a red cell so the editor can explain the
+        // mismatch in its persistent feedback label instead of silently ignoring it.
+        event->acceptProposedAction();
+    }
+
+    void dragLeaveEvent(QDragLeaveEvent* event) override
+    {
+        setStyleSheet(baseStyle_);
+        QToolButton::dragLeaveEvent(event);
+    }
+
+    void dragMoveEvent(QDragMoveEvent* event) override
+    {
+        if (decodeComponentDrag(event->mimeData())) event->acceptProposedAction();
     }
 
     void dropEvent(QDropEvent* event) override
     {
         const auto payload = decodeComponentDrag(event->mimeData());
-        if (!payload || ship_component_slot_category(payload->component) != slot_.category) return;
+        setStyleSheet(baseStyle_);
+        if (!payload) return;
         event->acceptProposedAction();
         dropped_(payload->component, payload->sourceSlot);
     }
@@ -265,6 +290,7 @@ private:
     SlotHandler selected_;
     SlotHandler removed_;
     QPoint dragStart_;
+    QString baseStyle_;
 };
 
 } // namespace
@@ -291,6 +317,17 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     nameEdit_->setObjectName("shipDesignName");
     nameEdit_->setMaxLength(48);
     form->addRow("Design name", nameEdit_);
+
+    templateCombo_ = new QComboBox(this);
+    templateCombo_->setObjectName("shipDesignTemplate");
+    templateCombo_->setToolTip("Open an existing design as a new draft. Built ships and the original design stay unchanged.");
+    templateCombo_->addItem("New design", static_cast<quint32>(0));
+    for (const auto& design : state.shipDesigns) {
+        if (design.owner != player_) continue;
+        templates_.push_back(design);
+        templateCombo_->addItem(QString::fromStdString(design.name), static_cast<quint32>(design.id));
+    }
+    form->addRow("Start from", templateCombo_);
 
     hullCombo_ = new QComboBox(this);
     hullCombo_->setObjectName("shipHullCatalog");
@@ -361,7 +398,10 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         item->setData(Qt::UserRole + 1, available);
         item->setToolTip(componentTooltip(component)
             + (available ? QString{} : QString("\nLocked — requires %1").arg(unlockRequirement(component))));
-        if (!available) item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
+        if (!available) {
+            item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
+            item->setForeground(QBrush(QColor("#7b8999")));
+        }
     }
     componentCatalog_->setCurrentRow(0);
 
@@ -396,6 +436,28 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(nameEdit_, &QLineEdit::textChanged, this, [this] { updatePreview(); });
+    connect(templateCombo_, &QComboBox::currentIndexChanged, this, [this] {
+        const auto id = static_cast<ShipDesignId>(templateCombo_->currentData().toUInt());
+        const auto it = std::find_if(templates_.begin(), templates_.end(), [id](const ShipDesign& design) {
+            return design.id == id;
+        });
+        if (it == templates_.end()) {
+            const QSignalBlocker blockHull(hullCombo_);
+            hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(ShipHullType::Scout)));
+            placements_ = autoplace_ship_components(ShipHullType::Scout,
+                {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner});
+            nameEdit_->setText("New Design");
+        } else {
+            const QSignalBlocker blockHull(hullCombo_);
+            hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(it->hull)));
+            placements_ = it->placements.empty()
+                ? autoplace_ship_components(it->hull, it->components) : it->placements;
+            nameEdit_->setText(QString::fromStdString(it->name).left(43) + " Copy");
+        }
+        selectedSlot_ = 0;
+        rebuildSlotGrid();
+        updatePreview();
+    });
     connect(hullCombo_, &QComboBox::currentIndexChanged, this, [this] {
         const auto hullType = static_cast<ShipHullType>(hullCombo_->currentData().toInt());
         ShipDesign migrated;
@@ -465,6 +527,17 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     rebuildSlotGrid();
     updatePreview();
     updateComponentDetails();
+    if (parent && !QCoreApplication::arguments().contains("--smoke-test")) {
+        const auto geometry = QSettings("SunsProject", "Suns").value("designer/geometry").toByteArray();
+        if (!geometry.isEmpty()) restoreGeometry(geometry);
+    }
+}
+
+ShipDesignerDialog::~ShipDesignerDialog()
+{
+    if (parentWidget() && !QCoreApplication::arguments().contains("--smoke-test")) {
+        QSettings("SunsProject", "Suns").setValue("designer/geometry", saveGeometry());
+    }
 }
 
 std::optional<ShipComponentType> ShipDesignerDialog::selectedCatalogComponent() const
