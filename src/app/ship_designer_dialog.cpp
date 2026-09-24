@@ -13,15 +13,21 @@
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QFormLayout>
+#include <QFontMetrics>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QPolygonF>
 #include <QPushButton>
 #include <QStandardItemModel>
 #include <QScrollArea>
@@ -33,9 +39,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <optional>
+#include <utility>
 
 namespace suns {
 
@@ -64,6 +72,131 @@ QString slotCategoryName(ShipSlotCategory category)
     case ShipSlotCategory::Mining: return "Mining";
     }
     return "Unknown";
+}
+
+// Presentation art only: logical slot IDs and simulation rules stay in core.
+QPixmap hullPortrait(ShipHullType hull)
+{
+    QPixmap image(300, 140);
+    image.fill(QColor("#101d29"));
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor("#263b4d"), 1));
+    for (int x = 20; x < 300; x += 20) painter.drawLine(x, 0, x, 140);
+    for (int y = 20; y < 140; y += 20) painter.drawLine(0, y, 300, y);
+    painter.translate(150, 70);
+
+    QPainterPath outline;
+    switch (hull) {
+    case ShipHullType::Scout:
+        outline.moveTo(0, -57);
+        outline.lineTo(17, -14); outline.lineTo(70, 28); outline.lineTo(38, 35);
+        outline.lineTo(21, 23); outline.lineTo(17, 55); outline.lineTo(-17, 55);
+        outline.lineTo(-21, 23); outline.lineTo(-38, 35); outline.lineTo(-70, 28);
+        outline.lineTo(-17, -14); outline.closeSubpath();
+        break;
+    case ShipHullType::LightTransport:
+        outline.moveTo(0, -55); outline.lineTo(25, -33); outline.lineTo(29, -9);
+        outline.lineTo(69, -9); outline.lineTo(78, 36); outline.lineTo(34, 46);
+        outline.lineTo(25, 55); outline.lineTo(-25, 55); outline.lineTo(-34, 46);
+        outline.lineTo(-78, 36); outline.lineTo(-69, -9); outline.lineTo(-29, -9);
+        outline.lineTo(-25, -33); outline.closeSubpath();
+        break;
+    case ShipHullType::MediumTransport:
+        outline.moveTo(0, -57); outline.lineTo(35, -45); outline.lineTo(48, -17);
+        outline.lineTo(95, -12); outline.lineTo(104, 37); outline.lineTo(42, 47);
+        outline.lineTo(32, 58); outline.lineTo(-32, 58); outline.lineTo(-42, 47);
+        outline.lineTo(-104, 37); outline.lineTo(-95, -12); outline.lineTo(-48, -17);
+        outline.lineTo(-35, -45); outline.closeSubpath();
+        break;
+    case ShipHullType::Utility:
+        outline.moveTo(0, -48); outline.lineTo(25, -42); outline.lineTo(44, -20);
+        outline.lineTo(90, -29); outline.lineTo(102, 27); outline.lineTo(51, 38);
+        outline.lineTo(29, 54); outline.lineTo(-29, 54); outline.lineTo(-51, 38);
+        outline.lineTo(-102, 27); outline.lineTo(-90, -29); outline.lineTo(-44, -20);
+        outline.lineTo(-25, -42); outline.closeSubpath();
+        break;
+    case ShipHullType::RemoteMiner:
+        outline.moveTo(0, -51); outline.lineTo(28, -35); outline.lineTo(33, -6);
+        outline.lineTo(88, -30); outline.lineTo(108, -10); outline.lineTo(82, 4);
+        outline.lineTo(94, 46); outline.lineTo(46, 51); outline.lineTo(29, 31);
+        outline.lineTo(24, 56); outline.lineTo(-24, 56); outline.lineTo(-29, 31);
+        outline.lineTo(-46, 51); outline.lineTo(-94, 46); outline.lineTo(-82, 4);
+        outline.lineTo(-108, -10); outline.lineTo(-88, -30); outline.lineTo(-33, -6);
+        outline.lineTo(-28, -35); outline.closeSubpath();
+        break;
+    }
+    painter.setPen(QPen(QColor("#9fc8dc"), 2));
+    painter.setBrush(QColor("#294459"));
+    painter.drawPath(outline);
+    painter.setPen(QPen(QColor("#59869e"), 1));
+    painter.setBrush(QColor("#172b3a"));
+    painter.drawRoundedRect(QRectF(-17, -30, 34, 62), 10, 10);
+    painter.setPen(QPen(QColor("#85c9e6"), 2));
+    painter.drawLine(QPointF(0, -44), QPointF(0, 20));
+    if (hull == ShipHullType::LightTransport || hull == ShipHullType::MediumTransport) {
+        painter.setPen(QPen(QColor("#9db8c9"), 1));
+        painter.drawRoundedRect(QRectF(-68, 0, 30, 27), 3, 3);
+        painter.drawRoundedRect(QRectF(38, 0, 30, 27), 3, 3);
+    } else if (hull == ShipHullType::RemoteMiner) {
+        painter.setPen(QPen(QColor("#e2bb70"), 3));
+        painter.drawLine(QPointF(-91, -12), QPointF(-109, -26));
+        painter.drawLine(QPointF(91, -12), QPointF(109, -26));
+    } else if (hull == ShipHullType::Utility) {
+        painter.setPen(QPen(QColor("#7ebac8"), 2));
+        painter.drawEllipse(QPointF(0, 8), 26, 26);
+    }
+    painter.setBrush(QColor("#e2bb70"));
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPointF(-13, 53), 4, 3);
+    painter.drawEllipse(QPointF(13, 53), 4, 3);
+    return image;
+}
+
+QIcon componentIcon(ShipComponentType component, bool available = true)
+{
+    QPixmap image(28, 28);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    if (!available) painter.setOpacity(0.4);
+    const auto kind = component_spec(component).kind;
+    painter.setPen(QPen(kind == ShipComponentKind::Engine ? QColor("#e2bb70")
+        : kind == ShipComponentKind::Scanner ? QColor("#78b8f0")
+        : kind == ShipComponentKind::Mining ? QColor("#d5a478")
+        : QColor("#8dcc9e"), 2));
+    painter.setBrush(Qt::NoBrush);
+    switch (kind) {
+    case ShipComponentKind::Engine:
+        painter.drawPolygon(QPolygonF{QPointF(8, 4), QPointF(20, 4), QPointF(18, 18), QPointF(10, 18)});
+        painter.drawLine(11, 21, 9, 26); painter.drawLine(17, 21, 19, 26);
+        break;
+    case ShipComponentKind::Scanner:
+        painter.drawEllipse(QPointF(14, 14), 3, 3);
+        painter.drawArc(QRectF(5, 5, 18, 18), 30 * 16, 120 * 16);
+        painter.drawArc(QRectF(1, 1, 26, 26), 30 * 16, 120 * 16);
+        break;
+    case ShipComponentKind::Mining:
+        painter.drawLine(8, 5, 18, 22);
+        painter.drawLine(14, 5, 23, 18);
+        painter.drawLine(7, 22, 21, 22);
+        break;
+    case ShipComponentKind::Fuel:
+        painter.drawRoundedRect(QRectF(8, 4, 12, 20), 4, 4);
+        painter.drawLine(8, 12, 20, 12);
+        break;
+    case ShipComponentKind::Cargo:
+        painter.drawRect(QRectF(5, 8, 18, 15));
+        painter.drawLine(5, 13, 23, 13);
+        painter.drawLine(14, 8, 14, 23);
+        break;
+    case ShipComponentKind::Special:
+        painter.drawEllipse(QRectF(5, 5, 18, 18));
+        painter.drawLine(14, 1, 14, 8);
+        painter.drawLine(14, 20, 14, 27);
+        break;
+    }
+    return QIcon(image);
 }
 
 QString unlockRequirement(ShipComponentType component)
@@ -170,6 +303,7 @@ class SlotButton final : public QToolButton {
 public:
     using DropHandler = std::function<void(ShipComponentType, ShipSlotId)>;
     using SlotHandler = std::function<void(ShipSlotId)>;
+    using NavigateHandler = std::function<void(ShipSlotId, int, int)>;
 
     SlotButton(
         ShipSlotSpec slot,
@@ -178,6 +312,7 @@ public:
         DropHandler dropped,
         SlotHandler selected,
         SlotHandler removed,
+        NavigateHandler navigate,
         QWidget* parent)
         : QToolButton(parent)
         , slot_(slot)
@@ -185,18 +320,29 @@ public:
         , dropped_(std::move(dropped))
         , selected_(std::move(selected))
         , removed_(std::move(removed))
+        , navigate_(std::move(navigate))
     {
         setAcceptDrops(true);
         setObjectName(QString("shipSlot_%1").arg(slot_.id));
         setFocusPolicy(Qt::StrongFocus);
-        setMinimumSize(150, 72);
+        setFixedSize(96, 96);
+        setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        setIconSize(QSize(26, 26));
+        if (component_) setIcon(componentIcon(*component_));
+        setChosen(chosen);
+        refreshText();
+        connect(this, &QToolButton::clicked, this, [this] { selected_(slot_.id); });
+    }
+
+    ShipSlotId slotId() const { return slot_.id; }
+
+    void setChosen(bool chosen)
+    {
         baseStyle_ = chosen
                 ? "QToolButton { border: 2px solid #52b6d9; background: #193346; padding: 5px; }"
                 : "QToolButton { border: 1px solid #52677a; background: #142433; padding: 5px; }"
                   "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
         setStyleSheet(baseStyle_);
-        refreshText();
-        connect(this, &QToolButton::clicked, this, [this] { selected_(slot_.id); });
     }
 
 protected:
@@ -262,6 +408,17 @@ protected:
 
     void keyPressEvent(QKeyEvent* event) override
     {
+        int rowDirection = 0;
+        int columnDirection = 0;
+        if (event->key() == Qt::Key_Up) rowDirection = -1;
+        else if (event->key() == Qt::Key_Down) rowDirection = 1;
+        else if (event->key() == Qt::Key_Left) columnDirection = -1;
+        else if (event->key() == Qt::Key_Right) columnDirection = 1;
+        if (rowDirection != 0 || columnDirection != 0) {
+            event->accept();
+            navigate_(slot_.id, rowDirection, columnDirection);
+            return;
+        }
         if (component_ && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace)) {
             event->accept();
             removed_(slot_.id);
@@ -273,13 +430,16 @@ protected:
 private:
     void refreshText()
     {
-        const auto title = QString("%1 slot #%2").arg(slotCategoryName(slot_.category)).arg(slot_.id);
+        const auto title = QString("%1 #%2").arg(slotCategoryName(slot_.category)).arg(slot_.id);
         if (component_) {
-            setText(QString("%1\n%2").arg(title, QString::fromStdString(component_spec(*component_).name)));
+            const auto fullName = QString::fromStdString(component_spec(*component_).name);
+            setText(QString("%1\n%2").arg(title, fontMetrics().elidedText(fullName, Qt::ElideRight, 84)));
+            setAccessibleName(QString("%1 slot, %2 fitted").arg(title, fullName));
             setToolTip(componentTooltip(*component_)
                 + "\n\nDrag to another compatible slot. Double-click or press Delete to remove.");
         } else {
             setText(QString("%1\nEmpty").arg(title));
+            setAccessibleName(QString("%1 slot, empty").arg(title));
             setToolTip("Select this cell and use Fit selected, or drag a compatible component here.");
         }
     }
@@ -289,6 +449,7 @@ private:
     DropHandler dropped_;
     SlotHandler selected_;
     SlotHandler removed_;
+    NavigateHandler navigate_;
     QPoint dragStart_;
     QString baseStyle_;
 };
@@ -394,6 +555,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
                              QString::fromStdString(component_spec(component).name));
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
         auto* item = new QListWidgetItem(label, componentCatalog_);
+        item->setIcon(componentIcon(component, available));
         item->setData(Qt::UserRole, static_cast<int>(component));
         item->setData(Qt::UserRole + 1, available);
         item->setToolTip(componentTooltip(component)
@@ -407,6 +569,11 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
 
     auto* fittingGroup = new QGroupBox("Hull fitting cells", this);
     auto* fittingLayout = new QVBoxLayout(fittingGroup);
+    hullPortrait_ = new QLabel(fittingGroup);
+    hullPortrait_->setObjectName("shipHullPortrait");
+    hullPortrait_->setAlignment(Qt::AlignCenter);
+    hullPortrait_->setToolTip("Hull silhouette is visual reference; cell positions and fitting rules come from the hull specification.");
+    fittingLayout->addWidget(hullPortrait_);
     slotPanel_ = new QWidget(fittingGroup);
     slotGrid_ = new QGridLayout(slotPanel_);
     slotGrid_->setSpacing(8);
@@ -559,12 +726,38 @@ void ShipDesignerDialog::updateComponentDetails()
 void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 {
     selectedSlot_ = slot;
+    for (auto* button : slotPanel_->findChildren<SlotButton*>())
+        button->setChosen(button->slotId() == slot);
     const auto placement = std::find_if(
         placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
             return candidate.slot == slot;
         });
     removeButton_->setEnabled(placement != placements_.end());
     fitButton_->setEnabled(selectedCatalogComponent().has_value());
+}
+
+void ShipDesignerDialog::focusAdjacentSlot(ShipSlotId slot, int rowDirection, int columnDirection)
+{
+    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+    const auto current = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(),
+        [slot](const ShipSlotSpec& candidate) { return candidate.id == slot; });
+    if (current == hull.fittingSlots.end()) return;
+
+    const ShipSlotSpec* nearest = nullptr;
+    std::pair<int, int> best{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+    for (const auto& candidate : hull.fittingSlots) {
+        const int row = int(candidate.row) - int(current->row);
+        const int column = int(candidate.column) - int(current->column);
+        const int forward = rowDirection * row + columnDirection * column;
+        if (forward <= 0) continue;
+        const int offset = rowDirection != 0 ? std::abs(column) : std::abs(row);
+        const std::pair score{offset, forward};
+        if (score < best) { best = score; nearest = &candidate; }
+    }
+    if (!nearest) return;
+    selectSlot(nearest->id);
+    if (auto* button = slotPanel_->findChild<SlotButton*>(QString("shipSlot_%1").arg(nearest->id)))
+        button->setFocus(Qt::OtherFocusReason);
 }
 
 void ShipDesignerDialog::fitComponent(
@@ -673,6 +866,7 @@ void ShipDesignerDialog::rebuildSlotGrid()
             },
             [this](ShipSlotId selected) { selectSlot(selected); },
             [this](ShipSlotId removed) { removeComponent(removed); },
+            [this](ShipSlotId current, int row, int column) { focusAdjacentSlot(current, row, column); },
             slotPanel_);
         slotGrid_->addWidget(button, slot.row, slot.column);
     }
@@ -714,6 +908,7 @@ void ShipDesignerDialog::updatePreview()
 {
     const auto design = previewDesign();
     const auto hull = hull_spec(design.hull);
+    hullPortrait_->setPixmap(hullPortrait(design.hull));
     const auto generalUsed = ship_design_general_slots_used(design);
     const auto miningUsed = ship_design_mining_slots_used(design);
     const auto validationError = ship_design_validation_error(design);
