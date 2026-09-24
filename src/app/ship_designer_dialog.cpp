@@ -13,6 +13,7 @@
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QFormLayout>
+#include <QFontMetrics>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -319,9 +320,9 @@ public:
         setAcceptDrops(true);
         setObjectName(QString("shipSlot_%1").arg(slot_.id));
         setFocusPolicy(Qt::StrongFocus);
-        setMinimumSize(150, 72);
-        setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        setIconSize(QSize(28, 28));
+        setFixedSize(96, 96);
+        setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        setIconSize(QSize(26, 26));
         if (component_) setIcon(componentIcon(*component_));
         baseStyle_ = chosen
                 ? "QToolButton { border: 2px solid #52b6d9; background: #193346; padding: 5px; }"
@@ -406,13 +407,16 @@ protected:
 private:
     void refreshText()
     {
-        const auto title = QString("%1 slot #%2").arg(slotCategoryName(slot_.category)).arg(slot_.id);
+        const auto title = QString("%1 #%2").arg(slotCategoryName(slot_.category)).arg(slot_.id);
         if (component_) {
-            setText(QString("%1\n%2").arg(title, QString::fromStdString(component_spec(*component_).name)));
+            const auto fullName = QString::fromStdString(component_spec(*component_).name);
+            setText(QString("%1\n%2").arg(title, fontMetrics().elidedText(fullName, Qt::ElideRight, 84)));
+            setAccessibleName(QString("%1 slot, %2 fitted").arg(title, fullName));
             setToolTip(componentTooltip(*component_)
                 + "\n\nDrag to another compatible slot. Double-click or press Delete to remove.");
         } else {
             setText(QString("%1\nEmpty").arg(title));
+            setAccessibleName(QString("%1 slot, empty").arg(title));
             setToolTip("Select this cell and use Fit selected, or drag a compatible component here.");
         }
     }
