@@ -475,7 +475,7 @@ QString MainWindow::selectedFleetWaypointFuelWarning(
 {
     const auto key = QString("%1:%2:%3:%4:%5:%6:%7:%8")
         .arg(planningRevision_).arg(selectedFleetForRouteProgram())
-        .arg(selectedStarId_.value_or(0)).arg(warp).arg(targetFleet)
+        .arg(selection_.star.value_or(0)).arg(warp).arg(targetFleet)
         .arg(static_cast<int>(action.kind)).arg(action.reservePopulation)
         .arg(static_cast<int>(action.cargo));
     if (key == waypointFuelKey_) return waypointFuelWarning_;
@@ -630,11 +630,10 @@ bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
 {
     const auto* fleet = findFleet(state_, fleetId);
     if (!fleet || fleet->owner != pendingOrders_.player) return false;
-    if (selectedFleetId_ == fleetId) return true;
-    rememberMapSelection(2, fleetId);
-    selectedFleetId_ = fleetId;
+    if (selection_.fleet == fleetId) return true;
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
+    if (!selectWorkspaceObject(2, fleetId)) return false;
     rebuildScene();
     return true;
 }
@@ -693,7 +692,7 @@ bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
             statusBar()->showMessage("The selected star is no longer available", 3000);
             return false;
         }
-        selectedStarId_ = static_cast<StarId>(id);
+        if (!selectWorkspaceObject(1, id)) return false;
     } else if (kind == 2 || kind == 3) {
         const auto* target = findFleet(state_, static_cast<FleetId>(id));
         if (!target || target->id == source->id) {
@@ -706,7 +705,7 @@ bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
         return false;
     }
 
-    rememberMapSelection(kind == 3 ? 2 : kind, id);
+    if (kind != 1) rememberMapSelection(2, id);
     emit routeProgramMapTargetPicked(kind, id);
     return true;
 }

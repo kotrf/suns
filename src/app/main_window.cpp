@@ -466,8 +466,7 @@ MainWindow::MainWindow(QWidget* parent)
 
         auto* item = selected.front();
         const auto kind = item->data(1).toInt();
-        if (kind == kMapItemStar) selectedStarId_ = static_cast<StarId>(item->data(0).toUInt());
-        else if (kind == kMapItemFleet) selectedFleetId_ = static_cast<FleetId>(item->data(0).toUInt());
+        if (!selectWorkspaceObject(kind, item->data(0).toUInt())) return;
         rebuildScene();
     });
 
@@ -504,8 +503,8 @@ MainWindow::MainWindow(QWidget* parent)
 
 const StarSystem* MainWindow::selectedStar() const
 {
-    if (!selectedStarId_) return nullptr;
-    return find_star(state_, *selectedStarId_);
+    if (!selection_.star) return nullptr;
+    return find_star(state_, *selection_.star);
 }
 
 const Planet* MainWindow::selectedPlanet() const
@@ -516,8 +515,8 @@ const Planet* MainWindow::selectedPlanet() const
 
 const Fleet* MainWindow::selectedFleet() const
 {
-    if (!selectedFleetId_) return nullptr;
-    const auto* fleet = findFleet(state_, *selectedFleetId_);
+    if (!selection_.fleet) return nullptr;
+    const auto* fleet = findFleet(state_, *selection_.fleet);
     return fleet && fleet->owner == pendingOrders_.player ? fleet : nullptr;
 }
 
@@ -584,13 +583,13 @@ void MainWindow::refreshShipDesignChoices()
 void MainWindow::rebuildScene()
 {
     ++planningRevision_;
-    const auto selectionToRestore = selectedStarId_;
+    const auto selectionToRestore = selection_.star;
 
     if (!selectedFleet()) {
         const auto fallback = std::find_if(state_.fleets.begin(), state_.fleets.end(), [this](const Fleet& fleet) {
             return fleet.owner == pendingOrders_.player;
         });
-        selectedFleetId_ = fallback == state_.fleets.end()
+        selection_.fleet = fallback == state_.fleets.end()
             ? std::optional<FleetId>{}
             : std::optional<FleetId>{fallback->id};
         warpControlFleetId_.reset();
@@ -599,7 +598,7 @@ void MainWindow::rebuildScene()
 
     const QSignalBlocker blocker(scene_);
     scene_->clear();
-    selectedStarId_ = selectionToRestore;
+    selection_.star = selectionToRestore;
     addBackgroundStars(scene_, state_.galaxySeed);
 
     if (showSensorRanges_) {
@@ -753,7 +752,7 @@ void MainWindow::rebuildScene()
         const double y = anchor.y();
         const bool enemyContact = fleet.owner != pendingOrders_.player;
         const auto color = enemyContact ? QColor("#dd7777") : fleetColor(fleet.role);
-        const bool selected = selectedFleetId_ && *selectedFleetId_ == fleet.id;
+        const bool selected = selection_.fleet && *selection_.fleet == fleet.id;
 
         QPolygonF shape;
         if (fleet.role == FleetRole::Scout) {
@@ -1451,7 +1450,7 @@ void MainWindow::endTurn()
     rotateTurnExchangeToken();
     pendingOrders_.orders.clear();
     pendingDescriptions_.clear();
-    selectedStarId_.reset();
+    selection_.star.reset();
     logisticsControlFleetId_.reset();
     refreshShipDesignChoices();
     rebuildScene();
@@ -1501,8 +1500,8 @@ void MainWindow::newGalaxy()
     pendingOrders_ = PlayerOrders{1, {}};
     resetTurnMessages();
     pendingDescriptions_.clear();
-    selectedStarId_.reset();
-    selectedFleetId_ = 1;
+    selection_.star.reset();
+    selection_.fleet = 1;
     emit routeProgramContextChanged(true);
     currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
     currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;

@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/communications.hpp"
 
 #include <QAction>
 #include <QColor>
@@ -513,17 +514,20 @@ void MainWindow::installTurnMessages()
         const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
             return candidate.id == event->fleet;
         });
-        if (star) {
-            selectedStarId_ = starId;
-        }
-        if (fleet != state_.fleets.end()) {
-            selectedFleetId_ = fleet->id;
-            rememberMapSelection(2, fleet->id);
+        const bool ownedFleet = fleet != state_.fleets.end() && fleet->owner == pendingOrders_.player;
+        // Preserve the report's system as the star context even if its fleet
+        // has travelled since the event was recorded.
+        if (star && ownedFleet) selection_.star = starId;
+        if (ownedFleet) {
+            selectWorkspaceObject(2, fleet->id);
         } else if (star) {
-            rememberMapSelection(1, starId);
+            selectWorkspaceObject(1, starId);
         }
         rebuildScene();
-        if (star) view_->centerOn(star->position.x, star->position.y);
+        if (ownedFleet) {
+            const auto visible = fleet_player_view(state_, *fleet);
+            view_->centerOn(visible.position.x, visible.position.y);
+        } else if (star) view_->centerOn(star->position.x, star->position.y);
         else view_->centerOn(event->position.x, event->position.y);
     };
 
