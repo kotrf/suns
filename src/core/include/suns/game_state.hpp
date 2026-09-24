@@ -387,6 +387,15 @@ struct RaceProfile {
     bool environmentBased{}; // Legacy campaigns retain their scalar habitability.
 };
 
+struct ColonyTurnStatistics {
+    PlanetId planet{};
+    std::uint64_t population{};
+    std::uint32_t factories{};
+    std::uint32_t mines{};
+    std::uint32_t productionOutput{};
+    MineralCargo minerals;
+};
+
 // Compact player-owned history. It contains no enemy or unsurveyed truth and
 // can therefore later back statistics, PBEM exports and replay inspection.
 struct EmpireTurnStatistics {
@@ -402,6 +411,8 @@ struct EmpireTurnStatistics {
     double fleetMass{};
     std::array<std::uint8_t, kResearchFieldCount> technologyLevels{};
     std::array<std::uint32_t, kResearchFieldCount> technologyProgress{};
+    // Only colonies owned at this boundary; absent years are not zero values.
+    std::vector<ColonyTurnStatistics> colonyHistory;
 };
 
 struct Player {
