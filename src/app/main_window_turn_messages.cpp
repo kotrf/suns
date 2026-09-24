@@ -508,7 +508,7 @@ void MainWindow::installTurnMessages()
 
     const auto showOnMap = [this, selectedEvent] {
         const auto* event = selectedEvent();
-        if (!event) return;
+        if (!event || (event->star == 0 && event->fleet == 0)) return;
         const auto starId = event->star;
         const auto* star = find_star(state_, starId);
         const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
@@ -548,7 +548,7 @@ void MainWindow::installTurnMessages()
     };
     connect(turnMessagesList_, &QListWidget::currentItemChanged, this,
         [read](QListWidgetItem* current, QListWidgetItem*) { read(current); });
-    connect(turnMessagesList_, &QListWidget::itemDoubleClicked, this,
+    connect(turnMessagesList_, &QListWidget::itemClicked, this,
         [showOnMap](QListWidgetItem*) { showOnMap(); });
     connect(turnMessageShowOnMapButton_, &QPushButton::clicked, this, showOnMap);
     const auto navigateUnread = [this](int direction) {
