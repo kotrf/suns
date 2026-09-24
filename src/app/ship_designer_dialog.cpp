@@ -39,9 +39,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <optional>
+#include <utility>
 
 namespace suns {
 
@@ -301,6 +303,7 @@ class SlotButton final : public QToolButton {
 public:
     using DropHandler = std::function<void(ShipComponentType, ShipSlotId)>;
     using SlotHandler = std::function<void(ShipSlotId)>;
+    using NavigateHandler = std::function<void(ShipSlotId, int, int)>;
 
     SlotButton(
         ShipSlotSpec slot,
@@ -309,6 +312,7 @@ public:
         DropHandler dropped,
         SlotHandler selected,
         SlotHandler removed,
+        NavigateHandler navigate,
         QWidget* parent)
         : QToolButton(parent)
         , slot_(slot)
@@ -316,6 +320,7 @@ public:
         , dropped_(std::move(dropped))
         , selected_(std::move(selected))
         , removed_(std::move(removed))
+        , navigate_(std::move(navigate))
     {
         setAcceptDrops(true);
         setObjectName(QString("shipSlot_%1").arg(slot_.id));
@@ -324,13 +329,20 @@ public:
         setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         setIconSize(QSize(26, 26));
         if (component_) setIcon(componentIcon(*component_));
+        setChosen(chosen);
+        refreshText();
+        connect(this, &QToolButton::clicked, this, [this] { selected_(slot_.id); });
+    }
+
+    ShipSlotId slotId() const { return slot_.id; }
+
+    void setChosen(bool chosen)
+    {
         baseStyle_ = chosen
                 ? "QToolButton { border: 2px solid #52b6d9; background: #193346; padding: 5px; }"
                 : "QToolButton { border: 1px solid #52677a; background: #142433; padding: 5px; }"
                   "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
         setStyleSheet(baseStyle_);
-        refreshText();
-        connect(this, &QToolButton::clicked, this, [this] { selected_(slot_.id); });
     }
 
 protected:
@@ -396,6 +408,17 @@ protected:
 
     void keyPressEvent(QKeyEvent* event) override
     {
+        int rowDirection = 0;
+        int columnDirection = 0;
+        if (event->key() == Qt::Key_Up) rowDirection = -1;
+        else if (event->key() == Qt::Key_Down) rowDirection = 1;
+        else if (event->key() == Qt::Key_Left) columnDirection = -1;
+        else if (event->key() == Qt::Key_Right) columnDirection = 1;
+        if (rowDirection != 0 || columnDirection != 0) {
+            event->accept();
+            navigate_(slot_.id, rowDirection, columnDirection);
+            return;
+        }
         if (component_ && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace)) {
             event->accept();
             removed_(slot_.id);
@@ -426,6 +449,7 @@ private:
     DropHandler dropped_;
     SlotHandler selected_;
     SlotHandler removed_;
+    NavigateHandler navigate_;
     QPoint dragStart_;
     QString baseStyle_;
 };
@@ -702,12 +726,38 @@ void ShipDesignerDialog::updateComponentDetails()
 void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 {
     selectedSlot_ = slot;
+    for (auto* button : slotPanel_->findChildren<SlotButton*>())
+        button->setChosen(button->slotId() == slot);
     const auto placement = std::find_if(
         placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
             return candidate.slot == slot;
         });
     removeButton_->setEnabled(placement != placements_.end());
     fitButton_->setEnabled(selectedCatalogComponent().has_value());
+}
+
+void ShipDesignerDialog::focusAdjacentSlot(ShipSlotId slot, int rowDirection, int columnDirection)
+{
+    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+    const auto current = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(),
+        [slot](const ShipSlotSpec& candidate) { return candidate.id == slot; });
+    if (current == hull.fittingSlots.end()) return;
+
+    const ShipSlotSpec* nearest = nullptr;
+    std::pair<int, int> best{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
+    for (const auto& candidate : hull.fittingSlots) {
+        const int row = int(candidate.row) - int(current->row);
+        const int column = int(candidate.column) - int(current->column);
+        const int forward = rowDirection * row + columnDirection * column;
+        if (forward <= 0) continue;
+        const int offset = rowDirection != 0 ? std::abs(column) : std::abs(row);
+        const std::pair score{offset, forward};
+        if (score < best) { best = score; nearest = &candidate; }
+    }
+    if (!nearest) return;
+    selectSlot(nearest->id);
+    if (auto* button = slotPanel_->findChild<SlotButton*>(QString("shipSlot_%1").arg(nearest->id)))
+        button->setFocus(Qt::OtherFocusReason);
 }
 
 void ShipDesignerDialog::fitComponent(
@@ -816,6 +866,7 @@ void ShipDesignerDialog::rebuildSlotGrid()
             },
             [this](ShipSlotId selected) { selectSlot(selected); },
             [this](ShipSlotId removed) { removeComponent(removed); },
+            [this](ShipSlotId current, int row, int column) { focusAdjacentSlot(current, row, column); },
             slotPanel_);
         slotGrid_->addWidget(button, slot.row, slot.column);
     }
