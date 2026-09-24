@@ -84,6 +84,9 @@ int main(int argc, char* argv[])
             if (auto* research = window.findChild<QDialog*>("researchDialog")) research->update();
             if (auto* history = window.findChild<QDockWidget*>("empireHistoryDock")) history->show();
             if (auto* metric = window.findChild<QComboBox*>("historyMetric")) metric->setCurrentIndex(3);
+            if (auto* scope = window.findChild<QComboBox*>("historyScope")) {
+                if (scope->count() > 1) scope->setCurrentIndex(1);
+            }
 
             // Open the non-modal graphical Ship Designer, select an empty
             // general slot and fit a Fuel Tank through the keyboard-accessible
