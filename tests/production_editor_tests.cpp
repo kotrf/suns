@@ -19,14 +19,14 @@ struct MainWindowTestAccess {
         w.state_.planets.front().productionQueue = {{ProductionKind::Factory, 2, 0}};
         w.pendingOrders_ = {1, {QueueProductionOrder{1, ProductionKind::Mine}}};
         w.pendingDescriptions_ = {"Build mine"};
-        w.selectedStarId_ = w.state_.planets.front().star;
+        w.selection_.star = w.state_.planets.front().star;
         w.rebuildScene();
         w.refreshProductionQueue();
     }
     static void advance(MainWindow& w)
     {
         w.endTurn();
-        w.selectedStarId_ = w.state_.planets.front().star;
+        w.selection_.star = w.state_.planets.front().star;
         w.rebuildScene();
         w.refreshProductionQueue();
     }
@@ -44,7 +44,7 @@ struct MainWindowTestAccess {
         w.state_ = make_demo_game();
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
-        w.selectedStarId_ = w.state_.planets.front().star;
+        w.selection_.star = w.state_.planets.front().star;
         w.appendPendingOrder(CreateShipDesignOrder{
             "Immediate Scout",
             ShipHullType::Scout,

@@ -24,8 +24,8 @@ struct MainWindowTestAccess {
         window.state_.nextFleetId = 3;
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();
-        window.selectedFleetId_ = 1;
-        window.selectedStarId_ = window.state_.planets.front().star;
+        window.selection_.fleet = 1;
+        window.selection_.star = window.state_.planets.front().star;
         window.rebuildScene();
         window.refreshFleetCompositionTable();
     }

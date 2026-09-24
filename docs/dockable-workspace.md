@@ -11,6 +11,12 @@ buttons in the dark theme.
 
 Window geometry and dock state are saved on normal shutdown and restored on the next launch. This provides a GIMP-like multi-window workspace without making map selection or game state depend on a particular screen arrangement.
 
+Map clicks, fleet tools and Turn Messages share a star/fleet selection context
+made of stable IDs. Activating a report selects its referenced object in the
+other panels; if a referenced friendly fleet still exists, the map centers on
+its current player-visible position. Enemy contacts and vanished fleets use
+the report's system or recorded position instead.
+
 The **View → Workspaces** section offers Map (panels hidden for maximum map
 space), Fleet Operations (fleet and route tools), Empire (overview, production
 and reports), and Ship Design (map plus the non-modal designer). Each preset

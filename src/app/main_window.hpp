@@ -52,6 +52,13 @@ struct RouteProgramTargetOption {
     bool enemy{};
 };
 
+// Stable IDs shared by the map, reports and docked tools. The owning game
+// state may be replaced after each turn, so panels must resolve IDs afresh.
+struct WorkspaceSelectionContext {
+    std::optional<StarId> star;
+    std::optional<FleetId> fleet{1};
+};
+
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -193,6 +200,7 @@ private:
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
     void refreshTurnMessages();
+    void updateTurnMessagesSummary();
     void openResearchDialog();
     void refreshResearchPanel();
     void refreshEmpireHistory();
@@ -206,6 +214,7 @@ private:
     void removeSelectedProductionItem();
     std::vector<ProductionItem> plannedProductionQueue(const Planet& planet) const;
     void rememberMapSelection(int kind, std::uint32_t id);
+    bool selectWorkspaceObject(int kind, std::uint32_t id);
     [[nodiscard]] QString selectedObjectDistanceSummary() const;
     [[nodiscard]] bool confirmFleetColonization(
         const Fleet& fleet, const Planet& planet, bool scheduledRoute);
@@ -252,8 +261,7 @@ private:
     std::vector<GameEvent> campaignMessages_;
     std::uint64_t campaignId_{};
     std::uint64_t turnToken_{};
-    std::optional<StarId> selectedStarId_;
-    std::optional<FleetId> selectedFleetId_{1};
+    WorkspaceSelectionContext selection_;
     std::optional<FleetId> warpControlFleetId_;
     std::optional<FleetId> logisticsControlFleetId_;
     int currentDistanceSelectionKind_{};
@@ -273,6 +281,7 @@ private:
     std::vector<GameEvent> turnMessages_;
     std::set<std::uint64_t> readTurnMessageIds_;
     std::set<QString> hiddenTurnMessageClasses_;
+    std::size_t hiddenTurnMessagesCount_{};
     QPointer<ShipDesignerDialog> shipDesigner_;
 
     QGraphicsScene* scene_{};
