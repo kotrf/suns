@@ -37,6 +37,7 @@ private:
     void fitComponent(ShipComponentType component, ShipSlotId target, ShipSlotId source = 0);
     void removeComponent(ShipSlotId slot);
     void selectSlot(ShipSlotId slot);
+    void focusAdjacentSlot(ShipSlotId slot, int rowDirection, int columnDirection);
     void updatePreview();
     void updateComponentDetails();
     [[nodiscard]] ShipDesign previewDesign() const;
@@ -51,6 +52,7 @@ private:
     std::vector<ShipDesign> templates_;
     QListWidget* componentCatalog_{};
     QLabel* componentDetails_{};
+    QLabel* hullPortrait_{};
     QWidget* slotPanel_{};
     QGridLayout* slotGrid_{};
     QLabel* fitMessage_{};

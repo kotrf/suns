@@ -27,6 +27,9 @@ int main()
     assert(initialHistory.front().ships == 1);
     assert(initialHistory.front().fleetMass > 0.0);
     assert(close(initialHistory.front().minerals.ironium, 100.0));
+    assert(initialHistory.front().colonyHistory.size() == 1);
+    assert(initialHistory.front().colonyHistory.front().planet == state.planets.front().id);
+    assert(initialHistory.front().colonyHistory.front().population == 1'000'000);
 
     const suns::TurnProcessor processor;
     const auto first = processor.process(state, {});
@@ -49,6 +52,8 @@ int main()
     assert(corrected.players.front().history.size() == 2);
     assert(corrected.players.front().history.back().population
         == first.players.front().history.back().population + 50);
+    assert(corrected.players.front().history.back().colonyHistory.front().population
+        == first.players.front().history.back().colonyHistory.front().population + 50);
 
     // A player's history is built only from assets they own. Authoritative
     // enemy truth and neutral surface stockpiles never leak into the record.
@@ -65,6 +70,22 @@ int main()
     assert(playerOne.population == initialHistory.front().population);
     assert(close(playerOne.minerals.ironium, initialHistory.front().minerals.ironium));
     assert(playerOne.fleets == initialHistory.front().fleets);
+    assert(playerOne.colonyHistory.size() == 1);
+    assert(playerOne.colonyHistory.front().planet != hidden.planets[1].id);
+
+    // Each year records only current ownership, preserving past observations
+    // when a colony is lost and providing a gap instead of a fictitious zero.
+    auto changingOwner = state;
+    changingOwner.planets[1].owner = 1;
+    changingOwner.planets[1].population = 420;
+    changingOwner.turn = 2;
+    suns::record_empire_turn_statistics(changingOwner);
+    assert(changingOwner.players.front().history.back().colonyHistory.size() == 2);
+    changingOwner.planets[1].owner = 2;
+    changingOwner.turn = 3;
+    suns::record_empire_turn_statistics(changingOwner);
+    assert(changingOwner.players.front().history.back().colonyHistory.size() == 1);
+    assert(changingOwner.players.front().history[1].colonyHistory[1].population == 420);
 
     return 0;
 }

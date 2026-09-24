@@ -81,10 +81,20 @@ Delete/Backspace and an explicit Remove
 button all remove equipment. Locked technology remains visible with its exact
 research requirement, while core validation still protects the order path if a
 malformed layout bypasses the UI.
+With focus on a fitting cell, arrow keys move to the nearest cell in that
+direction, including across gaps in the hull grid. Tab moves between the
+catalog, fitting cells and action buttons. The selected cell stays highlighted
+for keyboard fitting and removal.
 
 Ship Designer is a non-modal top-level dialog. The galaxy map and other docks
 remain usable while it is open, and attempting to open it again raises the
 existing window instead of creating competing drafts.
+Each hull now has a distinct schematic silhouette above its fitting grid, and
+catalog/fitted components have compact category icons. Fitting cells are square,
+show their category and stable ID, and retain the complete component name for
+tooltips and accessibility when the visible caption is shortened. These graphics are drawn
+in Qt and have no role in slot identity or simulation; replacing them later
+does not change saved placements.
 The Start from selector loads one of the current player's saved or planned
 designs as a new draft, preserving each component's logical cell. The proposed
 name gets a Copy suffix; creating the draft never edits the original design or
