@@ -281,6 +281,10 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.front().turn == 1);
     assert(loaded.state.players.front().history.back().turn == 77);
     assert(loaded.state.players.front().history.back().population == 1'000'000);
+    assert(loaded.state.players.front().history.back().colonyHistory.size() == 1);
+    assert(loaded.state.players.front().history.back().colonyHistory.front().planet
+        == original.state.planets.front().id);
+    assert(loaded.state.players.front().history.back().colonyHistory.front().mines == 17);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);

@@ -1393,6 +1393,8 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
 
     for (const auto& planet : state.planets) {
         if (planet.owner != playerId) continue;
+        result.colonyHistory.push_back({planet.id, planet.population, planet.industry,
+            planet.mines, colony_output(planet), planet.minerals});
         ++result.colonies;
         result.population += planet.population;
         result.factories += planet.industry;
