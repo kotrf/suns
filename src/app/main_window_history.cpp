@@ -23,6 +23,8 @@
 namespace suns {
 namespace {
 
+constexpr quint32 kFollowSelectedColony = std::numeric_limits<quint32>::max();
+
 struct HistorySeries {
     QString name;
     QColor color;
@@ -194,7 +196,7 @@ void MainWindow::installEmpireHistory()
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
     historyScope_->addItem("Whole empire", static_cast<quint32>(0));
-    historyScope_->setToolTip("Show an owned colony's recorded years; gaps mean it was not owned");
+    historyScope_->setToolTip("Show an owned colony's recorded years, or follow the map selection; gaps mean it was not owned");
     controls->addWidget(historyScope_, 1);
     controls->addWidget(new QLabel("Years", content));
     historyFirstTurn_ = new QSpinBox(content);
@@ -220,6 +222,11 @@ void MainWindow::installEmpireHistory()
         [this] { refreshEmpireHistory(); });
     connect(historyScope_, &QComboBox::currentIndexChanged, this,
         [this] { refreshEmpireHistory(); });
+    connect(this, &MainWindow::routeProgramContextChanged, this, [this] {
+        if (historyDock_->isVisible()
+            && historyScope_->currentData().toUInt() == kFollowSelectedColony)
+            refreshEmpireHistory();
+    });
     connect(historyFirstTurn_, &QSpinBox::valueChanged, this, [this](int year) {
         if (historyLastTurn_->value() < year) historyLastTurn_->setValue(year);
         else refreshEmpireHistory();
@@ -241,12 +248,18 @@ void MainWindow::refreshEmpireHistory()
     const std::vector<EmpireTurnStatistics> empty;
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
-    const auto selectedScope = static_cast<PlanetId>(historyScope_->currentData().toUInt());
+    const auto selectedScope = historyScope_->currentData().toUInt();
     const bool scopedMetric = historyMetric_->currentIndex() <= 3;
+    const auto* planetOnMap = selectedPlanet();
+    const PlanetId selectedColony = planetOnMap && planetOnMap->owner == pendingOrders_.player
+        ? planetOnMap->id : PlanetId{};
     {
         const QSignalBlocker blocker(historyScope_);
         historyScope_->clear();
         historyScope_->addItem("Whole empire", static_cast<quint32>(0));
+        historyScope_->addItem(selectedColony
+            ? QString("Follow map — %1").arg(QString::fromStdString(planetOnMap->name))
+            : QString("Follow map — select owned colony"), kFollowSelectedColony);
         std::set<PlanetId> knownColonies;
         for (const auto& snapshot : history)
             for (const auto& colony : snapshot.colonyHistory)
@@ -259,12 +272,14 @@ void MainWindow::refreshEmpireHistory()
                 ? QString("Former colony %1").arg(id) : QString::fromStdString(planet->name);
             historyScope_->addItem(name, static_cast<quint32>(id));
         }
-        const int restored = historyScope_->findData(static_cast<quint32>(selectedScope));
+        const int restored = historyScope_->findData(selectedScope);
         historyScope_->setCurrentIndex(!scopedMetric || restored < 0 ? 0 : restored);
     }
-    historyScope_->setEnabled(scopedMetric && historyScope_->count() > 1);
-    const auto colonyId = scopedMetric
-        ? static_cast<PlanetId>(historyScope_->currentData().toUInt()) : PlanetId{};
+    historyScope_->setEnabled(scopedMetric && !history.empty());
+    const bool followingMap = scopedMetric
+        && historyScope_->currentData().toUInt() == kFollowSelectedColony;
+    const auto colonyId = followingMap ? selectedColony
+        : scopedMetric ? static_cast<PlanetId>(historyScope_->currentData().toUInt()) : PlanetId{};
     if (history.empty()) {
         historySummary_->setText("No recorded history for this player.");
         historyFirstTurn_->setEnabled(false);
@@ -293,6 +308,11 @@ void MainWindow::refreshEmpireHistory()
         .arg(QString::fromStdString(player->name))
         .arg(static_cast<qulonglong>(history.size()))
         .arg(static_cast<qulonglong>(history.back().turn)));
+    if (followingMap && colonyId == 0) {
+        historySummary_->setText("Select an owned colony on the map to view its history.");
+        chart->setData({}, {});
+        return;
+    }
 
     QVector<const EmpireTurnStatistics*> shown;
     QVector<std::uint64_t> turns;
