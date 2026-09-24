@@ -51,6 +51,7 @@ private:
     std::vector<ShipDesign> templates_;
     QListWidget* componentCatalog_{};
     QLabel* componentDetails_{};
+    QLabel* hullPortrait_{};
     QWidget* slotPanel_{};
     QGridLayout* slotGrid_{};
     QLabel* fitMessage_{};
