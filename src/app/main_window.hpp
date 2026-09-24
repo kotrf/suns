@@ -302,6 +302,7 @@ private:
     QDockWidget* turnMessagesDock_{};
     QDockWidget* historyDock_{};
     QComboBox* historyMetric_{};
+    QComboBox* historyScope_{};
     QSpinBox* historyFirstTurn_{};
     QSpinBox* historyLastTurn_{};
     QLabel* historySummary_{};
