@@ -85,6 +85,10 @@ malformed layout bypasses the UI.
 Ship Designer is a non-modal top-level dialog. The galaxy map and other docks
 remain usable while it is open, and attempting to open it again raises the
 existing window instead of creating competing drafts.
+Each hull now has a distinct schematic silhouette above its fitting grid, and
+catalog/fitted components have compact category icons. These graphics are drawn
+in Qt and have no role in slot identity or simulation; replacing them later
+does not change saved placements.
 The Start from selector loads one of the current player's saved or planned
 designs as a new draft, preserving each component's logical cell. The proposed
 name gets a Copy suffix; creating the draft never edits the original design or
