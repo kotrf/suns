@@ -1,5 +1,6 @@
 #include "save_game.hpp"
 
+#include <QByteArray>
 #include <QDataStream>
 #include <QFile>
 #include <QTemporaryDir>
@@ -456,13 +457,15 @@ void population_migration_and_clear_orders()
     legacy.campaignId = 12;
     legacy.turnToken = 34;
     legacy.state = make_demo_game();
-    // This fixture is downgraded by rewriting only the version header, so
-    // keep v35-only variable-length survey payloads empty. The remaining
-    // fields deliberately retain the v31-compatible byte layout.
+    // Build a v31-shaped fixture from the current writer. Keep newer survey
+    // payloads empty and strip v37's colony-history count before downgrading
+    // the header; the historical empire snapshot itself must still migrate.
     legacy.state.players[0].surveyKnowledge.clear();
     legacy.state.players[0].pendingSurveyReports.clear();
     legacy.state.planets[0].population = 1000;
     legacy.state.players[0].history[0].population = 1000;
+    legacy.state.players[0].history[0].colonyHistory.clear();
+    legacy.state.players[0].history[0].technologyProgress.back() = 0xF00DF00D;
     legacy.state.fleets[0].design = kColonyShipDesignId;
     legacy.state.fleets[0].colonists = 300;
     legacy.state.fleets[0].telemetry.colonists = 200;
@@ -474,7 +477,14 @@ void population_migration_and_clear_orders()
     // v31 and v32 layouts are identical for this no-MoveFleetOrder fixture.
     {
         QFile file(path);
-        assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+        assert(file.open(QIODevice::ReadWrite));
+        auto bytes = file.readAll();
+        const auto marker = QByteArray::fromHex("f00df00d00000000");
+        const auto markerPosition = bytes.indexOf(marker);
+        assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
+        bytes.remove(markerPosition + 4, 4); // empty v37 colony-history vector
+        assert(file.resize(0) && file.seek(0));
+        assert(file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream stream(&file);
         stream << quint32{31};
     }
@@ -483,6 +493,8 @@ void population_migration_and_clear_orders()
     assert(migrated.migratedPopulation);
     assert(migrated.state.planets[0].population == 1'000'000);
     assert(migrated.state.players[0].history[0].population == 1'000'000);
+    assert(migrated.state.players[0].history[0].colonyHistory.size() == 1);
+    assert(migrated.state.players[0].history[0].colonyHistory[0].population == 1'000'000);
     assert(migrated.state.fleets[0].colonists == 30'000);
     assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 3.0);
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
