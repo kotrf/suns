@@ -30,7 +30,9 @@ population, colony/infrastructure counts, yearly production output, I/B/G
 stocks, fleet/ship counts, fleet mass, technology levels or invested RP. Hover
 over a year to read the exact values, and select a first and last year to inspect
 a shorter range. For population, infrastructure, output and mineral stocks,
-choose Whole empire or a recorded colony. Missing observations show a gap and
+choose Whole empire, a recorded colony or Follow map. Follow map tracks the
+currently selected owned colony; with no owned colony selected it prompts for
+one instead of showing empire totals under a colony label. Missing observations show a gap and
 "No owned-colony record" on hover. The dock can be detached, hidden and restored from View; it
 never reads the host's other players' histories in a player turn. It uses
 Qt Widgets painting and does not require Qt Charts.
