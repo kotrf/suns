@@ -32,8 +32,8 @@ struct MainWindowTestAccess {
         w.state_.fleets.push_back(other);
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
-        w.selectedStarId_ = w.state_.planets.front().star;
-        w.selectedFleetId_ = 1;
+        w.selection_.star = w.state_.planets.front().star;
+        w.selection_.fleet = 1;
         w.rebuildScene();
     }
     static void installEnemyColony(MainWindow& w)

@@ -52,6 +52,13 @@ struct RouteProgramTargetOption {
     bool enemy{};
 };
 
+// Stable IDs shared by the map, reports and docked tools. The owning game
+// state may be replaced after each turn, so panels must resolve IDs afresh.
+struct WorkspaceSelectionContext {
+    std::optional<StarId> star;
+    std::optional<FleetId> fleet{1};
+};
+
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
@@ -207,6 +214,7 @@ private:
     void removeSelectedProductionItem();
     std::vector<ProductionItem> plannedProductionQueue(const Planet& planet) const;
     void rememberMapSelection(int kind, std::uint32_t id);
+    bool selectWorkspaceObject(int kind, std::uint32_t id);
     [[nodiscard]] QString selectedObjectDistanceSummary() const;
     [[nodiscard]] bool confirmFleetColonization(
         const Fleet& fleet, const Planet& planet, bool scheduledRoute);
@@ -253,8 +261,7 @@ private:
     std::vector<GameEvent> campaignMessages_;
     std::uint64_t campaignId_{};
     std::uint64_t turnToken_{};
-    std::optional<StarId> selectedStarId_;
-    std::optional<FleetId> selectedFleetId_{1};
+    WorkspaceSelectionContext selection_;
     std::optional<FleetId> warpControlFleetId_;
     std::optional<FleetId> logisticsControlFleetId_;
     int currentDistanceSelectionKind_{};

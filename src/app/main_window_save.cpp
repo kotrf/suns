@@ -213,8 +213,8 @@ bool MainWindow::saveGameToPath(const QString& path)
     save.state = state_;
     save.pendingOrders = pendingOrders_;
     save.pendingDescriptions = pendingDescriptions_;
-    save.selectedStar = selectedStarId_;
-    save.selectedFleet = selectedFleetId_;
+    save.selectedStar = selection_.star;
+    save.selectedFleet = selection_.fleet;
     save.showSensorRanges = showSensorRanges_;
     save.strategicMessages = sessionMode_ == SessionMode::Host ? campaignMessages_ : turnMessages_;
     save.readStrategicMessageIds.assign(
@@ -279,13 +279,13 @@ bool MainWindow::loadGameFromPath(const QString& path)
         return event.recipient != pendingOrders_.player;
     });
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
-    selectedStarId_ = loaded.selectedStar;
-    selectedFleetId_ = loaded.selectedFleet;
+    selection_.star = loaded.selectedStar;
+    selection_.fleet = loaded.selectedFleet;
     emit routeProgramContextChanged(true);
     currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
     currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
-    if (selectedStarId_) rememberMapSelection(1, *selectedStarId_);
-    else if (selectedFleetId_) rememberMapSelection(2, *selectedFleetId_);
+    if (selection_.star) rememberMapSelection(1, *selection_.star);
+    else if (selection_.fleet) rememberMapSelection(2, *selection_.fleet);
     showSensorRanges_ = loaded.showSensorRanges;
     currentSavePath_ = QFileInfo(path).absoluteFilePath();
 

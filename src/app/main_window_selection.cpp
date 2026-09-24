@@ -27,6 +27,26 @@ void MainWindow::rememberMapSelection(int kind, std::uint32_t id)
     currentDistanceSelectionId_ = id;
 }
 
+bool MainWindow::selectWorkspaceObject(int kind, std::uint32_t id)
+{
+    if (id == 0) return false;
+    if (kind == kMapItemStar) {
+        if (!find_star(state_, static_cast<StarId>(id))) return false;
+        selection_.star = static_cast<StarId>(id);
+    } else if (kind == kMapItemFleet) {
+        const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [id](const Fleet& candidate) {
+            return candidate.id == static_cast<FleetId>(id);
+        });
+        if (fleet == state_.fleets.end()) return false;
+        selection_.fleet = static_cast<FleetId>(id);
+    } else {
+        return false;
+    }
+    rememberMapSelection(kind, id);
+    emit routeProgramContextChanged();
+    return true;
+}
+
 QString MainWindow::selectedObjectDistanceSummary() const
 {
     struct ObjectView {
@@ -93,15 +113,7 @@ void MainWindow::installDeferredMapSelectionHandler()
             }
             return;
         }
-        if (kind == kMapItemStar) {
-            selectedStarId_ = static_cast<StarId>(id);
-        } else if (kind == kMapItemFleet) {
-            selectedFleetId_ = static_cast<FleetId>(id);
-        } else {
-            return;
-        }
-        rememberMapSelection(kind, id);
-        emit routeProgramContextChanged();
+        if (!selectWorkspaceObject(kind, id)) return;
         if (kind == kMapItemStar) emit routeProgramMapTargetPicked(kind, id);
 
         // Never clear/delete QGraphicsItems while Qt is still delivering the

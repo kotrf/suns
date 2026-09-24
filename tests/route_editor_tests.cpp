@@ -49,8 +49,8 @@ struct MainWindowTestAccess {
         window.state_.fleets.push_back(enemy);
         window.pendingOrders_ = PlayerOrders{1, {}};
         window.pendingDescriptions_.clear();
-        window.selectedFleetId_ = 1;
-        window.selectedStarId_ = window.state_.stars.at(1).id;
+        window.selection_.fleet = 1;
+        window.selection_.star = window.state_.stars.at(1).id;
         emit window.routeProgramContextChanged(true);
         window.rebuildScene();
     }
@@ -64,8 +64,8 @@ struct MainWindowTestAccess {
         window.state_.stars[2].position = {75, 0};
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();
-        window.selectedFleetId_ = 1;
-        window.selectedStarId_ = 2;
+        window.selection_.fleet = 1;
+        window.selection_.star = 2;
         window.rebuildScene();
     }
 
@@ -96,8 +96,8 @@ struct MainWindowTestAccess {
         }
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();
-        window.selectedFleetId_ = fleet.id;
-        window.selectedStarId_ = window.state_.stars[1].id;
+        window.selection_.fleet = fleet.id;
+        window.selection_.star = window.state_.stars[1].id;
         window.rebuildScene();
         emit window.routeProgramContextChanged(true);
     }
@@ -116,8 +116,8 @@ struct MainWindowTestAccess {
         window.state_.stars[1].position = {100, 0};
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();
-        window.selectedFleetId_ = fleet.id;
-        window.selectedStarId_ = 2;
+        window.selection_.fleet = fleet.id;
+        window.selection_.star = 2;
         window.rebuildScene();
         emit window.routeProgramContextChanged(true);
     }
@@ -131,7 +131,7 @@ struct MainWindowTestAccess {
 
     static void selectStar(MainWindow& window, std::size_t index)
     {
-        window.selectedStarId_ = window.state_.stars.at(index).id;
+        window.selection_.star = window.state_.stars.at(index).id;
         emit window.routeProgramContextChanged();
     }
 
