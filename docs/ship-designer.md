@@ -81,6 +81,10 @@ Delete/Backspace and an explicit Remove
 button all remove equipment. Locked technology remains visible with its exact
 research requirement, while core validation still protects the order path if a
 malformed layout bypasses the UI.
+With focus on a fitting cell, arrow keys move to the nearest cell in that
+direction, including across gaps in the hull grid. Tab moves between the
+catalog, fitting cells and action buttons. The selected cell stays highlighted
+for keyboard fitting and removal.
 
 Ship Designer is a non-modal top-level dialog. The galaxy map and other docks
 remain usable while it is open, and attempting to open it again raises the
