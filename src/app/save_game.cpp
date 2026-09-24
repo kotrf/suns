@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 36;
+constexpr quint32 kSaveFormatVersion = 37;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 6;
@@ -810,6 +810,15 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
            << value.fleetMass;
     for (const auto level : value.technologyLevels) stream << static_cast<quint8>(level);
     for (const auto progress : value.technologyProgress) stream << static_cast<quint32>(progress);
+    stream << static_cast<quint32>(value.colonyHistory.size());
+    for (const auto& colony : value.colonyHistory) {
+        stream << static_cast<quint32>(colony.planet)
+               << static_cast<quint64>(colony.population)
+               << static_cast<quint32>(colony.factories)
+               << static_cast<quint32>(colony.mines)
+               << static_cast<quint32>(colony.productionOutput);
+        writeMinerals(stream, colony.minerals);
+    }
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -843,6 +852,29 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
         stream >> stored;
         progress = static_cast<std::uint32_t>(stored);
     }
+    if (gReadSaveFormatVersion >= 37) {
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.colonyHistory.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            ColonyTurnStatistics colony;
+            quint32 planet{};
+            quint64 population{};
+            stream >> planet >> population >> colony.factories >> colony.mines
+                   >> colony.productionOutput;
+            colony.planet = static_cast<PlanetId>(planet);
+            colony.population = static_cast<std::uint64_t>(population);
+            readMinerals(stream, colony.minerals);
+            if (colony.planet == 0 || std::any_of(value.colonyHistory.begin(),
+                    value.colonyHistory.end(), [&](const auto& other) {
+                        return other.planet == colony.planet;
+                    })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.colonyHistory.push_back(colony);
+        }
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -854,7 +886,14 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
         && validAmount(value.minerals.ironium)
         && validAmount(value.minerals.boranium)
         && validAmount(value.minerals.germanium)
-        && validAmount(value.fleetMass);
+        && validAmount(value.fleetMass)
+        && std::all_of(value.colonyHistory.begin(), value.colonyHistory.end(),
+            [&](const auto& colony) {
+                return colony.planet != 0
+                    && validAmount(colony.minerals.ironium)
+                    && validAmount(colony.minerals.boranium)
+                    && validAmount(colony.minerals.germanium);
+            });
 }
 
 void writePlayer(QDataStream& stream, const Player& value)
@@ -1445,6 +1484,15 @@ void readGameState(QDataStream& stream, GameState& value)
         addLegacyOrbitalStations(value);
     }
     if (gReadSaveFormatVersion < 22) record_empire_turn_statistics(value);
+    else if (gReadSaveFormatVersion < 37) {
+        // Earlier snapshots cannot be reconstructed without replay. Only the
+        // loaded planning boundary can receive a faithful colony breakdown.
+        for (auto& player : value.players) {
+            if (player.history.empty() || player.history.back().turn != value.turn) continue;
+            player.history.back().colonyHistory =
+                empire_turn_statistics(value, player.id).colonyHistory;
+        }
+    }
 }
 
 void writeGalaxyConfig(QDataStream& stream, const GalaxyConfig& value)
