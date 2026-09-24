@@ -193,6 +193,7 @@ private:
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
     void refreshTurnMessages();
+    void updateTurnMessagesSummary();
     void openResearchDialog();
     void refreshResearchPanel();
     void refreshEmpireHistory();
@@ -273,6 +274,7 @@ private:
     std::vector<GameEvent> turnMessages_;
     std::set<std::uint64_t> readTurnMessageIds_;
     std::set<QString> hiddenTurnMessageClasses_;
+    std::size_t hiddenTurnMessagesCount_{};
     QPointer<ShipDesignerDialog> shipDesigner_;
 
     QGraphicsScene* scene_{};

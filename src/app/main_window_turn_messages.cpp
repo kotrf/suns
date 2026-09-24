@@ -456,6 +456,8 @@ void MainWindow::installTurnMessages()
 
     auto* nextUnread = new QPushButton("Next unread", content);
     nextUnread->setObjectName("nextUnreadTurnMessage");
+    auto* previousUnread = new QPushButton("Previous unread", content);
+    previousUnread->setObjectName("previousUnreadTurnMessage");
     turnMessageShowOnMapButton_ = new QPushButton("Show on map", content);
     turnMessageShowOnMapButton_->setObjectName("showTurnMessageOnMap");
     turnMessageHideSimilarButton_ = new QPushButton("Hide similar", content);
@@ -467,8 +469,11 @@ void MainWindow::installTurnMessages()
     auto* clearMessages = new QPushButton("Clear messages", content);
     clearMessages->setObjectName("clearTurnMessages");
     clearMessages->setToolTip("Remove all reports currently shown in this panel");
+    auto* navigationRow = new QHBoxLayout;
+    navigationRow->addWidget(previousUnread);
+    navigationRow->addWidget(nextUnread);
+    navigationRow->addStretch(1);
     auto* buttonRow = new QHBoxLayout;
-    buttonRow->addWidget(nextUnread);
     buttonRow->addWidget(turnMessageShowOnMapButton_);
     buttonRow->addWidget(turnMessageHideSimilarButton_);
     buttonRow->addWidget(turnMessageRestoreHiddenButton_);
@@ -477,6 +482,7 @@ void MainWindow::installTurnMessages()
     layout->addWidget(turnMessagesSummary_);
     layout->addLayout(filterRow);
     layout->addWidget(reader, 1);
+    layout->addLayout(navigationRow);
     layout->addLayout(buttonRow);
     turnMessagesDock_->setWidget(content);
     addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
@@ -531,6 +537,7 @@ void MainWindow::installTurnMessages()
         auto font = item->font();
         font.setBold(false);
         item->setFont(font);
+        updateTurnMessagesSummary();
         turnMessageBody_->setPlainText(event_text(state_, *event));
         turnMessageShowOnMapButton_->setEnabled(event->star != 0 || event->fleet != 0);
         turnMessageHideSimilarButton_->setEnabled(true);
@@ -540,18 +547,25 @@ void MainWindow::installTurnMessages()
     connect(turnMessagesList_, &QListWidget::itemDoubleClicked, this,
         [showOnMap](QListWidgetItem*) { showOnMap(); });
     connect(turnMessageShowOnMapButton_, &QPushButton::clicked, this, showOnMap);
-    connect(nextUnread, &QPushButton::clicked, this, [this, read] {
-        if (!turnMessagesList_) return;
-        for (int row = 0; row < turnMessagesList_->count(); ++row) {
+    const auto navigateUnread = [this](int direction) {
+        if (!turnMessagesList_ || turnMessagesList_->count() == 0) return;
+        const int count = turnMessagesList_->count();
+        int start = turnMessagesList_->currentRow();
+        if (start < 0) start = direction > 0 ? -1 : 0;
+        for (int offset = 1; offset <= count; ++offset) {
+            const int row = (start + direction * offset + count) % count;
             auto* item = turnMessagesList_->item(row);
             if (!item->data(kUnreadRole).toBool()) continue;
             turnMessagesList_->setCurrentItem(item);
             turnMessagesList_->scrollToItem(item);
-            read(item);
             return;
         }
         statusBar()->showMessage("No unread turn messages", 1800);
-    });
+    };
+    connect(nextUnread, &QPushButton::clicked, this,
+        [navigateUnread] { navigateUnread(1); });
+    connect(previousUnread, &QPushButton::clicked, this,
+        [navigateUnread] { navigateUnread(-1); });
     connect(turnMessageHideSimilarButton_, &QPushButton::clicked, this, [this, selectedEvent] {
         const auto* event = selectedEvent();
         if (!event) return;
@@ -685,6 +699,20 @@ void MainWindow::refreshTurnMessages()
         if (turnMessageHideSimilarButton_) turnMessageHideSimilarButton_->setEnabled(false);
     }
 
+    hiddenTurnMessagesCount_ = hidden;
+    updateTurnMessagesSummary();
+    if (turnMessageRestoreHiddenButton_) {
+        turnMessageRestoreHiddenButton_->setEnabled(!hiddenTurnMessageClasses_.empty());
+        turnMessageRestoreHiddenButton_->setText(hiddenTurnMessageClasses_.empty()
+            ? "Restore hidden"
+            : QString("Restore hidden (%1 types)")
+                  .arg(static_cast<qulonglong>(hiddenTurnMessageClasses_.size())));
+    }
+}
+
+void MainWindow::updateTurnMessagesSummary()
+{
+    if (!turnMessagesList_ || !turnMessagesSummary_) return;
     std::size_t unread = 0;
     for (int row = 0; row < turnMessagesList_->count(); ++row) {
         if (turnMessagesList_->item(row)->data(kUnreadRole).toBool()) ++unread;
@@ -693,14 +721,9 @@ void MainWindow::refreshTurnMessages()
         .arg(turnMessagesList_->count())
         .arg(static_cast<qulonglong>(turnMessages_.size()))
         .arg(static_cast<qulonglong>(unread))
-        .arg(hidden > 0 ? QString(" • %1 hidden by Hide").arg(static_cast<qulonglong>(hidden)) : QString{}));
-    if (turnMessageRestoreHiddenButton_) {
-        turnMessageRestoreHiddenButton_->setEnabled(!hiddenTurnMessageClasses_.empty());
-        turnMessageRestoreHiddenButton_->setText(hiddenTurnMessageClasses_.empty()
-            ? "Restore hidden"
-            : QString("Restore hidden (%1 types)")
-                  .arg(static_cast<qulonglong>(hiddenTurnMessageClasses_.size())));
-    }
+        .arg(hiddenTurnMessagesCount_ > 0
+            ? QString(" • %1 hidden by Hide").arg(static_cast<qulonglong>(hiddenTurnMessagesCount_))
+            : QString{}));
 }
 
 void MainWindow::resetTurnMessages()
