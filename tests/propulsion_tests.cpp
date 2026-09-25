@@ -46,6 +46,37 @@ void verify_default_propulsion_and_cargo()
         > suns::fleet_fuel_change_for_distance(state, empty, 64.0));
 }
 
+void verify_researched_warp_ten_drive()
+{
+    auto state = suns::make_demo_game();
+    const auto highWarp = suns::ShipComponentType::HighWarpDrive;
+    assert(!suns::component_available_to_player(state, 1, highWarp));
+    state.players.front().technology.levels[
+        static_cast<std::size_t>(suns::ResearchField::Propulsion)] = 2;
+    assert(suns::component_available_to_player(state, 1, highWarp));
+
+    const auto id = state.nextShipDesignId++;
+    state.shipDesigns.push_back({id, 1, "Warp Ten Scout", suns::ShipHullType::Scout, {highWarp}});
+    assert(suns::ship_design_valid(state.shipDesigns.back()));
+    assert(suns::ship_design_max_warp(state.shipDesigns.back()) == 10);
+    assert(near(suns::ship_design_overdrive_damage(state.shipDesigns.back(), 10), 0.0));
+    assert(suns::ship_design_overdrive_damage(
+        *suns::find_ship_design(state, suns::kScoutDesignId), 10) > 0.0);
+    assert(suns::component_spec(highWarp).mass
+        > suns::component_spec(suns::ShipComponentType::AdvancedFusionDrive).mass);
+
+    auto& fleet = state.fleets.front();
+    fleet.design = id;
+    fleet.ships = {{id, 1}};
+    fleet.fuel = suns::fleet_fuel_capacity(state, fleet);
+    const auto start = fleet.position;
+    const suns::PlayerOrders order{1, {suns::MoveFleetOrder{
+        fleet.id, {start.x + 100.0, start.y}, 10}}};
+    const auto result = suns::TurnProcessor{}.process(state, {order});
+    assert(near(result.fleets.front().position.x - start.x, 100.0));
+    assert(near(result.fleets.front().damagePercent, fleet.damagePercent));
+}
+
 void verify_fuel_limits_actual_travel()
 {
     auto state = suns::make_demo_game();
@@ -192,6 +223,7 @@ int main()
 {
     verify_warp_squared_movement();
     verify_default_propulsion_and_cargo();
+    verify_researched_warp_ten_drive();
     verify_fuel_limits_actual_travel();
     verify_ram_scoop_can_generate_fuel_in_flight();
     verify_antimatter_generator_and_radiating_drive_metadata();

@@ -24,14 +24,16 @@ Each engine component provides:
 
 Positive fuel rate consumes fuel. Negative fuel rate means the drive collects more fuel from interstellar space than it spends, so the tank fills while travelling. This is how ram-scoop drives can have effectively fuel-free or fuel-positive low-Warp regimes.
 
-The current catalog contains four drives:
+The catalog contains five drives:
 
 - **Fusion Drive** — straightforward starter engine, available through Warp 8 with steep fuel burn at its top speed;
 - **Advanced Fusion Drive** — Propulsion 1, light and radiation-safe through Warp 9, but expensive and always consumes fuel;
+- **High Warp Drive** — Propulsion 2, safe through Warp 10, heavier, costly and fuel-hungry at high speed;
 - **Ram Scoop Drive** — fuel-positive at low Warp, economical at moderate Warp, maximum Warp 9;
 - **Radiating Ram Scoop** — stronger scoop behaviour and Warp 9 capability, but carries a radiation hazard for transported colonists.
 
-No current engine provides safe Warp 10; all can reach it using damaging overdrive.
+Other engines can reach Warp 10 only using damaging overdrive. Existing designs
+keep their fitted engines after the technology unlock; refitting is explicit.
 
 ## Overdrive damage
 
