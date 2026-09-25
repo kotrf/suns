@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 37;
+constexpr quint32 kSaveFormatVersion = 38;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 6;
@@ -818,7 +818,10 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
                << static_cast<quint32>(colony.mines)
                << static_cast<quint32>(colony.productionOutput);
         writeMinerals(stream, colony.minerals);
+        writeMinerals(stream, colony.extraction);
     }
+    writeMinerals(stream, value.extraction);
+    stream << static_cast<quint8>(value.extractionRecorded ? 1 : 0);
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -865,6 +868,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             colony.planet = static_cast<PlanetId>(planet);
             colony.population = static_cast<std::uint64_t>(population);
             readMinerals(stream, colony.minerals);
+            if (gReadSaveFormatVersion >= 38) readMinerals(stream, colony.extraction);
             if (colony.planet == 0 || std::any_of(value.colonyHistory.begin(),
                     value.colonyHistory.end(), [&](const auto& other) {
                         return other.planet == colony.planet;
@@ -874,6 +878,13 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             }
             value.colonyHistory.push_back(colony);
         }
+    }
+    if (gReadSaveFormatVersion >= 38) {
+        readMinerals(stream, value.extraction);
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) markCorrupt(stream);
+        value.extractionRecorded = recorded == 1;
     }
 }
 
@@ -886,13 +897,19 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
         && validAmount(value.minerals.ironium)
         && validAmount(value.minerals.boranium)
         && validAmount(value.minerals.germanium)
+        && validAmount(value.extraction.ironium)
+        && validAmount(value.extraction.boranium)
+        && validAmount(value.extraction.germanium)
         && validAmount(value.fleetMass)
         && std::all_of(value.colonyHistory.begin(), value.colonyHistory.end(),
             [&](const auto& colony) {
                 return colony.planet != 0
                     && validAmount(colony.minerals.ironium)
                     && validAmount(colony.minerals.boranium)
-                    && validAmount(colony.minerals.germanium);
+                    && validAmount(colony.minerals.germanium)
+                    && validAmount(colony.extraction.ironium)
+                    && validAmount(colony.extraction.boranium)
+                    && validAmount(colony.extraction.germanium);
             });
 }
 

@@ -10,6 +10,7 @@ The empire-wide metrics are:
 - total population across owned colonies and fleets;
 - colonies, factories, mines and current production output;
 - owned planetary and fleet mineral stocks;
+- I/B/G minerals actually extracted during the preceding year;
 - fleets, ships and gross fleet mass;
 - technology levels and invested RP by field.
 
@@ -24,12 +25,19 @@ its previously recorded years, but has a gap while it is not owned. These
 per-colony samples are saved in format 37; loading an older campaign can add
 the breakdown for its current boundary, but cannot invent earlier colony
 histories from empire-wide totals. Other players' assets are never included.
+Format 38 adds actual yearly extraction per empire and per owned colony. The
+year of a pre-38 save has no extraction record; those years show a gap and
+"No extraction record" on hover. Extraction belongs to the empire that owned a mine when it
+worked, even if the colony changes hands before the next planning boundary.
+Remote mining of neutral worlds is not included in this colony mining series.
 
 The Empire History dock plots the local player's saved snapshots. Choose
 population, colony/infrastructure counts, yearly production output, I/B/G
-stocks, fleet/ship counts, fleet mass, technology levels or invested RP. Hover
-over a year to read the exact values, and select a first and last year to inspect
-a shorter range. For population, infrastructure, output and mineral stocks,
+stocks, fleet/ship counts, fleet mass, technology levels, invested RP or
+mineral extraction. Extraction shows the three resources actually mined each
+year for the empire or a selected colony. Hover over a year to read exact
+values, and select a first and last year to inspect a shorter range. For
+population, infrastructure, output, stocks and extraction,
 choose Whole empire, a recorded colony or Follow map. Follow map tracks the
 currently selected owned colony; with no owned colony selected it prompts for
 one instead of showing empire totals under a colony label. Missing observations show a gap and
@@ -37,6 +45,6 @@ one instead of showing empire totals under a colony label. Missing observations 
 never reads the host's other players' histories in a player turn. It uses
 Qt Widgets painting and does not require Qt Charts.
 
-Extraction and freight counters, event markers and richer comparison tools
+Freight counters, event markers and richer comparison tools
 remain later extensions of issue #48; snapshots from older saves start at the
 loaded turn.

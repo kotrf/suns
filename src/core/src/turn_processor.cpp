@@ -239,15 +239,18 @@ void transfer_minerals(MineralCargo& colony, MineralCargo& fleet, const MineralC
     fleet = target;
 }
 
-void mine_colonies(GameState& state)
+std::vector<ColonyExtraction> mine_colonies(GameState& state)
 {
+    std::vector<ColonyExtraction> extraction;
     for (auto& planet : state.planets) {
         if (planet.owner == 0) continue;
         const auto mined = projected_mineral_mining(state, planet);
+        extraction.push_back({planet.id, planet.owner, mined});
         planet.minerals.ironium += mined.ironium;
         planet.minerals.boranium += mined.boranium;
         planet.minerals.germanium += mined.germanium;
     }
+    return extraction;
 }
 
 std::optional<std::uint32_t> complete_production(
@@ -1651,7 +1654,7 @@ TurnResult TurnProcessor::process_with_events(
     // orders and movement are resolved. A basic dock without the module does
     // not refuel, leaving room for cheaper station hulls later.
     refuel_fleets_at_orbital_services(next);
-    mine_colonies(next);
+    const auto extraction = mine_colonies(next);
 
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
@@ -1892,7 +1895,7 @@ TurnResult TurnProcessor::process_with_events(
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
-    record_empire_turn_statistics(next);
+    record_empire_turn_statistics(next, extraction, true);
     return {std::move(next), std::move(events)};
 }
 
