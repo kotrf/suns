@@ -1,8 +1,6 @@
 #include "main_window.hpp"
 
 #include <QComboBox>
-#include <QDialog>
-#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -11,6 +9,7 @@
 #include <QMenuBar>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -45,16 +44,17 @@ QString fieldName(ResearchField field)
 
 void MainWindow::installResearch()
 {
-    if (researchDialog_) return;
+    if (researchDock_) return;
 
-    researchDialog_ = new QDialog(this);
-    researchDialog_->setObjectName("researchDialog");
-    researchDialog_->setWindowTitle("Empire Research");
-    researchDialog_->setWindowModality(Qt::WindowModal);
-    researchDialog_->setMinimumSize(680, 500);
-    researchDialog_->resize(780, 600);
+    researchDock_ = new QDockWidget("Empire Research", this);
+    researchDock_->setObjectName("researchDock");
+    researchDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
 
-    auto* content = researchDialog_;
+    auto* scroll = new QScrollArea(researchDock_);
+    scroll->setWidgetResizable(true);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    auto* content = new QWidget(scroll);
+    content->setMinimumWidth(620);
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(7);
@@ -156,11 +156,6 @@ void MainWindow::installResearch()
     editRow->addWidget(researchRemoveButton_);
     layout->addLayout(editRow);
 
-    auto* dialogButtons = new QDialogButtonBox(QDialogButtonBox::Close, content);
-    dialogButtons->setObjectName("researchDialogButtons");
-    layout->addWidget(dialogButtons);
-    connect(dialogButtons, &QDialogButtonBox::rejected, researchDialog_, &QDialog::reject);
-
     connect(researchAddButton_, &QPushButton::clicked, this, &MainWindow::addResearchPlanItem);
     connect(researchMoveUpButton_, &QPushButton::clicked, this,
         [this] { moveSelectedResearchPlanItem(-1); });
@@ -176,6 +171,10 @@ void MainWindow::installResearch()
         researchMoveDownButton_->setEnabled(row >= 0 && row + 1 < count);
         researchRemoveButton_->setEnabled(row >= 0);
     });
+    scroll->setWidget(content);
+    researchDock_->setWidget(scroll);
+    addDockWidget(Qt::LeftDockWidgetArea, researchDock_);
+    researchDock_->hide();
     refreshResearchPanel();
 }
 
@@ -183,12 +182,14 @@ void MainWindow::openResearchDialog()
 {
     installResearch();
     refreshResearchPanel();
-    researchDialog_->exec();
+    researchDock_->show();
+    researchDock_->raise();
+    if (researchDock_->isFloating()) researchDock_->activateWindow();
 }
 
 void MainWindow::refreshResearchPanel()
 {
-    if (!researchDialog_) return;
+    if (!researchDock_) return;
     const auto* player = find_player(state_, pendingOrders_.player);
     if (!player) return;
 
@@ -246,7 +247,7 @@ void MainWindow::refreshResearchPanel()
     }
 
     QStringList nextUnlocks;
-    auto* catalog = researchDialog_->findChild<QTreeWidget*>("technologyCatalog");
+    auto* catalog = researchDock_->findChild<QTreeWidget*>("technologyCatalog");
     catalog->clear();
     for (const auto& unlock : research_unlocks()) {
         const auto current = technology_level(state_, player->id, unlock.field);

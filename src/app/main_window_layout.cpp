@@ -78,6 +78,7 @@ void MainWindow::installPanelLayoutFixes()
         auto* fleet = findChild<QDockWidget*>("fleetDock");
         auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
         auto* history = findChild<QDockWidget*>("empireHistoryDock");
+        auto* research = findChild<QDockWidget*>("researchDock");
         const auto show = [](QDockWidget* dock, bool visible) {
             if (dock) dock->setVisible(visible);
         };
@@ -93,6 +94,7 @@ void MainWindow::installPanelLayoutFixes()
         case 2: // Empire management and reports.
             show(overview, true);
             show(production, true);
+            show(research, true);
             show(turnMessagesDock_, true);
             show(history, true);
             if (turnMessagesDock_) turnMessagesDock_->raise();
@@ -167,7 +169,7 @@ void MainWindow::resetPanelLayout()
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
     auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
-    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, historyDock_}) {
+    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, historyDock_, researchDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -180,6 +182,11 @@ void MainWindow::resetPanelLayout()
     if (production) {
         addDockWidget(Qt::LeftDockWidgetArea, production);
         if (overview) splitDockWidget(overview, production, Qt::Vertical);
+    }
+    if (researchDock_) {
+        addDockWidget(Qt::LeftDockWidgetArea, researchDock_);
+        if (production) tabifyDockWidget(production, researchDock_);
+        researchDock_->hide();
     }
     if (fleet) addDockWidget(Qt::RightDockWidgetArea, fleet);
     if (route) {
