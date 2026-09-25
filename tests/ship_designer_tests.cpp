@@ -9,20 +9,31 @@ namespace {
 
 void verify_hulls_and_slot_validation()
 {
+    const auto& unlocks = suns::research_unlocks();
+    const auto heavyUnlock = std::find_if(unlocks.begin(), unlocks.end(), [](const suns::ResearchUnlock& unlock) {
+        return unlock.field == suns::ResearchField::Construction && unlock.level == 2;
+    });
+    assert(heavyUnlock != unlocks.end() && heavyUnlock->name == "Heavy Transport");
     const auto scoutHull = suns::hull_spec(suns::ShipHullType::Scout);
     const auto lightHull = suns::hull_spec(suns::ShipHullType::LightTransport);
     const auto mediumHull = suns::hull_spec(suns::ShipHullType::MediumTransport);
+    const auto heavyHull = suns::hull_spec(suns::ShipHullType::HeavyTransport);
     const auto minerHull = suns::hull_spec(suns::ShipHullType::RemoteMiner);
     const auto utilityHull = suns::hull_spec(suns::ShipHullType::Utility);
 
     assert(scoutHull.requiredEngines == 1);
     assert(mediumHull.requiredEngines == 2);
+    assert(heavyHull.requiredEngines == 3);
     assert(minerHull.requiredEngines == 2);
     assert(utilityHull.requiredEngines == 2);
     assert(scoutHull.generalSlots == 2);
     assert(lightHull.generalSlots == 3);
     assert(mediumHull.generalSlots == 5);
     assert(mediumHull.baseCargoCapacity > lightHull.baseCargoCapacity);
+    assert(heavyHull.baseCargoCapacity == 250.0);
+    assert(heavyHull.baseCargoCapacity > mediumHull.baseCargoCapacity);
+    assert(heavyHull.buildCost > mediumHull.buildCost);
+    assert(heavyHull.fittingSlots.size() == 9);
     assert(utilityHull.baseCargoCapacity == 0.0);
     assert(utilityHull.generalSlots > mediumHull.generalSlots);
     assert(minerHull.miningSlots == 2);
@@ -74,6 +85,30 @@ void verify_hulls_and_slot_validation()
     assert(suns::ship_design_mining_slots_used(validMiner) == 2);
     assert(suns::ship_design_general_slots_used(validMiner) == 1);
     assert(suns::ship_design_can_remote_mine(validMiner));
+
+    suns::ShipDesign bulkHauler{
+        16, 1, "Bulk Hauler", suns::ShipHullType::HeavyTransport,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::FusionDrive},
+    };
+    assert(suns::ship_design_valid(bulkHauler));
+    assert(suns::ship_design_engine_slots_used(bulkHauler) == 3);
+    assert(suns::ship_design_cargo_capacity(bulkHauler) == 250.0);
+    assert(!suns::ship_design_can_remote_mine(bulkHauler));
+    suns::ShipDesign mediumHauler{
+        17, 1, "Standard Hauler", suns::ShipHullType::MediumTransport,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive},
+    };
+    assert(suns::ship_design_valid(mediumHauler));
+    assert(suns::ship_design_cost(bulkHauler) > suns::ship_design_cost(mediumHauler));
+    assert(suns::ship_design_cargo_capacity(bulkHauler) > suns::ship_design_cargo_capacity(mediumHauler));
+    assert(suns::ship_design_mineral_cost(bulkHauler).ironium
+        > suns::ship_design_mineral_cost(mediumHauler).ironium);
+    assert(suns::ship_design_fuel_rate(bulkHauler, 7) * suns::ship_design_mass(bulkHauler)
+        > suns::ship_design_fuel_rate(mediumHauler, 7) * suns::ship_design_mass(mediumHauler));
+    auto missingEngine = bulkHauler;
+    missingEngine.components.pop_back();
+    assert(!suns::ship_design_valid(missingEngine));
 
     suns::ShipDesign mixedEngineBank{
         14, 1, "Mixed Engines", suns::ShipHullType::Utility,
@@ -225,6 +260,20 @@ void verify_create_design_order()
     assert(minerCreated.shipDesigns.size() == unlocked.shipDesigns.size() + 1);
     assert(minerCreated.shipDesigns.back().hull == suns::ShipHullType::RemoteMiner);
 
+    suns::PlayerOrders heavyOrder{1, {}};
+    heavyOrder.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Bulk Hauler", suns::ShipHullType::HeavyTransport,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FusionDrive,
+         suns::ShipComponentType::FusionDrive},
+    });
+    const auto lockedHeavy = processor.process(unlocked, {heavyOrder});
+    assert(lockedHeavy.shipDesigns.size() == unlocked.shipDesigns.size());
+    auto heavyTech = unlocked;
+    heavyTech.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 2;
+    const auto heavyCreated = processor.process(heavyTech, {heavyOrder});
+    assert(heavyCreated.shipDesigns.size() == heavyTech.shipDesigns.size() + 1);
+    assert(heavyCreated.shipDesigns.back().hull == suns::ShipHullType::HeavyTransport);
+
     suns::PlayerOrders advancedDrive{1, {}};
     advancedDrive.orders.emplace_back(suns::CreateShipDesignOrder{
         "Fast Courier",
@@ -245,6 +294,18 @@ void verify_create_design_order()
         == suns::ShipComponentType::AdvancedFusionDrive);
     assert(suns::component_available_to_player(
         propulsionUnlocked, 1, suns::ShipComponentType::AdvancedFusionDrive));
+
+    suns::PlayerOrders highWarp{1, {}};
+    highWarp.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Warp Ten Courier", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::HighWarpDrive},
+    });
+    assert(processor.process(propulsionUnlocked, {highWarp}).shipDesigns.size()
+        == propulsionUnlocked.shipDesigns.size());
+    propulsionUnlocked.players.front().technology.levels[
+        static_cast<std::size_t>(suns::ResearchField::Propulsion)] = 2;
+    const auto warpTenCreated = processor.process(propulsionUnlocked, {highWarp});
+    assert(warpTenCreated.shipDesigns.size() == propulsionUnlocked.shipDesigns.size() + 1);
 
     suns::PlayerOrders extendedScanner{1, {}};
     extendedScanner.orders.emplace_back(suns::CreateShipDesignOrder{

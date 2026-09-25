@@ -316,6 +316,8 @@ ShipHullSpec hull_spec(ShipHullType type)
         return {type, "Remote Miner", 120.0, 8, 500.0, 0.0, 2, 1, 2, make_hull_slots(2, 1, 2)};
     case ShipHullType::Utility:
         return {type, "Utility Hull", 85.0, 7, 500.0, 0.0, 2, 8, 0, make_hull_slots(2, 8, 0)};
+    case ShipHullType::HeavyTransport:
+        return {type, "Heavy Transport", 140.0, 12, 600.0, 250.0, 3, 6, 0, make_hull_slots(3, 6, 0)};
     }
     return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0, {}};
 }
@@ -366,6 +368,16 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.maxWarp = 9;
         spec.fuelPer100MassLy = {0.0, 0.04, 0.05, 0.07, 0.10, 0.16, 0.24, 0.38, 0.62, 0.88, 1.45};
         spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0};
+        break;
+    case ShipComponentType::HighWarpDrive:
+        spec.name = "High Warp Drive";
+        spec.kind = ShipComponentKind::Engine;
+        spec.mass = 25.0;
+        spec.buildCost = 12;
+        spec.engineThrust = 720.0;
+        spec.maxWarp = 10;
+        spec.fuelPer100MassLy = {0.0, 0.06, 0.08, 0.11, 0.16, 0.25, 0.40, 0.64, 1.05, 1.65, 2.40};
+        spec.overdriveDamagePercent.fill(0.0);
         break;
     case ShipComponentType::LongRangeScanner:
         spec.name = "Long Range Scanner";
@@ -646,8 +658,11 @@ bool ship_design_available_to_player(
 {
     const bool hullAvailable = design.hull != ShipHullType::RemoteMiner
         || technology_level(state, player, ResearchField::Construction) >= 1;
+    const bool heavyAvailable = design.hull != ShipHullType::HeavyTransport
+        || technology_level(state, player, ResearchField::Construction) >= 2;
     return design.owner == player
         && hullAvailable
+        && heavyAvailable
         && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
             return component_available_to_player(state, player, component);
         });
@@ -1423,11 +1438,100 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     return result;
 }
 
-void record_empire_turn_statistics(GameState& state)
+void record_empire_turn_statistics(
+    GameState& state, const std::vector<ColonyExtraction>& extraction, bool elapsedYear,
+    const std::vector<ColonyFreightDelivery>& freight,
+    const std::vector<RemoteExtraction>& remoteExtraction)
 {
     for (auto& player : state.players) {
         auto snapshot = empire_turn_statistics(state, player.id);
+        snapshot.extractionRecorded = elapsedYear;
+        for (const auto& mined : extraction) {
+            if (mined.owner != player.id) continue;
+            snapshot.extraction.ironium += mined.minerals.ironium;
+            snapshot.extraction.boranium += mined.minerals.boranium;
+            snapshot.extraction.germanium += mined.minerals.germanium;
+            const auto colony = std::find_if(snapshot.colonyHistory.begin(),
+                snapshot.colonyHistory.end(), [&](const auto& record) {
+                    return record.planet == mined.planet;
+                });
+            if (colony == snapshot.colonyHistory.end()) continue;
+            colony->extraction.ironium += mined.minerals.ironium;
+            colony->extraction.boranium += mined.minerals.boranium;
+            colony->extraction.germanium += mined.minerals.germanium;
+        }
+        snapshot.freightRecorded = elapsedYear;
+        for (const auto& delivered : freight) {
+            if (delivered.owner != player.id) continue;
+            snapshot.freightDelivered.ironium += delivered.minerals.ironium;
+            snapshot.freightDelivered.boranium += delivered.minerals.boranium;
+            snapshot.freightDelivered.germanium += delivered.minerals.germanium;
+            snapshot.colonistsDelivered += delivered.colonists;
+            const auto colony = std::find_if(snapshot.colonyHistory.begin(),
+                snapshot.colonyHistory.end(), [&](const auto& record) {
+                    return record.planet == delivered.planet;
+                });
+            if (colony == snapshot.colonyHistory.end()) continue;
+            colony->freightDelivered.ironium += delivered.minerals.ironium;
+            colony->freightDelivered.boranium += delivered.minerals.boranium;
+            colony->freightDelivered.germanium += delivered.minerals.germanium;
+            colony->colonistsDelivered += delivered.colonists;
+        }
+        snapshot.remoteExtractionRecorded = elapsedYear;
+        for (const auto& mined : remoteExtraction) {
+            if (mined.owner != player.id) continue;
+            snapshot.remoteExtraction.ironium += mined.minerals.ironium;
+            snapshot.remoteExtraction.boranium += mined.minerals.boranium;
+            snapshot.remoteExtraction.germanium += mined.minerals.germanium;
+            const auto site = std::find_if(snapshot.remoteMineHistory.begin(),
+                snapshot.remoteMineHistory.end(), [&](const auto& record) {
+                    return record.planet == mined.planet;
+                });
+            if (site == snapshot.remoteMineHistory.end()) {
+                snapshot.remoteMineHistory.push_back({mined.planet, mined.minerals});
+            } else {
+                site->extraction.ironium += mined.minerals.ironium;
+                site->extraction.boranium += mined.minerals.boranium;
+                site->extraction.germanium += mined.minerals.germanium;
+            }
+        }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
+            snapshot.milestones = player.history.back().milestones;
+            // Rebuilding a boundary to refresh population or ownership does
+            // not erase the measured mining output of that already resolved year.
+            if (!elapsedYear && player.history.back().extractionRecorded) {
+                const auto& previous = player.history.back();
+                snapshot.extractionRecorded = true;
+                snapshot.extraction = previous.extraction;
+                for (auto& colony : snapshot.colonyHistory) {
+                    const auto old = std::find_if(previous.colonyHistory.begin(),
+                        previous.colonyHistory.end(), [&](const auto& record) {
+                            return record.planet == colony.planet;
+                        });
+                    if (old != previous.colonyHistory.end()) colony.extraction = old->extraction;
+                }
+            }
+            if (!elapsedYear && player.history.back().freightRecorded) {
+                const auto& previous = player.history.back();
+                snapshot.freightRecorded = true;
+                snapshot.freightDelivered = previous.freightDelivered;
+                snapshot.colonistsDelivered = previous.colonistsDelivered;
+                for (auto& colony : snapshot.colonyHistory) {
+                    const auto old = std::find_if(previous.colonyHistory.begin(),
+                        previous.colonyHistory.end(), [&](const auto& record) {
+                            return record.planet == colony.planet;
+                        });
+                    if (old != previous.colonyHistory.end()) {
+                        colony.freightDelivered = old->freightDelivered;
+                        colony.colonistsDelivered = old->colonistsDelivered;
+                    }
+                }
+            }
+            if (!elapsedYear && player.history.back().remoteExtractionRecorded) {
+                snapshot.remoteExtractionRecorded = true;
+                snapshot.remoteExtraction = player.history.back().remoteExtraction;
+                snapshot.remoteMineHistory = player.history.back().remoteMineHistory;
+            }
             player.history.back() = std::move(snapshot);
         } else {
             player.history.push_back(std::move(snapshot));

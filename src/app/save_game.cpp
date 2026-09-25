@@ -18,13 +18,19 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 37;
+constexpr quint32 kSaveFormatVersion = 43;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 6;
+constexpr quint32 kTurnOrderFormatVersion = 8;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
+
+quint8 newestShipComponent()
+{
+    return static_cast<quint8>(gReadSaveFormatVersion >= 39
+        ? ShipComponentType::HighWarpDrive : ShipComponentType::ExtendedRangeScanner);
+}
 
 std::uint64_t mixId(std::uint64_t value)
 {
@@ -474,9 +480,8 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.id = static_cast<ShipDesignId>(id);
     value.owner = static_cast<PlayerId>(owner);
     readString(stream, value.name);
-    const auto newestHull = gReadSaveFormatVersion >= 20
-        ? ShipHullType::Utility
-        : ShipHullType::RemoteMiner;
+    const auto newestHull = gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+        : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
     if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return;
 
     quint32 count{};
@@ -485,7 +490,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
+        if (!readEnum(stream, component, newestShipComponent())) return;
         value.components.push_back(component);
     }
     value.placements.clear();
@@ -497,7 +502,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
             quint16 slot{};
             ShipComponentType component{};
             stream >> slot;
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
+            if (!readEnum(stream, component, newestShipComponent())) return;
             value.placements.push_back({static_cast<ShipSlotId>(slot), component});
         }
     }
@@ -818,6 +823,30 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
                << static_cast<quint32>(colony.mines)
                << static_cast<quint32>(colony.productionOutput);
         writeMinerals(stream, colony.minerals);
+        writeMinerals(stream, colony.extraction);
+        writeMinerals(stream, colony.freightDelivered);
+        stream << static_cast<quint64>(colony.colonistsDelivered);
+    }
+    writeMinerals(stream, value.extraction);
+    stream << static_cast<quint8>(value.extractionRecorded ? 1 : 0);
+    stream << static_cast<quint32>(value.milestones.size());
+    for (const auto& marker : value.milestones) {
+        stream << static_cast<quint64>(marker.eventId)
+               << static_cast<quint64>(marker.observedTurn);
+        writeEnum(stream, marker.kind);
+        stream << static_cast<quint32>(marker.planet);
+        writeEnum(stream, marker.researchField);
+        stream << static_cast<quint8>(marker.technologyLevel);
+    }
+    writeMinerals(stream, value.freightDelivered);
+    stream << static_cast<quint64>(value.colonistsDelivered)
+           << static_cast<quint8>(value.freightRecorded ? 1 : 0);
+    writeMinerals(stream, value.remoteExtraction);
+    stream << static_cast<quint8>(value.remoteExtractionRecorded ? 1 : 0)
+           << static_cast<quint32>(value.remoteMineHistory.size());
+    for (const auto& site : value.remoteMineHistory) {
+        stream << static_cast<quint32>(site.planet);
+        writeMinerals(stream, site.extraction);
     }
 }
 
@@ -865,6 +894,13 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             colony.planet = static_cast<PlanetId>(planet);
             colony.population = static_cast<std::uint64_t>(population);
             readMinerals(stream, colony.minerals);
+            if (gReadSaveFormatVersion >= 38) readMinerals(stream, colony.extraction);
+            if (gReadSaveFormatVersion >= 41) {
+                readMinerals(stream, colony.freightDelivered);
+                quint64 colonistsDelivered{};
+                stream >> colonistsDelivered;
+                colony.colonistsDelivered = colonistsDelivered;
+            }
             if (colony.planet == 0 || std::any_of(value.colonyHistory.begin(),
                     value.colonyHistory.end(), [&](const auto& other) {
                         return other.planet == colony.planet;
@@ -873,6 +909,77 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
                 return;
             }
             value.colonyHistory.push_back(colony);
+        }
+    }
+    if (gReadSaveFormatVersion >= 38) {
+        readMinerals(stream, value.extraction);
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) markCorrupt(stream);
+        value.extractionRecorded = recorded == 1;
+    }
+    if (gReadSaveFormatVersion >= 40) {
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.milestones.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            HistoryMilestone marker;
+            quint64 id{}, observedTurn{};
+            quint32 planet{};
+            stream >> id >> observedTurn;
+            if (!readEnum(stream, marker.kind,
+                    static_cast<quint8>(HistoryMilestoneKind::ResearchCompleted))) return;
+            stream >> planet;
+            if (!readEnum(stream, marker.researchField,
+                    static_cast<quint8>(ResearchField::Weapons))) return;
+            stream >> marker.technologyLevel;
+            marker.eventId = id;
+            marker.observedTurn = observedTurn;
+            marker.planet = planet;
+            if (marker.eventId == 0 || marker.observedTurn > value.turn
+                || (marker.kind == HistoryMilestoneKind::ResearchCompleted
+                    ? marker.technologyLevel == 0 : marker.planet == 0)
+                || std::any_of(value.milestones.begin(), value.milestones.end(), [&](const auto& other) {
+                    return other.eventId == marker.eventId;
+                })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.milestones.push_back(marker);
+        }
+    }
+    if (gReadSaveFormatVersion >= 41) {
+        readMinerals(stream, value.freightDelivered);
+        quint8 recorded{};
+        quint64 colonistsDelivered{};
+        stream >> colonistsDelivered >> recorded;
+        value.colonistsDelivered = colonistsDelivered;
+        if (recorded > 1) markCorrupt(stream);
+        value.freightRecorded = recorded == 1;
+    }
+    if (gReadSaveFormatVersion >= 42) {
+        readMinerals(stream, value.remoteExtraction);
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) markCorrupt(stream);
+        value.remoteExtractionRecorded = recorded == 1;
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.remoteMineHistory.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            RemoteMineTurnStatistics site;
+            quint32 planet{};
+            stream >> planet;
+            site.planet = planet;
+            readMinerals(stream, site.extraction);
+            if (site.planet == 0 || std::any_of(value.remoteMineHistory.begin(),
+                    value.remoteMineHistory.end(), [&](const auto& other) {
+                        return other.planet == site.planet;
+                    })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.remoteMineHistory.push_back(site);
         }
     }
 }
@@ -886,13 +993,35 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
         && validAmount(value.minerals.ironium)
         && validAmount(value.minerals.boranium)
         && validAmount(value.minerals.germanium)
+        && validAmount(value.extraction.ironium)
+        && validAmount(value.extraction.boranium)
+        && validAmount(value.extraction.germanium)
+        && validAmount(value.freightDelivered.ironium)
+        && validAmount(value.freightDelivered.boranium)
+        && validAmount(value.freightDelivered.germanium)
+        && validAmount(value.remoteExtraction.ironium)
+        && validAmount(value.remoteExtraction.boranium)
+        && validAmount(value.remoteExtraction.germanium)
         && validAmount(value.fleetMass)
         && std::all_of(value.colonyHistory.begin(), value.colonyHistory.end(),
             [&](const auto& colony) {
                 return colony.planet != 0
                     && validAmount(colony.minerals.ironium)
                     && validAmount(colony.minerals.boranium)
-                    && validAmount(colony.minerals.germanium);
+                    && validAmount(colony.minerals.germanium)
+                    && validAmount(colony.extraction.ironium)
+                    && validAmount(colony.extraction.boranium)
+                    && validAmount(colony.extraction.germanium)
+                    && validAmount(colony.freightDelivered.ironium)
+                    && validAmount(colony.freightDelivered.boranium)
+                    && validAmount(colony.freightDelivered.germanium);
+            })
+        && std::all_of(value.remoteMineHistory.begin(), value.remoteMineHistory.end(),
+            [&](const auto& site) {
+                return site.planet != 0
+                    && validAmount(site.extraction.ironium)
+                    && validAmount(site.extraction.boranium)
+                    && validAmount(site.extraction.germanium);
             });
 }
 
@@ -1662,16 +1791,15 @@ bool readOrder(QDataStream& stream, Order& order)
     case 2: {
         CreateShipDesignOrder value;
         readString(stream, value.name);
-        const auto newestHull = gReadSaveFormatVersion >= 20
-            ? ShipHullType::Utility
-            : ShipHullType::RemoteMiner;
+        const auto newestHull = gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+            : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
         if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return false;
         quint32 count{};
         if (!readCount(stream, count)) return false;
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
+            if (!readEnum(stream, component, newestShipComponent())) return false;
             value.components.push_back(component);
         }
         if (gReadSaveFormatVersion >= 19) {
@@ -1682,7 +1810,7 @@ bool readOrder(QDataStream& stream, Order& order)
                 quint16 slot{};
                 ShipComponentType component{};
                 stream >> slot;
-                if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
+                if (!readEnum(stream, component, newestShipComponent())) return false;
                 value.placements.push_back({static_cast<ShipSlotId>(slot), component});
             }
         }
@@ -2286,7 +2414,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

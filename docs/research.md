@@ -45,12 +45,16 @@ when the save is loaded.
   remain unchanged; new designs require the technology.
 - Propulsion 1: Advanced Fusion Drive, a safe 16 kt Warp-9 engine. It is lighter
   than either ram scoop, but costs more to build and consumes fuel at every Warp.
+- Propulsion 2: High Warp Drive, a safe Warp-10 engine at 25 kt and higher mineral
+  cost. It burns considerably more fuel at Warp 9–10, so scoops and the lighter
+  Advanced Fusion Drive remain useful for long routes and smaller ships.
 - Electronics 0: the starting Long Range Scanner remains available.
 - Electronics 1: Compact Long Range Scanner, 55 ly range, 5 kt, cost 2 and a smaller mineral bill.
 - Electronics 2: Extended Range Scanner, a 160 ly ordinary sensor at 24 kt,
   cost 8 and a substantial Germanium bill. It does not penetrate planets.
 - Electronics 3: Penetrating Scanner.
 - Construction 1: dedicated Remote Miner hull plus heavy Remote Mining Module. Mining equipment fits only `Mining` slots; the persistent waypoint task deposits output into the planet's surface stockpile for cargo fleets to collect separately.
+- Construction 2: Heavy Transport hull, with 250 kt built-in cargo capacity and three required engines. It carries bulk ore from mining sites, while smaller transports cost less to build and burn less fuel per ship.
 
 The scanner line offers three different engineering choices rather than automatic replacements: Compact saves mass at 55 ly, the starting scanner balances mass and a 90 ly field, and Extended reaches 160 ly at more than twice the starting scanner's mass and cost. The Advanced Fusion Drive likewise trades the ram scoops' fuel collection for lower mass, higher thrust and safe Warp 9. Existing ship designs remain unchanged. New designs are validated against the owner's technology both in the desktop Ship Designer and again in core order processing.
 

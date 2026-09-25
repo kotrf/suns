@@ -100,6 +100,7 @@ enum class ShipHullType {
     MediumTransport,
     RemoteMiner,
     Utility,
+    HeavyTransport,
 };
 
 using ShipSlotId = std::uint16_t;
@@ -144,6 +145,7 @@ enum class ShipComponentType {
     RemoteMiningModule,
     AdvancedFusionDrive,
     ExtendedRangeScanner,
+    HighWarpDrive,
 };
 
 enum class ShipComponentKind {
@@ -394,6 +396,48 @@ struct ColonyTurnStatistics {
     std::uint32_t mines{};
     std::uint32_t productionOutput{};
     MineralCargo minerals;
+    MineralCargo extraction; // Actual minerals mined during the preceding year.
+    MineralCargo freightDelivered; // Fleet cargo unloaded here during the preceding year.
+    std::uint64_t colonistsDelivered{};
+};
+
+struct ColonyExtraction {
+    PlanetId planet{};
+    PlayerId owner{}; // Owner when mining occurred; ownership may change before year end.
+    MineralCargo minerals;
+};
+
+struct ColonyFreightDelivery {
+    PlanetId planet{};
+    PlayerId owner{}; // Owner at delivery, even if the colony changes hands later.
+    MineralCargo minerals;
+    std::uint64_t colonists{};
+};
+
+struct RemoteExtraction {
+    PlanetId planet{};
+    PlayerId owner{}; // Fleet owner when ore was deposited on the neutral surface.
+    MineralCargo minerals;
+};
+
+struct RemoteMineTurnStatistics {
+    PlanetId planet{};
+    MineralCargo extraction;
+};
+
+enum class HistoryMilestoneKind : std::uint8_t {
+    ColonyFounded,
+    ColonyLost,
+    ResearchCompleted,
+};
+
+struct HistoryMilestone {
+    std::uint64_t eventId{};
+    std::uint64_t observedTurn{};
+    HistoryMilestoneKind kind{HistoryMilestoneKind::ColonyFounded};
+    PlanetId planet{};
+    ResearchField researchField{ResearchField::Electronics};
+    std::uint8_t technologyLevel{};
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and
@@ -406,6 +450,13 @@ struct EmpireTurnStatistics {
     std::uint32_t mines{};
     std::uint32_t productionOutput{};
     MineralCargo minerals;
+    MineralCargo extraction;
+    bool extractionRecorded{}; // False for the initial year and pre-v38 history.
+    MineralCargo freightDelivered;
+    std::uint64_t colonistsDelivered{};
+    bool freightRecorded{}; // False for the initial year and pre-v41 history.
+    MineralCargo remoteExtraction;
+    bool remoteExtractionRecorded{}; // False for the initial year and pre-v42 history.
     std::uint32_t fleets{};
     std::uint32_t ships{};
     double fleetMass{};
@@ -413,6 +464,10 @@ struct EmpireTurnStatistics {
     std::array<std::uint32_t, kResearchFieldCount> technologyProgress{};
     // Only colonies owned at this boundary; absent years are not zero values.
     std::vector<ColonyTurnStatistics> colonyHistory;
+    // Only neutral sites actually mined by this player's fleets in this year.
+    std::vector<RemoteMineTurnStatistics> remoteMineHistory;
+    // Only events delivered to this player at this planning boundary.
+    std::vector<HistoryMilestone> milestones;
 };
 
 struct Player {
@@ -741,7 +796,10 @@ void refresh_sensor_intel(GameState& state);
     const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
     const GameState& state, PlayerId player);
-void record_empire_turn_statistics(GameState& state);
+void record_empire_turn_statistics(
+    GameState& state, const std::vector<ColonyExtraction>& extraction = {}, bool elapsedYear = false,
+    const std::vector<ColonyFreightDelivery>& freight = {},
+    const std::vector<RemoteExtraction>& remoteExtraction = {});
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();

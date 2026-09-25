@@ -63,6 +63,19 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().race.habitableGravity = {27, 73};
     original.state.players.front().race.habitableRadiation = {4, 52};
     record_empire_turn_statistics(original.state);
+    original.state.players.front().history.back().extraction = {3.25, 2.5, 1.75};
+    original.state.players.front().history.back().extractionRecorded = true;
+    original.state.players.front().history.back().colonyHistory.front().extraction = {3.25, 2.5, 1.75};
+    original.state.players.front().history.back().freightDelivered = {4.5, 3.25, 2.0};
+    original.state.players.front().history.back().colonistsDelivered = 12000;
+    original.state.players.front().history.back().freightRecorded = true;
+    original.state.players.front().history.back().colonyHistory.front().freightDelivered = {4.5, 3.25, 2.0};
+    original.state.players.front().history.back().colonyHistory.front().colonistsDelivered = 12000;
+    original.state.players.front().history.back().remoteExtraction = {6.25, 5.5, 4.75};
+    original.state.players.front().history.back().remoteExtractionRecorded = true;
+    original.state.players.front().history.back().remoteMineHistory.push_back({2, {6.25, 5.5, 4.75}});
+    original.state.players.front().history.back().milestones.push_back({
+        12345, 77, HistoryMilestoneKind::ResearchCompleted, 0, ResearchField::Electronics, 2});
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
@@ -286,6 +299,21 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.back().colonyHistory.front().planet
         == original.state.planets.front().id);
     assert(loaded.state.players.front().history.back().colonyHistory.front().mines == 17);
+    assert(loaded.state.players.front().history.back().extraction.ironium == 3.25);
+    assert(loaded.state.players.front().history.back().extractionRecorded);
+    assert(loaded.state.players.front().history.back().colonyHistory.front().extraction.germanium == 1.75);
+    assert(loaded.state.players.front().history.back().freightRecorded);
+    assert(loaded.state.players.front().history.back().freightDelivered.ironium == 4.5);
+    assert(loaded.state.players.front().history.back().colonistsDelivered == 12000);
+    assert(loaded.state.players.front().history.back().colonyHistory.front().freightDelivered.boranium == 3.25);
+    assert(loaded.state.players.front().history.back().remoteExtractionRecorded);
+    assert(loaded.state.players.front().history.back().remoteExtraction.boranium == 5.5);
+    assert(loaded.state.players.front().history.back().remoteMineHistory.size() == 1);
+    assert(loaded.state.players.front().history.back().remoteMineHistory.front().planet == 2);
+    assert(loaded.state.players.front().history.back().remoteMineHistory.front().extraction.germanium == 4.75);
+    assert(loaded.state.players.front().history.back().milestones.size() == 1);
+    assert(loaded.state.players.front().history.back().milestones.front().eventId == 12345);
+    assert(loaded.state.players.front().history.back().milestones.front().technologyLevel == 2);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);
@@ -449,6 +477,83 @@ void turn_order_file_round_trip_preserves_envelope_and_orders()
     assert(allocation && allocation->percent == 30);
 }
 
+void high_warp_component_round_trips()
+{
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    QString error;
+    SaveGameData original;
+    original.galaxyConfig = {20260925, 24, 940.0, 700.0, 50.0};
+    original.state = generate_game(original.galaxyConfig);
+    original.campaignId = 5;
+    original.turnToken = 7;
+    original.pendingOrders = {1, {}};
+    const auto id = original.state.nextShipDesignId++;
+    original.state.shipDesigns.push_back({id, 1, "Warp Ten Scout",
+        ShipHullType::Scout, {ShipComponentType::HighWarpDrive}});
+    const auto savePath = directory.filePath("warp-ten.suns");
+    assert(write_save_game_file(savePath, original, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(savePath, loaded, error));
+    assert(find_ship_design(loaded.state, id)->components.front() == ShipComponentType::HighWarpDrive);
+
+    TurnOrderFileData packet{5, 1, 7,
+        {1, {CreateShipDesignOrder{"Warp Ten Scout", ShipHullType::Scout,
+            {ShipComponentType::HighWarpDrive}}}}, {"Design Warp Ten Scout"}};
+    const auto ordersPath = directory.filePath("warp-ten.sunsorders");
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(ordersPath, imported, error));
+    const auto& design = std::get<CreateShipDesignOrder>(imported.orders.orders.front());
+    assert(design.components.front() == ShipComponentType::HighWarpDrive);
+}
+
+void heavy_transport_round_trips()
+{
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    QString error;
+    SaveGameData original;
+    original.galaxyConfig = {20260925, 24, 940.0, 700.0, 50.0};
+    original.state = generate_game(original.galaxyConfig);
+    original.campaignId = 15;
+    original.turnToken = 9;
+    original.pendingOrders = {1, {}};
+    original.state.players.front().technology.levels[static_cast<std::size_t>(ResearchField::Construction)] = 2;
+    const auto id = original.state.nextShipDesignId++;
+    original.state.shipDesigns.push_back({id, 1, "Bulk Hauler", ShipHullType::HeavyTransport,
+        {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive, ShipComponentType::FusionDrive}});
+    const auto savePath = directory.filePath("heavy-transport.suns");
+    assert(write_save_game_file(savePath, original, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(savePath, loaded, error));
+    const auto* savedDesign = find_ship_design(loaded.state, id);
+    assert(savedDesign && savedDesign->hull == ShipHullType::HeavyTransport);
+    assert(ship_design_valid(*savedDesign));
+    assert(ship_design_available_to_player(loaded.state, 1, *savedDesign));
+
+    TurnOrderFileData packet{15, loaded.state.turn, 9,
+        {1, {CreateShipDesignOrder{"New Bulk Hauler", ShipHullType::HeavyTransport,
+            {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive,
+             ShipComponentType::FusionDrive}}}}, {"Design new bulk hauler"}};
+    const auto ordersPath = directory.filePath("heavy-transport.sunsorders");
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(ordersPath, imported, error));
+    const auto& design = std::get<CreateShipDesignOrder>(imported.orders.orders.front());
+    assert(design.hull == ShipHullType::HeavyTransport);
+    assert(design.components.size() == 3);
+
+    // Older packet versions reject the new hull ordinal rather than misreading it.
+    {
+        QFile file(ordersPath);
+        assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+        QDataStream stream(&file);
+        stream << quint32{7};
+    }
+    assert(!read_turn_order_file(ordersPath, imported, error));
+}
+
 void population_migration_and_clear_orders()
 {
     QTemporaryDir directory;
@@ -458,7 +563,8 @@ void population_migration_and_clear_orders()
     legacy.turnToken = 34;
     legacy.state = make_demo_game();
     // Build a v31-shaped fixture from the current writer. Keep newer survey
-    // payloads empty and strip v37's colony-history count before downgrading
+    // payloads empty and strip v37's colony-history count plus v38's
+    // extraction/freight totals before downgrading
     // the header; the historical empire snapshot itself must still migrate.
     legacy.state.players[0].surveyKnowledge.clear();
     legacy.state.players[0].pendingSurveyReports.clear();
@@ -482,7 +588,8 @@ void population_migration_and_clear_orders()
         const auto marker = QByteArray::fromHex("f00df00d00000000");
         const auto markerPosition = bytes.indexOf(marker);
         assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
-        bytes.remove(markerPosition + 4, 4); // empty v37 colony-history vector
+        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4);
+        // v37 vector, v38 extraction, v40 events, v41 freight and v42 remote extraction
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream stream(&file);
@@ -495,6 +602,11 @@ void population_migration_and_clear_orders()
     assert(migrated.state.players[0].history[0].population == 1'000'000);
     assert(migrated.state.players[0].history[0].colonyHistory.size() == 1);
     assert(migrated.state.players[0].history[0].colonyHistory[0].population == 1'000'000);
+    assert(migrated.state.players[0].history[0].extraction.ironium == 0.0);
+    assert(!migrated.state.players[0].history[0].extractionRecorded);
+    assert(migrated.state.players[0].history[0].milestones.empty());
+    assert(!migrated.state.players[0].history[0].freightRecorded);
+    assert(!migrated.state.players[0].history[0].remoteExtractionRecorded);
     assert(migrated.state.fleets[0].colonists == 30'000);
     assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 3.0);
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
@@ -578,6 +690,8 @@ int main()
 {
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();
+    high_warp_component_round_trips();
+    heavy_transport_round_trips();
     old_format_is_rejected_cleanly();
     population_migration_and_clear_orders();
     cancellation_round_trips_in_save_and_turn_packet();

@@ -239,15 +239,18 @@ void transfer_minerals(MineralCargo& colony, MineralCargo& fleet, const MineralC
     fleet = target;
 }
 
-void mine_colonies(GameState& state)
+std::vector<ColonyExtraction> mine_colonies(GameState& state)
 {
+    std::vector<ColonyExtraction> extraction;
     for (auto& planet : state.planets) {
         if (planet.owner == 0) continue;
         const auto mined = projected_mineral_mining(state, planet);
+        extraction.push_back({planet.id, planet.owner, mined});
         planet.minerals.ironium += mined.ironium;
         planet.minerals.boranium += mined.boranium;
         planet.minerals.germanium += mined.germanium;
     }
+    return extraction;
 }
 
 std::optional<std::uint32_t> complete_production(
@@ -564,7 +567,15 @@ MineralCargo& endpoint_minerals(CargoEndpointRef& endpoint)
     return endpoint.planet ? endpoint.planet->minerals : endpoint.fleet->minerals;
 }
 
-bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder& order)
+void record_freight_delivery(std::vector<ColonyFreightDelivery>& freight, const Planet& planet,
+    MineralCargo minerals, std::uint64_t colonists = 0)
+{
+    if (planet.owner == 0 || (colonists == 0 && mineral_cargo_mass(minerals) <= 0.0)) return;
+    freight.push_back({planet.id, planet.owner, minerals, colonists});
+}
+
+bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder& order,
+    std::vector<ColonyFreightDelivery>& freight)
 {
     constexpr double epsilon = 0.000001;
     auto source = resolve_cargo_endpoint(state, player, order.source);
@@ -631,27 +642,35 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
     destinationMinerals.ironium += order.minerals.ironium;
     destinationMinerals.boranium += order.minerals.boranium;
     destinationMinerals.germanium += order.minerals.germanium;
+    if (source->fleet && destination->planet)
+        record_freight_delivery(freight, *destination->planet, order.minerals, order.colonists);
     return true;
 }
 
-void mine_uncolonized_planets(GameState& state)
+std::vector<RemoteExtraction> mine_uncolonized_planets(GameState& state)
 {
+    std::vector<RemoteExtraction> extraction;
     for (const auto& fleet : state.fleets) {
         if (fleet.task != FleetTask::RemoteMining) continue;
         for (auto& planet : state.planets) {
-            if (!fleet_at_planet(state, fleet, planet)) continue;
+            if (planet.owner != 0 || !fleet_at_planet(state, fleet, planet)) continue;
             for (const auto& stack : fleet_ship_stacks(fleet)) {
                 const auto* design = find_ship_design(state, stack.design);
                 if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
                     || !ship_design_can_remote_mine(*design)) continue;
                 const auto mined = projected_remote_mining(state, planet, *design);
-                planet.minerals.ironium += mined.ironium * stack.count;
-                planet.minerals.boranium += mined.boranium * stack.count;
-                planet.minerals.germanium += mined.germanium * stack.count;
+                const MineralCargo output{mined.ironium * stack.count,
+                    mined.boranium * stack.count, mined.germanium * stack.count};
+                planet.minerals.ironium += output.ironium;
+                planet.minerals.boranium += output.boranium;
+                planet.minerals.germanium += output.germanium;
+                if (mineral_cargo_mass(output) > 0.0)
+                    extraction.push_back({planet.id, fleet.owner, output});
             }
             break;
         }
     }
+    return extraction;
 }
 
 Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
@@ -733,7 +752,8 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
         : std::optional<FleetArrivalAction>{action};
 }
 
-bool execute_arrival_action(GameState& state, Fleet& fleet)
+bool execute_arrival_action(GameState& state, Fleet& fleet,
+    std::vector<ColonyFreightDelivery>& freight)
 {
     if (!fleet.arrivalAction) return false;
 
@@ -784,6 +804,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
         if (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All) {
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (colony) {
+                record_freight_delivery(freight, *colony, {}, fleet.colonists);
                 colony->population += fleet.colonists;
                 fleet.colonists = 0;
             } else {
@@ -803,27 +824,34 @@ bool execute_arrival_action(GameState& state, Fleet& fleet)
             return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
         });
         if (surface == state.planets.end()) return false;
+        MineralCargo delivered;
         switch (action.cargo) {
         case FleetCargoKind::Colonists: break;
         case FleetCargoKind::Ironium:
+            delivered.ironium = fleet.minerals.ironium;
             surface->minerals.ironium += fleet.minerals.ironium;
             fleet.minerals.ironium = 0.0;
             break;
         case FleetCargoKind::Boranium:
+            delivered.boranium = fleet.minerals.boranium;
             surface->minerals.boranium += fleet.minerals.boranium;
             fleet.minerals.boranium = 0.0;
             break;
         case FleetCargoKind::Germanium:
+            delivered.germanium = fleet.minerals.germanium;
             surface->minerals.germanium += fleet.minerals.germanium;
             fleet.minerals.germanium = 0.0;
             break;
         case FleetCargoKind::All:
+            delivered = fleet.minerals;
             surface->minerals.ironium += fleet.minerals.ironium;
             surface->minerals.boranium += fleet.minerals.boranium;
             surface->minerals.germanium += fleet.minerals.germanium;
             fleet.minerals = {};
             break;
         }
+        if (surface->owner == fleet.owner)
+            record_freight_delivery(freight, *surface, delivered);
         return false;
     }
     case FleetArrivalActionKind::Refuel: {
@@ -1097,11 +1125,12 @@ void queue_fleet_movement_report(
         fleet.design);
 }
 
-bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets)
+bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets,
+    std::vector<ColonyFreightDelivery>& freight)
 {
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
-    if (execute_arrival_action(state, fleet)) {
+    if (execute_arrival_action(state, fleet, freight)) {
         queue_fleet_movement_report(state, fleet, PlayerReportKind::RouteCompleted, state.turn + 1);
         consumedFleets.push_back(fleet.id);
         return true;
@@ -1210,7 +1239,8 @@ void merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
 bool resolve_fleet_target_arrival(
     GameState& state,
     Fleet& fleet,
-    std::vector<FleetId>& consumedFleets)
+    std::vector<FleetId>& consumedFleets,
+    std::vector<ColonyFreightDelivery>& freight)
 {
     if (fleet.targetFleet == 0) return false;
     auto* target = friendly_fleet(state, fleet.owner, fleet.targetFleet);
@@ -1232,7 +1262,7 @@ bool resolve_fleet_target_arrival(
         return true;
     }
 
-    (void)finish_fleet_arrival(state, fleet, consumedFleets);
+    (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
     return true;
 }
 
@@ -1298,7 +1328,8 @@ void continue_merged_fleet_route(
     Fleet& fleet,
     Position destination,
     double remainingTurnFraction,
-    std::vector<FleetId>& consumedFleets)
+    std::vector<FleetId>& consumedFleets,
+    std::vector<ColonyFreightDelivery>& freight)
 {
     constexpr double epsilon = 0.000001;
     if (remainingTurnFraction <= epsilon) return;
@@ -1309,7 +1340,7 @@ void continue_merged_fleet_route(
     if (routeDistance <= epsilon) {
         if (fleet.targetFleet == 0) {
             fleet.destination.reset();
-            (void)finish_fleet_arrival(state, fleet, consumedFleets);
+            (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
         }
         return;
     }
@@ -1340,11 +1371,11 @@ void continue_merged_fleet_route(
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
         fleet.destination.reset();
-        (void)finish_fleet_arrival(state, fleet, consumedFleets);
+        (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
     }
 }
 
-void advance_fleets(GameState& state)
+void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freight)
 {
     constexpr double epsilon = 0.000001;
     std::vector<FleetId> consumedFleets;
@@ -1366,7 +1397,7 @@ void advance_fleets(GameState& state)
             continue;
         }
         if (same_position(fleet->position, target->position)) {
-            resolve_fleet_target_arrival(state, *fleet, consumedFleets);
+            resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight);
             skipMovement.push_back(id);
         }
     }
@@ -1551,7 +1582,7 @@ void advance_fleets(GameState& state)
         auto* fleet = fleet_by_id(state, id);
         if (!fleet || fleet_id_list_contains(consumedFleets, id)) continue;
         fleet->destination.reset();
-        (void)finish_fleet_arrival(state, *fleet, consumedFleets);
+        (void)finish_fleet_arrival(state, *fleet, consumedFleets, freight);
     }
 
     for (const auto id : fleetIds) {
@@ -1567,7 +1598,7 @@ void advance_fleets(GameState& state)
 
         const auto targetId = fleet->targetFleet;
         const auto action = fleet->arrivalAction.value_or(FleetArrivalAction{});
-        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets);
+        const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight);
         if (!resolved || encounter == resolvedEncounters.end()
             || action.kind != FleetArrivalActionKind::MergeWithFleet
             || !encounter->targetRouted) {
@@ -1588,7 +1619,7 @@ void advance_fleets(GameState& state)
             *merged,
             encounter->targetDestination,
             1.0 - encounter->timeFraction,
-            consumedFleets);
+            consumedFleets, freight);
     }
 
     if (!consumedFleets.empty()) {
@@ -1651,7 +1682,8 @@ TurnResult TurnProcessor::process_with_events(
     // orders and movement are resolved. A basic dock without the module does
     // not refuel, leaving room for cheaper station hulls later.
     refuel_fleets_at_orbital_services(next);
-    mine_colonies(next);
+    const auto extraction = mine_colonies(next);
+    std::vector<ColonyFreightDelivery> freight;
 
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
@@ -1786,7 +1818,9 @@ TurnResult TurnProcessor::process_with_events(
                             if (planet->population <= load) return;
                             planet->population -= load;
                         } else {
-                            planet->population += fleet->colonists - concreteOrder.colonists;
+                            const auto delivered = fleet->colonists - concreteOrder.colonists;
+                            planet->population += delivered;
+                            record_freight_delivery(freight, *planet, {}, delivered);
                         }
                         fleet->colonists = concreteOrder.colonists;
                     } else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>) {
@@ -1805,9 +1839,15 @@ TurnResult TurnProcessor::process_with_events(
                         if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
                         if (!minerals_available(planet->minerals, fleet->minerals, concreteOrder.minerals)) return;
 
+                        if (planet->owner == submission.player) {
+                            record_freight_delivery(freight, *planet, {
+                                std::max(0.0, fleet->minerals.ironium - concreteOrder.minerals.ironium),
+                                std::max(0.0, fleet->minerals.boranium - concreteOrder.minerals.boranium),
+                                std::max(0.0, fleet->minerals.germanium - concreteOrder.minerals.germanium)});
+                        }
                         transfer_minerals(planet->minerals, fleet->minerals, concreteOrder.minerals);
                     } else if constexpr (std::is_same_v<T, TransferCargoOrder>) {
-                        (void)transfer_cargo(next, submission.player, concreteOrder);
+                        (void)transfer_cargo(next, submission.player, concreteOrder, freight);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -1859,8 +1899,8 @@ TurnResult TurnProcessor::process_with_events(
         }
     }
 
-    mine_uncolonized_planets(next);
-    advance_fleets(next);
+    const auto remoteExtraction = mine_uncolonized_planets(next);
+    advance_fleets(next, freight);
     observe_current_sensor_coverage(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
     for (auto& planet : next.planets) {
@@ -1892,7 +1932,28 @@ TurnResult TurnProcessor::process_with_events(
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
-    record_empire_turn_statistics(next);
+    record_empire_turn_statistics(next, extraction, true, freight, remoteExtraction);
+    for (const auto& event : events) {
+        auto player = std::find_if(next.players.begin(), next.players.end(), [&](const Player& candidate) {
+            return candidate.id == event.recipient;
+        });
+        if (player == next.players.end() || player->history.empty()) continue;
+        std::optional<HistoryMilestoneKind> kind;
+        switch (event.kind) {
+        case GameEventKind::ColonyFounded: kind = HistoryMilestoneKind::ColonyFounded; break;
+        case GameEventKind::ColonyLost: kind = HistoryMilestoneKind::ColonyLost; break;
+        case GameEventKind::ResearchLevelCompleted: kind = HistoryMilestoneKind::ResearchCompleted; break;
+        default: break;
+        }
+        if (!kind || ((*kind == HistoryMilestoneKind::ResearchCompleted)
+                ? event.technologyLevel == 0 : event.planet == 0)) continue;
+        auto& milestones = player->history.back().milestones;
+        if (std::any_of(milestones.begin(), milestones.end(), [&](const auto& recorded) {
+                return recorded.eventId == event.id;
+            })) continue;
+        milestones.push_back({event.id, event.observedTurn, *kind,
+            event.planet, event.researchField, event.technologyLevel});
+    }
     return {std::move(next), std::move(events)};
 }
 

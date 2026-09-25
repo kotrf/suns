@@ -98,12 +98,50 @@ int main()
     assert(close(planet(started, 2).minerals.ironium, expected.ironium));
     assert(close(planet(started, 2).minerals.boranium, expected.boranium));
     assert(close(planet(started, 2).minerals.germanium, expected.germanium));
+    const auto& remoteHistory = started.players.front().history.back();
+    assert(remoteHistory.remoteExtractionRecorded);
+    assert(close(remoteHistory.remoteExtraction.ironium, expected.ironium));
+    assert(remoteHistory.remoteMineHistory.size() == 1);
+    assert(remoteHistory.remoteMineHistory.front().planet == 2);
+    assert(close(remoteHistory.remoteMineHistory.front().extraction.boranium, expected.boranium));
+    assert(!started.players.front().history.front().remoteExtractionRecorded);
+    auto refreshedRemote = started;
+    suns::record_empire_turn_statistics(refreshedRemote);
+    assert(close(refreshedRemote.players.front().history.back().remoteExtraction.ironium,
+        expected.ironium));
     assert(fleet(started, 2).task == suns::FleetTask::RemoteMining);
     assert(close(suns::mineral_cargo_mass(fleet(first, 2).minerals), 0.0));
 
     // The assigned task remains active without being queued every year.
     const auto continued = processor.process(started, {});
     assert(close(planet(continued, 2).minerals.ironium, expected.ironium * 2.0));
+    assert(close(continued.players.front().history.back().remoteExtraction.ironium,
+        expected.ironium));
+
+    // A different empire mining the same neutral site sees only its own work.
+    auto rivals = started;
+    rivals.players.push_back({2, "Rivals", {}});
+    rivals.players.back().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 1;
+    auto rivalDesign = rivals.shipDesigns[2];
+    rivalDesign.id = 5;
+    rivalDesign.owner = 2;
+    rivals.shipDesigns.push_back(rivalDesign);
+    auto rivalFleet = rivals.fleets.front();
+    rivalFleet.id = 4;
+    rivalFleet.owner = 2;
+    rivalFleet.design = 5;
+    rivalFleet.task = suns::FleetTask::RemoteMining;
+    rivals.fleets.push_back(rivalFleet);
+    const auto twoMiners = processor.process(rivals, {});
+    assert(close(twoMiners.players[0].history.back().remoteExtraction.ironium, expected.ironium));
+    assert(close(twoMiners.players[1].history.back().remoteExtraction.ironium, expected.ironium));
+    assert(twoMiners.players[1].history.back().remoteMineHistory.size() == 1);
+
+    // A site colonized before the next mining phase stops producing remote ore.
+    auto settled = started;
+    settled.planets[1].owner = 1;
+    const auto noRemoteMining = processor.process(settled, {});
+    assert(close(noRemoteMining.players.front().history.back().remoteExtraction.ironium, 0.0));
 
     // A transport, not the miner, may take the accumulated surface stock.
     suns::PlayerOrders collect{1, {}};
@@ -121,6 +159,22 @@ int main()
     assert(close(planet(collected, 2).minerals.ironium, expected.ironium));
     assert(close(planet(collected, 2).minerals.boranium, expected.boranium));
     assert(close(planet(collected, 2).minerals.germanium, expected.germanium));
+
+    // Loading ore at a neutral site is not a colony delivery. The haul is
+    // counted only after the transport reaches and unloads at the homeworld.
+    assert(close(collected.players.front().history.back().freightDelivered.ironium, 0.0));
+    suns::PlayerOrders returnHome{1, {suns::MoveFleetOrder{
+        3, state.stars.front().position, 8,
+        {suns::FleetArrivalActionKind::UnloadAll, 1, suns::FleetCargoKind::All}}}};
+    auto hauled = processor.process(collected, {returnHome});
+    for (int turn = 0; turn < 18
+            && close(hauled.players.front().history.back().freightDelivered.ironium, 0.0); ++turn) {
+        hauled = processor.process(hauled, {});
+    }
+    assert(close(hauled.players.front().history.back().freightDelivered.ironium,
+        accumulated.ironium));
+    assert(close(hauled.players.front().history.back().colonyHistory.front().freightDelivered.boranium,
+        accumulated.boranium));
 
     // The player can stop the task without moving the fleet.
     suns::PlayerOrders stopMining{1, {suns::MoveFleetOrder{
