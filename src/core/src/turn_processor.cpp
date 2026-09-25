@@ -647,24 +647,30 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
     return true;
 }
 
-void mine_uncolonized_planets(GameState& state)
+std::vector<RemoteExtraction> mine_uncolonized_planets(GameState& state)
 {
+    std::vector<RemoteExtraction> extraction;
     for (const auto& fleet : state.fleets) {
         if (fleet.task != FleetTask::RemoteMining) continue;
         for (auto& planet : state.planets) {
-            if (!fleet_at_planet(state, fleet, planet)) continue;
+            if (planet.owner != 0 || !fleet_at_planet(state, fleet, planet)) continue;
             for (const auto& stack : fleet_ship_stacks(fleet)) {
                 const auto* design = find_ship_design(state, stack.design);
                 if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
                     || !ship_design_can_remote_mine(*design)) continue;
                 const auto mined = projected_remote_mining(state, planet, *design);
-                planet.minerals.ironium += mined.ironium * stack.count;
-                planet.minerals.boranium += mined.boranium * stack.count;
-                planet.minerals.germanium += mined.germanium * stack.count;
+                const MineralCargo output{mined.ironium * stack.count,
+                    mined.boranium * stack.count, mined.germanium * stack.count};
+                planet.minerals.ironium += output.ironium;
+                planet.minerals.boranium += output.boranium;
+                planet.minerals.germanium += output.germanium;
+                if (mineral_cargo_mass(output) > 0.0)
+                    extraction.push_back({planet.id, fleet.owner, output});
             }
             break;
         }
     }
+    return extraction;
 }
 
 Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
@@ -1893,7 +1899,7 @@ TurnResult TurnProcessor::process_with_events(
         }
     }
 
-    mine_uncolonized_planets(next);
+    const auto remoteExtraction = mine_uncolonized_planets(next);
     advance_fleets(next, freight);
     observe_current_sensor_coverage(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
@@ -1926,7 +1932,7 @@ TurnResult TurnProcessor::process_with_events(
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
-    record_empire_turn_statistics(next, extraction, true, freight);
+    record_empire_turn_statistics(next, extraction, true, freight, remoteExtraction);
     for (const auto& event : events) {
         auto player = std::find_if(next.players.begin(), next.players.end(), [&](const Player& candidate) {
             return candidate.id == event.recipient;

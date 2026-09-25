@@ -213,7 +213,7 @@ void MainWindow::installEmpireHistory()
     historyMetric_->addItems({"Population", "Colonies and infrastructure", "Production output",
         "Mineral stocks (kt)", "Fleets and ships", "Fleet mass (kt)",
         "Technology levels", "Research invested (RP)", "Mineral extraction (kt/year)",
-        "Freight delivered to colonies (kt/year)"});
+        "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)"});
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -279,10 +279,21 @@ void MainWindow::refreshEmpireHistory()
     auto* chart = static_cast<HistoryChart*>(historyChart_);
     const auto selectedScope = historyScope_->currentData().toUInt();
     const auto selectedComparison = historyCompare_->currentData().toUInt();
+    const bool remoteMetric = historyMetric_->currentIndex() == 10;
     const bool scopedMetric = historyMetric_->currentIndex() <= 3
-        || historyMetric_->currentIndex() == 8 || historyMetric_->currentIndex() == 9;
+        || historyMetric_->currentIndex() == 8 || historyMetric_->currentIndex() == 9 || remoteMetric;
+    std::set<PlanetId> knownSites;
+    for (const auto& snapshot : history) {
+        if (remoteMetric) {
+            for (const auto& site : snapshot.remoteMineHistory) knownSites.insert(site.planet);
+        } else {
+            for (const auto& colony : snapshot.colonyHistory) knownSites.insert(colony.planet);
+        }
+    }
     const auto* planetOnMap = selectedPlanet();
-    const PlanetId selectedColony = planetOnMap && planetOnMap->owner == pendingOrders_.player
+    const PlanetId selectedColony = planetOnMap
+        && (remoteMetric ? knownSites.contains(planetOnMap->id)
+                         : planetOnMap->owner == pendingOrders_.player)
         ? planetOnMap->id : PlanetId{};
     {
         const QSignalBlocker blocker(historyScope_);
@@ -290,21 +301,22 @@ void MainWindow::refreshEmpireHistory()
         historyScope_->addItem("Whole empire", static_cast<quint32>(0));
         historyScope_->addItem(selectedColony
             ? QString("Follow map — %1").arg(QString::fromStdString(planetOnMap->name))
-            : QString("Follow map — select owned colony"), kFollowSelectedColony);
+            : remoteMetric ? QString("Follow map — select mined world")
+                           : QString("Follow map — select owned colony"), kFollowSelectedColony);
         const QSignalBlocker compareBlocker(historyCompare_);
         historyCompare_->clear();
         historyCompare_->addItem("Compare: none", kNoComparison);
         historyCompare_->addItem("Compare: whole empire", static_cast<quint32>(0));
-        std::set<PlanetId> knownColonies;
-        for (const auto& snapshot : history)
-            for (const auto& colony : snapshot.colonyHistory)
-                knownColonies.insert(colony.planet);
-        for (const auto id : knownColonies) {
+        for (const auto id : knownSites) {
             const auto planet = std::find_if(state_.planets.begin(), state_.planets.end(),
                 [id](const auto& candidate) { return candidate.id == id; });
-            const auto name = planet == state_.planets.end()
-                || planet->owner != pendingOrders_.player
-                ? QString("Former colony %1").arg(id) : QString::fromStdString(planet->name);
+            const auto name = remoteMetric
+                ? (planet == state_.planets.end()
+                    ? QString("Mined world %1").arg(id)
+                    : QString::fromStdString(planet->name))
+                : (planet == state_.planets.end() || planet->owner != pendingOrders_.player
+                    ? QString("Former colony %1").arg(id)
+                    : QString::fromStdString(planet->name));
             historyScope_->addItem(name, static_cast<quint32>(id));
             historyCompare_->addItem(QString("Compare: %1").arg(name), static_cast<quint32>(id));
         }
@@ -356,7 +368,9 @@ void MainWindow::refreshEmpireHistory()
         .arg(static_cast<qulonglong>(history.size()))
         .arg(static_cast<qulonglong>(history.back().turn)));
     if (followingMap && colonyId == 0) {
-        historySummary_->setText("Select an owned colony on the map to view its history.");
+        historySummary_->setText(remoteMetric
+            ? "Select a recorded mining world on the map to view its history."
+            : "Select an owned colony on the map to view its history.");
         chart->setData({}, {});
         return;
     }
@@ -389,6 +403,11 @@ void MainWindow::refreshEmpireHistory()
                     line.exactValues.push_back("No freight record");
                     continue;
                 }
+                if (remoteMetric && !snapshot->remoteExtractionRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No remote mining record");
+                    continue;
+                }
                 const double number = value(*snapshot);
                 line.values.push_back(number);
                 line.exactValues.push_back(QString::number(number, 'f', decimals));
@@ -415,6 +434,26 @@ void MainWindow::refreshEmpireHistory()
                     line.values.push_back(number);
                     line.exactValues.push_back(QString::number(number, 'f', decimals));
                 }
+            }
+            series.push_back(std::move(line));
+        };
+        const auto addRemoteSite = [&](QString name, QColor color,
+                                      std::function<double(const MineralCargo&)> value) {
+            HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                if (!snapshot->remoteExtractionRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No remote mining record");
+                    continue;
+                }
+                const auto site = std::find_if(snapshot->remoteMineHistory.begin(),
+                    snapshot->remoteMineHistory.end(), [seriesColonyId](const auto& record) {
+                        return record.planet == seriesColonyId;
+                    });
+                const double number = site == snapshot->remoteMineHistory.end()
+                    ? 0.0 : value(site->extraction);
+                line.values.push_back(number);
+                line.exactValues.push_back(QString::number(number, 'f', 2));
             }
             series.push_back(std::move(line));
         };
@@ -491,13 +530,25 @@ void MainWindow::refreshEmpireHistory()
                 add("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonistsDelivered); }, 2);
             }
             break;
+        case 10:
+            if (seriesColonyId) {
+                addRemoteSite("Ironium", "#db9a7a", [](const auto& s) { return s.ironium; });
+                addRemoteSite("Boranium", "#8dcc9e", [](const auto& s) { return s.boranium; });
+                addRemoteSite("Germanium", "#78b8f0", [](const auto& s) { return s.germanium; });
+            } else {
+                add("Ironium", "#db9a7a", [](const auto& s) { return s.remoteExtraction.ironium; }, 2);
+                add("Boranium", "#8dcc9e", [](const auto& s) { return s.remoteExtraction.boranium; }, 2);
+                add("Germanium", "#78b8f0", [](const auto& s) { return s.remoteExtraction.germanium; }, 2);
+            }
+            break;
         default: break;
         }
     };
     const auto scopeLabel = [&](PlanetId id) {
         if (id == 0) return QString("Empire");
         const auto index = historyScope_->findData(static_cast<quint32>(id));
-        return index < 0 ? QString("Colony %1").arg(id) : historyScope_->itemText(index);
+        return index < 0 ? QString(remoteMetric ? "Mined world %1" : "Colony %1").arg(id)
+            : historyScope_->itemText(index);
     };
     appendMetric(colonyId, comparing ? scopeLabel(colonyId) : QString{}, false);
     if (comparing) appendMetric(compareColonyId, scopeLabel(compareColonyId), true);

@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 41;
+constexpr quint32 kSaveFormatVersion = 42;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 7;
@@ -842,6 +842,13 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
     writeMinerals(stream, value.freightDelivered);
     stream << static_cast<quint64>(value.colonistsDelivered)
            << static_cast<quint8>(value.freightRecorded ? 1 : 0);
+    writeMinerals(stream, value.remoteExtraction);
+    stream << static_cast<quint8>(value.remoteExtractionRecorded ? 1 : 0)
+           << static_cast<quint32>(value.remoteMineHistory.size());
+    for (const auto& site : value.remoteMineHistory) {
+        stream << static_cast<quint32>(site.planet);
+        writeMinerals(stream, site.extraction);
+    }
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -951,6 +958,31 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
         if (recorded > 1) markCorrupt(stream);
         value.freightRecorded = recorded == 1;
     }
+    if (gReadSaveFormatVersion >= 42) {
+        readMinerals(stream, value.remoteExtraction);
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) markCorrupt(stream);
+        value.remoteExtractionRecorded = recorded == 1;
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.remoteMineHistory.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            RemoteMineTurnStatistics site;
+            quint32 planet{};
+            stream >> planet;
+            site.planet = planet;
+            readMinerals(stream, site.extraction);
+            if (site.planet == 0 || std::any_of(value.remoteMineHistory.begin(),
+                    value.remoteMineHistory.end(), [&](const auto& other) {
+                        return other.planet == site.planet;
+                    })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.remoteMineHistory.push_back(site);
+        }
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -968,6 +1000,9 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
         && validAmount(value.freightDelivered.ironium)
         && validAmount(value.freightDelivered.boranium)
         && validAmount(value.freightDelivered.germanium)
+        && validAmount(value.remoteExtraction.ironium)
+        && validAmount(value.remoteExtraction.boranium)
+        && validAmount(value.remoteExtraction.germanium)
         && validAmount(value.fleetMass)
         && std::all_of(value.colonyHistory.begin(), value.colonyHistory.end(),
             [&](const auto& colony) {
@@ -981,6 +1016,13 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
                     && validAmount(colony.freightDelivered.ironium)
                     && validAmount(colony.freightDelivered.boranium)
                     && validAmount(colony.freightDelivered.germanium);
+            })
+        && std::all_of(value.remoteMineHistory.begin(), value.remoteMineHistory.end(),
+            [&](const auto& site) {
+                return site.planet != 0
+                    && validAmount(site.extraction.ironium)
+                    && validAmount(site.extraction.boranium)
+                    && validAmount(site.extraction.germanium);
             });
 }
 
