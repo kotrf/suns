@@ -91,6 +91,7 @@ int main(int argc, char* argv[])
                 if (compare->count() > 1) compare->setCurrentIndex(1);
             }
             if (auto* metric = window.findChild<QComboBox*>("historyMetric")) metric->setCurrentIndex(9);
+            if (auto* metric = window.findChild<QComboBox*>("historyMetric")) metric->setCurrentIndex(10);
 
             // Open the non-modal graphical Ship Designer, select an empty
             // general slot and fit a Fuel Tank through the keyboard-accessible

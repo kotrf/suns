@@ -1435,7 +1435,8 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
 
 void record_empire_turn_statistics(
     GameState& state, const std::vector<ColonyExtraction>& extraction, bool elapsedYear,
-    const std::vector<ColonyFreightDelivery>& freight)
+    const std::vector<ColonyFreightDelivery>& freight,
+    const std::vector<RemoteExtraction>& remoteExtraction)
 {
     for (auto& player : state.players) {
         auto snapshot = empire_turn_statistics(state, player.id);
@@ -1471,6 +1472,24 @@ void record_empire_turn_statistics(
             colony->freightDelivered.germanium += delivered.minerals.germanium;
             colony->colonistsDelivered += delivered.colonists;
         }
+        snapshot.remoteExtractionRecorded = elapsedYear;
+        for (const auto& mined : remoteExtraction) {
+            if (mined.owner != player.id) continue;
+            snapshot.remoteExtraction.ironium += mined.minerals.ironium;
+            snapshot.remoteExtraction.boranium += mined.minerals.boranium;
+            snapshot.remoteExtraction.germanium += mined.minerals.germanium;
+            const auto site = std::find_if(snapshot.remoteMineHistory.begin(),
+                snapshot.remoteMineHistory.end(), [&](const auto& record) {
+                    return record.planet == mined.planet;
+                });
+            if (site == snapshot.remoteMineHistory.end()) {
+                snapshot.remoteMineHistory.push_back({mined.planet, mined.minerals});
+            } else {
+                site->extraction.ironium += mined.minerals.ironium;
+                site->extraction.boranium += mined.minerals.boranium;
+                site->extraction.germanium += mined.minerals.germanium;
+            }
+        }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
             snapshot.milestones = player.history.back().milestones;
             // Rebuilding a boundary to refresh population or ownership does
@@ -1502,6 +1521,11 @@ void record_empire_turn_statistics(
                         colony.colonistsDelivered = old->colonistsDelivered;
                     }
                 }
+            }
+            if (!elapsedYear && player.history.back().remoteExtractionRecorded) {
+                snapshot.remoteExtractionRecorded = true;
+                snapshot.remoteExtraction = player.history.back().remoteExtraction;
+                snapshot.remoteMineHistory = player.history.back().remoteMineHistory;
             }
             player.history.back() = std::move(snapshot);
         } else {

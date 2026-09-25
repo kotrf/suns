@@ -31,6 +31,16 @@ year of a pre-38 save has no extraction record; those years show a gap and
 worked, even if the colony changes hands before the next planning boundary.
 Remote mining of neutral worlds is not included in this colony mining series.
 
+Save format 42 adds a separate remote-extraction series for neutral worlds.
+The output is measured when an owned mining fleet deposits ore on the surface,
+credited to the fleet's owner even if that world is settled later in the year.
+It is not cargo delivered to a colony: the freight series records that only
+after a transport unloads. Multiple miners at one world are aggregated per
+player and per site, never across players. A recorded year with no mining is
+zero; initial and pre-42 years are unknown gaps. The Remote extraction chart
+supports empire totals, individual previously mined worlds, Follow map, and
+comparison between these scopes without revealing other players' operations.
+
 Save format 40 stores compact milestones for a player's delivered colony-founded,
 colony-lost and research-level reports. The chart marks the delivery year with
 colored vertical lines; hover to see the event and, if different, its observation
@@ -50,7 +60,7 @@ An initial year or an older save has no freight measurement and shows a gap.
 The Empire History dock plots the local player's saved snapshots. Choose
 population, colony/infrastructure counts, yearly production output, I/B/G
 stocks, fleet/ship counts, fleet mass, technology levels, invested RP or
-mineral extraction or delivered freight. Extraction shows the three resources actually mined each
+mineral extraction, delivered freight or remote extraction. Extraction shows the three resources actually mined each
 year for the empire or a selected colony. Hover over a year to read exact
 values, and select a first and last year to inspect a shorter range. For
 population, infrastructure, output, stocks, extraction and freight,

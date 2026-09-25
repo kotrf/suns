@@ -413,6 +413,17 @@ struct ColonyFreightDelivery {
     std::uint64_t colonists{};
 };
 
+struct RemoteExtraction {
+    PlanetId planet{};
+    PlayerId owner{}; // Fleet owner when ore was deposited on the neutral surface.
+    MineralCargo minerals;
+};
+
+struct RemoteMineTurnStatistics {
+    PlanetId planet{};
+    MineralCargo extraction;
+};
+
 enum class HistoryMilestoneKind : std::uint8_t {
     ColonyFounded,
     ColonyLost,
@@ -443,6 +454,8 @@ struct EmpireTurnStatistics {
     MineralCargo freightDelivered;
     std::uint64_t colonistsDelivered{};
     bool freightRecorded{}; // False for the initial year and pre-v41 history.
+    MineralCargo remoteExtraction;
+    bool remoteExtractionRecorded{}; // False for the initial year and pre-v42 history.
     std::uint32_t fleets{};
     std::uint32_t ships{};
     double fleetMass{};
@@ -450,6 +463,8 @@ struct EmpireTurnStatistics {
     std::array<std::uint32_t, kResearchFieldCount> technologyProgress{};
     // Only colonies owned at this boundary; absent years are not zero values.
     std::vector<ColonyTurnStatistics> colonyHistory;
+    // Only neutral sites actually mined by this player's fleets in this year.
+    std::vector<RemoteMineTurnStatistics> remoteMineHistory;
     // Only events delivered to this player at this planning boundary.
     std::vector<HistoryMilestone> milestones;
 };
@@ -782,7 +797,8 @@ void refresh_sensor_intel(GameState& state);
     const GameState& state, PlayerId player);
 void record_empire_turn_statistics(
     GameState& state, const std::vector<ColonyExtraction>& extraction = {}, bool elapsedYear = false,
-    const std::vector<ColonyFreightDelivery>& freight = {});
+    const std::vector<ColonyFreightDelivery>& freight = {},
+    const std::vector<RemoteExtraction>& remoteExtraction = {});
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();
