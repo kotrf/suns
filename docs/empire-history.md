@@ -26,8 +26,8 @@ per-colony samples are saved in format 37; loading an older campaign can add
 the breakdown for its current boundary, but cannot invent earlier colony
 histories from empire-wide totals. Other players' assets are never included.
 Format 38 adds actual yearly extraction per empire and per owned colony. The
-year of a pre-38 save has no extraction record; its missing historical values
-are shown as zero. Extraction belongs to the empire that owned a mine when it
+year of a pre-38 save has no extraction record; those years show a gap and
+"No extraction record" on hover. Extraction belongs to the empire that owned a mine when it
 worked, even if the colony changes hands before the next planning boundary.
 Remote mining of neutral worlds is not included in this colony mining series.
 

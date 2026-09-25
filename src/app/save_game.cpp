@@ -821,6 +821,7 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         writeMinerals(stream, colony.extraction);
     }
     writeMinerals(stream, value.extraction);
+    stream << static_cast<quint8>(value.extractionRecorded ? 1 : 0);
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -878,7 +879,13 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             value.colonyHistory.push_back(colony);
         }
     }
-    if (gReadSaveFormatVersion >= 38) readMinerals(stream, value.extraction);
+    if (gReadSaveFormatVersion >= 38) {
+        readMinerals(stream, value.extraction);
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) markCorrupt(stream);
+        value.extractionRecorded = recorded == 1;
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)

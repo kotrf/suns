@@ -414,6 +414,7 @@ struct EmpireTurnStatistics {
     std::uint32_t productionOutput{};
     MineralCargo minerals;
     MineralCargo extraction;
+    bool extractionRecorded{}; // False for the initial year and pre-v38 history.
     std::uint32_t fleets{};
     std::uint32_t ships{};
     double fleetMass{};
@@ -750,7 +751,7 @@ void refresh_sensor_intel(GameState& state);
 [[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
     const GameState& state, PlayerId player);
 void record_empire_turn_statistics(
-    GameState& state, const std::vector<ColonyExtraction>& extraction = {});
+    GameState& state, const std::vector<ColonyExtraction>& extraction = {}, bool elapsedYear = false);
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();

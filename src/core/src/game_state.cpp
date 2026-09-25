@@ -1424,10 +1424,11 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
 }
 
 void record_empire_turn_statistics(
-    GameState& state, const std::vector<ColonyExtraction>& extraction)
+    GameState& state, const std::vector<ColonyExtraction>& extraction, bool elapsedYear)
 {
     for (auto& player : state.players) {
         auto snapshot = empire_turn_statistics(state, player.id);
+        snapshot.extractionRecorded = elapsedYear;
         for (const auto& mined : extraction) {
             if (mined.owner != player.id) continue;
             snapshot.extraction.ironium += mined.minerals.ironium;
@@ -1443,6 +1444,20 @@ void record_empire_turn_statistics(
             colony->extraction.germanium += mined.minerals.germanium;
         }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
+            // Rebuilding a boundary to refresh population or ownership does
+            // not erase the measured mining output of that already resolved year.
+            if (!elapsedYear && player.history.back().extractionRecorded) {
+                const auto& previous = player.history.back();
+                snapshot.extractionRecorded = true;
+                snapshot.extraction = previous.extraction;
+                for (auto& colony : snapshot.colonyHistory) {
+                    const auto old = std::find_if(previous.colonyHistory.begin(),
+                        previous.colonyHistory.end(), [&](const auto& record) {
+                            return record.planet == colony.planet;
+                        });
+                    if (old != previous.colonyHistory.end()) colony.extraction = old->extraction;
+                }
+            }
             player.history.back() = std::move(snapshot);
         } else {
             player.history.push_back(std::move(snapshot));

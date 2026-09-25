@@ -31,6 +31,7 @@ int main()
     assert(initialHistory.front().colonyHistory.front().planet == state.planets.front().id);
     assert(initialHistory.front().colonyHistory.front().population == 1'000'000);
     assert(close(initialHistory.front().extraction.ironium, 0.0));
+    assert(!initialHistory.front().extractionRecorded);
 
     const suns::TurnProcessor processor;
     const auto first = processor.process(state, {});
@@ -46,6 +47,7 @@ int main()
         replay.players.front().history.back().minerals.germanium));
     const auto expectedMining = suns::projected_mineral_mining(state, state.planets.front());
     const auto& mined = first.players.front().history.back();
+    assert(mined.extractionRecorded);
     assert(close(mined.extraction.ironium, expectedMining.ironium));
     assert(close(mined.extraction.boranium, expectedMining.boranium));
     assert(close(mined.colonyHistory.front().extraction.germanium, expectedMining.germanium));
@@ -61,6 +63,8 @@ int main()
         == first.players.front().history.back().population + 50);
     assert(corrected.players.front().history.back().colonyHistory.front().population
         == first.players.front().history.back().colonyHistory.front().population + 50);
+    assert(corrected.players.front().history.back().extractionRecorded);
+    assert(close(corrected.players.front().history.back().extraction.ironium, mined.extraction.ironium));
 
     // A player's history is built only from assets they own. Authoritative
     // enemy truth and neutral surface stockpiles never leak into the record.
@@ -85,7 +89,7 @@ int main()
     auto conquered = hidden;
     conquered.turn = 2;
     conquered.planets.front().owner = 2;
-    suns::record_empire_turn_statistics(conquered, {{state.planets.front().id, 1, {3.0, 2.0, 1.0}}});
+    suns::record_empire_turn_statistics(conquered, {{state.planets.front().id, 1, {3.0, 2.0, 1.0}}}, true);
     assert(close(conquered.players[0].history.back().extraction.ironium, 3.0));
     assert(close(conquered.players[1].history.back().extraction.ironium, 0.0));
     assert(close(conquered.players[1].history.back().colonyHistory.front().extraction.ironium, 0.0));

@@ -328,6 +328,11 @@ void MainWindow::refreshEmpireHistory()
                          std::function<double(const EmpireTurnStatistics&)> value, int decimals = 0) {
         HistorySeries line{std::move(name), std::move(color), {}, {}};
         for (const auto* snapshot : shown) {
+            if (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded) {
+                line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                line.exactValues.push_back("No extraction record");
+                continue;
+            }
             const double number = value(*snapshot);
             line.values.push_back(number);
             line.exactValues.push_back(QString::number(number, 'f', decimals));
@@ -342,9 +347,11 @@ void MainWindow::refreshEmpireHistory()
                 snapshot->colonyHistory.end(), [colonyId](const auto& candidate) {
                     return candidate.planet == colonyId;
                 });
-            if (colony == snapshot->colonyHistory.end()) {
+            if (colony == snapshot->colonyHistory.end()
+                || (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded)) {
                 line.values.push_back(std::numeric_limits<double>::quiet_NaN());
-                line.exactValues.push_back("No owned-colony record");
+                line.exactValues.push_back(colony == snapshot->colonyHistory.end()
+                    ? "No owned-colony record" : "No extraction record");
             } else {
                 const double number = value(*colony);
                 line.values.push_back(number);

@@ -64,6 +64,7 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().race.habitableRadiation = {4, 52};
     record_empire_turn_statistics(original.state);
     original.state.players.front().history.back().extraction = {3.25, 2.5, 1.75};
+    original.state.players.front().history.back().extractionRecorded = true;
     original.state.players.front().history.back().colonyHistory.front().extraction = {3.25, 2.5, 1.75};
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
@@ -289,6 +290,7 @@ void round_trip_preserves_communications_and_planning()
         == original.state.planets.front().id);
     assert(loaded.state.players.front().history.back().colonyHistory.front().mines == 17);
     assert(loaded.state.players.front().history.back().extraction.ironium == 3.25);
+    assert(loaded.state.players.front().history.back().extractionRecorded);
     assert(loaded.state.players.front().history.back().colonyHistory.front().extraction.germanium == 1.75);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
@@ -487,7 +489,7 @@ void population_migration_and_clear_orders()
         const auto marker = QByteArray::fromHex("f00df00d00000000");
         const auto markerPosition = bytes.indexOf(marker);
         assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
-        bytes.remove(markerPosition + 4, 4 + 3 * 8); // empty v37 vector and v38 extraction
+        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1); // empty v37 vector and v38 extraction
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream stream(&file);
@@ -501,6 +503,7 @@ void population_migration_and_clear_orders()
     assert(migrated.state.players[0].history[0].colonyHistory.size() == 1);
     assert(migrated.state.players[0].history[0].colonyHistory[0].population == 1'000'000);
     assert(migrated.state.players[0].history[0].extraction.ironium == 0.0);
+    assert(!migrated.state.players[0].history[0].extractionRecorded);
     assert(migrated.state.fleets[0].colonists == 30'000);
     assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 3.0);
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
