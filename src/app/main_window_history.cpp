@@ -32,6 +32,12 @@ struct HistorySeries {
     QVector<QString> exactValues;
 };
 
+struct ChartMarker {
+    int index{};
+    QString description;
+    QColor color;
+};
+
 class HistoryChart final : public QWidget {
 public:
     explicit HistoryChart(QWidget* parent) : QWidget(parent)
@@ -41,10 +47,12 @@ public:
         setMouseTracking(true);
     }
 
-    void setData(QVector<std::uint64_t> turns, QVector<HistorySeries> series)
+    void setData(QVector<std::uint64_t> turns, QVector<HistorySeries> series,
+        QVector<ChartMarker> markers = {})
     {
         turns_ = std::move(turns);
         series_ = std::move(series);
+        markers_ = std::move(markers);
         update();
     }
 
@@ -71,7 +79,6 @@ protected:
             painter.drawText(legendX + 16, legendY, series.name);
             legendX += width;
         }
-
         const QRectF plot = plotRect(legendY);
         if (plot.width() < 1 || plot.height() < 1) return;
         double maximum = 1.0;
@@ -128,6 +135,12 @@ protected:
                 painter.setBrush(Qt::NoBrush);
             }
         }
+        for (const auto& marker : markers_) {
+            const double x = xAt(marker.index);
+            painter.setPen(QPen(marker.color, 1.5, Qt::DashLine));
+            painter.drawLine(QPointF(x, plot.top() + 7), QPointF(x, plot.bottom()));
+            painter.fillRect(QRectF(x - 3, plot.top(), 6, 6), marker.color);
+        }
     }
 
     void mouseMoveEvent(QMouseEvent* event) override
@@ -141,6 +154,8 @@ protected:
         QStringList lines{QString("Year %1").arg(static_cast<qulonglong>(turns_[index]))};
         for (const auto& series : series_)
             lines << QString("%1: %2").arg(series.name, series.exactValues[index]);
+        for (const auto& marker : markers_)
+            if (marker.index == index) lines << marker.description;
         QToolTip::showText(event->globalPosition().toPoint(), lines.join('\n'), this);
     }
 
@@ -167,6 +182,7 @@ private:
 
     QVector<std::uint64_t> turns_;
     QVector<HistorySeries> series_;
+    QVector<ChartMarker> markers_;
 };
 
 } // namespace
@@ -422,7 +438,35 @@ void MainWindow::refreshEmpireHistory()
         break;
     default: break;
     }
-    chart->setData(std::move(turns), std::move(series));
+    QVector<ChartMarker> markers;
+    for (int index = 0; index < shown.size(); ++index) {
+        for (const auto& event : shown[index]->milestones) {
+            if (colonyId && (event.kind == HistoryMilestoneKind::ResearchCompleted
+                    || event.planet != colonyId)) continue;
+            QString label;
+            QColor color;
+            switch (event.kind) {
+            case HistoryMilestoneKind::ColonyFounded:
+                label = QString("Colony %1 founded").arg(event.planet);
+                color = QColor("#8dcc9e");
+                break;
+            case HistoryMilestoneKind::ColonyLost:
+                label = QString("Colony %1 lost").arg(event.planet);
+                color = QColor("#e07575");
+                break;
+            case HistoryMilestoneKind::ResearchCompleted:
+                label = QString("%1 %2 completed")
+                    .arg(QString::fromStdString(research_field_name(event.researchField)))
+                    .arg(event.technologyLevel);
+                color = QColor("#d1a2e0");
+                break;
+            }
+            if (event.observedTurn && event.observedTurn != shown[index]->turn)
+                label += QString(" (observed year %1)").arg(static_cast<qulonglong>(event.observedTurn));
+            markers.push_back({index, std::move(label), color});
+        }
+    }
+    chart->setData(std::move(turns), std::move(series), std::move(markers));
 }
 
 } // namespace suns

@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 39;
+constexpr quint32 kSaveFormatVersion = 40;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 7;
@@ -828,6 +828,15 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
     }
     writeMinerals(stream, value.extraction);
     stream << static_cast<quint8>(value.extractionRecorded ? 1 : 0);
+    stream << static_cast<quint32>(value.milestones.size());
+    for (const auto& marker : value.milestones) {
+        stream << static_cast<quint64>(marker.eventId)
+               << static_cast<quint64>(marker.observedTurn);
+        writeEnum(stream, marker.kind);
+        stream << static_cast<quint32>(marker.planet);
+        writeEnum(stream, marker.researchField);
+        stream << static_cast<quint8>(marker.technologyLevel);
+    }
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -891,6 +900,36 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
         stream >> recorded;
         if (recorded > 1) markCorrupt(stream);
         value.extractionRecorded = recorded == 1;
+    }
+    if (gReadSaveFormatVersion >= 40) {
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.milestones.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            HistoryMilestone marker;
+            quint64 id{}, observedTurn{};
+            quint32 planet{};
+            stream >> id >> observedTurn;
+            if (!readEnum(stream, marker.kind,
+                    static_cast<quint8>(HistoryMilestoneKind::ResearchCompleted))) return;
+            stream >> planet;
+            if (!readEnum(stream, marker.researchField,
+                    static_cast<quint8>(ResearchField::Weapons))) return;
+            stream >> marker.technologyLevel;
+            marker.eventId = id;
+            marker.observedTurn = observedTurn;
+            marker.planet = planet;
+            if (marker.eventId == 0 || marker.observedTurn > value.turn
+                || (marker.kind == HistoryMilestoneKind::ResearchCompleted
+                    ? marker.technologyLevel == 0 : marker.planet == 0)
+                || std::any_of(value.milestones.begin(), value.milestones.end(), [&](const auto& other) {
+                    return other.eventId == marker.eventId;
+                })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.milestones.push_back(marker);
+        }
     }
 }
 

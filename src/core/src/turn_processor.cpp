@@ -1896,6 +1896,27 @@ TurnResult TurnProcessor::process_with_events(
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
     record_empire_turn_statistics(next, extraction, true);
+    for (const auto& event : events) {
+        auto player = std::find_if(next.players.begin(), next.players.end(), [&](const Player& candidate) {
+            return candidate.id == event.recipient;
+        });
+        if (player == next.players.end() || player->history.empty()) continue;
+        std::optional<HistoryMilestoneKind> kind;
+        switch (event.kind) {
+        case GameEventKind::ColonyFounded: kind = HistoryMilestoneKind::ColonyFounded; break;
+        case GameEventKind::ColonyLost: kind = HistoryMilestoneKind::ColonyLost; break;
+        case GameEventKind::ResearchLevelCompleted: kind = HistoryMilestoneKind::ResearchCompleted; break;
+        default: break;
+        }
+        if (!kind || ((*kind == HistoryMilestoneKind::ResearchCompleted)
+                ? event.technologyLevel == 0 : event.planet == 0)) continue;
+        auto& milestones = player->history.back().milestones;
+        if (std::any_of(milestones.begin(), milestones.end(), [&](const auto& recorded) {
+                return recorded.eventId == event.id;
+            })) continue;
+        milestones.push_back({event.id, event.observedTurn, *kind,
+            event.planet, event.researchField, event.technologyLevel});
+    }
     return {std::move(next), std::move(events)};
 }
 

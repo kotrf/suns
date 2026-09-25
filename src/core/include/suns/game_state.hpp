@@ -404,6 +404,21 @@ struct ColonyExtraction {
     MineralCargo minerals;
 };
 
+enum class HistoryMilestoneKind : std::uint8_t {
+    ColonyFounded,
+    ColonyLost,
+    ResearchCompleted,
+};
+
+struct HistoryMilestone {
+    std::uint64_t eventId{};
+    std::uint64_t observedTurn{};
+    HistoryMilestoneKind kind{HistoryMilestoneKind::ColonyFounded};
+    PlanetId planet{};
+    ResearchField researchField{ResearchField::Electronics};
+    std::uint8_t technologyLevel{};
+};
+
 // Compact player-owned history. It contains no enemy or unsurveyed truth and
 // can therefore later back statistics, PBEM exports and replay inspection.
 struct EmpireTurnStatistics {
@@ -423,6 +438,8 @@ struct EmpireTurnStatistics {
     std::array<std::uint32_t, kResearchFieldCount> technologyProgress{};
     // Only colonies owned at this boundary; absent years are not zero values.
     std::vector<ColonyTurnStatistics> colonyHistory;
+    // Only events delivered to this player at this planning boundary.
+    std::vector<HistoryMilestone> milestones;
 };
 
 struct Player {

@@ -31,6 +31,13 @@ year of a pre-38 save has no extraction record; those years show a gap and
 worked, even if the colony changes hands before the next planning boundary.
 Remote mining of neutral worlds is not included in this colony mining series.
 
+Save format 40 stores compact milestones for a player's delivered colony-founded,
+colony-lost and research-level reports. The chart marks the delivery year with
+colored vertical lines; hover to see the event and, if different, its observation
+year. In colony scope only milestones for that colony appear. Events known only
+to other players never enter this player's history. Older saves have no earlier
+milestones; loading them does not invent past discoveries or losses.
+
 The Empire History dock plots the local player's saved snapshots. Choose
 population, colony/infrastructure counts, yearly production output, I/B/G
 stocks, fleet/ship counts, fleet mass, technology levels, invested RP or
