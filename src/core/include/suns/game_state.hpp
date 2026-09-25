@@ -396,12 +396,21 @@ struct ColonyTurnStatistics {
     std::uint32_t productionOutput{};
     MineralCargo minerals;
     MineralCargo extraction; // Actual minerals mined during the preceding year.
+    MineralCargo freightDelivered; // Fleet cargo unloaded here during the preceding year.
+    std::uint64_t colonistsDelivered{};
 };
 
 struct ColonyExtraction {
     PlanetId planet{};
     PlayerId owner{}; // Owner when mining occurred; ownership may change before year end.
     MineralCargo minerals;
+};
+
+struct ColonyFreightDelivery {
+    PlanetId planet{};
+    PlayerId owner{}; // Owner at delivery, even if the colony changes hands later.
+    MineralCargo minerals;
+    std::uint64_t colonists{};
 };
 
 enum class HistoryMilestoneKind : std::uint8_t {
@@ -431,6 +440,9 @@ struct EmpireTurnStatistics {
     MineralCargo minerals;
     MineralCargo extraction;
     bool extractionRecorded{}; // False for the initial year and pre-v38 history.
+    MineralCargo freightDelivered;
+    std::uint64_t colonistsDelivered{};
+    bool freightRecorded{}; // False for the initial year and pre-v41 history.
     std::uint32_t fleets{};
     std::uint32_t ships{};
     double fleetMass{};
@@ -769,7 +781,8 @@ void refresh_sensor_intel(GameState& state);
 [[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
     const GameState& state, PlayerId player);
 void record_empire_turn_statistics(
-    GameState& state, const std::vector<ColonyExtraction>& extraction = {}, bool elapsedYear = false);
+    GameState& state, const std::vector<ColonyExtraction>& extraction = {}, bool elapsedYear = false,
+    const std::vector<ColonyFreightDelivery>& freight = {});
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();
