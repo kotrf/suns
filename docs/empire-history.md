@@ -53,7 +53,7 @@ stocks, fleet/ship counts, fleet mass, technology levels, invested RP or
 mineral extraction or delivered freight. Extraction shows the three resources actually mined each
 year for the empire or a selected colony. Hover over a year to read exact
 values, and select a first and last year to inspect a shorter range. For
-population, infrastructure, output, stocks and extraction,
+population, infrastructure, output, stocks, extraction and freight,
 choose Whole empire, a recorded colony or Follow map. Follow map tracks the
 currently selected owned colony; with no owned colony selected it prompts for
 one instead of showing empire totals under a colony label. Missing observations show a gap and
@@ -61,5 +61,12 @@ one instead of showing empire totals under a colony label. Missing observations 
 never reads the host's other players' histories in a player turn. It uses
 Qt Widgets painting and does not require Qt Charts.
 
-Further event categories and richer comparison tools remain extensions of
-issue #48; snapshots from older saves start at the loaded turn.
+The Compare selector overlays a second recorded colony or the whole empire for
+the same scoped metric. Both series sets share the same year range and axis;
+the comparison uses dashed lines and named legend/hover values. Missing years
+remain gaps for a colony that was not owned. Selecting the current primary
+scope twice leaves a single plot. Fleet counts, mass and research levels remain
+empire-only metrics.
+
+Further event categories remain extensions of issue #48; snapshots from older
+saves start at the loaded turn.

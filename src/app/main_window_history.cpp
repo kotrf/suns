@@ -24,12 +24,14 @@ namespace suns {
 namespace {
 
 constexpr quint32 kFollowSelectedColony = std::numeric_limits<quint32>::max();
+constexpr quint32 kNoComparison = kFollowSelectedColony - 1;
 
 struct HistorySeries {
     QString name;
     QColor color;
     QVector<double> values;
     QVector<QString> exactValues;
+    bool dashed{};
 };
 
 struct ChartMarker {
@@ -74,7 +76,9 @@ protected:
         for (const auto& series : series_) {
             const int width = painter.fontMetrics().horizontalAdvance(series.name) + 27;
             if (legendX + width > this->width() - 12) { legendX = 68; legendY += 18; }
-            painter.fillRect(legendX, legendY - 7, 11, 3, series.color);
+            painter.setPen(QPen(series.color, 2,
+                series.dashed ? Qt::DashLine : Qt::SolidLine));
+            painter.drawLine(legendX, legendY - 6, legendX + 11, legendY - 6);
             painter.setPen(QColor("#d5e0ed"));
             painter.drawText(legendX + 16, legendY, series.name);
             legendX += width;
@@ -121,7 +125,8 @@ protected:
                 else path.lineTo(point);
                 drawing = true;
             }
-            painter.setPen(QPen(series.color, 2));
+            painter.setPen(QPen(series.color, 2,
+                series.dashed ? Qt::DashLine : Qt::SolidLine));
             painter.drawPath(path);
             const auto visiblePoints = std::count_if(series.values.begin(), series.values.end(),
                 [](double value) { return std::isfinite(value); });
@@ -215,6 +220,10 @@ void MainWindow::installEmpireHistory()
     historyScope_->addItem("Whole empire", static_cast<quint32>(0));
     historyScope_->setToolTip("Show an owned colony's recorded years, or follow the map selection; gaps mean it was not owned");
     controls->addWidget(historyScope_, 1);
+    historyCompare_ = new QComboBox(content);
+    historyCompare_->setObjectName("historyCompare");
+    historyCompare_->setToolTip("Overlay a second colony or the whole empire using dashed lines");
+    historyCompare_->addItem("Compare: none", kNoComparison);
     controls->addWidget(new QLabel("Years", content));
     historyFirstTurn_ = new QSpinBox(content);
     historyFirstTurn_->setObjectName("historyFirstTurn");
@@ -228,6 +237,7 @@ void MainWindow::installEmpireHistory()
     controls->addWidget(new QLabel("to", content));
     controls->addWidget(historyLastTurn_);
     layout->addLayout(controls);
+    layout->addWidget(historyCompare_);
 
     historyChart_ = new HistoryChart(content);
     layout->addWidget(historyChart_, 1);
@@ -238,6 +248,8 @@ void MainWindow::installEmpireHistory()
     connect(historyMetric_, &QComboBox::currentIndexChanged, this,
         [this] { refreshEmpireHistory(); });
     connect(historyScope_, &QComboBox::currentIndexChanged, this,
+        [this] { refreshEmpireHistory(); });
+    connect(historyCompare_, &QComboBox::currentIndexChanged, this,
         [this] { refreshEmpireHistory(); });
     connect(this, &MainWindow::routeProgramContextChanged, this, [this] {
         if (historyDock_->isVisible()
@@ -266,6 +278,7 @@ void MainWindow::refreshEmpireHistory()
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
     const auto selectedScope = historyScope_->currentData().toUInt();
+    const auto selectedComparison = historyCompare_->currentData().toUInt();
     const bool scopedMetric = historyMetric_->currentIndex() <= 3
         || historyMetric_->currentIndex() == 8 || historyMetric_->currentIndex() == 9;
     const auto* planetOnMap = selectedPlanet();
@@ -278,6 +291,10 @@ void MainWindow::refreshEmpireHistory()
         historyScope_->addItem(selectedColony
             ? QString("Follow map — %1").arg(QString::fromStdString(planetOnMap->name))
             : QString("Follow map — select owned colony"), kFollowSelectedColony);
+        const QSignalBlocker compareBlocker(historyCompare_);
+        historyCompare_->clear();
+        historyCompare_->addItem("Compare: none", kNoComparison);
+        historyCompare_->addItem("Compare: whole empire", static_cast<quint32>(0));
         std::set<PlanetId> knownColonies;
         for (const auto& snapshot : history)
             for (const auto& colony : snapshot.colonyHistory)
@@ -289,15 +306,27 @@ void MainWindow::refreshEmpireHistory()
                 || planet->owner != pendingOrders_.player
                 ? QString("Former colony %1").arg(id) : QString::fromStdString(planet->name);
             historyScope_->addItem(name, static_cast<quint32>(id));
+            historyCompare_->addItem(QString("Compare: %1").arg(name), static_cast<quint32>(id));
         }
         const int restored = historyScope_->findData(selectedScope);
         historyScope_->setCurrentIndex(!scopedMetric || restored < 0 ? 0 : restored);
+        const int comparisonIndex = historyCompare_->findData(selectedComparison);
+        historyCompare_->setCurrentIndex(comparisonIndex < 0 ? 0 : comparisonIndex);
     }
     historyScope_->setEnabled(scopedMetric && !history.empty());
+    historyCompare_->setEnabled(scopedMetric && !history.empty());
     const bool followingMap = scopedMetric
         && historyScope_->currentData().toUInt() == kFollowSelectedColony;
     const auto colonyId = followingMap ? selectedColony
         : scopedMetric ? static_cast<PlanetId>(historyScope_->currentData().toUInt()) : PlanetId{};
+    if (scopedMetric && historyCompare_->currentData().toUInt() == colonyId) {
+        const QSignalBlocker blocker(historyCompare_);
+        historyCompare_->setCurrentIndex(0);
+    }
+    const auto compareSelection = historyCompare_->currentData().toUInt();
+    const bool comparing = scopedMetric && compareSelection != kNoComparison
+        && compareSelection != colonyId;
+    const auto compareColonyId = static_cast<PlanetId>(compareSelection);
     if (history.empty()) {
         historySummary_->setText("No recorded history for this player.");
         historyFirstTurn_->setEnabled(false);
@@ -342,129 +371,143 @@ void MainWindow::refreshEmpireHistory()
     }
 
     QVector<HistorySeries> series;
-    const auto add = [&](QString name, QColor color,
-                         std::function<double(const EmpireTurnStatistics&)> value, int decimals = 0) {
-        HistorySeries line{std::move(name), std::move(color), {}, {}};
-        for (const auto* snapshot : shown) {
-            if (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded) {
-                line.values.push_back(std::numeric_limits<double>::quiet_NaN());
-                line.exactValues.push_back("No extraction record");
-                continue;
-            }
-            if (historyMetric_->currentIndex() == 9 && !snapshot->freightRecorded) {
-                line.values.push_back(std::numeric_limits<double>::quiet_NaN());
-                line.exactValues.push_back("No freight record");
-                continue;
-            }
-            const double number = value(*snapshot);
-            line.values.push_back(number);
-            line.exactValues.push_back(QString::number(number, 'f', decimals));
-        }
-        series.push_back(std::move(line));
-    };
-    const auto addColony = [&](QString name, QColor color,
-                              std::function<double(const ColonyTurnStatistics&)> value, int decimals = 0) {
-        HistorySeries line{std::move(name), std::move(color), {}, {}};
-        for (const auto* snapshot : shown) {
-            const auto colony = std::find_if(snapshot->colonyHistory.begin(),
-                snapshot->colonyHistory.end(), [colonyId](const auto& candidate) {
-                    return candidate.planet == colonyId;
-                });
-            if (colony == snapshot->colonyHistory.end()
-                || (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded)
-                || (historyMetric_->currentIndex() == 9 && !snapshot->freightRecorded)) {
-                line.values.push_back(std::numeric_limits<double>::quiet_NaN());
-                line.exactValues.push_back(colony == snapshot->colonyHistory.end()
-                    ? "No owned-colony record"
-                    : historyMetric_->currentIndex() == 8 ? "No extraction record" : "No freight record");
-            } else {
-                const double number = value(*colony);
+    const auto appendMetric = [&](PlanetId seriesColonyId, const QString& seriesLabel, bool dashed) {
+        const auto named = [&](QString name) {
+            return seriesLabel.isEmpty() ? name : seriesLabel + " / " + name;
+        };
+        const auto add = [&](QString name, QColor color,
+                             std::function<double(const EmpireTurnStatistics&)> value, int decimals = 0) {
+            HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                if (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No extraction record");
+                    continue;
+                }
+                if (historyMetric_->currentIndex() == 9 && !snapshot->freightRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No freight record");
+                    continue;
+                }
+                const double number = value(*snapshot);
                 line.values.push_back(number);
                 line.exactValues.push_back(QString::number(number, 'f', decimals));
             }
-        }
-        series.push_back(std::move(line));
-    };
+            series.push_back(std::move(line));
+        };
+        const auto addColony = [&](QString name, QColor color,
+                                  std::function<double(const ColonyTurnStatistics&)> value, int decimals = 0) {
+            HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                const auto colony = std::find_if(snapshot->colonyHistory.begin(),
+                    snapshot->colonyHistory.end(), [seriesColonyId](const auto& candidate) {
+                        return candidate.planet == seriesColonyId;
+                    });
+                if (colony == snapshot->colonyHistory.end()
+                    || (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded)
+                    || (historyMetric_->currentIndex() == 9 && !snapshot->freightRecorded)) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back(colony == snapshot->colonyHistory.end()
+                        ? "No owned-colony record"
+                        : historyMetric_->currentIndex() == 8 ? "No extraction record" : "No freight record");
+                } else {
+                    const double number = value(*colony);
+                    line.values.push_back(number);
+                    line.exactValues.push_back(QString::number(number, 'f', decimals));
+                }
+            }
+            series.push_back(std::move(line));
+        };
 
-    switch (historyMetric_->currentIndex()) {
-    case 0:
-        if (colonyId) addColony("Population", "#78b8f0", [](const auto& s) { return double(s.population); });
-        else add("Population", "#78b8f0", [](const auto& s) { return double(s.population); });
-        break;
-    case 1:
-        if (colonyId) {
-            addColony("Factories", "#e2bb70", [](const auto& s) { return double(s.factories); });
-            addColony("Mines", "#8dcc9e", [](const auto& s) { return double(s.mines); });
-        } else {
-            add("Colonies", "#78b8f0", [](const auto& s) { return double(s.colonies); });
-            add("Factories", "#e2bb70", [](const auto& s) { return double(s.factories); });
-            add("Mines", "#8dcc9e", [](const auto& s) { return double(s.mines); });
+        switch (historyMetric_->currentIndex()) {
+        case 0:
+            if (seriesColonyId) addColony("Population", "#78b8f0", [](const auto& s) { return double(s.population); });
+            else add("Population", "#78b8f0", [](const auto& s) { return double(s.population); });
+            break;
+        case 1:
+            if (seriesColonyId) {
+                addColony("Factories", "#e2bb70", [](const auto& s) { return double(s.factories); });
+                addColony("Mines", "#8dcc9e", [](const auto& s) { return double(s.mines); });
+            } else {
+                add("Colonies", "#78b8f0", [](const auto& s) { return double(s.colonies); });
+                add("Factories", "#e2bb70", [](const auto& s) { return double(s.factories); });
+                add("Mines", "#8dcc9e", [](const auto& s) { return double(s.mines); });
+            }
+            break;
+        case 2:
+            if (seriesColonyId) addColony("Output / year", "#78b8f0", [](const auto& s) { return double(s.productionOutput); });
+            else add("Output / year", "#78b8f0", [](const auto& s) { return double(s.productionOutput); });
+            break;
+        case 3:
+            if (seriesColonyId) {
+                addColony("Ironium", "#db9a7a", [](const auto& s) { return s.minerals.ironium; }, 2);
+                addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.minerals.boranium; }, 2);
+                addColony("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; }, 2);
+            } else {
+                add("Ironium", "#db9a7a", [](const auto& s) { return s.minerals.ironium; }, 2);
+                add("Boranium", "#8dcc9e", [](const auto& s) { return s.minerals.boranium; }, 2);
+                add("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; }, 2);
+            }
+            break;
+        case 4:
+            add("Fleets", "#78b8f0", [](const auto& s) { return double(s.fleets); });
+            add("Ships", "#e2bb70", [](const auto& s) { return double(s.ships); });
+            break;
+        case 5:
+            add("Gross mass", "#78b8f0", [](const auto& s) { return s.fleetMass; }, 2);
+            break;
+        case 6:
+        case 7: {
+            constexpr const char* names[] = {"Energy", "Propulsion", "Construction", "Electronics", "Biology", "Weapons"};
+            constexpr const char* colors[] = {"#db9a7a", "#78b8f0", "#8dcc9e", "#d1a2e0", "#e2bb70", "#b4c0ce"};
+            const bool progress = historyMetric_->currentIndex() == 7;
+            for (std::size_t field = 0; field < kResearchFieldCount; ++field)
+                add(names[field], colors[field], [field, progress](const auto& s) {
+                    return double(progress ? s.technologyProgress[field] : s.technologyLevels[field]);
+                });
+            break;
         }
-        break;
-    case 2:
-        if (colonyId) addColony("Output / year", "#78b8f0", [](const auto& s) { return double(s.productionOutput); });
-        else add("Output / year", "#78b8f0", [](const auto& s) { return double(s.productionOutput); });
-        break;
-    case 3:
-        if (colonyId) {
-            addColony("Ironium", "#db9a7a", [](const auto& s) { return s.minerals.ironium; }, 2);
-            addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.minerals.boranium; }, 2);
-            addColony("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; }, 2);
-        } else {
-            add("Ironium", "#db9a7a", [](const auto& s) { return s.minerals.ironium; }, 2);
-            add("Boranium", "#8dcc9e", [](const auto& s) { return s.minerals.boranium; }, 2);
-            add("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; }, 2);
+        case 8:
+            if (seriesColonyId) {
+                addColony("Ironium", "#db9a7a", [](const auto& s) { return s.extraction.ironium; }, 2);
+                addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.extraction.boranium; }, 2);
+                addColony("Germanium", "#78b8f0", [](const auto& s) { return s.extraction.germanium; }, 2);
+            } else {
+                add("Ironium", "#db9a7a", [](const auto& s) { return s.extraction.ironium; }, 2);
+                add("Boranium", "#8dcc9e", [](const auto& s) { return s.extraction.boranium; }, 2);
+                add("Germanium", "#78b8f0", [](const auto& s) { return s.extraction.germanium; }, 2);
+            }
+            break;
+        case 9:
+            if (seriesColonyId) {
+                addColony("Ironium", "#db9a7a", [](const auto& s) { return s.freightDelivered.ironium; }, 2);
+                addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.freightDelivered.boranium; }, 2);
+                addColony("Germanium", "#78b8f0", [](const auto& s) { return s.freightDelivered.germanium; }, 2);
+                addColony("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonistsDelivered); }, 2);
+            } else {
+                add("Ironium", "#db9a7a", [](const auto& s) { return s.freightDelivered.ironium; }, 2);
+                add("Boranium", "#8dcc9e", [](const auto& s) { return s.freightDelivered.boranium; }, 2);
+                add("Germanium", "#78b8f0", [](const auto& s) { return s.freightDelivered.germanium; }, 2);
+                add("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonistsDelivered); }, 2);
+            }
+            break;
+        default: break;
         }
-        break;
-    case 4:
-        add("Fleets", "#78b8f0", [](const auto& s) { return double(s.fleets); });
-        add("Ships", "#e2bb70", [](const auto& s) { return double(s.ships); });
-        break;
-    case 5:
-        add("Gross mass", "#78b8f0", [](const auto& s) { return s.fleetMass; }, 2);
-        break;
-    case 6:
-    case 7: {
-        constexpr const char* names[] = {"Energy", "Propulsion", "Construction", "Electronics", "Biology", "Weapons"};
-        constexpr const char* colors[] = {"#db9a7a", "#78b8f0", "#8dcc9e", "#d1a2e0", "#e2bb70", "#b4c0ce"};
-        const bool progress = historyMetric_->currentIndex() == 7;
-        for (std::size_t field = 0; field < kResearchFieldCount; ++field)
-            add(names[field], colors[field], [field, progress](const auto& s) {
-                return double(progress ? s.technologyProgress[field] : s.technologyLevels[field]);
-            });
-        break;
-    }
-    case 8:
-        if (colonyId) {
-            addColony("Ironium", "#db9a7a", [](const auto& s) { return s.extraction.ironium; }, 2);
-            addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.extraction.boranium; }, 2);
-            addColony("Germanium", "#78b8f0", [](const auto& s) { return s.extraction.germanium; }, 2);
-        } else {
-            add("Ironium", "#db9a7a", [](const auto& s) { return s.extraction.ironium; }, 2);
-            add("Boranium", "#8dcc9e", [](const auto& s) { return s.extraction.boranium; }, 2);
-            add("Germanium", "#78b8f0", [](const auto& s) { return s.extraction.germanium; }, 2);
-        }
-        break;
-    case 9:
-        if (colonyId) {
-            addColony("Ironium", "#db9a7a", [](const auto& s) { return s.freightDelivered.ironium; }, 2);
-            addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.freightDelivered.boranium; }, 2);
-            addColony("Germanium", "#78b8f0", [](const auto& s) { return s.freightDelivered.germanium; }, 2);
-            addColony("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonistsDelivered); }, 2);
-        } else {
-            add("Ironium", "#db9a7a", [](const auto& s) { return s.freightDelivered.ironium; }, 2);
-            add("Boranium", "#8dcc9e", [](const auto& s) { return s.freightDelivered.boranium; }, 2);
-            add("Germanium", "#78b8f0", [](const auto& s) { return s.freightDelivered.germanium; }, 2);
-            add("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonistsDelivered); }, 2);
-        }
-        break;
-    default: break;
-    }
+    };
+    const auto scopeLabel = [&](PlanetId id) {
+        if (id == 0) return QString("Empire");
+        const auto index = historyScope_->findData(static_cast<quint32>(id));
+        return index < 0 ? QString("Colony %1").arg(id) : historyScope_->itemText(index);
+    };
+    appendMetric(colonyId, comparing ? scopeLabel(colonyId) : QString{}, false);
+    if (comparing) appendMetric(compareColonyId, scopeLabel(compareColonyId), true);
     QVector<ChartMarker> markers;
     for (int index = 0; index < shown.size(); ++index) {
         for (const auto& event : shown[index]->milestones) {
-            if (colonyId && (event.kind == HistoryMilestoneKind::ResearchCompleted
-                    || event.planet != colonyId)) continue;
+            if (colonyId && (!comparing || compareColonyId != 0)
+                && (event.kind == HistoryMilestoneKind::ResearchCompleted
+                    || (event.planet != colonyId
+                        && (!comparing || event.planet != compareColonyId)))) continue;
             QString label;
             QColor color;
             switch (event.kind) {
