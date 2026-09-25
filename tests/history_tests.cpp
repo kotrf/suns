@@ -34,6 +34,7 @@ int main()
     assert(initialHistory.front().colonyHistory.front().population == 1'000'000);
     assert(close(initialHistory.front().extraction.ironium, 0.0));
     assert(!initialHistory.front().extractionRecorded);
+    assert(!initialHistory.front().freightRecorded);
 
     const suns::TurnProcessor processor;
     const auto first = processor.process(state, {});
@@ -67,6 +68,7 @@ int main()
         == first.players.front().history.back().colonyHistory.front().population + 50);
     assert(corrected.players.front().history.back().extractionRecorded);
     assert(close(corrected.players.front().history.back().extraction.ironium, mined.extraction.ironium));
+    assert(corrected.players.front().history.back().freightRecorded);
 
     // A player's history is built only from assets they own. Authoritative
     // enemy truth and neutral surface stockpiles never leak into the record.
@@ -95,6 +97,51 @@ int main()
     assert(close(conquered.players[0].history.back().extraction.ironium, 3.0));
     assert(close(conquered.players[1].history.back().extraction.ironium, 0.0));
     assert(close(conquered.players[1].history.back().colonyHistory.front().extraction.ironium, 0.0));
+
+    // Delivered cargo is credited to the receiving player's colony, not to
+    // loads or ship-to-ship handling. A waypoint unload is counted once.
+    auto freightState = state;
+    freightState.fleets.push_back({2, 1, "Freighter", suns::FleetRole::ColonyShip,
+        suns::kColonyShipDesignId, freightState.stars[0].position, std::nullopt,
+        8, 100.0, 10000});
+    freightState.fleets.back().minerals = {2.0, 3.0, 4.0};
+    suns::PlayerOrders delivery{1, {suns::TransferCargoOrder{
+        {0, 2}, {freightState.planets.front().id, 0}, 5000, {1.0, 2.0, 3.0}}}};
+    const auto delivered = processor.process(freightState, {delivery});
+    const auto& deliveredHistory = delivered.players.front().history.back();
+    assert(deliveredHistory.freightRecorded);
+    assert(close(deliveredHistory.freightDelivered.ironium, 1.0));
+    assert(close(deliveredHistory.freightDelivered.boranium, 2.0));
+    assert(deliveredHistory.colonistsDelivered == 5000);
+    assert(close(deliveredHistory.colonyHistory.front().freightDelivered.germanium, 3.0));
+    assert(close(delivered.players.front().history.front().freightDelivered.ironium, 0.0));
+
+    auto waypoint = delivered;
+    auto& transport = waypoint.fleets.back();
+    transport.destination = waypoint.stars.front().position;
+    transport.arrivalAction = suns::FleetArrivalAction{
+        suns::FleetArrivalActionKind::UnloadAll, 1, suns::FleetCargoKind::All};
+    const auto unloaded = processor.process(waypoint, {});
+    const auto& unloadHistory = unloaded.players.front().history.back();
+    assert(close(unloadHistory.freightDelivered.ironium, 1.0));
+    assert(close(unloadHistory.freightDelivered.boranium, 1.0));
+    assert(unloadHistory.colonistsDelivered == 5000);
+    auto refreshedFreight = unloaded;
+    suns::record_empire_turn_statistics(refreshedFreight);
+    assert(refreshedFreight.players.front().history.back().freightRecorded);
+    assert(close(refreshedFreight.players.front().history.back().freightDelivered.ironium, 1.0));
+
+    // A colony changing owner later cannot retroactively award this haul to
+    // its new owner; a former colony has no invented per-colony entry.
+    auto lostFreight = freightState;
+    lostFreight.players.push_back({2, "Visitors", {}});
+    lostFreight.turn = 2;
+    lostFreight.planets.front().owner = 2;
+    suns::record_empire_turn_statistics(lostFreight, {}, true,
+        {{state.planets.front().id, 1, {7.0, 0.0, 0.0}, 900}});
+    assert(close(lostFreight.players[0].history.back().freightDelivered.ironium, 7.0));
+    assert(lostFreight.players[0].history.back().colonistsDelivered == 900);
+    assert(close(lostFreight.players[1].history.back().freightDelivered.ironium, 0.0));
 
     // Only delivered player-visible reports become compact history markers.
     auto briefing = state;

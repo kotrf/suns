@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 40;
+constexpr quint32 kSaveFormatVersion = 41;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 7;
@@ -825,6 +825,8 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
                << static_cast<quint32>(colony.productionOutput);
         writeMinerals(stream, colony.minerals);
         writeMinerals(stream, colony.extraction);
+        writeMinerals(stream, colony.freightDelivered);
+        stream << static_cast<quint64>(colony.colonistsDelivered);
     }
     writeMinerals(stream, value.extraction);
     stream << static_cast<quint8>(value.extractionRecorded ? 1 : 0);
@@ -837,6 +839,9 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         writeEnum(stream, marker.researchField);
         stream << static_cast<quint8>(marker.technologyLevel);
     }
+    writeMinerals(stream, value.freightDelivered);
+    stream << static_cast<quint64>(value.colonistsDelivered)
+           << static_cast<quint8>(value.freightRecorded ? 1 : 0);
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -884,6 +889,10 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             colony.population = static_cast<std::uint64_t>(population);
             readMinerals(stream, colony.minerals);
             if (gReadSaveFormatVersion >= 38) readMinerals(stream, colony.extraction);
+            if (gReadSaveFormatVersion >= 41) {
+                readMinerals(stream, colony.freightDelivered);
+                stream >> colony.colonistsDelivered;
+            }
             if (colony.planet == 0 || std::any_of(value.colonyHistory.begin(),
                     value.colonyHistory.end(), [&](const auto& other) {
                         return other.planet == colony.planet;
@@ -931,6 +940,13 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             value.milestones.push_back(marker);
         }
     }
+    if (gReadSaveFormatVersion >= 41) {
+        readMinerals(stream, value.freightDelivered);
+        quint8 recorded{};
+        stream >> value.colonistsDelivered >> recorded;
+        if (recorded > 1) markCorrupt(stream);
+        value.freightRecorded = recorded == 1;
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -945,6 +961,9 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
         && validAmount(value.extraction.ironium)
         && validAmount(value.extraction.boranium)
         && validAmount(value.extraction.germanium)
+        && validAmount(value.freightDelivered.ironium)
+        && validAmount(value.freightDelivered.boranium)
+        && validAmount(value.freightDelivered.germanium)
         && validAmount(value.fleetMass)
         && std::all_of(value.colonyHistory.begin(), value.colonyHistory.end(),
             [&](const auto& colony) {
@@ -954,7 +973,10 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
                     && validAmount(colony.minerals.germanium)
                     && validAmount(colony.extraction.ironium)
                     && validAmount(colony.extraction.boranium)
-                    && validAmount(colony.extraction.germanium);
+                    && validAmount(colony.extraction.germanium)
+                    && validAmount(colony.freightDelivered.ironium)
+                    && validAmount(colony.freightDelivered.boranium)
+                    && validAmount(colony.freightDelivered.germanium);
             });
 }
 

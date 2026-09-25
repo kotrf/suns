@@ -38,10 +38,19 @@ year. In colony scope only milestones for that colony appear. Events known only
 to other players never enter this player's history. Older saves have no earlier
 milestones; loading them does not invent past discoveries or losses.
 
+Save format 41 records cargo actually unloaded from fleets onto owned colonies
+in the preceding year: I/B/G minerals and colonists (shown in cargo kt). It
+counts exact transfer orders, legacy cargo adjustments and automatic waypoint
+unloads; it does not count loading, fleet-to-fleet transfers, neutral surface
+deposits, invasions or minerals gained when founding a colony. Deliveries from
+neutral remote-mining sites count when they reach a colony. Each delivery is
+credited to the owner at unloading, even if the colony changes hands later.
+An initial year or an older save has no freight measurement and shows a gap.
+
 The Empire History dock plots the local player's saved snapshots. Choose
 population, colony/infrastructure counts, yearly production output, I/B/G
 stocks, fleet/ship counts, fleet mass, technology levels, invested RP or
-mineral extraction. Extraction shows the three resources actually mined each
+mineral extraction or delivered freight. Extraction shows the three resources actually mined each
 year for the empire or a selected colony. Hover over a year to read exact
 values, and select a first and last year to inspect a shorter range. For
 population, infrastructure, output, stocks and extraction,
@@ -52,6 +61,5 @@ one instead of showing empire totals under a colony label. Missing observations 
 never reads the host's other players' histories in a player turn. It uses
 Qt Widgets painting and does not require Qt Charts.
 
-Freight counters, event markers and richer comparison tools
-remain later extensions of issue #48; snapshots from older saves start at the
-loaded turn.
+Further event categories and richer comparison tools remain extensions of
+issue #48; snapshots from older saves start at the loaded turn.

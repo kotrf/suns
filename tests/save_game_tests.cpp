@@ -66,6 +66,11 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().history.back().extraction = {3.25, 2.5, 1.75};
     original.state.players.front().history.back().extractionRecorded = true;
     original.state.players.front().history.back().colonyHistory.front().extraction = {3.25, 2.5, 1.75};
+    original.state.players.front().history.back().freightDelivered = {4.5, 3.25, 2.0};
+    original.state.players.front().history.back().colonistsDelivered = 12000;
+    original.state.players.front().history.back().freightRecorded = true;
+    original.state.players.front().history.back().colonyHistory.front().freightDelivered = {4.5, 3.25, 2.0};
+    original.state.players.front().history.back().colonyHistory.front().colonistsDelivered = 12000;
     original.state.players.front().history.back().milestones.push_back({
         12345, 77, HistoryMilestoneKind::ResearchCompleted, 0, ResearchField::Electronics, 2});
     original.state.shipDesigns.push_back({
@@ -294,6 +299,10 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.back().extraction.ironium == 3.25);
     assert(loaded.state.players.front().history.back().extractionRecorded);
     assert(loaded.state.players.front().history.back().colonyHistory.front().extraction.germanium == 1.75);
+    assert(loaded.state.players.front().history.back().freightRecorded);
+    assert(loaded.state.players.front().history.back().freightDelivered.ironium == 4.5);
+    assert(loaded.state.players.front().history.back().colonistsDelivered == 12000);
+    assert(loaded.state.players.front().history.back().colonyHistory.front().freightDelivered.boranium == 3.25);
     assert(loaded.state.players.front().history.back().milestones.size() == 1);
     assert(loaded.state.players.front().history.back().milestones.front().eventId == 12345);
     assert(loaded.state.players.front().history.back().milestones.front().technologyLevel == 2);
@@ -501,7 +510,7 @@ void population_migration_and_clear_orders()
     legacy.state = make_demo_game();
     // Build a v31-shaped fixture from the current writer. Keep newer survey
     // payloads empty and strip v37's colony-history count plus v38's
-    // extraction totals before downgrading
+    // extraction/freight totals before downgrading
     // the header; the historical empire snapshot itself must still migrate.
     legacy.state.players[0].surveyKnowledge.clear();
     legacy.state.players[0].pendingSurveyReports.clear();
@@ -525,7 +534,8 @@ void population_migration_and_clear_orders()
         const auto marker = QByteArray::fromHex("f00df00d00000000");
         const auto markerPosition = bytes.indexOf(marker);
         assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
-        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4); // v37 vector, v38 extraction and v40 events
+        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1);
+        // v37 vector, v38 extraction, v40 events and v41 freight
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream stream(&file);
@@ -541,6 +551,7 @@ void population_migration_and_clear_orders()
     assert(migrated.state.players[0].history[0].extraction.ironium == 0.0);
     assert(!migrated.state.players[0].history[0].extractionRecorded);
     assert(migrated.state.players[0].history[0].milestones.empty());
+    assert(!migrated.state.players[0].history[0].freightRecorded);
     assert(migrated.state.fleets[0].colonists == 30'000);
     assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 3.0);
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);

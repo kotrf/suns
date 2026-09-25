@@ -122,6 +122,22 @@ int main()
     assert(close(planet(collected, 2).minerals.boranium, expected.boranium));
     assert(close(planet(collected, 2).minerals.germanium, expected.germanium));
 
+    // Loading ore at a neutral site is not a colony delivery. The haul is
+    // counted only after the transport reaches and unloads at the homeworld.
+    assert(close(collected.players.front().history.back().freightDelivered.ironium, 0.0));
+    suns::PlayerOrders returnHome{1, {suns::MoveFleetOrder{
+        3, state.stars.front().position, 8,
+        {suns::FleetArrivalActionKind::UnloadAll, 1, suns::FleetCargoKind::All}}}};
+    auto hauled = processor.process(collected, {returnHome});
+    for (int turn = 0; turn < 18
+            && close(hauled.players.front().history.back().freightDelivered.ironium, 0.0); ++turn) {
+        hauled = processor.process(hauled, {});
+    }
+    assert(close(hauled.players.front().history.back().freightDelivered.ironium,
+        accumulated.ironium));
+    assert(close(hauled.players.front().history.back().colonyHistory.front().freightDelivered.boranium,
+        accumulated.boranium));
+
     // The player can stop the task without moving the fleet.
     suns::PlayerOrders stopMining{1, {suns::MoveFleetOrder{
         2,
