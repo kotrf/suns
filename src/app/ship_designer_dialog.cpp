@@ -217,9 +217,11 @@ QString unlockRequirement(ShipComponentType component)
     case ShipComponentType::AntimatterGenerator: return "Energy 1";
     case ShipComponentType::AdvancedFusionDrive: return "Propulsion 1";
     case ShipComponentType::HighWarpDrive: return "Propulsion 2";
+    case ShipComponentType::EfficientRamScoopDrive: return "Propulsion 3";
     case ShipComponentType::CompactLongRangeScanner: return "Electronics 1";
     case ShipComponentType::ExtendedRangeScanner: return "Electronics 2";
     case ShipComponentType::PenetratingScanner: return "Electronics 3";
+    case ShipComponentType::DeepPenetratingScanner: return "Electronics 4";
     case ShipComponentType::RemoteMiningModule: return "Construction 1";
     default: return {};
     }
@@ -286,7 +288,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::HighWarpDrive)
+        || component > static_cast<int>(ShipComponentType::DeepPenetratingScanner)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -569,6 +571,8 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::CargoPod,
         ShipComponentType::AntimatterGenerator,
         ShipComponentType::HighWarpDrive,
+        ShipComponentType::EfficientRamScoopDrive,
+        ShipComponentType::DeepPenetratingScanner,
     };
     for (const auto component : catalog) {
         const auto available = component_available_to_player(state, player, component);

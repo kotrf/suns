@@ -349,12 +349,16 @@ QString event_text(const GameState& state, const GameEvent& event)
             text += "\nUnlocked: Advanced Fusion Drive";
         } else if (event.researchField == ResearchField::Propulsion && event.technologyLevel == 2) {
             text += "\nUnlocked: High Warp Drive";
+        } else if (event.researchField == ResearchField::Propulsion && event.technologyLevel == 3) {
+            text += "\nUnlocked: Efficient Ram Scoop";
         } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 1) {
             text += "\nUnlocked: Compact Long Range Scanner";
         } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 2) {
             text += "\nUnlocked: Extended Range Scanner";
         } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 3) {
             text += "\nUnlocked: Penetrating Scanner";
+        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 4) {
+            text += "\nUnlocked: Deep Penetrating Scanner";
         } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 1) {
             text += "\nUnlocked: Remote Mining Module";
         }

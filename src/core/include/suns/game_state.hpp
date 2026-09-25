@@ -146,6 +146,8 @@ enum class ShipComponentType {
     AdvancedFusionDrive,
     ExtendedRangeScanner,
     HighWarpDrive,
+    EfficientRamScoopDrive,
+    DeepPenetratingScanner,
 };
 
 enum class ShipComponentKind {
