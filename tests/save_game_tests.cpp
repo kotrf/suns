@@ -50,6 +50,13 @@ void round_trip_preserves_communications_and_planning()
     });
     original.state.players.front().pendingPlayerReports.back().deliveredMinerals = {2.5, 1.0, 0.25};
     original.state.players.front().pendingPlayerReports.back().deliveredColonists = 1234;
+    auto enemyReport = original.state.players.front().pendingPlayerReports.back();
+    enemyReport.kind = PlayerReportKind::EnemyFleetDetected;
+    enemyReport.fleet = 42;
+    enemyReport.contactPosition = {425.0, 15.0};
+    enemyReport.contactOwner = 2;
+    original.state.players.front().pendingPlayerReports.push_back(enemyReport);
+    original.state.players.front().observedEnemyFleets.push_back({42, 2, {425.0, 15.0}, 1, 0});
     original.state.players.front().technology.levels[3] = 1;
     original.state.players.front().technology.progress[3] = 7;
     original.state.players.front().technology.focus = ResearchField::Electronics;
@@ -212,6 +219,13 @@ void round_trip_preserves_communications_and_planning()
     invasionMessage.planet = 2;
     invasionMessage.quantity = 731;
     original.strategicMessages.push_back(invasionMessage);
+    auto enemyMessage = archivedMessage;
+    enemyMessage.id += 3;
+    enemyMessage.kind = GameEventKind::EnemyFleetDetected;
+    enemyMessage.fleet = 42;
+    enemyMessage.contactOwner = 2;
+    enemyMessage.position = {425.0, 15.0};
+    original.strategicMessages.push_back(enemyMessage);
     original.readStrategicMessageIds.push_back(archivedMessage.id);
 
     QTemporaryDir directory;
@@ -268,7 +282,7 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().pendingSurveyReports.front().deliveryTurn == 79);
     assert(loaded.state.players.front().pendingSurveyReports.front().level == SurveyLevel::DeepSurvey);
     assert(loaded.state.players.front().pendingSurveyReports.front().observedOwner == PlayerId{2});
-    assert(loaded.state.players.front().pendingPlayerReports.size() == 1);
+    assert(loaded.state.players.front().pendingPlayerReports.size() == 2);
     const auto& report = loaded.state.players.front().pendingPlayerReports.front();
     assert(report.kind == PlayerReportKind::ColonyLost);
     assert(report.observedTurn == 76);
@@ -279,6 +293,12 @@ void round_trip_preserves_communications_and_planning()
     assert(report.technologyLevel == 3);
     assert(report.deliveredMinerals.ironium == 2.5);
     assert(report.deliveredColonists == 1234);
+    assert(loaded.state.players.front().pendingPlayerReports.back().kind == PlayerReportKind::EnemyFleetDetected);
+    assert(loaded.state.players.front().pendingPlayerReports.back().contactOwner == 2);
+    assert(same_position(loaded.state.players.front().pendingPlayerReports.back().contactPosition,
+        {425.0, 15.0}));
+    assert(loaded.state.players.front().observedEnemyFleets.size() == 1);
+    assert(loaded.state.players.front().observedEnemyFleets.front().fleet == 42);
     const auto& technology = loaded.state.players.front().technology;
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 7);
@@ -419,15 +439,17 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);
     assert(!loaded.showSensorRanges);
-    assert(loaded.strategicMessages.size() == 3);
+    assert(loaded.strategicMessages.size() == 4);
     assert(loaded.strategicMessages.front().id == archivedMessage.id);
     assert(loaded.strategicMessages.front().kind == GameEventKind::ProductionCompleted);
     assert(loaded.strategicMessages.front().planet == 1);
     assert(loaded.strategicMessages.front().shipDesign == kScoutDesignId);
     assert(loaded.strategicMessages[1].surveyLevel == SurveyLevel::DeepSurvey);
     assert(loaded.strategicMessages[1].precursorArtifactHint);
-    assert(loaded.strategicMessages.back().kind == GameEventKind::GroundInvasionWon);
-    assert(loaded.strategicMessages.back().quantity == 731);
+    assert(loaded.strategicMessages[2].kind == GameEventKind::GroundInvasionWon);
+    assert(loaded.strategicMessages.back().kind == GameEventKind::EnemyFleetDetected);
+    assert(loaded.strategicMessages.back().contactOwner == 2);
+    assert(loaded.strategicMessages[2].quantity == 731);
     assert(loaded.readStrategicMessageIds == original.readStrategicMessageIds);
 }
 
@@ -596,6 +618,8 @@ void population_migration_and_clear_orders()
         const auto markerPosition = bytes.indexOf(marker);
         assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
         bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4);
+        // v46 adds the host's observed-contact count after environmentBased.
+        bytes.remove(markerPosition + 5, 4);
         // v37 vector, v38 extraction, v40 events, v41 freight and v42 remote extraction
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));

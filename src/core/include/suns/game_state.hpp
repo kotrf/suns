@@ -336,6 +336,8 @@ enum class PlayerReportKind {
     GroundDefenseWon,
     ColonyLost,
     FreightDelivered,
+    EnemyFleetDetected,
+    EnemyFleetLost,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -356,6 +358,8 @@ struct PendingPlayerReport {
     std::uint8_t technologyLevel{};
     MineralCargo deliveredMinerals;
     std::uint64_t deliveredColonists{};
+    Position contactPosition;
+    PlayerId contactOwner{};
 };
 
 struct TechnologyState {
@@ -484,6 +488,16 @@ struct Player {
     std::vector<SystemSurveyKnowledge> surveyKnowledge;
     std::vector<PendingSurveyReport> pendingSurveyReports;
     std::vector<PendingPlayerReport> pendingPlayerReports;
+    // Host-only sensor transitions. The player export strips this physical
+    // observation ledger until a queued briefing actually arrives.
+    struct EnemyContact {
+        FleetId fleet{};
+        PlayerId owner{};
+        Position lastPosition;
+        FleetId reportingFleet{};
+        PlanetId reportingColony{};
+    };
+    std::vector<EnemyContact> observedEnemyFleets;
     RaceProfile race;
     TechnologyState technology;
     std::vector<EmpireTurnStatistics> history;
