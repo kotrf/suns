@@ -1,8 +1,10 @@
 #include "suns/game_state.hpp"
+#include "suns/player_knowledge.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <cassert>
 #include <cmath>
+#include <algorithm>
 
 namespace {
 
@@ -93,6 +95,39 @@ int main()
     assert(close(conquered.players[0].history.back().extraction.ironium, 3.0));
     assert(close(conquered.players[1].history.back().extraction.ironium, 0.0));
     assert(close(conquered.players[1].history.back().colonyHistory.front().extraction.ironium, 0.0));
+
+    // Only delivered player-visible reports become compact history markers.
+    auto briefing = state;
+    briefing.players.push_back({2, "Visitors", {}});
+    suns::record_empire_turn_statistics(briefing);
+    briefing.players.front().technology.progress[
+        static_cast<std::size_t>(suns::ResearchField::Electronics)] = 17;
+    const auto* homeStar = suns::find_star(briefing, briefing.planets.front().star);
+    assert(homeStar);
+    suns::queue_player_report(briefing, 1, suns::PlayerReportKind::ColonyFounded,
+        homeStar->position, 2, homeStar->id, briefing.planets.front().id);
+    const auto report = processor.process_with_events(briefing, {});
+    const auto rerun = processor.process_with_events(briefing, {});
+    const auto& milestones = report.state.players[0].history.back().milestones;
+    assert(milestones.size() == 2);
+    const auto colony = std::find_if(milestones.begin(), milestones.end(), [](const auto& marker) {
+        return marker.kind == suns::HistoryMilestoneKind::ColonyFounded;
+    });
+    const auto research = std::find_if(milestones.begin(), milestones.end(), [](const auto& marker) {
+        return marker.kind == suns::HistoryMilestoneKind::ResearchCompleted;
+    });
+    assert(colony != milestones.end() && colony->planet == briefing.planets.front().id);
+    assert(research != milestones.end());
+    assert(research->researchField == suns::ResearchField::Electronics);
+    assert(research->technologyLevel == 1);
+    assert(std::any_of(rerun.state.players[0].history.back().milestones.begin(),
+        rerun.state.players[0].history.back().milestones.end(), [&](const auto& marker) {
+            return marker.eventId == research->eventId;
+        }));
+    assert(report.state.players[1].history.back().milestones.empty());
+    auto refreshed = report.state;
+    suns::record_empire_turn_statistics(refreshed);
+    assert(refreshed.players[0].history.back().milestones.size() == 2);
 
     // Each year records only current ownership, preserving past observations
     // when a colony is lost and providing a gap instead of a fictitious zero.

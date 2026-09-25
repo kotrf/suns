@@ -1454,6 +1454,7 @@ void record_empire_turn_statistics(
             colony->extraction.germanium += mined.minerals.germanium;
         }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
+            snapshot.milestones = player.history.back().milestones;
             // Rebuilding a boundary to refresh population or ownership does
             // not erase the measured mining output of that already resolved year.
             if (!elapsedYear && player.history.back().extractionRecorded) {
