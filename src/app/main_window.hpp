@@ -333,7 +333,7 @@ private:
     QProgressBar* planetRadiationBar_{};
     QProgressBar* planetPopulationBar_{};
     QTreeWidget* fleetCompositionTree_{};
-    QDialog* researchDialog_{};
+    QDockWidget* researchDock_{};
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};
     QProgressBar* researchProgress_{};
