@@ -54,6 +54,7 @@ when the save is loaded.
   cost 8 and a substantial Germanium bill. It does not penetrate planets.
 - Electronics 3: Penetrating Scanner.
 - Construction 1: dedicated Remote Miner hull plus heavy Remote Mining Module. Mining equipment fits only `Mining` slots; the persistent waypoint task deposits output into the planet's surface stockpile for cargo fleets to collect separately.
+- Construction 2: Heavy Transport hull, with 250 kt built-in cargo capacity and three required engines. It carries bulk ore from mining sites, while smaller transports cost less to build and burn less fuel per ship.
 
 The scanner line offers three different engineering choices rather than automatic replacements: Compact saves mass at 55 ly, the starting scanner balances mass and a 90 ly field, and Extended reaches 160 ly at more than twice the starting scanner's mass and cost. The Advanced Fusion Drive likewise trades the ram scoops' fuel collection for lower mass, higher thrust and safe Warp 9. Existing ship designs remain unchanged. New designs are validated against the owner's technology both in the desktop Ship Designer and again in core order processing.
 

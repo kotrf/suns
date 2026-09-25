@@ -4,19 +4,20 @@ Suns! treats a ship role as the result of a fitted design rather than a fixed cl
 
 ## Hulls
 
-Five hulls are currently available:
+Six hulls are currently available (research requirements apply):
 
 | Hull | Dry hull mass | Hull cost | Base fuel | Base cargo | Required engines | General | Mining |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Scout Hull | 34.5 kt | 2 | 300 | 0 | 1 | 2 | 0 |
 | Light Transport | 45 kt | 2 | 400 | 5 | 1 | 3 | 0 |
 | Medium Transport | 70 kt | 5 | 500 | 50 | 2 | 5 | 0 |
+| Heavy Transport (Construction 2) | 140 kt | 12 | 600 | 250 | 3 | 6 | 0 |
 | Remote Miner (Construction 1) | 120 kt | 8 | 500 | 0 | 2 | 1 | 2 |
 | Utility Hull | 85 kt | 7 | 500 | 0 | 2 | 8 | 0 |
 
 The numbers are tuning placeholders. The structural rules are more important. Each hull has a fixed required engine count based on its structural mass class, and every engine in that bank must be the same model. Multiple engines do not multiply maximum Warp: together they are the propulsion plant required for that hull to achieve the selected engine model's normal performance. Every installed engine still contributes its own mass, build cost and mineral cost. Remote Mining Modules use `Mining`, not general, slots.
 
-Transport hulls buy cargo efficiency through built-in hold capacity and have fewer configurable cells. The Utility Hull starts with no cargo capacity but has eight general cells. It may become a hauler by spending those cells on Cargo Pods, or instead become a survey vessel, colony expedition, relay or industrial support design. A fully cargo-fitted Utility Hull is intentionally more expensive and heavier than obtaining comparable capacity from a transport hull.
+Transport hulls buy cargo efficiency through built-in hold capacity and have fewer configurable cells. The Heavy Transport moves five times the Medium Transport's base cargo, but requires a third engine, a larger mineral bill and more fuel per ship. The Utility Hull starts with no cargo capacity but has eight general cells. It may become a hauler by spending those cells on Cargo Pods, or instead become a survey vessel, colony expedition, relay or industrial support design. A fully cargo-fitted Utility Hull is intentionally more expensive and heavier than obtaining comparable capacity from a transport hull.
 
 ## Fitting
 

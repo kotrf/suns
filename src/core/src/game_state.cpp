@@ -316,6 +316,8 @@ ShipHullSpec hull_spec(ShipHullType type)
         return {type, "Remote Miner", 120.0, 8, 500.0, 0.0, 2, 1, 2, make_hull_slots(2, 1, 2)};
     case ShipHullType::Utility:
         return {type, "Utility Hull", 85.0, 7, 500.0, 0.0, 2, 8, 0, make_hull_slots(2, 8, 0)};
+    case ShipHullType::HeavyTransport:
+        return {type, "Heavy Transport", 140.0, 12, 600.0, 250.0, 3, 6, 0, make_hull_slots(3, 6, 0)};
     }
     return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0, {}};
 }
@@ -656,8 +658,11 @@ bool ship_design_available_to_player(
 {
     const bool hullAvailable = design.hull != ShipHullType::RemoteMiner
         || technology_level(state, player, ResearchField::Construction) >= 1;
+    const bool heavyAvailable = design.hull != ShipHullType::HeavyTransport
+        || technology_level(state, player, ResearchField::Construction) >= 2;
     return design.owner == player
         && hullAvailable
+        && heavyAvailable
         && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
             return component_available_to_player(state, player, component);
         });

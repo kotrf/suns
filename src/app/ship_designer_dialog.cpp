@@ -109,6 +109,13 @@ QPixmap hullPortrait(ShipHullType hull)
         outline.lineTo(-104, 37); outline.lineTo(-95, -12); outline.lineTo(-48, -17);
         outline.lineTo(-35, -45); outline.closeSubpath();
         break;
+    case ShipHullType::HeavyTransport:
+        outline.moveTo(0, -58); outline.lineTo(41, -48); outline.lineTo(52, -29);
+        outline.lineTo(110, -32); outline.lineTo(118, 39); outline.lineTo(58, 51);
+        outline.lineTo(38, 57); outline.lineTo(-38, 57); outline.lineTo(-58, 51);
+        outline.lineTo(-118, 39); outline.lineTo(-110, -32); outline.lineTo(-52, -29);
+        outline.lineTo(-41, -48); outline.closeSubpath();
+        break;
     case ShipHullType::Utility:
         outline.moveTo(0, -48); outline.lineTo(25, -42); outline.lineTo(44, -20);
         outline.lineTo(90, -29); outline.lineTo(102, 27); outline.lineTo(51, 38);
@@ -134,10 +141,15 @@ QPixmap hullPortrait(ShipHullType hull)
     painter.drawRoundedRect(QRectF(-17, -30, 34, 62), 10, 10);
     painter.setPen(QPen(QColor("#85c9e6"), 2));
     painter.drawLine(QPointF(0, -44), QPointF(0, 20));
-    if (hull == ShipHullType::LightTransport || hull == ShipHullType::MediumTransport) {
+    if (hull == ShipHullType::LightTransport || hull == ShipHullType::MediumTransport
+        || hull == ShipHullType::HeavyTransport) {
         painter.setPen(QPen(QColor("#9db8c9"), 1));
         painter.drawRoundedRect(QRectF(-68, 0, 30, 27), 3, 3);
         painter.drawRoundedRect(QRectF(38, 0, 30, 27), 3, 3);
+        if (hull == ShipHullType::HeavyTransport) {
+            painter.drawRoundedRect(QRectF(-105, -25, 34, 22), 3, 3);
+            painter.drawRoundedRect(QRectF(71, -25, 34, 22), 3, 3);
+        }
     } else if (hull == ShipHullType::RemoteMiner) {
         painter.setPen(QPen(QColor("#e2bb70"), 3));
         painter.drawLine(QPointF(-91, -12), QPointF(-109, -26));
@@ -496,6 +508,14 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     addEnumItem(hullCombo_, "Scout Hull", ShipHullType::Scout);
     addEnumItem(hullCombo_, "Light Transport", ShipHullType::LightTransport);
     addEnumItem(hullCombo_, "Medium Transport", ShipHullType::MediumTransport);
+    const bool heavyAvailable = technology_level(state, player_, ResearchField::Construction) >= 2;
+    addEnumItem(hullCombo_, heavyAvailable ? "Heavy Transport" : "Heavy Transport (locked — Construction 2)",
+        ShipHullType::HeavyTransport);
+    if (!heavyAvailable) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model())) {
+            model->item(hullCombo_->count() - 1)->setEnabled(false);
+        }
+    }
     addEnumItem(hullCombo_, "Utility Hull", ShipHullType::Utility);
     addEnumItem(hullCombo_, remoteMiningAvailable_ ? "Remote Miner" : "Remote Miner (locked — Construction 1)",
         ShipHullType::RemoteMiner);
