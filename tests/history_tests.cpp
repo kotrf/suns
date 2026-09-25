@@ -30,6 +30,7 @@ int main()
     assert(initialHistory.front().colonyHistory.size() == 1);
     assert(initialHistory.front().colonyHistory.front().planet == state.planets.front().id);
     assert(initialHistory.front().colonyHistory.front().population == 1'000'000);
+    assert(close(initialHistory.front().extraction.ironium, 0.0));
 
     const suns::TurnProcessor processor;
     const auto first = processor.process(state, {});
@@ -43,6 +44,12 @@ int main()
     assert(close(
         first.players.front().history.back().minerals.germanium,
         replay.players.front().history.back().minerals.germanium));
+    const auto expectedMining = suns::projected_mineral_mining(state, state.planets.front());
+    const auto& mined = first.players.front().history.back();
+    assert(close(mined.extraction.ironium, expectedMining.ironium));
+    assert(close(mined.extraction.boranium, expectedMining.boranium));
+    assert(close(mined.colonyHistory.front().extraction.germanium, expectedMining.germanium));
+    assert(close(mined.extraction.ironium, replay.players.front().history.back().extraction.ironium));
 
     // Re-recording one planning boundary replaces its snapshot rather than
     // manufacturing a duplicate sample.
@@ -72,6 +79,16 @@ int main()
     assert(playerOne.fleets == initialHistory.front().fleets);
     assert(playerOne.colonyHistory.size() == 1);
     assert(playerOne.colonyHistory.front().planet != hidden.planets[1].id);
+
+    // Record mining under the empire which mined it even when a world changes
+    // hands before the next boundary; the winner gets no historical credit.
+    auto conquered = hidden;
+    conquered.turn = 2;
+    conquered.planets.front().owner = 2;
+    suns::record_empire_turn_statistics(conquered, {{state.planets.front().id, 1, {3.0, 2.0, 1.0}}});
+    assert(close(conquered.players[0].history.back().extraction.ironium, 3.0));
+    assert(close(conquered.players[1].history.back().extraction.ironium, 0.0));
+    assert(close(conquered.players[1].history.back().colonyHistory.front().extraction.ironium, 0.0));
 
     // Each year records only current ownership, preserving past observations
     // when a colony is lost and providing a gap instead of a fictitious zero.

@@ -191,7 +191,7 @@ void MainWindow::installEmpireHistory()
     historyMetric_->setObjectName("historyMetric");
     historyMetric_->addItems({"Population", "Colonies and infrastructure", "Production output",
         "Mineral stocks (kt)", "Fleets and ships", "Fleet mass (kt)",
-        "Technology levels", "Research invested (RP)"});
+        "Technology levels", "Research invested (RP)", "Mineral extraction (kt/year)"});
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -249,7 +249,7 @@ void MainWindow::refreshEmpireHistory()
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
     const auto selectedScope = historyScope_->currentData().toUInt();
-    const bool scopedMetric = historyMetric_->currentIndex() <= 3;
+    const bool scopedMetric = historyMetric_->currentIndex() <= 3 || historyMetric_->currentIndex() == 8;
     const auto* planetOnMap = selectedPlanet();
     const PlanetId selectedColony = planetOnMap && planetOnMap->owner == pendingOrders_.player
         ? planetOnMap->id : PlanetId{};
@@ -402,6 +402,17 @@ void MainWindow::refreshEmpireHistory()
             });
         break;
     }
+    case 8:
+        if (colonyId) {
+            addColony("Ironium", "#db9a7a", [](const auto& s) { return s.extraction.ironium; }, 2);
+            addColony("Boranium", "#8dcc9e", [](const auto& s) { return s.extraction.boranium; }, 2);
+            addColony("Germanium", "#78b8f0", [](const auto& s) { return s.extraction.germanium; }, 2);
+        } else {
+            add("Ironium", "#db9a7a", [](const auto& s) { return s.extraction.ironium; }, 2);
+            add("Boranium", "#8dcc9e", [](const auto& s) { return s.extraction.boranium; }, 2);
+            add("Germanium", "#78b8f0", [](const auto& s) { return s.extraction.germanium; }, 2);
+        }
+        break;
     default: break;
     }
     chart->setData(std::move(turns), std::move(series));

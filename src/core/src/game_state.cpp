@@ -1423,10 +1423,25 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     return result;
 }
 
-void record_empire_turn_statistics(GameState& state)
+void record_empire_turn_statistics(
+    GameState& state, const std::vector<ColonyExtraction>& extraction)
 {
     for (auto& player : state.players) {
         auto snapshot = empire_turn_statistics(state, player.id);
+        for (const auto& mined : extraction) {
+            if (mined.owner != player.id) continue;
+            snapshot.extraction.ironium += mined.minerals.ironium;
+            snapshot.extraction.boranium += mined.minerals.boranium;
+            snapshot.extraction.germanium += mined.minerals.germanium;
+            const auto colony = std::find_if(snapshot.colonyHistory.begin(),
+                snapshot.colonyHistory.end(), [&](const auto& record) {
+                    return record.planet == mined.planet;
+                });
+            if (colony == snapshot.colonyHistory.end()) continue;
+            colony->extraction.ironium += mined.minerals.ironium;
+            colony->extraction.boranium += mined.minerals.boranium;
+            colony->extraction.germanium += mined.minerals.germanium;
+        }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
             player.history.back() = std::move(snapshot);
         } else {

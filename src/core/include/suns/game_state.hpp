@@ -394,6 +394,13 @@ struct ColonyTurnStatistics {
     std::uint32_t mines{};
     std::uint32_t productionOutput{};
     MineralCargo minerals;
+    MineralCargo extraction; // Actual minerals mined during the preceding year.
+};
+
+struct ColonyExtraction {
+    PlanetId planet{};
+    PlayerId owner{}; // Owner when mining occurred; ownership may change before year end.
+    MineralCargo minerals;
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and
@@ -406,6 +413,7 @@ struct EmpireTurnStatistics {
     std::uint32_t mines{};
     std::uint32_t productionOutput{};
     MineralCargo minerals;
+    MineralCargo extraction;
     std::uint32_t fleets{};
     std::uint32_t ships{};
     double fleetMass{};
@@ -741,7 +749,8 @@ void refresh_sensor_intel(GameState& state);
     const GameState& state, const Planet& planet, std::uint64_t turn);
 [[nodiscard]] EmpireTurnStatistics empire_turn_statistics(
     const GameState& state, PlayerId player);
-void record_empire_turn_statistics(GameState& state);
+void record_empire_turn_statistics(
+    GameState& state, const std::vector<ColonyExtraction>& extraction = {});
 
 [[nodiscard]] GameState generate_game(const GalaxyConfig& config);
 GameState make_demo_game();
