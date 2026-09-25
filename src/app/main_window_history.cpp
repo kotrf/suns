@@ -319,6 +319,10 @@ void MainWindow::refreshEmpireHistory()
         && historyScope_->currentData().toUInt() == kFollowSelectedColony;
     const auto colonyId = followingMap ? selectedColony
         : scopedMetric ? static_cast<PlanetId>(historyScope_->currentData().toUInt()) : PlanetId{};
+    if (scopedMetric && historyCompare_->currentData().toUInt() == colonyId) {
+        const QSignalBlocker blocker(historyCompare_);
+        historyCompare_->setCurrentIndex(0);
+    }
     const auto compareSelection = historyCompare_->currentData().toUInt();
     const bool comparing = scopedMetric && compareSelection != kNoComparison
         && compareSelection != colonyId;
