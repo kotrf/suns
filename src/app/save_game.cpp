@@ -891,7 +891,9 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             if (gReadSaveFormatVersion >= 38) readMinerals(stream, colony.extraction);
             if (gReadSaveFormatVersion >= 41) {
                 readMinerals(stream, colony.freightDelivered);
-                stream >> colony.colonistsDelivered;
+                quint64 colonistsDelivered{};
+                stream >> colonistsDelivered;
+                colony.colonistsDelivered = colonistsDelivered;
             }
             if (colony.planet == 0 || std::any_of(value.colonyHistory.begin(),
                     value.colonyHistory.end(), [&](const auto& other) {
@@ -943,7 +945,9 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
     if (gReadSaveFormatVersion >= 41) {
         readMinerals(stream, value.freightDelivered);
         quint8 recorded{};
-        stream >> value.colonistsDelivered >> recorded;
+        quint64 colonistsDelivered{};
+        stream >> colonistsDelivered >> recorded;
+        value.colonistsDelivered = colonistsDelivered;
         if (recorded > 1) markCorrupt(stream);
         value.freightRecorded = recorded == 1;
     }
