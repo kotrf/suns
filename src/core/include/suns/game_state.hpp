@@ -333,6 +333,7 @@ enum class PlayerReportKind {
     GroundInvasionLost,
     GroundDefenseWon,
     ColonyLost,
+    FreightDelivered,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -351,6 +352,8 @@ struct PendingPlayerReport {
     std::uint32_t quantity{};
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
+    MineralCargo deliveredMinerals;
+    std::uint64_t deliveredColonists{};
 };
 
 struct TechnologyState {
@@ -429,6 +432,7 @@ enum class HistoryMilestoneKind : std::uint8_t {
     ColonyFounded,
     ColonyLost,
     ResearchCompleted,
+    FleetStalledForFuel,
 };
 
 struct HistoryMilestone {
@@ -438,6 +442,7 @@ struct HistoryMilestone {
     PlanetId planet{};
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
+    FleetId fleet{};
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and

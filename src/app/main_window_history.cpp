@@ -557,6 +557,7 @@ void MainWindow::refreshEmpireHistory()
         for (const auto& event : shown[index]->milestones) {
             if (colonyId && (!comparing || compareColonyId != 0)
                 && (event.kind == HistoryMilestoneKind::ResearchCompleted
+                    || event.kind == HistoryMilestoneKind::FleetStalledForFuel
                     || (event.planet != colonyId
                         && (!comparing || event.planet != compareColonyId)))) continue;
             QString label;
@@ -575,6 +576,10 @@ void MainWindow::refreshEmpireHistory()
                     .arg(QString::fromStdString(research_field_name(event.researchField)))
                     .arg(event.technologyLevel);
                 color = QColor("#d1a2e0");
+                break;
+            case HistoryMilestoneKind::FleetStalledForFuel:
+                label = QString("Fleet %1 stalled for fuel").arg(event.fleet);
+                color = QColor("#e4b868");
                 break;
             }
             if (event.observedTurn && event.observedTurn != shown[index]->turn)

@@ -42,7 +42,9 @@ void queue_player_report(
     ProductionKind productionKind = ProductionKind::ColonyShip,
     std::uint32_t quantity = 0,
     ResearchField researchField = ResearchField::Electronics,
-    std::uint8_t technologyLevel = 0);
+    std::uint8_t technologyLevel = 0,
+    MineralCargo deliveredMinerals = {},
+    std::uint64_t deliveredColonists = 0);
 
 [[nodiscard]] std::vector<GameEvent> deliver_due_player_reports(GameState& state);
 

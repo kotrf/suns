@@ -24,7 +24,7 @@
    Export and distribute the next player turns.
 
 This is asynchronous file multiplayer with a trusted host. There is no deployed
-server, matchmaking, network login, signature verification or combat yet.
+server, matchmaking, network login, signature verification or fleet combat yet.
 Copying a token gives its holder the ability to submit for that player that turn;
 use a private channel for each participant's files. Keep the host save private.
 

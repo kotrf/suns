@@ -114,6 +114,15 @@ int main()
     assert(close(deliveredHistory.freightDelivered.boranium, 2.0));
     assert(deliveredHistory.colonistsDelivered == 5000);
     assert(close(deliveredHistory.colonyHistory.front().freightDelivered.germanium, 3.0));
+    const auto deliveredEvents = processor.process_with_events(freightState, {delivery});
+    const auto cargoMessage = std::find_if(deliveredEvents.events.begin(), deliveredEvents.events.end(), [](const auto& event) {
+        return event.kind == suns::GameEventKind::FreightDelivered;
+    });
+    assert(cargoMessage != deliveredEvents.events.end());
+    assert(cargoMessage->planet == freightState.planets.front().id);
+    assert(close(cargoMessage->deliveredMinerals.ironium, 1.0));
+    assert(cargoMessage->deliveredColonists == 5000);
+    assert(cargoMessage->id == processor.process_with_events(freightState, {delivery}).events.back().id);
     assert(close(delivered.players.front().history.front().freightDelivered.ironium, 0.0));
 
     auto waypoint = delivered;
@@ -126,6 +135,10 @@ int main()
     assert(close(unloadHistory.freightDelivered.ironium, 1.0));
     assert(close(unloadHistory.freightDelivered.boranium, 1.0));
     assert(unloadHistory.colonistsDelivered == 5000);
+    const auto unloadEvents = processor.process_with_events(waypoint, {});
+    assert(std::count_if(unloadEvents.events.begin(), unloadEvents.events.end(), [](const auto& event) {
+        return event.kind == suns::GameEventKind::FreightDelivered;
+    }) == 1);
     auto refreshedFreight = unloaded;
     suns::record_empire_turn_statistics(refreshedFreight);
     assert(refreshedFreight.players.front().history.back().freightRecorded);
@@ -172,6 +185,14 @@ int main()
             return marker.eventId == research->eventId;
         }));
     assert(report.state.players[1].history.back().milestones.empty());
+    auto fuelReport = state;
+    suns::queue_player_report(fuelReport, 1, suns::PlayerReportKind::FleetStalledForFuel,
+        homeStar->position, 2, 0, 0, fuelReport.fleets.front().id);
+    const auto stalled = processor.process_with_events(fuelReport, {});
+    const auto& fuelMarkers = stalled.state.players.front().history.back().milestones;
+    assert(std::any_of(fuelMarkers.begin(), fuelMarkers.end(), [](const auto& marker) {
+        return marker.kind == suns::HistoryMilestoneKind::FleetStalledForFuel && marker.fleet == 1;
+    }));
     auto refreshed = report.state;
     suns::record_empire_turn_statistics(refreshed);
     assert(refreshed.players[0].history.back().milestones.size() == 2);

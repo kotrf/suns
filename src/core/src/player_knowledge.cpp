@@ -3,6 +3,7 @@
 #include "suns/communications.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 
 namespace suns {
@@ -72,6 +73,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::GroundInvasionLost: return GameEventKind::GroundInvasionLost;
     case PlayerReportKind::GroundDefenseWon: return GameEventKind::GroundDefenseWon;
     case PlayerReportKind::ColonyLost: return GameEventKind::ColonyLost;
+    case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
     }
     return GameEventKind::FleetArrived;
 }
@@ -109,6 +111,12 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     mix(report.quantity);
     mix(static_cast<std::uint64_t>(report.researchField));
     mix(report.technologyLevel);
+    // A receiving colony gets one aggregated freight report per year.
+    // The manifest is part of the stable identity even when replaying a turn.
+    mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.ironium));
+    mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.boranium));
+    mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.germanium));
+    mix(report.deliveredColonists);
     return hash;
 }
 
@@ -170,7 +178,9 @@ void queue_player_report(
     ProductionKind productionKind,
     std::uint32_t quantity,
     ResearchField researchField,
-    std::uint8_t technologyLevel)
+    std::uint8_t technologyLevel,
+    MineralCargo deliveredMinerals,
+    std::uint64_t deliveredColonists)
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
@@ -189,6 +199,8 @@ void queue_player_report(
         quantity,
         researchField,
         technologyLevel,
+        deliveredMinerals,
+        deliveredColonists,
     });
 }
 
@@ -372,6 +384,9 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 SurveyLevel::Detected,
                 report.researchField,
                 report.technologyLevel,
+                false,
+                report.deliveredMinerals,
+                report.deliveredColonists,
             });
         }
 

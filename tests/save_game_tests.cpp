@@ -48,6 +48,8 @@ void round_trip_preserves_communications_and_planning()
         ResearchField::Biology,
         3,
     });
+    original.state.players.front().pendingPlayerReports.back().deliveredMinerals = {2.5, 1.0, 0.25};
+    original.state.players.front().pendingPlayerReports.back().deliveredColonists = 1234;
     original.state.players.front().technology.levels[3] = 1;
     original.state.players.front().technology.progress[3] = 7;
     original.state.players.front().technology.focus = ResearchField::Electronics;
@@ -76,6 +78,8 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().history.back().remoteMineHistory.push_back({2, {6.25, 5.5, 4.75}});
     original.state.players.front().history.back().milestones.push_back({
         12345, 77, HistoryMilestoneKind::ResearchCompleted, 0, ResearchField::Electronics, 2});
+    original.state.players.front().history.back().milestones.push_back({
+        12346, 77, HistoryMilestoneKind::FleetStalledForFuel, 0, ResearchField::Electronics, 0, 1});
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
@@ -273,6 +277,8 @@ void round_trip_preserves_communications_and_planning()
     assert(same_position(report.position, {420.0, 10.0}));
     assert(report.researchField == ResearchField::Biology);
     assert(report.technologyLevel == 3);
+    assert(report.deliveredMinerals.ironium == 2.5);
+    assert(report.deliveredColonists == 1234);
     const auto& technology = loaded.state.players.front().technology;
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 7);
@@ -311,9 +317,10 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.back().remoteMineHistory.size() == 1);
     assert(loaded.state.players.front().history.back().remoteMineHistory.front().planet == 2);
     assert(loaded.state.players.front().history.back().remoteMineHistory.front().extraction.germanium == 4.75);
-    assert(loaded.state.players.front().history.back().milestones.size() == 1);
+    assert(loaded.state.players.front().history.back().milestones.size() == 2);
     assert(loaded.state.players.front().history.back().milestones.front().eventId == 12345);
     assert(loaded.state.players.front().history.back().milestones.front().technologyLevel == 2);
+    assert(loaded.state.players.front().history.back().milestones.back().fleet == 1);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);

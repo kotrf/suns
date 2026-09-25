@@ -46,6 +46,7 @@ enum class MessageTypeFilter {
     ShipConstruction,
     Infrastructure,
     Colonization,
+    Freight,
     Combat,
     Research,
     ProductionDelays,
@@ -134,6 +135,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::ColonyLost:
         subject = QString("Colony lost on %1").arg(planetName);
         break;
+    case GameEventKind::FreightDelivered:
+        subject = QString("Cargo delivered to %1").arg(planetName);
+        break;
     }
     return QString("T%1  %2").arg(static_cast<qulonglong>(event.turn)).arg(subject);
 }
@@ -173,6 +177,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind != ProductionKind::ColonyShip;
     case MessageTypeFilter::Colonization: return event.kind == GameEventKind::ColonyFounded;
+    case MessageTypeFilter::Freight: return event.kind == GameEventKind::FreightDelivered;
     case MessageTypeFilter::Combat:
         return event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
@@ -300,6 +305,15 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  New colony founded on %2")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(planetName);
+    } else if (event.kind == GameEventKind::FreightDelivered) {
+        text = QString("Turn %1  •  Cargo delivered to %2\n"
+                       "Minerals: I %3 / B %4 / G %5 kt; colonists: %6")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(event_planet_name(state, event))
+                   .arg(event.deliveredMinerals.ironium, 0, 'f', 2)
+                   .arg(event.deliveredMinerals.boranium, 0, 'f', 2)
+                   .arg(event.deliveredMinerals.germanium, 0, 'f', 2)
+                   .arg(static_cast<qulonglong>(event.deliveredColonists));
     } else if (event.kind == GameEventKind::GroundInvasionWon) {
         text = QString("Turn %1  •  Ground invasion succeeded on %2\n"
                        "The colony was captured; %3 attacking colonists survived.")
@@ -423,6 +437,7 @@ void MainWindow::installTurnMessages()
     turnMessageTypeFilter_->addItem("Ships completed", static_cast<int>(MessageTypeFilter::ShipConstruction));
     turnMessageTypeFilter_->addItem("Infrastructure completed", static_cast<int>(MessageTypeFilter::Infrastructure));
     turnMessageTypeFilter_->addItem("New colonies", static_cast<int>(MessageTypeFilter::Colonization));
+    turnMessageTypeFilter_->addItem("Cargo deliveries", static_cast<int>(MessageTypeFilter::Freight));
     turnMessageTypeFilter_->addItem("Ground combat", static_cast<int>(MessageTypeFilter::Combat));
     turnMessageTypeFilter_->addItem("Research completed", static_cast<int>(MessageTypeFilter::Research));
     turnMessageTypeFilter_->addItem("Production delays", static_cast<int>(MessageTypeFilter::ProductionDelays));

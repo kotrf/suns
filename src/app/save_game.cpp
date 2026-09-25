@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 43;
+constexpr quint32 kSaveFormatVersion = 44;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 8;
@@ -683,6 +683,8 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
     writeEnum(stream, value.researchField);
     stream << static_cast<quint8>(value.technologyLevel)
            << static_cast<quint8>(value.precursorArtifactHint ? 1 : 0);
+    writeMinerals(stream, value.deliveredMinerals);
+    stream << static_cast<quint64>(value.deliveredColonists);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -698,7 +700,8 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 36
+    const auto newestEventKind = gReadSaveFormatVersion >= 44
+        ? GameEventKind::FreightDelivered : gReadSaveFormatVersion >= 36
         ? GameEventKind::ColonyLost
         : gReadSaveFormatVersion >= 27
             ? GameEventKind::PrecursorArtifactsDiscovered
@@ -737,6 +740,12 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     value.quantity = static_cast<std::int32_t>(quantity);
     value.technologyLevel = static_cast<std::uint8_t>(technologyLevel);
     value.precursorArtifactHint = precursorArtifactHint != 0;
+    if (gReadSaveFormatVersion >= 44) {
+        readMinerals(stream, value.deliveredMinerals);
+        quint64 colonists{};
+        stream >> colonists;
+        value.deliveredColonists = colonists;
+    }
 }
 
 void writeMessageIds(QDataStream& stream, const std::vector<std::uint64_t>& ids)
@@ -837,6 +846,7 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         stream << static_cast<quint32>(marker.planet);
         writeEnum(stream, marker.researchField);
         stream << static_cast<quint8>(marker.technologyLevel);
+        stream << static_cast<quint32>(marker.fleet);
     }
     writeMinerals(stream, value.freightDelivered);
     stream << static_cast<quint64>(value.colonistsDelivered)
@@ -928,17 +938,26 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             quint32 planet{};
             stream >> id >> observedTurn;
             if (!readEnum(stream, marker.kind,
-                    static_cast<quint8>(HistoryMilestoneKind::ResearchCompleted))) return;
+                    static_cast<quint8>(gReadSaveFormatVersion >= 44
+                        ? HistoryMilestoneKind::FleetStalledForFuel
+                        : HistoryMilestoneKind::ResearchCompleted))) return;
             stream >> planet;
             if (!readEnum(stream, marker.researchField,
                     static_cast<quint8>(ResearchField::Weapons))) return;
             stream >> marker.technologyLevel;
+            if (gReadSaveFormatVersion >= 44) {
+                quint32 fleet{};
+                stream >> fleet;
+                marker.fleet = fleet;
+            }
             marker.eventId = id;
             marker.observedTurn = observedTurn;
             marker.planet = planet;
             if (marker.eventId == 0 || marker.observedTurn > value.turn
                 || (marker.kind == HistoryMilestoneKind::ResearchCompleted
-                    ? marker.technologyLevel == 0 : marker.planet == 0)
+                    ? marker.technologyLevel == 0
+                    : marker.kind == HistoryMilestoneKind::FleetStalledForFuel
+                        ? marker.fleet == 0 : marker.planet == 0)
                 || std::any_of(value.milestones.begin(), value.milestones.end(), [&](const auto& other) {
                     return other.eventId == marker.eventId;
                 })) {
@@ -1063,6 +1082,8 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint32>(report.quantity);
         writeEnum(stream, report.researchField);
         stream << static_cast<quint8>(report.technologyLevel);
+        writeMinerals(stream, report.deliveredMinerals);
+        stream << static_cast<quint64>(report.deliveredColonists);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -1174,7 +1195,8 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 36
+        const auto newestReportKind = gReadSaveFormatVersion >= 44
+            ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
             ? PlayerReportKind::ColonyLost
             : gReadSaveFormatVersion >= 27
                 ? PlayerReportKind::ResearchLevelCompleted
@@ -1209,6 +1231,12 @@ void readPlayer(QDataStream& stream, Player& value)
             quint8 technologyLevel{};
             stream >> technologyLevel;
             report.technologyLevel = static_cast<std::uint8_t>(technologyLevel);
+        }
+        if (gReadSaveFormatVersion >= 44) {
+            readMinerals(stream, report.deliveredMinerals);
+            quint64 colonists{};
+            stream >> colonists;
+            report.deliveredColonists = colonists;
         }
         report.observedTurn = static_cast<std::uint64_t>(observedTurn);
         report.deliveryTurn = static_cast<std::uint64_t>(deliveryTurn);
