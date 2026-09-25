@@ -461,9 +461,11 @@ void high_warp_component_round_trips()
     assert(directory.isValid());
     QString error;
     SaveGameData original;
-    original.state = make_demo_game();
+    original.galaxyConfig = {20260925, 24, 940.0, 700.0, 50.0};
+    original.state = generate_game(original.galaxyConfig);
     original.campaignId = 5;
     original.turnToken = 7;
+    original.pendingOrders = {1, {}};
     const auto id = original.state.nextShipDesignId++;
     original.state.shipDesigns.push_back({id, 1, "Warp Ten Scout",
         ShipHullType::Scout, {ShipComponentType::HighWarpDrive}});
