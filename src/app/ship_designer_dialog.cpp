@@ -204,6 +204,7 @@ QString unlockRequirement(ShipComponentType component)
     switch (component) {
     case ShipComponentType::AntimatterGenerator: return "Energy 1";
     case ShipComponentType::AdvancedFusionDrive: return "Propulsion 1";
+    case ShipComponentType::HighWarpDrive: return "Propulsion 2";
     case ShipComponentType::CompactLongRangeScanner: return "Electronics 1";
     case ShipComponentType::ExtendedRangeScanner: return "Electronics 2";
     case ShipComponentType::PenetratingScanner: return "Electronics 3";
@@ -273,7 +274,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::ExtendedRangeScanner)
+        || component > static_cast<int>(ShipComponentType::HighWarpDrive)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -547,6 +548,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::FuelTank,
         ShipComponentType::CargoPod,
         ShipComponentType::AntimatterGenerator,
+        ShipComponentType::HighWarpDrive,
     };
     for (const auto component : catalog) {
         const auto available = component_available_to_player(state, player, component);

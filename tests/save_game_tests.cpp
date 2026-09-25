@@ -455,6 +455,37 @@ void turn_order_file_round_trip_preserves_envelope_and_orders()
     assert(allocation && allocation->percent == 30);
 }
 
+void high_warp_component_round_trips()
+{
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    QString error;
+    SaveGameData original;
+    original.galaxyConfig = {20260925, 24, 940.0, 700.0, 50.0};
+    original.state = generate_game(original.galaxyConfig);
+    original.campaignId = 5;
+    original.turnToken = 7;
+    original.pendingOrders = {1, {}};
+    const auto id = original.state.nextShipDesignId++;
+    original.state.shipDesigns.push_back({id, 1, "Warp Ten Scout",
+        ShipHullType::Scout, {ShipComponentType::HighWarpDrive}});
+    const auto savePath = directory.filePath("warp-ten.suns");
+    assert(write_save_game_file(savePath, original, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(savePath, loaded, error));
+    assert(find_ship_design(loaded.state, id)->components.front() == ShipComponentType::HighWarpDrive);
+
+    TurnOrderFileData packet{5, 1, 7,
+        {1, {CreateShipDesignOrder{"Warp Ten Scout", ShipHullType::Scout,
+            {ShipComponentType::HighWarpDrive}}}}, {"Design Warp Ten Scout"}};
+    const auto ordersPath = directory.filePath("warp-ten.sunsorders");
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(ordersPath, imported, error));
+    const auto& design = std::get<CreateShipDesignOrder>(imported.orders.orders.front());
+    assert(design.components.front() == ShipComponentType::HighWarpDrive);
+}
+
 void population_migration_and_clear_orders()
 {
     QTemporaryDir directory;
@@ -587,6 +618,7 @@ int main()
 {
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();
+    high_warp_component_round_trips();
     old_format_is_rejected_cleanly();
     population_migration_and_clear_orders();
     cancellation_round_trips_in_save_and_turn_packet();

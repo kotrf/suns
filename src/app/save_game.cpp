@@ -18,13 +18,19 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 38;
+constexpr quint32 kSaveFormatVersion = 39;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 6;
+constexpr quint32 kTurnOrderFormatVersion = 7;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
+
+quint8 newestShipComponent()
+{
+    return static_cast<quint8>(gReadSaveFormatVersion >= 39
+        ? ShipComponentType::HighWarpDrive : ShipComponentType::ExtendedRangeScanner);
+}
 
 std::uint64_t mixId(std::uint64_t value)
 {
@@ -485,7 +491,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.components.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         ShipComponentType component{};
-        if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
+        if (!readEnum(stream, component, newestShipComponent())) return;
         value.components.push_back(component);
     }
     value.placements.clear();
@@ -497,7 +503,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
             quint16 slot{};
             ShipComponentType component{};
             stream >> slot;
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return;
+            if (!readEnum(stream, component, newestShipComponent())) return;
             value.placements.push_back({static_cast<ShipSlotId>(slot), component});
         }
     }
@@ -1688,7 +1694,7 @@ bool readOrder(QDataStream& stream, Order& order)
         value.components.reserve(count);
         for (quint32 index = 0; index < count; ++index) {
             ShipComponentType component{};
-            if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
+            if (!readEnum(stream, component, newestShipComponent())) return false;
             value.components.push_back(component);
         }
         if (gReadSaveFormatVersion >= 19) {
@@ -1699,7 +1705,7 @@ bool readOrder(QDataStream& stream, Order& order)
                 quint16 slot{};
                 ShipComponentType component{};
                 stream >> slot;
-                if (!readEnum(stream, component, static_cast<quint8>(ShipComponentType::ExtendedRangeScanner))) return false;
+                if (!readEnum(stream, component, newestShipComponent())) return false;
                 value.placements.push_back({static_cast<ShipSlotId>(slot), component});
             }
         }
@@ -2303,7 +2309,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

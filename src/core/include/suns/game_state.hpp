@@ -144,6 +144,7 @@ enum class ShipComponentType {
     RemoteMiningModule,
     AdvancedFusionDrive,
     ExtendedRangeScanner,
+    HighWarpDrive,
 };
 
 enum class ShipComponentKind {

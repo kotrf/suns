@@ -367,6 +367,16 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.fuelPer100MassLy = {0.0, 0.04, 0.05, 0.07, 0.10, 0.16, 0.24, 0.38, 0.62, 0.88, 1.45};
         spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10.0};
         break;
+    case ShipComponentType::HighWarpDrive:
+        spec.name = "High Warp Drive";
+        spec.kind = ShipComponentKind::Engine;
+        spec.mass = 25.0;
+        spec.buildCost = 12;
+        spec.engineThrust = 720.0;
+        spec.maxWarp = 10;
+        spec.fuelPer100MassLy = {0.0, 0.06, 0.08, 0.11, 0.16, 0.25, 0.40, 0.64, 1.05, 1.65, 2.40};
+        spec.overdriveDamagePercent.fill(0.0);
+        break;
     case ShipComponentType::LongRangeScanner:
         spec.name = "Long Range Scanner";
         spec.kind = ShipComponentKind::Scanner;

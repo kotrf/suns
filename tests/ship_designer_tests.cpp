@@ -246,6 +246,18 @@ void verify_create_design_order()
     assert(suns::component_available_to_player(
         propulsionUnlocked, 1, suns::ShipComponentType::AdvancedFusionDrive));
 
+    suns::PlayerOrders highWarp{1, {}};
+    highWarp.orders.emplace_back(suns::CreateShipDesignOrder{
+        "Warp Ten Courier", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::HighWarpDrive},
+    });
+    assert(processor.process(propulsionUnlocked, {highWarp}).shipDesigns.size()
+        == propulsionUnlocked.shipDesigns.size());
+    propulsionUnlocked.players.front().technology.levels[
+        static_cast<std::size_t>(suns::ResearchField::Propulsion)] = 2;
+    const auto warpTenCreated = processor.process(propulsionUnlocked, {highWarp});
+    assert(warpTenCreated.shipDesigns.size() == propulsionUnlocked.shipDesigns.size() + 1);
+
     suns::PlayerOrders extendedScanner{1, {}};
     extendedScanner.orders.emplace_back(suns::CreateShipDesignOrder{
         "Deep Space Surveyor",

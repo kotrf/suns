@@ -45,6 +45,9 @@ when the save is loaded.
   remain unchanged; new designs require the technology.
 - Propulsion 1: Advanced Fusion Drive, a safe 16 kt Warp-9 engine. It is lighter
   than either ram scoop, but costs more to build and consumes fuel at every Warp.
+- Propulsion 2: High Warp Drive, a safe Warp-10 engine at 25 kt and higher mineral
+  cost. It burns considerably more fuel at Warp 9–10, so scoops and the lighter
+  Advanced Fusion Drive remain useful for long routes and smaller ships.
 - Electronics 0: the starting Long Range Scanner remains available.
 - Electronics 1: Compact Long Range Scanner, 55 ly range, 5 kt, cost 2 and a smaller mineral bill.
 - Electronics 2: Extended Range Scanner, a 160 ly ordinary sensor at 24 kt,
