@@ -508,6 +508,52 @@ void high_warp_component_round_trips()
     assert(design.components.front() == ShipComponentType::HighWarpDrive);
 }
 
+void heavy_transport_round_trips()
+{
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    QString error;
+    SaveGameData original;
+    original.galaxyConfig = {20260925, 24, 940.0, 700.0, 50.0};
+    original.state = generate_game(original.galaxyConfig);
+    original.campaignId = 15;
+    original.turnToken = 9;
+    original.pendingOrders = {1, {}};
+    original.state.players.front().technology.levels[static_cast<std::size_t>(ResearchField::Construction)] = 2;
+    const auto id = original.state.nextShipDesignId++;
+    original.state.shipDesigns.push_back({id, 1, "Bulk Hauler", ShipHullType::HeavyTransport,
+        {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive, ShipComponentType::FusionDrive}});
+    const auto savePath = directory.filePath("heavy-transport.suns");
+    assert(write_save_game_file(savePath, original, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(savePath, loaded, error));
+    const auto* savedDesign = find_ship_design(loaded.state, id);
+    assert(savedDesign && savedDesign->hull == ShipHullType::HeavyTransport);
+    assert(ship_design_valid(*savedDesign));
+    assert(ship_design_available_to_player(loaded.state, 1, *savedDesign));
+
+    TurnOrderFileData packet{15, loaded.state.turn, 9,
+        {1, {CreateShipDesignOrder{"New Bulk Hauler", ShipHullType::HeavyTransport,
+            {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive,
+             ShipComponentType::FusionDrive}}}}, {"Design new bulk hauler"}};
+    const auto ordersPath = directory.filePath("heavy-transport.sunsorders");
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(ordersPath, imported, error));
+    const auto& design = std::get<CreateShipDesignOrder>(imported.orders.orders.front());
+    assert(design.hull == ShipHullType::HeavyTransport);
+    assert(design.components.size() == 3);
+
+    // Older packet versions reject the new hull ordinal rather than misreading it.
+    {
+        QFile file(ordersPath);
+        assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+        QDataStream stream(&file);
+        stream << quint32{7};
+    }
+    assert(!read_turn_order_file(ordersPath, imported, error));
+}
+
 void population_migration_and_clear_orders()
 {
     QTemporaryDir directory;
@@ -645,6 +691,7 @@ int main()
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();
     high_warp_component_round_trips();
+    heavy_transport_round_trips();
     old_format_is_rejected_cleanly();
     population_migration_and_clear_orders();
     cancellation_round_trips_in_save_and_turn_packet();

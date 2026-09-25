@@ -100,6 +100,7 @@ enum class ShipHullType {
     MediumTransport,
     RemoteMiner,
     Utility,
+    HeavyTransport,
 };
 
 using ShipSlotId = std::uint16_t;
