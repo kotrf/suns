@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
 #include <QComboBox>
+#include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QLabel>
 #include <QListWidget>
@@ -152,6 +153,10 @@ int main(int argc, char** argv)
         QMimeData mime;
         mime.setData("application/x-suns-ship-component",
             QByteArray::number(static_cast<int>(suns::ShipComponentType::LongRangeScanner)) + ":200");
+        QDragEnterEvent enter(target->rect().center(), Qt::MoveAction, &mime,
+            Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &enter);
+        assert(enter.isAccepted());
         QDropEvent drop(QPointF(target->rect().center()), Qt::MoveAction, &mime,
             Qt::LeftButton, Qt::NoModifier);
         QApplication::sendEvent(target, &drop);
