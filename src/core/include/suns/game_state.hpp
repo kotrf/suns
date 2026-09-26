@@ -146,6 +146,8 @@ enum class ShipComponentType {
     AdvancedFusionDrive,
     ExtendedRangeScanner,
     HighWarpDrive,
+    EfficientRamScoopDrive,
+    DeepPenetratingScanner,
 };
 
 enum class ShipComponentKind {
@@ -333,6 +335,9 @@ enum class PlayerReportKind {
     GroundInvasionLost,
     GroundDefenseWon,
     ColonyLost,
+    FreightDelivered,
+    EnemyFleetDetected,
+    EnemyFleetLost,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -351,6 +356,10 @@ struct PendingPlayerReport {
     std::uint32_t quantity{};
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
+    MineralCargo deliveredMinerals;
+    std::uint64_t deliveredColonists{};
+    Position contactPosition;
+    PlayerId contactOwner{};
 };
 
 struct TechnologyState {
@@ -425,10 +434,18 @@ struct RemoteMineTurnStatistics {
     MineralCargo extraction;
 };
 
+struct FleetTurnStatistics {
+    FleetId fleet{};
+    std::uint32_t ships{};
+    double grossMass{};
+    double fuel{};
+};
+
 enum class HistoryMilestoneKind : std::uint8_t {
     ColonyFounded,
     ColonyLost,
     ResearchCompleted,
+    FleetStalledForFuel,
 };
 
 struct HistoryMilestone {
@@ -438,6 +455,7 @@ struct HistoryMilestone {
     PlanetId planet{};
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
+    FleetId fleet{};
 };
 
 // Compact player-owned history. It contains no enemy or unsurveyed truth and
@@ -466,6 +484,9 @@ struct EmpireTurnStatistics {
     std::vector<ColonyTurnStatistics> colonyHistory;
     // Only neutral sites actually mined by this player's fleets in this year.
     std::vector<RemoteMineTurnStatistics> remoteMineHistory;
+    // Only owned fleets with current, immediately confirmed telemetry. Missing
+    // years mean the fleet was out of contact or no longer existed.
+    std::vector<FleetTurnStatistics> fleetHistory;
     // Only events delivered to this player at this planning boundary.
     std::vector<HistoryMilestone> milestones;
 };
@@ -477,6 +498,16 @@ struct Player {
     std::vector<SystemSurveyKnowledge> surveyKnowledge;
     std::vector<PendingSurveyReport> pendingSurveyReports;
     std::vector<PendingPlayerReport> pendingPlayerReports;
+    // Host-only sensor transitions. The player export strips this physical
+    // observation ledger until a queued briefing actually arrives.
+    struct EnemyContact {
+        FleetId fleet{};
+        PlayerId owner{};
+        Position lastPosition;
+        FleetId reportingFleet{};
+        PlanetId reportingColony{};
+    };
+    std::vector<EnemyContact> observedEnemyFleets;
     RaceProfile race;
     TechnologyState technology;
     std::vector<EmpireTurnStatistics> history;

@@ -4,11 +4,11 @@ Suns! should eventually make ship roles emerge from fitted hardware rather than 
 
 ## Current model
 
-A `Fleet` references a `ShipDesign`. A design has a hull mass, hull build cost and a list of installed components. The initial component catalog is deliberately tiny:
+A `Fleet` references a `ShipDesign`. A design has a hull mass, hull build cost and a list of installed components. The starter designs use a small selection from the catalog:
 
 - **Fusion Drive** — adds mass, build cost and engine thrust;
-- **Long Range Scanner** — detects systems and, later, foreign fleets without reading planetary parameters;
-- **Penetrating Scanner** — a later Sensors technology that estimates planetary suitability inside its shorter field;
+- **Long Range Scanner** — detects systems and nearby foreign fleets without reading planetary parameters;
+- **Penetrating Scanner** — Electronics 3 technology that estimates planetary suitability inside its shorter field;
 - **Colony Module** — adds mass, build cost and enables colonization.
 
 The two starting designs reproduce the current game behaviour through the same component rules:
@@ -22,7 +22,7 @@ Total mass is hull mass plus component masses. Build cost is hull cost plus comp
 
 Travel speed is derived from engine thrust and fitted mass:
 
-`speed = total_engine_thrust * 10 / total_mass`
+`design speed = total_engine_thrust * 10 / total_mass`; actual yearly travel is limited by the chosen Warp setting (`Warp²` ly).
 
 The constants are tuning placeholders, but the relationship is intentional. Adding useful equipment makes a ship heavier, so a designer must trade capability against speed unless a stronger engine is fitted.
 
@@ -43,7 +43,7 @@ A later UI-focused step should remove this compatibility role and derive present
 
 ## Future direction
 
-The component system is intentionally extensible. `PenetratingScanner` already has core mass, cost, mineral and range rules, but is deliberately not selectable in the starter designer until technology unlocks are modeled. Candidate future equipment includes fuel tanks, stronger engines, armor, shields, beam and missile weapons, point defense, cargo, minelayers, mining equipment, jammers and cloaking.
+The component system is intentionally extensible. Technologies unlock scanners, drives, mining modules and specialized hulls in the ship designer. Candidate future equipment includes armor, shields, beam and missile weapons, point defense, minelayers, jammers and cloaking.
 
 Those components should not be added merely to create a long catalog. Each should introduce a strategic design decision through mass, cost, power, range, survivability, signature, logistics or another interacting constraint.
 

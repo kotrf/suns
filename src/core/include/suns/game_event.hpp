@@ -23,6 +23,9 @@ enum class GameEventKind {
     GroundInvasionLost,
     GroundDefenseWon,
     ColonyLost,
+    FreightDelivered,
+    EnemyFleetDetected,
+    EnemyFleetLost,
 };
 
 enum class GameEventSeverity {
@@ -49,6 +52,9 @@ struct GameEvent {
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
     bool precursorArtifactHint{};
+    MineralCargo deliveredMinerals;
+    std::uint64_t deliveredColonists{};
+    PlayerId contactOwner{};
 };
 
 } // namespace suns

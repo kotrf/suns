@@ -169,6 +169,7 @@ QPixmap renderShipPortrait(const ShipDesign& design)
     // player learns to recognise scoop/radiating drives at a glance.
     QColor engineColour("#76b8ff");
     if (hasComponent(design, ShipComponentType::RamScoopDrive)) engineColour = QColor("#65d6cf");
+    if (hasComponent(design, ShipComponentType::EfficientRamScoopDrive)) engineColour = QColor("#7cd7af");
     if (hasComponent(design, ShipComponentType::RadiatingRamScoopDrive)) engineColour = QColor("#ff8b63");
     const auto engineCount = hull_spec(design.hull).requiredEngines;
     for (std::uint8_t index = 0; index < engineCount; ++index) {
@@ -226,10 +227,12 @@ QPixmap renderShipPortrait(const ShipDesign& design)
 
     if (hasComponent(design, ShipComponentType::LongRangeScanner)
         || hasComponent(design, ShipComponentType::CompactLongRangeScanner)
-        || hasComponent(design, ShipComponentType::PenetratingScanner)) {
+        || hasComponent(design, ShipComponentType::PenetratingScanner)
+        || hasComponent(design, ShipComponentType::DeepPenetratingScanner)) {
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(
-            hasComponent(design, ShipComponentType::PenetratingScanner)
+            (hasComponent(design, ShipComponentType::PenetratingScanner)
+                || hasComponent(design, ShipComponentType::DeepPenetratingScanner))
                 ? QColor("#d9a6ff")
                 : QColor("#9fd5ff"),
             1.5));

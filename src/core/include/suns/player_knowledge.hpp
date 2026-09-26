@@ -42,7 +42,15 @@ void queue_player_report(
     ProductionKind productionKind = ProductionKind::ColonyShip,
     std::uint32_t quantity = 0,
     ResearchField researchField = ResearchField::Electronics,
-    std::uint8_t technologyLevel = 0);
+    std::uint8_t technologyLevel = 0,
+    MineralCargo deliveredMinerals = {},
+    std::uint64_t deliveredColonists = 0,
+    Position contactPosition = {},
+    PlayerId contactOwner = 0);
+
+// Detect transitions in physical sensor coverage. Reports travel through the
+// same communication channel as fleet operations, including remote scouts.
+void observe_enemy_fleet_contacts(GameState& state, std::uint64_t observationTurn);
 
 [[nodiscard]] std::vector<GameEvent> deliver_due_player_reports(GameState& state);
 

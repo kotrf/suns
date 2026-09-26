@@ -1902,6 +1902,7 @@ TurnResult TurnProcessor::process_with_events(
     const auto remoteExtraction = mine_uncolonized_planets(next);
     advance_fleets(next, freight);
     observe_current_sensor_coverage(next, next.turn + 1);
+    observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
     for (auto& planet : next.planets) {
         const auto contribution = run_colony_production(next, planet);
@@ -1920,6 +1921,33 @@ TurnResult TurnProcessor::process_with_events(
     // the planning boundary, without requiring a separate Refuel order.
     refuel_fleets_at_orbital_services(next);
     grow_colonies(next);
+
+    // The ledger counts physical deliveries; publish one manifest per receiving
+    // colony instead of one message for every split cargo order or waypoint.
+    std::sort(freight.begin(), freight.end(), [](const auto& left, const auto& right) {
+        if (left.owner != right.owner) return left.owner < right.owner;
+        return left.planet < right.planet;
+    });
+    for (std::size_t index = 0; index < freight.size();) {
+        const auto owner = freight[index].owner;
+        const auto planetId = freight[index].planet;
+        MineralCargo minerals{};
+        std::uint64_t colonists = 0;
+        do {
+            minerals.ironium += freight[index].minerals.ironium;
+            minerals.boranium += freight[index].minerals.boranium;
+            minerals.germanium += freight[index].minerals.germanium;
+            colonists += freight[index].colonists;
+            ++index;
+        } while (index < freight.size() && freight[index].owner == owner && freight[index].planet == planetId);
+        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [planetId](const Planet& candidate) {
+            return candidate.id == planetId;
+        });
+        const auto* star = planet != next.planets.end() ? find_star(next, planet->star) : nullptr;
+        if (star) queue_player_report(next, owner, PlayerReportKind::FreightDelivered,
+            star->position, next.turn + 1, star->id, planetId, 0, 0,
+            ProductionKind::ColonyShip, 0, ResearchField::Electronics, 0, minerals, colonists);
+    }
 
     // The returned state is the next planning boundary. Commands arriving
     // during this elapsed year become active now but never rewrite movement
@@ -1943,16 +1971,19 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::ColonyFounded: kind = HistoryMilestoneKind::ColonyFounded; break;
         case GameEventKind::ColonyLost: kind = HistoryMilestoneKind::ColonyLost; break;
         case GameEventKind::ResearchLevelCompleted: kind = HistoryMilestoneKind::ResearchCompleted; break;
+        case GameEventKind::FleetStalledForFuel: kind = HistoryMilestoneKind::FleetStalledForFuel; break;
         default: break;
         }
         if (!kind || ((*kind == HistoryMilestoneKind::ResearchCompleted)
-                ? event.technologyLevel == 0 : event.planet == 0)) continue;
+                ? event.technologyLevel == 0
+                : *kind == HistoryMilestoneKind::FleetStalledForFuel
+                    ? event.fleet == 0 : event.planet == 0)) continue;
         auto& milestones = player->history.back().milestones;
         if (std::any_of(milestones.begin(), milestones.end(), [&](const auto& recorded) {
                 return recorded.eventId == event.id;
             })) continue;
         milestones.push_back({event.id, event.observedTurn, *kind,
-            event.planet, event.researchField, event.technologyLevel});
+            event.planet, event.researchField, event.technologyLevel, event.fleet});
     }
     return {std::move(next), std::move(events)};
 }
