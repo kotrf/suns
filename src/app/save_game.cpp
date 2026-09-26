@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 46;
+constexpr quint32 kSaveFormatVersion = 47;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 9;
@@ -866,6 +866,11 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         stream << static_cast<quint32>(site.planet);
         writeMinerals(stream, site.extraction);
     }
+    stream << static_cast<quint32>(value.fleetHistory.size());
+    for (const auto& fleet : value.fleetHistory)
+        stream << static_cast<quint32>(fleet.fleet)
+               << static_cast<quint32>(fleet.ships)
+               << fleet.grossMass << fleet.fuel;
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -1009,6 +1014,22 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             value.remoteMineHistory.push_back(site);
         }
     }
+    if (gReadSaveFormatVersion >= 47) {
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.fleetHistory.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            FleetTurnStatistics fleet;
+            stream >> fleet.fleet >> fleet.ships >> fleet.grossMass >> fleet.fuel;
+            if (fleet.fleet == 0 || fleet.ships == 0
+                || std::any_of(value.fleetHistory.begin(), value.fleetHistory.end(),
+                    [&](const auto& other) { return other.fleet == fleet.fleet; })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.fleetHistory.push_back(fleet);
+        }
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -1049,6 +1070,11 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
                     && validAmount(site.extraction.ironium)
                     && validAmount(site.extraction.boranium)
                     && validAmount(site.extraction.germanium);
+            })
+        && std::all_of(value.fleetHistory.begin(), value.fleetHistory.end(),
+            [&](const auto& fleet) {
+                return fleet.fleet != 0 && fleet.ships != 0
+                    && validAmount(fleet.grossMass) && validAmount(fleet.fuel);
             });
 }
 
