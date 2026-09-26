@@ -34,6 +34,7 @@ public:
 
 private:
     void rebuildSlotGrid();
+    void refreshSlotGrid();
     void fitComponent(ShipComponentType component, ShipSlotId target, ShipSlotId source = 0);
     void removeComponent(ShipSlotId slot);
     void selectSlot(ShipSlotId slot);

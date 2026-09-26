@@ -360,6 +360,13 @@ public:
         setChecked(chosen);
     }
 
+    void setComponent(std::optional<ShipComponentType> component)
+    {
+        component_ = component;
+        setIcon(component_ ? componentIcon(*component_) : QIcon{});
+        refreshText();
+    }
+
 protected:
     void dragEnterEvent(QDragEnterEvent* event) override
     {
@@ -815,7 +822,7 @@ void ShipDesignerDialog::fitComponent(
             if (slot.category == ShipSlotCategory::Engine) placements_.push_back({slot.id, component});
         }
         selectedSlot_ = target;
-        rebuildSlotGrid();
+        refreshSlotGrid();
         updatePreview();
         return;
     }
@@ -852,7 +859,7 @@ void ShipDesignerDialog::fitComponent(
         targetPlacement->component = component;
     }
     selectedSlot_ = target;
-    rebuildSlotGrid();
+    refreshSlotGrid();
     updatePreview();
 }
 
@@ -869,8 +876,31 @@ void ShipDesignerDialog::removeComponent(ShipSlotId slot)
             ? component_spec(placement.component).kind == ShipComponentKind::Engine
             : placement.slot == slot;
     });
-    rebuildSlotGrid();
+    refreshSlotGrid();
     updatePreview();
+}
+
+void ShipDesignerDialog::refreshSlotGrid()
+{
+    // A drop runs while QDrag::exec() still owns the source widget on Wayland.
+    // Keep both source and target alive until the drag has finished.
+    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+    for (const auto& slot : hull.fittingSlots) {
+        const auto* item = slotGrid_->itemAtPosition(slot.row, slot.column);
+        if (!item || !item->widget()) continue;
+        auto* button = static_cast<SlotButton*>(item->widget());
+        const auto placement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
+            return candidate.slot == slot.id;
+        });
+        button->setComponent(placement == placements_.end()
+            ? std::nullopt : std::optional<ShipComponentType>(placement->component));
+        button->setChosen(selectedSlot_ == slot.id);
+    }
+    const auto selectedPlacement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placement) {
+        return placement.slot == selectedSlot_;
+    });
+    removeButton_->setEnabled(selectedPlacement != placements_.end());
+    fitButton_->setEnabled(selectedSlot_ != 0 && selectedCatalogComponent().has_value());
 }
 
 void ShipDesignerDialog::rebuildSlotGrid()
