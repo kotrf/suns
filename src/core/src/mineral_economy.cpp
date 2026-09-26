@@ -63,6 +63,8 @@ MineralCargo componentMineralCost(ShipComponentType type)
     case ShipComponentType::AdvancedFusionDrive:     return {3.0, 2.0, 4.0};
     case ShipComponentType::ExtendedRangeScanner:    return {1.0, 4.0, 7.0};
     case ShipComponentType::HighWarpDrive:           return {4.0, 3.0, 6.0};
+    case ShipComponentType::EfficientRamScoopDrive:  return {5.0, 5.0, 7.0};
+    case ShipComponentType::DeepPenetratingScanner:  return {2.0, 6.0, 9.0};
     }
     return {};
 }

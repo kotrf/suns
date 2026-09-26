@@ -234,6 +234,42 @@ void verify_percentage_is_taken_before_production_and_leftovers_follow()
     assert(third.players.front().technology.progress[3] == 13);
 }
 
+void verify_new_research_changes_scouting_and_fuel_logistics()
+{
+    auto state = suns::make_demo_game();
+    const auto scoop = suns::ShipComponentType::EfficientRamScoopDrive;
+    const auto scanner = suns::ShipComponentType::DeepPenetratingScanner;
+    assert(!suns::component_available_to_player(state, 1, scoop));
+    assert(!suns::component_available_to_player(state, 1, scanner));
+    suns::PlayerOrders orders{1, {suns::CreateShipDesignOrder{
+        "Long Range Surveyor", suns::ShipHullType::Scout, {scoop, scanner}}}};
+    const suns::TurnProcessor processor;
+    assert(suns::find_ship_design(processor.process(state, {orders}),
+        suns::kFirstCustomShipDesignId) == nullptr);
+
+    state.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Propulsion)] = 3;
+    state.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Electronics)] = 4;
+    assert(suns::component_available_to_player(state, 1, scoop));
+    assert(suns::component_available_to_player(state, 1, scanner));
+    const auto unlocked = processor.process(state, {orders});
+    const auto* design = suns::find_ship_design(unlocked, suns::kFirstCustomShipDesignId);
+    assert(design != nullptr);
+    auto fleet = state.fleets.front();
+    fleet.design = design->id;
+    fleet.ships = {{design->id, 1}};
+    fleet.warp = 7;
+    auto comparison = fleet;
+    comparison.design = suns::kScoutDesignId;
+    comparison.ships = {{suns::kScoutDesignId, 1}};
+    state.shipDesigns.push_back(*design);
+    assert(suns::fleet_fuel_change_for_distance(state, fleet, 49.0) < 0.0);
+    assert(suns::fleet_fuel_change_for_distance(state, comparison, 49.0) > 0.0);
+    assert(suns::fleet_penetrating_sensor_range(state, fleet) == 145.0);
+    assert(suns::fleet_penetrating_sensor_range(state, comparison) == 0.0);
+    assert(suns::component_spec(scoop).radiationHazard == 0.0);
+    assert(suns::component_spec(scoop).mass > suns::component_spec(suns::ShipComponentType::RamScoopDrive).mass);
+}
+
 } // namespace
 
 int main()
@@ -245,5 +281,6 @@ int main()
     verify_active_research_can_be_moved_removed_and_resumed();
     verify_component_unlock_is_enforced_for_new_designs();
     verify_percentage_is_taken_before_production_and_leftovers_follow();
+    verify_new_research_changes_scouting_and_fuel_logistics();
     return 0;
 }

@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <bit>
 #include <cstdint>
+#include <limits>
+#include <tuple>
 
 namespace suns {
 
@@ -74,6 +76,8 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::GroundDefenseWon: return GameEventKind::GroundDefenseWon;
     case PlayerReportKind::ColonyLost: return GameEventKind::ColonyLost;
     case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
+    case PlayerReportKind::EnemyFleetDetected: return GameEventKind::EnemyFleetDetected;
+    case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
     }
     return GameEventKind::FleetArrived;
 }
@@ -81,7 +85,8 @@ GameEventKind event_kind(PlayerReportKind kind)
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
-    return kind == PlayerReportKind::FleetStalledForFuel
+    return kind == PlayerReportKind::EnemyFleetDetected
+            || kind == PlayerReportKind::FleetStalledForFuel
             || kind == PlayerReportKind::FleetTargetLost
             || kind == PlayerReportKind::ProductionWaitingForMinerals
             || kind == PlayerReportKind::ProductionWaitingForShipyard
@@ -113,10 +118,18 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     mix(report.technologyLevel);
     // A receiving colony gets one aggregated freight report per year.
     // The manifest is part of the stable identity even when replaying a turn.
-    mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.ironium));
-    mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.boranium));
-    mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.germanium));
-    mix(report.deliveredColonists);
+    if (report.kind == PlayerReportKind::FreightDelivered) {
+        mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.ironium));
+        mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.boranium));
+        mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.germanium));
+        mix(report.deliveredColonists);
+    }
+    if (report.kind == PlayerReportKind::EnemyFleetDetected
+        || report.kind == PlayerReportKind::EnemyFleetLost) {
+        mix(report.contactOwner);
+        mix(std::bit_cast<std::uint64_t>(report.contactPosition.x));
+        mix(std::bit_cast<std::uint64_t>(report.contactPosition.y));
+    }
     return hash;
 }
 
@@ -180,7 +193,9 @@ void queue_player_report(
     ResearchField researchField,
     std::uint8_t technologyLevel,
     MineralCargo deliveredMinerals,
-    std::uint64_t deliveredColonists)
+    std::uint64_t deliveredColonists,
+    Position contactPosition,
+    PlayerId contactOwner)
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
@@ -201,6 +216,8 @@ void queue_player_report(
         technologyLevel,
         deliveredMinerals,
         deliveredColonists,
+        contactPosition,
+        contactOwner,
     });
 }
 
@@ -262,6 +279,101 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
                     state, fleet.owner, star.id, fleet.id, fleet.position, observationTurn, level);
             }
         }
+    }
+}
+
+void observe_enemy_fleet_contacts(GameState& state, std::uint64_t observationTurn)
+{
+    for (auto& player : state.players) {
+        std::vector<Player::EnemyContact> visible;
+        for (const auto& enemy : state.fleets) {
+            if (enemy.owner == 0 || enemy.owner == player.id) continue;
+            // Prefer the shortest communication route. Ties use stable source
+            // IDs, regardless of container iteration or fleet insertion order.
+            auto best = std::tuple{std::numeric_limits<std::uint32_t>::max(), 2, std::uint32_t{0}};
+            Position source;
+            FleetId reporterFleet = 0;
+            PlanetId reporterColony = 0;
+            for (const auto& colony : state.planets) {
+                if (colony.owner != player.id || colony.population == 0) continue;
+                const auto* star = find_star(state, colony.star);
+                if (!star || distance_between(star->position, enemy.position) > kColonySensorRange + 0.000001)
+                    continue;
+                const auto priority = std::tuple{communication_delay_turns(state, player.id, star->position),
+                    0, colony.id};
+                if (priority < best) {
+                    best = priority;
+                    source = star->position;
+                    reporterFleet = 0;
+                    reporterColony = colony.id;
+                }
+            }
+            for (const auto& detector : state.fleets) {
+                if (detector.owner != player.id
+                    || distance_between(detector.position, enemy.position)
+                        > fleet_sensor_range(state, detector) + 0.000001) continue;
+                const auto priority = std::tuple{communication_delay_turns(state, player.id, detector.position),
+                    1, detector.id};
+                if (priority < best) {
+                    best = priority;
+                    source = detector.position;
+                    reporterFleet = detector.id;
+                    reporterColony = 0;
+                }
+            }
+            if (std::get<0>(best) == std::numeric_limits<std::uint32_t>::max()) continue;
+            visible.push_back({enemy.id, enemy.owner, enemy.position, reporterFleet, reporterColony});
+            const auto previous = std::find_if(player.observedEnemyFleets.begin(),
+                player.observedEnemyFleets.end(), [&](const auto& contact) {
+                    return contact.fleet == enemy.id;
+                });
+            if (previous != player.observedEnemyFleets.end()) continue;
+            StarId starId = 0;
+            for (const auto& star : state.stars) if (same_position(star.position, enemy.position)) {
+                starId = star.id;
+                break;
+            }
+            queue_player_report(state, player.id, PlayerReportKind::EnemyFleetDetected,
+                source, observationTurn, starId, 0, enemy.id, 0, ProductionKind::ColonyShip,
+                0, ResearchField::Electronics, 0, {}, 0, enemy.position, enemy.owner);
+        }
+
+        for (const auto& previous : player.observedEnemyFleets) {
+            if (std::any_of(visible.begin(), visible.end(), [&](const auto& current) {
+                return current.fleet == previous.fleet;
+            })) continue;
+            // A surviving sensor can report the loss of its earlier signal.
+            // If the source itself vanished, there is nobody to send a report.
+            Position source;
+            if (previous.reportingFleet != 0) {
+                const auto detector = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& fleet) {
+                    return fleet.id == previous.reportingFleet && fleet.owner == player.id;
+                });
+                if (detector == state.fleets.end()) continue;
+                source = detector->position;
+            } else {
+                const auto colony = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+                    return planet.id == previous.reportingColony && planet.owner == player.id
+                        && planet.population > 0;
+                });
+                if (colony == state.planets.end()) continue;
+                const auto* star = find_star(state, colony->star);
+                if (!star) continue;
+                source = star->position;
+            }
+            StarId starId = 0;
+            for (const auto& star : state.stars) if (same_position(star.position, previous.lastPosition)) {
+                starId = star.id;
+                break;
+            }
+            queue_player_report(state, player.id, PlayerReportKind::EnemyFleetLost,
+                source, observationTurn, starId, 0, previous.fleet, 0, ProductionKind::ColonyShip,
+                0, ResearchField::Electronics, 0, {}, 0, previous.lastPosition, previous.owner);
+        }
+        std::sort(visible.begin(), visible.end(), [](const auto& a, const auto& b) {
+            return a.fleet < b.fleet;
+        });
+        player.observedEnemyFleets = std::move(visible);
     }
 }
 
@@ -379,7 +491,9 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.fleet,
                 report.shipDesign,
                 report.productionKind,
-                report.position,
+                report.kind == PlayerReportKind::EnemyFleetDetected
+                        || report.kind == PlayerReportKind::EnemyFleetLost
+                    ? report.contactPosition : report.position,
                 static_cast<std::int32_t>(report.quantity),
                 SurveyLevel::Detected,
                 report.researchField,
@@ -387,6 +501,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 false,
                 report.deliveredMinerals,
                 report.deliveredColonists,
+                report.contactOwner,
             });
         }
 

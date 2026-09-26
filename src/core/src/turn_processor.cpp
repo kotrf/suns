@@ -1902,6 +1902,7 @@ TurnResult TurnProcessor::process_with_events(
     const auto remoteExtraction = mine_uncolonized_planets(next);
     advance_fleets(next, freight);
     observe_current_sensor_coverage(next, next.turn + 1);
+    observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
     for (auto& planet : next.planets) {
         const auto contribution = run_colony_production(next, planet);

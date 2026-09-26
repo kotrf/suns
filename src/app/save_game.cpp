@@ -18,18 +18,19 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 44;
+constexpr quint32 kSaveFormatVersion = 47;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 8;
+constexpr quint32 kTurnOrderFormatVersion = 9;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
 
 quint8 newestShipComponent()
 {
-    return static_cast<quint8>(gReadSaveFormatVersion >= 39
-        ? ShipComponentType::HighWarpDrive : ShipComponentType::ExtendedRangeScanner);
+    return static_cast<quint8>(gReadSaveFormatVersion >= 45
+        ? ShipComponentType::DeepPenetratingScanner : gReadSaveFormatVersion >= 39
+            ? ShipComponentType::HighWarpDrive : ShipComponentType::ExtendedRangeScanner);
 }
 
 std::uint64_t mixId(std::uint64_t value)
@@ -685,6 +686,7 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
            << static_cast<quint8>(value.precursorArtifactHint ? 1 : 0);
     writeMinerals(stream, value.deliveredMinerals);
     stream << static_cast<quint64>(value.deliveredColonists);
+    stream << static_cast<quint32>(value.contactOwner);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -700,7 +702,8 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 44
+    const auto newestEventKind = gReadSaveFormatVersion >= 46
+        ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
         ? GameEventKind::FreightDelivered : gReadSaveFormatVersion >= 36
         ? GameEventKind::ColonyLost
         : gReadSaveFormatVersion >= 27
@@ -745,6 +748,11 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
         quint64 colonists{};
         stream >> colonists;
         value.deliveredColonists = colonists;
+    }
+    if (gReadSaveFormatVersion >= 46) {
+        quint32 owner{};
+        stream >> owner;
+        value.contactOwner = owner;
     }
 }
 
@@ -858,6 +866,11 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         stream << static_cast<quint32>(site.planet);
         writeMinerals(stream, site.extraction);
     }
+    stream << static_cast<quint32>(value.fleetHistory.size());
+    for (const auto& fleet : value.fleetHistory)
+        stream << static_cast<quint32>(fleet.fleet)
+               << static_cast<quint32>(fleet.ships)
+               << fleet.grossMass << fleet.fuel;
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -1001,6 +1014,22 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             value.remoteMineHistory.push_back(site);
         }
     }
+    if (gReadSaveFormatVersion >= 47) {
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        value.fleetHistory.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            FleetTurnStatistics fleet;
+            stream >> fleet.fleet >> fleet.ships >> fleet.grossMass >> fleet.fuel;
+            if (fleet.fleet == 0 || fleet.ships == 0
+                || std::any_of(value.fleetHistory.begin(), value.fleetHistory.end(),
+                    [&](const auto& other) { return other.fleet == fleet.fleet; })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.fleetHistory.push_back(fleet);
+        }
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -1041,6 +1070,11 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
                     && validAmount(site.extraction.ironium)
                     && validAmount(site.extraction.boranium)
                     && validAmount(site.extraction.germanium);
+            })
+        && std::all_of(value.fleetHistory.begin(), value.fleetHistory.end(),
+            [&](const auto& fleet) {
+                return fleet.fleet != 0 && fleet.ships != 0
+                    && validAmount(fleet.grossMass) && validAmount(fleet.fuel);
             });
 }
 
@@ -1084,6 +1118,8 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint8>(report.technologyLevel);
         writeMinerals(stream, report.deliveredMinerals);
         stream << static_cast<quint64>(report.deliveredColonists);
+        writePosition(stream, report.contactPosition);
+        stream << static_cast<quint32>(report.contactOwner);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -1104,6 +1140,14 @@ void writePlayer(QDataStream& stream, const Player& value)
     stream << static_cast<quint32>(value.history.size());
     for (const auto& snapshot : value.history) writeEmpireTurnStatistics(stream, snapshot);
     stream << quint8(value.race.environmentBased);
+    stream << static_cast<quint32>(value.observedEnemyFleets.size());
+    for (const auto& contact : value.observedEnemyFleets) {
+        stream << static_cast<quint32>(contact.fleet)
+               << static_cast<quint32>(contact.owner);
+        writePosition(stream, contact.lastPosition);
+        stream << static_cast<quint32>(contact.reportingFleet)
+               << static_cast<quint32>(contact.reportingColony);
+    }
 }
 
 void readPlayer(QDataStream& stream, Player& value)
@@ -1195,7 +1239,8 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 44
+        const auto newestReportKind = gReadSaveFormatVersion >= 46
+            ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
             ? PlayerReportKind::ColonyLost
             : gReadSaveFormatVersion >= 27
@@ -1237,6 +1282,12 @@ void readPlayer(QDataStream& stream, Player& value)
             quint64 colonists{};
             stream >> colonists;
             report.deliveredColonists = colonists;
+        }
+        if (gReadSaveFormatVersion >= 46) {
+            readPosition(stream, report.contactPosition);
+            quint32 owner{};
+            stream >> owner;
+            report.contactOwner = owner;
         }
         report.observedTurn = static_cast<std::uint64_t>(observedTurn);
         report.deliveryTurn = static_cast<std::uint64_t>(deliveryTurn);
@@ -1366,6 +1417,30 @@ void readPlayer(QDataStream& stream, Player& value)
         stream >> environmentBased;
         if (environmentBased > 1) { markCorrupt(stream); return; }
         value.race.environmentBased = environmentBased != 0;
+    }
+
+    if (gReadSaveFormatVersion >= 46) {
+        if (!readCount(stream, count)) return;
+        value.observedEnemyFleets.reserve(count);
+        for (quint32 index = 0; index < count; ++index) {
+            Player::EnemyContact contact;
+            quint32 fleet{}, owner{}, reportingFleet{}, reportingColony{};
+            stream >> fleet >> owner;
+            readPosition(stream, contact.lastPosition);
+            stream >> reportingFleet >> reportingColony;
+            contact.fleet = fleet;
+            contact.owner = owner;
+            contact.reportingFleet = reportingFleet;
+            contact.reportingColony = reportingColony;
+            if (fleet == 0 || owner == 0 || owner == value.id
+                || (reportingFleet == 0) == (reportingColony == 0)
+                || std::any_of(value.observedEnemyFleets.begin(), value.observedEnemyFleets.end(),
+                    [&](const auto& known) { return known.fleet == fleet; })) {
+                markCorrupt(stream);
+                return;
+            }
+            value.observedEnemyFleets.push_back(contact);
+        }
     }
 
 }
@@ -2442,7 +2517,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/campaign.hpp"
 #include "suns/turn_processor.hpp"
 
 #include <algorithm>
@@ -350,6 +351,69 @@ void mineral_shortage_warns_once_per_blocked_transition()
     assert(second.state.planets.front().productionWaitingForMinerals);
 }
 
+void enemy_contacts_follow_sensor_transitions_and_remote_delivery()
+{
+    auto state = survey_fixture({420.0, 0.0}, {450.0, 0.0}, 10);
+    state.players.push_back({2, "Opposition"});
+    auto enemy = state.fleets.front();
+    enemy.id = 22;
+    enemy.owner = 2;
+    enemy.name = "Secret enemy name";
+    enemy.position = {450.0, 0.0};
+    enemy.design = kColonyShipDesignId;
+    enemy.ships = {{kColonyShipDesignId, 1}};
+    state.fleets.push_back(enemy);
+    const TurnProcessor processor;
+    const auto first = processor.process_with_events(state, {});
+    const auto replay = processor.process_with_events(state, {});
+    assert(find_event(first.events, GameEventKind::EnemyFleetDetected) == nullptr);
+    assert(first.state.players[0].observedEnemyFleets.size() == 1);
+    const auto& pending = first.state.players[0].pendingPlayerReports;
+    const auto contact = std::find_if(pending.begin(), pending.end(), [](const auto& report) {
+        return report.kind == PlayerReportKind::EnemyFleetDetected;
+    });
+    assert(contact != pending.end() && contact->deliveryTurn == 14);
+    assert(contact->contactOwner == 2 && same_position(contact->contactPosition, {450.0, 0.0}));
+    assert(contact->contactPosition.x == replay.state.players[0].pendingPlayerReports.back().contactPosition.x);
+    const auto view = make_player_view(first.state, 1);
+    assert(view.state.players.front().observedEnemyFleets.empty());
+    assert(view.state.players.front().pendingPlayerReports.empty());
+    assert(std::none_of(view.state.fleets.begin(), view.state.fleets.end(), [](const Fleet& fleet) {
+        return fleet.owner == 2;
+    }));
+
+    auto departed = first.state;
+    departed.fleets.back().position = {900.0, 0.0};
+    const auto second = processor.process_with_events(departed, {});
+    assert(find_event(second.events, GameEventKind::EnemyFleetLost) == nullptr);
+    assert(second.state.players[0].observedEnemyFleets.empty());
+    assert(processor.process_with_events(second.state, {}).state.players[0].pendingPlayerReports.size() == 2);
+    const auto third = processor.process_with_events(second.state, {});
+    const auto fourth = processor.process_with_events(third.state, {});
+    const auto* detected = find_event(fourth.events, GameEventKind::EnemyFleetDetected);
+    assert(detected && detected->recipient == 1 && detected->fleet == 22);
+    assert(detected->contactOwner == 2 && detected->observedTurn == 11 && detected->turn == 14);
+    assert(same_position(detected->position, {450.0, 0.0}));
+    assert(find_event(fourth.events, GameEventKind::EnemyFleetLost) == nullptr);
+    const auto fifth = processor.process_with_events(fourth.state, {});
+    const auto* lost = find_event(fifth.events, GameEventKind::EnemyFleetLost);
+    assert(lost && lost->observedTurn == 12 && lost->turn == 15);
+    assert(same_position(lost->position, detected->position));
+
+    auto local = survey_fixture({0.0, 0.0}, {250.0, 0.0});
+    local.players.push_back({2, "Opposition"});
+    enemy.position = {20.0, 0.0};
+    local.fleets.push_back(enemy);
+    const auto immediate = processor.process_with_events(local, {});
+    assert(find_event(immediate.events, GameEventKind::EnemyFleetDetected));
+    const auto quiet = processor.process_with_events(immediate.state, {});
+    assert(find_event(quiet.events, GameEventKind::EnemyFleetDetected) == nullptr);
+    auto away = quiet.state;
+    away.fleets.back().position = {500.0, 0.0};
+    const auto disappeared = processor.process_with_events(away, {});
+    assert(find_event(disappeared.events, GameEventKind::EnemyFleetLost));
+}
+
 } // namespace
 
 int main()
@@ -364,6 +428,7 @@ int main()
     local_production_completion_is_immediate_and_deterministic();
     colony_founding_emits_a_player_event();
     mineral_shortage_warns_once_per_blocked_transition();
+    enemy_contacts_follow_sensor_transitions_and_remote_delivery();
     std::cout << "player knowledge tests passed\n";
     return 0;
 }

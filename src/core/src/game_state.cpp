@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
+#include "suns/communications.hpp"
 #include "star_name_pool.hpp"
 
 #include <algorithm>
@@ -379,6 +380,16 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.fuelPer100MassLy = {0.0, 0.06, 0.08, 0.11, 0.16, 0.25, 0.40, 0.64, 1.05, 1.65, 2.40};
         spec.overdriveDamagePercent.fill(0.0);
         break;
+    case ShipComponentType::EfficientRamScoopDrive:
+        spec.name = "Efficient Ram Scoop";
+        spec.kind = ShipComponentKind::Engine;
+        spec.mass = 25.0;
+        spec.buildCost = 13;
+        spec.engineThrust = 610.0;
+        spec.maxWarp = 9;
+        spec.fuelPer100MassLy = {0.0, -0.13, -0.13, -0.12, -0.10, -0.08, -0.05, -0.01, 0.10, 0.32, 0.80};
+        spec.overdriveDamagePercent = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 12.0};
+        break;
     case ShipComponentType::LongRangeScanner:
         spec.name = "Long Range Scanner";
         spec.kind = ShipComponentKind::Scanner;
@@ -407,6 +418,14 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.mass = 24.0;
         spec.buildCost = 8;
         spec.sensorRange = 160.0;
+        break;
+    case ShipComponentType::DeepPenetratingScanner:
+        spec.name = "Deep Penetrating Scanner";
+        spec.kind = ShipComponentKind::Scanner;
+        spec.mass = 32.0;
+        spec.buildCost = 14;
+        spec.sensorRange = 145.0;
+        spec.penetratesPlanets = true;
         break;
     case ShipComponentType::RemoteMiningModule:
         spec.name = "Remote Mining Module";
@@ -1429,6 +1448,9 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.ironium += fleet.minerals.ironium;
         result.minerals.boranium += fleet.minerals.boranium;
         result.minerals.germanium += fleet.minerals.germanium;
+        if (fleet_has_instant_link(state, fleet))
+            result.fleetHistory.push_back({fleet.id, fleet_ship_count(fleet),
+                fleet_gross_mass(state, fleet), fleet.fuel});
     }
 
     if (const auto* player = find_player(state, playerId)) {

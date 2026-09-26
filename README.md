@@ -60,7 +60,7 @@ Route programs can target another friendly FleetId. Pursuers resolve the target'
 
 The galaxy map is the permanent workspace while Overview, Fleet, Fleet Route Program, Production, Research and Turn Messages are dockable panels. They may be tabbed, resized or detached into operating-system windows, and the chosen layout is restored on the next launch. Fleet logistics, organization, colonization and ship design live together in the Fleet area.
 
-Colony production is shown as an ordered list with per-item remaining work and a forecast completion turn. Items can be moved earlier or later before End Turn. An empire-wide percentage funds global research before local production, and unused output after each colony's queue also becomes RP. Energy 1 unlocks onboard fuel generation, Propulsion 1 a light safe Warp-9 drive, and Electronics 2 a heavy 160 ly sensor.
+Colony production is shown as an ordered list with per-item remaining work and a forecast completion turn. Items can be moved earlier or later before End Turn. An empire-wide percentage funds global research before local production, and unused output after each colony's queue also becomes RP. Energy 1 unlocks onboard fuel generation, Propulsion 3 a fuel-collecting safe Warp-9 drive, and Electronics 4 a long-distance penetrating scanner.
 
 Orbital services are explicit infrastructure. The homeworld begins with a basic Orbital Dock containing a shipyard and refueling depot; new colonies must build their own dock through the local production queue before they can construct ships or refuel fleets. Ship orders require an active shipyard; existing queued ships wait without consuming production if their shipyard is lost.
 
