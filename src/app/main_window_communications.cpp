@@ -8,6 +8,7 @@
 #include <QList>
 #include <QPushButton>
 #include <QRectF>
+#include <QStatusBar>
 #include <QString>
 #include <QTimer>
 
@@ -22,16 +23,24 @@ void MainWindow::installCommunicationStatus()
     summary->setWordWrap(true);
     summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
+    auto* status = new QLabel(statusBar());
+    status->setObjectName("statusBarComms");
+    status->setTextFormat(Qt::RichText);
+    statusBar()->addPermanentWidget(status);
+
     if (auto* box = qobject_cast<QBoxLayout*>(fleetLabel_->parentWidget()->layout())) {
         const auto index = box->indexOf(fleetLabel_);
         box->insertWidget(index >= 0 ? index + 1 : box->count(), summary);
     }
 
-    const auto refresh = [this, summary] {
-        if (shuttingDown_ || !summary) return;
+    const auto refresh = [this, summary, status] {
+        if (shuttingDown_) return;
         const auto* fleet = selectedFleet();
         if (!fleet) {
             summary->setText("<b>Communications:</b> no fleet selected");
+            summary->setToolTip({});
+            status->setText("Comms: —");
+            status->setToolTip("Select an owned fleet to view its communications state.");
             if (fleetMoveButton_) fleetMoveButton_->setToolTip({});
             return;
         }
@@ -49,6 +58,7 @@ void MainWindow::installCommunicationStatus()
                   .arg(age == 1 ? "" : "s");
 
         summary->setText(text);
+        status->setText(text);
         QString details = QString("Last confirmed: turn %1 at (%2, %3)")
                               .arg(static_cast<qulonglong>(
                                   telemetry.observedTurn == 0 ? state_.turn : telemetry.observedTurn))
@@ -67,6 +77,7 @@ void MainWindow::installCommunicationStatus()
                            .arg(estimatedDelay == 1 ? "" : "s");
         }
         summary->setToolTip(details);
+        status->setToolTip(details);
         if (fleetMoveButton_) {
             fleetMoveButton_->setToolTip(estimatedDelay == 0
                 ? "Command will reach this fleet immediately."
@@ -78,6 +89,7 @@ void MainWindow::installCommunicationStatus()
 
     connect(scene_, &QGraphicsScene::selectionChanged, summary, refresh);
     connect(scene_, &QGraphicsScene::changed, summary, [refresh](const QList<QRectF>&) { refresh(); });
+    connect(this, &MainWindow::routeProgramContextChanged, summary, [refresh](bool) { refresh(); });
     connect(endTurnButton_, &QPushButton::clicked, summary, [summary, refresh] {
         QTimer::singleShot(0, summary, refresh);
     });

@@ -523,6 +523,11 @@ void MainWindow::installUiPolish()
             color: #f0d59d;
             border-left: 1px solid #45566a;
         }
+        QLabel#statusBarComms {
+            padding: 2px 8px;
+            color: #d5e0ed;
+            border-left: 1px solid #45566a;
+        }
         QScrollBar:vertical {
             width: 10px;
             margin: 0;
