@@ -607,6 +607,7 @@ void population_migration_and_clear_orders()
     legacy.state.planets[0].population = 1000;
     legacy.state.players[0].history[0].population = 1000;
     legacy.state.players[0].history[0].colonyHistory.clear();
+    legacy.state.players[0].history[0].fleetHistory.clear();
     legacy.state.players[0].history[0].technologyProgress.back() = 0xF00DF00D;
     legacy.state.fleets[0].design = kColonyShipDesignId;
     legacy.state.fleets[0].colonists = 300;
