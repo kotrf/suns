@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
+#include "suns/communications.hpp"
 #include "star_name_pool.hpp"
 
 #include <algorithm>
@@ -1447,6 +1448,9 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.ironium += fleet.minerals.ironium;
         result.minerals.boranium += fleet.minerals.boranium;
         result.minerals.germanium += fleet.minerals.germanium;
+        if (fleet_has_instant_link(state, fleet))
+            result.fleetHistory.push_back({fleet.id, fleet_ship_count(fleet),
+                fleet_gross_mass(state, fleet), fleet.fuel});
     }
 
     if (const auto* player = find_player(state, playerId)) {

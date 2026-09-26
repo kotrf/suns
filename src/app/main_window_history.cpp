@@ -213,17 +213,28 @@ void MainWindow::installEmpireHistory()
     historyMetric_->addItems({"Population", "Colonies and infrastructure", "Production output",
         "Mineral stocks (kt)", "Fleets and ships", "Fleet mass (kt)",
         "Technology levels", "Research invested (RP)", "Mineral extraction (kt/year)",
-        "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)"});
+        "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)",
+        "Confirmed fleet fuel (kt)"});
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
     historyScope_->addItem("Whole empire", static_cast<quint32>(0));
-    historyScope_->setToolTip("Show an owned colony's recorded years, or follow the map selection; gaps mean it was not owned");
+    historyScope_->setToolTip("Show a colony, mining world or fleet; gaps mean no confirmed record for that year");
     controls->addWidget(historyScope_, 1);
     historyCompare_ = new QComboBox(content);
     historyCompare_->setObjectName("historyCompare");
     historyCompare_->setToolTip("Overlay a second colony or the whole empire using dashed lines");
     historyCompare_->addItem("Compare: none", kNoComparison);
+    historyRange_ = new QComboBox(content);
+    historyRange_->setObjectName("historyRange");
+    historyRange_->addItem("Custom", 0);
+    historyRange_->addItem("Last 25", 25);
+    historyRange_->addItem("Last 50", 50);
+    historyRange_->addItem("Last 100", 100);
+    historyRange_->addItem("All years", std::numeric_limits<int>::max());
+    historyRange_->setCurrentIndex(2);
+    historyRange_->setToolTip("Choose a rolling window; editing the year fields switches to Custom");
+    controls->addWidget(historyRange_);
     controls->addWidget(new QLabel("Years", content));
     historyFirstTurn_ = new QSpinBox(content);
     historyFirstTurn_->setObjectName("historyFirstTurn");
@@ -251,16 +262,22 @@ void MainWindow::installEmpireHistory()
         [this] { refreshEmpireHistory(); });
     connect(historyCompare_, &QComboBox::currentIndexChanged, this,
         [this] { refreshEmpireHistory(); });
+    connect(historyRange_, &QComboBox::currentIndexChanged, this,
+        [this] { refreshEmpireHistory(); });
     connect(this, &MainWindow::routeProgramContextChanged, this, [this] {
         if (historyDock_->isVisible()
             && historyScope_->currentData().toUInt() == kFollowSelectedColony)
             refreshEmpireHistory();
     });
     connect(historyFirstTurn_, &QSpinBox::valueChanged, this, [this](int year) {
+        const QSignalBlocker blockRange(historyRange_);
+        historyRange_->setCurrentIndex(0);
         if (historyLastTurn_->value() < year) historyLastTurn_->setValue(year);
         else refreshEmpireHistory();
     });
     connect(historyLastTurn_, &QSpinBox::valueChanged, this, [this](int year) {
+        const QSignalBlocker blockRange(historyRange_);
+        historyRange_->setCurrentIndex(0);
         if (historyFirstTurn_->value() > year) historyFirstTurn_->setValue(year);
         else refreshEmpireHistory();
     });
@@ -277,14 +294,24 @@ void MainWindow::refreshEmpireHistory()
     const std::vector<EmpireTurnStatistics> empty;
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
-    const auto selectedScope = historyScope_->currentData().toUInt();
-    const auto selectedComparison = historyCompare_->currentData().toUInt();
     const bool remoteMetric = historyMetric_->currentIndex() == 10;
+    const bool fleetMetric = historyMetric_->currentIndex() == 4
+        || historyMetric_->currentIndex() == 5 || historyMetric_->currentIndex() == 11;
+    const int scopeKind = fleetMetric ? 2 : remoteMetric ? 1 : 0;
+    const auto selectedScope = scopeKind == historyScopeKind_
+        ? historyScope_->currentData().toUInt() : quint32{0};
+    const auto selectedComparison = scopeKind == historyScopeKind_
+        ? historyCompare_->currentData().toUInt() : kNoComparison;
+    historyScopeKind_ = scopeKind;
     const bool scopedMetric = historyMetric_->currentIndex() <= 3
-        || historyMetric_->currentIndex() == 8 || historyMetric_->currentIndex() == 9 || remoteMetric;
+        || historyMetric_->currentIndex() == 8 || historyMetric_->currentIndex() == 9
+        || remoteMetric || fleetMetric;
     std::set<PlanetId> knownSites;
+    std::set<FleetId> knownFleets;
     for (const auto& snapshot : history) {
-        if (remoteMetric) {
+        if (fleetMetric) {
+            for (const auto& fleet : snapshot.fleetHistory) knownFleets.insert(fleet.fleet);
+        } else if (remoteMetric) {
             for (const auto& site : snapshot.remoteMineHistory) knownSites.insert(site.planet);
         } else {
             for (const auto& colony : snapshot.colonyHistory) knownSites.insert(colony.planet);
@@ -295,18 +322,36 @@ void MainWindow::refreshEmpireHistory()
         && (remoteMetric ? knownSites.contains(planetOnMap->id)
                          : planetOnMap->owner == pendingOrders_.player)
         ? planetOnMap->id : PlanetId{};
+    const auto* fleetOnMap = selectedFleet();
+    const FleetId selectedFleetId = fleetOnMap && knownFleets.contains(fleetOnMap->id)
+        ? fleetOnMap->id : FleetId{};
     {
         const QSignalBlocker blocker(historyScope_);
         historyScope_->clear();
         historyScope_->addItem("Whole empire", static_cast<quint32>(0));
-        historyScope_->addItem(selectedColony
-            ? QString("Follow map — %1").arg(QString::fromStdString(planetOnMap->name))
-            : remoteMetric ? QString("Follow map — select mined world")
-                           : QString("Follow map — select owned colony"), kFollowSelectedColony);
+        historyScope_->addItem(fleetMetric
+            ? (selectedFleetId
+                ? QString("Follow map — %1").arg(QString::fromStdString(fleetOnMap->name))
+                : QString("Follow map — select owned fleet"))
+            : (selectedColony
+                ? QString("Follow map — %1").arg(QString::fromStdString(planetOnMap->name))
+                : remoteMetric ? QString("Follow map — select mined world")
+                               : QString("Follow map — select owned colony")), kFollowSelectedColony);
         const QSignalBlocker compareBlocker(historyCompare_);
         historyCompare_->clear();
         historyCompare_->addItem("Compare: none", kNoComparison);
         historyCompare_->addItem("Compare: whole empire", static_cast<quint32>(0));
+        for (const auto id : knownFleets) {
+            const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(),
+                [id, this](const auto& candidate) {
+                    return candidate.id == id && candidate.owner == pendingOrders_.player;
+                });
+            const auto name = fleet == state_.fleets.end()
+                ? QString("Former fleet %1").arg(id)
+                : QString::fromStdString(fleet->name) + QString(" (#%1)").arg(id);
+            historyScope_->addItem(name, static_cast<quint32>(id));
+            historyCompare_->addItem(QString("Compare: %1").arg(name), static_cast<quint32>(id));
+        }
         for (const auto id : knownSites) {
             const auto planet = std::find_if(state_.planets.begin(), state_.planets.end(),
                 [id](const auto& candidate) { return candidate.id == id; });
@@ -329,7 +374,7 @@ void MainWindow::refreshEmpireHistory()
     historyCompare_->setEnabled(scopedMetric && !history.empty());
     const bool followingMap = scopedMetric
         && historyScope_->currentData().toUInt() == kFollowSelectedColony;
-    const auto colonyId = followingMap ? selectedColony
+    const auto colonyId = followingMap ? (fleetMetric ? selectedFleetId : selectedColony)
         : scopedMetric ? static_cast<PlanetId>(historyScope_->currentData().toUInt()) : PlanetId{};
     if (scopedMetric && historyCompare_->currentData().toUInt() == colonyId) {
         const QSignalBlocker blocker(historyCompare_);
@@ -357,8 +402,14 @@ void MainWindow::refreshEmpireHistory()
         const QSignalBlocker blockLast(historyLastTurn_);
         historyFirstTurn_->setRange(first, last);
         historyLastTurn_->setRange(first, last);
-        if (!historyRangeInitialized_) historyFirstTurn_->setValue(std::max(first, last - 49));
-        if (follow) historyLastTurn_->setValue(last);
+        const int window = historyRange_->currentData().toInt();
+        if (window > 0) {
+            historyLastTurn_->setValue(last);
+            historyFirstTurn_->setValue(std::max(first, last - (window - 1)));
+        } else {
+            if (!historyRangeInitialized_) historyFirstTurn_->setValue(std::max(first, last - 49));
+            if (follow) historyLastTurn_->setValue(last);
+        }
     }
     historyRangeInitialized_ = true;
     historyFirstTurn_->setEnabled(true);
@@ -368,9 +419,10 @@ void MainWindow::refreshEmpireHistory()
         .arg(static_cast<qulonglong>(history.size()))
         .arg(static_cast<qulonglong>(history.back().turn)));
     if (followingMap && colonyId == 0) {
-        historySummary_->setText(remoteMetric
-            ? "Select a recorded mining world on the map to view its history."
-            : "Select an owned colony on the map to view its history.");
+        historySummary_->setText(fleetMetric
+            ? "Select a recorded fleet on the map to view its history."
+            : remoteMetric ? "Select a recorded mining world on the map to view its history."
+                           : "Select an owned colony on the map to view its history.");
         chart->setData({}, {});
         return;
     }
@@ -457,6 +509,40 @@ void MainWindow::refreshEmpireHistory()
             }
             series.push_back(std::move(line));
         };
+        const auto addFleet = [&](QString name, QColor color,
+                                  std::function<double(const FleetTurnStatistics&)> value, int decimals = 0) {
+            HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                const auto fleet = std::find_if(snapshot->fleetHistory.begin(),
+                    snapshot->fleetHistory.end(), [seriesColonyId](const auto& record) {
+                        return record.fleet == seriesColonyId;
+                    });
+                if (fleet == snapshot->fleetHistory.end()) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No confirmed fleet record");
+                } else {
+                    const double number = value(*fleet);
+                    line.values.push_back(number);
+                    line.exactValues.push_back(QString::number(number, 'f', decimals));
+                }
+            }
+            series.push_back(std::move(line));
+        };
+        const auto addKnownFuel = [&] {
+            HistorySeries line{named("Fuel"), QColor("#8dcc9e"), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                if (snapshot->fleetHistory.empty() && snapshot->fleets != 0) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No confirmed fleet record");
+                } else {
+                    double fuel = 0.0;
+                    for (const auto& fleet : snapshot->fleetHistory) fuel += fleet.fuel;
+                    line.values.push_back(fuel);
+                    line.exactValues.push_back(QString::number(fuel, 'f', 2));
+                }
+            }
+            series.push_back(std::move(line));
+        };
 
         switch (historyMetric_->currentIndex()) {
         case 0:
@@ -489,11 +575,15 @@ void MainWindow::refreshEmpireHistory()
             }
             break;
         case 4:
-            add("Fleets", "#78b8f0", [](const auto& s) { return double(s.fleets); });
-            add("Ships", "#e2bb70", [](const auto& s) { return double(s.ships); });
+            if (seriesColonyId) addFleet("Ships", "#e2bb70", [](const auto& s) { return double(s.ships); });
+            else {
+                add("Fleets", "#78b8f0", [](const auto& s) { return double(s.fleets); });
+                add("Ships", "#e2bb70", [](const auto& s) { return double(s.ships); });
+            }
             break;
         case 5:
-            add("Gross mass", "#78b8f0", [](const auto& s) { return s.fleetMass; }, 2);
+            if (seriesColonyId) addFleet("Gross mass", "#78b8f0", [](const auto& s) { return s.grossMass; }, 2);
+            else add("Gross mass", "#78b8f0", [](const auto& s) { return s.fleetMass; }, 2);
             break;
         case 6:
         case 7: {
@@ -541,13 +631,17 @@ void MainWindow::refreshEmpireHistory()
                 add("Germanium", "#78b8f0", [](const auto& s) { return s.remoteExtraction.germanium; }, 2);
             }
             break;
+        case 11:
+            if (seriesColonyId) addFleet("Fuel", "#8dcc9e", [](const auto& s) { return s.fuel; }, 2);
+            else addKnownFuel();
+            break;
         default: break;
         }
     };
     const auto scopeLabel = [&](PlanetId id) {
         if (id == 0) return QString("Empire");
         const auto index = historyScope_->findData(static_cast<quint32>(id));
-        return index < 0 ? QString(remoteMetric ? "Mined world %1" : "Colony %1").arg(id)
+        return index < 0 ? QString(fleetMetric ? "Fleet %1" : remoteMetric ? "Mined world %1" : "Colony %1").arg(id)
             : historyScope_->itemText(index);
     };
     appendMetric(colonyId, comparing ? scopeLabel(colonyId) : QString{}, false);
@@ -555,7 +649,11 @@ void MainWindow::refreshEmpireHistory()
     QVector<ChartMarker> markers;
     for (int index = 0; index < shown.size(); ++index) {
         for (const auto& event : shown[index]->milestones) {
-            if (colonyId && (!comparing || compareColonyId != 0)
+            if (fleetMetric && colonyId && (!comparing || compareColonyId != 0)
+                && (event.kind != HistoryMilestoneKind::FleetStalledForFuel
+                    || (event.fleet != colonyId
+                        && (!comparing || event.fleet != compareColonyId)))) continue;
+            if (!fleetMetric && colonyId && (!comparing || compareColonyId != 0)
                 && (event.kind == HistoryMilestoneKind::ResearchCompleted
                     || event.kind == HistoryMilestoneKind::FleetStalledForFuel
                     || (event.planet != colonyId

@@ -28,6 +28,11 @@ int main()
     assert(initialHistory.front().fleets == 1);
     assert(initialHistory.front().ships == 1);
     assert(initialHistory.front().fleetMass > 0.0);
+    assert(initialHistory.front().fleetHistory.size() == 1);
+    assert(initialHistory.front().fleetHistory.front().fleet == state.fleets.front().id);
+    assert(initialHistory.front().fleetHistory.front().ships == 1);
+    assert(close(initialHistory.front().fleetHistory.front().grossMass,
+        initialHistory.front().fleetMass));
     assert(close(initialHistory.front().minerals.ironium, 100.0));
     assert(initialHistory.front().colonyHistory.size() == 1);
     assert(initialHistory.front().colonyHistory.front().planet == state.planets.front().id);
@@ -70,6 +75,18 @@ int main()
     assert(close(corrected.players.front().history.back().extraction.ironium, mined.extraction.ironium));
     assert(corrected.players.front().history.back().freightRecorded);
 
+    // A disconnected ship remains in the physical empire totals, but its
+    // live mass/fuel must not be added to a player-visible per-fleet series.
+    auto detached = state;
+    detached.fleets.front().position = {10000.0, 10000.0};
+    detached.fleets.front().fuel = 17.0;
+    const auto detachedHistory = suns::empire_turn_statistics(detached, 1);
+    assert(detachedHistory.fleets == 1);
+    assert(detachedHistory.fleetHistory.empty());
+    suns::record_empire_turn_statistics(detached);
+    assert(detached.players.front().history.size() == 1);
+    assert(detached.players.front().history.front().fleetHistory.empty());
+
     // A player's history is built only from assets they own. Authoritative
     // enemy truth and neutral surface stockpiles never leak into the record.
     auto hidden = state;
@@ -87,6 +104,8 @@ int main()
     assert(playerOne.fleets == initialHistory.front().fleets);
     assert(playerOne.colonyHistory.size() == 1);
     assert(playerOne.colonyHistory.front().planet != hidden.planets[1].id);
+    assert(playerOne.fleetHistory.size() == 1);
+    assert(playerOne.fleetHistory.front().fleet != hidden.fleets.back().id);
 
     // Record mining under the empire which mined it even when a world changes
     // hands before the next boundary; the winner gets no historical credit.

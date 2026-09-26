@@ -313,11 +313,13 @@ private:
     QComboBox* historyMetric_{};
     QComboBox* historyScope_{};
     QComboBox* historyCompare_{};
+    QComboBox* historyRange_{};
     QSpinBox* historyFirstTurn_{};
     QSpinBox* historyLastTurn_{};
     QLabel* historySummary_{};
     QWidget* historyChart_{};
     bool historyRangeInitialized_{};
+    int historyScopeKind_{};
     QListWidget* turnMessagesList_{};
     QLabel* turnMessagesSummary_{};
     QComboBox* turnMessageAgeFilter_{};

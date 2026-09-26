@@ -434,6 +434,13 @@ struct RemoteMineTurnStatistics {
     MineralCargo extraction;
 };
 
+struct FleetTurnStatistics {
+    FleetId fleet{};
+    std::uint32_t ships{};
+    double grossMass{};
+    double fuel{};
+};
+
 enum class HistoryMilestoneKind : std::uint8_t {
     ColonyFounded,
     ColonyLost,
@@ -477,6 +484,9 @@ struct EmpireTurnStatistics {
     std::vector<ColonyTurnStatistics> colonyHistory;
     // Only neutral sites actually mined by this player's fleets in this year.
     std::vector<RemoteMineTurnStatistics> remoteMineHistory;
+    // Only owned fleets with current, immediately confirmed telemetry. Missing
+    // years mean the fleet was out of contact or no longer existed.
+    std::vector<FleetTurnStatistics> fleetHistory;
     // Only events delivered to this player at this planning boundary.
     std::vector<HistoryMilestone> milestones;
 };
