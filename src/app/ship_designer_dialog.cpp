@@ -748,8 +748,12 @@ void ShipDesignerDialog::updateComponentDetails()
 void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 {
     selectedSlot_ = slot;
-    for (auto* button : slotPanel_->findChildren<SlotButton*>())
-        button->setChosen(button->slotId() == slot);
+    // Qt 6.11 requires Q_OBJECT for the type passed to findChildren. The
+    // presentation-only SlotButton intentionally has no Qt meta-object.
+    for (auto* child : slotPanel_->findChildren<QToolButton*>()) {
+        if (auto* button = dynamic_cast<SlotButton*>(child))
+            button->setChosen(button->slotId() == slot);
+    }
     const auto placement = std::find_if(
         placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
             return candidate.slot == slot;
@@ -778,7 +782,7 @@ void ShipDesignerDialog::focusAdjacentSlot(ShipSlotId slot, int rowDirection, in
     }
     if (!nearest) return;
     selectSlot(nearest->id);
-    if (auto* button = slotPanel_->findChild<SlotButton*>(QString("shipSlot_%1").arg(nearest->id)))
+    if (auto* button = slotPanel_->findChild<QToolButton*>(QString("shipSlot_%1").arg(nearest->id)))
         button->setFocus(Qt::OtherFocusReason);
 }
 
