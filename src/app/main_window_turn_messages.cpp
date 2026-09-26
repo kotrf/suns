@@ -47,6 +47,7 @@ enum class MessageTypeFilter {
     Infrastructure,
     Colonization,
     Freight,
+    EnemyContacts,
     Combat,
     Research,
     ProductionDelays,
@@ -138,6 +139,12 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::FreightDelivered:
         subject = QString("Cargo delivered to %1").arg(planetName);
         break;
+    case GameEventKind::EnemyFleetDetected:
+        subject = QString("Enemy fleet %1 detected").arg(event.fleet);
+        break;
+    case GameEventKind::EnemyFleetLost:
+        subject = QString("Contact lost: enemy fleet %1").arg(event.fleet);
+        break;
     }
     return QString("T%1  %2").arg(static_cast<qulonglong>(event.turn)).arg(subject);
 }
@@ -178,6 +185,9 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
             && event.productionKind != ProductionKind::ColonyShip;
     case MessageTypeFilter::Colonization: return event.kind == GameEventKind::ColonyFounded;
     case MessageTypeFilter::Freight: return event.kind == GameEventKind::FreightDelivered;
+    case MessageTypeFilter::EnemyContacts:
+        return event.kind == GameEventKind::EnemyFleetDetected
+            || event.kind == GameEventKind::EnemyFleetLost;
     case MessageTypeFilter::Combat:
         return event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
@@ -314,6 +324,18 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(event.deliveredMinerals.boranium, 0, 'f', 2)
                    .arg(event.deliveredMinerals.germanium, 0, 'f', 2)
                    .arg(static_cast<qulonglong>(event.deliveredColonists));
+    } else if (event.kind == GameEventKind::EnemyFleetDetected
+        || event.kind == GameEventKind::EnemyFleetLost) {
+        const auto location = event.star != 0 ? starName
+            : QString("(%1, %2)").arg(event.position.x, 0, 'f', 0).arg(event.position.y, 0, 'f', 0);
+        text = QString("Turn %1  •  %2: enemy fleet %3 (Empire %4)\n"
+                       "Last observed at %5 in year %6. Its current position and composition are unknown.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(event.kind == GameEventKind::EnemyFleetDetected ? "Contact detected" : "Contact lost")
+                   .arg(event.fleet)
+                   .arg(event.contactOwner)
+                   .arg(location)
+                   .arg(static_cast<qulonglong>(event.observedTurn));
     } else if (event.kind == GameEventKind::GroundInvasionWon) {
         text = QString("Turn %1  •  Ground invasion succeeded on %2\n"
                        "The colony was captured; %3 attacking colonists survived.")
@@ -442,6 +464,7 @@ void MainWindow::installTurnMessages()
     turnMessageTypeFilter_->addItem("Infrastructure completed", static_cast<int>(MessageTypeFilter::Infrastructure));
     turnMessageTypeFilter_->addItem("New colonies", static_cast<int>(MessageTypeFilter::Colonization));
     turnMessageTypeFilter_->addItem("Cargo deliveries", static_cast<int>(MessageTypeFilter::Freight));
+    turnMessageTypeFilter_->addItem("Enemy contacts", static_cast<int>(MessageTypeFilter::EnemyContacts));
     turnMessageTypeFilter_->addItem("Ground combat", static_cast<int>(MessageTypeFilter::Combat));
     turnMessageTypeFilter_->addItem("Research completed", static_cast<int>(MessageTypeFilter::Research));
     turnMessageTypeFilter_->addItem("Production delays", static_cast<int>(MessageTypeFilter::ProductionDelays));

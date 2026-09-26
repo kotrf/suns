@@ -24,6 +24,8 @@ enum class GameEventKind {
     GroundDefenseWon,
     ColonyLost,
     FreightDelivered,
+    EnemyFleetDetected,
+    EnemyFleetLost,
 };
 
 enum class GameEventSeverity {
@@ -52,6 +54,7 @@ struct GameEvent {
     bool precursorArtifactHint{};
     MineralCargo deliveredMinerals;
     std::uint64_t deliveredColonists{};
+    PlayerId contactOwner{};
 };
 
 } // namespace suns

@@ -181,6 +181,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     Player own = *player;
     own.pendingSurveyReports.clear();
     own.pendingPlayerReports.clear();
+    own.observedEnemyFleets.clear();
     state.players.push_back(own);
     for (const auto& star : host.stars) {
         StarSystem publicStar{star.id, star.name, star.position, star.stellarClass};
@@ -248,8 +249,8 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         state.fleets.push_back(known);
         state.nextFleetId = std::max(state.nextFleetId, fleet.id + 1);
     }
-    // Only current contacts in the connected sensor mesh are immediately
-    // reportable. Detached reconnaissance needs a future contact-report queue.
+    // The live map shows only the connected sensor mesh. Detached reconnaissance
+    // contributes delayed briefings without disclosing today's remote truth.
     for (const auto& enemy : host.fleets) if (enemy.owner != playerId) {
         bool visible = false;
         for (const auto& colony : host.planets) if (colony.owner == playerId && colony.population > 0) {
