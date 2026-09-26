@@ -3,6 +3,8 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QListWidget>
+#include <QMouseEvent>
+#include <QToolButton>
 
 #include <QApplication>
 #include <QPushButton>
@@ -106,6 +108,37 @@ int main(int argc, char** argv)
                 assert(fit && !fit->isEnabled());
             }
         }
+    }
+
+    {
+        // Exercise an actual press/release on a fitted cell. QToolButton::click()
+        // skips the mouse handlers that run in the user's designer.
+        suns::ShipDesignerDialog designer(suns::make_demo_game(), 1);
+        auto* hull = designer.findChild<QComboBox*>("shipHullCatalog");
+        assert(hull);
+        hull->setCurrentIndex(hull->findData(static_cast<int>(suns::ShipHullType::Utility)));
+        designer.show();
+        QApplication::processEvents();
+        auto* first = designer.findChild<QToolButton*>("shipSlot_100");
+        auto* second = designer.findChild<QToolButton*>("shipSlot_101");
+        auto* remove = designer.findChild<QPushButton*>("removeSelectedComponent");
+        assert(first && second && remove);
+        const auto mouseClick = [](QToolButton* button) {
+            const QPointF local(button->rect().center());
+            const QPointF global(button->mapToGlobal(local.toPoint()));
+            QMouseEvent press(QEvent::MouseButtonPress, local, global,
+                Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(button, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, local, global,
+                Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(button, &release);
+        };
+        mouseClick(second);
+        assert(second->isChecked() && !first->isChecked() && remove->isEnabled());
+        mouseClick(second);
+        assert(second->isChecked());
+        mouseClick(first);
+        assert(first->isChecked() && !second->isChecked());
     }
 
     {
