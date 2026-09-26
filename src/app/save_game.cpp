@@ -1043,7 +1043,9 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
         value.fleetCargoRecorded = recorded == 1;
         for (auto& fleet : value.fleetHistory) {
             readMinerals(stream, fleet.minerals);
-            stream >> fleet.colonists;
+            quint64 colonists{};
+            stream >> colonists;
+            fleet.colonists = colonists;
         }
     }
 }
