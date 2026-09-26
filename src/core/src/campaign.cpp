@@ -44,6 +44,7 @@ const std::vector<ResearchUnlock>& research_unlocks()
         {ResearchField::Electronics, 2, "Extended Scanner", "Heavy 160 ly sensor for distant system contacts.", ShipComponentType::ExtendedRangeScanner},
         {ResearchField::Electronics, 3, "Penetrating Scanner", "Estimate planetary habitability without entering orbit.", ShipComponentType::PenetratingScanner},
         {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
+        {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
         {ResearchField::Biology, 1, "Sealed Habitats", "New campaigns: tolerate environments 5 points outside racial ranges.", {}},
         {ResearchField::Biology, 2, "Adaptive Habitats", "New campaigns: expand environmental tolerance to 10 points.", {}},
         {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},

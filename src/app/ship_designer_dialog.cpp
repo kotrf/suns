@@ -222,6 +222,7 @@ QString unlockRequirement(ShipComponentType component)
     case ShipComponentType::ExtendedRangeScanner: return "Electronics 2";
     case ShipComponentType::PenetratingScanner: return "Electronics 3";
     case ShipComponentType::DeepPenetratingScanner: return "Electronics 4";
+    case ShipComponentType::RelayArray: return "Electronics 5";
     case ShipComponentType::RemoteMiningModule: return "Construction 1";
     default: return {};
     }
@@ -255,6 +256,9 @@ QString componentTooltip(ShipComponentType component)
             ? "Penetrating: surveys planets; does not extend the communications network."
             : "Ordinary: detects ships and extends the communications network; does not survey planets.");
     }
+    if (spec.relayRange > 0.0)
+        facts << QString("Comms relay +%1 ly; no ship detection or planet survey")
+            .arg(spec.relayRange, 0, 'f', 0);
     if (spec.fuelCapacity > 0.0) facts << QString("Fuel capacity +%1").arg(spec.fuelCapacity, 0, 'f', 0);
     if (spec.fuelGenerationPerTurn > 0.0) {
         facts << QString("Fuel generation +%1/turn").arg(spec.fuelGenerationPerTurn, 0, 'f', 0);
@@ -288,7 +292,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::DeepPenetratingScanner)
+        || component > static_cast<int>(ShipComponentType::RelayArray)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -573,6 +577,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::HighWarpDrive,
         ShipComponentType::EfficientRamScoopDrive,
         ShipComponentType::DeepPenetratingScanner,
+        ShipComponentType::RelayArray,
     };
     for (const auto component : catalog) {
         const auto available = component_available_to_player(state, player, component);
@@ -954,6 +959,11 @@ void ShipDesignerDialog::updatePreview()
     QString capabilities;
     if (const auto sensor = ship_design_sensor_range(design); sensor > 0.0) {
         capabilities += QString("Scanner %1 ly").arg(sensor, 0, 'f', 0);
+    }
+    const auto relay = ship_design_communication_range(design);
+    if (relay > ship_design_ordinary_sensor_range(design)) {
+        if (!capabilities.isEmpty()) capabilities += " • ";
+        capabilities += QString("Comms %1 ly").arg(relay, 0, 'f', 0);
     }
     if (ship_design_can_colonize(design)) {
         if (!capabilities.isEmpty()) capabilities += " • ";

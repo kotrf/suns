@@ -427,6 +427,13 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.sensorRange = 145.0;
         spec.penetratesPlanets = true;
         break;
+    case ShipComponentType::RelayArray:
+        spec.name = "Relay Array";
+        spec.kind = ShipComponentKind::Special;
+        spec.mass = 22.0;
+        spec.buildCost = 11;
+        spec.relayRange = 180.0;
+        break;
     case ShipComponentType::RemoteMiningModule:
         spec.name = "Remote Mining Module";
         spec.kind = ShipComponentKind::Mining;
@@ -728,6 +735,13 @@ double ship_design_ordinary_sensor_range(const ShipDesign& design)
     return range;
 }
 
+double ship_design_communication_range(const ShipDesign& design)
+{
+    double range = ship_design_ordinary_sensor_range(design);
+    for (const auto component : design.components) range += component_spec(component).relayRange;
+    return range;
+}
+
 double ship_design_penetrating_sensor_range(const ShipDesign& design)
 {
     double range = 0.0;
@@ -955,6 +969,16 @@ double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet)
         if (const auto* design = find_ship_design(state, stack.design)) {
             range = std::max(range, ship_design_ordinary_sensor_range(*design));
         }
+    }
+    return range;
+}
+
+double fleet_communication_range(const GameState& state, const Fleet& fleet)
+{
+    double range = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design))
+            range = std::max(range, ship_design_communication_range(*design));
     }
     return range;
 }

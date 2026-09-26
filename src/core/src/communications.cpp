@@ -30,11 +30,11 @@ std::vector<CommunicationField> communication_fields(
         fields.push_back({star->position, kColonySensorRange, true});
     }
 
-    // An ordinary ship scanner automatically relays while its field overlaps
-    // any already-connected field. Penetrating-only scanners do not take part.
+    // Ordinary scanners and dedicated relay arrays participate in the mesh.
+    // Penetrating-only scanners do not extend communications.
     for (const auto& fleet : state.fleets) {
         if (fleet.owner != player) continue;
-        const auto range = fleet_ordinary_sensor_range(state, fleet);
+        const auto range = fleet_communication_range(state, fleet);
         if (range <= 0.0) continue;
         fields.push_back({fleet.position, range, false});
     }

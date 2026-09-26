@@ -91,6 +91,33 @@ void penetrating_only_scanner_does_not_extend_the_network()
     assert(communication_delay_turns(state, 1, {180.0, 0.0}) == 1);
 }
 
+void relay_array_extends_comms_without_detecting_contacts()
+{
+    auto state = generate_game(GalaxyConfig{});
+    state.shipDesigns.push_back({99, 1, "Relay ship", ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::RelayArray}});
+    auto& relay = state.fleets.front();
+    relay.design = 99;
+    relay.ships = {{99, 1}};
+    relay.position = {200.0, 0.0};
+
+    assert(!component_available_to_player(state, 1, ShipComponentType::RelayArray));
+    assert(!ship_design_available_to_player(state, 1, state.shipDesigns.back()));
+    assert(fleet_sensor_range(state, relay) == 0.0);
+    assert(fleet_penetrating_sensor_range(state, relay) == 0.0);
+    assert(fleet_communication_range(state, relay) == 180.0);
+    assert(communication_delay_turns(state, 1, {370.0, 0.0}) == 0);
+
+    state.players.front().technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 5;
+    assert(component_available_to_player(state, 1, ShipComponentType::RelayArray));
+    assert(ship_design_available_to_player(state, 1, state.shipDesigns.back()));
+    assert(fleet_sensor_range(state, relay) == 0.0);
+
+    relay.design = kScoutDesignId;
+    relay.ships = {{kScoutDesignId, 1}};
+    assert(communication_delay_turns(state, 1, {370.0, 0.0}) > 0);
+}
+
 void slow_signal_reaches_a_physical_receiver_not_a_field_boundary()
 {
     auto state = generate_game(GalaxyConfig{});
@@ -255,6 +282,7 @@ int main()
     homeworld_scanner_defines_the_initial_network_field();
     ordinary_scanners_automatically_form_a_relay_chain();
     penetrating_only_scanner_does_not_extend_the_network();
+    relay_array_extends_comms_without_detecting_contacts();
     slow_signal_reaches_a_physical_receiver_not_a_field_boundary();
     nearest_colony_scanner_field_is_used();
     remote_command_arrives_after_signal_delay();
