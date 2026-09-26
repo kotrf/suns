@@ -1,8 +1,14 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
 #include <QComboBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QLabel>
 #include <QListWidget>
+#include <QMimeData>
+#include <QMouseEvent>
+#include <QPointer>
+#include <QToolButton>
 
 #include <QApplication>
 #include <QPushButton>
@@ -106,6 +112,62 @@ int main(int argc, char** argv)
                 assert(fit && !fit->isEnabled());
             }
         }
+    }
+
+    {
+        // Exercise an actual press/release on a fitted cell. QToolButton::click()
+        // skips the mouse handlers that run in the user's designer.
+        suns::ShipDesignerDialog designer(suns::make_demo_game(), 1);
+        auto* hull = designer.findChild<QComboBox*>("shipHullCatalog");
+        assert(hull);
+        hull->setCurrentIndex(hull->findData(static_cast<int>(suns::ShipHullType::Utility)));
+        designer.show();
+        QApplication::processEvents();
+        auto* first = designer.findChild<QToolButton*>("shipSlot_100");
+        auto* second = designer.findChild<QToolButton*>("shipSlot_101");
+        auto* remove = designer.findChild<QPushButton*>("removeSelectedComponent");
+        assert(first && second && remove);
+        const auto mouseClick = [](QToolButton* button) {
+            const QPointF local(button->rect().center());
+            const QPointF global(button->mapToGlobal(local.toPoint()));
+            QMouseEvent press(QEvent::MouseButtonPress, local, global,
+                Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(button, &press);
+            QMouseEvent release(QEvent::MouseButtonRelease, local, global,
+                Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(button, &release);
+        };
+        mouseClick(second);
+        assert(second->isChecked() && !first->isChecked() && remove->isEnabled());
+        mouseClick(second);
+        assert(second->isChecked());
+        mouseClick(first);
+        assert(first->isChecked() && !second->isChecked());
+
+        // A drop must not destroy either button while Qt is finishing QDrag::exec().
+        auto* source = designer.findChild<QToolButton*>("shipSlot_200");
+        auto* target = designer.findChild<QToolButton*>("shipSlot_201");
+        assert(source && target && !source->text().contains("Empty") && target->text().contains("Empty"));
+        const QPointer<QToolButton> sourceGuard(source);
+        const QPointer<QToolButton> targetGuard(target);
+        QMimeData mime;
+        mime.setData("application/x-suns-ship-component",
+            QByteArray::number(static_cast<int>(suns::ShipComponentType::LongRangeScanner)) + ":200");
+        QDragEnterEvent enter(target->rect().center(), Qt::MoveAction, &mime,
+            Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &enter);
+        assert(enter.isAccepted());
+        QDropEvent drop(QPointF(target->rect().center()), Qt::MoveAction, &mime,
+            Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &drop);
+        assert(drop.isAccepted());
+        assert(sourceGuard && targetGuard);
+        assert(designer.findChild<QToolButton*>("shipSlot_200") == source);
+        assert(designer.findChild<QToolButton*>("shipSlot_201") == target);
+        assert(source->text().contains("Empty"));
+        assert(!target->text().contains("Empty"));
+        assert(designer.draft().placements.size() == 3);
+        assert(designer.draft().placements.back().slot == 201);
     }
 
     {

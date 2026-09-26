@@ -68,7 +68,9 @@ QScrollArea* makeVerticalScrollArea(QWidget* content, QWidget* parent, const cha
 void clearLayoutPreservingWidgets(QLayout* layout)
 {
     if (!layout) return;
-    while (auto* item = layout->takeAt(0)) {
+    while (layout->count() > 0) {
+        auto* item = layout->takeAt(0);
+        if (!item) break;
         if (auto* childLayout = item->layout()) {
             clearLayoutPreservingWidgets(childLayout);
             delete childLayout;
