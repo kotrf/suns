@@ -83,7 +83,8 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().history.back().remoteExtraction = {6.25, 5.5, 4.75};
     original.state.players.front().history.back().remoteExtractionRecorded = true;
     original.state.players.front().history.back().remoteMineHistory.push_back({2, {6.25, 5.5, 4.75}});
-    original.state.players.front().history.back().fleetHistory.push_back({998, 3, 42.5, 17.25});
+    original.state.players.front().history.back().fleetHistory.push_back({
+        998, 3, 42.5, 17.25, {1.25, 2.5, 3.75}, 5500});
     original.state.players.front().history.back().milestones.push_back({
         12345, 77, HistoryMilestoneKind::ResearchCompleted, 0, ResearchField::Electronics, 2});
     original.state.players.front().history.back().milestones.push_back({
@@ -348,6 +349,9 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.back().fleetHistory.back().ships == 3);
     assert(loaded.state.players.front().history.back().fleetHistory.back().grossMass == 42.5);
     assert(loaded.state.players.front().history.back().fleetHistory.back().fuel == 17.25);
+    assert(loaded.state.players.front().history.back().fleetCargoRecorded);
+    assert(loaded.state.players.front().history.back().fleetHistory.back().minerals.germanium == 3.75);
+    assert(loaded.state.players.front().history.back().fleetHistory.back().colonists == 5500);
     assert(loaded.state.players.front().history.back().milestones.size() == 2);
     assert(loaded.state.players.front().history.back().milestones.front().eventId == 12345);
     assert(loaded.state.players.front().history.back().milestones.front().technologyLevel == 2);

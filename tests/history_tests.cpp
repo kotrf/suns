@@ -31,8 +31,11 @@ int main()
     assert(initialHistory.front().fleetHistory.size() == 1);
     assert(initialHistory.front().fleetHistory.front().fleet == state.fleets.front().id);
     assert(initialHistory.front().fleetHistory.front().ships == 1);
+    assert(initialHistory.front().fleetCargoRecorded);
     assert(close(initialHistory.front().fleetHistory.front().grossMass,
         initialHistory.front().fleetMass));
+    assert(close(initialHistory.front().fleetHistory.front().minerals.ironium,
+        state.fleets.front().minerals.ironium));
     assert(close(initialHistory.front().minerals.ironium, 100.0));
     assert(initialHistory.front().colonyHistory.size() == 1);
     assert(initialHistory.front().colonyHistory.front().planet == state.planets.front().id);
@@ -75,6 +78,15 @@ int main()
     assert(close(corrected.players.front().history.back().extraction.ironium, mined.extraction.ironium));
     assert(corrected.players.front().history.back().freightRecorded);
 
+    auto loadedFleet = state;
+    loadedFleet.fleets.front().minerals = {2.5, 3.0, 4.5};
+    loadedFleet.fleets.front().colonists = 12500;
+    suns::record_empire_turn_statistics(loadedFleet);
+    const auto& cargo = loadedFleet.players.front().history.back().fleetHistory.front();
+    assert(close(cargo.minerals.ironium, 2.5));
+    assert(close(cargo.minerals.germanium, 4.5));
+    assert(cargo.colonists == 12500);
+
     // A disconnected ship remains in the physical empire totals, but its
     // live mass/fuel must not be added to a player-visible per-fleet series.
     auto detached = state;
@@ -86,6 +98,7 @@ int main()
     suns::record_empire_turn_statistics(detached);
     assert(detached.players.front().history.size() == 1);
     assert(detached.players.front().history.front().fleetHistory.empty());
+    assert(detached.players.front().history.front().fleetCargoRecorded);
 
     // A player's history is built only from assets they own. Authoritative
     // enemy truth and neutral surface stockpiles never leak into the record.

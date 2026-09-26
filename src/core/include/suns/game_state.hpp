@@ -441,6 +441,8 @@ struct FleetTurnStatistics {
     std::uint32_t ships{};
     double grossMass{};
     double fuel{};
+    MineralCargo minerals;
+    std::uint64_t colonists{};
 };
 
 enum class HistoryMilestoneKind : std::uint8_t {
@@ -489,6 +491,7 @@ struct EmpireTurnStatistics {
     // Only owned fleets with current, immediately confirmed telemetry. Missing
     // years mean the fleet was out of contact or no longer existed.
     std::vector<FleetTurnStatistics> fleetHistory;
+    bool fleetCargoRecorded{}; // False for pre-v49 history.
     // Only events delivered to this player at this planning boundary.
     std::vector<HistoryMilestone> milestones;
 };
