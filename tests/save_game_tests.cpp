@@ -637,10 +637,10 @@ void population_migration_and_clear_orders()
         const auto marker = QByteArray::fromHex("f00df00d00000000");
         const auto markerPosition = bytes.indexOf(marker);
         assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
-        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4 + 4);
+        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4 + 4 + 1);
         // v46 adds the host's observed-contact count after environmentBased.
         bytes.remove(markerPosition + 5, 4);
-        // v37 vector, v38 extraction, v40 events, v41 freight and v42 remote extraction
+        // v37 colony records through v47 fleet count, plus v49 cargo-recorded flag.
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream stream(&file);
