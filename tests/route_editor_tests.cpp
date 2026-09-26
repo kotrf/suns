@@ -167,6 +167,7 @@ struct MainWindowTestAccess {
         QMouseEvent press(
             QEvent::MouseButtonPress,
             QPointF(viewportPosition),
+            QPointF(window.view_->viewport()->mapToGlobal(viewportPosition)),
             Qt::RightButton,
             Qt::RightButton,
             Qt::NoModifier);
