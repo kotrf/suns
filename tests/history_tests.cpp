@@ -230,6 +230,40 @@ int main()
     assert(std::any_of(fuelMarkers.begin(), fuelMarkers.end(), [](const auto& marker) {
         return marker.kind == suns::HistoryMilestoneKind::FleetStalledForFuel && marker.fleet == 1;
     }));
+    // Contact and combat markers are made from delivered messages. A remote
+    // sighting appears in the delivery year with its earlier observation year.
+    auto delayedContact = state;
+    delayedContact.players.push_back({2, "Visitors", {}});
+    suns::queue_player_report(delayedContact, 1, suns::PlayerReportKind::EnemyFleetDetected,
+        homeStar->position, 2, 0, 0, 57);
+    delayedContact.players.front().pendingPlayerReports.back().deliveryTurn = 3;
+    suns::queue_player_report(delayedContact, 1, suns::PlayerReportKind::GroundInvasionLost,
+        homeStar->position, 2, homeStar->id, state.planets.front().id, state.fleets.front().id);
+    suns::queue_player_report(delayedContact, 2, suns::PlayerReportKind::GroundDefenseWon,
+        homeStar->position, 2, homeStar->id, state.planets.front().id, state.fleets.front().id);
+    const auto contactYear = processor.process_with_events(delayedContact, {});
+    assert(std::none_of(contactYear.state.players[0].history.back().milestones.begin(),
+        contactYear.state.players[0].history.back().milestones.end(), [](const auto& marker) {
+            return marker.kind == suns::HistoryMilestoneKind::EnemyFleetDetected;
+        }));
+    assert(std::any_of(contactYear.state.players[0].history.back().milestones.begin(),
+        contactYear.state.players[0].history.back().milestones.end(), [](const auto& marker) {
+            return marker.kind == suns::HistoryMilestoneKind::GroundInvasionLost;
+        }));
+    assert(std::any_of(contactYear.state.players[1].history.back().milestones.begin(),
+        contactYear.state.players[1].history.back().milestones.end(), [](const auto& marker) {
+            return marker.kind == suns::HistoryMilestoneKind::GroundDefenseWon;
+        }));
+    const auto arrivedContact = processor.process_with_events(contactYear.state, {});
+    const auto& markers = arrivedContact.state.players[0].history.back().milestones;
+    assert(std::any_of(markers.begin(), markers.end(), [](const auto& marker) {
+        return marker.kind == suns::HistoryMilestoneKind::EnemyFleetDetected
+            && marker.fleet == 57 && marker.observedTurn == 2;
+    }));
+    assert(arrivedContact.state.players[1].history.back().milestones.empty());
+    auto rememberedContact = arrivedContact.state;
+    suns::record_empire_turn_statistics(rememberedContact);
+    assert(rememberedContact.players[0].history.back().milestones.size() == markers.size());
     auto refreshed = report.state;
     suns::record_empire_turn_statistics(refreshed);
     assert(refreshed.players[0].history.back().milestones.size() == 2);

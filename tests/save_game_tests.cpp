@@ -89,6 +89,10 @@ void round_trip_preserves_communications_and_planning()
         12345, 77, HistoryMilestoneKind::ResearchCompleted, 0, ResearchField::Electronics, 2});
     original.state.players.front().history.back().milestones.push_back({
         12346, 77, HistoryMilestoneKind::FleetStalledForFuel, 0, ResearchField::Electronics, 0, 1});
+    original.state.players.front().history.back().milestones.push_back({
+        12347, 75, HistoryMilestoneKind::EnemyFleetDetected, 0, ResearchField::Electronics, 0, 42});
+    original.state.players.front().history.back().milestones.push_back({
+        12348, 77, HistoryMilestoneKind::GroundInvasionLost, 2});
     original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++, 1, "Relay", ShipHullType::Scout,
         {ShipComponentType::FusionDrive, ShipComponentType::RelayArray},
@@ -354,10 +358,14 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.back().fleetHistory.back().colonists == 5500);
     assert(loaded.state.players.front().history.back().fleetDamageRecorded);
     assert(loaded.state.players.front().history.back().fleetHistory.back().damagePercent == 64.25);
-    assert(loaded.state.players.front().history.back().milestones.size() == 2);
+    assert(loaded.state.players.front().history.back().milestones.size() == 4);
     assert(loaded.state.players.front().history.back().milestones.front().eventId == 12345);
     assert(loaded.state.players.front().history.back().milestones.front().technologyLevel == 2);
-    assert(loaded.state.players.front().history.back().milestones.back().fleet == 1);
+    assert(loaded.state.players.front().history.back().milestones[1].fleet == 1);
+    assert(loaded.state.players.front().history.back().milestones[2].fleet == 42);
+    assert(loaded.state.players.front().history.back().milestones[2].observedTurn == 75);
+    assert(loaded.state.players.front().history.back().milestones.back().kind
+        == HistoryMilestoneKind::GroundInvasionLost);
     assert(loaded.state.planets.front().productionQueue.empty());
     assert(loaded.state.shipDesigns.back().components.front() == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);
@@ -642,7 +650,7 @@ void population_migration_and_clear_orders()
         bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4 + 4 + 1 + 1);
         // v46 adds the host's observed-contact count after environmentBased.
         bytes.remove(markerPosition + 5, 4);
-        // v37 colony records through v47 fleet count, plus v49 cargo-recorded flag.
+        // v37 colony records through v47 fleet count, v49 cargo and v50 damage flags.
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream stream(&file);

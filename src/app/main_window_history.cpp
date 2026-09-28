@@ -744,6 +744,26 @@ void MainWindow::refreshEmpireHistory()
                 label = QString("Fleet %1 stalled for fuel").arg(event.fleet);
                 color = QColor("#e4b868");
                 break;
+            case HistoryMilestoneKind::EnemyFleetDetected:
+                label = QString("Enemy fleet %1 detected").arg(event.fleet);
+                color = QColor("#e07575");
+                break;
+            case HistoryMilestoneKind::EnemyFleetLost:
+                label = QString("Enemy fleet %1 contact lost").arg(event.fleet);
+                color = QColor("#e4b868");
+                break;
+            case HistoryMilestoneKind::GroundInvasionWon:
+                label = QString("Invasion of planet %1 succeeded").arg(event.planet);
+                color = QColor("#8dcc9e");
+                break;
+            case HistoryMilestoneKind::GroundInvasionLost:
+                label = QString("Invasion of planet %1 failed").arg(event.planet);
+                color = QColor("#e07575");
+                break;
+            case HistoryMilestoneKind::GroundDefenseWon:
+                label = QString("Planet %1 defended").arg(event.planet);
+                color = QColor("#8dcc9e");
+                break;
             }
             if (event.observedTurn && event.observedTurn != shown[index]->turn)
                 label += QString(" (observed year %1)").arg(static_cast<qulonglong>(event.observedTurn));

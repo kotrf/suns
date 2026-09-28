@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 50;
+constexpr quint32 kSaveFormatVersion = 51;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 10;
@@ -960,7 +960,9 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             stream >> id >> observedTurn;
             if (!readEnum(stream, marker.kind,
                     static_cast<quint8>(gReadSaveFormatVersion >= 44
-                        ? HistoryMilestoneKind::FleetStalledForFuel
+                        ? gReadSaveFormatVersion >= 51
+                            ? HistoryMilestoneKind::GroundDefenseWon
+                            : HistoryMilestoneKind::FleetStalledForFuel
                         : HistoryMilestoneKind::ResearchCompleted))) return;
             stream >> planet;
             if (!readEnum(stream, marker.researchField,
@@ -974,11 +976,13 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             marker.eventId = id;
             marker.observedTurn = observedTurn;
             marker.planet = planet;
+            const bool fleetEvent = marker.kind == HistoryMilestoneKind::FleetStalledForFuel
+                || marker.kind == HistoryMilestoneKind::EnemyFleetDetected
+                || marker.kind == HistoryMilestoneKind::EnemyFleetLost;
             if (marker.eventId == 0 || marker.observedTurn > value.turn
                 || (marker.kind == HistoryMilestoneKind::ResearchCompleted
                     ? marker.technologyLevel == 0
-                    : marker.kind == HistoryMilestoneKind::FleetStalledForFuel
-                        ? marker.fleet == 0 : marker.planet == 0)
+                    : fleetEvent ? marker.fleet == 0 : marker.planet == 0)
                 || std::any_of(value.milestones.begin(), value.milestones.end(), [&](const auto& other) {
                     return other.eventId == marker.eventId;
                 })) {
