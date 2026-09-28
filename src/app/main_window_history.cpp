@@ -214,7 +214,8 @@ void MainWindow::installEmpireHistory()
         "Mineral stocks (kt)", "Fleets and ships", "Fleet mass (kt)",
         "Technology levels", "Research invested (RP)", "Mineral extraction (kt/year)",
         "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)",
-        "Confirmed fleet fuel (kt)", "Confirmed fleet cargo (kt)"});
+        "Confirmed fleet fuel (kt)", "Confirmed fleet cargo (kt)",
+        "Confirmed fleet damage (%)"});
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -297,7 +298,8 @@ void MainWindow::refreshEmpireHistory()
     const bool remoteMetric = historyMetric_->currentIndex() == 10;
     const bool fleetMetric = historyMetric_->currentIndex() == 4
         || historyMetric_->currentIndex() == 5
-        || historyMetric_->currentIndex() == 11 || historyMetric_->currentIndex() == 12;
+        || historyMetric_->currentIndex() == 11 || historyMetric_->currentIndex() == 12
+        || historyMetric_->currentIndex() == 13;
     const int scopeKind = fleetMetric ? 2 : remoteMetric ? 1 : 0;
     const auto selectedScope = scopeKind == historyScopeKind_
         ? historyScope_->currentData().toUInt() : quint32{0};
@@ -518,7 +520,10 @@ void MainWindow::refreshEmpireHistory()
                     snapshot->fleetHistory.end(), [seriesColonyId](const auto& record) {
                         return record.fleet == seriesColonyId;
                     });
-                if (historyMetric_->currentIndex() == 12 && !snapshot->fleetCargoRecorded) {
+                if (historyMetric_->currentIndex() == 13 && !snapshot->fleetDamageRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No damage record");
+                } else if (historyMetric_->currentIndex() == 12 && !snapshot->fleetCargoRecorded) {
                     line.values.push_back(std::numeric_limits<double>::quiet_NaN());
                     line.exactValues.push_back("No cargo record");
                 } else if (fleet == snapshot->fleetHistory.end()) {
@@ -561,6 +566,27 @@ void MainWindow::refreshEmpireHistory()
                 for (const auto& fleet : snapshot->fleetHistory) amount += value(fleet);
                 line.values.push_back(amount);
                 line.exactValues.push_back(QString::number(amount, 'f', 2));
+            }
+            series.push_back(std::move(line));
+        };
+        const auto addKnownDamage = [&] {
+            HistorySeries line{named("Ship-weighted damage"), QColor("#e07575"), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                if (!snapshot->fleetDamageRecorded || snapshot->fleetHistory.size() != snapshot->fleets) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back(snapshot->fleetDamageRecorded
+                        ? "Some fleets are out of contact" : "No damage record");
+                    continue;
+                }
+                double weightedDamage = 0.0;
+                std::uint64_t ships = 0;
+                for (const auto& fleet : snapshot->fleetHistory) {
+                    weightedDamage += fleet.damagePercent * fleet.ships;
+                    ships += fleet.ships;
+                }
+                const double percent = ships ? weightedDamage / ships : 0.0;
+                line.values.push_back(percent);
+                line.exactValues.push_back(QString::number(percent, 'f', 1) + "%");
             }
             series.push_back(std::move(line));
         };
@@ -668,6 +694,11 @@ void MainWindow::refreshEmpireHistory()
                 addKnownCargo("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; });
                 addKnownCargo("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonists); });
             }
+            break;
+        case 13:
+            if (seriesColonyId) addFleet("Damage (%)", "#e07575",
+                [](const auto& s) { return s.damagePercent; }, 1);
+            else addKnownDamage();
             break;
         default: break;
         }

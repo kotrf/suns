@@ -1474,7 +1474,8 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.germanium += fleet.minerals.germanium;
         if (fleet_has_instant_link(state, fleet))
             result.fleetHistory.push_back({fleet.id, fleet_ship_count(fleet),
-                fleet_gross_mass(state, fleet), fleet.fuel, fleet.minerals, fleet.colonists});
+                fleet_gross_mass(state, fleet), fleet.fuel, fleet.minerals, fleet.colonists,
+                fleet.damagePercent});
     }
 
     if (const auto* player = find_player(state, playerId)) {
@@ -1482,6 +1483,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.technologyProgress = player->technology.progress;
     }
     result.fleetCargoRecorded = true;
+    result.fleetDamageRecorded = true;
     return result;
 }
 

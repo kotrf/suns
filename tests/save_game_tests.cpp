@@ -84,7 +84,7 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().history.back().remoteExtractionRecorded = true;
     original.state.players.front().history.back().remoteMineHistory.push_back({2, {6.25, 5.5, 4.75}});
     original.state.players.front().history.back().fleetHistory.push_back({
-        998, 3, 42.5, 17.25, {1.25, 2.5, 3.75}, 5500});
+        998, 3, 42.5, 17.25, {1.25, 2.5, 3.75}, 5500, 64.25});
     original.state.players.front().history.back().milestones.push_back({
         12345, 77, HistoryMilestoneKind::ResearchCompleted, 0, ResearchField::Electronics, 2});
     original.state.players.front().history.back().milestones.push_back({
@@ -352,6 +352,8 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.back().fleetCargoRecorded);
     assert(loaded.state.players.front().history.back().fleetHistory.back().minerals.germanium == 3.75);
     assert(loaded.state.players.front().history.back().fleetHistory.back().colonists == 5500);
+    assert(loaded.state.players.front().history.back().fleetDamageRecorded);
+    assert(loaded.state.players.front().history.back().fleetHistory.back().damagePercent == 64.25);
     assert(loaded.state.players.front().history.back().milestones.size() == 2);
     assert(loaded.state.players.front().history.back().milestones.front().eventId == 12345);
     assert(loaded.state.players.front().history.back().milestones.front().technologyLevel == 2);
@@ -637,7 +639,7 @@ void population_migration_and_clear_orders()
         const auto marker = QByteArray::fromHex("f00df00d00000000");
         const auto markerPosition = bytes.indexOf(marker);
         assert(markerPosition >= 0 && bytes.indexOf(marker, markerPosition + 1) < 0);
-        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4 + 4 + 1);
+        bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4 + 4 + 1 + 1);
         // v46 adds the host's observed-contact count after environmentBased.
         bytes.remove(markerPosition + 5, 4);
         // v37 colony records through v47 fleet count, plus v49 cargo-recorded flag.

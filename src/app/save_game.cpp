@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 49;
+constexpr quint32 kSaveFormatVersion = 50;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 10;
@@ -877,6 +877,8 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         writeMinerals(stream, fleet.minerals);
         stream << static_cast<quint64>(fleet.colonists);
     }
+    stream << static_cast<quint8>(value.fleetDamageRecorded ? 1 : 0);
+    for (const auto& fleet : value.fleetHistory) stream << fleet.damagePercent;
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -1048,6 +1050,13 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             fleet.colonists = colonists;
         }
     }
+    if (gReadSaveFormatVersion >= 50) {
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) { markCorrupt(stream); return; }
+        value.fleetDamageRecorded = recorded == 1;
+        for (auto& fleet : value.fleetHistory) stream >> fleet.damagePercent;
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -1095,7 +1104,8 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
                     && validAmount(fleet.grossMass) && validAmount(fleet.fuel)
                     && validAmount(fleet.minerals.ironium)
                     && validAmount(fleet.minerals.boranium)
-                    && validAmount(fleet.minerals.germanium);
+                    && validAmount(fleet.minerals.germanium)
+                    && validAmount(fleet.damagePercent) && fleet.damagePercent <= 100.0;
             });
 }
 
