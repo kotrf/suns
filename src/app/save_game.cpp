@@ -18,7 +18,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 48;
+constexpr quint32 kSaveFormatVersion = 49;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
 constexpr quint32 kTurnOrderFormatVersion = 10;
@@ -872,6 +872,11 @@ void writeEmpireTurnStatistics(QDataStream& stream, const EmpireTurnStatistics& 
         stream << static_cast<quint32>(fleet.fleet)
                << static_cast<quint32>(fleet.ships)
                << fleet.grossMass << fleet.fuel;
+    stream << static_cast<quint8>(value.fleetCargoRecorded ? 1 : 0);
+    for (const auto& fleet : value.fleetHistory) {
+        writeMinerals(stream, fleet.minerals);
+        stream << static_cast<quint64>(fleet.colonists);
+    }
 }
 
 void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
@@ -1031,6 +1036,18 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             value.fleetHistory.push_back(fleet);
         }
     }
+    if (gReadSaveFormatVersion >= 49) {
+        quint8 recorded{};
+        stream >> recorded;
+        if (recorded > 1) { markCorrupt(stream); return; }
+        value.fleetCargoRecorded = recorded == 1;
+        for (auto& fleet : value.fleetHistory) {
+            readMinerals(stream, fleet.minerals);
+            quint64 colonists{};
+            stream >> colonists;
+            fleet.colonists = colonists;
+        }
+    }
 }
 
 bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
@@ -1075,7 +1092,10 @@ bool validEmpireTurnStatistics(const EmpireTurnStatistics& value)
         && std::all_of(value.fleetHistory.begin(), value.fleetHistory.end(),
             [&](const auto& fleet) {
                 return fleet.fleet != 0 && fleet.ships != 0
-                    && validAmount(fleet.grossMass) && validAmount(fleet.fuel);
+                    && validAmount(fleet.grossMass) && validAmount(fleet.fuel)
+                    && validAmount(fleet.minerals.ironium)
+                    && validAmount(fleet.minerals.boranium)
+                    && validAmount(fleet.minerals.germanium);
             });
 }
 

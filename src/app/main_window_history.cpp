@@ -214,7 +214,7 @@ void MainWindow::installEmpireHistory()
         "Mineral stocks (kt)", "Fleets and ships", "Fleet mass (kt)",
         "Technology levels", "Research invested (RP)", "Mineral extraction (kt/year)",
         "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)",
-        "Confirmed fleet fuel (kt)"});
+        "Confirmed fleet fuel (kt)", "Confirmed fleet cargo (kt)"});
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -296,7 +296,8 @@ void MainWindow::refreshEmpireHistory()
     auto* chart = static_cast<HistoryChart*>(historyChart_);
     const bool remoteMetric = historyMetric_->currentIndex() == 10;
     const bool fleetMetric = historyMetric_->currentIndex() == 4
-        || historyMetric_->currentIndex() == 5 || historyMetric_->currentIndex() == 11;
+        || historyMetric_->currentIndex() == 5
+        || historyMetric_->currentIndex() == 11 || historyMetric_->currentIndex() == 12;
     const int scopeKind = fleetMetric ? 2 : remoteMetric ? 1 : 0;
     const auto selectedScope = scopeKind == historyScopeKind_
         ? historyScope_->currentData().toUInt() : quint32{0};
@@ -517,7 +518,10 @@ void MainWindow::refreshEmpireHistory()
                     snapshot->fleetHistory.end(), [seriesColonyId](const auto& record) {
                         return record.fleet == seriesColonyId;
                     });
-                if (fleet == snapshot->fleetHistory.end()) {
+                if (historyMetric_->currentIndex() == 12 && !snapshot->fleetCargoRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No cargo record");
+                } else if (fleet == snapshot->fleetHistory.end()) {
                     line.values.push_back(std::numeric_limits<double>::quiet_NaN());
                     line.exactValues.push_back("No confirmed fleet record");
                 } else {
@@ -531,15 +535,32 @@ void MainWindow::refreshEmpireHistory()
         const auto addKnownFuel = [&] {
             HistorySeries line{named("Fuel"), QColor("#8dcc9e"), {}, {}, dashed};
             for (const auto* snapshot : shown) {
-                if (snapshot->fleetHistory.empty() && snapshot->fleets != 0) {
+                if (snapshot->fleetHistory.size() != snapshot->fleets) {
                     line.values.push_back(std::numeric_limits<double>::quiet_NaN());
-                    line.exactValues.push_back("No confirmed fleet record");
+                    line.exactValues.push_back("Some fleets are out of contact");
                 } else {
                     double fuel = 0.0;
                     for (const auto& fleet : snapshot->fleetHistory) fuel += fleet.fuel;
                     line.values.push_back(fuel);
                     line.exactValues.push_back(QString::number(fuel, 'f', 2));
                 }
+            }
+            series.push_back(std::move(line));
+        };
+        const auto addKnownCargo = [&](QString name, QColor color,
+                                       std::function<double(const FleetTurnStatistics&)> value) {
+            HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
+            for (const auto* snapshot : shown) {
+                if (!snapshot->fleetCargoRecorded || snapshot->fleetHistory.size() != snapshot->fleets) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back(snapshot->fleetCargoRecorded
+                        ? "Some fleets are out of contact" : "No cargo record");
+                    continue;
+                }
+                double amount = 0.0;
+                for (const auto& fleet : snapshot->fleetHistory) amount += value(fleet);
+                line.values.push_back(amount);
+                line.exactValues.push_back(QString::number(amount, 'f', 2));
             }
             series.push_back(std::move(line));
         };
@@ -634,6 +655,19 @@ void MainWindow::refreshEmpireHistory()
         case 11:
             if (seriesColonyId) addFleet("Fuel", "#8dcc9e", [](const auto& s) { return s.fuel; }, 2);
             else addKnownFuel();
+            break;
+        case 12:
+            if (seriesColonyId) {
+                addFleet("Ironium", "#db9a7a", [](const auto& s) { return s.minerals.ironium; }, 2);
+                addFleet("Boranium", "#8dcc9e", [](const auto& s) { return s.minerals.boranium; }, 2);
+                addFleet("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; }, 2);
+                addFleet("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonists); }, 2);
+            } else {
+                addKnownCargo("Ironium", "#db9a7a", [](const auto& s) { return s.minerals.ironium; });
+                addKnownCargo("Boranium", "#8dcc9e", [](const auto& s) { return s.minerals.boranium; });
+                addKnownCargo("Germanium", "#78b8f0", [](const auto& s) { return s.minerals.germanium; });
+                addKnownCargo("Colonists", "#d1a2e0", [](const auto& s) { return colonist_cargo_mass(s.colonists); });
+            }
             break;
         default: break;
         }
