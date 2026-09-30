@@ -68,7 +68,9 @@ QScrollArea* makeVerticalScrollArea(QWidget* content, QWidget* parent, const cha
 void clearLayoutPreservingWidgets(QLayout* layout)
 {
     if (!layout) return;
-    while (auto* item = layout->takeAt(0)) {
+    while (layout->count() > 0) {
+        auto* item = layout->takeAt(0);
+        if (!item) break;
         if (auto* childLayout = item->layout()) {
             clearLayoutPreservingWidgets(childLayout);
             delete childLayout;
@@ -521,6 +523,11 @@ void MainWindow::installUiPolish()
         QLabel#selectionDistance {
             padding: 2px 8px;
             color: #f0d59d;
+            border-left: 1px solid #45566a;
+        }
+        QLabel#statusBarComms {
+            padding: 2px 8px;
+            color: #d5e0ed;
             border-left: 1px solid #45566a;
         }
         QScrollBar:vertical {
