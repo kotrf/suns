@@ -1972,12 +1972,19 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::ColonyLost: kind = HistoryMilestoneKind::ColonyLost; break;
         case GameEventKind::ResearchLevelCompleted: kind = HistoryMilestoneKind::ResearchCompleted; break;
         case GameEventKind::FleetStalledForFuel: kind = HistoryMilestoneKind::FleetStalledForFuel; break;
+        case GameEventKind::EnemyFleetDetected: kind = HistoryMilestoneKind::EnemyFleetDetected; break;
+        case GameEventKind::EnemyFleetLost: kind = HistoryMilestoneKind::EnemyFleetLost; break;
+        case GameEventKind::GroundInvasionWon: kind = HistoryMilestoneKind::GroundInvasionWon; break;
+        case GameEventKind::GroundInvasionLost: kind = HistoryMilestoneKind::GroundInvasionLost; break;
+        case GameEventKind::GroundDefenseWon: kind = HistoryMilestoneKind::GroundDefenseWon; break;
         default: break;
         }
-        if (!kind || ((*kind == HistoryMilestoneKind::ResearchCompleted)
-                ? event.technologyLevel == 0
-                : *kind == HistoryMilestoneKind::FleetStalledForFuel
-                    ? event.fleet == 0 : event.planet == 0)) continue;
+        if (!kind) continue;
+        const bool fleetEvent = *kind == HistoryMilestoneKind::FleetStalledForFuel
+            || *kind == HistoryMilestoneKind::EnemyFleetDetected
+            || *kind == HistoryMilestoneKind::EnemyFleetLost;
+        if (*kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0
+            : fleetEvent ? event.fleet == 0 : event.planet == 0) continue;
         auto& milestones = player->history.back().milestones;
         if (std::any_of(milestones.begin(), milestones.end(), [&](const auto& recorded) {
                 return recorded.eventId == event.id;

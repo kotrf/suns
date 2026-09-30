@@ -451,6 +451,11 @@ enum class HistoryMilestoneKind : std::uint8_t {
     ColonyLost,
     ResearchCompleted,
     FleetStalledForFuel,
+    EnemyFleetDetected,
+    EnemyFleetLost,
+    GroundInvasionWon,
+    GroundInvasionLost,
+    GroundDefenseWon,
 };
 
 struct HistoryMilestone {
