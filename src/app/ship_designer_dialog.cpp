@@ -50,6 +50,10 @@ namespace suns {
 namespace {
 
 constexpr auto kComponentMimeType = "application/x-suns-ship-component";
+constexpr auto kSlotButtonStyle =
+    "QToolButton { border: 1px solid #52677a; background: #142433; padding: 5px; }"
+    "QToolButton:checked { border: 2px solid #52b6d9; background: #193346; }"
+    "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
 
 template <typename Enum>
 void addEnumItem(QComboBox* combo, const QString& text, Enum value)
@@ -343,21 +347,24 @@ public:
         setFixedSize(96, 96);
         setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         setIconSize(QSize(26, 26));
+        setCheckable(true);
+        setStyleSheet(kSlotButtonStyle);
         if (component_) setIcon(componentIcon(*component_));
         setChosen(chosen);
         refreshText();
         connect(this, &QToolButton::clicked, this, [this] { selected_(slot_.id); });
     }
 
-    ShipSlotId slotId() const { return slot_.id; }
-
     void setChosen(bool chosen)
     {
-        baseStyle_ = chosen
-                ? "QToolButton { border: 2px solid #52b6d9; background: #193346; padding: 5px; }"
-                : "QToolButton { border: 1px solid #52677a; background: #142433; padding: 5px; }"
-                  "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
-        setStyleSheet(baseStyle_);
+        setChecked(chosen);
+    }
+
+    void setComponent(std::optional<ShipComponentType> component)
+    {
+        component_ = component;
+        setIcon(component_ ? componentIcon(*component_) : QIcon{});
+        refreshText();
     }
 
 protected:
@@ -376,7 +383,7 @@ protected:
 
     void dragLeaveEvent(QDragLeaveEvent* event) override
     {
-        setStyleSheet(baseStyle_);
+        setStyleSheet(kSlotButtonStyle);
         QToolButton::dragLeaveEvent(event);
     }
 
@@ -388,7 +395,7 @@ protected:
     void dropEvent(QDropEvent* event) override
     {
         const auto payload = decodeComponentDrag(event->mimeData());
-        setStyleSheet(baseStyle_);
+        setStyleSheet(kSlotButtonStyle);
         if (!payload) return;
         event->acceptProposedAction();
         dropped_(payload->component, payload->sourceSlot);
@@ -398,7 +405,6 @@ protected:
     {
         dragStart_ = event->pos();
         QToolButton::mousePressEvent(event);
-        selected_(slot_.id);
     }
 
     void mouseMoveEvent(QMouseEvent* event) override
@@ -466,7 +472,6 @@ private:
     SlotHandler removed_;
     NavigateHandler navigate_;
     QPoint dragStart_;
-    QString baseStyle_;
 };
 
 } // namespace
@@ -752,11 +757,11 @@ void ShipDesignerDialog::updateComponentDetails()
 void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 {
     selectedSlot_ = slot;
-    // Qt 6.11 requires Q_OBJECT for the type passed to findChildren. The
-    // presentation-only SlotButton intentionally has no Qt meta-object.
-    for (auto* child : slotPanel_->findChildren<QToolButton*>()) {
-        if (auto* button = dynamic_cast<SlotButton*>(child))
-            button->setChosen(button->slotId() == slot);
+    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+    for (const auto& cell : hull.fittingSlots) {
+        const auto* item = slotGrid_->itemAtPosition(cell.row, cell.column);
+        if (item && item->widget())
+            static_cast<SlotButton*>(item->widget())->setChosen(cell.id == slot);
     }
     const auto placement = std::find_if(
         placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
@@ -786,8 +791,9 @@ void ShipDesignerDialog::focusAdjacentSlot(ShipSlotId slot, int rowDirection, in
     }
     if (!nearest) return;
     selectSlot(nearest->id);
-    if (auto* button = slotPanel_->findChild<QToolButton*>(QString("shipSlot_%1").arg(nearest->id)))
-        button->setFocus(Qt::OtherFocusReason);
+    if (auto* item = slotGrid_->itemAtPosition(nearest->row, nearest->column)) {
+        if (auto* button = item->widget()) button->setFocus(Qt::OtherFocusReason);
+    }
 }
 
 void ShipDesignerDialog::fitComponent(
@@ -816,7 +822,7 @@ void ShipDesignerDialog::fitComponent(
             if (slot.category == ShipSlotCategory::Engine) placements_.push_back({slot.id, component});
         }
         selectedSlot_ = target;
-        rebuildSlotGrid();
+        refreshSlotGrid();
         updatePreview();
         return;
     }
@@ -853,7 +859,7 @@ void ShipDesignerDialog::fitComponent(
         targetPlacement->component = component;
     }
     selectedSlot_ = target;
-    rebuildSlotGrid();
+    refreshSlotGrid();
     updatePreview();
 }
 
@@ -870,8 +876,31 @@ void ShipDesignerDialog::removeComponent(ShipSlotId slot)
             ? component_spec(placement.component).kind == ShipComponentKind::Engine
             : placement.slot == slot;
     });
-    rebuildSlotGrid();
+    refreshSlotGrid();
     updatePreview();
+}
+
+void ShipDesignerDialog::refreshSlotGrid()
+{
+    // A drop runs while QDrag::exec() still owns the source widget on Wayland.
+    // Keep both source and target alive until the drag has finished.
+    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+    for (const auto& slot : hull.fittingSlots) {
+        const auto* item = slotGrid_->itemAtPosition(slot.row, slot.column);
+        if (!item || !item->widget()) continue;
+        auto* button = static_cast<SlotButton*>(item->widget());
+        const auto placement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
+            return candidate.slot == slot.id;
+        });
+        button->setComponent(placement == placements_.end()
+            ? std::nullopt : std::optional<ShipComponentType>(placement->component));
+        button->setChosen(selectedSlot_ == slot.id);
+    }
+    const auto selectedPlacement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placement) {
+        return placement.slot == selectedSlot_;
+    });
+    removeButton_->setEnabled(selectedPlacement != placements_.end());
+    fitButton_->setEnabled(selectedSlot_ != 0 && selectedCatalogComponent().has_value());
 }
 
 void ShipDesignerDialog::rebuildSlotGrid()
