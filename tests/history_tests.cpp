@@ -32,6 +32,8 @@ int main()
     assert(initialHistory.front().fleetHistory.front().fleet == state.fleets.front().id);
     assert(initialHistory.front().fleetHistory.front().ships == 1);
     assert(initialHistory.front().fleetCargoRecorded);
+    assert(initialHistory.front().fleetDamageRecorded);
+    assert(close(initialHistory.front().fleetHistory.front().damagePercent, state.fleets.front().damagePercent));
     assert(close(initialHistory.front().fleetHistory.front().grossMass,
         initialHistory.front().fleetMass));
     assert(close(initialHistory.front().fleetHistory.front().minerals.ironium,
@@ -81,11 +83,13 @@ int main()
     auto loadedFleet = state;
     loadedFleet.fleets.front().minerals = {2.5, 3.0, 4.5};
     loadedFleet.fleets.front().colonists = 12500;
+    loadedFleet.fleets.front().damagePercent = 24.5;
     suns::record_empire_turn_statistics(loadedFleet);
     const auto& cargo = loadedFleet.players.front().history.back().fleetHistory.front();
     assert(close(cargo.minerals.ironium, 2.5));
     assert(close(cargo.minerals.germanium, 4.5));
     assert(cargo.colonists == 12500);
+    assert(close(cargo.damagePercent, 24.5));
 
     // A disconnected ship remains in the physical empire totals, but its
     // live mass/fuel must not be added to a player-visible per-fleet series.
@@ -99,6 +103,7 @@ int main()
     assert(detached.players.front().history.size() == 1);
     assert(detached.players.front().history.front().fleetHistory.empty());
     assert(detached.players.front().history.front().fleetCargoRecorded);
+    assert(detached.players.front().history.front().fleetDamageRecorded);
 
     // A player's history is built only from assets they own. Authoritative
     // enemy truth and neutral surface stockpiles never leak into the record.

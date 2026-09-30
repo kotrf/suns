@@ -443,6 +443,7 @@ struct FleetTurnStatistics {
     double fuel{};
     MineralCargo minerals;
     std::uint64_t colonists{};
+    double damagePercent{};
 };
 
 enum class HistoryMilestoneKind : std::uint8_t {
@@ -492,6 +493,7 @@ struct EmpireTurnStatistics {
     // years mean the fleet was out of contact or no longer existed.
     std::vector<FleetTurnStatistics> fleetHistory;
     bool fleetCargoRecorded{}; // False for pre-v49 history.
+    bool fleetDamageRecorded{}; // False for pre-v50 history.
     // Only events delivered to this player at this planning boundary.
     std::vector<HistoryMilestone> milestones;
 };
