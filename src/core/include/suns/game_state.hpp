@@ -148,6 +148,7 @@ enum class ShipComponentType {
     HighWarpDrive,
     EfficientRamScoopDrive,
     DeepPenetratingScanner,
+    RelayArray,
 };
 
 enum class ShipComponentKind {
@@ -175,6 +176,7 @@ struct ShipComponentSpec {
 
     double sensorRange{};
     bool penetratesPlanets{};
+    double relayRange{};
     double fuelCapacity{};
     double cargoCapacity{};
     double fuelGenerationPerTurn{};
@@ -694,6 +696,7 @@ void normalize_ship_design_placement(ShipDesign& design);
 [[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
+[[nodiscard]] double ship_design_communication_range(const ShipDesign& design);
 [[nodiscard]] double ship_design_ordinary_sensor_range(const ShipDesign& design);
 [[nodiscard]] double ship_design_penetrating_sensor_range(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
@@ -754,6 +757,7 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] double fleet_speed(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet);
+[[nodiscard]] double fleet_communication_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] bool fleet_can_colonize(const GameState& state, const Fleet& fleet);
 [[nodiscard]] bool fleet_can_remote_mine(const GameState& state, const Fleet& fleet);

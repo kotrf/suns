@@ -89,6 +89,10 @@ void round_trip_preserves_communications_and_planning()
     original.state.players.front().history.back().milestones.push_back({
         12346, 77, HistoryMilestoneKind::FleetStalledForFuel, 0, ResearchField::Electronics, 0, 1});
     original.state.shipDesigns.push_back({
+        original.state.nextShipDesignId++, 1, "Relay", ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::RelayArray},
+        {{100, ShipComponentType::FusionDrive}, {200, ShipComponentType::RelayArray}}});
+    original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
         "Remote Miner",
@@ -353,6 +357,10 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.shipDesigns.back().components[1] == ShipComponentType::AdvancedFusionDrive);
     assert(loaded.state.shipDesigns.back().components[2] == ShipComponentType::ExtendedRangeScanner);
     assert(loaded.state.shipDesigns.back().components.back() == ShipComponentType::RemoteMiningModule);
+    const auto relay = std::find_if(loaded.state.shipDesigns.begin(), loaded.state.shipDesigns.end(),
+        [](const ShipDesign& design) { return design.name == "Relay"; });
+    assert(relay != loaded.state.shipDesigns.end());
+    assert(relay->placements.back().component == ShipComponentType::RelayArray);
     assert(loaded.state.shipDesigns.back().hull == ShipHullType::RemoteMiner);
     assert(loaded.state.shipDesigns.back().placements.size() == 4);
     assert(loaded.state.shipDesigns.back().placements[0].slot == 100);
