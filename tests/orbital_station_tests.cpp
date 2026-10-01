@@ -263,6 +263,60 @@ void field_bays_repair_remote_fleets_in_proportion_to_equipped_ships()
     assert(docked.fleets.front().damagePercent == 80.0);
 }
 
+void restored_mobility_is_reported_once_and_respects_communications_delay()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    state.fleets.front().damagePercent = 100.0;
+
+    const auto first = processor.process_with_events(state, {});
+    const auto report = std::find_if(first.events.begin(), first.events.end(), [](const GameEvent& event) {
+        return event.kind == GameEventKind::FleetMobilityRestored;
+    });
+    assert(report != first.events.end());
+    assert(report->fleet == state.fleets.front().id);
+    assert(report->recipient == state.fleets.front().owner);
+    assert(report->observedTurn == state.turn + 1);
+    const auto replay = processor.process_with_events(state, {});
+    const auto replayReport = std::find_if(replay.events.begin(), replay.events.end(), [](const GameEvent& event) {
+        return event.kind == GameEventKind::FleetMobilityRestored;
+    });
+    assert(replayReport != replay.events.end() && replayReport->id == report->id);
+    const auto second = processor.process_with_events(first.state, {});
+    assert(std::none_of(second.events.begin(), second.events.end(), [](const GameEvent& event) {
+        return event.kind == GameEventKind::FleetMobilityRestored;
+    }));
+
+    auto remote = state;
+    remote.shipDesigns.push_back({
+        remote.nextShipDesignId++, 1, "Repair Scout", ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::FieldRepairBay}});
+    remote.fleets.front().ships = {{remote.shipDesigns.back().id, 1}};
+    remote.fleets.front().position = {500.0, 500.0};
+    const auto firstRemote = processor.process_with_events(remote, {});
+    assert(std::none_of(firstRemote.events.begin(), firstRemote.events.end(), [](const GameEvent& event) {
+        return event.kind == GameEventKind::FleetMobilityRestored;
+    }));
+    assert(firstRemote.state.players.front().pendingPlayerReports.size() == 1);
+    const auto dueTurn = firstRemote.state.players.front().pendingPlayerReports.front().deliveryTurn;
+    assert(dueTurn > firstRemote.state.turn);
+    assert(firstRemote.state.players.front().pendingPlayerReports.front().kind
+        == PlayerReportKind::FleetMobilityRestored);
+    auto current = firstRemote.state;
+    while (current.turn < dueTurn) {
+        auto next = processor.process_with_events(current, {});
+        if (next.state.turn == dueTurn) {
+            const auto delayed = std::find_if(next.events.begin(), next.events.end(), [](const GameEvent& event) {
+                return event.kind == GameEventKind::FleetMobilityRestored;
+            });
+            assert(delayed != next.events.end());
+            assert(delayed->observedTurn == remote.turn + 1);
+            assert(delayed->turn == dueTurn);
+        }
+        current = std::move(next.state);
+    }
+}
+
 void production_forecast_understands_shipyard_dependency()
 {
     auto state = make_demo_game();
@@ -300,5 +354,6 @@ int main()
     arriving_fleet_repairs_but_departing_fleet_does_not();
     newly_built_dock_can_repair_a_fleet_that_year();
     field_bays_repair_remote_fleets_in_proportion_to_equipped_ships();
+    restored_mobility_is_reported_once_and_respects_communications_delay();
     production_forecast_understands_shipyard_dependency();
 }

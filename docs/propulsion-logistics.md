@@ -50,6 +50,8 @@ Damage is deterministic and proportional to distance travelled divided by Warp s
 
 Construction 3 unlocks the Field Repair Bay, a general-slot module with an 18 kt mass and 4/2/4 I/B/G mineral cost. Each equipped ship contributes 8 percentage points of repair per year anywhere, including deep space and at critical damage. Mixed fleets receive the ship-count-weighted average, so one repair scout does not fully service a large convoy; a second bay on the same hull does not stack. At a friendly shipyard, the dock's 20-point rate replaces onboard repair. Field maintenance applies once after movement, so overdrive damage still accumulates if it exceeds the repair rate.
 
+When a fleet recovers from 100% damage, the owner receives one Turn Message through the normal communications channel. The earlier route was cleared at critical damage, so a new order is needed to depart. Other repair years do not create messages.
+
 The initial model stores one shared damage percentage per fleet. A mixed fleet uses the highest damage rate among its engines. Merge averages damage by ship count; split preserves the same percentage in both resulting fleets. A future per-ship hull model can replace this approximation. Damage is carried in confirmed and delayed telemetry and saved in format 30; older saves begin with zero damage. Restoring a save preserves unsafe Warp orders.
 
 The numeric curves are tuning placeholders. Their strategic shape is intentional.
