@@ -32,6 +32,7 @@ The first designer exposes these components:
 - Extended Range Scanner (Electronics 2; 160 ly ordinary field, heavy and expensive)
 - Penetrating Scanner (Electronics 3)
 - Remote Mining Module (Construction 1, 80 kt; Remote Miner `Mining` slots only)
+- Field Repair Bay (Construction 3; repairs hull damage away from docks)
 - Colony Module
 - Fuel Tank
 - Cargo Pod

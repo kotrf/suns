@@ -383,6 +383,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             text += "\nUnlocked: Deep Penetrating Scanner";
         } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 1) {
             text += "\nUnlocked: Remote Mining Module";
+        } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 3) {
+            text += "\nUnlocked: Field Repair Bay";
         }
     } else if (event.kind == GameEventKind::PrecursorArtifactsDiscovered) {
         const auto planetName = planet
