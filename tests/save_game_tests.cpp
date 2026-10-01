@@ -98,6 +98,10 @@ void round_trip_preserves_communications_and_planning()
         {ShipComponentType::FusionDrive, ShipComponentType::RelayArray},
         {{100, ShipComponentType::FusionDrive}, {200, ShipComponentType::RelayArray}}});
     original.state.shipDesigns.push_back({
+        original.state.nextShipDesignId++, 1, "Repair", ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::FieldRepairBay},
+        {{100, ShipComponentType::FusionDrive}, {200, ShipComponentType::FieldRepairBay}}});
+    original.state.shipDesigns.push_back({
         original.state.nextShipDesignId++,
         1,
         "Remote Miner",
@@ -196,11 +200,16 @@ void round_trip_preserves_communications_and_planning()
              {101, ShipComponentType::FusionDrive},
              {201, ShipComponentType::CargoPod}},
         },
+        CreateShipDesignOrder{
+            "Repair Scout", ShipHullType::Scout,
+            {ShipComponentType::FusionDrive, ShipComponentType::FieldRepairBay},
+            {{100, ShipComponentType::FusionDrive}, {200, ShipComponentType::FieldRepairBay}},
+        },
     }};
     original.pendingDescriptions = {
         "move", "mine", "research plan", "research allocation", "stop remote mining", "transfer cargo",
         "merge fleets", "split fleet", "reorder production",
-        "create placed design",
+        "create placed design", "create repair design",
     };
     original.selectedStar = 2;
     original.selectedFleet = scout.id;
@@ -375,6 +384,10 @@ void round_trip_preserves_communications_and_planning()
         [](const ShipDesign& design) { return design.name == "Relay"; });
     assert(relay != loaded.state.shipDesigns.end());
     assert(relay->placements.back().component == ShipComponentType::RelayArray);
+    const auto repair = std::find_if(loaded.state.shipDesigns.begin(), loaded.state.shipDesigns.end(),
+        [](const ShipDesign& design) { return design.name == "Repair"; });
+    assert(repair != loaded.state.shipDesigns.end());
+    assert(repair->placements.back().component == ShipComponentType::FieldRepairBay);
     assert(loaded.state.shipDesigns.back().hull == ShipHullType::RemoteMiner);
     assert(loaded.state.shipDesigns.back().placements.size() == 4);
     assert(loaded.state.shipDesigns.back().placements[0].slot == 100);
@@ -422,7 +435,7 @@ void round_trip_preserves_communications_and_planning()
     assert(fleet.telemetryInTransit.front().telemetry.damagePercent == 18.0);
     assert(fleet.telemetryInTransit.front().telemetry.ships.size() == 2);
 
-    assert(loaded.pendingOrders.orders.size() == 10);
+    assert(loaded.pendingOrders.orders.size() == 11);
     const auto* savedMove = std::get_if<MoveFleetOrder>(&loaded.pendingOrders.orders.front());
     assert(savedMove && savedMove->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable);
     assert(savedMove->arrivalAction.cargo == FleetCargoKind::Germanium);
@@ -464,6 +477,9 @@ void round_trip_preserves_communications_and_planning()
     assert(createDesign->placements[0].slot == 100);
     assert(createDesign->placements[1].slot == 101);
     assert(createDesign->placements[2].slot == 201);
+    const auto* repairOrder = std::get_if<CreateShipDesignOrder>(&loaded.pendingOrders.orders[10]);
+    assert(repairOrder && repairOrder->name == "Repair Scout");
+    assert(repairOrder->placements.back().component == ShipComponentType::FieldRepairBay);
     assert(loaded.pendingDescriptions == original.pendingDescriptions);
     assert(loaded.selectedStar == original.selectedStar);
     assert(loaded.selectedFleet == original.selectedFleet);

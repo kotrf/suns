@@ -228,6 +228,7 @@ QString unlockRequirement(ShipComponentType component)
     case ShipComponentType::DeepPenetratingScanner: return "Electronics 4";
     case ShipComponentType::RelayArray: return "Electronics 5";
     case ShipComponentType::RemoteMiningModule: return "Construction 1";
+    case ShipComponentType::FieldRepairBay: return "Construction 3";
     default: return {};
     }
 }
@@ -270,6 +271,8 @@ QString componentTooltip(ShipComponentType component)
     if (spec.cargoCapacity > 0.0) facts << QString("Cargo +%1 kt").arg(spec.cargoCapacity, 0, 'f', 0);
     if (spec.remoteMiningUnits > 0.0)
         facts << "Remote mining: 1.25 extraction units per turn × concentration of each mineral, on unowned planets.";
+    if (spec.fieldRepairPerTurn > 0.0)
+        facts << "Field repair: 8 hull-damage points per year per equipped ship; mixed fleets scale by equipped ship fraction. A friendly shipyard repairs 20 instead.";
     if (spec.radiationHazard > 0.0) facts << "Radiation hazard: 10% colonist losses per travel turn unless the race is immune or has radiation tolerance ≥ 85%.";
     if (spec.enablesColonization) facts << "Enables colonization";
     return facts.join("\n");
@@ -296,7 +299,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::RelayArray)
+        || component > static_cast<int>(ShipComponentType::FieldRepairBay)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -583,6 +586,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::EfficientRamScoopDrive,
         ShipComponentType::DeepPenetratingScanner,
         ShipComponentType::RelayArray,
+        ShipComponentType::FieldRepairBay,
     };
     for (const auto component : catalog) {
         const auto available = component_available_to_player(state, player, component);
@@ -1001,6 +1005,12 @@ void ShipDesignerDialog::updatePreview()
     if (ship_design_can_remote_mine(design)) {
         if (!capabilities.isEmpty()) capabilities += " • ";
         capabilities += "Remote mining capable";
+    }
+    if (std::any_of(design.components.begin(), design.components.end(), [](ShipComponentType component) {
+            return component_spec(component).fieldRepairPerTurn > 0.0;
+        })) {
+        if (!capabilities.isEmpty()) capabilities += " • ";
+        capabilities += "Field repair 8 damage points/year";
     }
     if (capabilities.isEmpty()) capabilities = "No special mission capability";
 

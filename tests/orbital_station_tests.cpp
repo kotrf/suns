@@ -236,6 +236,33 @@ void newly_built_dock_can_repair_a_fleet_that_year()
     assert(next.fleets.front().damagePercent == 80.0);
 }
 
+void field_bays_repair_remote_fleets_in_proportion_to_equipped_ships()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    state.shipDesigns.push_back({
+        state.nextShipDesignId++, 1, "Repair Scout", ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::FieldRepairBay},
+    });
+    const auto repairDesign = state.shipDesigns.back().id;
+    auto& fleet = state.fleets.front();
+    fleet.position = {500.0, 500.0};
+    fleet.damagePercent = 100.0;
+    fleet.ships = {{repairDesign, 1}};
+
+    const auto equipped = processor.process(state, {});
+    assert(equipped.fleets.front().damagePercent == 92.0);
+    assert(fleet_warp_valid(equipped, equipped.fleets.front(), 1));
+
+    fleet.ships.push_back({kScoutDesignId, 1});
+    const auto mixed = processor.process(state, {});
+    assert(mixed.fleets.front().damagePercent == 96.0);
+
+    fleet.position = state.stars.front().position;
+    const auto docked = processor.process(state, {});
+    assert(docked.fleets.front().damagePercent == 80.0);
+}
+
 void production_forecast_understands_shipyard_dependency()
 {
     auto state = make_demo_game();
@@ -272,5 +299,6 @@ int main()
     repair_requires_a_friendly_shipyard_at_the_fleet_position();
     arriving_fleet_repairs_but_departing_fleet_does_not();
     newly_built_dock_can_repair_a_fleet_that_year();
+    field_bays_repair_remote_fleets_in_proportion_to_equipped_ships();
     production_forecast_understands_shipyard_dependency();
 }

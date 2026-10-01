@@ -949,17 +949,34 @@ void refuel_fleets_at_orbital_services(GameState& state)
     }
 }
 
-void repair_fleets_at_orbital_shipyards(GameState& state)
+double fleet_field_repair_rate(const GameState& state, const Fleet& fleet)
 {
-    constexpr double repairPerTurn = 20.0;
+    const auto shipCount = fleet_ship_count(fleet);
+    if (shipCount == 0) return 0.0;
+    double total = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) continue;
+        double perShip = 0.0;
+        for (const auto component : design->components) {
+            // A second bay on the same hull does not double its capacity.
+            perShip = std::max(perShip, component_spec(component).fieldRepairPerTurn);
+        }
+        total += perShip * stack.count;
+    }
+    return total / shipCount;
+}
+
+void repair_fleet_damage(GameState& state)
+{
+    constexpr double shipyardRepairPerTurn = 20.0;
     for (auto& fleet : state.fleets) {
         if (fleet.damagePercent <= 0.0) continue;
         const auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony || !colony_has_orbital_service(
-                state, colony->id, fleet.owner, OrbitalStationModule::Shipyard)) {
-            continue;
-        }
-        fleet.damagePercent = std::max(0.0, fleet.damagePercent - repairPerTurn);
+        const bool atShipyard = colony && colony_has_orbital_service(
+            state, colony->id, fleet.owner, OrbitalStationModule::Shipyard);
+        const auto repair = atShipyard ? shipyardRepairPerTurn : fleet_field_repair_rate(state, fleet);
+        fleet.damagePercent = std::max(0.0, fleet.damagePercent - repair);
     }
 }
 
@@ -1935,8 +1952,8 @@ TurnResult TurnProcessor::process_with_events(
     // the planning boundary, without requiring a separate Refuel order.
     refuel_fleets_at_orbital_services(next);
     // Repair once at the end of the year, after movement and construction.
-    // A fleet that reaches a friendly shipyard can recover from 100% damage.
-    repair_fleets_at_orbital_shipyards(next);
+    // Shipyards supersede onboard repair; fleets recover only once per year.
+    repair_fleet_damage(next);
     grow_colonies(next);
 
     // The ledger counts physical deliveries; publish one manifest per receiving

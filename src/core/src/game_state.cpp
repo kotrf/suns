@@ -434,6 +434,13 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.buildCost = 11;
         spec.relayRange = 180.0;
         break;
+    case ShipComponentType::FieldRepairBay:
+        spec.name = "Field Repair Bay";
+        spec.kind = ShipComponentKind::Special;
+        spec.mass = 18.0;
+        spec.buildCost = 10;
+        spec.fieldRepairPerTurn = 8.0;
+        break;
     case ShipComponentType::RemoteMiningModule:
         spec.name = "Remote Mining Module";
         spec.kind = ShipComponentKind::Mining;
