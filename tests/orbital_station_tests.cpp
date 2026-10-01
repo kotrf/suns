@@ -161,6 +161,81 @@ void station_without_refueling_module_does_not_refuel()
     assert(std::abs(next.fleets.front().fuel - 12.0) < 0.000001);
 }
 
+void shipyard_repairs_docked_fleets_once_per_year()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    state.orbitalStations.front().modules = {OrbitalStationModule::Shipyard};
+    state.fleets.front().damagePercent = 100.0;
+
+    const auto first = processor.process(state, {});
+    assert(std::abs(first.fleets.front().damagePercent - 80.0) < 0.000001);
+    assert(fleet_warp_valid(first, first.fleets.front(), 1));
+
+    const auto second = processor.process(first, {});
+    assert(std::abs(second.fleets.front().damagePercent - 60.0) < 0.000001);
+
+    auto almostRepaired = state;
+    almostRepaired.fleets.front().damagePercent = 13.5;
+    const auto completed = processor.process(almostRepaired, {});
+    assert(completed.fleets.front().damagePercent == 0.0);
+}
+
+void repair_requires_a_friendly_shipyard_at_the_fleet_position()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    state.fleets.front().damagePercent = 40.0;
+
+    auto withoutShipyard = state;
+    withoutShipyard.orbitalStations.front().modules = {OrbitalStationModule::RefuelingDepot};
+    assert(processor.process(withoutShipyard, {}).fleets.front().damagePercent == 40.0);
+
+    auto enemyStation = state;
+    enemyStation.orbitalStations.front().owner = 2;
+    assert(processor.process(enemyStation, {}).fleets.front().damagePercent == 40.0);
+
+    auto awayFromColony = state;
+    awayFromColony.fleets.front().position = {1.0, 0.0};
+    assert(processor.process(awayFromColony, {}).fleets.front().damagePercent == 40.0);
+
+    state.orbitalStations.clear();
+    assert(processor.process(state, {}).fleets.front().damagePercent == 40.0);
+}
+
+void arriving_fleet_repairs_but_departing_fleet_does_not()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    state.fleets.front().damagePercent = 40.0;
+    state.fleets.front().warp = 1;
+    state.fleets.front().destination = Position{1.0, 0.0};
+
+    const auto departed = processor.process(state, {});
+    assert(same_position(departed.fleets.front().position, Position{1.0, 0.0}));
+    assert(departed.fleets.front().damagePercent == 40.0);
+
+    auto returning = departed;
+    returning.fleets.front().destination = state.fleets.front().position;
+    const auto arrived = processor.process(returning, {});
+    assert(same_position(arrived.fleets.front().position, state.fleets.front().position));
+    assert(arrived.fleets.front().damagePercent == 20.0);
+}
+
+void newly_built_dock_can_repair_a_fleet_that_year()
+{
+    TurnProcessor processor;
+    auto state = make_demo_game();
+    auto& colony = establish_test_colony(state);
+    colony.productionQueue = {{ProductionKind::OrbitalStation, kOrbitalDockCost, 0}};
+    state.fleets.front().position = state.stars.at(1).position;
+    state.fleets.front().damagePercent = 100.0;
+
+    const auto next = processor.process(state, {});
+    assert(find_orbital_station_at_planet(next, colony.id));
+    assert(next.fleets.front().damagePercent == 80.0);
+}
+
 void production_forecast_understands_shipyard_dependency()
 {
     auto state = make_demo_game();
@@ -193,5 +268,9 @@ int main()
     station_loss_removes_refueling_service();
     station_refuels_before_departure_and_after_arrival();
     station_without_refueling_module_does_not_refuel();
+    shipyard_repairs_docked_fleets_once_per_year();
+    repair_requires_a_friendly_shipyard_at_the_fleet_position();
+    arriving_fleet_repairs_but_departing_fleet_does_not();
+    newly_built_dock_can_repair_a_fleet_that_year();
     production_forecast_understands_shipyard_dependency();
 }

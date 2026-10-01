@@ -644,7 +644,8 @@ void attachRouteProgramDock(MainWindow& window)
             "Every fleet has a safe Warp limit set by the least tolerant engine in its ships. "
             "You may still order any speed through Warp 10. Above the safe limit the selector turns red: "
             "fuel use rises sharply and hull damage accumulates on every turn spent moving. "
-            "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized.\n\n"
+            "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized. "
+            "A friendly orbital shipyard repairs 20% damage per year.\n\n"
             "Red also warns when the next waypoint's route preview predicts a fuel shortage. "
             "Hover over the selector for the predicted turn and waypoint. The preview includes earlier route legs and refuelling, up to 96 years.");
     });

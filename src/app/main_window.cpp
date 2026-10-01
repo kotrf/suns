@@ -1036,12 +1036,18 @@ void MainWindow::updateControls()
         const bool refuelingAvailable = logisticsColony
             && colony_has_orbital_service(
                 state_, logisticsColony->id, fleet->owner, OrbitalStationModule::RefuelingDepot);
+        const bool repairAvailable = logisticsColony
+            && colony_has_orbital_service(
+                state_, logisticsColony->id, fleet->owner, OrbitalStationModule::Shipyard);
         const QString dockedLine = logisticsColony
-            ? QString("<br>Docked at <b>%1</b>: loading available; %2.")
+            ? QString("<br>Docked at <b>%1</b>: loading available; %2; %3.")
                   .arg(QString::fromStdString(logisticsColony->name))
                   .arg(refuelingAvailable
                           ? "automatic refueling active"
                           : "no automatic refueling service")
+                  .arg(repairAvailable
+                          ? "hull repair 20%/year"
+                          : "no hull repair service")
             : "<br>Logistics: select the friendly colony under this fleet to load cargo.";
 
         QString movementPlanLine;

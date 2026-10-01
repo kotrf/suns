@@ -949,6 +949,20 @@ void refuel_fleets_at_orbital_services(GameState& state)
     }
 }
 
+void repair_fleets_at_orbital_shipyards(GameState& state)
+{
+    constexpr double repairPerTurn = 20.0;
+    for (auto& fleet : state.fleets) {
+        if (fleet.damagePercent <= 0.0) continue;
+        const auto* colony = friendly_colony_at_fleet(state, fleet);
+        if (!colony || !colony_has_orbital_service(
+                state, colony->id, fleet.owner, OrbitalStationModule::Shipyard)) {
+            continue;
+        }
+        fleet.damagePercent = std::max(0.0, fleet.damagePercent - repairPerTurn);
+    }
+}
+
 bool fleet_ready_for_reorganization(const Fleet& fleet)
 {
     return !fleet.destination
@@ -1920,6 +1934,9 @@ TurnResult TurnProcessor::process_with_events(
     // Running this after production also activates a newly completed depot at
     // the planning boundary, without requiring a separate Refuel order.
     refuel_fleets_at_orbital_services(next);
+    // Repair once at the end of the year, after movement and construction.
+    // A fleet that reaches a friendly shipyard can recover from 100% damage.
+    repair_fleets_at_orbital_shipyards(next);
     grow_colonies(next);
 
     // The ledger counts physical deliveries; publish one manifest per receiving
