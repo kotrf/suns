@@ -27,6 +27,20 @@ void verify_research_costs_and_initial_unlocks()
         state, 1, suns::ShipComponentType::PenetratingScanner));
     assert(suns::component_available_to_player(
         state, 1, suns::ShipComponentType::LongRangeScanner));
+    assert(!suns::component_available_to_player(
+        state, 1, suns::ShipComponentType::FieldRepairBay));
+    auto researched = state;
+    researched.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 2;
+    assert(!suns::component_available_to_player(
+        researched, 1, suns::ShipComponentType::FieldRepairBay));
+    researched.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 3;
+    assert(suns::component_available_to_player(
+        researched, 1, suns::ShipComponentType::FieldRepairBay));
+    const suns::ShipDesign repairScout{42, 1, "Repair Scout", suns::ShipHullType::Scout,
+        {suns::ShipComponentType::FusionDrive, suns::ShipComponentType::FieldRepairBay}};
+    assert(suns::ship_design_valid(repairScout));
+    assert(suns::ship_design_available_to_player(researched, 1, repairScout));
+    assert(!suns::ship_design_available_to_player(state, 1, repairScout));
 }
 
 void verify_unused_colony_output_advances_focus_queue()

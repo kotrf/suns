@@ -64,6 +64,8 @@ Colony production is shown as an ordered list with per-item remaining work and a
 
 Orbital services are explicit infrastructure. The homeworld begins with a basic Orbital Dock containing a shipyard and refueling depot; new colonies must build their own dock through the local production queue before they can construct ships or refuel fleets. Ship orders require an active shipyard; existing queued ships wait without consuming production if their shipyard is lost. A friendly shipyard automatically repairs docked fleets by 20 percentage points of hull damage per year, including immobilized fleets.
 
+Construction 3 unlocks a Field Repair Bay for ship designs, which can repair damaged fleets away from docks. Mixed fleets repair in proportion to the ships carrying the module.
+
 A colony ship may enter an unknown or basically scanned system, but colonization requires a confirmed orbital survey. Planet quality therefore matters before the expansion decision instead of being a decorative statistic.
 Successful colonization dismantles the entire fleet, deposits all carried minerals, and recovers 33% of every ship design's Ironium, Boranium and Germanium construction cost, rounded down per mineral. Split escorts or valuable ships away before founding the colony.
 

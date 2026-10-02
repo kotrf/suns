@@ -40,6 +40,7 @@ const std::vector<ResearchUnlock>& research_unlocks()
         {ResearchField::Propulsion, 3, "Efficient Ram Scoop", "Safe Warp 9; collects fuel through Warp 7 without a radiation hazard, but is heavy and costly.", ShipComponentType::EfficientRamScoopDrive},
         {ResearchField::Construction, 1, "Remote Mining", "Remote miner hull and module: extract uncolonized surface deposits.", ShipComponentType::RemoteMiningModule},
         {ResearchField::Construction, 2, "Heavy Transport", "High-capacity three-engine freight hull for large mineral convoys.", {}},
+        {ResearchField::Construction, 3, "Field Repair Bay", "Repair 8 hull-damage points per year away from a dock; mixed fleets repair in proportion to equipped ships.", ShipComponentType::FieldRepairBay},
         {ResearchField::Electronics, 1, "Compact Scanner", "55 ly sensor in a lighter, cheaper package.", ShipComponentType::CompactLongRangeScanner},
         {ResearchField::Electronics, 2, "Extended Scanner", "Heavy 160 ly sensor for distant system contacts.", ShipComponentType::ExtendedRangeScanner},
         {ResearchField::Electronics, 3, "Penetrating Scanner", "Estimate planetary habitability without entering orbit.", ShipComponentType::PenetratingScanner},

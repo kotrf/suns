@@ -149,6 +149,7 @@ enum class ShipComponentType {
     EfficientRamScoopDrive,
     DeepPenetratingScanner,
     RelayArray,
+    FieldRepairBay,
 };
 
 enum class ShipComponentKind {
@@ -183,6 +184,7 @@ struct ShipComponentSpec {
     bool enablesColonization{};
     double remoteMiningUnits{};
     double radiationHazard{};
+    double fieldRepairPerTurn{};
 };
 
 struct ShipComponentPlacement {
