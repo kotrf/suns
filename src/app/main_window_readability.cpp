@@ -264,8 +264,8 @@ void MainWindow::installFleetReadabilityPolish()
         damageBar->setValue(static_cast<int>(std::lround(damage)));
         damageBar->setFormat(QString("Hull damage %1%").arg(damage, 0, 'f', 1));
         damageBar->setToolTip(damage >= 100.0
-            ? "Critical hull damage: this fleet is immobilized."
-            : "Damage accumulates when travelling above the fleet's safe Warp limit.");
+            ? "Critical hull damage: this fleet is immobilized. A friendly orbital shipyard repairs 20% each year."
+            : "Unsafe Warp travel causes damage. A friendly orbital shipyard repairs 20% each year.");
     };
 
     auto* refreshTimer = new QTimer(this);

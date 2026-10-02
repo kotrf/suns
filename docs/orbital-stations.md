@@ -12,6 +12,12 @@ The initial `OrbitalDock` hull provides two modules:
 - `Shipyard`: permits queued ships to be constructed at that colony;
 - `RefuelingDepot`: permits immediate and waypoint-arrival refueling.
 
+The shipyard also repairs docked friendly fleets by 20 percentage points of
+hull damage per year. Repair resolves once after movement and production, so
+newly built docks can service arrivals that same year. A fleet immobilized at
+100% damage can fly again after a repair year. Repair is automatic and does
+not currently consume colony minerals.
+
 An orbital dock costs 24 production resources plus 12 Ironium, 6 Boranium and
 8 Germanium. It is constructed in the planet's normal ordered production queue.
 Only one station can currently occupy a planet's orbit.
@@ -23,7 +29,7 @@ such as `Orbital Dock -> transport` to be planned in one turn. A player-facing
 warning is emitted once when production first becomes blocked.
 
 Destroying or otherwise removing the station immediately removes its services:
-ship production waits and refueling orders no longer work. Surface cargo
+ship production waits, refueling orders and fleet repair no longer work. Surface cargo
 loading and unloading remain colony operations and do not require a station.
 
 ## Persistence

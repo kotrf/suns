@@ -46,7 +46,7 @@ Initial balance values, in percentage points of hull damage per full turn of tra
 | Ram Scoop Drive | 9 | 0% | 18% |
 | Radiating Ram Scoop | 9 | 0% | 14% |
 
-Damage is deterministic and proportional to distance travelled divided by Warp squared. Short legs and fuel-limited movement therefore incur only their actual exposure. Safe flight adds no damage. At 100% damage the fleet stops at the point where integrity runs out and its route is cleared; it remains on the map. Repair mechanics are a follow-up, not part of this slice.
+Damage is deterministic and proportional to distance travelled divided by Warp squared. Short legs and fuel-limited movement therefore incur only their actual exposure. Safe flight adds no damage. At 100% damage the fleet stops at the point where integrity runs out and its route is cleared; it remains on the map. At the end of each year, a fleet at a friendly colony with an orbital shipyard repairs 20 percentage points of damage, down to zero. A disabled fleet already at the dock regains the ability to fly after one repair year. Fleets arriving that year can repair; fleets that leave the dock cannot. Repair is automatic and currently consumes no minerals.
 
 The initial model stores one shared damage percentage per fleet. A mixed fleet uses the highest damage rate among its engines. Merge averages damage by ship count; split preserves the same percentage in both resulting fleets. A future per-ship hull model can replace this approximation. Damage is carried in confirmed and delayed telemetry and saved in format 30; older saves begin with zero damage. Restoring a save preserves unsafe Warp orders.
 
