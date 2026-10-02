@@ -342,6 +342,7 @@ enum class PlayerReportKind {
     FreightDelivered,
     EnemyFleetDetected,
     EnemyFleetLost,
+    FleetMobilityRestored,
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.

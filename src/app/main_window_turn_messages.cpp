@@ -145,6 +145,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::EnemyFleetLost:
         subject = QString("Contact lost: enemy fleet %1").arg(event.fleet);
         break;
+    case GameEventKind::FleetMobilityRestored:
+        subject = QString("%1 can fly again after repairs").arg(fleetName);
+        break;
     }
     return QString("T%1  %2").arg(static_cast<qulonglong>(event.turn)).arg(subject);
 }
@@ -176,7 +179,8 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::FleetArrived
             || event.kind == GameEventKind::RouteCompleted
             || event.kind == GameEventKind::FleetTargetLost
-            || event.kind == GameEventKind::FleetsMerged;
+            || event.kind == GameEventKind::FleetsMerged
+            || event.kind == GameEventKind::FleetMobilityRestored;
     case MessageTypeFilter::ShipConstruction:
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind == ProductionKind::ColonyShip;
@@ -282,6 +286,11 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  Warning: %2 cannot continue — insufficient fuel")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(fleetName);
+    } else if (event.kind == GameEventKind::FleetMobilityRestored) {
+        text = QString("Turn %1  •  %2 is operational after hull repairs at %3. "
+                       "The previous route was cleared at critical damage; issue a new order to depart.")
+                   .arg(static_cast<qulonglong>(event.observedTurn))
+                   .arg(fleetName, starName);
     } else if (event.kind == GameEventKind::FleetTargetLost) {
         text = QString("Turn %1  •  Warning: %2 lost moving target Fleet %3; route cleared")
                    .arg(static_cast<qulonglong>(event.turn))

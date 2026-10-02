@@ -26,6 +26,7 @@ enum class GameEventKind {
     FreightDelivered,
     EnemyFleetDetected,
     EnemyFleetLost,
+    FleetMobilityRestored,
 };
 
 enum class GameEventSeverity {

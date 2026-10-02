@@ -967,6 +967,9 @@ double fleet_field_repair_rate(const GameState& state, const Fleet& fleet)
     return total / shipCount;
 }
 
+void queue_fleet_movement_report(
+    GameState& state, const Fleet& fleet, PlayerReportKind kind, std::uint64_t observationTurn);
+
 void repair_fleet_damage(GameState& state)
 {
     constexpr double shipyardRepairPerTurn = 20.0;
@@ -976,7 +979,11 @@ void repair_fleet_damage(GameState& state)
         const bool atShipyard = colony && colony_has_orbital_service(
             state, colony->id, fleet.owner, OrbitalStationModule::Shipyard);
         const auto repair = atShipyard ? shipyardRepairPerTurn : fleet_field_repair_rate(state, fleet);
+        const bool immobilized = fleet.damagePercent >= 100.0;
         fleet.damagePercent = std::max(0.0, fleet.damagePercent - repair);
+        if (immobilized && fleet.damagePercent < 100.0)
+            queue_fleet_movement_report(
+                state, fleet, PlayerReportKind::FleetMobilityRestored, state.turn + 1);
     }
 }
 

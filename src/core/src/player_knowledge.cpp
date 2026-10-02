@@ -78,6 +78,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
     case PlayerReportKind::EnemyFleetDetected: return GameEventKind::EnemyFleetDetected;
     case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
+    case PlayerReportKind::FleetMobilityRestored: return GameEventKind::FleetMobilityRestored;
     }
     return GameEventKind::FleetArrived;
 }
