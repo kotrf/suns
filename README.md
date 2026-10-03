@@ -72,3 +72,5 @@ A colony ship may enter an unknown or basically scanned system, but colonization
 Successful colonization dismantles the entire fleet, deposits all carried minerals, and recovers 33% of every ship design's Ironium, Boranium and Germanium construction cost, rounded down per mineral. Split escorts or valuable ships away before founding the colony.
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.
+
+The engine technology catalog follows the 15 normal Stars! models, with their field levels, mass, costs and speed bands. See [Stars! propulsion](docs/stars-propulsion.md) for access rules, legacy compatibility and Suns! fuel/damage adaptations.

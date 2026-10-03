@@ -34,25 +34,92 @@ RaceProfile race_preset(RacePreset preset)
 
 const std::vector<ResearchUnlock>& research_unlocks()
 {
-    static const std::vector<ResearchUnlock> unlocks{
-        {ResearchField::Energy, 1, "Antimatter Generator", "Generate fuel onboard; adds 200 reserve capacity.", ShipComponentType::AntimatterGenerator},
-        {ResearchField::Propulsion, 1, "Advanced Fusion Drive", "Light engine with safe Warp 9; consumes fuel.", ShipComponentType::AdvancedFusionDrive},
-        {ResearchField::Propulsion, 2, "High Warp Drive", "Safe Warp 10; heavier and fuel-hungry at top speed.", ShipComponentType::HighWarpDrive},
-        {ResearchField::Propulsion, 3, "Efficient Ram Scoop", "Safe Warp 9; collects fuel through Warp 7 without a radiation hazard, but is heavy and costly.", ShipComponentType::EfficientRamScoopDrive},
-        {ResearchField::Construction, 1, "Remote Mining", "Remote miner hull and module: extract uncolonized surface deposits.", ShipComponentType::RemoteMiningModule},
-        {ResearchField::Construction, 2, "Heavy Transport", "High-capacity three-engine freight hull for large mineral convoys.", {}},
-        {ResearchField::Construction, 3, "Field Repair Bay", "Repair 8 hull-damage points per year away from a dock; mixed fleets repair in proportion to equipped ships.", ShipComponentType::FieldRepairBay},
-        {ResearchField::Electronics, 1, "Compact Scanner", "55 ly sensor in a lighter, cheaper package.", ShipComponentType::CompactLongRangeScanner},
-        {ResearchField::Electronics, 2, "Extended Scanner", "Heavy 160 ly sensor for distant system contacts.", ShipComponentType::ExtendedRangeScanner},
-        {ResearchField::Electronics, 3, "Penetrating Scanner", "Estimate planetary habitability without entering orbit.", ShipComponentType::PenetratingScanner},
-        {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
-        {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
-        {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
-        {ResearchField::Biology, 1, "Sealed Habitats", "New campaigns: tolerate environments 5 points outside racial ranges.", {}},
-        {ResearchField::Biology, 2, "Adaptive Habitats", "New campaigns: expand environmental tolerance to 10 points.", {}},
-        {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},
-    };
+    static const std::vector<ResearchUnlock> unlocks = [] {
+        std::vector<ResearchUnlock> entries{
+            {ResearchField::Energy, 1, "Antimatter Generator", "Generate fuel onboard; adds 200 reserve capacity.", ShipComponentType::AntimatterGenerator},
+            {ResearchField::Propulsion, 1, "Advanced Fusion Drive", "Light engine with safe Warp 9; consumes fuel.", ShipComponentType::AdvancedFusionDrive},
+            {ResearchField::Propulsion, 2, "High Warp Drive", "Safe Warp 10; heavier and fuel-hungry at top speed.", ShipComponentType::HighWarpDrive},
+            {ResearchField::Propulsion, 3, "Efficient Ram Scoop", "Safe Warp 9; collects fuel through Warp 7 without a radiation hazard, but is heavy and costly.", ShipComponentType::EfficientRamScoopDrive},
+            {ResearchField::Construction, 1, "Remote Mining", "Remote miner hull and module: extract uncolonized surface deposits.", ShipComponentType::RemoteMiningModule},
+            {ResearchField::Construction, 2, "Heavy Transport", "High-capacity three-engine freight hull for large mineral convoys.", {}},
+            {ResearchField::Construction, 3, "Field Repair Bay", "Repair 8 hull-damage points per year away from a dock; mixed fleets repair in proportion to equipped ships.", ShipComponentType::FieldRepairBay},
+            {ResearchField::Electronics, 1, "Compact Scanner", "55 ly sensor in a lighter, cheaper package.", ShipComponentType::CompactLongRangeScanner},
+            {ResearchField::Electronics, 2, "Extended Scanner", "Heavy 160 ly sensor for distant system contacts.", ShipComponentType::ExtendedRangeScanner},
+            {ResearchField::Electronics, 3, "Penetrating Scanner", "Estimate planetary habitability without entering orbit.", ShipComponentType::PenetratingScanner},
+            {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
+            {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
+            {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
+            {ResearchField::Biology, 1, "Sealed Habitats", "New campaigns: tolerate environments 5 points outside racial ranges.", {}},
+            {ResearchField::Biology, 2, "Adaptive Habitats", "New campaigns: expand environmental tolerance to 10 points.", {}},
+            {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},
+        };
+        for (auto& entry : entries)
+            entry.legacyPropulsion = entry.component && legacy_propulsion_component(*entry.component);
+        for (const auto& engine : propulsion_technologies()) {
+            const auto description = std::string("Optimal Warp ") + std::to_string(engine.optimalWarp)
+                + "; free through Warp " + std::to_string(engine.freeWarp)
+                + "; safe through Warp " + std::to_string(engine.safeWarp)
+                + (engine.radiating ? "; hazardous to unprotected colonists." : ".")
+                + (engine.access == EngineAccess::Settler ? " Fits Mini-Colony Ship only." : "");
+            ResearchUnlock entry{ResearchField::Propulsion, engine.propulsion,
+                engine.name, description, engine.component};
+            entry.extraLevels[static_cast<std::size_t>(ResearchField::Energy)] = engine.energy;
+            entry.engineAccess = engine.access;
+            entry.excludesNoRamScoops = engine.ramScoop && engine.access != EngineAccess::Settler;
+            entries.push_back(std::move(entry));
+        }
+        ResearchUnlock mini{ResearchField::Construction, 0, "Mini-Colony Ship",
+            "Small 10 kt colony transport with one engine and one general cell.", {}};
+        mini.engineAccess = EngineAccess::Settler;
+        mini.hull = ShipHullType::MiniColonyShip;
+        entries.push_back(std::move(mini));
+        return entries;
+    }();
     return unlocks;
+}
+
+bool research_unlock_applicable(const GameState& state, PlayerId player, const ResearchUnlock& unlock)
+{
+    const auto* owner = find_player(state, player);
+    return owner && engine_access_available(owner->race, unlock.engineAccess)
+        && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines);
+}
+
+bool research_unlock_available(const GameState& state, PlayerId player, const ResearchUnlock& unlock)
+{
+    if (!research_unlock_applicable(state, player, unlock)
+        || technology_level(state, player, unlock.field) < unlock.level) return false;
+    for (std::size_t field = 0; field < kResearchFieldCount; ++field)
+        if (technology_level(state, player, static_cast<ResearchField>(field)) < unlock.extraLevels[field])
+            return false;
+    return true;
+}
+
+std::string research_unlock_requirement(const ResearchUnlock& unlock)
+{
+    std::string text = research_field_name(unlock.field) + " " + std::to_string(unlock.level);
+    for (std::size_t field = 0; field < kResearchFieldCount; ++field)
+        if (unlock.extraLevels[field]) text += " + " + research_field_name(static_cast<ResearchField>(field))
+            + " " + std::to_string(unlock.extraLevels[field]);
+    switch (unlock.engineAccess) {
+    case EngineAccess::Any: break;
+    case EngineAccess::ImprovedFuelEfficiency: text += "; Improved Fuel Efficiency"; break;
+    case EngineAccess::NoRamScoops: text += "; No Ram Scoop Engines"; break;
+    case EngineAccess::Settler: text += "; Settler engine access"; break;
+    }
+    if (unlock.excludesNoRamScoops) text += "; requires ram scoops enabled";
+    return text;
+}
+
+bool ship_hull_available_to_player(const GameState& state, PlayerId player, ShipHullType hull)
+{
+    if (!find_player(state, player)) return false;
+    if (hull == ShipHullType::RemoteMiner)
+        return technology_level(state, player, ResearchField::Construction) >= 1;
+    if (hull == ShipHullType::HeavyTransport)
+        return technology_level(state, player, ResearchField::Construction) >= 2;
+    if (hull == ShipHullType::MiniColonyShip) return find_player(state, player)->race.settlerEngineAccess;
+    return hull_spec(hull).requiredEngines > 0;
 }
 
 std::int32_t race_habitability(
@@ -126,6 +193,9 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         homes.push_back(home->id);
         Player player{id, empires[i].name, {home->id}};
         player.race = race_preset(empires[i].race);
+        player.race.improvedFuelEfficiency = empires[i].improvedFuelEfficiency;
+        player.race.noRamScoopEngines = empires[i].noRamScoopEngines;
+        player.race.settlerEngineAccess = empires[i].settlerEngineAccess;
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.star == home->id; });

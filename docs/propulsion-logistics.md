@@ -24,7 +24,7 @@ Each engine component provides:
 
 Positive fuel rate consumes fuel. Negative fuel rate means the drive collects more fuel from interstellar space than it spends, so the tank fills while travelling. This is how ram-scoop drives can have effectively fuel-free or fuel-positive low-Warp regimes.
 
-The catalog contains five drives:
+New games use the [Stars! reference engine catalog](stars-propulsion.md). The following prototype engines remain available only to empires that already own legacy designs:
 
 - **Fusion Drive** — straightforward starter engine, available through Warp 8 with steep fuel burn at its top speed;
 - **Advanced Fusion Drive** — Propulsion 1, light and radiation-safe through Warp 9, but expensive and always consumes fuel;

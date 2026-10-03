@@ -26,6 +26,7 @@ QColor hullAccent(ShipHullType hull)
 {
     switch (hull) {
     case ShipHullType::Scout: return QColor("#73bdf0");
+    case ShipHullType::MiniColonyShip:
     case ShipHullType::LightTransport: return QColor("#79c79b");
     case ShipHullType::MediumTransport: return QColor("#d8a862");
     case ShipHullType::HeavyTransport: return QColor("#dfb47a");
@@ -105,6 +106,7 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         hull.lineTo(105, 69);
         hull.closeSubpath();
         break;
+    case ShipHullType::MiniColonyShip:
     case ShipHullType::LightTransport:
         hull.moveTo(148, 52);
         hull.cubicTo(132, 35, 112, 31, 81, 32);

@@ -1,5 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/campaign.hpp"
+#include "suns/propulsion.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -18,6 +20,74 @@ void verify_warp_squared_movement()
     assert(suns::warp_distance(9) == 81.0);
     assert(suns::warp_distance(10) == 100.0);
     assert(suns::warp_distance(0) == 0.0);
+}
+
+void verify_stars_progression_and_multifield_gates()
+{
+    using namespace suns;
+    auto state = generate_campaign(GalaxyConfig{}, {{"New empire", RacePreset::Terran}});
+    assert(propulsion_technologies().size() == 15);
+    assert(find_ship_design(state, 1)->components.front() == ShipComponentType::QuickJump5);
+    assert(!component_available_to_player(state, 1, ShipComponentType::HighWarpDrive));
+    assert(component_available_to_player(state, 1, ShipComponentType::QuickJump5));
+    auto& tech = state.players.front().technology;
+    const auto prop = static_cast<std::size_t>(ResearchField::Propulsion);
+    const auto energy = static_cast<std::size_t>(ResearchField::Energy);
+    tech.levels[prop] = 8;
+    tech.levels[energy] = 1;
+    const auto scoop = ShipComponentType::SubGalacticFuelScoop;
+    assert(!component_available_to_player(state, 1, scoop));
+    const PlayerOrders order{1, {CreateShipDesignOrder{"Scoop scout", ShipHullType::Scout, {scoop}}}};
+    assert(TurnProcessor{}.process(state, {order}).shipDesigns.size() == state.shipDesigns.size());
+    tech.levels[energy] = 2;
+    assert(component_available_to_player(state, 1, scoop));
+    assert(TurnProcessor{}.process(state, {order}).shipDesigns.size() == state.shipDesigns.size() + 1);
+    tech.levels[prop] = 22;
+    assert(!component_available_to_player(state, 1, ShipComponentType::TransStar10));
+    tech.levels[prop] = 23;
+    assert(component_available_to_player(state, 1, ShipComponentType::TransStar10));
+    assert(!component_available_to_player(state, 1, ShipComponentType::Interspace10));
+    state.players.front().race.noRamScoopEngines = true;
+    assert(component_available_to_player(state, 1, ShipComponentType::Interspace10));
+    assert(!component_available_to_player(state, 1, scoop));
+    assert(!component_available_to_player(state, 1, ShipComponentType::FuelMizer));
+    state.players.front().race.improvedFuelEfficiency = true;
+    assert(component_available_to_player(state, 1, ShipComponentType::FuelMizer));
+    tech.levels[energy] = 5;
+    assert(!component_available_to_player(state, 1, ShipComponentType::GalaxyScoop));
+    state.players.front().race.noRamScoopEngines = false;
+    assert(component_available_to_player(state, 1, ShipComponentType::GalaxyScoop));
+    assert(research_level_cost(ResearchField::Propulsion, 23) == 4572);
+    assert(research_level_cost(ResearchField::Propulsion, 255) < 1'000'000);
+}
+
+void verify_stars_speed_bands_and_settler_restriction()
+{
+    using namespace suns;
+    ShipDesign quick{40, 1, "Quick", ShipHullType::Scout, {ShipComponentType::QuickJump5}};
+    ShipDesign mizer{41, 1, "Mizer", ShipHullType::Scout, {ShipComponentType::FuelMizer}};
+    ShipDesign scoop{42, 1, "Scoop", ShipHullType::Scout, {ShipComponentType::RadiatingHydroRamScoop}};
+    ShipDesign late{43, 1, "Late", ShipHullType::Scout, {ShipComponentType::TransStar10}};
+    assert(ship_design_max_warp(quick) == 9); // Optimal Warp 5 is not the safe-speed limit.
+    assert(ship_design_fuel_rate(quick, 1) == 0 && ship_design_fuel_rate(quick, 8) > 0);
+    assert(ship_design_fuel_rate(mizer, 4) == 0 && ship_design_fuel_rate(mizer, 5) > 0);
+    assert(ship_design_fuel_rate(scoop, 6) < 0 && ship_design_fuel_rate(scoop, 7) > 0);
+    assert(ship_design_radiation_hazard(scoop) > 0);
+    assert(ship_design_overdrive_damage(quick, 10) > 0);
+    assert(ship_design_overdrive_damage(late, 10) == 0);
+    assert(ship_design_fuel_rate(late, 9) < ship_design_fuel_rate(quick, 9));
+    const auto minerals = ship_design_mineral_cost(late);
+    assert(minerals.ironium == 7 && minerals.boranium == 1 && minerals.germanium == 4);
+    auto state = generate_campaign(GalaxyConfig{}, {{"Settlers", RacePreset::Terran, false, true, true}});
+    ShipDesign settler{44, 1, "Settler", ShipHullType::MiniColonyShip,
+        {ShipComponentType::SettlersDelight, ShipComponentType::ColonyModule}};
+    assert(ship_design_valid(settler) && ship_design_available_to_player(state, 1, settler));
+    assert(ship_design_cargo_capacity(settler) == 10);
+    settler.hull = ShipHullType::Scout;
+    assert(!ship_design_valid(settler));
+    settler.hull = ShipHullType::MiniColonyShip;
+    state.players.front().race.settlerEngineAccess = false;
+    assert(!ship_design_available_to_player(state, 1, settler));
 }
 
 void verify_default_propulsion_and_cargo()
@@ -221,6 +291,8 @@ void verify_unsafe_warp_accumulates_engine_damage()
 
 int main()
 {
+    verify_stars_progression_and_multifield_gates();
+    verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();
     verify_default_propulsion_and_cargo();
     verify_researched_warp_ten_drive();

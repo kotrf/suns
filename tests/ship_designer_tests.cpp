@@ -403,7 +403,7 @@ void verify_same_turn_designs_in_multiplayer()
         const auto colony = std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.owner == player; });
         PlayerOrders orders{player, {
-            CreateShipDesignOrder{"Same name", ShipHullType::Scout, {ShipComponentType::FusionDrive}},
+            CreateShipDesignOrder{"Same name", ShipHullType::Scout, {ShipComponentType::QuickJump5}},
             QueueShipDesignOrder{colony->id, 0, "Same name"}}};
         const auto preview = planned_ship_design_state(state, orders);
         assert(preview.turn == state.turn);

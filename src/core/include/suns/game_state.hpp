@@ -102,6 +102,7 @@ enum class ShipHullType {
     RemoteMiner,
     Utility,
     HeavyTransport,
+    MiniColonyShip,
 };
 
 using ShipSlotId = std::uint16_t;
@@ -152,6 +153,21 @@ enum class ShipComponentType {
     RelayArray,
     FieldRepairBay,
     AnomalyDetector,
+    SettlersDelight,
+    QuickJump5,
+    LongHump6,
+    DaddyLongLegs7,
+    AlphaDrive8,
+    TransGalacticDrive,
+    Interspace10,
+    TransStar10,
+    FuelMizer,
+    RadiatingHydroRamScoop,
+    SubGalacticFuelScoop,
+    TransGalacticFuelScoop,
+    TransGalacticSuperScoop,
+    TransGalacticMizerScoop,
+    GalaxyScoop,
 };
 
 enum class ShipComponentKind {
@@ -176,6 +192,8 @@ struct ShipComponentSpec {
     // Hull damage added by one full turn of travel at each Warp setting.
     // Entries above maxWarp are engine-specific emergency overdrive ratings.
     std::array<double, kMaxWarp + 1> overdriveDamagePercent{};
+    std::uint8_t optimalWarp{};
+    std::uint8_t freeWarp{};
 
     double sensorRange{};
     bool penetratesPlanets{};
@@ -403,6 +421,10 @@ struct RaceProfile {
     RaceEnvironmentRange habitableGravity{30, 70};
     RaceEnvironmentRange habitableRadiation{0, 40};
     bool environmentBased{}; // Legacy campaigns retain their scalar habitability.
+    // Propulsion access only; these do not imply a complete Stars! race trait.
+    bool improvedFuelEfficiency{};
+    bool noRamScoopEngines{};
+    bool settlerEngineAccess{};
 };
 
 struct ColonyTurnStatistics {

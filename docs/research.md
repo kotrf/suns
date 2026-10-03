@@ -22,7 +22,7 @@ becomes active and is removed from the queue. Excess RP from the completing turn
 immediately enters the new field; no research is lost. If the future queue is
 empty, research continues in the current field.
 
-Level costs currently double from an 18 RP base: 18 RP for level 1, 36 RP for level 2 and 72 RP for level 3. These values are early balance parameters rather than permanent rules.
+Level costs are `18 * (1 + level * (level - 1) / 2)` RP: 18, 36 and 72 for levels 1–3; 4572 for level 23. The quadratic curve makes late reference engines reachable and reprices existing higher-level projects without losing their RP. These values remain initial balance parameters.
 
 ## Empire allocation and colony production
 
@@ -39,6 +39,8 @@ minerals accumulate. Legacy ongoing `Research` rows from older saves are removed
 when the save is loaded.
 
 ## First unlocks
+
+New campaigns use the [15-model Stars! propulsion line](stars-propulsion.md), including multiple field prerequisites and propulsion access restrictions. The early Propulsion 1/2/3 entries below describe legacy designs retained for older empires.
 
 - Energy 1: Antimatter Generator, adding 200 fuel capacity and producing 50 fuel
   per turn. Existing designs that used the previously unrestricted component
@@ -85,8 +87,8 @@ Future scientific expeditions and reverse engineering can add discovery or artif
 
 The research window now lists the shared core unlock catalog with prerequisites,
 availability and capability descriptions. Double-clicking a locked technology
-appends its missing field levels to the plan, accounting for already queued
-levels. Component legality uses that same catalog on the host.
+appends all missing field levels to the plan, including secondary requirements, accounting for already queued
+levels. Race-restricted technologies explain their access condition and cannot queue futile research. Component legality uses that same catalog on the host.
 
 For environment-based campaigns, Biology 1/2/3 unlock Sealed, Adaptive and Extreme
 Habitats. These extend each applicable racial environment range by 5/10/15 points,

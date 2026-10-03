@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -114,13 +115,14 @@ Position generated_position(
     throw std::runtime_error("Unable to place generated star systems with the requested galaxy density");
 }
 
-std::vector<ShipDesign> default_ship_designs(PlayerId owner)
+std::vector<ShipDesign> default_ship_designs(PlayerId owner, bool starsPropulsion = false)
 {
+    const auto engine = starsPropulsion ? ShipComponentType::QuickJump5 : ShipComponentType::FusionDrive;
     std::vector<ShipDesign> designs{
         {kScoutDesignId, owner, "Scout", ShipHullType::Scout,
-         {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner}},
+         {engine, ShipComponentType::LongRangeScanner}},
         {kColonyShipDesignId, owner, "Colony Ship", ShipHullType::LightTransport,
-         {ShipComponentType::FusionDrive, ShipComponentType::ColonyModule}},
+         {engine, ShipComponentType::ColonyModule}},
     };
     for (auto& design : designs) normalize_ship_design_placement(design);
     return designs;
@@ -320,12 +322,15 @@ ShipHullSpec hull_spec(ShipHullType type)
         return {type, "Utility Hull", 85.0, 7, 500.0, 0.0, 2, 8, 0, make_hull_slots(2, 8, 0)};
     case ShipHullType::HeavyTransport:
         return {type, "Heavy Transport", 140.0, 12, 600.0, 250.0, 3, 6, 0, make_hull_slots(3, 6, 0)};
+    case ShipHullType::MiniColonyShip:
+        return {type, "Mini-Colony Ship", 8.0, 3, 150.0, 10.0, 1, 1, 0, make_hull_slots(1, 1, 0)};
     }
     return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0, {}};
 }
 
 ShipComponentSpec component_spec(ShipComponentType type)
 {
+    if (const auto* engine = propulsion_technology(type)) return propulsion_component_spec(*engine);
     ShipComponentSpec spec;
     spec.type = type;
 
@@ -564,6 +569,8 @@ std::string ship_design_validation_error(const ShipDesign& design)
     }
     std::optional<ShipComponentType> engineType;
     for (const auto component : design.components) {
+        if (component == ShipComponentType::SettlersDelight && design.hull != ShipHullType::MiniColonyShip)
+            return "Settler's Delight fits only a Mini-Colony Ship.";
         if (component_spec(component).kind != ShipComponentKind::Engine) continue;
         if (!engineType) {
             engineType = component;
@@ -674,36 +681,28 @@ std::uint8_t technology_level(const GameState& state, PlayerId player, ResearchF
 std::uint32_t research_level_cost(ResearchField, std::uint8_t level)
 {
     if (level == 0) return 0;
-    std::uint32_t cost = kFirstResearchLevelCost;
-    for (std::uint8_t current = 1; current < level; ++current) {
-        if (cost > std::numeric_limits<std::uint32_t>::max() / 2U) {
-            return std::numeric_limits<std::uint32_t>::max();
-        }
-        cost *= 2U;
-    }
-    return cost;
+    // Preserve 18/36/72 RP at levels 1–3, then grow quadratically so the
+    // original Propulsion-23 engines remain reachable in a Suns! campaign.
+    const auto n = static_cast<std::uint32_t>(level);
+    return kFirstResearchLevelCost * (1U + n * (n - 1U) / 2U);
 }
 
 bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component)
 {
     if (!find_player(state, player)) return false;
+    if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) return false;
     for (const auto& unlock : research_unlocks())
         if (unlock.component == component)
-            return technology_level(state, player, unlock.field) >= unlock.level;
+            return research_unlock_available(state, player, unlock);
     return true;
 }
 
 bool ship_design_available_to_player(
     const GameState& state, PlayerId player, const ShipDesign& design)
 {
-    const bool hullAvailable = design.hull != ShipHullType::RemoteMiner
-        || technology_level(state, player, ResearchField::Construction) >= 1;
-    const bool heavyAvailable = design.hull != ShipHullType::HeavyTransport
-        || technology_level(state, player, ResearchField::Construction) >= 2;
     return design.owner == player
-        && hullAvailable
-        && heavyAvailable
+        && ship_hull_available_to_player(state, player, design.hull)
         && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
             return component_available_to_player(state, player, component);
         });
@@ -1646,7 +1645,7 @@ GameState generate_game(const GalaxyConfig& config)
     state.wormholeRules.width = std::max(500.0, config.width);
     state.wormholeRules.height = std::max(400.0, config.height);
     state.players.push_back({1, "Terrans", {1}});
-    state.shipDesigns = default_ship_designs(1);
+    state.shipDesigns = default_ship_designs(1, true);
     state.stars.reserve(starCount);
     state.planets.reserve(starCount);
 

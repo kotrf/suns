@@ -1,6 +1,7 @@
 #pragma once
 
 #include "suns/turn_processor.hpp"
+#include "suns/propulsion.hpp"
 
 namespace suns {
 
@@ -8,6 +9,9 @@ enum class RacePreset { Terran, Cryophile, Radiotroph };
 struct EmpireSetup {
     std::string name;
     RacePreset race{RacePreset::Terran};
+    bool improvedFuelEfficiency{};
+    bool noRamScoopEngines{};
+    bool settlerEngineAccess{};
 };
 struct ResearchUnlock {
     ResearchField field;
@@ -15,10 +19,19 @@ struct ResearchUnlock {
     std::string name;
     std::string description;
     std::optional<ShipComponentType> component;
+    std::array<std::uint8_t, kResearchFieldCount> extraLevels{};
+    EngineAccess engineAccess{EngineAccess::Any};
+    bool excludesNoRamScoops{};
+    bool legacyPropulsion{};
+    std::optional<ShipHullType> hull;
 };
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);
 [[nodiscard]] const std::vector<ResearchUnlock>& research_unlocks();
+[[nodiscard]] bool research_unlock_applicable(const GameState& state, PlayerId player, const ResearchUnlock& unlock);
+[[nodiscard]] bool research_unlock_available(const GameState& state, PlayerId player, const ResearchUnlock& unlock);
+[[nodiscard]] std::string research_unlock_requirement(const ResearchUnlock& unlock);
+[[nodiscard]] bool ship_hull_available_to_player(const GameState& state, PlayerId player, ShipHullType hull);
 [[nodiscard]] std::int32_t race_habitability(
     const RaceProfile& race, PlanetEnvironment environment, std::uint8_t biology);
 [[nodiscard]] std::int32_t player_planet_habitability(

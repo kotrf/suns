@@ -1,4 +1,5 @@
 #include "save_game.hpp"
+#include "suns/campaign.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -688,7 +689,7 @@ void population_migration_and_clear_orders()
         whStream << quint32{1} << legacy.state.wormholeRules.width << legacy.state.wormholeRules.height;
         const auto whPosition = bytes.indexOf(whMarker);
         assert(whPosition >= 0 && bytes.indexOf(whMarker, whPosition + 1) < 0);
-        bytes.remove(whPosition, 112);
+        bytes.remove(whPosition, 112 + 11); // Empty WH plus v55 propulsion access for one player.
         // v37 colony records through v47 fleet count, v49 cargo and v50 damage flags.
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
@@ -891,7 +892,7 @@ void pre_wormhole_formats_remain_readable()
         shape << quint32{1} << old.state.wormholeRules.width << old.state.wormholeRules.height;
         const auto offset = bytes.indexOf(marker);
         assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
-        bytes.remove(offset, 112); // Empty v54 extension with one player.
+        bytes.remove(offset, 112 + 11); // Empty WH and propulsion extensions with one player.
         assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream header(&file);
         header << quint32{53};
@@ -1007,10 +1008,85 @@ void moving_transit_outcomes_have_identical_undelivered_packets()
     }
 }
 
+void stars_propulsion_and_access_round_trip()
+{
+    using namespace suns;
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData save;
+    save.campaignId = 21;
+    save.turnToken = 34;
+    save.mode = SessionMode::Host;
+    save.playerTokens = {{1, 34}};
+    save.state = generate_campaign(GalaxyConfig{}, {{"Engines", RacePreset::Terran, true, false, true}});
+    save.pendingOrders = {1, {}};
+    for (const auto& engine : propulsion_technologies()) {
+        const auto hull = engine.component == ShipComponentType::SettlersDelight
+            ? ShipHullType::MiniColonyShip : ShipHullType::Scout;
+        save.state.shipDesigns.push_back({save.state.nextShipDesignId++, 1, engine.name, hull, {engine.component}});
+        save.pendingOrders.orders.emplace_back(CreateShipDesignOrder{engine.name, hull, {engine.component}});
+        save.pendingDescriptions << engine.name;
+    }
+    const auto path = dir.filePath("engines.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().race.improvedFuelEfficiency);
+    assert(!loaded.state.players.front().race.noRamScoopEngines);
+    assert(loaded.state.players.front().race.settlerEngineAccess);
+    assert(loaded.state.shipDesigns.size() == save.state.shipDesigns.size());
+    for (std::size_t i = 0; i < save.state.shipDesigns.size(); ++i)
+        assert(loaded.state.shipDesigns[i].components == save.state.shipDesigns[i].components);
+    const auto turn = make_player_turn(save, 1);
+    assert(write_save_game_file(path, turn, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().race.settlerEngineAccess);
+    TurnOrderFileData packet{21, save.state.turn, 34, save.pendingOrders, save.pendingDescriptions};
+    const auto orders = dir.filePath("engines.sunsorders");
+    assert(write_turn_order_file(orders, packet, error));
+    TurnOrderFileData read;
+    assert(read_turn_order_file(orders, read, error));
+    assert(read.orders.orders.size() == 15);
+    for (std::size_t i = 0; i < read.orders.orders.size(); ++i)
+        assert(std::get<CreateShipDesignOrder>(read.orders.orders[i]).components
+            == std::get<CreateShipDesignOrder>(packet.orders.orders[i]).components);
+    // A pre-catalog client must reject new IDs rather than reinterpret them.
+    QFile file(orders);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream header(&file);
+    header << quint32{12};
+    file.close();
+    assert(!read_turn_order_file(orders, read, error));
+
+    save.state = make_demo_game();
+    save.pendingOrders = {1, {}};
+    save.pendingDescriptions.clear();
+    assert(write_save_game_file(path, save, error));
+    file.setFileName(path);
+    assert(file.open(QIODevice::ReadWrite));
+    auto bytes = file.readAll();
+    QByteArray marker;
+    QDataStream shape(&marker, QIODevice::WriteOnly);
+    shape << quint32{1} << save.state.wormholeRules.width << save.state.wormholeRules.height;
+    const auto offset = bytes.indexOf(marker);
+    assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
+    bytes.remove(offset + 112, 11); // v54 has WH state but no propulsion access extension.
+    assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
+    QDataStream oldHeader(&file);
+    oldHeader << quint32{54};
+    file.close();
+    assert(read_save_game_file(path, loaded, error));
+    assert(!loaded.state.players.front().race.improvedFuelEfficiency);
+    assert(!loaded.state.players.front().race.noRamScoopEngines);
+    assert(!loaded.state.players.front().race.settlerEngineAccess);
+    assert(loaded.state.shipDesigns.front().components.front() == ShipComponentType::FusionDrive);
+    assert(ship_design_max_warp(loaded.state.shipDesigns.front()) == 8);
+}
+
 } // namespace
 
 int main()
 {
+    stars_propulsion_and_access_round_trip();
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();
     wormholes_round_trip_and_keep_player_exports_private();
