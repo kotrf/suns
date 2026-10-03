@@ -53,7 +53,7 @@ void MainWindow::newCampaign()
         table.setCellWidget(row, 1, race);
         for (int column = 2; column < 5; ++column) {
             auto* access = new QCheckBox(&table);
-            access->setToolTip(column == 2 ? "Unlock Fuel Mizer and Galaxy Scoop engines."
+            access->setToolTip(column == 2 ? "Unlock Fuel Mizer and Galaxy Scoop engines; reference engines consume 15% less fuel."
                 : column == 3 ? "Disable researchable ram scoops; unlock Interspace-10 at Propulsion 11. Fuel Mizer and Settler's Delight remain allowed."
                 : "Unlock Mini-Colony Ship and Settler's Delight. This grants propulsion access, without changing population growth.");
             table.setCellWidget(row, column, access);

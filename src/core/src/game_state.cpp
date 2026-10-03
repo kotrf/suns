@@ -1106,24 +1106,138 @@ double fleet_gross_mass(const GameState& state, const Fleet& fleet)
     return mass;
 }
 
-double fleet_fuel_rate(const GameState& state, const Fleet& fleet)
+namespace {
+
+struct FleetFuelAmounts {
+    double consumed{};
+    double collected{};
+};
+
+bool has_reference_engine(const GameState& state, const Fleet& fleet)
 {
-    double weightedRate = 0.0;
-    double dryMass = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design))
+            for (const auto component : design->components)
+                if (propulsion_technology(component)) return true;
+    }
+    return false;
+}
+
+FleetFuelAmounts fleet_fuel_amounts(
+    const GameState& state, const Fleet& fleet, double distance, bool rounded)
+{
+    if (distance <= 0.0 || fleet.warp == 0 || fleet.warp > kMaxWarp) return {};
+    // Keep the prototype's mass-weighted signed curve for legacy-only fleets.
+    if (!has_reference_engine(state, fleet)) {
+        double weightedRate = 0.0;
+        double dryMass = 0.0;
+        for (const auto& stack : fleet_ship_stacks(fleet)) {
+            const auto* design = find_ship_design(state, stack.design);
+            if (!design) continue;
+            const auto mass = ship_design_mass(*design) * stack.count;
+            weightedRate += ship_design_fuel_rate(*design, fleet.warp) * mass;
+            dryMass += mass;
+        }
+        const auto change = dryMass > 0.0
+            ? weightedRate / dryMass * fleet_gross_mass(state, fleet) / 100.0 * distance : 0.0;
+        return {std::max(0.0, change), std::max(0.0, -change)};
+    }
+
+    FleetFuelAmounts result;
+    const auto cargo = fleet_cargo_used(state, fleet);
+    const auto capacity = fleet_cargo_capacity(state, fleet);
+    const auto dryMass = fleet_gross_mass(state, fleet) - cargo;
+    const auto* player = find_player(state, fleet.owner);
+    const bool ife = player && player->race.improvedFuelEfficiency;
+    const auto roundedDistance = std::ceil(std::max(0.0, distance - 1e-9));
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state, stack.design);
         if (!design) continue;
-        const auto mass = ship_design_mass(*design) * stack.count;
-        weightedRate += ship_design_fuel_rate(*design, fleet.warp) * mass;
-        dryMass += mass;
+        auto mass = ship_design_mass(*design) * stack.count;
+        // Cargo belongs to cargo-capable ships, rather than to escorts in
+        // proportion to their dry mass. Fractional kt remains a Suns! unit.
+        mass += cargo * (capacity > 0.0
+            ? ship_design_cargo_capacity(*design) * stack.count / capacity
+            : dryMass > 0.0 ? mass / dryMass : 0.0);
+        ShipComponentSpec storage;
+        const auto* engine = primary_engine(*design, storage);
+        if (!engine) continue;
+        if (const auto* reference = propulsion_technology(engine->type)) {
+            const auto baseEfficiency = reference->fuelEfficiency[fleet.warp];
+            const auto efficiency = ife ? (baseEfficiency * 85 + 99) / 100 : baseEfficiency;
+            // Stars-compatible whole-mg billing per design stack and movement
+            // leg: round distance up, retain one decimal, then round fuel up.
+            const auto cost = rounded
+                ? std::ceil(std::floor(mass * efficiency * roundedDistance / 2000.0 + 1e-9) / 10.0 - 1e-9)
+                : mass * efficiency * distance / 20000.0;
+            result.consumed += std::max(0.0, cost);
+            result.collected += engine->fuelCollectedPerEngineLy[fleet.warp]
+                * ship_design_engine_slots_used(*design) * stack.count * distance;
+        } else {
+            const auto change = engine->fuelPer100MassLy[fleet.warp] * mass / 100.0 * distance;
+            result.consumed += std::max(0.0, change);
+            result.collected += std::max(0.0, -change);
+        }
     }
-    return dryMass > 0.0 ? weightedRate / dryMass : 0.0;
+    if (rounded) result.collected = std::floor(result.collected + 1e-9);
+    return result;
+}
+
+} // namespace
+
+double fleet_fuel_rate(const GameState& state, const Fleet& fleet)
+{
+    const auto amounts = fleet_fuel_amounts(state, fleet, 1.0, false);
+    const auto mass = fleet_gross_mass(state, fleet);
+    return mass > 0.0 ? (amounts.consumed - amounts.collected) * 100.0 / mass : 0.0;
 }
 
 double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance)
 {
-    if (distance <= 0.0) return 0.0;
-    return fleet_fuel_rate(state, fleet) * (fleet_gross_mass(state, fleet) / 100.0) * distance;
+    const auto amounts = fleet_fuel_amounts(state, fleet, distance, true);
+    return amounts.consumed - amounts.collected;
+}
+
+double fleet_fuel_consumption_for_distance(const GameState& state, const Fleet& fleet, double distance)
+{
+    return fleet_fuel_amounts(state, fleet, distance, true).consumed;
+}
+
+double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet, double maximumDistance)
+{
+    if (maximumDistance <= 0.0) return 0.0;
+    if (!has_reference_engine(state, fleet)) {
+        const auto rate = fleet_fuel_consumption_for_distance(state, fleet, 1.0);
+        return rate > 0.0 ? std::min(maximumDistance, fleet.fuel / rate) : maximumDistance;
+    }
+    if (fleet_fuel_consumption_for_distance(state, fleet, maximumDistance) <= fleet.fuel + 1e-9)
+        return maximumDistance;
+    // Rounded consumption is monotone. Do not spend fuel that a different
+    // engine will collect later in the same movement leg.
+    double lo = 0.0, hi = maximumDistance;
+    for (int iteration = 0; iteration < 56; ++iteration) {
+        const auto middle = (lo + hi) / 2.0;
+        if (fleet_fuel_consumption_for_distance(state, fleet, middle) <= fleet.fuel + 1e-9) lo = middle;
+        else hi = middle;
+    }
+    return lo < 1e-8 ? 0.0 : lo;
+}
+
+std::uint8_t fleet_free_warp(const GameState& state, const Fleet& fleet)
+{
+    std::uint8_t freeWarp = kMaxWarp;
+    bool fitted = false;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) return 0;
+        ShipComponentSpec storage;
+        const auto* engine = primary_engine(*design, storage);
+        // Legacy fleets retain their original fuel-limited movement.
+        if (!engine || !propulsion_technology(engine->type)) return 0;
+        freeWarp = std::min(freeWarp, engine->freeWarp);
+        fitted = true;
+    }
+    return fitted ? freeWarp : 0;
 }
 
 double fleet_overdrive_damage_rate(

@@ -10,6 +10,12 @@ values live in one core catalog, `propulsion_technologies()`. The Research dock,
 Ship Designer and host order validation use the same prerequisites. New campaigns
 and quick galaxy generation start with Quick Jump 5.
 
+Individual Warp 1–10 fuel percentages come from the original **Stars! Player's
+Guide**, appendix B-6 (PDF page 246):
+https://www.bestoldgames.net/download/games/stars/stars-win-manual.pdf
+The tables replace the prototype's universal fuel curve. This includes Fuel
+Mizer's distinctive high-Warp economy and Settler's Delight's 140% at Warp 7.
+
 | Engine | Propulsion | Energy | Optimal Warp | Free Warp | Safe Warp | Mass kt | Access |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | Settler's Delight | 0 | 0 | 6 | 6 | 9 | 2 | Settler engines; Mini-Colony Ship only |
@@ -36,15 +42,16 @@ Trans-Galactic Mizer Scoop at P16/E4, or Trans-Star 10 at P23 for any empire.
 ## Access and fitting
 
 New campaign setup offers three independent propulsion-access choices for every
-empire: Fuel efficiency, No ram scoops, and Settler engines. They control access
-only. They do not claim to implement the complete Stars! IFE/NRSE/Hyper Expansion
-race traits, their point costs, starting-tech bonuses or growth modifiers.
-The fuel-efficiency choice unlocks Fuel Mizer and Galaxy Scoop; it does not apply
-a global 15% fuel discount.
+empire: Fuel efficiency, No ram scoops, and Settler engines. Fuel efficiency
+unlocks Fuel Mizer and Galaxy Scoop and reduces reference-engine consumption by
+15%, rounding the adjusted table percentage upward. Legacy engines keep their
+previous consumption. These choices do not implement the complete Stars!
+IFE/NRSE/Hyper Expansion race traits, their point costs, starting-tech bonuses
+or growth modifiers.
 
 No ram scoops blocks the six researchable scoop engines, including the hazardous
-Hydro-Ram Scoop. Fuel Mizer remains allowed because it burns no fuel through
-Warp 4 without collecting any. Settler's Delight also remains allowed with
+Hydro-Ram Scoop. Fuel Mizer remains allowed and collects fuel through Warp 4.
+Settler's Delight also remains allowed with
 Settler engine access, but only in a Mini-Colony Ship.
 
 The Mini-Colony Ship has one engine cell and one general cell, 8 kt hull mass,
@@ -57,14 +64,41 @@ race-restricted row explains the requirement and does not add futile research.
 The designer shows locked engines and prevents fitting unavailable components;
 the host independently rejects designs that bypass those gates.
 
-## Suns! simulation and balance
+## Reference fuel rules
 
-Travel remains Warp squared. For Warp above the free-speed band, the current
-fuel rate is `0.15 * (Warp / optimalWarp)^6` fuel units per 100 kt per ly.
-Real scoops collect `0.02 * (freeWarp - Warp + 1)` in their free band; ordinary
-engines and Fuel Mizer merely consume zero. Rates scale with loaded mass, and
-multi-engine hulls retain Suns!' identical-engine-bank rule. These curves are
-Suns! balance values, not a claim to reproduce the original fuel-use tables.
+Travel remains Warp squared. For a table percentage `E`, unrounded consumption
+is `loaded_mass_kt * E * distance_ly / 20000`: at 100%, one mg moves 200 kt by
+one ly. Cargo is distributed between design stacks in proportion to their cargo
+capacity. Consumption is billed separately for each stack: round distance up to
+whole ly, truncate the computed bill to one decimal place, then round up to whole
+mg. Fuel efficiency first changes `E` to `ceil(E * 0.85)`.
+
+The rounding follows the empirical Stars! algorithm attributed to m.a@stars,
+published in CraigStars (`fuelUsageForStack`, pinned source):
+https://github.com/sirgwain/craig-stars/blob/d6a71d0b981b2343498e31311ef17797ec501d2d/cs/fleet.go
+Suns! implements these rules independently and retains its fractional ship/cargo
+masses; it does not reproduce every integer-mass quirk of the original binary.
+
+Collection is separate from consumption and depends on engine count and actual
+distance, not cargo mass. Each engine collects 1/3/6/10 mg per ly at its free
+Warp, one below, two below, or three-or-more below, respectively. Fuel Mizer is
+included. Ordinary engines collect 1 mg per ly at Warp 1. A one-engine Fuel Mizer
+travelling a full year at Warp 4 collects 16 mg; a three-engine ship collects
+48 mg. The fleet's total collection is rounded down to whole mg and limited by
+its fuel capacity.
+
+When fuel cannot support the ordered Warp, reference-engine fleets spend their
+remaining time at the lowest free Warp among their engines, retaining the
+requested Warp for the next year. Collection during a move cannot finance the
+initial consumption of another engine in the fleet. Pure legacy fleets retain
+their previous fuel-limited movement and signed linear fuel curves.
+
+The designer shows base consumption per 100 kt per ly separately from collection
+for the fitted engine bank; Fuel efficiency is applied in flight. Suns!' hulls,
+fuel capacities and colonist mass still affect range, so using the original
+engine tables does not make every fleet's range identical to Stars!.
+
+## Suns! simulation and balance
 
 Each safe-Warp-9 model accumulates 18 hull-damage points per full year at Warp 10.
 Safe-Warp-10 models add no overdrive damage. Damage is deterministic rather than

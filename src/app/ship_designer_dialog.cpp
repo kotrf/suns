@@ -240,9 +240,13 @@ QString componentTooltip(ShipComponentType component)
         if (spec.optimalWarp)
             facts << QString("Optimal Warp %1 • Free through Warp %2").arg(spec.optimalWarp).arg(spec.freeWarp);
         facts << "One engine model fills the entire propulsion bank. Costs and mass above are per engine.";
-        facts << "Fuel per 100 kt per ly (gain means fuel collected):";
+        facts << (spec.optimalWarp
+            ? "Base fuel consumption per 100 kt per ly (Fuel efficiency applies in flight):"
+            : "Fuel use/gain per 100 kt per ly:");
         for (std::uint8_t warp = 1; warp <= kMaxWarp; ++warp) {
             auto line = QString("W%1: %2").arg(warp).arg(signedFuelRate(spec.fuelPer100MassLy[warp]));
+            if (spec.fuelCollectedPerEngineLy[warp] > 0.0)
+                line += QString(" • collects %1 mg per engine per ly").arg(spec.fuelCollectedPerEngineLy[warp]);
             if (spec.overdriveDamagePercent[warp] > 0.0)
                 line += QString(" • hull damage %1%/turn").arg(spec.overdriveDamagePercent[warp]);
             facts << line;
@@ -646,6 +650,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     layout->addLayout(workspace, 2);
 
     previewLabel_ = new QLabel(this);
+    previewLabel_->setObjectName("shipDesignPreview");
     previewLabel_->setWordWrap(true);
     previewLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(previewLabel_, 1);
@@ -1001,10 +1006,19 @@ void ShipDesignerDialog::updatePreview()
 
     QStringList fuelCurve;
     const auto maxWarp = ship_design_max_warp(design);
+    const auto referenceEngine = std::any_of(design.components.begin(), design.components.end(), [](auto component) {
+        return component_spec(component).optimalWarp > 0;
+    });
+    const auto fuelLegend = referenceEngine
+        ? "Base consumption per 100 kt per ly; Fuel efficiency applies in flight. Collection is for the fitted engine bank:"
+        : "Fuel use/gain per 100 kt per ly:";
     for (std::uint8_t warp = 1; warp <= maxWarp; ++warp) {
-        fuelCurve.push_back(QString("W%1: %2")
-                                .arg(warp)
-                                .arg(signedFuelRate(ship_design_fuel_rate(design, warp))));
+        auto line = QString("W%1: %2").arg(warp).arg(signedFuelRate(ship_design_fuel_rate(design, warp)));
+        double collected = 0.0;
+        for (const auto component : design.components)
+            collected += component_spec(component).fuelCollectedPerEngineLy[warp];
+        if (collected > 0.0) line += QString("; collects %1 mg/ly").arg(collected);
+        fuelCurve.push_back(line);
     }
     QString capabilities;
     if (const auto sensor = ship_design_sensor_range(design); sensor > 0.0) {
@@ -1044,7 +1058,7 @@ void ShipDesignerDialog::updatePreview()
                 "Max Warp: <b>%13</b> &nbsp; Fuel capacity: <b>%14</b> &nbsp; Fuel generation: <b>%15/turn</b><br>"
                 "Cargo capacity: <b>%16</b> (%17 colonists max)<br>"
                 "%18%19<br><br>"
-                "<b>Engine fuel curve</b> — rate per 100 kt per ly:<br>%20")
+                "<b>Engine fuel curve</b> — %20<br>%21")
             .arg(QString::fromStdString(design.name.empty() ? std::string("Unnamed design") : design.name))
             .arg(QString::fromStdString(hull.name))
             .arg(hull.requiredEngines)
@@ -1064,6 +1078,7 @@ void ShipDesignerDialog::updatePreview()
             .arg(ship_design_cargo_capacity(design) * kColonistsPerCargoUnit, 0, 'f', 0)
             .arg(capabilities)
             .arg(radiation > 0.0 ? " • <b>Radiation hazard</b>" : "")
+            .arg(fuelLegend)
             .arg(fuelCurve.isEmpty() ? "No engine fitted" : fuelCurve.join(" &nbsp; ")));
     saveButton_->setEnabled(valid);
 }

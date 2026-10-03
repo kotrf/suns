@@ -65,7 +65,8 @@ const std::vector<ResearchUnlock>& research_unlocks()
                 engine.name, description, engine.component};
             entry.extraLevels[static_cast<std::size_t>(ResearchField::Energy)] = engine.energy;
             entry.engineAccess = engine.access;
-            entry.excludesNoRamScoops = engine.ramScoop && engine.access != EngineAccess::Settler;
+            entry.excludesNoRamScoops = engine.ramScoop && engine.access != EngineAccess::Settler
+                && engine.component != ShipComponentType::FuelMizer;
             entries.push_back(std::move(entry));
         }
         ResearchUnlock mini{ResearchField::Construction, 0, "Mini-Colony Ship",

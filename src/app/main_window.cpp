@@ -935,15 +935,17 @@ void MainWindow::updateControls()
         preview.warp = selectedWarp;
         const auto routeDistance = distance_between(fleet->position, star->position);
         const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, routeDistance);
+        const auto fuelConsumed = fleet_fuel_consumption_for_distance(state_, preview, routeDistance);
         if (fuelChange > 0.000001) {
             routeFuelLine = QString("<br>Direct-route fuel: <b>%1</b>; fuel at movement phase: %2.")
                                 .arg(fuelValue(fuelChange)).arg(fuelValue(preview.fuel));
-            if (fuelChange > preview.fuel + 0.000001) routeFuelLine += " <b>Insufficient at movement phase.</b>";
         } else if (fuelChange < -0.000001) {
             routeFuelLine = QString("<br>Ram-scoop gain on direct route: <b>+%1</b> fuel.").arg(fuelValue(-fuelChange));
         } else {
             routeFuelLine = "<br>Direct route is fuel-neutral at this Warp.";
         }
+        if (fuelConsumed > preview.fuel + 0.000001)
+            routeFuelLine += " <b>Insufficient for ordered Warp at movement phase.</b>";
     }
 
     const bool dynamicLoadTarget = surveyed && planet && fleet
@@ -1274,17 +1276,19 @@ void MainWindow::queueFleetMove()
     const auto* plannedFleet = findFleet(movementPreview, fleet->id);
     auto preview = plannedFleet ? *plannedFleet : *fleet;
     preview.warp = warp;
-    const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, distance_between(fleet->position, star->position));
+    const auto routeDistance = distance_between(fleet->position, star->position);
+    const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, routeDistance);
+    const auto fuelConsumed = fleet_fuel_consumption_for_distance(state_, preview, routeDistance);
 
     QString fuelText;
     if (fuelChange > 0.000001) {
         fuelText = QString(", fuel %1, available %2").arg(fuelValue(fuelChange)).arg(fuelValue(preview.fuel));
-        if (fuelChange > preview.fuel + 0.000001) fuelText += " [INSUFFICIENT]";
     } else if (fuelChange < -0.000001) {
         fuelText = QString(", scoop +%1 fuel").arg(fuelValue(-fuelChange));
     } else {
         fuelText = ", fuel-neutral";
     }
+    if (fuelConsumed > preview.fuel + 0.000001) fuelText += " [INSUFFICIENT FOR ORDERED WARP]";
 
     replacePendingFleetMove(fleet->id, star->position, warp, {},
         QString("Plot %1 course to %2 — W%3, %4%5")

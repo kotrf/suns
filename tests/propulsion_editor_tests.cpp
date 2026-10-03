@@ -6,6 +6,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QListWidget>
+#include <QLabel>
 #include <QMimeData>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -87,5 +88,25 @@ int main(int argc, char** argv)
     QApplication::sendEvent(target, &drop);
     assert(drop.isAccepted());
     assert(designer.draft().components.front() == ShipComponentType::GalaxyScoop);
+
+    auto* preview = designer.findChild<QLabel*>("shipDesignPreview");
+    assert(preview && preview->text().contains("collects 1 mg/ly"));
+    assert(preview->text().contains("Fuel efficiency applies in flight"));
+    state.players.front().technology.levels[static_cast<std::size_t>(ResearchField::Construction)] = 2;
+    ShipDesignerDialog heavyDesigner(state, 1);
+    auto* hulls = heavyDesigner.findChild<QComboBox*>("shipHullCatalog");
+    assert(hulls);
+    hulls->setCurrentIndex(hulls->findData(static_cast<int>(ShipHullType::HeavyTransport)));
+    heavyDesigner.show();
+    QApplication::processEvents();
+    auto* bank = heavyDesigner.findChild<QToolButton*>("shipSlot_100");
+    assert(bank);
+    QDragEnterEvent bankEnter(bank->rect().center(), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(bank, &bankEnter);
+    QDropEvent bankDrop(QPointF(bank->rect().center()), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(bank, &bankDrop);
+    assert(bankDrop.isAccepted());
+    preview = heavyDesigner.findChild<QLabel*>("shipDesignPreview");
+    assert(preview && preview->text().contains("collects 3 mg/ly"));
     return 0;
 }

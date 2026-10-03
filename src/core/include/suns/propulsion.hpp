@@ -22,6 +22,8 @@ struct PropulsionTechnology {
     EngineAccess access{EngineAccess::Any};
     bool ramScoop{};
     bool radiating{};
+    // Original fuel-use percentages, indexed by Warp (0..10).
+    std::array<std::uint16_t, kMaxWarp + 1> fuelEfficiency{};
 };
 
 [[nodiscard]] std::span<const PropulsionTechnology> propulsion_technologies();

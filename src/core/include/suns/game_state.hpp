@@ -189,6 +189,8 @@ struct ShipComponentSpec {
     double engineThrust{};
     std::uint8_t maxWarp{};
     std::array<double, kMaxWarp + 1> fuelPer100MassLy{};
+    // Reference engines collect fuel per fitted engine and ly, independent of mass.
+    std::array<double, kMaxWarp + 1> fuelCollectedPerEngineLy{};
     // Hull damage added by one full turn of travel at each Warp setting.
     // Entries above maxWarp are engine-specific emergency overdrive ratings.
     std::array<double, kMaxWarp + 1> overdriveDamagePercent{};
@@ -881,6 +883,9 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] double fleet_gross_mass(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_rate(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance);
+[[nodiscard]] double fleet_fuel_consumption_for_distance(const GameState& state, const Fleet& fleet, double distance);
+[[nodiscard]] double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet, double maximumDistance);
+[[nodiscard]] std::uint8_t fleet_free_warp(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_overdrive_damage_rate(
     const GameState& state, const Fleet& fleet, std::uint8_t warp);
 [[nodiscard]] bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp);

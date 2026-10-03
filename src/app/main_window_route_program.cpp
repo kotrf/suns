@@ -258,8 +258,8 @@ QString routeForecast(
         }
 
         if (fuelWarning && after->destination
-            && (after->fuelStalled || (after->fuel <= 0.000001
-                && fleet_fuel_change_for_distance(next, *after, 1.0) > 0.000001
+            && (after->fuelStalled || (
+                fleet_fuel_consumption_for_distance(next, *after, warp_distance(after->warp)) > 0.000001
                 && distance_between(beforeFleet->position, after->position) + 0.000001 < warp_distance(after->warp)
                 && same_position(*after->destination, leg.destination)))) {
             *fuelWarning = QString("Fuel shortage forecast at T+%1, before waypoint %2 (%3). "

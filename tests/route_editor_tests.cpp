@@ -105,10 +105,22 @@ struct MainWindowTestAccess {
     static const GameState& state(const MainWindow& window) { return window.state_; }
     static void advance(MainWindow& window) { window.endTurn(); }
 
-    static void installFuelFixture(MainWindow& window, double fuel, bool atDepot = false)
+    static void installFuelFixture(MainWindow& window, double fuel, bool atDepot = false, bool mizer = false)
     {
         window.state_ = make_demo_game();
         auto& fleet = window.state_.fleets.front();
+        if (mizer) {
+            window.state_.players.front().race.improvedFuelEfficiency = true;
+            for (auto& design : window.state_.shipDesigns) {
+                if (design.id != fleet.design) continue;
+                for (auto& component : design.components)
+                    if (component_spec(component).kind == ShipComponentKind::Engine)
+                        component = ShipComponentType::FuelMizer;
+                for (auto& placement : design.placements)
+                    if (component_spec(placement.component).kind == ShipComponentKind::Engine)
+                        placement.component = ShipComponentType::FuelMizer;
+            }
+        }
         fleet.position = atDepot ? Position{0, 0} : Position{50, 0};
         fleet.fuel = fuel;
         fleet.telemetry.position = fleet.position;
@@ -478,6 +490,10 @@ int main(int argc, char* argv[])
     assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
     suns::MainWindowTestAccess::installFuelFixture(window, 0, true);
     assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty()); // depot tops up first
+
+    suns::MainWindowTestAccess::installFuelFixture(window, 0, false, true);
+    assert(!window.selectedFleetWaypointFuelWarning(9, 0, {}).isEmpty()); // free fallback collects, but slows arrival
+    assert(window.selectedFleetWaypointFuelWarning(4, 0, {}).isEmpty());
 
     // Exercise the real dock controls all the way through End Turn. This
     // catches arrival actions that look correct in the table but are not
