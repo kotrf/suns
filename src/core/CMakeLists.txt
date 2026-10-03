@@ -5,6 +5,7 @@ add_library(suns_core
     src/mineral_economy.cpp
     src/player_knowledge.cpp
     src/production_forecast.cpp
+    src/propulsion.cpp
     src/radiation.cpp
     src/turn_processor.cpp
     src/wormholes.cpp

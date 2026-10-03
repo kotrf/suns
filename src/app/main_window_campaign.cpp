@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 
 #include <QDialog>
+#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -41,8 +42,8 @@ void MainWindow::newCampaign()
         "Biology unlocks habitats beyond these environmental limits.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    QTableWidget table(8, 2, &dialog);
-    table.setHorizontalHeaderLabels({"Empire name", "Race"});
+    QTableWidget table(8, 5, &dialog);
+    table.setHorizontalHeaderLabels({"Empire name", "Race", "Fuel efficiency", "No ram scoops", "Settler engines"});
     table.horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     for (int row = 0; row < 8; ++row) {
         table.setItem(row, 0, new QTableWidgetItem(QString("Empire %1").arg(row + 1)));
@@ -50,6 +51,13 @@ void MainWindow::newCampaign()
         race->addItems({"Terran", "Cryophile", "Radiotroph"});
         race->setCurrentIndex(row % 3);
         table.setCellWidget(row, 1, race);
+        for (int column = 2; column < 5; ++column) {
+            auto* access = new QCheckBox(&table);
+            access->setToolTip(column == 2 ? "Unlock Fuel Mizer and Galaxy Scoop engines; reference engines consume 15% less fuel."
+                : column == 3 ? "Disable researchable ram scoops; unlock Interspace-10 at Propulsion 11. Fuel Mizer and Settler's Delight remain allowed."
+                : "Unlock Mini-Colony Ship and Settler's Delight. This grants propulsion access, without changing population growth.");
+            table.setCellWidget(row, column, access);
+        }
         table.setRowHidden(row, row >= count.value());
     }
     connect(&count, &QSpinBox::valueChanged, &dialog, [&](int value) {
@@ -71,13 +79,16 @@ void MainWindow::newCampaign()
     });
     connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(&buttons);
-    dialog.resize(680, 600);
+    dialog.resize(920, 600);
     if (dialog.exec() != QDialog::Accepted) return;
     empireSetups_.clear();
     for (int row = 0; row < count.value(); ++row) {
         const auto* race = qobject_cast<QComboBox*>(table.cellWidget(row, 1));
         empireSetups_.push_back({table.item(row, 0)->text().trimmed().toStdString(),
-            static_cast<RacePreset>(race->currentIndex())});
+            static_cast<RacePreset>(race->currentIndex()),
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->isChecked(),
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->isChecked(),
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->isChecked()});
     }
     seedEdit_->setText(seed.text());
     starCountSpin_->setValue(stars.value());

@@ -102,6 +102,7 @@ enum class ShipHullType {
     RemoteMiner,
     Utility,
     HeavyTransport,
+    MiniColonyShip,
 };
 
 using ShipSlotId = std::uint16_t;
@@ -152,6 +153,21 @@ enum class ShipComponentType {
     RelayArray,
     FieldRepairBay,
     AnomalyDetector,
+    SettlersDelight,
+    QuickJump5,
+    LongHump6,
+    DaddyLongLegs7,
+    AlphaDrive8,
+    TransGalacticDrive,
+    Interspace10,
+    TransStar10,
+    FuelMizer,
+    RadiatingHydroRamScoop,
+    SubGalacticFuelScoop,
+    TransGalacticFuelScoop,
+    TransGalacticSuperScoop,
+    TransGalacticMizerScoop,
+    GalaxyScoop,
 };
 
 enum class ShipComponentKind {
@@ -173,9 +189,13 @@ struct ShipComponentSpec {
     double engineThrust{};
     std::uint8_t maxWarp{};
     std::array<double, kMaxWarp + 1> fuelPer100MassLy{};
+    // Reference engines collect fuel per fitted engine and ly, independent of mass.
+    std::array<double, kMaxWarp + 1> fuelCollectedPerEngineLy{};
     // Hull damage added by one full turn of travel at each Warp setting.
     // Entries above maxWarp are engine-specific emergency overdrive ratings.
     std::array<double, kMaxWarp + 1> overdriveDamagePercent{};
+    std::uint8_t optimalWarp{};
+    std::uint8_t freeWarp{};
 
     double sensorRange{};
     bool penetratesPlanets{};
@@ -403,6 +423,10 @@ struct RaceProfile {
     RaceEnvironmentRange habitableGravity{30, 70};
     RaceEnvironmentRange habitableRadiation{0, 40};
     bool environmentBased{}; // Legacy campaigns retain their scalar habitability.
+    // Propulsion access only; these do not imply a complete Stars! race trait.
+    bool improvedFuelEfficiency{};
+    bool noRamScoopEngines{};
+    bool settlerEngineAccess{};
 };
 
 struct ColonyTurnStatistics {
@@ -859,6 +883,9 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] double fleet_gross_mass(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_rate(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance);
+[[nodiscard]] double fleet_fuel_consumption_for_distance(const GameState& state, const Fleet& fleet, double distance);
+[[nodiscard]] double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet, double maximumDistance);
+[[nodiscard]] std::uint8_t fleet_free_warp(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_overdrive_damage_rate(
     const GameState& state, const Fleet& fleet, std::uint8_t warp);
 [[nodiscard]] bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp);

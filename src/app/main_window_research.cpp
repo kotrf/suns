@@ -20,6 +20,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <limits>
 #include <iterator>
 
 namespace suns {
@@ -85,17 +86,26 @@ void MainWindow::installResearch()
     technologies->setToolTip("Double-click a locked technology to queue the required levels.");
     layout->addWidget(technologies);
     connect(technologies, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
-        const auto field = static_cast<ResearchField>(item->data(0, Qt::UserRole).toInt());
-        const int target = item->data(0, Qt::UserRole + 1).toInt();
-        int planned = technology_level(state_, pendingOrders_.player, field);
-        for (int row = 0; row < researchPlanTree_->topLevelItemCount(); ++row)
-            if (researchPlanTree_->topLevelItem(row)->data(0, Qt::UserRole).toInt() == int(field)) ++planned;
-        if (planned >= target) return;
-        for (; planned < target; ++planned) {
-            auto* row = new QTreeWidgetItem(researchPlanTree_);
-            row->setData(0, Qt::UserRole, int(field));
+        const auto index = item->data(0, Qt::UserRole + 2).toUInt();
+        if (index >= research_unlocks().size()) return;
+        const auto& unlock = research_unlocks()[index];
+        if (!research_unlock_applicable(state_, pendingOrders_.player, unlock)) return;
+        auto required = unlock.extraLevels;
+        required[static_cast<std::size_t>(unlock.field)] = std::max(
+            required[static_cast<std::size_t>(unlock.field)], unlock.level);
+        bool changed = false;
+        for (std::size_t fieldIndex = 0; fieldIndex < kResearchFieldCount; ++fieldIndex) {
+            const auto field = static_cast<ResearchField>(fieldIndex);
+            int planned = technology_level(state_, pendingOrders_.player, field);
+            for (int row = 0; row < researchPlanTree_->topLevelItemCount(); ++row)
+                if (researchPlanTree_->topLevelItem(row)->data(0, Qt::UserRole).toInt() == int(field)) ++planned;
+            for (; planned < required[fieldIndex]; ++planned) {
+                auto* row = new QTreeWidgetItem(researchPlanTree_);
+                row->setData(0, Qt::UserRole, int(field));
+                changed = true;
+            }
         }
-        queueResearchPlan();
+        if (changed) queueResearchPlan();
     });
 
     auto* allocationRow = new QHBoxLayout;
@@ -249,17 +259,28 @@ void MainWindow::refreshResearchPanel()
     QStringList nextUnlocks;
     auto* catalog = researchDock_->findChild<QTreeWidget*>("technologyCatalog");
     catalog->clear();
-    for (const auto& unlock : research_unlocks()) {
-        const auto current = technology_level(state_, player->id, unlock.field);
+    auto projected = state_;
+    auto& projectedPlayer = *std::find_if(projected.players.begin(), projected.players.end(),
+        [player](const auto& candidate) { return candidate.id == player->id; });
+    if (level < std::numeric_limits<std::uint8_t>::max())
+        projectedPlayer.technology.levels[static_cast<std::size_t>(focus)] = level + 1;
+    for (std::size_t unlockIndex = 0; unlockIndex < research_unlocks().size(); ++unlockIndex) {
+        const auto& unlock = research_unlocks()[unlockIndex];
+        if (unlock.legacyPropulsion && !player_uses_legacy_propulsion(state_, player->id)) continue;
         auto* row = new QTreeWidgetItem(catalog);
-        row->setText(0, QString::fromStdString(unlock.name));
-        row->setText(1, QString("%1 %2").arg(fieldName(unlock.field)).arg(unlock.level));
-        const bool applicable = unlock.field != ResearchField::Biology || player->race.environmentBased;
-        row->setText(2, !applicable ? "Legacy rules" : current >= unlock.level ? "Available" : "Locked");
+        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion ? " (legacy)" : ""));
+        row->setText(1, QString::fromStdString(research_unlock_requirement(unlock)));
+        const bool legacyBiology = unlock.field == ResearchField::Biology && !player->race.environmentBased;
+        const bool applicable = research_unlock_applicable(state_, player->id, unlock);
+        row->setText(2, legacyBiology ? "Legacy rules" : !applicable ? "Race restriction"
+            : research_unlock_available(state_, player->id, unlock) ? "Available" : "Locked");
         row->setText(3, QString::fromStdString(unlock.description));
         row->setData(0, Qt::UserRole, int(unlock.field));
         row->setData(0, Qt::UserRole + 1, int(unlock.level));
-        if (unlock.field == focus && unlock.level == level + 1)
+        row->setData(0, Qt::UserRole + 2, uint(unlockIndex));
+        bool next = unlock.field == focus && unlock.level == level + 1;
+        next = next || unlock.extraLevels[static_cast<std::size_t>(focus)] == level + 1;
+        if (next && !legacyBiology && applicable && research_unlock_available(projected, player->id, unlock))
             nextUnlocks << QString::fromStdString(unlock.name);
     }
     researchUnlock_->setText(!planActive ? "Research paused; accumulated RP is preserved."

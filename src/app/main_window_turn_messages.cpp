@@ -399,27 +399,15 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(QString::fromStdString(research_field_name(event.researchField)))
                    .arg(event.technologyLevel);
-        if (event.researchField == ResearchField::Energy && event.technologyLevel == 1) {
-            text += "\nUnlocked: Antimatter Generator";
-        } else if (event.researchField == ResearchField::Propulsion && event.technologyLevel == 1) {
-            text += "\nUnlocked: Advanced Fusion Drive";
-        } else if (event.researchField == ResearchField::Propulsion && event.technologyLevel == 2) {
-            text += "\nUnlocked: High Warp Drive";
-        } else if (event.researchField == ResearchField::Propulsion && event.technologyLevel == 3) {
-            text += "\nUnlocked: Efficient Ram Scoop";
-        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 1) {
-            text += "\nUnlocked: Compact Long Range Scanner";
-        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 2) {
-            text += "\nUnlocked: Extended Range Scanner";
-        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 3) {
-            text += "\nUnlocked: Penetrating Scanner";
-        } else if (event.researchField == ResearchField::Electronics && event.technologyLevel == 4) {
-            text += "\nUnlocked: Deep Penetrating Scanner";
-        } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 1) {
-            text += "\nUnlocked: Remote Mining Module";
-        } else if (event.researchField == ResearchField::Construction && event.technologyLevel == 3) {
-            text += "\nUnlocked: Field Repair Bay";
+        QStringList technologies;
+        for (const auto& unlock : research_unlocks()) {
+            if (unlock.legacyPropulsion && !player_uses_legacy_propulsion(state, event.recipient)) continue;
+            const bool threshold = (unlock.field == event.researchField && unlock.level == event.technologyLevel)
+                || unlock.extraLevels[static_cast<std::size_t>(event.researchField)] == event.technologyLevel;
+            if (threshold && research_unlock_available(state, event.recipient, unlock))
+                technologies << QString::fromStdString(unlock.name);
         }
+        if (!technologies.isEmpty()) text += "\nAvailable technologies: " + technologies.join(", ");
     } else if (event.kind == GameEventKind::PrecursorArtifactsDiscovered) {
         const auto planetName = planet
             ? QString::fromStdString(planet->name)

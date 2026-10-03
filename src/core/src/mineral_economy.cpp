@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/propulsion.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -48,6 +49,7 @@ MineralCargo classBias(StarClass stellarClass)
 
 MineralCargo componentMineralCost(ShipComponentType type)
 {
+    if (const auto* engine = propulsion_technology(type)) return engine->minerals;
     switch (type) {
     case ShipComponentType::FusionDrive:             return {2.0, 2.0, 1.0};
     case ShipComponentType::RamScoopDrive:           return {2.0, 3.0, 2.0};
@@ -81,6 +83,7 @@ MineralCargo hullMineralCost(ShipHullType type)
     case ShipHullType::RemoteMiner:    return {12.0, 6.0, 8.0};
     case ShipHullType::Utility:        return {10.0, 5.0, 5.0};
     case ShipHullType::HeavyTransport: return {18.0, 6.0, 6.0};
+    case ShipHullType::MiniColonyShip: return {2.0, 0.0, 2.0};
     }
     return {};
 }

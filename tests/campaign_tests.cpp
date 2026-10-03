@@ -118,8 +118,11 @@ int main()
     assert(technology_level(next, 1, ResearchField::Energy) == 1);
     assert(technology_level(next, 2, ResearchField::Propulsion) == 1);
     assert(technology_level(next, 3, ResearchField::Biology) == 1);
-    assert(component_available_to_player(next, 2, ShipComponentType::AdvancedFusionDrive));
-    assert(!component_available_to_player(next, 1, ShipComponentType::AdvancedFusionDrive));
+    assert(component_available_to_player(next, 2, ShipComponentType::QuickJump5));
+    assert(!component_available_to_player(next, 2, ShipComponentType::LongHump6));
+    next.players[1].technology.levels[static_cast<std::size_t>(ResearchField::Propulsion)] = 3;
+    assert(component_available_to_player(next, 2, ShipComponentType::LongHump6));
+    assert(!component_available_to_player(next, 1, ShipComponentType::LongHump6));
 
     auto& observer = state.players[1];
     observer.pendingSurveyReports.push_back({1, 2, 1, 99, SurveyLevel::DeepSurvey});

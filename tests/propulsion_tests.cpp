@@ -1,7 +1,10 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/campaign.hpp"
+#include "suns/propulsion.hpp"
 
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -18,6 +21,200 @@ void verify_warp_squared_movement()
     assert(suns::warp_distance(9) == 81.0);
     assert(suns::warp_distance(10) == 100.0);
     assert(suns::warp_distance(0) == 0.0);
+}
+
+void verify_stars_progression_and_multifield_gates()
+{
+    using namespace suns;
+    auto state = generate_campaign(GalaxyConfig{}, {{"New empire", RacePreset::Terran}});
+    assert(propulsion_technologies().size() == 15);
+    assert(find_ship_design(state, 1)->components.front() == ShipComponentType::QuickJump5);
+    assert(!component_available_to_player(state, 1, ShipComponentType::HighWarpDrive));
+    assert(component_available_to_player(state, 1, ShipComponentType::QuickJump5));
+    auto& tech = state.players.front().technology;
+    const auto prop = static_cast<std::size_t>(ResearchField::Propulsion);
+    const auto energy = static_cast<std::size_t>(ResearchField::Energy);
+    tech.levels[prop] = 8;
+    tech.levels[energy] = 1;
+    const auto scoop = ShipComponentType::SubGalacticFuelScoop;
+    assert(!component_available_to_player(state, 1, scoop));
+    const PlayerOrders order{1, {CreateShipDesignOrder{"Scoop scout", ShipHullType::Scout, {scoop}}}};
+    assert(TurnProcessor{}.process(state, {order}).shipDesigns.size() == state.shipDesigns.size());
+    tech.levels[energy] = 2;
+    assert(component_available_to_player(state, 1, scoop));
+    assert(TurnProcessor{}.process(state, {order}).shipDesigns.size() == state.shipDesigns.size() + 1);
+    tech.levels[prop] = 22;
+    assert(!component_available_to_player(state, 1, ShipComponentType::TransStar10));
+    tech.levels[prop] = 23;
+    assert(component_available_to_player(state, 1, ShipComponentType::TransStar10));
+    assert(!component_available_to_player(state, 1, ShipComponentType::Interspace10));
+    state.players.front().race.noRamScoopEngines = true;
+    assert(component_available_to_player(state, 1, ShipComponentType::Interspace10));
+    assert(!component_available_to_player(state, 1, scoop));
+    assert(!component_available_to_player(state, 1, ShipComponentType::FuelMizer));
+    state.players.front().race.improvedFuelEfficiency = true;
+    assert(component_available_to_player(state, 1, ShipComponentType::FuelMizer));
+    tech.levels[energy] = 5;
+    assert(!component_available_to_player(state, 1, ShipComponentType::GalaxyScoop));
+    state.players.front().race.noRamScoopEngines = false;
+    assert(component_available_to_player(state, 1, ShipComponentType::GalaxyScoop));
+    assert(research_level_cost(ResearchField::Propulsion, 23) == 4572);
+    assert(research_level_cost(ResearchField::Propulsion, 255) < 1'000'000);
+}
+
+void verify_stars_speed_bands_and_settler_restriction()
+{
+    using namespace suns;
+    ShipDesign quick{40, 1, "Quick", ShipHullType::Scout, {ShipComponentType::QuickJump5}};
+    ShipDesign mizer{41, 1, "Mizer", ShipHullType::Scout, {ShipComponentType::FuelMizer}};
+    ShipDesign scoop{42, 1, "Scoop", ShipHullType::Scout, {ShipComponentType::RadiatingHydroRamScoop}};
+    ShipDesign late{43, 1, "Late", ShipHullType::Scout, {ShipComponentType::TransStar10}};
+    assert(ship_design_max_warp(quick) == 9); // Optimal Warp 5 is not the safe-speed limit.
+    assert(ship_design_fuel_rate(quick, 1) == 0 && ship_design_fuel_rate(quick, 8) > 0);
+    assert(ship_design_fuel_rate(mizer, 4) == 0 && ship_design_fuel_rate(mizer, 5) > 0);
+    assert(ship_design_fuel_rate(scoop, 6) == 0 && ship_design_fuel_rate(scoop, 7) > 0);
+    assert(component_spec(ShipComponentType::FuelMizer).fuelCollectedPerEngineLy[4] == 1);
+    assert(ship_design_radiation_hazard(scoop) > 0);
+    assert(ship_design_overdrive_damage(quick, 10) > 0);
+    assert(ship_design_overdrive_damage(late, 10) == 0);
+    assert(ship_design_fuel_rate(late, 9) < ship_design_fuel_rate(quick, 9));
+    const auto minerals = ship_design_mineral_cost(late);
+    assert(minerals.ironium == 7 && minerals.boranium == 1 && minerals.germanium == 4);
+    auto state = generate_campaign(GalaxyConfig{}, {{"Settlers", RacePreset::Terran, false, true, true}});
+    ShipDesign settler{44, 1, "Settler", ShipHullType::MiniColonyShip,
+        {ShipComponentType::SettlersDelight, ShipComponentType::ColonyModule}};
+    assert(ship_design_valid(settler) && ship_design_available_to_player(state, 1, settler));
+    assert(ship_design_cargo_capacity(settler) == 10);
+    settler.hull = ShipHullType::Scout;
+    assert(!ship_design_valid(settler));
+    settler.hull = ShipHullType::MiniColonyShip;
+    state.players.front().race.settlerEngineAccess = false;
+    assert(!ship_design_available_to_player(state, 1, settler));
+}
+
+void verify_original_fuel_tables_and_rounding()
+{
+    using namespace suns;
+    // Independent regression values from Player's Guide B-6. In particular,
+    // Mizer beats the P5/P7 standard engines at W9; late TS10 halves IS10 use.
+    const auto qj = component_spec(ShipComponentType::QuickJump5);
+    assert(near(qj.fuelPer100MassLy[2], 0.125));
+    assert(near(qj.fuelPer100MassLy[3], qj.fuelPer100MassLy[5]));
+    const auto mizer = component_spec(ShipComponentType::FuelMizer);
+    assert(mizer.fuelPer100MassLy[9] < component_spec(ShipComponentType::DaddyLongLegs7).fuelPer100MassLy[9]);
+    assert(mizer.fuelPer100MassLy[9] < component_spec(ShipComponentType::AlphaDrive8).fuelPer100MassLy[9]);
+    assert(near(component_spec(ShipComponentType::TransStar10).fuelPer100MassLy[10],
+        component_spec(ShipComponentType::Interspace10).fuelPer100MassLy[10] / 2));
+    assert(propulsion_technology(ShipComponentType::SettlersDelight)->fuelEfficiency[7] == 140);
+
+    GameState state;
+    state.players.push_back({1, "Fuel tests", {}});
+    state.shipDesigns.push_back({10, 1, "Mizer hauler", ShipHullType::HeavyTransport,
+        {ShipComponentType::FuelMizer, ShipComponentType::FuelMizer, ShipComponentType::FuelMizer}});
+    Fleet fleet{1, 1, "Fuel", FleetRole::Scout, 10, {0, 0}, Position{100, 0}, 9, 600, 0};
+    fleet.minerals.ironium = 42; // Exactly 200 kt including the three engines.
+    assert(fleet_gross_mass(state, fleet) == 200);
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 100) == 360);
+    state.players.front().race.improvedFuelEfficiency = true;
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 100) == 306);
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 0) == 0);
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 1.01) == 7);
+    fleet.fuel = 6;
+    assert(near(fleet_fuel_affordable_distance(state, fleet, 81), 1));
+
+    // IFE rounds the drive percentage up: 35 * .85 -> 30, not 29.75.
+    fleet.warp = 5;
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 100) == 30);
+}
+
+void verify_original_collection_is_per_engine()
+{
+    using namespace suns;
+    GameState state;
+    state.players.push_back({1, "Collectors", {}});
+    state.shipDesigns.push_back({10, 1, "Mizer scout", ShipHullType::Scout, {ShipComponentType::FuelMizer}});
+    state.shipDesigns.push_back({11, 1, "Mizer hauler", ShipHullType::HeavyTransport,
+        {ShipComponentType::FuelMizer, ShipComponentType::FuelMizer, ShipComponentType::FuelMizer}});
+    Fleet scout{1, 1, "Scout", FleetRole::Scout, 10, {0, 0}, Position{100, 0}, 4, 0, 0};
+    assert(fleet_fuel_change_for_distance(state, scout, 16) == -16);
+    scout.warp = 3;
+    assert(fleet_fuel_change_for_distance(state, scout, 9) == -27);
+    scout.warp = 2;
+    assert(fleet_fuel_change_for_distance(state, scout, 4) == -24);
+    scout.warp = 1;
+    assert(fleet_fuel_change_for_distance(state, scout, 1) == -10);
+    scout.design = 11;
+    scout.warp = 4;
+    assert(fleet_fuel_change_for_distance(state, scout, 16) == -48);
+    scout.minerals.ironium = 250;
+    assert(fleet_fuel_change_for_distance(state, scout, 16) == -48);
+    scout.ships = {{11, 2}};
+    assert(fleet_fuel_change_for_distance(state, scout, 16) == -96);
+    scout.ships.clear();
+    scout.design = 10;
+    state.shipDesigns.front().components.front() = ShipComponentType::QuickJump5;
+    scout.warp = 1;
+    assert(fleet_fuel_change_for_distance(state, scout, 1) == -1);
+    scout.warp = 2;
+    assert(fleet_fuel_change_for_distance(state, scout, 10) > 0);
+}
+
+void verify_mixed_fleet_cargo_and_fuel_collection()
+{
+    using namespace suns;
+    GameState state;
+    state.players.push_back({1, "Mixed fleet", {}});
+    state.shipDesigns.push_back({10, 1, "Freighter", ShipHullType::HeavyTransport,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5, ShipComponentType::QuickJump5}});
+    state.shipDesigns.push_back({11, 1, "Escort", ShipHullType::Scout, {ShipComponentType::TransStar10}});
+    Fleet fleet{1, 1, "Convoy", FleetRole::Scout, 10, {0, 0}, Position{100, 0}, 9, 600, 0};
+    fleet.ships = {{10, 1}, {11, 1}};
+    fleet.minerals.ironium = 100;
+    // All 100 kt cargo is on the freighter: ceil(918.5) + ceil(7.1).
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 927);
+    std::reverse(fleet.ships.begin(), fleet.ships.end());
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 927);
+    state.shipDesigns.front().components.assign(3, ShipComponentType::GalaxyScoop);
+    fleet.warp = 9;
+    fleet.fuel = 0;
+    // The scoop's future collection cannot finance the escort's initial burn.
+    assert(fleet_fuel_change_for_distance(state, fleet, 81) < 0);
+    assert(fleet_fuel_consumption_for_distance(state, fleet, 81) == 8);
+    assert(fleet_fuel_affordable_distance(state, fleet, 81) < 81);
+    assert(fleet_free_warp(state, fleet) == 1);
+}
+
+void verify_reference_fuel_exhaustion_and_free_speed()
+{
+    using namespace suns;
+    GameState state;
+    state.players.push_back({1, "Mizer", {}});
+    state.players.front().race.improvedFuelEfficiency = true;
+    state.shipDesigns.push_back({10, 1, "Mizer scout", ShipHullType::Scout, {ShipComponentType::FuelMizer}});
+    state.fleets.push_back({1, 1, "Scout", FleetRole::Scout, 10, {0, 0}, Position{200, 0}, 9, 0, 0});
+    auto next = TurnProcessor{}.process(state, {});
+    assert(near(next.fleets.front().position.x, 16));
+    assert(next.fleets.front().fuel == 16);
+    assert(next.fleets.front().warp == 9 && !next.fleets.front().fuelStalled);
+
+    state.fleets.front().fuel = 10;
+    next = TurnProcessor{}.process(state, {});
+    // 16 ly at W9 costs 10 mg; use the remaining 65/81 of a year at W4.
+    assert(near(next.fleets.front().position.x, 16 + 16 * 65.0 / 81));
+    assert(next.fleets.front().fuel == 12);
+    state.fleets.front().fuel = 5;
+    state.fleets.front().warp = 10;
+    next = TurnProcessor{}.process(state, {});
+    assert(near(next.fleets.front().position.x, 7 + 16 * .93));
+    assert(near(next.fleets.front().damagePercent, 18 * .07));
+    assert(next.fleets.front().fuel == 14);
+
+    state.shipDesigns.front().components.front() = ShipComponentType::QuickJump5;
+    state.fleets.front().warp = 9;
+    state.fleets.front().fuel = 0;
+    next = TurnProcessor{}.process(state, {});
+    assert(near(next.fleets.front().position.x, 1));
+    assert(next.fleets.front().fuel == 1);
 }
 
 void verify_default_propulsion_and_cargo()
@@ -221,6 +418,12 @@ void verify_unsafe_warp_accumulates_engine_damage()
 
 int main()
 {
+    verify_original_fuel_tables_and_rounding();
+    verify_original_collection_is_per_engine();
+    verify_mixed_fleet_cargo_and_fuel_collection();
+    verify_reference_fuel_exhaustion_and_free_speed();
+    verify_stars_progression_and_multifield_gates();
+    verify_stars_speed_bands_and_settler_restriction();
     verify_warp_squared_movement();
     verify_default_propulsion_and_cargo();
     verify_researched_warp_ten_drive();

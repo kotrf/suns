@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -114,13 +115,14 @@ Position generated_position(
     throw std::runtime_error("Unable to place generated star systems with the requested galaxy density");
 }
 
-std::vector<ShipDesign> default_ship_designs(PlayerId owner)
+std::vector<ShipDesign> default_ship_designs(PlayerId owner, bool starsPropulsion = false)
 {
+    const auto engine = starsPropulsion ? ShipComponentType::QuickJump5 : ShipComponentType::FusionDrive;
     std::vector<ShipDesign> designs{
         {kScoutDesignId, owner, "Scout", ShipHullType::Scout,
-         {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner}},
+         {engine, ShipComponentType::LongRangeScanner}},
         {kColonyShipDesignId, owner, "Colony Ship", ShipHullType::LightTransport,
-         {ShipComponentType::FusionDrive, ShipComponentType::ColonyModule}},
+         {engine, ShipComponentType::ColonyModule}},
     };
     for (auto& design : designs) normalize_ship_design_placement(design);
     return designs;
@@ -320,12 +322,15 @@ ShipHullSpec hull_spec(ShipHullType type)
         return {type, "Utility Hull", 85.0, 7, 500.0, 0.0, 2, 8, 0, make_hull_slots(2, 8, 0)};
     case ShipHullType::HeavyTransport:
         return {type, "Heavy Transport", 140.0, 12, 600.0, 250.0, 3, 6, 0, make_hull_slots(3, 6, 0)};
+    case ShipHullType::MiniColonyShip:
+        return {type, "Mini-Colony Ship", 8.0, 3, 150.0, 10.0, 1, 1, 0, make_hull_slots(1, 1, 0)};
     }
     return {type, "Unknown Hull", 0.0, 0, 0.0, 0.0, 0, 0, 0, {}};
 }
 
 ShipComponentSpec component_spec(ShipComponentType type)
 {
+    if (const auto* engine = propulsion_technology(type)) return propulsion_component_spec(*engine);
     ShipComponentSpec spec;
     spec.type = type;
 
@@ -564,6 +569,8 @@ std::string ship_design_validation_error(const ShipDesign& design)
     }
     std::optional<ShipComponentType> engineType;
     for (const auto component : design.components) {
+        if (component == ShipComponentType::SettlersDelight && design.hull != ShipHullType::MiniColonyShip)
+            return "Settler's Delight fits only a Mini-Colony Ship.";
         if (component_spec(component).kind != ShipComponentKind::Engine) continue;
         if (!engineType) {
             engineType = component;
@@ -674,36 +681,28 @@ std::uint8_t technology_level(const GameState& state, PlayerId player, ResearchF
 std::uint32_t research_level_cost(ResearchField, std::uint8_t level)
 {
     if (level == 0) return 0;
-    std::uint32_t cost = kFirstResearchLevelCost;
-    for (std::uint8_t current = 1; current < level; ++current) {
-        if (cost > std::numeric_limits<std::uint32_t>::max() / 2U) {
-            return std::numeric_limits<std::uint32_t>::max();
-        }
-        cost *= 2U;
-    }
-    return cost;
+    // Preserve 18/36/72 RP at levels 1–3, then grow quadratically so the
+    // original Propulsion-23 engines remain reachable in a Suns! campaign.
+    const auto n = static_cast<std::uint32_t>(level);
+    return kFirstResearchLevelCost * (1U + n * (n - 1U) / 2U);
 }
 
 bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component)
 {
     if (!find_player(state, player)) return false;
+    if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) return false;
     for (const auto& unlock : research_unlocks())
         if (unlock.component == component)
-            return technology_level(state, player, unlock.field) >= unlock.level;
+            return research_unlock_available(state, player, unlock);
     return true;
 }
 
 bool ship_design_available_to_player(
     const GameState& state, PlayerId player, const ShipDesign& design)
 {
-    const bool hullAvailable = design.hull != ShipHullType::RemoteMiner
-        || technology_level(state, player, ResearchField::Construction) >= 1;
-    const bool heavyAvailable = design.hull != ShipHullType::HeavyTransport
-        || technology_level(state, player, ResearchField::Construction) >= 2;
     return design.owner == player
-        && hullAvailable
-        && heavyAvailable
+        && ship_hull_available_to_player(state, player, design.hull)
         && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
             return component_available_to_player(state, player, component);
         });
@@ -1107,24 +1106,138 @@ double fleet_gross_mass(const GameState& state, const Fleet& fleet)
     return mass;
 }
 
-double fleet_fuel_rate(const GameState& state, const Fleet& fleet)
+namespace {
+
+struct FleetFuelAmounts {
+    double consumed{};
+    double collected{};
+};
+
+bool has_reference_engine(const GameState& state, const Fleet& fleet)
 {
-    double weightedRate = 0.0;
-    double dryMass = 0.0;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        if (const auto* design = find_ship_design(state, stack.design))
+            for (const auto component : design->components)
+                if (propulsion_technology(component)) return true;
+    }
+    return false;
+}
+
+FleetFuelAmounts fleet_fuel_amounts(
+    const GameState& state, const Fleet& fleet, double distance, bool rounded)
+{
+    if (distance <= 0.0 || fleet.warp == 0 || fleet.warp > kMaxWarp) return {};
+    // Keep the prototype's mass-weighted signed curve for legacy-only fleets.
+    if (!has_reference_engine(state, fleet)) {
+        double weightedRate = 0.0;
+        double dryMass = 0.0;
+        for (const auto& stack : fleet_ship_stacks(fleet)) {
+            const auto* design = find_ship_design(state, stack.design);
+            if (!design) continue;
+            const auto mass = ship_design_mass(*design) * stack.count;
+            weightedRate += ship_design_fuel_rate(*design, fleet.warp) * mass;
+            dryMass += mass;
+        }
+        const auto change = dryMass > 0.0
+            ? weightedRate / dryMass * fleet_gross_mass(state, fleet) / 100.0 * distance : 0.0;
+        return {std::max(0.0, change), std::max(0.0, -change)};
+    }
+
+    FleetFuelAmounts result;
+    const auto cargo = fleet_cargo_used(state, fleet);
+    const auto capacity = fleet_cargo_capacity(state, fleet);
+    const auto dryMass = fleet_gross_mass(state, fleet) - cargo;
+    const auto* player = find_player(state, fleet.owner);
+    const bool ife = player && player->race.improvedFuelEfficiency;
+    const auto roundedDistance = std::ceil(std::max(0.0, distance - 1e-9));
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state, stack.design);
         if (!design) continue;
-        const auto mass = ship_design_mass(*design) * stack.count;
-        weightedRate += ship_design_fuel_rate(*design, fleet.warp) * mass;
-        dryMass += mass;
+        auto mass = ship_design_mass(*design) * stack.count;
+        // Cargo belongs to cargo-capable ships, rather than to escorts in
+        // proportion to their dry mass. Fractional kt remains a Suns! unit.
+        mass += cargo * (capacity > 0.0
+            ? ship_design_cargo_capacity(*design) * stack.count / capacity
+            : dryMass > 0.0 ? mass / dryMass : 0.0);
+        ShipComponentSpec storage;
+        const auto* engine = primary_engine(*design, storage);
+        if (!engine) continue;
+        if (const auto* reference = propulsion_technology(engine->type)) {
+            const auto baseEfficiency = reference->fuelEfficiency[fleet.warp];
+            const auto efficiency = ife ? (baseEfficiency * 85 + 99) / 100 : baseEfficiency;
+            // Stars-compatible whole-mg billing per design stack and movement
+            // leg: round distance up, retain one decimal, then round fuel up.
+            const auto cost = rounded
+                ? std::ceil(std::floor(mass * efficiency * roundedDistance / 2000.0 + 1e-9) / 10.0 - 1e-9)
+                : mass * efficiency * distance / 20000.0;
+            result.consumed += std::max(0.0, cost);
+            result.collected += engine->fuelCollectedPerEngineLy[fleet.warp]
+                * ship_design_engine_slots_used(*design) * stack.count * distance;
+        } else {
+            const auto change = engine->fuelPer100MassLy[fleet.warp] * mass / 100.0 * distance;
+            result.consumed += std::max(0.0, change);
+            result.collected += std::max(0.0, -change);
+        }
     }
-    return dryMass > 0.0 ? weightedRate / dryMass : 0.0;
+    if (rounded) result.collected = std::floor(result.collected + 1e-9);
+    return result;
+}
+
+} // namespace
+
+double fleet_fuel_rate(const GameState& state, const Fleet& fleet)
+{
+    const auto amounts = fleet_fuel_amounts(state, fleet, 1.0, false);
+    const auto mass = fleet_gross_mass(state, fleet);
+    return mass > 0.0 ? (amounts.consumed - amounts.collected) * 100.0 / mass : 0.0;
 }
 
 double fleet_fuel_change_for_distance(const GameState& state, const Fleet& fleet, double distance)
 {
-    if (distance <= 0.0) return 0.0;
-    return fleet_fuel_rate(state, fleet) * (fleet_gross_mass(state, fleet) / 100.0) * distance;
+    const auto amounts = fleet_fuel_amounts(state, fleet, distance, true);
+    return amounts.consumed - amounts.collected;
+}
+
+double fleet_fuel_consumption_for_distance(const GameState& state, const Fleet& fleet, double distance)
+{
+    return fleet_fuel_amounts(state, fleet, distance, true).consumed;
+}
+
+double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet, double maximumDistance)
+{
+    if (maximumDistance <= 0.0) return 0.0;
+    if (!has_reference_engine(state, fleet)) {
+        const auto rate = fleet_fuel_consumption_for_distance(state, fleet, 1.0);
+        return rate > 0.0 ? std::min(maximumDistance, fleet.fuel / rate) : maximumDistance;
+    }
+    if (fleet_fuel_consumption_for_distance(state, fleet, maximumDistance) <= fleet.fuel + 1e-9)
+        return maximumDistance;
+    // Rounded consumption is monotone. Do not spend fuel that a different
+    // engine will collect later in the same movement leg.
+    double lo = 0.0, hi = maximumDistance;
+    for (int iteration = 0; iteration < 56; ++iteration) {
+        const auto middle = (lo + hi) / 2.0;
+        if (fleet_fuel_consumption_for_distance(state, fleet, middle) <= fleet.fuel + 1e-9) lo = middle;
+        else hi = middle;
+    }
+    return lo < 1e-8 ? 0.0 : lo;
+}
+
+std::uint8_t fleet_free_warp(const GameState& state, const Fleet& fleet)
+{
+    std::uint8_t freeWarp = kMaxWarp;
+    bool fitted = false;
+    for (const auto& stack : fleet_ship_stacks(fleet)) {
+        const auto* design = find_ship_design(state, stack.design);
+        if (!design) return 0;
+        ShipComponentSpec storage;
+        const auto* engine = primary_engine(*design, storage);
+        // Legacy fleets retain their original fuel-limited movement.
+        if (!engine || !propulsion_technology(engine->type)) return 0;
+        freeWarp = std::min(freeWarp, engine->freeWarp);
+        fitted = true;
+    }
+    return fitted ? freeWarp : 0;
 }
 
 double fleet_overdrive_damage_rate(
@@ -1646,7 +1759,7 @@ GameState generate_game(const GalaxyConfig& config)
     state.wormholeRules.width = std::max(500.0, config.width);
     state.wormholeRules.height = std::max(400.0, config.height);
     state.players.push_back({1, "Terrans", {1}});
-    state.shipDesigns = default_ship_designs(1);
+    state.shipDesigns = default_ship_designs(1, true);
     state.stars.reserve(starCount);
     state.planets.reserve(starCount);
 

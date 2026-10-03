@@ -45,6 +45,7 @@ private:
     [[nodiscard]] std::optional<ShipComponentType> selectedCatalogComponent() const;
 
     PlayerId player_{};
+    ShipComponentType initialEngine_{ShipComponentType::FusionDrive};
     bool remoteMiningAvailable_{};
 
     QLineEdit* nameEdit_{};

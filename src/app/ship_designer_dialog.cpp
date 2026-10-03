@@ -1,4 +1,5 @@
 #include "ship_designer_dialog.hpp"
+#include "suns/campaign.hpp"
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -99,6 +100,7 @@ QPixmap hullPortrait(ShipHullType hull)
         outline.lineTo(-21, 23); outline.lineTo(-38, 35); outline.lineTo(-70, 28);
         outline.lineTo(-17, -14); outline.closeSubpath();
         break;
+    case ShipHullType::MiniColonyShip:
     case ShipHullType::LightTransport:
         outline.moveTo(0, -55); outline.lineTo(25, -33); outline.lineTo(29, -9);
         outline.lineTo(69, -9); outline.lineTo(78, 36); outline.lineTo(34, 46);
@@ -217,21 +219,9 @@ QIcon componentIcon(ShipComponentType component, bool available = true)
 
 QString unlockRequirement(ShipComponentType component)
 {
-    switch (component) {
-    case ShipComponentType::AntimatterGenerator: return "Energy 1";
-    case ShipComponentType::AdvancedFusionDrive: return "Propulsion 1";
-    case ShipComponentType::HighWarpDrive: return "Propulsion 2";
-    case ShipComponentType::EfficientRamScoopDrive: return "Propulsion 3";
-    case ShipComponentType::CompactLongRangeScanner: return "Electronics 1";
-    case ShipComponentType::ExtendedRangeScanner: return "Electronics 2";
-    case ShipComponentType::PenetratingScanner: return "Electronics 3";
-    case ShipComponentType::DeepPenetratingScanner: return "Electronics 4";
-    case ShipComponentType::RelayArray: return "Electronics 5";
-    case ShipComponentType::RemoteMiningModule: return "Construction 1";
-    case ShipComponentType::AnomalyDetector: return "Electronics 6";
-    case ShipComponentType::FieldRepairBay: return "Construction 3";
-    default: return {};
-    }
+    for (const auto& unlock : research_unlocks())
+        if (unlock.component == component) return QString::fromStdString(research_unlock_requirement(unlock));
+    return {};
 }
 
 QString componentTooltip(ShipComponentType component)
@@ -247,10 +237,16 @@ QString componentTooltip(ShipComponentType component)
         .arg(minerals.ironium).arg(minerals.boranium).arg(minerals.germanium);
     if (spec.maxWarp > 0) {
         facts << QString("Safe maximum Warp %1 • Thrust %2").arg(spec.maxWarp).arg(spec.engineThrust);
+        if (spec.optimalWarp)
+            facts << QString("Optimal Warp %1 • Free through Warp %2").arg(spec.optimalWarp).arg(spec.freeWarp);
         facts << "One engine model fills the entire propulsion bank. Costs and mass above are per engine.";
-        facts << "Fuel per 100 kt per ly (gain means fuel collected):";
+        facts << (spec.optimalWarp
+            ? "Base fuel consumption per 100 kt per ly (Fuel efficiency applies in flight):"
+            : "Fuel use/gain per 100 kt per ly:");
         for (std::uint8_t warp = 1; warp <= kMaxWarp; ++warp) {
             auto line = QString("W%1: %2").arg(warp).arg(signedFuelRate(spec.fuelPer100MassLy[warp]));
+            if (spec.fuelCollectedPerEngineLy[warp] > 0.0)
+                line += QString(" • collects %1 mg per engine per ly").arg(spec.fuelCollectedPerEngineLy[warp]);
             if (spec.overdriveDamagePercent[warp] > 0.0)
                 line += QString(" • hull damage %1%/turn").arg(spec.overdriveDamagePercent[warp]);
             facts << line;
@@ -300,7 +296,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::AnomalyDetector)
+        || component > static_cast<int>(ShipComponentType::GalaxyScoop)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -487,6 +483,7 @@ private:
 ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent)
     : QDialog(parent)
     , player_(player)
+    , initialEngine_(player_uses_legacy_propulsion(state, player) ? ShipComponentType::FusionDrive : ShipComponentType::QuickJump5)
     , remoteMiningAvailable_(component_available_to_player(
           state, player, ShipComponentType::RemoteMiningModule))
 {
@@ -539,6 +536,11 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             model->item(hullCombo_->count() - 1)->setEnabled(false);
         }
     }
+    const bool settlersAvailable = ship_hull_available_to_player(state, player_, ShipHullType::MiniColonyShip);
+    addEnumItem(hullCombo_, settlersAvailable ? "Mini-Colony Ship" : "Mini-Colony Ship (locked — Settler engine access)", ShipHullType::MiniColonyShip);
+    if (!settlersAvailable)
+        if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model()))
+            model->item(hullCombo_->count() - 1)->setEnabled(false);
     form->addRow("Hull", hullCombo_);
     layout->addLayout(form);
 
@@ -589,13 +591,30 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::RelayArray,
         ShipComponentType::FieldRepairBay,
         ShipComponentType::AnomalyDetector,
+        ShipComponentType::SettlersDelight,
+        ShipComponentType::QuickJump5,
+        ShipComponentType::LongHump6,
+        ShipComponentType::DaddyLongLegs7,
+        ShipComponentType::AlphaDrive8,
+        ShipComponentType::TransGalacticDrive,
+        ShipComponentType::Interspace10,
+        ShipComponentType::TransStar10,
+        ShipComponentType::FuelMizer,
+        ShipComponentType::RadiatingHydroRamScoop,
+        ShipComponentType::SubGalacticFuelScoop,
+        ShipComponentType::TransGalacticFuelScoop,
+        ShipComponentType::TransGalacticSuperScoop,
+        ShipComponentType::TransGalacticMizerScoop,
+        ShipComponentType::GalaxyScoop,
     };
     for (const auto component : catalog) {
+        if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) continue;
         const auto available = component_available_to_player(state, player, component);
         auto label = QString("%1 • %2")
                          .arg(slotCategoryName(ship_component_slot_category(component)),
                              QString::fromStdString(component_spec(component).name));
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
+        if (legacy_propulsion_component(component)) label += "  [legacy]";
         auto* item = new QListWidgetItem(label, componentCatalog_);
         item->setIcon(componentIcon(component, available));
         item->setData(Qt::UserRole, static_cast<int>(component));
@@ -631,6 +650,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     layout->addLayout(workspace, 2);
 
     previewLabel_ = new QLabel(this);
+    previewLabel_->setObjectName("shipDesignPreview");
     previewLabel_->setWordWrap(true);
     previewLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     layout->addWidget(previewLabel_, 1);
@@ -640,7 +660,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     saveButton_->setObjectName("saveShipDesign");
     layout->addWidget(buttons);
     placements_ = autoplace_ship_components(ShipHullType::Scout,
-        {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner});
+        {initialEngine_, ShipComponentType::LongRangeScanner});
 
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -654,7 +674,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             const QSignalBlocker blockHull(hullCombo_);
             hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(ShipHullType::Scout)));
             placements_ = autoplace_ship_components(ShipHullType::Scout,
-                {ShipComponentType::FusionDrive, ShipComponentType::LongRangeScanner});
+                {initialEngine_, ShipComponentType::LongRangeScanner});
             nameEdit_->setText("New Design");
         } else {
             const QSignalBlocker blockHull(hullCombo_);
@@ -986,10 +1006,19 @@ void ShipDesignerDialog::updatePreview()
 
     QStringList fuelCurve;
     const auto maxWarp = ship_design_max_warp(design);
+    const auto referenceEngine = std::any_of(design.components.begin(), design.components.end(), [](auto component) {
+        return component_spec(component).optimalWarp > 0;
+    });
+    const auto fuelLegend = referenceEngine
+        ? "Base consumption per 100 kt per ly; Fuel efficiency applies in flight. Collection is for the fitted engine bank:"
+        : "Fuel use/gain per 100 kt per ly:";
     for (std::uint8_t warp = 1; warp <= maxWarp; ++warp) {
-        fuelCurve.push_back(QString("W%1: %2")
-                                .arg(warp)
-                                .arg(signedFuelRate(ship_design_fuel_rate(design, warp))));
+        auto line = QString("W%1: %2").arg(warp).arg(signedFuelRate(ship_design_fuel_rate(design, warp)));
+        double collected = 0.0;
+        for (const auto component : design.components)
+            collected += component_spec(component).fuelCollectedPerEngineLy[warp];
+        if (collected > 0.0) line += QString("; collects %1 mg/ly").arg(collected);
+        fuelCurve.push_back(line);
     }
     QString capabilities;
     if (const auto sensor = ship_design_sensor_range(design); sensor > 0.0) {
@@ -1029,7 +1058,7 @@ void ShipDesignerDialog::updatePreview()
                 "Max Warp: <b>%13</b> &nbsp; Fuel capacity: <b>%14</b> &nbsp; Fuel generation: <b>%15/turn</b><br>"
                 "Cargo capacity: <b>%16</b> (%17 colonists max)<br>"
                 "%18%19<br><br>"
-                "<b>Engine fuel curve</b> — rate per 100 kt per ly:<br>%20")
+                "<b>Engine fuel curve</b> — %20<br>%21")
             .arg(QString::fromStdString(design.name.empty() ? std::string("Unnamed design") : design.name))
             .arg(QString::fromStdString(hull.name))
             .arg(hull.requiredEngines)
@@ -1049,6 +1078,7 @@ void ShipDesignerDialog::updatePreview()
             .arg(ship_design_cargo_capacity(design) * kColonistsPerCargoUnit, 0, 'f', 0)
             .arg(capabilities)
             .arg(radiation > 0.0 ? " • <b>Radiation hazard</b>" : "")
+            .arg(fuelLegend)
             .arg(fuelCurve.isEmpty() ? "No engine fitted" : fuelCurve.join(" &nbsp; ")));
     saveButton_->setEnabled(valid);
 }

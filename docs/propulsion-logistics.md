@@ -22,9 +22,11 @@ Each engine component provides:
 - a signed fuel rate for Warp 1..10, measured as fuel units per 100 kt of gross ship mass per light-year;
 - optional radiation hazard metadata.
 
-Positive fuel rate consumes fuel. Negative fuel rate means the drive collects more fuel from interstellar space than it spends, so the tank fills while travelling. This is how ram-scoop drives can have effectively fuel-free or fuel-positive low-Warp regimes.
+Reference engines store nonnegative consumption and separate collection per engine per ly. Their cargo allocation, rounding and Fuel efficiency modifier are described in the [reference fuel rules](stars-propulsion.md#reference-fuel-rules).
 
-The catalog contains five drives:
+Legacy engines keep signed fuel curves: positive consumes fuel; negative means the drive collects more fuel from interstellar space than it spends, so the tank fills while travelling.
+
+New games use the [Stars! reference engine catalog](stars-propulsion.md). The following prototype engines remain available only to empires that already own legacy designs:
 
 - **Fusion Drive** — straightforward starter engine, available through Warp 8 with steep fuel burn at its top speed;
 - **Advanced Fusion Drive** — Propulsion 1, light and radiation-safe through Warp 9, but expensive and always consumes fuel;
@@ -77,7 +79,9 @@ Current logistics components include:
 
 Fleets at a friendly colony are automatically refuelled at the start of turn for now. This stands in for explicit planetary fuel transfer until colony logistics are modelled in more detail.
 
-If a normal drive lacks enough fuel for the requested Warp distance, the fleet travels only the distance its remaining fuel can support and keeps its course. A ram-scoop with a negative fuel rate can move even with an empty tank and collect fuel during that movement.
+If a legacy normal drive lacks enough fuel for the requested Warp distance, the fleet travels only the distance its remaining fuel can support and keeps its course. A legacy ram-scoop with a negative fuel rate can move even with an empty tank and collect fuel during that movement.
+
+The reference Stars! engines use individual Warp fuel tables and separate collection per engine per ly. If fuel runs out at the ordered Warp, their fleets use the remaining travel time at the lowest free Warp among their engines. The ordered Warp is retained for the next year. Fuel efficiency reduces their consumption by 15%; legacy engines keep their previous behavior. See [reference fuel rules](stars-propulsion.md#reference-fuel-rules) for rounding, cargo allocation and collection details.
 
 ## Mass and cargo
 

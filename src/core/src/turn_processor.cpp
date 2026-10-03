@@ -1314,6 +1314,45 @@ bool resolve_fleet_target_arrival(
     return true;
 }
 
+struct MovementBudget {
+    double distance{};
+    double fuelChange{};
+    double damage{};
+};
+
+MovementBudget fleet_movement_budget(
+    const GameState& state, const Fleet& fleet, double remaining, double turnFraction)
+{
+    constexpr double epsilon = 0.000001;
+    if (remaining <= epsilon || !fleet_warp_valid(state, fleet, fleet.warp)) return {};
+    const auto time = std::clamp(turnFraction, 0.0, 1.0);
+    const auto speed = warp_distance(fleet.warp);
+    const auto maximumDistance = std::min(remaining, speed * time);
+    auto paidDistance = fleet_fuel_affordable_distance(state, fleet, maximumDistance);
+    const bool fuelLimited = paidDistance < maximumDistance - epsilon;
+    const auto damageRate = fleet_overdrive_damage_rate(state, fleet, fleet.warp);
+    if (damageRate > 0.0)
+        paidDistance = std::min(paidDistance, speed * (100.0 - fleet.damagePercent) / damageRate);
+    MovementBudget result{
+        paidDistance,
+        fleet_fuel_change_for_distance(state, fleet, paidDistance),
+        speed > 0.0 ? damageRate * paidDistance / speed : 0.0,
+    };
+    // Reference engines fall back to the slowest free speed in the fleet
+    // for the unused part of the year. The player's requested Warp is kept.
+    const auto freeWarp = fleet_free_warp(state, fleet);
+    if (fuelLimited && freeWarp > 0 && freeWarp < fleet.warp
+        && fleet.damagePercent + result.damage < 100.0 - epsilon) {
+        auto coasting = fleet;
+        coasting.warp = freeWarp;
+        const auto freeDistance = std::min(
+            remaining - paidDistance, warp_distance(freeWarp) * std::max(0.0, time - paidDistance / speed));
+        result.distance += freeDistance;
+        result.fuelChange += fleet_fuel_change_for_distance(state, coasting, freeDistance);
+    }
+    return result;
+}
+
 Position projected_movement_endpoint(
     const GameState& state,
     const Fleet& fleet,
@@ -1323,16 +1362,7 @@ Position projected_movement_endpoint(
     const auto remaining = distance_between(fleet.position, destination);
     if (remaining <= 0.000001 || !fleet_warp_valid(state, fleet, fleet.warp)) return fleet.position;
 
-    double distance = std::min(
-        remaining,
-        warp_distance(fleet.warp) * std::clamp(turnFraction, 0.0, 1.0));
-    const auto fuelPerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
-    if (fuelPerLy > 0.000001) distance = std::min(distance, fleet.fuel / fuelPerLy);
-    const auto damageRate = fleet_overdrive_damage_rate(state, fleet, fleet.warp);
-    if (damageRate > 0.0) {
-        distance = std::min(distance,
-            warp_distance(fleet.warp) * (100.0 - fleet.damagePercent) / damageRate);
-    }
+    const auto distance = fleet_movement_budget(state, fleet, remaining, turnFraction).distance;
     if (distance <= 0.000001) return fleet.position;
     if (distance >= remaining - 0.000001) return destination;
 
@@ -1348,16 +1378,11 @@ Position projected_turn_endpoint(const GameState& state, const Fleet& fleet, Pos
     return projected_movement_endpoint(state, fleet, destination, 1.0);
 }
 
-void apply_overdrive_damage(
-    const GameState& state, Fleet& fleet, double travelledDistance)
+void apply_overdrive_damage(Fleet& fleet, double damage)
 {
-    const auto rate = fleet_overdrive_damage_rate(state, fleet, fleet.warp);
-    const auto fullTurnDistance = warp_distance(fleet.warp);
-    if (rate <= 0.0 || travelledDistance <= 0.0 || fullTurnDistance <= 0.0) return;
-
-    const auto exposure = std::clamp(travelledDistance / fullTurnDistance, 0.0, 1.0);
+    if (damage <= 0.0) return;
     fleet.damagePercent = std::clamp(
-        fleet.damagePercent + rate * exposure, 0.0, 100.0);
+        fleet.damagePercent + damage, 0.0, 100.0);
     if (fleet.damagePercent < 100.0 - 0.000001) return;
     fleet.damagePercent = 100.0;
 
@@ -1397,7 +1422,7 @@ void continue_merged_fleet_route(
         state, fleet, destination, remainingTurnFraction);
     const auto travelled = distance_between(start, endpoint);
     if (travelled <= epsilon) {
-        const auto fuelPerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
+        const auto fuelPerLy = fleet_fuel_consumption_for_distance(state, fleet, routeDistance);
         if (routeDistance > epsilon && fuelPerLy > epsilon && !fleet.fuelStalled) {
             fleet.fuelStalled = true;
             queue_fleet_movement_report(
@@ -1406,15 +1431,15 @@ void continue_merged_fleet_route(
         return;
     }
 
-    const auto fuelChange = fleet_fuel_change_for_distance(state, fleet, travelled);
+    const auto budget = fleet_movement_budget(state, fleet, travelled, remainingTurnFraction);
     fleet.fuel = std::clamp(
-        fleet.fuel - fuelChange,
+        fleet.fuel - budget.fuelChange,
         0.0,
         fleet_fuel_capacity(state, fleet));
     fleet.position = endpoint;
     fleet.fuelStalled = false;
     observe_fleet_sensor_sweep(state, fleet, start, endpoint, state.turn + 1);
-    apply_overdrive_damage(state, fleet, travelled);
+    apply_overdrive_damage(fleet, budget.damage);
 
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
@@ -1590,7 +1615,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             const auto routeDistance = plan->routed
                 ? distance_between(start, plan->destination)
                 : 0.0;
-            const auto fuelChangePerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
+            const auto fuelChangePerLy = fleet_fuel_consumption_for_distance(state, fleet, routeDistance);
             if (routeDistance > epsilon && fuelChangePerLy > epsilon && !plan->intercepted
                 && !fleet.fuelStalled) {
                 fleet.fuelStalled = true;
@@ -1605,17 +1630,16 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             }
             continue;
         }
-        const double fuelChangePerLy = fleet_fuel_change_for_distance(state, fleet, 1.0);
         fleet.fuelStalled = false;
 
-        const double fuelChange = fuelChangePerLy * remaining;
+        const auto budget = fleet_movement_budget(state, fleet, remaining, 1.0);
         const auto capacity = fleet_fuel_capacity(state, fleet);
-        fleet.fuel = std::clamp(fleet.fuel - fuelChange, 0.0, capacity);
+        fleet.fuel = std::clamp(fleet.fuel - budget.fuelChange, 0.0, capacity);
         fleet.position = endpoint;
 
         observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
         apply_fleet_radiation_attrition(state, fleet);
-        apply_overdrive_damage(state, fleet, remaining);
+        apply_overdrive_damage(fleet, budget.damage);
 
         if (fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
