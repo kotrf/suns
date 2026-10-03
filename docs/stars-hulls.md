@@ -116,7 +116,7 @@ complete engine bank. Moving a fitted cell cannot mix models in a destination
 bank. Automatic placement prefers dedicated/narrow banks to general banks.
 
 Current Suns! scanners, including Anomaly Detector, use Scanner slots. Relay
-Array uses Electrical slots. Fuel Tank, Cargo Pod, Antimatter Generator,
+Array and Antimatter Generator use Electrical slots. Fuel Tank, Cargo Pod,
 Colony Module and Field Repair Bay use Mechanical slots. Remote Mining Module
 uses Mining slots. For example, Colony Ship accepts its Colony Module but
 does not accept a scanner; Small Freighter's Sh/A bank cannot hold a Cargo Pod.
@@ -185,4 +185,3 @@ homogeneous banks, host-side rejection, tanker generation/support, remote
 mining, UI fitting/scrolling/research queueing, all 32 hull IDs in save/order
 round trips, player export, malformed access flags and actual v55/v13
 compatibility fixtures.
-

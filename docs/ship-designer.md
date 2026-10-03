@@ -56,7 +56,7 @@ fills the complete required bank; removing one engine cell removes the bank.
 Mixed or incomplete engine banks are never saved. Reference hulls have typed
 equipment banks, each holding only one model. Fitting from the catalog fills
 that bank; Delete reduces its quantity one cell at a time. Scanners use Scanner
-slots, Relay Array uses Electrical, and tanks/cargo/generators/colony/repair
+slots, Relay Array and Antimatter Generator use Electrical, and tanks/cargo/colony/repair
 equipment use Mechanical. General banks accept these classes; shield/armor,
 weapon, bomb and mine-layer banks enforce their own restrictions. Legacy hulls
 retain their individual General/Mining cells.

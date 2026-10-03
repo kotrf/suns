@@ -67,8 +67,8 @@ std::uint16_t equipment_mask(ShipComponentType component)
     if (kind == ShipComponentKind::Engine) return 1;
     if (kind == ShipComponentKind::Scanner) return 2;
     if (kind == ShipComponentKind::Mining) return 128;
-    if (component == ShipComponentType::RelayArray) return 2048;
-    return 4096; // Tanks, cargo pods, generators, colonizers and repair bays.
+    if (component == ShipComponentType::RelayArray || component == ShipComponentType::AntimatterGenerator) return 2048;
+    return 4096; // Tanks, cargo pods, colonizers and repair bays.
 }
 
 } // namespace

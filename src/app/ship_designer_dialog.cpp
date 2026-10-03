@@ -528,10 +528,15 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         auto label = QString::fromStdString(hull.name) + (legacy ? " (legacy)" : "");
         if (!available) label += QString(" (locked — %1)").arg(requirement);
         addEnumItem(hullCombo_, label, hull.type);
+        QString support;
+        if (hull.fuelGenerationPerTurn > 0)
+            support += QString("\nGenerates %1 mg fuel/year per ship.").arg(hull.fuelGenerationPerTurn);
+        if (hull.fleetRepairBonus > 0)
+            support += QString("\nStationary fleet repair +%1 damage points/year; strongest tanker bonus only.").arg(hull.fleetRepairBonus);
         hullCombo_->setItemData(hullCombo_->count() - 1,
             QString("%1 kt; %2 resources; %3 engines; %4 kt cargo; %5 mg fuel; %6 base armor; initiative %7.\n%8")
                 .arg(hull.mass).arg(hull.buildCost).arg(hull.requiredEngines).arg(hull.baseCargoCapacity)
-                .arg(hull.baseFuelCapacity).arg(hull.armor).arg(hull.initiative).arg(requirement), Qt::ToolTipRole);
+                .arg(hull.baseFuelCapacity).arg(hull.armor).arg(hull.initiative).arg(requirement) + support, Qt::ToolTipRole);
         if (!available)
             if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model()))
                 model->item(hullCombo_->count() - 1)->setEnabled(false);
@@ -1077,6 +1082,10 @@ void ShipDesignerDialog::updatePreview()
         })) {
         if (!capabilities.isEmpty()) capabilities += " • ";
         capabilities += "Field repair 8 damage points/year";
+    }
+    if (hull.fleetRepairBonus > 0) {
+        if (!capabilities.isEmpty()) capabilities += " • ";
+        capabilities += QString("Stationary fleet repair +%1 damage points/year (strongest tanker only)").arg(hull.fleetRepairBonus);
     }
     if (capabilities.isEmpty()) capabilities = "No special mission capability";
 

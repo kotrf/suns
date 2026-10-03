@@ -91,6 +91,12 @@ void verify_slot_types_and_homogeneous_banks()
     assert(ship_design_valid(colony));
     colony.components[1] = ShipComponentType::LongRangeScanner;
     assert(!ship_design_valid(colony));
+    colony.components[1] = ShipComponentType::AntimatterGenerator;
+    assert(!ship_design_valid(colony)); // Electrical generation cannot use a mechanical-only bank.
+    ShipDesign generator{44, 1, "Generator", ShipHullType::Destroyer,
+        {ShipComponentType::QuickJump5, ShipComponentType::AntimatterGenerator}};
+    normalize_ship_design_placement(generator);
+    assert(ship_design_valid(generator) && generator.placements[1].slot == 206); // Dedicated electrical bank.
     ShipDesign frigate{41, 1, "Frigate", ShipHullType::Frigate,
         {ShipComponentType::QuickJump5, ShipComponentType::LongRangeScanner, ShipComponentType::FuelTank}};
     normalize_ship_design_placement(frigate);
