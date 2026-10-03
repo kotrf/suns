@@ -54,7 +54,7 @@ Hydro-Ram Scoop. Fuel Mizer remains allowed and collects fuel through Warp 4.
 Settler's Delight also remains allowed with
 Settler engine access, but only in a Mini-Colony Ship.
 
-The Mini-Colony Ship has one engine cell and one general cell, 8 kt hull mass,
+The reference Mini-Colony Ship has one engine cell and one mechanical cell, 8 kt hull mass,
 150 fuel capacity and 10 kt cargo capacity. Its base costs are 3 resources and
 2/0/2 minerals. Its cargo still uses Suns!' 100 kg/person conversion.
 
@@ -94,9 +94,10 @@ initial consumption of another engine in the fleet. Pure legacy fleets retain
 their previous fuel-limited movement and signed linear fuel curves.
 
 The designer shows base consumption per 100 kt per ly separately from collection
-for the fitted engine bank; Fuel efficiency is applied in flight. Suns!' hulls,
-fuel capacities and colonist mass still affect range, so using the original
-engine tables does not make every fleet's range identical to Stars!.
+for the fitted engine bank; Fuel efficiency is applied in flight. The reference
+hull catalog now supplies original mass and fuel capacities (see
+[Stars! hulls](stars-hulls.md)); legacy hulls, Suns! equipment and colonist mass
+still affect range.
 
 ## Suns! simulation and balance
 
@@ -120,12 +121,14 @@ build and copy them; the designer marks their engines as legacy. New empires do
 not see or unlock that prototype line. Existing ships are never silently refitted.
 The deterministic demo fixture retains its legacy ships.
 
-Save format is 55 and order format is 13. Previous saves/orders remain readable;
-pre-55 races receive neutral propulsion access settings. New engine IDs, the new
-hull and access settings round-trip in host saves and player turn files. All PBEM
+Save format is 56 and order format is 14 (propulsion originally introduced
+55/13). Previous saves/orders remain readable; pre-55 races receive neutral
+propulsion access settings. New engine/hull IDs and access settings round-trip
+in host saves and player turn files. All PBEM
 participants need the same build; older clients reject newer packet formats.
 
 This completes the normal reference engine catalog, not every Stars! technology.
 The Mystery Trader's Enigma Pulser is not a normal research unlock and awaits a
-visitor/acquisition system. Weapons, shields, most hulls, terraforming and other
+visitor/acquisition system. The complete ship hull catalog is documented in
+[Stars! hulls](stars-hulls.md). Weapons, shields, terraforming and other
 branches remain separate work under #44 and their respective mechanics.

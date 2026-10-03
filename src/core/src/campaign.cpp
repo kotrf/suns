@@ -1,6 +1,7 @@
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
+#include "suns/hulls.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -53,8 +54,10 @@ const std::vector<ResearchUnlock>& research_unlocks()
             {ResearchField::Biology, 2, "Adaptive Habitats", "New campaigns: expand environmental tolerance to 10 points.", {}},
             {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},
         };
-        for (auto& entry : entries)
+        for (auto& entry : entries) {
             entry.legacyPropulsion = entry.component && legacy_propulsion_component(*entry.component);
+            if (entry.name == "Heavy Transport") { entry.hull = ShipHullType::HeavyTransport; entry.legacyHull = true; }
+        }
         for (const auto& engine : propulsion_technologies()) {
             const auto description = std::string("Optimal Warp ") + std::to_string(engine.optimalWarp)
                 + "; free through Warp " + std::to_string(engine.freeWarp)
@@ -73,7 +76,16 @@ const std::vector<ResearchUnlock>& research_unlocks()
             "Small 10 kt colony transport with one engine and one general cell.", {}};
         mini.engineAccess = EngineAccess::Settler;
         mini.hull = ShipHullType::MiniColonyShip;
+        mini.legacyHull = true;
         entries.push_back(std::move(mini));
+        for (const auto& hull : reference_hulls()) {
+            ResearchUnlock entry{ResearchField::Construction, hull.constructionLevel, hull.name,
+                std::to_string(hull.requiredEngines) + " engines; " + std::to_string(int(hull.baseCargoCapacity))
+                    + " kt cargo; " + std::to_string(int(hull.baseFuelCapacity)) + " mg fuel; "
+                    + std::to_string(hull.armor) + " base armor.", {}};
+            entry.hull = hull.type;
+            entries.push_back(std::move(entry));
+        }
         return entries;
     }();
     return unlocks;
@@ -83,7 +95,8 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
 {
     const auto* owner = find_player(state, player);
     return owner && engine_access_available(owner->race, unlock.engineAccess)
-        && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines);
+        && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines)
+        && (!unlock.hull || ship_hull_access_applicable(state, player, *unlock.hull));
 }
 
 bool research_unlock_available(const GameState& state, PlayerId player, const ResearchUnlock& unlock)
@@ -109,12 +122,38 @@ std::string research_unlock_requirement(const ResearchUnlock& unlock)
     case EngineAccess::Settler: text += "; Settler engine access"; break;
     }
     if (unlock.excludesNoRamScoops) text += "; requires ram scoops enabled";
+    if (unlock.hull) if (const auto* hull = reference_hull(*unlock.hull)) {
+        if (hull->access != HullAccess::Standard) text += "; " + hull_access_name(hull->access) + " hull access";
+        if (hull->requiresAdvancedRemoteMining) text += "; Advanced Remote Mining";
+        if (hull->excludesBasicRemoteMining) text += "; unavailable with Basic Remote Mining";
+        if (hull->mysteryTrader) text += "; Mystery Trader acquisition";
+    }
     return text;
+}
+
+bool ship_hull_access_applicable(const GameState& state, PlayerId player, ShipHullType type)
+{
+    const auto* owner = find_player(state, player);
+    if (!owner) return false;
+    if (const auto* hull = reference_hull(type)) {
+        if (hull->access != HullAccess::Standard && hull->access != owner->race.hullAccess
+            && !(type == ShipHullType::StarsMiniColonyShip && owner->race.settlerEngineAccess)) return false;
+        if (hull->requiresAdvancedRemoteMining && !owner->race.advancedRemoteMining) return false;
+        if (hull->excludesBasicRemoteMining && owner->race.basicRemoteMining) return false;
+        if (hull->mysteryTrader) return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const auto& design) {
+            return design.owner == player && design.hull == type;
+        });
+        return true;
+    }
+    if (!player_uses_legacy_hulls(state, player)) return false;
+    return type != ShipHullType::MiniColonyShip || owner->race.settlerEngineAccess;
 }
 
 bool ship_hull_available_to_player(const GameState& state, PlayerId player, ShipHullType hull)
 {
-    if (!find_player(state, player)) return false;
+    if (!ship_hull_access_applicable(state, player, hull)) return false;
+    if (const auto* reference = reference_hull(hull))
+        return technology_level(state, player, ResearchField::Construction) >= reference->constructionLevel;
     if (hull == ShipHullType::RemoteMiner)
         return technology_level(state, player, ResearchField::Construction) >= 1;
     if (hull == ShipHullType::HeavyTransport)
@@ -181,6 +220,8 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
     for (std::size_t i = 0; i < empires.size(); ++i) {
         if (empires[i].name.empty() || empires[i].name.size() > 80)
             throw std::invalid_argument("Empire names must contain 1–80 bytes");
+        if (empires[i].hullAccess > HullAccess::HyperExpansion || (empires[i].advancedRemoteMining && empires[i].basicRemoteMining))
+            throw std::invalid_argument("Invalid hull access or mutually exclusive remote-mining settings");
         const PlayerId id = static_cast<PlayerId>(i + 1);
         const StarSystem* home = &state.stars.front();
         double best = -1;
@@ -196,7 +237,10 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         player.race = race_preset(empires[i].race);
         player.race.improvedFuelEfficiency = empires[i].improvedFuelEfficiency;
         player.race.noRamScoopEngines = empires[i].noRamScoopEngines;
-        player.race.settlerEngineAccess = empires[i].settlerEngineAccess;
+        player.race.settlerEngineAccess = empires[i].settlerEngineAccess || empires[i].hullAccess == HullAccess::HyperExpansion;
+        player.race.hullAccess = empires[i].hullAccess;
+        player.race.advancedRemoteMining = empires[i].advancedRemoteMining;
+        player.race.basicRemoteMining = empires[i].basicRemoteMining;
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.star == home->id; });

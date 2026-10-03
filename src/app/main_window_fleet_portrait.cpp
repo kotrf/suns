@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/hulls.hpp"
 
 #include <QColor>
 #include <QGraphicsScene>
@@ -20,6 +21,19 @@ namespace {
 bool hasComponent(const ShipDesign& design, ShipComponentType type)
 {
     return std::find(design.components.begin(), design.components.end(), type) != design.components.end();
+}
+
+ShipHullType portraitHull(ShipHullType type)
+{
+    if (const auto* hull = reference_hull(type)) {
+        if (hull->miningSlots) return ShipHullType::RemoteMiner;
+        if (hull->baseCargoCapacity >= 1000) return ShipHullType::HeavyTransport;
+        if (hull->baseCargoCapacity >= 70) return ShipHullType::MediumTransport;
+        if (hull->baseCargoCapacity > 0) return ShipHullType::LightTransport;
+        if (hull->requiredEngines > 1) return ShipHullType::Utility;
+        return ShipHullType::Scout;
+    }
+    return type;
 }
 
 QColor hullAccent(ShipHullType hull)
@@ -90,12 +104,13 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         painter.drawPoint(x, y);
     }
 
-    const QColor accent = hullAccent(design.hull);
+    const auto silhouette = portraitHull(design.hull);
+    const QColor accent = hullAccent(silhouette);
     QColor hullFill("#617589");
     QColor hullEdge = accent.lighter(120);
 
     QPainterPath hull;
-    switch (design.hull) {
+    switch (silhouette) {
     case ShipHullType::Scout:
         hull.moveTo(146, 52);
         hull.lineTo(105, 35);
@@ -184,27 +199,27 @@ QPixmap renderShipPortrait(const ShipDesign& design)
     }
 
     // Hull mass class gets a different silhouette even before optional modules.
-    if (design.hull != ShipHullType::Scout) {
+    if (silhouette != ShipHullType::Scout) {
         painter.setBrush(accent.darker(170));
         painter.setPen(QPen(accent, 1.0));
         painter.drawRoundedRect(QRectF(70, 22, 31, 11), 4, 4);
         painter.drawRoundedRect(QRectF(70, 71, 31, 11), 4, 4);
     }
-    if (design.hull == ShipHullType::MediumTransport || design.hull == ShipHullType::HeavyTransport) {
+    if (silhouette == ShipHullType::MediumTransport || silhouette == ShipHullType::HeavyTransport) {
         painter.drawRoundedRect(QRectF(104, 23, 24, 12), 4, 4);
         painter.drawRoundedRect(QRectF(104, 69, 24, 12), 4, 4);
-        if (design.hull == ShipHullType::HeavyTransport) {
+        if (silhouette == ShipHullType::HeavyTransport) {
             painter.drawRoundedRect(QRectF(52, 17, 24, 13), 4, 4);
             painter.drawRoundedRect(QRectF(52, 74, 24, 13), 4, 4);
         }
     }
-    if (design.hull == ShipHullType::RemoteMiner) {
+    if (silhouette == ShipHullType::RemoteMiner) {
         painter.setBrush(QColor("#684876"));
         painter.setPen(QPen(QColor("#d7a6ec"), 1.0));
         painter.drawRoundedRect(QRectF(76, 18, 34, 15), 3, 3);
         painter.drawRoundedRect(QRectF(76, 71, 34, 15), 3, 3);
     }
-    if (design.hull == ShipHullType::Utility) {
+    if (silhouette == ShipHullType::Utility) {
         painter.setBrush(QColor("#315f67"));
         painter.setPen(QPen(QColor("#85ded8"), 1.0));
         painter.drawRoundedRect(QRectF(72, 20, 25, 13), 3, 3);

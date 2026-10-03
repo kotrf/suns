@@ -38,7 +38,7 @@ void verify_stars_progression_and_multifield_gates()
     tech.levels[energy] = 1;
     const auto scoop = ShipComponentType::SubGalacticFuelScoop;
     assert(!component_available_to_player(state, 1, scoop));
-    const PlayerOrders order{1, {CreateShipDesignOrder{"Scoop scout", ShipHullType::Scout, {scoop}}}};
+    const PlayerOrders order{1, {CreateShipDesignOrder{"Scoop scout", ShipHullType::StarsScout, {scoop}}}};
     assert(TurnProcessor{}.process(state, {order}).shipDesigns.size() == state.shipDesigns.size());
     tech.levels[energy] = 2;
     assert(component_available_to_player(state, 1, scoop));
@@ -81,13 +81,13 @@ void verify_stars_speed_bands_and_settler_restriction()
     const auto minerals = ship_design_mineral_cost(late);
     assert(minerals.ironium == 7 && minerals.boranium == 1 && minerals.germanium == 4);
     auto state = generate_campaign(GalaxyConfig{}, {{"Settlers", RacePreset::Terran, false, true, true}});
-    ShipDesign settler{44, 1, "Settler", ShipHullType::MiniColonyShip,
+    ShipDesign settler{44, 1, "Settler", ShipHullType::StarsMiniColonyShip,
         {ShipComponentType::SettlersDelight, ShipComponentType::ColonyModule}};
     assert(ship_design_valid(settler) && ship_design_available_to_player(state, 1, settler));
     assert(ship_design_cargo_capacity(settler) == 10);
     settler.hull = ShipHullType::Scout;
     assert(!ship_design_valid(settler));
-    settler.hull = ShipHullType::MiniColonyShip;
+    settler.hull = ShipHullType::StarsMiniColonyShip;
     state.players.front().race.settlerEngineAccess = false;
     assert(!ship_design_available_to_player(state, 1, settler));
 }

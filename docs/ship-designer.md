@@ -4,7 +4,12 @@ Suns! treats a ship role as the result of a fitted design rather than a fixed cl
 
 ## Hulls
 
-Six hulls are currently available (research requirements apply):
+New campaigns use the 32-hull Stars! reference catalog, including racial and
+Mystery Trader restrictions. See [Stars! hulls](stars-hulls.md) for all values,
+bank layouts and research gates. New starter designs use Scout and Colony Ship.
+
+The earlier prototype hulls remain available to empires which already own a
+legacy design. Their values are preserved for save compatibility:
 
 | Hull | Dry hull mass | Hull cost | Base fuel | Base cargo | Required engines | General | Mining |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -14,14 +19,22 @@ Six hulls are currently available (research requirements apply):
 | Heavy Transport (Construction 2) | 140 kt | 12 | 600 | 250 | 3 | 6 | 0 |
 | Remote Miner (Construction 1) | 120 kt | 8 | 500 | 0 | 2 | 1 | 2 |
 | Utility Hull | 85 kt | 7 | 500 | 0 | 2 | 8 | 0 |
+| Mini-Colony Ship (Settler engines) | 8 kt | 3 | 150 | 10 | 1 | 1 | 0 |
 
-The numbers are tuning placeholders. The structural rules are more important. Each hull has a fixed required engine count based on its structural mass class, and every engine in that bank must be the same model. Multiple engines do not multiply maximum Warp: together they are the propulsion plant required for that hull to achieve the selected engine model's normal performance. Every installed engine still contributes its own mass, build cost and mineral cost. Remote Mining Modules use `Mining`, not general, slots.
+These legacy numbers are tuning placeholders. Reference hulls use original
+values and bank capacities. Each hull has a fixed required engine count, and
+every engine in that bank must be the same model. Multiple engines do not
+multiply maximum Warp: together they are the propulsion plant required for that
+hull to achieve the selected engine model's normal performance. Every installed
+engine still contributes its own mass, build cost and mineral cost. Remote Mining
+Modules use `Mining` slots on either legacy or reference miner hulls.
 
 Transport hulls buy cargo efficiency through built-in hold capacity and have fewer configurable cells. The Heavy Transport moves five times the Medium Transport's base cargo, but requires a third engine, a larger mineral bill and more fuel per ship. The Utility Hull starts with no cargo capacity but has eight general cells. It may become a hauler by spending those cells on Cargo Pods, or instead become a survey vessel, colony expedition, relay or industrial support design. A fully cargo-fitted Utility Hull is intentionally more expensive and heavier than obtaining comparable capacity from a transport hull.
 
 ## Fitting
 
-The first designer exposes these components:
+The designer exposes the [15 reference engines](stars-propulsion.md), the
+following Suns! equipment, and legacy engines for existing legacy empires:
 
 - Fusion Drive
 - Advanced Fusion Drive (Propulsion 1; light, safe Warp 9, but no fuel scooping)
@@ -31,14 +44,22 @@ The first designer exposes these components:
 - Compact Long Range Scanner (Electronics 1)
 - Extended Range Scanner (Electronics 2; 160 ly ordinary field, heavy and expensive)
 - Penetrating Scanner (Electronics 3)
-- Remote Mining Module (Construction 1, 80 kt; Remote Miner `Mining` slots only)
+- Remote Mining Module (Construction 1, 80 kt; miner hull `Mining` slots only)
 - Field Repair Bay (Construction 3; repairs hull damage away from docks)
 - Colony Module
 - Fuel Tank
 - Cargo Pod
 - Antimatter Generator (Energy 1; +200 fuel capacity and +50 fuel/turn)
 
-Engines occupy the dedicated engine cells. Selecting or dropping an engine model in the designer fills the complete required bank, and removing one engine cell removes the bank; mixed or incomplete banks are never saved. Remote Mining Modules occupy dedicated `Mining` slots. Every other installed component consumes one general slot. Fuel tanks, cargo pods and generators may be fitted more than once when the hull has room.
+Engines occupy dedicated engine cells. Selecting or dropping an engine model
+fills the complete required bank; removing one engine cell removes the bank.
+Mixed or incomplete engine banks are never saved. Reference hulls have typed
+equipment banks, each holding only one model. Fitting from the catalog fills
+that bank; Delete reduces its quantity one cell at a time. Scanners use Scanner
+slots, Relay Array uses Electrical, and tanks/cargo/generators/colony/repair
+equipment use Mechanical. General banks accept these classes; shield/armor,
+weapon, bomb and mine-layer banks enforce their own restrictions. Legacy hulls
+retain their individual General/Mining cells.
 
 Selecting any catalog row opens a persistent detail card below the catalog. It
 shows the compatible slot category, mass, production cost, I/B/G bill and the

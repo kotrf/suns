@@ -18,10 +18,10 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 55;
+constexpr quint32 kSaveFormatVersion = 56;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 13;
+constexpr quint32 kTurnOrderFormatVersion = 14;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -493,7 +493,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.id = static_cast<ShipDesignId>(id);
     value.owner = static_cast<PlayerId>(owner);
     readString(stream, value.name);
-    const auto newestHull = gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+    const auto newestHull = gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
         : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
     if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return;
 
@@ -1898,9 +1898,11 @@ void writeGameState(QDataStream& stream, const GameState& value)
     writeVector(stream, value.orbitalStations, writeOrbitalStation);
     writeWormholeState(stream, value);
     stream << quint32(value.players.size());
-    for (const auto& player : value.players)
+    for (const auto& player : value.players) {
         stream << quint32(player.id) << quint8(player.race.improvedFuelEfficiency)
-               << quint8(player.race.noRamScoopEngines) << quint8(player.race.settlerEngineAccess);
+               << quint8(player.race.noRamScoopEngines) << quint8(player.race.settlerEngineAccess)
+               << quint8(player.race.hullAccess) << quint8(player.race.advancedRemoteMining) << quint8(player.race.basicRemoteMining);
+    }
 }
 
 void readGameState(QDataStream& stream, GameState& value)
@@ -1961,6 +1963,16 @@ void readGameState(QDataStream& stream, GameState& value)
             player.race.improvedFuelEfficiency = efficiency;
             player.race.noRamScoopEngines = noScoops;
             player.race.settlerEngineAccess = settlers;
+            if (gReadSaveFormatVersion >= 56) {
+                quint8 access{}, advanced{}, basic{};
+                stream >> access >> advanced >> basic;
+                if (access > quint8(HullAccess::HyperExpansion) || advanced > 1 || basic > 1 || (advanced && basic)) {
+                    markCorrupt(stream); return;
+                }
+                player.race.hullAccess = static_cast<HullAccess>(access);
+                player.race.advancedRemoteMining = advanced;
+                player.race.basicRemoteMining = basic;
+            }
         }
     }
     if (gReadSaveFormatVersion < 22) record_empire_turn_statistics(value);
@@ -2142,7 +2154,7 @@ bool readOrder(QDataStream& stream, Order& order)
     case 2: {
         CreateShipDesignOrder value;
         readString(stream, value.name);
-        const auto newestHull = gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+        const auto newestHull = gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
             : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
         if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return false;
         quint32 count{};
@@ -2765,7 +2777,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
