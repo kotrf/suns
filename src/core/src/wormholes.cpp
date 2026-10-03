@@ -258,6 +258,8 @@ bool enter_wormhole(GameState& state, Fleet& fleet, WormholeEndpointId endpoint)
     std::erase_if(state.wormholeTransits, [&](const auto& t) { return t.lastContact.id == fleet.id; });
     auto contact = fleet_player_view(state, fleet);
     contact.fuelStalled = false;
+    // Signals already emitted before entry survive destruction of their sender.
+    contact.telemetryInTransit = fleet.telemetryInTransit;
     if (contact.telemetry.ships.empty()) contact.ships = {{contact.design, 1}};
     state.wormholeTransits.push_back({contact, endpoint, turn, overdue,
         overdue + state.wormholeRules.presumedLostGraceTurns});
@@ -344,6 +346,17 @@ std::vector<GameEvent> deliver_wormhole_reports(GameState& state)
         std::erase_if(reports, [&](const auto& r) { return r.deliveryTurn <= state.turn; });
     }
     for (auto& transit : state.wormholeTransits) {
+        auto& contact = transit.lastContact;
+        for (const auto& packet : contact.telemetryInTransit) if (packet.deliveryTurn <= state.turn
+            && packet.telemetry.observedTurn > contact.telemetry.observedTurn) contact.telemetry = packet.telemetry;
+        std::erase_if(contact.telemetryInTransit, [&](const auto& packet) { return packet.deliveryTurn <= state.turn; });
+        const auto physical = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const auto& fleet) { return fleet.id == contact.id; });
+        if (physical != state.fleets.end() && physical->telemetry.observedTurn >= transit.enteredTurn
+            && physical->telemetry.observedTurn > contact.telemetry.observedTurn)
+            contact = fleet_player_view(state, *physical);
+        if (transit.status != WormholeTransitStatus::EmergenceConfirmed
+            && transit.status != WormholeTransitStatus::PresumedLost)
+            transit.lastContact.position = projected_fleet_position(state, transit.lastContact);
         WormholeKnowledge knowledge{transit.endpoint, transit.lastContact.position, state.turn};
         if (transit.status == WormholeTransitStatus::AwaitingEmergence && state.turn >= transit.overdueTurn) {
             transit.status = WormholeTransitStatus::Overdue;
@@ -364,7 +377,7 @@ std::vector<Fleet> wormhole_missing_contacts(const GameState& state, PlayerId pl
         if (transit.lastContact.owner != player || transit.status == WormholeTransitStatus::PresumedLost
             || transit.status == WormholeTransitStatus::EmergenceConfirmed) continue;
         if (std::none_of(state.fleets.begin(), state.fleets.end(), [&](const auto& f) { return f.id == transit.lastContact.id; }))
-            contacts.push_back(transit.lastContact);
+            contacts.push_back(fleet_player_view(state, transit.lastContact));
     }
     return contacts;
 }

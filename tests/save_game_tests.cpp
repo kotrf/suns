@@ -925,6 +925,88 @@ void pre_wormhole_formats_remain_readable()
     assert(std::get<MoveFleetOrder>(readOrders.orders.orders.front()).destination.x == 20);
 }
 
+void moving_transit_outcomes_have_identical_undelivered_packets()
+{
+    SaveGameData initial;
+    initial.mode = SessionMode::Host;
+    initial.campaignId = 21;
+    initial.turnToken = 34;
+    initial.playerTokens = {{1, 34}};
+    initial.pendingOrders = {1, {}};
+    initial.state = make_demo_game();
+    auto& state = initial.state;
+    state.turn = 3;
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.wormholeRules.driftPerTurn = 0;
+    state.wormholeRules.relocationChance = 0;
+    state.wormholeRules.instabilityLossChance = 0;
+    state.nextWormholeEndpointId = 21;
+    state.wormholes.push_back({{{{19, {300, 0}, WormholeSignature::Strong},
+        {20, {-400, 200}, WormholeSignature::Weak}}}, 1, 50, 0.7});
+    state.players.front().wormholeKnowledge.push_back({19, {300, 0}, 1, WormholeStability::Variable});
+    auto& moving = state.fleets.front();
+    moving.position = {236, 0};
+    moving.telemetry.position = moving.position;
+    moving.destination = Position{300, 0};
+    moving.telemetry.destination = moving.destination;
+    moving.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::EnterWormhole, 1, FleetCargoKind::Colonists, 19};
+    moving.telemetry.arrivalAction = moving.arrivalAction;
+    auto inFlight = moving.telemetry;
+    inFlight.observedTurn = 2;
+    inFlight.position = {250, 0};
+    inFlight.fuel = 123;
+    moving.telemetryInTransit.push_back({5, inFlight});
+    auto other = moving;
+    other.id = 2;
+    other.name = "Second scout";
+    other.position = other.telemetry.position = {0, 0};
+    other.destination.reset(); other.telemetry.destination.reset();
+    other.arrivalAction.reset(); other.telemetry.arrivalAction.reset();
+    other.telemetryInTransit.clear();
+    state.fleets.push_back(other);
+    state.nextFleetId = 3;
+    auto lost = initial, alive = initial;
+    lost.state.wormholeRules.minimumLossChance = 1;
+    alive.state.wormholeRules.minimumLossChance = 0;
+    lost.state = TurnProcessor{}.process(lost.state, {});
+    alive.state = TurnProcessor{}.process(alive.state, {});
+    assert(lost.state.fleets.size() == 1 && alive.state.fleets.size() == 2);
+    assert(lost.state.players.front().history.back().fleets == 2);
+    const auto lostPacket = make_player_turn(lost, 1), alivePacket = make_player_turn(alive, 1);
+    assert(lostPacket.state.fleets[0].id == 1 && alivePacket.state.fleets[0].id == 1);
+    assert(lostPacket.state.fleets[0].position.x == 300 && alivePacket.state.fleets[0].position.x == 300);
+    assert(lostPacket.state.wormholeTransits.empty() && alivePacket.state.wormholeTransits.empty());
+    QTemporaryDir dir;
+    QString error;
+    const auto aPath = dir.filePath("moving-alive.sunsturn"), bPath = dir.filePath("moving-lost.sunsturn");
+    assert(write_save_game_file(aPath, alivePacket, error));
+    assert(write_save_game_file(bPath, lostPacket, error));
+    QFile a(aPath), b(bPath);
+    assert(a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly));
+    assert(a.readAll() == b.readAll());
+    // Undelivered cargo changes after emergence cannot affect player statistics.
+    alive.state.fleets.front().colonists = 9000;
+    alive.state.fleets.front().minerals = {10, 20, 30};
+    const auto known = empire_turn_statistics(alive.state, 1);
+    const auto missing = empire_turn_statistics(lost.state, 1);
+    assert(known.population == missing.population && known.fleetMass == missing.fleetMass);
+    assert(known.minerals.ironium == missing.minerals.ironium);
+    for (int year = 5; year <= 6; ++year) {
+        alive.state = TurnProcessor{}.process(alive.state, {});
+        lost.state = TurnProcessor{}.process(lost.state, {});
+        assert(alive.state.turn == static_cast<std::uint64_t>(year));
+        const auto live = make_player_turn(alive, 1), gone = make_player_turn(lost, 1);
+        assert(live.state.fleets.front().telemetry.observedTurn == (year == 5 ? 2 : 4));
+        assert(gone.state.fleets.front().telemetry.observedTurn == live.state.fleets.front().telemetry.observedTurn);
+        assert(live.state.fleets.front().fuel == 123 && gone.state.fleets.front().fuel == 123);
+        a.close(); b.close();
+        assert(write_save_game_file(aPath, live, error) && write_save_game_file(bPath, gone, error));
+        assert(a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly));
+        assert(a.readAll() == b.readAll());
+        for (const auto& transit : gone.state.wormholeTransits) assert(transit.lastContact.telemetryInTransit.empty());
+    }
+}
+
 } // namespace
 
 int main()
@@ -933,6 +1015,7 @@ int main()
     turn_order_file_round_trip_preserves_envelope_and_orders();
     wormholes_round_trip_and_keep_player_exports_private();
     pre_wormhole_formats_remain_readable();
+    moving_transit_outcomes_have_identical_undelivered_packets();
     high_warp_component_round_trips();
     heavy_transport_round_trips();
     old_format_is_rejected_cleanly();

@@ -1481,8 +1481,14 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     auto knownFleets = state.fleets;
     const auto missing = wormhole_missing_contacts(state, playerId);
     knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
-    for (const auto& fleet : knownFleets) {
-        if (fleet.owner != playerId) continue;
+    std::sort(knownFleets.begin(), knownFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+    for (const auto& source : knownFleets) {
+        if (source.owner != playerId) continue;
+        const bool pendingTransit = std::any_of(state.wormholeTransits.begin(), state.wormholeTransits.end(),
+            [&](const auto& t) { return t.lastContact.id == source.id && t.lastContact.owner == playerId
+                && t.status != WormholeTransitStatus::EmergenceConfirmed
+                && t.status != WormholeTransitStatus::PresumedLost; });
+        const auto fleet = pendingTransit ? fleet_player_view(state, source) : source;
         ++result.fleets;
         result.population += fleet.colonists;
         result.ships += fleet_ship_count(fleet);
@@ -1490,7 +1496,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.ironium += fleet.minerals.ironium;
         result.minerals.boranium += fleet.minerals.boranium;
         result.minerals.germanium += fleet.minerals.germanium;
-        if (std::none_of(missing.begin(), missing.end(), [&](const auto& contact) { return contact.id == fleet.id; })
+        if (!pendingTransit && std::none_of(missing.begin(), missing.end(), [&](const auto& contact) { return contact.id == fleet.id; })
             && fleet_has_instant_link(state, fleet))
             result.fleetHistory.push_back({fleet.id, fleet_ship_count(fleet),
                 fleet_gross_mass(state, fleet), fleet.fuel, fleet.minerals, fleet.colonists,

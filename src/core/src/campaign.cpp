@@ -262,10 +262,12 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     for (const auto& transit : host.wormholeTransits) if (transit.lastContact.owner == playerId
         && transit.status != WormholeTransitStatus::AwaitingEntryReport) {
         auto known = transit;
+        known.lastContact = fleet_player_view(host, transit.lastContact);
         known.overdueTurn = 0;
         known.presumedLostTurn = 0;
         state.wormholeTransits.push_back(known);
     }
+    std::sort(state.fleets.begin(), state.fleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     state.wormholeRules.spawnChancePerTurn = 0.0;
     // The live map shows only the connected sensor mesh. Detached reconnaissance
     // contributes delayed briefings without disclosing today's remote truth.

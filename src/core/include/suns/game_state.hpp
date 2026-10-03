@@ -709,7 +709,8 @@ struct WormholeRules {
 
 enum class WormholeTransitStatus : std::uint8_t { AwaitingEntryReport, AwaitingEmergence, Overdue, PresumedLost, EmergenceConfirmed };
 struct WormholeTransit {
-    // A knowledge-only contact remains available after authoritative destruction.
+    // A retained contact remains available after authoritative destruction.
+    // Pre-entry telemetry traffic is host-only and stripped from player views.
     // It contains no outcome flag or hidden exit coordinate.
     Fleet lastContact;
     WormholeEndpointId endpoint{};

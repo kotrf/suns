@@ -33,6 +33,13 @@ struct MainWindowTestAccess {
         w.state_.fleets.clear();
         w.rebuildScene();
     }
+    static void installState(MainWindow& w, GameState state) {
+        w.state_ = std::move(state); w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear();
+        w.selection_.fleet = 1; w.rebuildScene();
+    }
+    static QString fleetPanel(MainWindow& w) { return w.fleetLabel_->text(); }
+    static QString empirePanel(MainWindow& w) { return w.empireLabel_->text(); }
+    static Position planningPosition(MainWindow& w) { return w.selectedFleetPlanningView()->position; }
     static bool hasSelectedFleet(MainWindow& w) { return w.selectedFleet() != nullptr; }
     static void setTransitStatus(MainWindow& w, WormholeTransitStatus status) {
         w.state_.wormholeTransits.front().status = status;
@@ -81,5 +88,28 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::setTransitStatus(window, suns::WormholeTransitStatus::PresumedLost);
     assert(status->text().contains("PRESUMED LOST"));
     assert(!suns::MainWindowTestAccess::hasSelectedFleet(window));
+    auto source = suns::make_demo_game();
+    source.wormholeRules.spawnChancePerTurn = source.wormholeRules.driftPerTurn = source.wormholeRules.relocationChance = 0;
+    source.wormholeRules.instabilityLossChance = 0;
+    source.wormholes.push_back({{{{19, {300, 0}, suns::WormholeSignature::Strong},
+        {20, {-400, 200}, suns::WormholeSignature::Weak}}}, 1, 30, 0.7});
+    auto& moving = source.fleets.front();
+    moving.position = moving.telemetry.position = {236, 0};
+    moving.destination = moving.telemetry.destination = suns::Position{300, 0};
+    moving.arrivalAction = moving.telemetry.arrivalAction = suns::FleetArrivalAction{
+        suns::FleetArrivalActionKind::EnterWormhole, 1, suns::FleetCargoKind::Colonists, 19};
+    auto lost = source, alive = source;
+    lost.wormholeRules.minimumLossChance = 1;
+    alive.wormholeRules.minimumLossChance = 0;
+    lost = suns::TurnProcessor{}.process(lost, {});
+    alive = suns::TurnProcessor{}.process(alive, {});
+    suns::MainWindow liveWindow, lostWindow;
+    suns::MainWindowTestAccess::installState(liveWindow, alive);
+    suns::MainWindowTestAccess::installState(lostWindow, lost);
+    assert(suns::MainWindowTestAccess::planningPosition(liveWindow).x == 300);
+    assert(suns::MainWindowTestAccess::planningPosition(lostWindow).x == 300);
+    assert(suns::MainWindowTestAccess::fleetPanel(liveWindow) == suns::MainWindowTestAccess::fleetPanel(lostWindow));
+    assert(suns::MainWindowTestAccess::empirePanel(liveWindow) == suns::MainWindowTestAccess::empirePanel(lostWindow));
+    assert(liveWindow.availableOwnedFleetsForRouteProgram() == lostWindow.availableOwnedFleetsForRouteProgram());
     std::cout << "wormhole editor tests passed\n";
 }

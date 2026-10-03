@@ -454,6 +454,13 @@ Position projected_fleet_position(const GameState& state, const Fleet& fleet)
 
 Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
 {
+    for (const auto& transit : state.wormholeTransits) {
+        if (transit.lastContact.id == fleet.id && transit.lastContact.owner == fleet.owner
+            && &fleet != &transit.lastContact && fleet.telemetry.observedTurn < transit.enteredTurn
+            && transit.status != WormholeTransitStatus::EmergenceConfirmed
+            && transit.status != WormholeTransitStatus::PresumedLost)
+            return fleet_player_view(state, transit.lastContact);
+    }
     const auto telemetry = confirmed_fleet_telemetry(state, fleet);
     Fleet view = fleet;
     view.position = project_from_telemetry(telemetry, fleet_telemetry_age(state, fleet));

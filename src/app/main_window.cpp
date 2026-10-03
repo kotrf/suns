@@ -143,17 +143,21 @@ QString fuelValue(double fuel)
 
 const Fleet* findFleet(const GameState& state, FleetId id)
 {
+    for (const auto& transit : state.wormholeTransits) if (transit.lastContact.id == id
+        && transit.status != WormholeTransitStatus::PresumedLost
+        && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
     const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
         return fleet.id == id;
     });
-    return it == state.fleets.end() ? nullptr : &*it;
+    if (it != state.fleets.end()) return &*it;
+    return nullptr;
 }
 
-QPointF fleetMapAnchor(const GameState& state, const Fleet& fleet)
+QPointF fleetMapAnchor(const GameState& state, const Fleet& fleet, const std::vector<Fleet>& contacts)
 {
     const auto visible = fleet_player_view(state, fleet);
     int coLocatedBefore = 0;
-    for (const auto& candidate : state.fleets) {
+    for (const auto& candidate : contacts) {
         if (candidate.id == fleet.id) break;
         const auto candidateVisible = fleet_player_view(state, candidate);
         if (same_position(candidateVisible.position, visible.position)) ++coLocatedBefore;
@@ -519,12 +523,12 @@ const Planet* MainWindow::selectedPlanet() const
 const Fleet* MainWindow::selectedFleet() const
 {
     if (!selection_.fleet) return nullptr;
-    const auto* fleet = findFleet(state_, *selection_.fleet);
-    if (fleet && fleet->owner == pendingOrders_.player) return fleet;
     for (const auto& transit : state_.wormholeTransits) if (transit.lastContact.id == *selection_.fleet
         && transit.lastContact.owner == pendingOrders_.player
         && transit.status != WormholeTransitStatus::PresumedLost
         && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
+    const auto* fleet = findFleet(state_, *selection_.fleet);
+    if (fleet && fleet->owner == pendingOrders_.player) return fleet;
     return nullptr;
 }
 
@@ -541,7 +545,7 @@ std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
     const auto* fleet = selectedFleet();
     if (!fleet) return std::nullopt;
     auto visible = fleet_player_view(state_, *fleet);
-    if (!fleet_has_instant_link(state_, *fleet)) return visible;
+    if (!fleet_has_instant_link(state_, *fleet) || fleet_telemetry_age(state_, *fleet) != 0) return visible;
     const auto preview = movementPhasePreviewState(state_, pendingOrders_, processor_);
     if (const auto* planned = findFleet(preview, fleet->id)) visible = *planned;
     return visible;
@@ -612,6 +616,7 @@ void MainWindow::rebuildScene()
     auto displayFleets = state_.fleets;
     const auto missingContacts = wormhole_missing_contacts(state_, pendingOrders_.player);
     displayFleets.insert(displayFleets.end(), missingContacts.begin(), missingContacts.end());
+    std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
             if (planet.owner != pendingOrders_.player) continue;
@@ -635,12 +640,12 @@ void MainWindow::rebuildScene()
         const auto visibleFleet = fleet_player_view(state_, fleet);
         if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
         auto routeDestination = *visibleFleet.destination;
-        const auto routeStart = fleetMapAnchor(state_, fleet);
+        const auto routeStart = fleetMapAnchor(state_, fleet, displayFleets);
         QPointF routeEnd(routeDestination.x, routeDestination.y);
         if (visibleFleet.targetFleet != 0) {
             if (const auto* target = findFleet(state_, visibleFleet.targetFleet)) {
                 routeDestination = fleet_player_view(state_, *target).position;
-                routeEnd = fleetMapAnchor(state_, *target);
+                routeEnd = fleetMapAnchor(state_, *target, displayFleets);
             }
         }
         const auto routeColor = fleetColor(fleet.role, 105);
@@ -671,12 +676,12 @@ void MainWindow::rebuildScene()
                 if (!fleet) return;
                 const auto visibleFleet = fleet_player_view(state_, *fleet);
                 auto routeDestination = concreteOrder.destination;
-                const auto routeStart = fleetMapAnchor(state_, *fleet);
+                const auto routeStart = fleetMapAnchor(state_, *fleet, displayFleets);
                 QPointF routeEnd(routeDestination.x, routeDestination.y);
                 if (concreteOrder.targetFleet != 0) {
                     if (const auto* target = findFleet(state_, concreteOrder.targetFleet)) {
                         routeDestination = fleet_player_view(state_, *target).position;
-                        routeEnd = fleetMapAnchor(state_, *target);
+                        routeEnd = fleetMapAnchor(state_, *target, displayFleets);
                     }
                 }
                 const auto routeColor = fleetColor(fleet->role, 190);
@@ -758,7 +763,7 @@ void MainWindow::rebuildScene()
 
     for (const auto& fleet : displayFleets) {
         const auto visibleFleet = fleet_player_view(state_, fleet);
-        const auto anchor = fleetMapAnchor(state_, fleet);
+        const auto anchor = fleetMapAnchor(state_, fleet, displayFleets);
         const double x = anchor.x();
         const double y = anchor.y();
         const bool enemyContact = fleet.owner != pendingOrders_.player;
@@ -838,7 +843,8 @@ void MainWindow::updateControls()
     const bool surveyed = star && is_surveyed(state_, pendingOrders_.player, star->id);
     const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
     const auto* plannedFleet = authoritativeFleet ? findFleet(movementPreview, authoritativeFleet->id) : nullptr;
-    const bool instantLink = authoritativeFleet && fleet_has_instant_link(state_, *authoritativeFleet);
+    const bool instantLink = authoritativeFleet && fleet_has_instant_link(state_, *authoritativeFleet)
+        && fleet_telemetry_age(state_, *authoritativeFleet) == 0;
     const auto* effectiveFleet = instantLink && plannedFleet ? plannedFleet : fleet;
 
     galaxyLabel_->setText(QString("<b>Galaxy seed:</b> %1 &nbsp; <b>Systems:</b> %2<br>"
@@ -858,6 +864,7 @@ void MainWindow::updateControls()
     }
 
     auto knownFleets = state_.fleets;
+    for (auto& known : knownFleets) if (known.owner == pendingOrders_.player) known = fleet_player_view(state_, known);
     const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
     knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
     const auto colonyShips = static_cast<std::size_t>(std::count_if(knownFleets.begin(), knownFleets.end(), [&](const Fleet& candidate) {

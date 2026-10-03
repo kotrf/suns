@@ -59,7 +59,8 @@ outcome. Route forecasts never run the hidden transit lottery or expose the exit
 
 A failed transit destroys the authoritative fleet immediately. The owner retains
 a knowledge-only copy of its last confirmed contact until a loss assessment can
-be made. Entry and emergence reports have independently computed communication
+be made. Position estimates continue from that telemetry for either outcome;
+pre-entry signals already in flight can still arrive after destruction. Entry and emergence reports have independently computed communication
 latencies; an emergence report can arrive before the entry report.
 
 After a delivered entry, the owner waits for emergence. A conservative timeout

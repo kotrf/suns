@@ -25,10 +25,14 @@ Fleet* findFleet(GameState& state, FleetId id)
 
 const Fleet* findFleet(const GameState& state, FleetId id)
 {
+    for (const auto& transit : state.wormholeTransits) if (transit.lastContact.id == id
+        && transit.status != WormholeTransitStatus::PresumedLost
+        && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
     const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
         return fleet.id == id;
     });
-    return it == state.fleets.end() ? nullptr : &*it;
+    if (it != state.fleets.end()) return &*it;
+    return nullptr;
 }
 
 const StarSystem* findStarAtPosition(const GameState& state, Position position)
@@ -177,6 +181,8 @@ QString routeForecast(
     GameState simulated = state;
     simulated.wormholes.clear();
     simulated.wormholeRules.spawnChancePerTurn = 0.0;
+    const auto missing = wormhole_missing_contacts(state, pending.player);
+    simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
     if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
         *simulatedFleet = fleet_player_view(state, *simulatedFleet);
     }
