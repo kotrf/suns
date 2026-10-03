@@ -150,6 +150,8 @@ public:
 
     // Player-owned turn history, presented without exposing other empires.
     void installEmpireHistory();
+    void installWormholes();
+    bool queueWormholeApproach(WormholeEndpointId endpoint, bool enter);
 
     // Ordered colony build list with completion forecasts and move controls.
     void installProductionQueue();
@@ -204,6 +206,8 @@ private:
     void openResearchDialog();
     void refreshResearchPanel();
     void refreshEmpireHistory();
+    void refreshWormholes();
+    void renderKnownWormholes();
     void queueResearchPlan();
     void queueResearchAllocation(int percent);
     void addResearchPlanItem();

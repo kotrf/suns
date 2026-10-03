@@ -1,4 +1,5 @@
 #include "suns/communications.hpp"
+#include "suns/wormholes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -114,6 +115,7 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
 bool route_tasks_valid(const FleetRouteProgram& program)
 {
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
+        if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
         if (target != 0) {
             return action.kind == FleetArrivalActionKind::None
                 || action.kind == FleetArrivalActionKind::MergeWithFleet;
@@ -128,13 +130,15 @@ bool route_tasks_valid(const FleetRouteProgram& program)
         return false;
     }
     if ((program.arrivalAction.kind == FleetArrivalActionKind::RemoteMining
-            || program.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet)
+            || program.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
+            || program.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole)
         && !program.queuedWaypoints.empty()) {
         return false;
     }
     for (std::size_t index = 0; index + 1 < program.queuedWaypoints.size(); ++index) {
         if (program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::RemoteMining
-            || program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet) {
+            || program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
+            || program.queuedWaypoints[index].arrivalAction.kind == FleetArrivalActionKind::EnterWormhole) {
             return false;
         }
     }
@@ -143,7 +147,8 @@ bool route_tasks_valid(const FleetRouteProgram& program)
         const auto incompatible = [](const FleetArrivalAction& action) {
             return action.kind == FleetArrivalActionKind::Colonize
                 || action.kind == FleetArrivalActionKind::RemoteMining
-                || action.kind == FleetArrivalActionKind::MergeWithFleet;
+                || action.kind == FleetArrivalActionKind::MergeWithFleet
+                || action.kind == FleetArrivalActionKind::EnterWormhole;
         };
         if (incompatible(program.arrivalAction)
             || std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
@@ -498,6 +503,13 @@ bool submit_fleet_route_command(
                 return candidate.id == candidateId && candidate.owner == player;
             });
     };
+    const auto knownEntry = [&](const FleetArrivalAction& action) {
+        if (action.kind != FleetArrivalActionKind::EnterWormhole) return true;
+        const auto* knowledge = known_wormhole(state, player, action.wormholeEndpoint);
+        return knowledge && !knowledge->collapsed && knowledge->stability != WormholeStability::Unknown;
+    };
+    if (!knownEntry(arrivalAction) || std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
+        [&](const auto& waypoint) { return !knownEntry(waypoint.arrivalAction); })) return false;
     if (!validTarget(targetFleet)
         || std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
             [&](const FleetWaypoint& waypoint) { return !validTarget(waypoint.targetFleet); })) {

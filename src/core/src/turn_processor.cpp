@@ -1,4 +1,5 @@
 #include "suns/turn_processor.hpp"
+#include "suns/wormholes.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
@@ -762,6 +763,8 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     if (action.kind == FleetArrivalActionKind::None) return false;
 
     switch (action.kind) {
+    case FleetArrivalActionKind::EnterWormhole:
+        return false; // Handled before ordinary arrival actions.
     case FleetArrivalActionKind::None:
         return false;
     case FleetArrivalActionKind::LoadAllAvailable: {
@@ -1168,6 +1171,13 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
 {
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
+    if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::EnterWormhole) {
+        if (enter_wormhole(state, fleet, fleet.arrivalAction->wormholeEndpoint)) {
+            consumedFleets.push_back(fleet.id);
+            return true;
+        }
+        return false;
+    }
     if (execute_arrival_action(state, fleet, freight)) {
         queue_fleet_movement_report(state, fleet, PlayerReportKind::RouteCompleted, state.turn + 1);
         consumedFleets.push_back(fleet.id);
@@ -1708,6 +1718,8 @@ TurnResult TurnProcessor::process_with_events(
 {
     GameState next = current;
     std::vector<GameEvent> events = deliver_due_survey_reports(next);
+    auto wormholeEvents = deliver_wormhole_reports(next);
+    events.insert(events.end(), wormholeEvents.begin(), wormholeEvents.end());
     auto deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
 
@@ -1938,7 +1950,10 @@ TurnResult TurnProcessor::process_with_events(
     }
 
     const auto remoteExtraction = mine_uncolonized_planets(next);
+    advance_wormholes(next);
+    resolve_wormhole_approaches(next);
     advance_fleets(next, freight);
+    observe_current_wormholes(next, next.turn + 1);
     observe_current_sensor_coverage(next, next.turn + 1);
     observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
@@ -2001,6 +2016,8 @@ TurnResult TurnProcessor::process_with_events(
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
+    wormholeEvents = deliver_wormhole_reports(next);
+    events.insert(events.end(), wormholeEvents.begin(), wormholeEvents.end());
     record_empire_turn_statistics(next, extraction, true, freight, remoteExtraction);
     for (const auto& event : events) {
         auto player = std::find_if(next.players.begin(), next.players.end(), [&](const Player& candidate) {

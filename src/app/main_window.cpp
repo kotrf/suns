@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/wormholes.hpp"
 
 #include "suns/communications.hpp"
 #include "ship_designer_dialog.hpp"
@@ -215,6 +216,8 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
         return "colonize";
     case FleetArrivalActionKind::RemoteMining:
         return "begin remote mining";
+    case FleetArrivalActionKind::EnterWormhole:
+        return QString("Enter WH %1 — unknown outcome").arg(action.wormholeEndpoint);
     case FleetArrivalActionKind::MergeWithFleet:
         return "merge with fleet";
     }
@@ -517,7 +520,12 @@ const Fleet* MainWindow::selectedFleet() const
 {
     if (!selection_.fleet) return nullptr;
     const auto* fleet = findFleet(state_, *selection_.fleet);
-    return fleet && fleet->owner == pendingOrders_.player ? fleet : nullptr;
+    if (fleet && fleet->owner == pendingOrders_.player) return fleet;
+    for (const auto& transit : state_.wormholeTransits) if (transit.lastContact.id == *selection_.fleet
+        && transit.lastContact.owner == pendingOrders_.player
+        && transit.status != WormholeTransitStatus::PresumedLost
+        && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
+    return nullptr;
 }
 
 const Fleet* MainWindow::selectedColonyShipAtSelectedStar() const
@@ -601,6 +609,9 @@ void MainWindow::rebuildScene()
     selection_.star = selectionToRestore;
     addBackgroundStars(scene_, state_.galaxySeed);
 
+    auto displayFleets = state_.fleets;
+    const auto missingContacts = wormhole_missing_contacts(state_, pendingOrders_.player);
+    displayFleets.insert(displayFleets.end(), missingContacts.begin(), missingContacts.end());
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
             if (planet.owner != pendingOrders_.player) continue;
@@ -609,7 +620,7 @@ void MainWindow::rebuildScene()
                     QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
             }
         }
-        for (const auto& fleet : state_.fleets) {
+        for (const auto& fleet : displayFleets) {
             if (fleet.owner != pendingOrders_.player) continue;
             const auto visibleFleet = fleet_player_view(state_, fleet);
             const auto range = fleet_sensor_range(state_, visibleFleet);
@@ -620,7 +631,7 @@ void MainWindow::rebuildScene()
         }
     }
 
-    for (const auto& fleet : state_.fleets) {
+    for (const auto& fleet : displayFleets) {
         const auto visibleFleet = fleet_player_view(state_, fleet);
         if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
         auto routeDestination = *visibleFleet.destination;
@@ -745,7 +756,7 @@ void MainWindow::rebuildScene()
         label->setZValue(5.0);
     }
 
-    for (const auto& fleet : state_.fleets) {
+    for (const auto& fleet : displayFleets) {
         const auto visibleFleet = fleet_player_view(state_, fleet);
         const auto anchor = fleetMapAnchor(state_, fleet);
         const double x = anchor.x();
@@ -810,6 +821,7 @@ void MainWindow::rebuildScene()
         label->setZValue(11.0);
     }
 
+    renderKnownWormholes();
     updateControls();
     emit routeProgramContextChanged();
 }
@@ -845,10 +857,13 @@ void MainWindow::updateControls()
         }
     }
 
-    const auto colonyShips = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
+    auto knownFleets = state_.fleets;
+    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
+    const auto colonyShips = static_cast<std::size_t>(std::count_if(knownFleets.begin(), knownFleets.end(), [&](const Fleet& candidate) {
         return candidate.owner == pendingOrders_.player && fleet_can_colonize(state_, candidate);
     }));
-    const auto inTransit = static_cast<std::size_t>(std::count_if(state_.fleets.begin(), state_.fleets.end(), [this](const Fleet& candidate) {
+    const auto inTransit = static_cast<std::size_t>(std::count_if(knownFleets.begin(), knownFleets.end(), [this](const Fleet& candidate) {
         return candidate.owner == pendingOrders_.player && candidate.destination.has_value();
     }));
     const auto* player = find_player(state_, pendingOrders_.player);

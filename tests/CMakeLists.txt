@@ -14,6 +14,10 @@ target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_core_tests COMMAND suns_core_tests)
 
+add_executable(suns_wormhole_tests wormhole_tests.cpp)
+target_link_libraries(suns_wormhole_tests PRIVATE Suns::Core)
+add_test(NAME suns_wormhole_tests COMMAND suns_wormhole_tests)
+
 add_executable(suns_radiation_tests
     radiation_tests.cpp
 )
@@ -200,6 +204,12 @@ target_link_libraries(suns_precursor_artifact_tests PRIVATE Suns::Core)
 add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_tests)
 
 if(SUNS_BUILD_APP)
+    add_executable(suns_wormhole_editor_tests wormhole_editor_tests.cpp)
+    target_link_libraries(suns_wormhole_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_wormhole_editor_tests COMMAND suns_wormhole_editor_tests)
+    set_tests_properties(suns_wormhole_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 20)
     add_executable(suns_save_game_tests
         save_game_tests.cpp
         ../src/app/save_game.cpp

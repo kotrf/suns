@@ -18,17 +18,18 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 53;
+constexpr quint32 kSaveFormatVersion = 54;
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 11;
+constexpr quint32 kTurnOrderFormatVersion = 12;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
 
 quint8 newestShipComponent()
 {
-    return static_cast<quint8>(gReadSaveFormatVersion >= 52
+    return static_cast<quint8>(gReadSaveFormatVersion >= 54
+        ? ShipComponentType::AnomalyDetector : gReadSaveFormatVersion >= 52
         ? ShipComponentType::FieldRepairBay : gReadSaveFormatVersion >= 48
         ? ShipComponentType::RelayArray : gReadSaveFormatVersion >= 45
         ? ShipComponentType::DeepPenetratingScanner : gReadSaveFormatVersion >= 39
@@ -169,15 +170,23 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
     writeEnum(stream, value.kind);
     stream << static_cast<quint64>(value.reservePopulation);
     writeEnum(stream, value.cargo);
+    stream << static_cast<quint32>(value.wormholeEndpoint);
 }
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(FleetArrivalActionKind::MergeWithFleet))) return;
+    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 54
+        ? FleetArrivalActionKind::EnterWormhole : FleetArrivalActionKind::MergeWithFleet))) return;
     quint64 reserve{};
     stream >> reserve;
     value.reservePopulation = migratedPopulation(stream, reserve, 1000);
     readEnum(stream, value.cargo, static_cast<quint8>(FleetCargoKind::All));
+    if (gReadSaveFormatVersion >= 54) {
+        quint32 endpoint{};
+        stream >> endpoint;
+        value.wormholeEndpoint = endpoint;
+        if ((value.kind == FleetArrivalActionKind::EnterWormhole) != (endpoint != 0)) markCorrupt(stream);
+    }
 }
 
 void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)
@@ -689,6 +698,7 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
     writeMinerals(stream, value.deliveredMinerals);
     stream << static_cast<quint64>(value.deliveredColonists);
     stream << static_cast<quint32>(value.contactOwner);
+    stream << static_cast<quint32>(value.wormholeEndpoint);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -704,7 +714,8 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 53
+    const auto newestEventKind = gReadSaveFormatVersion >= 54
+        ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
         ? GameEventKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -756,6 +767,11 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
         quint32 owner{};
         stream >> owner;
         value.contactOwner = owner;
+    }
+    if (gReadSaveFormatVersion >= 54) {
+        quint32 endpoint{};
+        stream >> endpoint;
+        value.wormholeEndpoint = endpoint;
     }
 }
 
@@ -1694,6 +1710,178 @@ void addLegacyOrbitalStations(GameState& state)
     }
 }
 
+void writeWormholeKnowledge(QDataStream& stream, const WormholeKnowledge& value)
+{
+    stream << static_cast<quint32>(value.endpoint);
+    writePosition(stream, value.lastPosition);
+    stream << static_cast<quint64>(value.observedTurn);
+    writeEnum(stream, value.stability);
+    stream << static_cast<quint32>(value.linkedEndpoint) << static_cast<quint8>(value.collapsed);
+}
+
+void readWormholeKnowledge(QDataStream& stream, WormholeKnowledge& value)
+{
+    quint32 endpoint{}, linked{};
+    quint64 turn{};
+    quint8 collapsed{};
+    stream >> endpoint;
+    readPosition(stream, value.lastPosition);
+    stream >> turn;
+    readEnum(stream, value.stability, static_cast<quint8>(WormholeStability::Stable));
+    stream >> linked >> collapsed;
+    value.endpoint = endpoint;
+    value.observedTurn = turn;
+    value.linkedEndpoint = linked;
+    value.collapsed = collapsed != 0;
+    if (!endpoint || linked == endpoint || collapsed > 1) markCorrupt(stream);
+}
+
+void writeWormholeReport(QDataStream& stream, const PendingWormholeReport& value)
+{
+    writeEnum(stream, value.kind);
+    stream << static_cast<quint64>(value.observedTurn) << static_cast<quint64>(value.deliveryTurn)
+           << static_cast<quint32>(value.fleet);
+    writeWormholeKnowledge(stream, value.knowledge);
+}
+
+void readWormholeReport(QDataStream& stream, PendingWormholeReport& value)
+{
+    quint64 observed{}, delivered{};
+    quint32 fleet{};
+    readEnum(stream, value.kind, static_cast<quint8>(WormholeReportKind::Collapsed));
+    stream >> observed >> delivered >> fleet;
+    value.observedTurn = observed;
+    value.deliveryTurn = delivered;
+    value.fleet = fleet;
+    readWormholeKnowledge(stream, value.knowledge);
+    if (delivered < observed || value.knowledge.observedTurn != observed) markCorrupt(stream);
+}
+
+void writeWormhole(QDataStream& stream, const Wormhole& value)
+{
+    for (const auto& mouth : value.endpoints) {
+        stream << static_cast<quint32>(mouth.id);
+        writePosition(stream, mouth.position);
+        writeEnum(stream, mouth.signature);
+        writePosition(stream, mouth.driftDirection);
+    }
+    stream << static_cast<quint64>(value.createdTurn) << static_cast<quint64>(value.collapseTurn) << value.stability;
+}
+
+void readWormhole(QDataStream& stream, Wormhole& value)
+{
+    for (auto& mouth : value.endpoints) {
+        quint32 id{};
+        stream >> id;
+        mouth.id = id;
+        readPosition(stream, mouth.position);
+        readEnum(stream, mouth.signature, static_cast<quint8>(WormholeSignature::Weak));
+        readPosition(stream, mouth.driftDirection);
+        if (std::abs(mouth.driftDirection.x) > 1 || std::abs(mouth.driftDirection.y) > 1) markCorrupt(stream);
+        if (!id) markCorrupt(stream);
+    }
+    quint64 created{}, collapse{};
+    stream >> created >> collapse >> value.stability;
+    value.createdTurn = created;
+    value.collapseTurn = collapse;
+    if (collapse <= created || !std::isfinite(value.stability) || value.stability < 0 || value.stability > 1
+        || value.endpoints[0].id == value.endpoints[1].id) markCorrupt(stream);
+}
+
+void writeWormholeTransit(QDataStream& stream, const WormholeTransit& value)
+{
+    writeFleet(stream, value.lastContact);
+    stream << static_cast<quint32>(value.endpoint) << static_cast<quint64>(value.enteredTurn)
+           << static_cast<quint64>(value.overdueTurn) << static_cast<quint64>(value.presumedLostTurn);
+    writeEnum(stream, value.status);
+}
+
+void readWormholeTransit(QDataStream& stream, WormholeTransit& value)
+{
+    readFleet(stream, value.lastContact);
+    quint32 endpoint{};
+    quint64 entered{}, overdue{}, presumed{};
+    stream >> endpoint >> entered >> overdue >> presumed;
+    value.endpoint = endpoint;
+    value.enteredTurn = entered;
+    value.overdueTurn = overdue;
+    value.presumedLostTurn = presumed;
+    readEnum(stream, value.status, static_cast<quint8>(WormholeTransitStatus::EmergenceConfirmed));
+    // Zero deadlines are the deliberately redacted player-turn representation.
+    if (!endpoint || !entered || presumed < overdue || (overdue && overdue < entered)
+        || !value.lastContact.id || !value.lastContact.owner) markCorrupt(stream);
+}
+
+void writeWormholeState(QDataStream& stream, const GameState& value)
+{
+    const auto& r = value.wormholeRules;
+    stream << static_cast<quint32>(value.nextWormholeEndpointId)
+           << r.width << r.height << r.spawnChancePerTurn << static_cast<quint32>(r.maximumPairs)
+           << static_cast<quint32>(r.minimumLifetime) << static_cast<quint32>(r.maximumLifetime)
+           << r.driftPerTurn << r.relocationChance << r.minimumLossChance << r.instabilityLossChance
+           << r.detectorRiskMultiplier << static_cast<quint32>(r.overdueGraceTurns)
+           << static_cast<quint32>(r.presumedLostGraceTurns);
+    writeVector(stream, value.wormholes, writeWormhole);
+    writeVector(stream, value.wormholeTransits, writeWormholeTransit);
+    stream << static_cast<quint32>(value.players.size());
+    for (const auto& player : value.players) {
+        stream << static_cast<quint32>(player.id);
+        writeVector(stream, player.wormholeKnowledge, writeWormholeKnowledge);
+        writeVector(stream, player.pendingWormholeReports, writeWormholeReport);
+    }
+}
+
+void readWormholeState(QDataStream& stream, GameState& value)
+{
+    auto& r = value.wormholeRules;
+    quint32 next{}, pairs{}, minimum{}, maximum{}, overdue{}, presumed{};
+    stream >> next >> r.width >> r.height >> r.spawnChancePerTurn >> pairs >> minimum >> maximum
+           >> r.driftPerTurn >> r.relocationChance >> r.minimumLossChance >> r.instabilityLossChance
+           >> r.detectorRiskMultiplier >> overdue >> presumed;
+    value.nextWormholeEndpointId = next;
+    r.maximumPairs = pairs;
+    r.minimumLifetime = minimum;
+    r.maximumLifetime = maximum;
+    r.overdueGraceTurns = overdue;
+    r.presumedLostGraceTurns = presumed;
+    const auto probability = [](double n) { return std::isfinite(n) && n >= 0 && n <= 1; };
+    if (!next || !std::isfinite(r.width) || !std::isfinite(r.height) || r.width <= 0 || r.height <= 0
+        || r.width > 1e9 || r.height > 1e9 || !std::isfinite(r.driftPerTurn) || r.driftPerTurn < 0
+        || r.driftPerTurn > 1e6 || !probability(r.spawnChancePerTurn) || !probability(r.relocationChance)
+        || !probability(r.minimumLossChance) || !probability(r.instabilityLossChance)
+        || !probability(r.detectorRiskMultiplier) || pairs > 10000 || minimum == 0 || maximum < minimum
+        || maximum > 10000 || overdue > 10000 || presumed > 10000) { markCorrupt(stream); return; }
+    if (!readVector(stream, value.wormholes, readWormhole)) return;
+    if (!readVector(stream, value.wormholeTransits, readWormholeTransit)) return;
+    std::vector<WormholeEndpointId> ids;
+    for (const auto& hole : value.wormholes) for (const auto& mouth : hole.endpoints) {
+        if (mouth.id >= next || std::find(ids.begin(), ids.end(), mouth.id) != ids.end()) { markCorrupt(stream); return; }
+        ids.push_back(mouth.id);
+    }
+    quint32 players{};
+    stream >> players;
+    if (players != value.players.size()) { markCorrupt(stream); return; }
+    for (auto& player : value.players) {
+        quint32 id{};
+        stream >> id;
+        if (id != player.id) { markCorrupt(stream); return; }
+        if (!readVector(stream, player.wormholeKnowledge, readWormholeKnowledge)) return;
+        if (!readVector(stream, player.pendingWormholeReports, readWormholeReport)) return;
+        ids.clear();
+        for (const auto& k : player.wormholeKnowledge) {
+            if (std::find(ids.begin(), ids.end(), k.endpoint) != ids.end()) { markCorrupt(stream); return; }
+            ids.push_back(k.endpoint);
+        }
+    }
+    ids.clear();
+    for (const auto& t : value.wormholeTransits) {
+        if (!find_player(value, t.lastContact.owner) || std::find(ids.begin(), ids.end(), t.lastContact.id) != ids.end()) {
+            markCorrupt(stream); return;
+        }
+        ids.push_back(t.lastContact.id);
+    }
+}
+
 void writeGameState(QDataStream& stream, const GameState& value)
 {
     stream << static_cast<quint64>(value.turn)
@@ -1707,6 +1895,7 @@ void writeGameState(QDataStream& stream, const GameState& value)
     writeVector(stream, value.planets, writePlanet);
     writeVector(stream, value.fleets, writeFleet);
     writeVector(stream, value.orbitalStations, writeOrbitalStation);
+    writeWormholeState(stream, value);
 }
 
 void readGameState(QDataStream& stream, GameState& value)
@@ -1753,6 +1942,7 @@ void readGameState(QDataStream& stream, GameState& value)
     } else {
         addLegacyOrbitalStations(value);
     }
+    if (gReadSaveFormatVersion >= 54) readWormholeState(stream, value);
     if (gReadSaveFormatVersion < 22) record_empire_turn_statistics(value);
     else if (gReadSaveFormatVersion < 37) {
         // Earlier snapshots cannot be reconstructed without replay. Only the
@@ -2555,7 +2745,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

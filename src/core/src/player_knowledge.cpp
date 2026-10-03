@@ -1,6 +1,7 @@
 #include "suns/player_knowledge.hpp"
 
 #include "suns/communications.hpp"
+#include "suns/wormholes.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -229,6 +230,7 @@ void observe_fleet_sensor_sweep(
     Position end,
     std::uint64_t observationTurn)
 {
+    observe_wormhole_sweep(state, fleet, start, end, observationTurn);
     const auto range = fleet_sensor_range(state, fleet);
     if (range <= 0.0) return;
     const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);

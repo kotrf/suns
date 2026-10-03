@@ -677,6 +677,18 @@ void population_migration_and_clear_orders()
         bytes.remove(markerPosition + 4, 4 + 3 * 8 + 1 + 4 + 3 * 8 + 8 + 1 + 3 * 8 + 1 + 4 + 4 + 1 + 1);
         // v46 adds the host's observed-contact count after environmentBased.
         bytes.remove(markerPosition + 5, 4);
+        // v54 adds a 4-byte mouth ID to this single arrival action and a
+        // 112-byte empty WH section (one player) after GameState.
+        const auto actionMarker = QByteArray::fromHex("0100000000000000640000000000");
+        const auto actionPosition = bytes.indexOf(actionMarker);
+        assert(actionPosition >= 0 && bytes.indexOf(actionMarker, actionPosition + 1) < 0);
+        bytes.remove(actionPosition + 10, 4);
+        QByteArray whMarker;
+        QDataStream whStream(&whMarker, QIODevice::WriteOnly);
+        whStream << quint32{1} << legacy.state.wormholeRules.width << legacy.state.wormholeRules.height;
+        const auto whPosition = bytes.indexOf(whMarker);
+        assert(whPosition >= 0 && bytes.indexOf(whMarker, whPosition + 1) < 0);
+        bytes.remove(whPosition, 112);
         // v37 colony records through v47 fleet count, v49 cargo and v50 damage flags.
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
@@ -773,12 +785,154 @@ void cancellation_round_trips_in_save_and_turn_packet()
     assert(std::get<RenameFleetOrder>(read.orders.orders.at(2)).name == "Trailblazer");
 }
 
+void wormholes_round_trip_and_keep_player_exports_private()
+{
+    SaveGameData host;
+    host.mode = SessionMode::Host;
+    host.campaignId = 123;
+    host.turnToken = 456;
+    host.playerTokens = {{1, 456}};
+    host.pendingOrders = {1, {}};
+    host.state = make_demo_game();
+    host.state.nextWormholeEndpointId = 21;
+    host.state.wormholes.push_back({{{{19, {25, 0}, WormholeSignature::Strong},
+        {20, {-400, 200}, WormholeSignature::Weak}}}, 1, 16, 0.6});
+    host.state.players.front().wormholeKnowledge.push_back({19, {20, 0}, 1, WormholeStability::Variable});
+    host.state.players.front().pendingWormholeReports.push_back({WormholeReportKind::Observation, 2, 4, 1,
+        {20, {-400, 200}, 2, WormholeStability::Variable, 19}});
+    auto action = FleetArrivalAction{};
+    action.kind = FleetArrivalActionKind::EnterWormhole;
+    action.wormholeEndpoint = 19;
+    host.pendingOrders.orders.push_back(MoveFleetOrder{1, {20, 0}, 8, action});
+    host.pendingDescriptions = {"Enter WH 19"};
+    host.state.fleets.front().arrivalAction = action;
+    host.state.wormholeTransits.push_back({host.state.fleets.front(), 19, 1, 12, 17});
+    host.state.wormholeRules.driftPerTurn = 4.5;
+    GameEvent event;
+    event.id = 55;
+    event.turn = 1;
+    event.recipient = 1;
+    event.kind = GameEventKind::WormholeEntered;
+    event.wormholeEndpoint = 19;
+    host.strategicMessages.push_back(event);
+    QTemporaryDir dir;
+    QString error;
+    const auto path = dir.filePath("wormholes.suns");
+    assert(write_save_game_file(path, host, error));
+    SaveGameData read;
+    assert(read_save_game_file(path, read, error));
+    assert(read.state.wormholes.size() == 1 && read.state.nextWormholeEndpointId == 21);
+    assert(read.state.wormholes.front().endpoints[1].signature == WormholeSignature::Weak);
+    assert(read.state.wormholes.front().collapseTurn == 16);
+    assert(read.state.wormholeRules.driftPerTurn == 4.5);
+    assert(read.state.players.front().wormholeKnowledge.front().lastPosition.x == 20);
+    assert(read.state.players.front().pendingWormholeReports.front().knowledge.linkedEndpoint == 19);
+    assert(read.state.wormholeTransits.front().presumedLostTurn == 17);
+    assert(read.strategicMessages.front().wormholeEndpoint == 19);
+    assert(std::get<MoveFleetOrder>(read.pendingOrders.orders.front()).arrivalAction.wormholeEndpoint == 19);
+    TurnOrderFileData orders{123, 1, 456, host.pendingOrders, host.pendingDescriptions};
+    const auto ordersPath = dir.filePath("wormholes.sunsorders");
+    assert(write_turn_order_file(ordersPath, orders, error));
+    TurnOrderFileData readOrders;
+    assert(read_turn_order_file(ordersPath, readOrders, error));
+    assert(std::get<MoveFleetOrder>(readOrders.orders.orders.front()).arrivalAction.kind == FleetArrivalActionKind::EnterWormhole);
+    assert(std::get<MoveFleetOrder>(readOrders.orders.orders.front()).arrivalAction.wormholeEndpoint == 19);
+    const auto packet = make_player_turn(host, 1);
+    assert(packet.state.wormholes.empty() && packet.state.galaxySeed == 0);
+    assert(packet.state.wormholeTransits.empty());
+    assert(packet.state.players.front().pendingWormholeReports.empty());
+    const auto packetPath = dir.filePath("a.sunsturn");
+    assert(write_save_game_file(packetPath, packet, error));
+    auto hidden = host;
+    hidden.state.nextWormholeEndpointId = 700;
+    hidden.state.wormholes.front().endpoints[0].position = {91, 88};
+    hidden.state.wormholes.front().endpoints[1].position = {-999, 700};
+    hidden.state.wormholes.front().stability = 0.01;
+    hidden.state.wormholes.front().collapseTurn = 100;
+    hidden.state.wormholeRules.minimumLossChance = 0.2;
+    hidden.state.wormholeTransits.front().presumedLostTurn = 999;
+    const auto hiddenPath = dir.filePath("b.sunsturn");
+    assert(write_save_game_file(hiddenPath, make_player_turn(hidden, 1), error));
+    QFile a(packetPath), b(hiddenPath);
+    assert(a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly));
+    assert(a.readAll() == b.readAll());
+    assert(read_save_game_file(packetPath, read, error));
+    assert(read.state.wormholes.empty() && read.state.players.front().wormholeKnowledge.size() == 1);
+    // Loss before an entry report preserves the exact same owner packet as a live, remote fleet.
+    host.state.fleets.front().arrivalAction.reset();
+    host.state.wormholeTransits.front().lastContact = host.state.fleets.front();
+    const auto alivePath = dir.filePath("alive.sunsturn");
+    assert(write_save_game_file(alivePath, make_player_turn(host, 1), error));
+    host.state.fleets.clear();
+    const auto lostPath = dir.filePath("lost.sunsturn");
+    assert(write_save_game_file(lostPath, make_player_turn(host, 1), error));
+    QFile alive(alivePath), lost(lostPath);
+    assert(alive.open(QIODevice::ReadOnly) && lost.open(QIODevice::ReadOnly));
+    assert(alive.readAll() == lost.readAll());
+}
+
+void pre_wormhole_formats_remain_readable()
+{
+    QTemporaryDir dir;
+    SaveGameData old;
+    old.campaignId = 21;
+    old.turnToken = 34;
+    old.state = make_demo_game();
+    old.pendingOrders = {1, {}};
+    QString error;
+    const auto path = dir.filePath("v53.suns");
+    assert(write_save_game_file(path, old, error));
+    {
+        QFile file(path);
+        assert(file.open(QIODevice::ReadWrite));
+        auto bytes = file.readAll();
+        QByteArray marker;
+        QDataStream shape(&marker, QIODevice::WriteOnly);
+        shape << quint32{1} << old.state.wormholeRules.width << old.state.wormholeRules.height;
+        const auto offset = bytes.indexOf(marker);
+        assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
+        bytes.remove(offset, 112); // Empty v54 extension with one player.
+        assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
+        QDataStream header(&file);
+        header << quint32{53};
+    }
+    SaveGameData read;
+    assert(read_save_game_file(path, read, error));
+    assert(read.state.wormholes.empty() && read.state.wormholeTransits.empty());
+    assert(read.state.fleets.size() == old.state.fleets.size());
+    FleetArrivalAction action;
+    action.reservePopulation = 1094; // Distinct marker for the single old action.
+    TurnOrderFileData orders{21, 1, 34, {1, {MoveFleetOrder{1, {20, 30}, 7, action}}}, {"Ordinary flight"}};
+    const auto orderPath = dir.filePath("v11.sunsorders");
+    assert(write_turn_order_file(orderPath, orders, error));
+    {
+        QFile file(orderPath);
+        assert(file.open(QIODevice::ReadWrite));
+        auto bytes = file.readAll();
+        QByteArray marker;
+        QDataStream shape(&marker, QIODevice::WriteOnly);
+        shape << quint8{0} << quint64{1094} << quint8{0} << quint32{0};
+        const auto offset = bytes.indexOf(marker);
+        assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
+        bytes.remove(offset + 10, 4);
+        assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
+        QDataStream header(&file);
+        header << quint32{11};
+    }
+    TurnOrderFileData readOrders;
+    assert(read_turn_order_file(orderPath, readOrders, error));
+    assert(std::get<MoveFleetOrder>(readOrders.orders.orders.front()).arrivalAction.wormholeEndpoint == 0);
+    assert(std::get<MoveFleetOrder>(readOrders.orders.orders.front()).destination.x == 20);
+}
+
 } // namespace
 
 int main()
 {
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();
+    wormholes_round_trip_and_keep_player_exports_private();
+    pre_wormhole_formats_remain_readable();
     high_warp_component_round_trips();
     heavy_transport_round_trips();
     old_format_is_rejected_cleanly();

@@ -100,6 +100,14 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::AnomalyDetected: subject = QString("Spatial anomaly %1 detected").arg(event.wormholeEndpoint); break;
+    case GameEventKind::WormholeClassified: subject = QString("WH %1 classified").arg(event.wormholeEndpoint); break;
+    case GameEventKind::WormholeEntered: subject = QString("%1 entered WH %2").arg(fleetName).arg(event.wormholeEndpoint); break;
+    case GameEventKind::WormholeEmerged: subject = QString("%1 emerged at WH %2").arg(fleetName).arg(event.wormholeEndpoint); break;
+    case GameEventKind::WormholeEntryMissed: subject = QString("%1: WH entry not found at rendezvous").arg(fleetName); break;
+    case GameEventKind::WormholeOverdue: subject = QString("%1: OVERDUE / NO CONTACT").arg(fleetName); break;
+    case GameEventKind::WormholePresumedLost: subject = QString("%1: PRESUMED LOST after WH transit").arg(fleetName); break;
+    case GameEventKind::WormholeCollapsed: subject = QString("WH %1: collapse observed").arg(event.wormholeEndpoint); break;
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
     case GameEventKind::RouteCompleted: subject = QString("%1 completed its route").arg(fleetName); break;
@@ -172,7 +180,10 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     case MessageTypeFilter::All: return true;
     case MessageTypeFilter::Exploration:
         return event.kind == GameEventKind::SystemSurveyed
-            || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
+            || event.kind == GameEventKind::PrecursorArtifactsDiscovered
+            || event.kind == GameEventKind::AnomalyDetected
+            || event.kind == GameEventKind::WormholeClassified
+            || event.kind == GameEventKind::WormholeCollapsed;
     case MessageTypeFilter::Archaeology:
         return event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::FleetMovement:
@@ -180,7 +191,12 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
             || event.kind == GameEventKind::RouteCompleted
             || event.kind == GameEventKind::FleetTargetLost
             || event.kind == GameEventKind::FleetsMerged
-            || event.kind == GameEventKind::FleetMobilityRestored;
+            || event.kind == GameEventKind::FleetMobilityRestored
+            || event.kind == GameEventKind::WormholeEntered
+            || event.kind == GameEventKind::WormholeEmerged
+            || event.kind == GameEventKind::WormholeEntryMissed
+            || event.kind == GameEventKind::WormholeOverdue
+            || event.kind == GameEventKind::WormholePresumedLost;
     case MessageTypeFilter::ShipConstruction:
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind == ProductionKind::ColonyShip;
@@ -235,6 +251,15 @@ QString event_text(const GameState& state, const GameEvent& event)
         : QString("Fleet %1").arg(event.fleet);
 
     QString text;
+    if (event.kind >= GameEventKind::AnomalyDetected) {
+        text = event_subject(state, event) + QString("\nObservation: turn %1. Report received: turn %2.\nPosition: %3, %4.\n")
+            .arg(static_cast<qulonglong>(event.observedTurn)).arg(static_cast<qulonglong>(event.turn))
+            .arg(event.position.x, 0, 'f', 1).arg(event.position.y, 0, 'f', 1);
+        text += event.kind == GameEventKind::WormholePresumedLost || event.kind == GameEventKind::WormholeOverdue
+            ? "No emergence report has arrived. This is an assessment from missing contact, not immediate proof of destruction."
+            : "Natural wormholes drift and may collapse. Exit knowledge is partial; transit can destroy the entire fleet.";
+        return text.toHtmlEscaped().replace("\n", "<br>");
+    }
     if (event.kind == GameEventKind::SystemSurveyed) {
         QString detail;
         if (event.surveyLevel == SurveyLevel::SystemScan) {
