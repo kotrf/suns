@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
+#include "suns/wormholes.hpp"
 #include "star_name_pool.hpp"
 
 #include <algorithm>
@@ -433,6 +434,13 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.mass = 22.0;
         spec.buildCost = 11;
         spec.relayRange = 180.0;
+        break;
+    case ShipComponentType::AnomalyDetector:
+        spec.name = "Anomaly Detector";
+        spec.kind = ShipComponentKind::Scanner;
+        spec.mass = 20.0;
+        spec.buildCost = 12;
+        spec.sensorRange = 200.0;
         break;
     case ShipComponentType::FieldRepairBay:
         spec.name = "Field Repair Bay";
@@ -1470,8 +1478,17 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.germanium += planet.minerals.germanium;
     }
 
-    for (const auto& fleet : state.fleets) {
-        if (fleet.owner != playerId) continue;
+    auto knownFleets = state.fleets;
+    const auto missing = wormhole_missing_contacts(state, playerId);
+    knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
+    std::sort(knownFleets.begin(), knownFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+    for (const auto& source : knownFleets) {
+        if (source.owner != playerId) continue;
+        const bool pendingTransit = std::any_of(state.wormholeTransits.begin(), state.wormholeTransits.end(),
+            [&](const auto& t) { return t.lastContact.id == source.id && t.lastContact.owner == playerId
+                && t.status != WormholeTransitStatus::EmergenceConfirmed
+                && t.status != WormholeTransitStatus::PresumedLost; });
+        const auto fleet = pendingTransit ? fleet_player_view(state, source) : source;
         ++result.fleets;
         result.population += fleet.colonists;
         result.ships += fleet_ship_count(fleet);
@@ -1479,7 +1496,8 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.ironium += fleet.minerals.ironium;
         result.minerals.boranium += fleet.minerals.boranium;
         result.minerals.germanium += fleet.minerals.germanium;
-        if (fleet_has_instant_link(state, fleet))
+        if (!pendingTransit && std::none_of(missing.begin(), missing.end(), [&](const auto& contact) { return contact.id == fleet.id; })
+            && fleet_has_instant_link(state, fleet))
             result.fleetHistory.push_back({fleet.id, fleet_ship_count(fleet),
                 fleet_gross_mass(state, fleet), fleet.fuel, fleet.minerals, fleet.colonists,
                 fleet.damagePercent});
@@ -1625,6 +1643,8 @@ GameState generate_game(const GalaxyConfig& config)
 
     GameState state;
     state.galaxySeed = config.seed;
+    state.wormholeRules.width = std::max(500.0, config.width);
+    state.wormholeRules.height = std::max(400.0, config.height);
     state.players.push_back({1, "Terrans", {1}});
     state.shipDesigns = default_ship_designs(1);
     state.stars.reserve(starCount);

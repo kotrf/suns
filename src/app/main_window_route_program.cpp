@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/wormholes.hpp"
 
 #include "suns/communications.hpp"
 
@@ -24,10 +25,14 @@ Fleet* findFleet(GameState& state, FleetId id)
 
 const Fleet* findFleet(const GameState& state, FleetId id)
 {
+    for (const auto& transit : state.wormholeTransits) if (transit.lastContact.id == id
+        && transit.status != WormholeTransitStatus::PresumedLost
+        && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
     const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
         return fleet.id == id;
     });
-    return it == state.fleets.end() ? nullptr : &*it;
+    if (it != state.fleets.end()) return &*it;
+    return nullptr;
 }
 
 const StarSystem* findStarAtPosition(const GameState& state, Position position)
@@ -83,6 +88,8 @@ QString actionName(const FleetArrivalAction& action)
         return "Remote Mining — persistent";
     case FleetArrivalActionKind::MergeWithFleet:
         return "Merge with fleet — terminal";
+    case FleetArrivalActionKind::EnterWormhole:
+        return QString("Enter WH %1 — uncertain exit, fleet-loss risk").arg(action.wormholeEndpoint);
     }
     return "no action";
 }
@@ -166,8 +173,16 @@ QString routeForecast(
     if (legs.empty()) return {};
     if (arrivalTurns) arrivalTurns->assign(legs.size(), std::nullopt);
     if (fuelWarning) fuelWarning->clear();
+    if (std::any_of(legs.begin(), legs.end(), [](const auto& leg) {
+        return leg.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole;
+    })) return "WH approach uses last observed coordinates. Local sensors can reacquire a drifting mouth. "
+        "Entry, lifetime, exit and survival cannot be forecast with certainty.";
 
     GameState simulated = state;
+    simulated.wormholes.clear();
+    simulated.wormholeRules.spawnChancePerTurn = 0.0;
+    const auto missing = wormhole_missing_contacts(state, pending.player);
+    simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
     if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
         *simulatedFleet = fleet_player_view(state, *simulatedFleet);
     }
@@ -574,6 +589,8 @@ std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
     for (const auto& fleet : state_.fleets) {
         if (fleet.id != source) targets.push_back(fleet.id);
     }
+    for (const auto& contact : wormhole_missing_contacts(state_, pendingOrders_.player))
+        if (contact.id != source) targets.push_back(contact.id);
     std::sort(targets.begin(), targets.end());
     return targets;
 }
@@ -584,6 +601,7 @@ std::vector<FleetId> MainWindow::availableOwnedFleetsForRouteProgram() const
     for (const auto& fleet : state_.fleets) {
         if (fleet.owner == pendingOrders_.player) fleets.push_back(fleet.id);
     }
+    for (const auto& contact : wormhole_missing_contacts(state_, pendingOrders_.player)) fleets.push_back(contact.id);
     std::sort(fleets.begin(), fleets.end());
     return fleets;
 }
@@ -593,6 +611,8 @@ QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
     if (const auto* fleet = findFleet(state_, fleetId)) {
         return QString("%1 (Fleet %2)").arg(QString::fromStdString(fleet->name)).arg(fleetId);
     }
+    for (const auto& contact : wormhole_missing_contacts(state_, pendingOrders_.player)) if (contact.id == fleetId)
+        return QString("%1 (Fleet %2)").arg(QString::fromStdString(contact.name)).arg(fleetId);
     return QString("Fleet %1").arg(fleetId);
 }
 
@@ -629,7 +649,9 @@ std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedS
 bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
 {
     const auto* fleet = findFleet(state_, fleetId);
-    if (!fleet || fleet->owner != pendingOrders_.player) return false;
+    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    const bool ownContact = std::any_of(missing.begin(), missing.end(), [=](const auto& contact) { return contact.id == fleetId; });
+    if ((!fleet || fleet->owner != pendingOrders_.player) && !ownContact) return false;
     if (selection_.fleet == fleetId) return true;
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
@@ -836,14 +858,16 @@ bool MainWindow::appendRouteWaypoint(
             ? existing->arrivalAction
             : existing->queuedWaypoints.back().arrivalAction;
         if (finalAction.kind == FleetArrivalActionKind::RemoteMining
-            || finalAction.kind == FleetArrivalActionKind::MergeWithFleet) {
+            || finalAction.kind == FleetArrivalActionKind::MergeWithFleet
+            || finalAction.kind == FleetArrivalActionKind::EnterWormhole) {
             statusBar()->showMessage("The current terminal action must be cleared before adding another waypoint", 3000);
             return false;
         }
         if (existing->repeatOrders
             && (arrivalAction.kind == FleetArrivalActionKind::Colonize
                 || arrivalAction.kind == FleetArrivalActionKind::RemoteMining
-                || arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet)) {
+                || arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
+                || arrivalAction.kind == FleetArrivalActionKind::EnterWormhole)) {
             statusBar()->showMessage("Disable Repeat Orders before adding a terminal action", 3000);
             return false;
         }
@@ -932,7 +956,8 @@ bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int directi
     const auto terminal = [](const FleetArrivalAction& action) {
         return action.kind == FleetArrivalActionKind::Colonize
             || action.kind == FleetArrivalActionKind::RemoteMining
-            || action.kind == FleetArrivalActionKind::MergeWithFleet;
+            || action.kind == FleetArrivalActionKind::MergeWithFleet
+                || action.kind == FleetArrivalActionKind::EnterWormhole;
     };
     if (std::any_of(legs.begin(), std::prev(legs.end()), [&](const FleetWaypoint& leg) {
             return terminal(leg.arrivalAction);
@@ -997,7 +1022,8 @@ bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
         const auto incompatible = [](const FleetArrivalAction& action) {
             return action.kind == FleetArrivalActionKind::Colonize
                 || action.kind == FleetArrivalActionKind::RemoteMining
-                || action.kind == FleetArrivalActionKind::MergeWithFleet;
+                || action.kind == FleetArrivalActionKind::MergeWithFleet
+                || action.kind == FleetArrivalActionKind::EnterWormhole;
         };
         if (incompatible(route->arrivalAction)
             || std::any_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),

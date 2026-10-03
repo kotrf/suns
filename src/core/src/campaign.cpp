@@ -1,5 +1,6 @@
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
+#include "suns/wormholes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -46,6 +47,7 @@ const std::vector<ResearchUnlock>& research_unlocks()
         {ResearchField::Electronics, 3, "Penetrating Scanner", "Estimate planetary habitability without entering orbit.", ShipComponentType::PenetratingScanner},
         {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
         {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
+        {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
         {ResearchField::Biology, 1, "Sealed Habitats", "New campaigns: tolerate environments 5 points outside racial ranges.", {}},
         {ResearchField::Biology, 2, "Adaptive Habitats", "New campaigns: expand environmental tolerance to 10 points.", {}},
         {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},
@@ -184,6 +186,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     own.pendingSurveyReports.clear();
     own.pendingPlayerReports.clear();
     own.observedEnemyFleets.clear();
+    own.pendingWormholeReports.clear();
     state.players.push_back(own);
     for (const auto& star : host.stars) {
         StarSystem publicStar{star.id, star.name, star.position, star.stellarClass};
@@ -251,6 +254,21 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         state.fleets.push_back(known);
         state.nextFleetId = std::max(state.nextFleetId, fleet.id + 1);
     }
+    for (const auto& contact : wormhole_missing_contacts(host, playerId)) {
+        state.fleets.push_back(contact);
+        state.nextFleetId = std::max(state.nextFleetId, contact.id + 1);
+    }
+    // Export only delivered transit status; allocation/deadlines and physical WHs stay with the host.
+    for (const auto& transit : host.wormholeTransits) if (transit.lastContact.owner == playerId
+        && transit.status != WormholeTransitStatus::AwaitingEntryReport) {
+        auto known = transit;
+        known.lastContact = fleet_player_view(host, transit.lastContact);
+        known.overdueTurn = 0;
+        known.presumedLostTurn = 0;
+        state.wormholeTransits.push_back(known);
+    }
+    std::sort(state.fleets.begin(), state.fleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+    state.wormholeRules.spawnChancePerTurn = 0.0;
     // The live map shows only the connected sensor mesh. Detached reconnaissance
     // contributes delayed briefings without disclosing today's remote truth.
     for (const auto& enemy : host.fleets) if (enemy.owner != playerId) {

@@ -66,6 +66,7 @@ MineralCargo componentMineralCost(ShipComponentType type)
     case ShipComponentType::EfficientRamScoopDrive:  return {5.0, 5.0, 7.0};
     case ShipComponentType::DeepPenetratingScanner:  return {2.0, 6.0, 9.0};
     case ShipComponentType::RelayArray:              return {3.0, 5.0, 8.0};
+    case ShipComponentType::AnomalyDetector:        return {4.0, 3.0, 9.0};
     case ShipComponentType::FieldRepairBay:          return {4.0, 2.0, 4.0};
     }
     return {};

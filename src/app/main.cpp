@@ -33,6 +33,7 @@ int main(int argc, char* argv[])
     window.installTurnMessages();
     window.installResearch();
     window.installEmpireHistory();
+    window.installWormholes();
     window.installPanelLayoutFixes();
 
     window.show();

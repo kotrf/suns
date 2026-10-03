@@ -27,6 +27,14 @@ enum class GameEventKind {
     EnemyFleetDetected,
     EnemyFleetLost,
     FleetMobilityRestored,
+    AnomalyDetected,
+    WormholeClassified,
+    WormholeEntered,
+    WormholeEmerged,
+    WormholeEntryMissed,
+    WormholeOverdue,
+    WormholePresumedLost,
+    WormholeCollapsed,
 };
 
 enum class GameEventSeverity {
@@ -56,6 +64,7 @@ struct GameEvent {
     MineralCargo deliveredMinerals;
     std::uint64_t deliveredColonists{};
     PlayerId contactOwner{};
+    WormholeEndpointId wormholeEndpoint{};
 };
 
 } // namespace suns

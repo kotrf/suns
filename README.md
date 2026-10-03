@@ -54,6 +54,8 @@ The desktop app now links exploration, planet quality, economy and expansion:
 
 Ending a turn also produces an actionable Turn Messages briefing. Survey discoveries, fleet arrivals, completed routes, fuel stalls, finished production, mineral shortages and new colonies are typed deterministic events. Remote fleet reports obey communication delay instead of exposing authoritative state through the UI.
 
+Rare natural wormholes can appear, drift independently at both mouths and collapse. Spatial anomalies must be detected and classified before deliberate entry; weak signatures need the Electronics-6 Anomaly Detector. The anomaly panel shows last reported coordinates and uncertain exits. Transit risks the whole fleet, and missing-contact reports respect communications delay. See [wormholes](docs/wormholes.md).
+
 Fleets may contain multiple ship designs and counts. Co-located idle fleets can be merged while preserving the chosen FleetId, or split by exact design stack into a new FleetId; movement, sensors, cargo, fuel, colonization and remote mining derive from the complete composition.
 
 Route programs can target another friendly FleetId. Pursuers resolve the target's projected motion every turn and may use **Merge with fleet**. Their relative movement is checked continuously inside the annual turn, so a real crossing can merge the fleets at the intercept point while a closest-approach miss keeps the pursuit active. After merging, the surviving target FleetId continues its route for the unused part of the year at a Warp supported by every ship in the combined fleet. A lost target clears the route and produces a warning.

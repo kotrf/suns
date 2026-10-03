@@ -7,6 +7,7 @@ add_library(suns_core
     src/production_forecast.cpp
     src/radiation.cpp
     src/turn_processor.cpp
+    src/wormholes.cpp
 )
 
 add_library(Suns::Core ALIAS suns_core)

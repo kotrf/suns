@@ -15,6 +15,7 @@ using PlanetId = std::uint32_t;
 using FleetId = std::uint32_t;
 using ShipDesignId = std::uint32_t;
 using OrbitalStationId = std::uint32_t;
+using WormholeEndpointId = std::uint32_t;
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
 inline constexpr std::uint32_t kFactoryCost = 6;
@@ -150,6 +151,7 @@ enum class ShipComponentType {
     DeepPenetratingScanner,
     RelayArray,
     FieldRepairBay,
+    AnomalyDetector,
 };
 
 enum class ShipComponentKind {
@@ -506,6 +508,27 @@ struct EmpireTurnStatistics {
     std::vector<HistoryMilestone> milestones;
 };
 
+enum class WormholeSignature : std::uint8_t { Strong, Faint, Weak };
+enum class WormholeStability : std::uint8_t { Unknown, Unstable, Variable, Stable };
+
+struct WormholeKnowledge {
+    WormholeEndpointId endpoint{};
+    Position lastPosition;
+    std::uint64_t observedTurn{};
+    WormholeStability stability{WormholeStability::Unknown};
+    WormholeEndpointId linkedEndpoint{}; // Learned only from a delivered emergence report.
+    bool collapsed{};
+};
+
+enum class WormholeReportKind : std::uint8_t { Observation, Entered, Emerged, EntryMissed, Collapsed };
+struct PendingWormholeReport {
+    WormholeReportKind kind{WormholeReportKind::Observation};
+    std::uint64_t observedTurn{};
+    std::uint64_t deliveryTurn{};
+    FleetId fleet{};
+    WormholeKnowledge knowledge;
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -526,6 +549,8 @@ struct Player {
     RaceProfile race;
     TechnologyState technology;
     std::vector<EmpireTurnStatistics> history;
+    std::vector<WormholeKnowledge> wormholeKnowledge;
+    std::vector<PendingWormholeReport> pendingWormholeReports;
 };
 
 enum class FleetRole {
@@ -546,6 +571,7 @@ enum class FleetArrivalActionKind {
     Colonize,
     RemoteMining,
     MergeWithFleet,
+    EnterWormhole,
 };
 
 enum class FleetCargoKind {
@@ -560,6 +586,7 @@ struct FleetArrivalAction {
     FleetArrivalActionKind kind{FleetArrivalActionKind::None};
     std::uint64_t reservePopulation{1};
     FleetCargoKind cargo{FleetCargoKind::Colonists};
+    WormholeEndpointId wormholeEndpoint{};
 };
 
 struct FleetWaypoint {
@@ -649,6 +676,50 @@ struct Fleet {
     double damagePercent{};
 };
 
+struct WormholeEndpoint {
+    WormholeEndpointId id{};
+    Position position;
+    WormholeSignature signature{WormholeSignature::Strong};
+    Position driftDirection;
+};
+
+struct Wormhole {
+    std::array<WormholeEndpoint, 2> endpoints;
+    std::uint64_t createdTurn{};
+    std::uint64_t collapseTurn{};
+    double stability{0.5};
+};
+
+// Balance lives in a persisted policy, independent of deterministic RNG state.
+struct WormholeRules {
+    double width{900.0};
+    double height{650.0};
+    double spawnChancePerTurn{0.025};
+    std::uint32_t maximumPairs{3};
+    std::uint32_t minimumLifetime{5};
+    std::uint32_t maximumLifetime{30};
+    double driftPerTurn{3.0};
+    double relocationChance{0.025};
+    double minimumLossChance{0.01};
+    double instabilityLossChance{0.12};
+    double detectorRiskMultiplier{0.65};
+    std::uint32_t overdueGraceTurns{2};
+    std::uint32_t presumedLostGraceTurns{5};
+};
+
+enum class WormholeTransitStatus : std::uint8_t { AwaitingEntryReport, AwaitingEmergence, Overdue, PresumedLost, EmergenceConfirmed };
+struct WormholeTransit {
+    // A retained contact remains available after authoritative destruction.
+    // Pre-entry telemetry traffic is host-only and stripped from player views.
+    // It contains no outcome flag or hidden exit coordinate.
+    Fleet lastContact;
+    WormholeEndpointId endpoint{};
+    std::uint64_t enteredTurn{};
+    std::uint64_t overdueTurn{};
+    std::uint64_t presumedLostTurn{};
+    WormholeTransitStatus status{WormholeTransitStatus::AwaitingEntryReport};
+};
+
 struct GameState {
     std::uint64_t turn{1};
     std::uint64_t galaxySeed{};
@@ -661,6 +732,10 @@ struct GameState {
     std::vector<Planet> planets;
     std::vector<Fleet> fleets;
     std::vector<OrbitalStation> orbitalStations;
+    WormholeEndpointId nextWormholeEndpointId{1};
+    WormholeRules wormholeRules;
+    std::vector<Wormhole> wormholes;
+    std::vector<WormholeTransit> wormholeTransits;
 };
 
 struct GalaxyConfig {

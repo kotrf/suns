@@ -228,6 +228,7 @@ QString unlockRequirement(ShipComponentType component)
     case ShipComponentType::DeepPenetratingScanner: return "Electronics 4";
     case ShipComponentType::RelayArray: return "Electronics 5";
     case ShipComponentType::RemoteMiningModule: return "Construction 1";
+    case ShipComponentType::AnomalyDetector: return "Electronics 6";
     case ShipComponentType::FieldRepairBay: return "Construction 3";
     default: return {};
     }
@@ -299,7 +300,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::FieldRepairBay)
+        || component > static_cast<int>(ShipComponentType::AnomalyDetector)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -587,6 +588,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::DeepPenetratingScanner,
         ShipComponentType::RelayArray,
         ShipComponentType::FieldRepairBay,
+        ShipComponentType::AnomalyDetector,
     };
     for (const auto component : catalog) {
         const auto available = component_available_to_player(state, player, component);

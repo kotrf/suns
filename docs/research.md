@@ -53,6 +53,9 @@ when the save is loaded.
 - Electronics 2: Extended Range Scanner, a 160 ly ordinary sensor at 24 kt,
   cost 8 and a substantial Germanium bill. It does not penetrate planets.
 - Electronics 3: Penetrating Scanner.
+- Electronics 6: Anomaly Detector, a 200 ly scanner that detects weak spatial
+  anomalies, classifies wormholes and reduces transit risk while retaining a
+  non-zero loss floor. See [wormholes](wormholes.md).
 - Construction 1: dedicated Remote Miner hull plus heavy Remote Mining Module. Mining equipment fits only `Mining` slots; the persistent waypoint task deposits output into the planet's surface stockpile for cargo fleets to collect separately.
 - Construction 2: Heavy Transport hull, with 250 kt built-in cargo capacity and three required engines. It carries bulk ore from mining sites, while smaller transports cost less to build and burn less fuel per ship.
 - Construction 3: Field Repair Bay in a general slot. Equipped ships can repair 8 hull-damage points per year away from a dock; mixed fleets scale the rate by the equipped fraction. At a friendly shipyard, the dock's 20-point rate takes precedence.
