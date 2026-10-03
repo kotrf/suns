@@ -45,8 +45,8 @@ private:
     [[nodiscard]] std::optional<ShipComponentType> selectedCatalogComponent() const;
 
     PlayerId player_{};
+    ShipHullType initialHull_{ShipHullType::Scout};
     ShipComponentType initialEngine_{ShipComponentType::FusionDrive};
-    bool remoteMiningAvailable_{};
 
     QLineEdit* nameEdit_{};
     QComboBox* hullCombo_{};

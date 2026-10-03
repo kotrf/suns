@@ -1,5 +1,6 @@
 #include "save_game.hpp"
 #include "suns/campaign.hpp"
+#include "suns/hulls.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -689,7 +690,7 @@ void population_migration_and_clear_orders()
         whStream << quint32{1} << legacy.state.wormholeRules.width << legacy.state.wormholeRules.height;
         const auto whPosition = bytes.indexOf(whMarker);
         assert(whPosition >= 0 && bytes.indexOf(whMarker, whPosition + 1) < 0);
-        bytes.remove(whPosition, 112 + 11); // Empty WH plus v55 propulsion access for one player.
+        bytes.remove(whPosition, 112 + 14); // Empty WH plus v55 propulsion and v56 hull access for one player.
         // v37 colony records through v47 fleet count, v49 cargo and v50 damage flags.
         assert(file.resize(0) && file.seek(0));
         assert(file.write(bytes) == bytes.size() && file.seek(4));
@@ -892,7 +893,7 @@ void pre_wormhole_formats_remain_readable()
         shape << quint32{1} << old.state.wormholeRules.width << old.state.wormholeRules.height;
         const auto offset = bytes.indexOf(marker);
         assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
-        bytes.remove(offset, 112 + 11); // Empty WH and propulsion extensions with one player.
+        bytes.remove(offset, 112 + 14); // Empty WH and propulsion/hull extensions with one player.
         assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream header(&file);
         header << quint32{53};
@@ -1069,7 +1070,7 @@ void stars_propulsion_and_access_round_trip()
     shape << quint32{1} << save.state.wormholeRules.width << save.state.wormholeRules.height;
     const auto offset = bytes.indexOf(marker);
     assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
-    bytes.remove(offset + 112, 11); // v54 has WH state but no propulsion access extension.
+    bytes.remove(offset + 112, 14); // v54 has WH state but no propulsion/hull access extension.
     assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
     QDataStream oldHeader(&file);
     oldHeader << quint32{54};
@@ -1082,10 +1083,112 @@ void stars_propulsion_and_access_round_trip()
     assert(ship_design_max_warp(loaded.state.shipDesigns.front()) == 8);
 }
 
+void stars_hulls_round_trip_and_previous_format_migration()
+{
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData save;
+    save.campaignId = 21; save.turnToken = 34;
+    save.mode = SessionMode::Host;
+    save.state = generate_campaign({}, {
+        {"War", RacePreset::Terran, false, false, false, HullAccess::WarMonger, true, false},
+        {"Supply", RacePreset::Terran, false, false, false, HullAccess::InnerStrength, false, true}});
+    save.playerTokens = {{1, 34}, {2, 35}};
+    save.pendingOrders = {1, {}};
+    for (const auto& hull : reference_hulls()) {
+        ShipDesign design{save.state.nextShipDesignId++, 1, hull.name, hull.type,
+            std::vector<ShipComponentType>(hull.requiredEngines, ShipComponentType::QuickJump5)};
+        normalize_ship_design_placement(design);
+        assert(ship_design_valid(design));
+        save.state.shipDesigns.push_back(design);
+        save.pendingOrders.orders.emplace_back(CreateShipDesignOrder{design.name, design.hull, design.components, design.placements});
+        save.pendingDescriptions << QString::fromStdString(design.name);
+    }
+    const auto path = dir.filePath("hulls.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players[0].race.hullAccess == HullAccess::WarMonger);
+    assert(loaded.state.players[0].race.advancedRemoteMining && !loaded.state.players[0].race.basicRemoteMining);
+    assert(loaded.state.players[1].race.hullAccess == HullAccess::InnerStrength);
+    assert(!loaded.state.players[1].race.advancedRemoteMining && loaded.state.players[1].race.basicRemoteMining);
+    assert(loaded.state.shipDesigns.size() == save.state.shipDesigns.size());
+    for (std::size_t i = 0; i < save.state.shipDesigns.size(); ++i) {
+        assert(loaded.state.shipDesigns[i].hull == save.state.shipDesigns[i].hull);
+        assert(loaded.state.shipDesigns[i].placements == save.state.shipDesigns[i].placements);
+    }
+    assert(write_save_game_file(path, make_player_turn(save, 1), error));
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.size() == 1 && loaded.state.players[0].race.advancedRemoteMining);
+    assert(loaded.state.players[0].race.hullAccess == HullAccess::WarMonger);
+    assert(loaded.state.shipDesigns.back().hull == ShipHullType::MetaMorph);
+    const auto orders = dir.filePath("hulls.sunsorders");
+    TurnOrderFileData packet{21, save.state.turn, 34, save.pendingOrders, save.pendingDescriptions};
+    assert(write_turn_order_file(orders, packet, error));
+    TurnOrderFileData read;
+    assert(read_turn_order_file(orders, read, error));
+    assert(read.orders.orders.size() == reference_hulls().size());
+    for (std::size_t i = 0; i < read.orders.orders.size(); ++i) {
+        const auto& before = std::get<CreateShipDesignOrder>(packet.orders.orders[i]);
+        const auto& after = std::get<CreateShipDesignOrder>(read.orders.orders[i]);
+        assert(after.hull == before.hull && after.placements == before.placements);
+    }
+    QFile file(orders);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream oldOrderHeader(&file); oldOrderHeader << quint32{13}; file.close();
+    assert(!read_turn_order_file(orders, read, error)); // Hull IDs require order v14.
+    packet.orders.orders = {CreateShipDesignOrder{"Legacy", ShipHullType::Scout, {ShipComponentType::QuickJump5}}};
+    packet.descriptions = {"Legacy"};
+    assert(write_turn_order_file(orders, packet, error));
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream compatibleOrderHeader(&file); compatibleOrderHeader << quint32{13}; file.close();
+    assert(read_turn_order_file(orders, read, error));
+    assert(std::get<CreateShipDesignOrder>(read.orders.orders.front()).hull == ShipHullType::Scout);
+
+    save.state = make_demo_game();
+    save.state.players[0].race.improvedFuelEfficiency = true;
+    save.pendingOrders = {1, {}}; save.pendingDescriptions.clear();
+    save.playerTokens = {{1, 34}};
+    assert(write_save_game_file(path, save, error));
+    file.setFileName(path);
+    assert(file.open(QIODevice::ReadOnly));
+    const auto original = file.readAll(); file.close();
+    QByteArray marker;
+    QDataStream shape(&marker, QIODevice::WriteOnly);
+    shape << quint32{1} << save.state.wormholeRules.width << save.state.wormholeRules.height;
+    const auto offset = original.indexOf(marker);
+    assert(offset >= 0 && original.indexOf(marker, offset + 1) < 0);
+    const auto accessOffset = offset + 112 + 4 + 4 + 3;
+    const auto writeBytes = [&](const QByteArray& bytes) {
+        assert(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        assert(file.write(bytes) == bytes.size()); file.close();
+    };
+    auto malformed = original;
+    malformed[accessOffset] = char(6);
+    writeBytes(malformed);
+    assert(!read_save_game_file(path, loaded, error));
+    malformed = original;
+    malformed[accessOffset + 1] = char(1); malformed[accessOffset + 2] = char(1);
+    writeBytes(malformed);
+    assert(!read_save_game_file(path, loaded, error));
+    auto previous = original;
+    previous.remove(accessOffset, 3); // v55 retains propulsion access, without hull access.
+    QDataStream previousHeader(&previous, QIODevice::ReadWrite);
+    assert(previousHeader.device()->seek(4)); previousHeader << quint32{55};
+    writeBytes(previous);
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players[0].race.improvedFuelEfficiency);
+    assert(loaded.state.players[0].race.hullAccess == HullAccess::Standard);
+    assert(!loaded.state.players[0].race.advancedRemoteMining && !loaded.state.players[0].race.basicRemoteMining);
+    assert(loaded.state.shipDesigns[0].hull == ShipHullType::Scout);
+    assert(ship_design_fuel_capacity(loaded.state.shipDesigns[0]) == ship_design_fuel_capacity(save.state.shipDesigns[0]));
+}
+
 } // namespace
 
 int main()
 {
+    stars_hulls_round_trip_and_previous_format_migration();
     stars_propulsion_and_access_round_trip();
     round_trip_preserves_communications_and_planning();
     turn_order_file_round_trip_preserves_envelope_and_orders();

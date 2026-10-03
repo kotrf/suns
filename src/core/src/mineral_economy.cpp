@@ -76,6 +76,7 @@ MineralCargo componentMineralCost(ShipComponentType type)
 
 MineralCargo hullMineralCost(ShipHullType type)
 {
+    if (type >= ShipHullType::SmallFreighter) return hull_spec(type).baseMineralCost;
     switch (type) {
     case ShipHullType::Scout:          return {4.0, 1.0, 1.0};
     case ShipHullType::LightTransport: return {6.0, 2.0, 2.0};

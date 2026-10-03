@@ -42,8 +42,8 @@ void MainWindow::newCampaign()
         "Biology unlocks habitats beyond these environmental limits.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    QTableWidget table(8, 5, &dialog);
-    table.setHorizontalHeaderLabels({"Empire name", "Race", "Fuel efficiency", "No ram scoops", "Settler engines"});
+    QTableWidget table(8, 7, &dialog);
+    table.setHorizontalHeaderLabels({"Empire name", "Race", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining"});
     table.horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     for (int row = 0; row < 8; ++row) {
         table.setItem(row, 0, new QTableWidgetItem(QString("Empire %1").arg(row + 1)));
@@ -58,6 +58,18 @@ void MainWindow::newCampaign()
                 : "Unlock Mini-Colony Ship and Settler's Delight. This grants propulsion access, without changing population growth.");
             table.setCellWidget(row, column, access);
         }
+        auto* hullAccess = new QComboBox(&table);
+        hullAccess->addItems({"Standard", "Inner Strength", "Super Stealth", "War Monger", "Space Demolition", "Hyper Expansion"});
+        hullAccess->setToolTip("Choose access to special hulls. Population, economy and combat race effects are independent.");
+        table.setCellWidget(row, 5, hullAccess);
+        auto* miningAccess = new QComboBox(&table);
+        miningAccess->addItems({"Standard", "Advanced (ARM)", "Basic (BRM)"});
+        miningAccess->setToolTip("ARM adds Midget Miner and Ultra-Miner. BRM blocks reference miner hulls.");
+        table.setCellWidget(row, 6, miningAccess);
+        connect(hullAccess, &QComboBox::currentIndexChanged, &table, [&table, row](int index) {
+            if (index == static_cast<int>(HullAccess::HyperExpansion))
+                qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->setChecked(true);
+        });
         table.setRowHidden(row, row >= count.value());
     }
     connect(&count, &QSpinBox::valueChanged, &dialog, [&](int value) {
@@ -79,7 +91,7 @@ void MainWindow::newCampaign()
     });
     connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(&buttons);
-    dialog.resize(920, 600);
+    dialog.resize(1120, 600);
     if (dialog.exec() != QDialog::Accepted) return;
     empireSetups_.clear();
     for (int row = 0; row < count.value(); ++row) {
@@ -88,7 +100,10 @@ void MainWindow::newCampaign()
             static_cast<RacePreset>(race->currentIndex()),
             qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->isChecked(),
             qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->isChecked(),
-            qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->isChecked()});
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->isChecked(),
+            static_cast<HullAccess>(qobject_cast<QComboBox*>(table.cellWidget(row, 5))->currentIndex()),
+            qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 1,
+            qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 2});
     }
     seedEdit_->setText(seed.text());
     starCountSpin_->setValue(stars.value());

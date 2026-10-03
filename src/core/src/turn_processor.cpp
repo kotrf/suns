@@ -973,7 +973,7 @@ double fleet_field_repair_rate(const GameState& state, const Fleet& fleet)
 void queue_fleet_movement_report(
     GameState& state, const Fleet& fleet, PlayerReportKind kind, std::uint64_t observationTurn);
 
-void repair_fleet_damage(GameState& state)
+void repair_fleet_damage(GameState& state, const GameState& previous)
 {
     constexpr double shipyardRepairPerTurn = 20.0;
     for (auto& fleet : state.fleets) {
@@ -981,7 +981,15 @@ void repair_fleet_damage(GameState& state)
         const auto* colony = friendly_colony_at_fleet(state, fleet);
         const bool atShipyard = colony && colony_has_orbital_service(
             state, colony->id, fleet.owner, OrbitalStationModule::Shipyard);
-        const auto repair = atShipyard ? shipyardRepairPerTurn : fleet_field_repair_rate(state, fleet);
+        double hullBonus = 0.0;
+        const auto before = std::find_if(previous.fleets.begin(), previous.fleets.end(),
+            [&](const auto& candidate) { return candidate.id == fleet.id; });
+        if (before != previous.fleets.end() && same_position(before->position, fleet.position)
+            && !fleet.destination && fleet.targetFleet == 0)
+            for (const auto& stack : fleet_ship_stacks(fleet))
+                if (const auto* design = find_ship_design(state, stack.design))
+                    hullBonus = std::max(hullBonus, hull_spec(design->hull).fleetRepairBonus);
+        const auto repair = (atShipyard ? shipyardRepairPerTurn : fleet_field_repair_rate(state, fleet)) + hullBonus;
         const bool immobilized = fleet.damagePercent >= 100.0;
         fleet.damagePercent = std::max(0.0, fleet.damagePercent - repair);
         if (immobilized && fleet.damagePercent < 100.0)
@@ -1999,7 +2007,7 @@ TurnResult TurnProcessor::process_with_events(
     refuel_fleets_at_orbital_services(next);
     // Repair once at the end of the year, after movement and construction.
     // Shipyards supersede onboard repair; fleets recover only once per year.
-    repair_fleet_damage(next);
+    repair_fleet_damage(next, current);
     grow_colonies(next);
 
     // The ledger counts physical deliveries; publish one manifest per receiving
