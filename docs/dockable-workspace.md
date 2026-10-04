@@ -33,3 +33,11 @@ The fleet selector, compact portrait, fuel/cargo/damage gauges, communications a
 Overview and Production default to a 290 px column. Production scrolls vertically,
 and long design names use the dropdown popup without forcing a wider column.
 The map is fitted after the initial dock layout is ready.
+
+Map clicks hit each star's visible disc with a small margin, rather than the
+large rectangle needed to paint its glow. When selectable markers overlap,
+the nearest marker center wins, with equal distances resolved by scene
+stacking order. Ordinary selection, map-target picking and right-click route
+orders use the same rule. Labels, glow/selection rings and sensor circles do
+not intercept these object clicks. Scene redraws remain deferred until after
+the current mouse event.

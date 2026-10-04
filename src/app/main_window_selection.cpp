@@ -4,9 +4,11 @@
 
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QGraphicsView>
 #include <QTimer>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 
 namespace suns {
@@ -17,6 +19,43 @@ constexpr int kMapItemStar = 1;
 constexpr int kMapItemFleet = 2;
 
 } // namespace
+
+QGraphicsItem* MainWindow::mapObjectAtViewportPosition(const QPoint& position) const
+{
+    if (!view_) return nullptr;
+    QGraphicsItem* closest = nullptr;
+    auto closestDistance = std::numeric_limits<qreal>::max();
+    // QGraphicsView queries item shapes, not their generous painting bounds.
+    // When visible discs overlap, prefer the center nearest the pointer. Equal
+    // distances retain Qt's stacking order (for genuinely coincident markers).
+    for (auto* item : view_->items(position)) {
+        const auto kind = item->data(1).toInt();
+        if ((kind != kMapItemStar && kind != kMapItemFleet)
+            || item->data(0).toUInt() == 0
+            || !(item->flags() & QGraphicsItem::ItemIsSelectable)) continue;
+        const auto center = view_->viewportTransform().map(
+            item->mapToScene(item->boundingRect().center()));
+        const auto delta = center - QPointF(position);
+        const auto distance = delta.x() * delta.x() + delta.y() * delta.y();
+        if (distance < closestDistance) {
+            closest = item;
+            closestDistance = distance;
+        }
+    }
+    return closest;
+}
+
+void MainWindow::queueMapSelectionRebuild()
+{
+    // Never delete scene items while Qt is still delivering a click/selection
+    // event. Multiple selection changes in one event turn share one redraw.
+    if (mapSelectionRebuildPending_) return;
+    mapSelectionRebuildPending_ = true;
+    QTimer::singleShot(0, this, [this] {
+        mapSelectionRebuildPending_ = false;
+        if (!shuttingDown_) rebuildScene();
+    });
+}
 
 void MainWindow::rememberMapSelection(int kind, std::uint32_t id)
 {
@@ -107,28 +146,13 @@ void MainWindow::installDeferredMapSelectionHandler()
 
             // Restore the source-fleet highlight after the target item caused
             // QGraphicsScene's ordinary selection to move to itself.
-            if (!mapSelectionRebuildPending_) {
-                mapSelectionRebuildPending_ = true;
-                QTimer::singleShot(0, this, [this] {
-                    mapSelectionRebuildPending_ = false;
-                    if (!shuttingDown_) rebuildScene();
-                });
-            }
+            queueMapSelectionRebuild();
             return;
         }
         if (!selectWorkspaceObject(kind, id)) return;
         if (kind == kMapItemStar) emit routeProgramMapTargetPicked(kind, id);
 
-        // Never clear/delete QGraphicsItems while Qt is still delivering the
-        // selectionChanged event that references them. Multiple changes in the
-        // same event-loop turn collapse into one redraw.
-        if (mapSelectionRebuildPending_) return;
-        mapSelectionRebuildPending_ = true;
-        QTimer::singleShot(0, this, [this] {
-            mapSelectionRebuildPending_ = false;
-            if (shuttingDown_) return;
-            rebuildScene();
-        });
+        queueMapSelectionRebuild();
     });
 }
 

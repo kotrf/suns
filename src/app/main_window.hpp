@@ -19,6 +19,7 @@
 class QCloseEvent;
 class QDialog;
 class QEvent;
+class QGraphicsItem;
 class QGraphicsScene;
 class QGraphicsView;
 class QLabel;
@@ -171,6 +172,8 @@ protected:
 private:
     friend struct MainWindowTestAccess;
     void rebuildScene();
+    [[nodiscard]] QGraphicsItem* mapObjectAtViewportPosition(const QPoint& position) const;
+    void queueMapSelectionRebuild();
     void updateControls();
     void refreshShipDesignChoices();
     void openShipDesigner();

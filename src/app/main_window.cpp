@@ -757,6 +757,7 @@ void MainWindow::rebuildScene()
         auto* label = scene_->addText(mapLabel);
         label->setPos(star.position.x + 12.0, star.position.y - 16.0);
         label->setDefaultTextColor(colony ? QColor("#8fdaa9") : surveyed ? QColor("#d1d9e6") : QColor("#727c8c"));
+        label->setAcceptedMouseButtons(Qt::NoButton);
         label->setScale(state_.stars.size() > 36 ? 0.72 : state_.stars.size() > 24 ? 0.82 : 0.92);
         label->setZValue(5.0);
     }
@@ -822,6 +823,7 @@ void MainWindow::rebuildScene()
         auto* label = scene_->addText(fleetText);
         label->setPos(x + 9.0, y - 8.0);
         label->setDefaultTextColor(selected ? color.lighter(165) : color.lighter(135));
+        label->setAcceptedMouseButtons(Qt::NoButton);
         label->setScale(0.85);
         label->setZValue(11.0);
     }

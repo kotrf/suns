@@ -789,16 +789,23 @@ void MainWindow::fitGalaxyView()
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
     if (!shuttingDown_ && view_ && watched == view_->viewport()
-        && event->type() == QEvent::MouseButtonPress) {
+        && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonDblClick)) {
         const auto* mouse = static_cast<QMouseEvent*>(event);
-        if (mouse->button() == Qt::RightButton) {
-            for (auto* item : view_->items(mouse->position().toPoint())) {
+        if (mouse->button() == Qt::LeftButton
+            || (mouse->button() == Qt::RightButton && event->type() == QEvent::MouseButtonPress)) {
+            if (auto* item = mapObjectAtViewportPosition(mouse->position().toPoint())) {
                 const auto kind = item->data(1).toInt();
                 const auto id = static_cast<std::uint32_t>(item->data(0).toUInt());
-                if ((kind != 1 && kind != 2) || id == 0) continue;
-                if (!selectRouteProgramMapTarget(kind, id)) return true;
-                cancelRouteProgramMapTargetPick();
-                emit routeProgramQuickTargetRequested(kind, id);
+                if (mouse->button() == Qt::RightButton || routeProgramMapTargetPickActive_) {
+                    if (!selectRouteProgramMapTarget(kind, id)) return true;
+                    cancelRouteProgramMapTargetPick();
+                    if (mouse->button() == Qt::RightButton)
+                        emit routeProgramQuickTargetRequested(kind, id);
+                } else {
+                    if (!selectWorkspaceObject(kind, id)) return true;
+                    if (kind == 1) emit routeProgramMapTargetPicked(kind, id);
+                }
+                queueMapSelectionRebuild();
                 return true;
             }
         }

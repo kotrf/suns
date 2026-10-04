@@ -2,6 +2,7 @@
 
 #include <QCursor>
 #include <QPainter>
+#include <QPainterPath>
 #include <QRadialGradient>
 #include <QStyleOptionGraphicsItem>
 
@@ -29,10 +30,22 @@ QRectF StarItem::boundingRect() const
     return {-38.0, -38.0, 76.0, 76.0};
 }
 
+QPainterPath StarItem::shape() const
+{
+    // Rendering needs room for the glow and selection rings, but those empty
+    // pixels must not steal clicks from neighboring systems.
+    const auto coreRadius = (surveyed_ ? 6.0 : 4.7) * visualScale_;
+    const auto hitRadius = std::max<qreal>(6.0, coreRadius + 2.0);
+    QPainterPath path;
+    path.addEllipse(QPointF{}, hitRadius, hitRadius);
+    return path;
+}
+
 void StarItem::setVisualStyle(const QColor& color, qreal scale)
 {
     scale = std::clamp<qreal>(scale, 0.50, 2.0);
     if (color_ == color && std::abs(visualScale_ - scale) < 0.0001) return;
+    if (std::abs(visualScale_ - scale) >= 0.0001) prepareGeometryChange();
     color_ = color;
     visualScale_ = scale;
     update();

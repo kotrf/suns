@@ -6,6 +6,7 @@
 #include <QGraphicsItem>
 
 class QPainter;
+class QPainterPath;
 class QStyleOptionGraphicsItem;
 class QWidget;
 
@@ -16,6 +17,7 @@ public:
     StarItem(StarId id, QColor color, bool surveyed, bool colony, QGraphicsItem* parent = nullptr);
 
     [[nodiscard]] QRectF boundingRect() const override;
+    [[nodiscard]] QPainterPath shape() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
     void setVisualStyle(const QColor& color, qreal scale);
 
