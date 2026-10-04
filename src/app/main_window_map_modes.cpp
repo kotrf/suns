@@ -103,6 +103,7 @@ void MainWindow::applyMapDisplayMode()
 {
     if (!scene_) return;
 
+    bool changed = false;
     for (auto* item : scene_->items()) {
         auto* marker = dynamic_cast<StarItem*>(item);
         if (!marker) continue;
@@ -141,8 +142,9 @@ void MainWindow::applyMapDisplayMode()
             }
         }
 
-        marker->setVisualStyle(color, scale);
+        changed |= marker->setVisualStyle(color, scale);
     }
+    if (changed) queueMapLabelRefresh();
 }
 
 } // namespace suns

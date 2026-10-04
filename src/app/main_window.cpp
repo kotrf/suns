@@ -4,6 +4,7 @@
 #include "suns/communications.hpp"
 #include "ship_designer_dialog.hpp"
 #include "star_item.hpp"
+#include "map_marker_items.hpp"
 
 #include <QBrush>
 #include <QCheckBox>
@@ -11,9 +12,12 @@
 #include <QComboBox>
 #include <QCursor>
 #include <QFormLayout>
+#include <QFont>
+#include <QFontMetricsF>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
+#include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -153,18 +157,10 @@ const Fleet* findFleet(const GameState& state, FleetId id)
     return nullptr;
 }
 
-QPointF fleetMapAnchor(const GameState& state, const Fleet& fleet, const std::vector<Fleet>& contacts)
+QPointF fleetMapPosition(const GameState& state, const Fleet& fleet)
 {
     const auto visible = fleet_player_view(state, fleet);
-    int coLocatedBefore = 0;
-    for (const auto& candidate : contacts) {
-        if (candidate.id == fleet.id) break;
-        const auto candidateVisible = fleet_player_view(state, candidate);
-        if (same_position(candidateVisible.position, visible.position)) ++coLocatedBefore;
-    }
-    return QPointF(
-        visible.position.x,
-        visible.position.y + 15.0 + static_cast<double>(coLocatedBefore) * 13.0);
+    return {visible.position.x, visible.position.y};
 }
 
 const StarSystem* findStarAtPosition(const GameState& state, Position position)
@@ -268,10 +264,14 @@ QColor fleetColor(FleetRole role, int alpha = 255)
 void addTravelLabel(
     QGraphicsScene* scene, QPointF from, QPointF to, const QString& text, const QColor& color)
 {
-    auto* label = scene->addText(text);
-    label->setPos((from.x() + to.x()) / 2.0 + 5.0, (from.y() + to.y()) / 2.0 - 10.0);
-    label->setDefaultTextColor(color);
-    label->setScale(0.72);
+    auto* label = scene->addSimpleText(text);
+    QFont font;
+    font.setPixelSize(10);
+    label->setFont(font);
+    label->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+    label->setAcceptedMouseButtons(Qt::NoButton);
+    label->setPos((from.x() + to.x()) / 2.0, (from.y() + to.y()) / 2.0);
+    label->setBrush(color);
     label->setZValue(-8.0);
 }
 
@@ -285,6 +285,7 @@ void addSensorRange(
     if (range <= 0.0) return;
 
     QPen pen(outline);
+    pen.setCosmetic(true);
     pen.setWidthF(0.9);
     pen.setStyle(Qt::DashLine);
     auto* circle = scene->addEllipse(
@@ -640,12 +641,12 @@ void MainWindow::rebuildScene()
         const auto visibleFleet = fleet_player_view(state_, fleet);
         if (!visibleFleet.destination || hasPendingMove(pendingOrders_, fleet.id)) continue;
         auto routeDestination = *visibleFleet.destination;
-        const auto routeStart = fleetMapAnchor(state_, fleet, displayFleets);
+        const auto routeStart = fleetMapPosition(state_, fleet);
         QPointF routeEnd(routeDestination.x, routeDestination.y);
         if (visibleFleet.targetFleet != 0) {
             if (const auto* target = findFleet(state_, visibleFleet.targetFleet)) {
                 routeDestination = fleet_player_view(state_, *target).position;
-                routeEnd = fleetMapAnchor(state_, *target, displayFleets);
+                routeEnd = fleetMapPosition(state_, *target);
             }
         }
         const auto routeColor = fleetColor(fleet.role, 105);
@@ -665,7 +666,8 @@ void MainWindow::rebuildScene()
         const auto routeLabel = visibleFleet.targetFleet != 0
             ? QString("W%1 • intercept ~%2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
             : QString("W%1 • %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
-        addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet.role, 155));
+        if (selection_.fleet && *selection_.fleet == fleet.id)
+            addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet.role, 155));
     }
 
     for (const auto& order : pendingOrders_.orders) {
@@ -676,12 +678,12 @@ void MainWindow::rebuildScene()
                 if (!fleet) return;
                 const auto visibleFleet = fleet_player_view(state_, *fleet);
                 auto routeDestination = concreteOrder.destination;
-                const auto routeStart = fleetMapAnchor(state_, *fleet, displayFleets);
+                const auto routeStart = fleetMapPosition(state_, *fleet);
                 QPointF routeEnd(routeDestination.x, routeDestination.y);
                 if (concreteOrder.targetFleet != 0) {
                     if (const auto* target = findFleet(state_, concreteOrder.targetFleet)) {
                         routeDestination = fleet_player_view(state_, *target).position;
-                        routeEnd = fleetMapAnchor(state_, *target, displayFleets);
+                        routeEnd = fleetMapPosition(state_, *target);
                     }
                 }
                 const auto routeColor = fleetColor(fleet->role, 190);
@@ -705,7 +707,8 @@ void MainWindow::rebuildScene()
                 const auto routeLabel = concreteOrder.targetFleet != 0
                     ? QString("W%1 • intercept ~%2").arg(routeWarp).arg(turnCount(eta))
                     : QString("W%1 • %2").arg(routeWarp).arg(turnCount(eta));
-                addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet->role, 210));
+                if (selection_.fleet && *selection_.fleet == fleet->id)
+                    addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet->role, 210));
             }
         }, order);
     }
@@ -729,11 +732,9 @@ void MainWindow::rebuildScene()
         const auto variability = stellarVariabilitySummary(state_, star, pendingOrders_.player);
         if (!variability.isEmpty()) {
             tooltip += QString("\n%1").arg(variability);
-            mapLabel += "  [VAR]";
         }
         if (!surveyed) {
             tooltip += "\nPlanetary parameters unknown — requires orbit or a penetrating scanner";
-            mapLabel += "  [?]";
         } else if (planet) {
             const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
             const auto estimated = survey_level(state_, pendingOrders_.player, star.id) == SurveyLevel::BasicScan;
@@ -745,7 +746,6 @@ void MainWindow::rebuildScene()
                            .arg(static_cast<qulonglong>(std::max(0, knownHabitability))
                                * kPopulationPerHabitability);
             if (colony) {
-                mapLabel += "  [COLONY]";
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
                                .arg(colony_output(*planet))
                                .arg(productionSummary(state_, *planet))
@@ -754,81 +754,95 @@ void MainWindow::rebuildScene()
         }
         marker->setToolTip(tooltip);
 
-        auto* label = scene_->addText(mapLabel);
-        label->setPos(star.position.x + 12.0, star.position.y - 16.0);
-        label->setDefaultTextColor(colony ? QColor("#8fdaa9") : surveyed ? QColor("#d1d9e6") : QColor("#727c8c"));
+        QVariantList orbitFleets;
+        QStringList fleetNames;
+        bool ownOrbit = false;
+        bool otherOrbit = false;
+        bool selectedOrbit = false;
+        for (const auto& fleet : displayFleets) {
+            if (!same_position(fleet_player_view(state_, fleet).position, star.position)) continue;
+            orbitFleets.push_back(static_cast<unsigned int>(fleet.id));
+            fleetNames.push_back(QString::fromStdString(fleet.name));
+            ownOrbit |= fleet.owner == pendingOrders_.player;
+            otherOrbit |= fleet.owner != pendingOrders_.player;
+            selectedOrbit |= selection_.fleet && *selection_.fleet == fleet.id;
+        }
+        if (!orbitFleets.isEmpty()) {
+            const auto color = ownOrbit && otherOrbit ? QColor("#c58bf0")
+                : ownOrbit ? QColor("#e4edf5") : QColor("#e77c7c");
+            auto* orbit = new OrbitRingItem(star.id, color, selectedOrbit, marker);
+            orbit->setData(2, orbitFleets);
+            orbit->setToolTip(QString("%1: %2 fleet(s) in orbit\n%3\nLeft-click ring: select fleet\nRight-click: route to system")
+                .arg(QString::fromStdString(star.name)).arg(orbitFleets.size()).arg(fleetNames.join("\n")));
+        }
+        auto* label = new QGraphicsSimpleTextItem(marker);
+        QFont font;
+        font.setPixelSize(11);
+        label->setFont(font);
+        label->setText(QFontMetricsF(font).elidedText(mapLabel, Qt::ElideRight, 150));
+        label->setBrush(colony ? QColor("#8fdaa9") : surveyed ? QColor("#d1d9e6") : QColor("#727c8c"));
         label->setAcceptedMouseButtons(Qt::NoButton);
-        label->setScale(state_.stars.size() > 36 ? 0.72 : state_.stars.size() > 24 ? 0.82 : 0.92);
+        label->setData(0, static_cast<unsigned int>(star.id));
+        label->setData(1, kMapLabelStar);
+        label->setData(2, colony ? 2 : surveyed ? 1 : 0);
+        label->setToolTip(tooltip);
         label->setZValue(5.0);
     }
 
+    // An orbital group is already represented by its star's ring. Deep-space
+    // fleets stay at their actual reported coordinates, sharing a marker when
+    // co-located rather than moving their display positions down the map.
+    std::vector<std::vector<Fleet>> groups;
     for (const auto& fleet : displayFleets) {
-        const auto visibleFleet = fleet_player_view(state_, fleet);
-        const auto anchor = fleetMapAnchor(state_, fleet, displayFleets);
-        const double x = anchor.x();
-        const double y = anchor.y();
-        const bool enemyContact = fleet.owner != pendingOrders_.player;
-        const auto color = enemyContact ? QColor("#dd7777") : fleetColor(fleet.role);
-        const bool selected = selection_.fleet && *selection_.fleet == fleet.id;
-
-        QPolygonF shape;
-        if (fleet.role == FleetRole::Scout) {
-            shape << QPointF(x + 6.0, y)
-                  << QPointF(x - 5.0, y - 4.0)
-                  << QPointF(x - 2.0, y)
-                  << QPointF(x - 5.0, y + 4.0);
-        } else {
-            shape << QPointF(x, y - 5.0)
-                  << QPointF(x + 5.0, y)
-                  << QPointF(x, y + 5.0)
-                  << QPointF(x - 5.0, y);
+        const auto visible = fleet_player_view(state_, fleet);
+        if (findStarAtPosition(state_, visible.position)) continue;
+        const auto group = std::find_if(groups.begin(), groups.end(), [&](const auto& candidates) {
+            return same_position(candidates.front().position, visible.position);
+        });
+        if (group == groups.end()) groups.push_back({visible});
+        else group->push_back(visible);
+    }
+    for (const auto& group : groups) {
+        const auto& fleet = group.front();
+        QVariantList fleetIds;
+        QStringList fleetNames;
+        bool own = false;
+        bool other = false;
+        bool selected = false;
+        for (const auto& contact : group) {
+            fleetIds.push_back(static_cast<unsigned int>(contact.id));
+            fleetNames.push_back(QString::fromStdString(contact.name));
+            own |= contact.owner == pendingOrders_.player;
+            other |= contact.owner != pendingOrders_.player;
+            selected |= selection_.fleet && *selection_.fleet == contact.id;
         }
-
-        if (selected) {
-            QPen selectionPen(color.lighter(150));
-            selectionPen.setWidthF(1.4);
-            auto* ring = scene_->addEllipse(x - 9.0, y - 9.0, 18.0, 18.0, selectionPen, Qt::NoBrush);
-            ring->setZValue(9.0);
+        const auto color = own && other ? QColor("#c58bf0") : other ? QColor("#dd7777") : QColor("#65a6ff");
+        const auto label = group.size() == 1 ? QString::fromStdString(fleet.name)
+            : QString("%1 fleets").arg(group.size());
+        auto* marker = new FleetMarkerItem(fleet.id, color, selected, label, [this] { queueMapLabelRefresh(); });
+        marker->setPos(fleet.position.x, fleet.position.y);
+        marker->setData(2, fleetIds);
+        QString tooltip = fleetNames.join("\n");
+        if (group.size() == 1 && own) {
+            tooltip += QString("\nWarp %1 (%2 ly/turn)\nFuel %3 / %4 — gross mass %5")
+                .arg(fleet.warp).arg(warp_distance(fleet.warp), 0, 'f', 0)
+                .arg(fuelValue(fleet.fuel)).arg(fuelValue(fleet_fuel_capacity(state_, fleet)))
+                .arg(fleet_gross_mass(state_, fleet), 0, 'f', 1);
+            if (fleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));
+            if (fleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*fleet.arrivalAction));
         }
-
-        QPen fleetPen(selected ? color.lighter(160) : color.lighter(135));
-        fleetPen.setWidthF(selected ? 2.0 : 1.0);
-        auto* marker = scene_->addPolygon(shape, fleetPen, QBrush(color));
-        marker->setFlag(QGraphicsItem::ItemIsSelectable);
-        marker->setData(0, static_cast<unsigned int>(fleet.id));
-        marker->setData(1, kMapItemFleet);
-        marker->setCursor(QCursor(Qt::PointingHandCursor));
-
-        QString tooltip = QString::fromStdString(fleet.name);
-        tooltip += QString("\n%1 — Warp %2 (%3 ly/turn)")
-                       .arg(fleetRoleName(fleet.role)).arg(visibleFleet.warp).arg(warp_distance(visibleFleet.warp), 0, 'f', 0);
-        tooltip += QString("\nFuel %1 / %2 — gross mass %3")
-                       .arg(fuelValue(visibleFleet.fuel)).arg(fuelValue(fleet_fuel_capacity(state_, visibleFleet)))
-                       .arg(fleet_gross_mass(state_, visibleFleet), 0, 'f', 1);
-        if (const auto range = fleet_sensor_range(state_, visibleFleet); range > 0.0) {
-            tooltip += QString("\nSensor range %1").arg(range, 0, 'f', 0);
-        }
-        if (visibleFleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(visibleFleet)));
-        if (visibleFleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
-        if (enemyContact && sessionMode_ == SessionMode::PlayerTurn) {
-            tooltip = QString("%1\nEmpire %2 contact\nPosition: %3, %4\nShip details unknown")
-                .arg(QString::fromStdString(fleet.name)).arg(fleet.owner)
-                .arg(visibleFleet.position.x, 0, 'f', 1).arg(visibleFleet.position.y, 0, 'f', 1);
-        }
+        if (group.size() == 1 && other)
+            tooltip += QString("\nEmpire %1 contact\nPosition: %2, %3\nShip details unknown")
+                .arg(fleet.owner).arg(fleet.position.x, 0, 'f', 1).arg(fleet.position.y, 0, 'f', 1);
+        if (group.size() == 1 && own && fleet_sensor_range(state_, fleet) > 0.0)
+            tooltip += QString("\nSensor range %1").arg(fleet_sensor_range(state_, fleet), 0, 'f', 0);
+        if (group.size() > 1) tooltip += "\nClick to choose a fleet";
         marker->setToolTip(tooltip);
-        marker->setZValue(10.0);
-
-        QString fleetText = QString::fromStdString(fleet.name);
-        if (selected) fleetText = QString("▶ %1").arg(fleetText);
-        auto* label = scene_->addText(fleetText);
-        label->setPos(x + 9.0, y - 8.0);
-        label->setDefaultTextColor(selected ? color.lighter(165) : color.lighter(135));
-        label->setAcceptedMouseButtons(Qt::NoButton);
-        label->setScale(0.85);
-        label->setZValue(11.0);
+        scene_->addItem(marker);
     }
 
     renderKnownWormholes();
+    refreshMapLabels();
     updateControls();
     emit routeProgramContextChanged();
 }

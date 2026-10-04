@@ -6,6 +6,8 @@
 #include <QGraphicsScene>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsTextItem>
+#include <QGraphicsSimpleTextItem>
+#include <QFont>
 #include <QHeaderView>
 #include <QLabel>
 #include <QMenuBar>
@@ -147,19 +149,25 @@ void MainWindow::renderKnownWormholes()
     if (!player) return;
     for (const auto& k : player->wormholeKnowledge) {
         const auto color = k.collapsed ? QColor("#718096") : QColor("#bf85ff");
-        QPen pen(color, 1.5, k.collapsed ? Qt::DashLine : Qt::SolidLine);
-        auto* marker = scene_->addEllipse(k.lastPosition.x-7, k.lastPosition.y-7, 14, 14, pen);
+        QPen pen(color, 1.0, k.collapsed ? Qt::DashLine : Qt::SolidLine);
+        auto* marker = scene_->addEllipse(-5, -5, 10, 10, pen);
+        marker->setPos(k.lastPosition.x, k.lastPosition.y);
+        marker->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+        marker->setAcceptedMouseButtons(Qt::NoButton);
         marker->setZValue(8);
         const auto description = QString("%1 %2\n%3\nLast observed turn %4; mouths drift independently\nLifetime unknown; %5")
             .arg(k.stability == WormholeStability::Unknown ? "Anomaly" : "WH").arg(k.endpoint)
             .arg(k.collapsed ? "Collapse observed" : riskText(k.stability)).arg(static_cast<qulonglong>(k.observedTurn))
             .arg(k.linkedEndpoint ? QString("last known link WH %1").arg(k.linkedEndpoint) : "exit unknown");
         marker->setToolTip(description);
-        auto* label = scene_->addText(QString("%1 %2").arg(k.stability == WormholeStability::Unknown ? "?" : "WH").arg(k.endpoint));
-        label->setPos(k.lastPosition.x+9, k.lastPosition.y-13);
-        label->setDefaultTextColor(color);
+        auto* label = new QGraphicsSimpleTextItem(QString("%1 %2").arg(k.stability == WormholeStability::Unknown ? "?" : "WH").arg(k.endpoint), marker);
+        QFont font;
+        font.setPixelSize(11);
+        label->setFont(font);
+        label->setPos(8, -7);
+        label->setBrush(color);
+        label->setAcceptedMouseButtons(Qt::NoButton);
         label->setToolTip(description);
-        label->setScale(0.8);
         label->setZValue(8);
     }
 }

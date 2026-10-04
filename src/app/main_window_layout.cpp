@@ -214,6 +214,7 @@ void MainWindow::resetPanelLayout()
         if (turnMessagesDock_) tabifyDockWidget(turnMessagesDock_, historyDock_);
     }
     if (turnMessagesDock_) turnMessagesDock_->raise();
+    if (turnMessagesDock_) resizeDocks({turnMessagesDock_}, {260}, Qt::Vertical);
 
     if (auto* routeScroll = findChild<QScrollArea*>("fleetOrdersScrollArea")) {
         routeScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);

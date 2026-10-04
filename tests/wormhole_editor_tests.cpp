@@ -81,7 +81,8 @@ int main(int argc, char** argv)
     assert(status && status->text().isEmpty());
     bool fleetMarker = false;
     for (const auto* item : window.routeProgramScene()->items())
-        if (item->data(1).toInt() == 2 && item->data(0).toUInt() == 1) fleetMarker = true;
+        if ((item->data(1).toInt() == 2 || item->data(1).toInt() == 4)
+            && item->data(2).toList().contains(QVariant(1U))) fleetMarker = true;
     assert(fleetMarker);
     suns::MainWindowTestAccess::setTransitStatus(window, suns::WormholeTransitStatus::Overdue);
     assert(status->text().contains("NO CONTACT"));

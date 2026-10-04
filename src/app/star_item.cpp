@@ -19,6 +19,7 @@ StarItem::StarItem(StarId id, QColor color, bool surveyed, bool colony, QGraphic
     , colony_(colony)
 {
     setFlag(QGraphicsItem::ItemIsSelectable);
+    setFlag(QGraphicsItem::ItemIgnoresTransformations);
     setData(0, static_cast<unsigned int>(id));
     setCursor(QCursor(Qt::PointingHandCursor));
     setCacheMode(QGraphicsItem::DeviceCoordinateCache);
@@ -26,29 +27,30 @@ StarItem::StarItem(StarId id, QColor color, bool surveyed, bool colony, QGraphic
 
 QRectF StarItem::boundingRect() const
 {
-    // Large enough for the biggest population-mode marker and its selection halo.
-    return {-38.0, -38.0, 76.0, 76.0};
+    // Screen-sized, including the largest population marker and small glow.
+    return {-15.0, -15.0, 30.0, 30.0};
 }
 
 QPainterPath StarItem::shape() const
 {
     // Rendering needs room for the glow and selection rings, but those empty
     // pixels must not steal clicks from neighboring systems.
-    const auto coreRadius = (surveyed_ ? 6.0 : 4.7) * visualScale_;
-    const auto hitRadius = std::max<qreal>(6.0, coreRadius + 2.0);
+    const auto coreRadius = (surveyed_ ? 3.2 : 2.8) * visualScale_;
+    const auto hitRadius = std::max<qreal>(4.0, coreRadius + 1.5);
     QPainterPath path;
     path.addEllipse(QPointF{}, hitRadius, hitRadius);
     return path;
 }
 
-void StarItem::setVisualStyle(const QColor& color, qreal scale)
+bool StarItem::setVisualStyle(const QColor& color, qreal scale)
 {
     scale = std::clamp<qreal>(scale, 0.50, 2.0);
-    if (color_ == color && std::abs(visualScale_ - scale) < 0.0001) return;
+    if (color_ == color && std::abs(visualScale_ - scale) < 0.0001) return false;
     if (std::abs(visualScale_ - scale) >= 0.0001) prepareGeometryChange();
     color_ = color;
     visualScale_ = scale;
     update();
+    return true;
 }
 
 void StarItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*)
@@ -62,14 +64,14 @@ void StarItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     outerHalo.setAlphaF(0.10 * visibility);
     painter->setPen(QPen(Qt::NoPen));
     painter->setBrush(outerHalo);
-    painter->drawEllipse(QPointF(0.0, 0.0), 17.0 * scale, 17.0 * scale);
+    painter->drawEllipse(QPointF(0.0, 0.0), 6.5 * scale, 6.5 * scale);
 
     QColor innerHalo = color_;
     innerHalo.setAlphaF(0.22 * visibility);
     painter->setBrush(innerHalo);
-    painter->drawEllipse(QPointF(0.0, 0.0), 11.0 * scale, 11.0 * scale);
+    painter->drawEllipse(QPointF(0.0, 0.0), 4.5 * scale, 4.5 * scale);
 
-    QRadialGradient gradient(QPointF(0.0, 0.0), 6.5 * scale);
+    QRadialGradient gradient(QPointF(0.0, 0.0), 3.5 * scale);
     QColor center = Qt::white;
     center.setAlphaF(0.95 * visibility + 0.05);
     QColor middle = color_.lighter(118);
@@ -80,7 +82,7 @@ void StarItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
     gradient.setColorAt(0.38, middle);
     gradient.setColorAt(1.0, edge);
     painter->setBrush(gradient);
-    const auto coreRadius = (surveyed_ ? 6.0 : 4.7) * scale;
+    const auto coreRadius = (surveyed_ ? 3.2 : 2.8) * scale;
     painter->drawEllipse(QPointF(0.0, 0.0), coreRadius, coreRadius);
 
     if (!surveyed_) {
@@ -89,29 +91,29 @@ void StarItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget
         unknownPen.setStyle(Qt::DashLine);
         painter->setPen(unknownPen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(QPointF(0.0, 0.0), 9.5 * scale, 9.5 * scale);
+        painter->drawEllipse(QPointF(0.0, 0.0), 4.8 * scale, 4.8 * scale);
     }
 
     if (colony_) {
         QPen colonyPen(QColor(92, 210, 142, 190));
-        colonyPen.setWidthF(1.2);
+        colonyPen.setWidthF(0.8);
         painter->setPen(colonyPen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(QPointF(0.0, 0.0), 10.8 * scale, 10.8 * scale);
+        painter->drawEllipse(QPointF(0.0, 0.0), 5.8 * scale, 5.8 * scale);
     }
 
     if (isSelected()) {
-        const auto selectionRadius = std::max<qreal>(14.5, 14.5 * scale);
+        const auto selectionRadius = std::max<qreal>(6.5, coreRadius + 2.5);
         QPen selectionPen(QColor(105, 165, 255, 235));
-        selectionPen.setWidthF(1.7);
+        selectionPen.setWidthF(1.1);
         painter->setPen(selectionPen);
         painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(QPointF(0.0, 0.0), selectionRadius, selectionRadius);
-
-        QPen outerSelection(QColor(105, 165, 255, 85));
-        outerSelection.setWidthF(1.0);
-        painter->setPen(outerSelection);
-        painter->drawEllipse(QPointF(0.0, 0.0), selectionRadius + 3.5, selectionRadius + 3.5);
+        // Corner brackets distinguish selection from an occupied-orbit ring.
+        for (const auto x : {-1.0, 1.0}) for (const auto y : {-1.0, 1.0}) {
+            const QPointF corner(x * selectionRadius, y * selectionRadius);
+            painter->drawLine(corner, corner - QPointF(x * 3.0, 0));
+            painter->drawLine(corner, corner - QPointF(0, y * 3.0));
+        }
     }
 }
 

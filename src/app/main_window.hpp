@@ -11,6 +11,7 @@
 #include <QPointer>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 #include <optional>
 #include <set>
@@ -25,6 +26,7 @@ class QGraphicsView;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QMenu;
 class QObject;
 class QPushButton;
 class QProgressBar;
@@ -174,6 +176,9 @@ private:
     void rebuildScene();
     [[nodiscard]] QGraphicsItem* mapObjectAtViewportPosition(const QPoint& position) const;
     void queueMapSelectionRebuild();
+    void showMapFleetPicker(const QVariantList& fleets, const QPoint& position, bool target, bool quick);
+    void queueMapLabelRefresh();
+    void refreshMapLabels();
     void updateControls();
     void refreshShipDesignChoices();
     void openShipDesigner();
@@ -281,6 +286,8 @@ private:
     int mapDisplayMode_{};
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
+    bool mapLabelsRefreshPending_{};
+    QPointer<QMenu> mapFleetPicker_;
     bool routeProgramMapTargetPickActive_{};
     bool mapDisplayApplyPending_{};
     bool planetPolishRefreshPending_{};

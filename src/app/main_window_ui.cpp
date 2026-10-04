@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "galaxy_setup_widget.hpp"
+#include "map_marker_items.hpp"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -30,6 +31,7 @@
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QSettings>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QStyle>
@@ -376,6 +378,13 @@ void MainWindow::installUiPolish()
         setFont(compactFont);
     }
 
+    for (auto* group : findChildren<QGroupBox*>()) {
+        if (auto* layout = group->layout()) {
+            layout->setContentsMargins(6, 6, 6, 5);
+            layout->setSpacing(4);
+        }
+    }
+
     setStyleSheet(R"(
         QMainWindow, QDockWidget {
             background: #0d141d;
@@ -392,8 +401,8 @@ void MainWindow::installUiPolish()
             color: #cfdae7;
         }
         QGroupBox {
-            margin-top: 9px;
-            padding: 5px 4px 4px 4px;
+            margin-top: 8px;
+            padding: 3px 4px 3px 4px;
             border: 1px solid #2a4056;
             border-radius: 5px;
             font-weight: 600;
@@ -417,8 +426,8 @@ void MainWindow::installUiPolish()
         QGroupBox#routeSummaryGroup { border-color: #3f6684; }
         QGroupBox#routeWaypointGroup { border-color: #4a7797; }
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
-            min-height: 22px;
-            padding: 2px 5px;
+            min-height: 18px;
+            padding: 1px 5px;
             color: #e6eef7;
             background: #0b121b;
             border: 1px solid #2a4056;
@@ -429,8 +438,8 @@ void MainWindow::installUiPolish()
             border: 1px solid #58a6e7;
         }
         QPushButton {
-            min-height: 23px;
-            padding: 3px 7px;
+            min-height: 19px;
+            padding: 2px 6px;
             color: #dbe8f4;
             background: #192838;
             border: 1px solid #304a63;
@@ -449,7 +458,7 @@ void MainWindow::installUiPolish()
             border-color: #202f3d;
         }
         QToolButton#primaryTurnToolButton {
-            min-height: 29px;
+            min-height: 24px;
             padding-left: 12px;
             padding-right: 12px;
             font-weight: 700;
@@ -483,7 +492,7 @@ void MainWindow::installUiPolish()
             border-bottom: 1px solid #233446;
         }
         QToolButton {
-            padding: 3px 8px;
+            padding: 2px 6px;
             color: #dce8f4;
             background: #182635;
             border: 1px solid #2d4358;
@@ -494,7 +503,7 @@ void MainWindow::installUiPolish()
             border-color: #5ba8e6;
         }
         QDockWidget::title {
-            padding: 5px 7px;
+            padding: 3px 6px;
             background: #152231;
             border-bottom: 1px solid #294057;
         }
@@ -502,9 +511,9 @@ void MainWindow::installUiPolish()
             background: #090f16;
         }
         QMainWindow QTabBar::tab {
-            min-width: 120px;
-            min-height: 25px;
-            padding: 5px 12px;
+            min-width: 95px;
+            min-height: 19px;
+            padding: 3px 9px;
             margin-right: 2px;
             color: #9fb1c3;
             background: #111c28;
@@ -560,6 +569,8 @@ void MainWindow::installUiPolish()
 
     if (view_) {
         view_->viewport()->installEventFilter(this);
+        connect(view_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this] { queueMapLabelRefresh(); });
+        connect(view_->verticalScrollBar(), &QScrollBar::valueChanged, this, [this] { queueMapLabelRefresh(); });
         view_->setResizeAnchor(QGraphicsView::AnchorViewCenter);
         view_->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     }
@@ -776,6 +787,7 @@ void MainWindow::zoomMap(double factor)
     if (std::abs(target - current) < 0.000001) return;
 
     view_->scale(target / current, target / current);
+    refreshMapLabels();
     statusBar()->showMessage(QString("Map zoom ×%1").arg(target, 0, 'f', 2), 1000);
 }
 
@@ -783,6 +795,7 @@ void MainWindow::fitGalaxyView()
 {
     if (!view_ || !scene_) return;
     view_->fitInView(scene_->sceneRect().adjusted(-12.0, -12.0, 12.0, 12.0), Qt::KeepAspectRatio);
+    refreshMapLabels();
     statusBar()->showMessage("Galaxy fitted to map viewport", 1000);
 }
 
@@ -794,8 +807,16 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         if (mouse->button() == Qt::LeftButton
             || (mouse->button() == Qt::RightButton && event->type() == QEvent::MouseButtonPress)) {
             if (auto* item = mapObjectAtViewportPosition(mouse->position().toPoint())) {
-                const auto kind = item->data(1).toInt();
+                auto kind = item->data(1).toInt();
                 const auto id = static_cast<std::uint32_t>(item->data(0).toUInt());
+                const bool quick = mouse->button() == Qt::RightButton;
+                const bool target = quick || routeProgramMapTargetPickActive_;
+                const auto fleets = item->data(2).toList();
+                if ((kind == kMapItemOrbit && !quick) || (kind == 2 && fleets.size() > 1)) {
+                    showMapFleetPicker(fleets, mouse->position().toPoint(), target, quick);
+                    return true;
+                }
+                if (kind == kMapItemOrbit) kind = 1;
                 if (mouse->button() == Qt::RightButton || routeProgramMapTargetPickActive_) {
                     if (!selectRouteProgramMapTarget(kind, id)) return true;
                     cancelRouteProgramMapTargetPick();
@@ -810,6 +831,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
+    if (!shuttingDown_ && view_ && watched == view_->viewport() && event->type() == QEvent::Resize)
+        queueMapLabelRefresh();
     if (!shuttingDown_ && view_ && watched == view_->viewport() && event->type() == QEvent::Wheel) {
         const auto* wheel = static_cast<QWheelEvent*>(event);
         const int delta = wheel->angleDelta().y() != 0

@@ -19,7 +19,7 @@ public:
     [[nodiscard]] QRectF boundingRect() const override;
     [[nodiscard]] QPainterPath shape() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
-    void setVisualStyle(const QColor& color, qreal scale);
+    bool setVisualStyle(const QColor& color, qreal scale);
 
 private:
     QColor color_;

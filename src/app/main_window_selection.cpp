@@ -1,10 +1,14 @@
 #include "main_window.hpp"
+#include "map_marker_items.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/communications.hpp"
 
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QMenu>
+#include <QIcon>
+#include <QPixmap>
 #include <QTimer>
 
 #include <algorithm>
@@ -27,22 +31,62 @@ QGraphicsItem* MainWindow::mapObjectAtViewportPosition(const QPoint& position) c
     auto closestDistance = std::numeric_limits<qreal>::max();
     // QGraphicsView queries item shapes, not their generous painting bounds.
     // When visible discs overlap, prefer the center nearest the pointer. Equal
-    // distances retain Qt's stacking order (for genuinely coincident markers).
+    // distances retain Qt's stacking order; a core wins over its own ring.
     for (auto* item : view_->items(position)) {
         const auto kind = item->data(1).toInt();
-        if ((kind != kMapItemStar && kind != kMapItemFleet)
+        if ((kind != kMapItemStar && kind != kMapItemFleet && kind != kMapItemOrbit)
             || item->data(0).toUInt() == 0
             || !(item->flags() & QGraphicsItem::ItemIsSelectable)) continue;
         const auto center = view_->viewportTransform().map(
             item->mapToScene(item->boundingRect().center()));
         const auto delta = center - QPointF(position);
         const auto distance = delta.x() * delta.x() + delta.y() * delta.y();
-        if (distance < closestDistance) {
+        if (distance < closestDistance
+            || (distance == closestDistance && closest
+                && closest->data(1).toInt() == kMapItemOrbit && kind == kMapItemStar)) {
             closest = item;
             closestDistance = distance;
         }
     }
     return closest;
+}
+
+void MainWindow::showMapFleetPicker(const QVariantList& fleets, const QPoint& position, bool target, bool quick)
+{
+    if (mapFleetPicker_) mapFleetPicker_->close();
+    auto* menu = new QMenu(this);
+    mapFleetPicker_ = menu;
+    menu->setObjectName("mapFleetPicker");
+    menu->addSection(target ? "Choose target fleet" : "Fleets at this location");
+    auto contacts = state_.fleets;
+    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    contacts.insert(contacts.end(), missing.begin(), missing.end());
+    for (const auto& value : fleets) {
+        const auto id = static_cast<FleetId>(value.toUInt());
+        const auto it = std::find_if(contacts.begin(), contacts.end(),
+            [id](const Fleet& fleet) { return fleet.id == id; });
+        if (it == contacts.end()) continue;
+        const bool own = it->owner == pendingOrders_.player;
+        QPixmap swatch(8, 8);
+        swatch.fill(own ? QColor("#dce9f4") : QColor("#dd7777"));
+        const auto name = QString::fromStdString(it->name);
+        auto* action = menu->addAction(QIcon(swatch), own ? name : QString("Empire %1 — %2").arg(it->owner).arg(name));
+        action->setData(static_cast<unsigned int>(id));
+        action->setCheckable(!target);
+        action->setChecked(!target && selection_.fleet && *selection_.fleet == id);
+        action->setEnabled(!target || selectedFleetForRouteProgram() != id);
+        connect(action, &QAction::triggered, this, [this, id, target, quick, menu] {
+            if (target) {
+                if (!selectRouteProgramMapTarget(2, id)) return;
+                cancelRouteProgramMapTargetPick();
+                if (quick) emit routeProgramQuickTargetRequested(2, id);
+            } else if (!selectWorkspaceObject(2, id)) return;
+            menu->close();
+            queueMapSelectionRebuild();
+        });
+    }
+    connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
+    menu->popup(view_->viewport()->mapToGlobal(position) + QPoint(5, 8));
 }
 
 void MainWindow::queueMapSelectionRebuild()

@@ -102,10 +102,10 @@ void MainWindow::installFleetOperationsPanel()
     root->setStyleSheet(R"(
         QWidget#fleetOperationsPanel QProgressBar { min-height: 18px; max-height: 18px; }
         QWidget#fleetOperationsPanel QPushButton, QWidget#fleetOperationsPanel QToolButton {
-            min-height: 20px; padding: 2px 5px;
+            min-height: 18px; padding: 1px 5px;
         }
         QWidget#fleetOperationsPanel QComboBox, QWidget#fleetOperationsPanel QSpinBox {
-            min-height: 20px; padding: 1px 4px;
+            min-height: 18px; padding: 1px 4px;
         }
     )");
     fleetDock->setWindowTitle("Fleet — Orders & Logistics");
