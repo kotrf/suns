@@ -118,9 +118,9 @@ private:
             style()->polish(this);
         }
         setFormat((unsafe
-            ? QString("Warp %1 • +%2% damage/turn").arg(value()).arg(damageRate_, 0, 'f', 0)
-            : QString("Warp %1 • safe to W%2").arg(value()).arg(safeWarp_))
-            + (fuelLimited ? " • low fuel" : ""));
+            ? QString("W%1 • +%2% damage/turn").arg(value()).arg(damageRate_, 0, 'f', 0)
+            : QString("W%1 • safe W%2").arg(value()).arg(safeWarp_))
+            + (fuelLimited ? " • fuel!" : ""));
         setToolTip((unsafe
             ? QString("Unsafe overdrive: rated W%1, selected W%2. Hull damage accumulates while moving.")
                   .arg(safeWarp_).arg(value())
@@ -191,6 +191,9 @@ void attachRouteProgramDock(MainWindow& window)
 
     auto* panel = new QWidget(dock);
     auto* layout = new QVBoxLayout(panel);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(4);
+    panel->setObjectName("routeProgramPanel");
 
     const auto helpText = QString(
         "Select the fleet to program, click Pick target on map, then click a star or another fleet. "
@@ -202,6 +205,7 @@ void attachRouteProgramDock(MainWindow& window)
         "Colonization dismantles the entire fleet and recovers 33% of its ship minerals. Dockside loading and refuelling are in Fleet Logistics.");
     auto* headingRow = new QHBoxLayout;
     auto* heading = new QLabel("Program orders for one fleet", panel);
+    heading->setObjectName("routeProgramHeading");
     auto* helpButton = new QToolButton(panel);
     helpButton->setObjectName("routeProgramHelpButton");
     helpButton->setText("?");
@@ -221,10 +225,13 @@ void attachRouteProgramDock(MainWindow& window)
     auto* routeGroup = new QGroupBox("Current program", panel);
     routeGroup->setObjectName("routeSummaryGroup");
     auto* routeLayout = new QVBoxLayout(routeGroup);
+    routeLayout->setContentsMargins(6, 6, 6, 6);
+    routeLayout->setSpacing(3);
     auto* routeTree = new QTreeWidget(routeGroup);
     routeTree->setObjectName("routeProgramQueue");
     routeTree->setColumnCount(4);
-    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA (years)"});
+    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA"});
+    routeTree->headerItem()->setToolTip(3, "Estimated arrival in years from the planning turn");
     routeTree->setRootIsDecorated(false);
     routeTree->setAlternatingRowColors(true);
     routeTree->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -233,7 +240,7 @@ void attachRouteProgramDock(MainWindow& window)
     routeTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     routeTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    routeTree->setMinimumHeight(118);
+    routeTree->setFixedHeight(100);
     routeLayout->addWidget(routeTree);
     auto* selectedAction = new QLabel("Select a waypoint to view its arrival action.", routeGroup);
     selectedAction->setObjectName("routeSelectedArrivalAction");
@@ -260,6 +267,9 @@ void attachRouteProgramDock(MainWindow& window)
     auto* routeLabel = new QLabel(routeGroup);
     routeLabel->setWordWrap(true);
     routeLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    // The forecast dialog contains the full summary without consuming the
+    // working area needed for waypoint controls.
+    routeLabel->hide();
     routeLayout->addWidget(routeLabel);
     auto* forecastButton = new QPushButton("Route forecast…", routeGroup);
     routeLayout->addWidget(forecastButton);
@@ -275,6 +285,8 @@ void attachRouteProgramDock(MainWindow& window)
     auto* waypointGroup = new QGroupBox("Add waypoint", panel);
     waypointGroup->setObjectName("routeWaypointGroup");
     auto* waypointLayout = new QVBoxLayout(waypointGroup);
+    waypointLayout->setContentsMargins(6, 6, 6, 6);
+    waypointLayout->setSpacing(3);
 
     auto* warpSelector = new WarpSelector(waypointGroup);
     QObject::connect(warpSelector, &QProgressBar::valueChanged, panel,
@@ -311,6 +323,10 @@ void attachRouteProgramDock(MainWindow& window)
     auto* targetFleetCombo = new QComboBox(waypointGroup);
     targetFleetCombo->setObjectName("routeTargetFleetCombo");
     targetFleetCombo->setEnabled(false);
+    // Destination/map picking drives these compatibility selectors. Unmanaged
+    // visible children otherwise appear at (0,0) over the group title.
+    targetTypeCombo->hide();
+    targetFleetCombo->hide();
     auto* destinationCombo = new QComboBox(waypointGroup);
     destinationCombo->setObjectName("routeDestinationCombo");
     destinationCombo->setToolTip(
@@ -338,12 +354,14 @@ void attachRouteProgramDock(MainWindow& window)
     reserveSpin->setEnabled(false);
 
     auto* form = new QFormLayout;
+    form->setVerticalSpacing(3);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     form->addRow("Destination", destinationCombo);
-    form->addRow("Waypoint Warp", warpRow);
+    form->addRow("Warp", warpRow);
     form->addRow("On arrival", actionCombo);
     actionCombo->setToolTip("Action for the new waypoint of this fleet. Add the waypoint to apply it; existing route rows keep their own actions.");
     form->addRow("Cargo", cargoCombo);
-    form->addRow("Leave on colony", reserveSpin);
+    form->addRow("Leave population", reserveSpin);
     waypointLayout->addLayout(form);
 
     auto* pickTargetButton = new QPushButton("Pick target on map…", waypointGroup);
@@ -356,6 +374,7 @@ void attachRouteProgramDock(MainWindow& window)
         "Tip: use this button when the destination is another fleet.", waypointGroup);
     pickedTargetLabel->setObjectName("routePickedTargetLabel");
     pickedTargetLabel->setWordWrap(true);
+    pickedTargetLabel->hide();
     waypointLayout->addWidget(pickedTargetLabel);
 
     auto* appendButton = new QPushButton("Add selected star to route", waypointGroup);
@@ -365,10 +384,13 @@ void attachRouteProgramDock(MainWindow& window)
 
     auto* repeatCheck = new QCheckBox("Repeat Orders", panel);
     repeatCheck->setToolTip("Restart the complete route after its final waypoint");
-    layout->addWidget(repeatCheck);
+    auto* programActions = new QHBoxLayout;
+    programActions->addWidget(repeatCheck);
 
-    auto* clearButton = new QPushButton("Clear route / set No Task", panel);
-    layout->addWidget(clearButton);
+    auto* clearButton = new QPushButton("Clear route", panel);
+    clearButton->setToolTip("Clear the fleet program and set No Task");
+    programActions->addWidget(clearButton);
+    layout->addLayout(programActions);
 
     layout->addStretch(1);
 
@@ -617,6 +639,7 @@ void attachRouteProgramDock(MainWindow& window)
             pickTargetButton->setChecked(active);
             pickTargetButton->setText(active ? "Cancel target picking" : "Pick target on map…");
             if (active) {
+                pickedTargetLabel->show();
                 pickedTargetLabel->setText(
                     "Click a star or another fleet on the map. Esc cancels.");
             } else if (pickedTargetLabel->text().startsWith("Click a star")) {
@@ -626,10 +649,11 @@ void attachRouteProgramDock(MainWindow& window)
     QObject::connect(&window, &MainWindow::routeProgramMapTargetPicked, panel,
         [=, &window](int kind, std::uint32_t id) {
             rebuildDestinationChoices(kind, id);
+            pickedTargetLabel->show();
             pickedTargetLabel->setText(QString("Target: <b>%1</b>")
                 .arg(window.routeProgramMapTargetName(kind, id).toHtmlEscaped()));
         });
-    auto* cancelTargetShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), dock);
+    auto* cancelTargetShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), panel);
     QObject::connect(cancelTargetShortcut, &QShortcut::activated, panel,
         [&window] { window.cancelRouteProgramMapTargetPick(); });
     QObject::connect(dock, &QDockWidget::visibilityChanged, panel,
@@ -711,10 +735,11 @@ void attachRouteProgramDock(MainWindow& window)
                 static_cast<FleetId>(sourceFleetCombo->currentData().toUInt()));
         });
 
-    auto* timer = new QTimer(dock);
+    // Refresh must survive moving this panel into the shared fleet dock.
+    auto* timer = new QTimer(panel);
     timer->setObjectName("routeProgramRefreshTimer");
     timer->setInterval(180);
-    QObject::connect(timer, &QTimer::timeout, dock,
+    QObject::connect(timer, &QTimer::timeout, panel,
         [&window, routeLabel, routeTree, moveUpButton, moveDownButton, removeButton,
             warpSelector, appendButton, clearButton, repeatCheck,
             targetTypeCombo, targetFleetCombo,

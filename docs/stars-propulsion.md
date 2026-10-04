@@ -39,6 +39,16 @@ Optimal speed is an efficiency reference, not the safe-speed ceiling. Quick Jump
 10 first becomes possible with Interspace-10 at P11 for a no-scoop empire,
 Trans-Galactic Mizer Scoop at P16/E4, or Trans-Star 10 at P23 for any empire.
 
+Starting fleets and newly built ships use the fitted reference engine's catalog
+optimal Warp as their initial speed. Legacy ships retain their previous defaults
+(Warp 8 for scouts/other ships, Warp 7 for colony ships). The starting reference
+Scout weighs 22 kt (8 kt hull, 4 kt Quick Jump 5, 10 kt Suns! scanner) and holds
+50 mg. A full turn at Warp 5 moves 25 ly and costs 3 mg; at Warp 8 it would move
+64 ly and cost 57 mg, exceeding the entire tank. In deep space, Warp 5 sustains
+16 full turns / 400 ly before needing a slower leg or refuelling. Existing saves
+and explicit route speeds are preserved; set an existing Quick Jump 5 scout to
+Warp 5 for normal exploration. Higher speeds remain available when needed.
+
 ## Access and fitting
 
 New campaign setup offers three independent propulsion-access choices for every
@@ -74,7 +84,7 @@ whole ly, truncate the computed bill to one decimal place, then round up to whol
 mg. Fuel efficiency first changes `E` to `ceil(E * 0.85)`.
 
 The rounding follows the empirical Stars! algorithm attributed to m.a@stars,
-published in CraigStars (`fuelUsageForStack`, pinned source):
+published in CraigStars (`getFuelCostForEngine`, pinned source):
 https://github.com/sirgwain/craig-stars/blob/d6a71d0b981b2343498e31311ef17797ec501d2d/cs/fleet.go
 Suns! implements these rules independently and retains its fractional ship/cargo
 masses; it does not reproduce every integer-mass quirk of the original binary.

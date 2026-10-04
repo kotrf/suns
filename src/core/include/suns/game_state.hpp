@@ -820,11 +820,17 @@ struct GameState {
 
 struct GalaxyConfig {
     std::uint64_t seed{20260817};
-    std::size_t starCount{24};
-    double width{900.0};
-    double height{650.0};
-    double minimumSeparation{48.0};
+    std::size_t starCount{32};
+    double width{400.0};
+    double height{400.0};
+    double minimumSeparation{15.0};
 };
+
+enum class GalaxySize : std::uint8_t { Tiny, Small, Medium, Large, Huge };
+enum class GalaxyDensity : std::uint8_t { Sparse, Normal, Dense, Packed };
+inline constexpr std::size_t kMaximumGalaxySystems = 1000;
+[[nodiscard]] GalaxyConfig galaxy_preset(GalaxySize size, GalaxyDensity density, std::uint64_t seed);
+[[nodiscard]] GalaxyConfig normalized_galaxy_config(GalaxyConfig config);
 
 [[nodiscard]] const StarSystem* find_star(const GameState& state, StarId id);
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
@@ -870,6 +876,9 @@ void normalize_ship_design_placement(ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_remote_mine(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
+// Initial speed only; reference engines use their catalog optimum, legacy
+// designs retain role-based defaults. Explicit/saved routes are never changed.
+[[nodiscard]] std::uint8_t ship_design_cruise_warp(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp);
 [[nodiscard]] double ship_design_overdrive_damage(
     const ShipDesign& design, std::uint8_t warp);

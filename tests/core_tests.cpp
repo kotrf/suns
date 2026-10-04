@@ -132,8 +132,7 @@ void verify_procedural_generation()
     assert(first.players.front().surveyedStars == repeat.players.front().surveyedStars);
     assert(first.fleets.size() == 1);
     assert(first.fleets.front().design == suns::kScoutDesignId);
-    assert(first.fleets.front().warp == suns::kScoutCruiseWarp);
-    assert(first.fleets.front().warp == 8);
+    assert(first.fleets.front().warp == 5);
     assert(suns::same_position(first.fleets.front().position, first.stars.front().position));
     assert(first.planets.front().environment.temperature == 50);
     assert(first.planets.front().environment.gravity == 50);

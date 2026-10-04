@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
             }
             // Exercise an intentionally disturbed dock width and the same reset
             // action exposed to players through View → Reset panel layout.
-            if (auto* dock = window.findChild<QDockWidget*>("fleetRouteProgramDock")) {
+            if (auto* dock = window.findChild<QDockWidget*>("fleetDock")) {
                 window.resizeDocks({dock}, {500}, Qt::Horizontal);
             }
             if (auto* reset = window.findChild<QAction*>("resetPanelLayoutAction")) {

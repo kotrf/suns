@@ -469,7 +469,8 @@ int main(int argc, char* argv[])
     assert(routeTree && routeTimer && arrivalDetails);
     assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
     assert(routeTree->columnCount() == 4 && routeTree->topLevelItemCount() == 2);
-    assert(routeTree->headerItem()->text(3) == "ETA (years)");
+    assert(routeTree->headerItem()->text(3) == "ETA");
+    assert(routeTree->headerItem()->toolTip(3).contains("years"));
     routeTree->setCurrentItem(routeTree->topLevelItem(0));
     assert(arrivalDetails->text().contains("no action"));
     routeTree->setCurrentItem(routeTree->topLevelItem(1));

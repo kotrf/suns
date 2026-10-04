@@ -30,4 +30,4 @@ This separation is deliberate: names are presentation/content; geometry and phys
 
 Categories in `src/core/src/star_name_pool.hpp` exist only to keep the source understandable. The game should present the names as one mixed deck rather than exposing categories to the player.
 
-The current pool contains 300 unique names, comfortably above the maximum supported 64-system galaxy. When expanding it, prefer distinctive short-to-medium names and keep the mix broad enough that a generated map does not look like it came from a single naming algorithm.
+The current pool contains 300 unique names. Galaxies support up to 1000 systems; after the shuffled deck is exhausted, unique `System <id>` names cover the remainder. When expanding it, prefer distinctive short-to-medium names and keep the mix broad enough that a generated map does not look like it came from a single naming algorithm.

@@ -99,9 +99,9 @@ Position generated_position(
     const GalaxyConfig& config,
     const std::vector<StarSystem>& stars)
 {
-    const int halfWidth = std::max(250, static_cast<int>(config.width / 2.0));
-    const int halfHeight = std::max(200, static_cast<int>(config.height / 2.0));
-    const double requestedSeparation = std::clamp(config.minimumSeparation, 24.0, 100.0);
+    const int halfWidth = static_cast<int>(config.width / 2.0);
+    const int halfHeight = static_cast<int>(config.height / 2.0);
+    const double requestedSeparation = config.minimumSeparation;
 
     for (int relaxation = 0; relaxation < 6; ++relaxation) {
         const double separation = requestedSeparation * std::pow(0.90, relaxation);
@@ -812,6 +812,16 @@ std::uint8_t ship_design_max_warp(const ShipDesign& design)
     std::uint8_t maxWarp = 0;
     for (const auto component : design.components) maxWarp = std::max(maxWarp, component_spec(component).maxWarp);
     return maxWarp;
+}
+
+std::uint8_t ship_design_cruise_warp(const ShipDesign& design)
+{
+    ShipComponentSpec engine;
+    const auto* spec = primary_engine(design, engine);
+    if (!spec || spec->maxWarp == 0) return 1;
+    const auto preferred = spec->optimalWarp != 0 ? spec->optimalWarp
+        : (ship_design_can_colonize(design) ? kColonyShipCruiseWarp : kScoutCruiseWarp);
+    return std::min(spec->maxWarp, preferred);
 }
 
 double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp)
@@ -1772,9 +1782,35 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
 
 } // namespace
 
-GameState generate_game(const GalaxyConfig& config)
+GalaxyConfig galaxy_preset(GalaxySize size, GalaxyDensity density, std::uint64_t seed)
 {
-    const auto starCount = std::clamp<std::size_t>(config.starCount, 2, 64);
+    const auto sizeIndex = static_cast<unsigned>(size);
+    const auto densityIndex = static_cast<unsigned>(density);
+    if (sizeIndex > 4 || densityIndex > 3) throw std::invalid_argument("Unknown galaxy preset");
+    const double side = 400.0 * (sizeIndex + 1);
+    // Original Stars! help gives approximate area per planet; Suns rounds the
+    // resulting count. Packed is 30% above Dense, capped at 1000 systems.
+    constexpr std::array<double, 4> areaPerSystem{6500.0, 5000.0, 4000.0, 4000.0 / 1.30};
+    const auto count = static_cast<std::size_t>(std::lround(side * side / areaPerSystem[densityIndex]));
+    return {seed, std::min(count, kMaximumGalaxySystems), side, side, 15.0};
+}
+
+GalaxyConfig normalized_galaxy_config(GalaxyConfig config)
+{
+    if (!std::isfinite(config.width) || !std::isfinite(config.height)
+        || !std::isfinite(config.minimumSeparation))
+        throw std::invalid_argument("Galaxy dimensions and separation must be finite");
+    config.starCount = std::clamp<std::size_t>(config.starCount, 2, kMaximumGalaxySystems);
+    config.width = std::clamp(config.width, 100.0, 10000.0);
+    config.height = std::clamp(config.height, 100.0, 10000.0);
+    config.minimumSeparation = std::clamp(config.minimumSeparation, 0.0, 100.0);
+    return config;
+}
+
+GameState generate_game(const GalaxyConfig& requestedConfig)
+{
+    const auto config = normalized_galaxy_config(requestedConfig);
+    const auto starCount = config.starCount;
 
     std::mt19937_64 physicalRng(config.seed);
     std::mt19937_64 namingRng(config.seed ^ 0x9E3779B97F4A7C15ULL);
@@ -1782,8 +1818,8 @@ GameState generate_game(const GalaxyConfig& config)
 
     GameState state;
     state.galaxySeed = config.seed;
-    state.wormholeRules.width = std::max(500.0, config.width);
-    state.wormholeRules.height = std::max(400.0, config.height);
+    state.wormholeRules.width = config.width;
+    state.wormholeRules.height = config.height;
     state.players.push_back({1, "Terrans", {1}});
     state.shipDesigns = default_ship_designs(1, true);
     state.stars.reserve(starCount);
@@ -1801,7 +1837,8 @@ GameState generate_game(const GalaxyConfig& config)
 
     for (std::size_t index = 2; index <= starCount; ++index) {
         const auto id = static_cast<StarId>(index);
-        const auto name = std::string(nameDeck[index - 2]);
+        const auto name = index - 2 < nameDeck.size()
+            ? std::string(nameDeck[index - 2]) : "System " + std::to_string(index);
         const auto position = generated_position(physicalRng, config, state.stars);
         const auto stellarClass = generated_star_class(physicalRng);
         state.stars.push_back({
@@ -1814,9 +1851,10 @@ GameState generate_game(const GalaxyConfig& config)
 
     const auto* scout = find_ship_design(state, kScoutDesignId);
     const auto scoutFuel = scout ? ship_design_fuel_capacity(*scout) : 0.0;
+    const std::uint8_t scoutWarp = scout ? ship_design_cruise_warp(*scout) : 1;
     state.fleets.push_back({
         1, 1, "Scout 1", FleetRole::Scout, kScoutDesignId,
-        {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, scoutFuel, 0,
+        {0.0, 0.0}, std::nullopt, scoutWarp, scoutFuel, 0,
     });
     initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;

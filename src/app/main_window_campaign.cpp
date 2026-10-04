@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "galaxy_setup_widget.hpp"
 
 #include <QDialog>
 #include <QCheckBox>
@@ -25,15 +26,14 @@ void MainWindow::newCampaign()
     auto* layout = new QVBoxLayout(&dialog);
     auto* form = new QFormLayout;
     QLineEdit seed(seedEdit_->text(), &dialog);
-    QSpinBox stars(&dialog), count(&dialog);
-    stars.setRange(8, 64);
-    stars.setValue(starCountSpin_->value());
+    QSpinBox count(&dialog);
     count.setRange(1, 8);
     count.setValue(2);
     form->addRow("Galaxy seed", &seed);
-    form->addRow("Systems", &stars);
     form->addRow("Human players", &count);
     layout->addLayout(form);
+    GalaxySetupWidget galaxy(galaxyConfig_, &dialog);
+    layout->addWidget(&galaxy);
     auto* explanation = new QLabel(
         "Player 1 hosts and plays locally. Other players open their .sunsturn files, plan orders, "
         "then send .sunsorders back. All players submit before the host resolves the turn.\n\n"
@@ -81,6 +81,10 @@ void MainWindow::newCampaign()
         bool ok{};
         seed.text().toULongLong(&ok);
         if (!ok) { QMessageBox::warning(&dialog, "Invalid seed", "Enter an unsigned integer."); return; }
+        if (galaxy.config(seed.text().toULongLong()).starCount < static_cast<std::size_t>(count.value())) {
+            QMessageBox::warning(&dialog, "Too few systems", "Each player needs a starting system.");
+            return;
+        }
         for (int row = 0; row < count.value(); ++row) {
             const auto name = table.item(row, 0)->text().trimmed().toUtf8();
             if (name.isEmpty() || name.size() > 80) {
@@ -106,8 +110,7 @@ void MainWindow::newCampaign()
             qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 2});
     }
     seedEdit_->setText(seed.text());
-    starCountSpin_->setValue(stars.value());
-    newGalaxy();
+    newGalaxy(galaxy.config(seed.text().toULongLong()));
 }
 
 SaveGameData MainWindow::campaignSnapshot() const

@@ -296,8 +296,8 @@ void MainWindow::installFleetPortraitPolish()
     auto* portrait = new QLabel(fleetGroup);
     portrait->setObjectName("fleetPortrait");
     portrait->setAlignment(Qt::AlignCenter);
-    portrait->setMinimumHeight(108);
-    portrait->setPixmap(emptyFleetPortrait());
+    portrait->setFixedSize(92, 52);
+    portrait->setPixmap(emptyFleetPortrait().scaled(92, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     portrait->setToolTip("The silhouette is derived from the selected ship design's hull and fitted components.");
     layout->insertWidget(0, portrait);
 
@@ -306,12 +306,12 @@ void MainWindow::installFleetPortraitPolish()
         const auto* fleet = selectedFleet();
         const auto* design = fleet ? fleet_design(state_, *fleet) : nullptr;
         if (!fleet || !design) {
-            portrait->setPixmap(emptyFleetPortrait());
+            portrait->setPixmap(emptyFleetPortrait().scaled(92, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             portrait->setToolTip("No fleet selected.");
             return;
         }
 
-        portrait->setPixmap(renderShipPortrait(*design));
+        portrait->setPixmap(renderShipPortrait(*design).scaled(92, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         QStringList components;
         for (const auto component : design->components) {
             components << QString::fromStdString(component_spec(component).name);

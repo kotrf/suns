@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "galaxy_setup_widget.hpp"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -145,7 +146,7 @@ void MainWindow::installUiPolish()
 
     // Rebuild the chronological side panel as a dockable workspace. Map state,
     // fleet operations and production each get a stable thematic home; the
-    // Fleet and Route Program docks share one tabbed area by default.
+    // final layout pass combines fleet telemetry and route editing.
     if (auto* central = centralWidget()) {
         if (auto* layout = qobject_cast<QHBoxLayout*>(central->layout()); layout && layout->count() >= 2) {
             commandPanel = layout->itemAt(1)->widget();
@@ -234,6 +235,7 @@ void MainWindow::installUiPolish()
                         "Changing this value updates the current-year dockside cargo plan immediately");
 
                     auto* cargoButton = new QPushButton("Transfer cargo…", fleetGroup);
+                    cargoButton->setObjectName("fleetTransferCargoButton");
                     cargoButton->setToolTip(
                         "Transfer colonists and minerals between the planetary surface and friendly fleets at this system");
                     fleetLayout->addWidget(cargoButton);
@@ -270,6 +272,9 @@ void MainWindow::installUiPolish()
                     auto* productionLayout = new QVBoxLayout(productionGroup);
                     auto* productionForm = new QFormLayout;
                     shipDesignCombo_->show();
+                    shipDesignCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+                    shipDesignCombo_->setMinimumContentsLength(12);
+                    shipDesignCombo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
                     productionForm->addRow("Ship design", shipDesignCombo_);
                     productionLayout->addLayout(productionForm);
                     buildShipButton_->show();
@@ -574,6 +579,7 @@ void MainWindow::installUiPolish()
     gameMenu->addSeparator();
 
     auto* newGalaxyAction = gameMenu->addAction("New galaxy…");
+    newGalaxyAction->setObjectName("newGalaxyAction");
     newGalaxyAction->setShortcut(QKeySequence::New);
     connect(newGalaxyAction, &QAction::triggered, this, [this] {
         QDialog dialog(this);
@@ -581,12 +587,10 @@ void MainWindow::installUiPolish()
         auto* layout = new QVBoxLayout(&dialog);
         auto* form = new QFormLayout;
         auto* seed = new QLineEdit(seedEdit_->text(), &dialog);
-        auto* systems = new QSpinBox(&dialog);
-        systems->setRange(8, 64);
-        systems->setValue(starCountSpin_->value());
         form->addRow("Seed", seed);
-        form->addRow("Star systems", systems);
         layout->addLayout(form);
+        auto* galaxy = new GalaxySetupWidget(galaxyConfig_, &dialog);
+        layout->addWidget(galaxy);
         auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
         connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
@@ -600,8 +604,7 @@ void MainWindow::installUiPolish()
             return;
         }
         seedEdit_->setText(seed->text());
-        starCountSpin_->setValue(systems->value());
-        newGalaxy();
+        newGalaxy(galaxy->config(seed->text().toULongLong()));
         fitGalaxyView();
     });
 
@@ -830,7 +833,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/geometry", saveGeometry());
-        settings.setValue("workspace/docks", saveState(2));
+        settings.setValue("workspace/docks", saveState(3));
     }
 
     QMainWindow::closeEvent(event);

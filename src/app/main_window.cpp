@@ -387,7 +387,7 @@ MainWindow::MainWindow(QWidget* parent)
     seedEdit_ = new QLineEdit(QString::number(state_.galaxySeed), sidePanel);
     seedEdit_->setPlaceholderText("Unsigned 64-bit seed");
     starCountSpin_ = new QSpinBox(sidePanel);
-    starCountSpin_->setRange(8, 64);
+    starCountSpin_->setRange(2, static_cast<int>(kMaximumGalaxySystems));
     starCountSpin_->setValue(static_cast<int>(state_.stars.size()));
     newGalaxyButton_ = new QPushButton("Generate / Restart Galaxy", sidePanel);
     sensorRangesCheck_ = new QCheckBox("Show sensor ranges", sidePanel);
@@ -1493,7 +1493,7 @@ void MainWindow::endTurn()
         .arg(static_cast<qulonglong>(state_.turn)));
 }
 
-void MainWindow::newGalaxy()
+void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
 {
     if (sessionMode_ == SessionMode::PlayerTurn && empireSetups_.empty()) {
         statusBar()->showMessage("A player turn cannot restart the host's galaxy. Use File → New campaign.", 5000);
@@ -1507,11 +1507,12 @@ void MainWindow::newGalaxy()
         return;
     }
 
-    GalaxyConfig requested = galaxyConfig_;
+    GalaxyConfig requested = config.value_or(galaxyConfig_);
     requested.seed = static_cast<std::uint64_t>(parsedSeed);
-    requested.starCount = static_cast<std::size_t>(starCountSpin_->value());
+    if (!config) requested.starCount = static_cast<std::size_t>(starCountSpin_->value());
 
     try {
+        requested = normalized_galaxy_config(requested);
         auto generated = empireSetups_.empty() ? generate_game(requested) : generate_campaign(requested, empireSetups_);
         sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
         pendingOrders_ = {1, {}};
@@ -1521,6 +1522,7 @@ void MainWindow::newGalaxy()
         if (shipDesigner_) shipDesigner_->close();
         galaxyConfig_ = requested;
         state_ = std::move(generated);
+        starCountSpin_->setValue(static_cast<int>(galaxyConfig_.starCount));
         historyRangeInitialized_ = false;
         refreshEmpireHistory();
         resetTurnExchangeIdentity();
@@ -1548,7 +1550,8 @@ void MainWindow::newGalaxy()
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 
     statusBar()->showMessage(QString("New galaxy: seed %1, %2 systems — Scout 1 selected at Warp %3")
-        .arg(static_cast<qulonglong>(state_.galaxySeed)).arg(static_cast<qulonglong>(state_.stars.size())).arg(kScoutCruiseWarp));
+        .arg(static_cast<qulonglong>(state_.galaxySeed)).arg(static_cast<qulonglong>(state_.stars.size()))
+        .arg(state_.fleets.front().warp));
 }
 
 } // namespace suns

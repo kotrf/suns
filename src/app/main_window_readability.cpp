@@ -221,10 +221,9 @@ void MainWindow::installFleetReadabilityPolish()
         fuelBar->setValue(percentOf(fleet->fuel, fuelCapacity));
         if (fuelCapacity > 0.000001) {
             fuelBar->setFormat(
-                QString("Fuel %1 / %2 • %3%")
+                QString("Fuel %1 / %2 mg")
                     .arg(fleet->fuel, 0, 'f', 1)
-                    .arg(fuelCapacity, 0, 'f', 1)
-                    .arg(percentOf(fleet->fuel, fuelCapacity)));
+                    .arg(fuelCapacity, 0, 'f', 1));
         } else {
             fuelBar->setFormat("Fuel — no tank capacity");
         }
@@ -239,13 +238,9 @@ void MainWindow::installFleetReadabilityPolish()
         cargoBar->setEnabled(cargoCapacity > 0.000001);
         cargoBar->setValue(percentOf(cargoUsed, cargoCapacity));
         if (cargoCapacity > 0.000001) {
-            QString format = QString("Cargo %1 / %2 • %3%")
+            QString format = QString("Cargo %1 / %2 kt")
                     .arg(cargoUsed, 0, 'f', 1)
-                    .arg(cargoCapacity, 0, 'f', 1)
-                    .arg(percentOf(cargoUsed, cargoCapacity));
-            if (fleet->colonists > 0) {
-                format += QString(" • %1 colonists").arg(static_cast<qulonglong>(fleet->colonists));
-            }
+                    .arg(cargoCapacity, 0, 'f', 1);
             cargoBar->setFormat(format);
         } else {
             cargoBar->setFormat("Cargo hold — no cargo capacity");

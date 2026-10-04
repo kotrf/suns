@@ -14,6 +14,85 @@ bool near(double a, double b, double epsilon = 0.0001)
     return std::abs(a - b) < epsilon;
 }
 
+void verify_starting_scout_range()
+{
+    using namespace suns;
+    auto state = generate_game(GalaxyConfig{});
+    auto scout = state.fleets.front();
+    assert(fleet_gross_mass(state, scout) == 22);
+    assert(fleet_fuel_capacity(state, scout) == 50);
+    scout.warp = 8;
+    assert(fleet_fuel_consumption_for_distance(state, scout, 64) == 57);
+    scout.warp = 5;
+    assert(fleet_fuel_consumption_for_distance(state, scout, 25) == 3);
+
+    // A generated fleet must already choose the economical engine speed.
+    assert(state.fleets.front().warp == 5);
+    assert(state.fleets.front().telemetry.warp == 5);
+    // Travel away from every dock so refuelling cannot mask the range regression.
+    state.fleets.front().position = {1000, 1000};
+    state.fleets.front().destination = Position{2000, 1000};
+    const auto manualFastRoute = state;
+    const TurnProcessor processor;
+    for (int turn = 1; turn <= 16; ++turn) {
+        state = processor.process(state, {});
+        assert(near(state.fleets.front().position.x, 1000 + turn * 25));
+        assert(near(state.fleets.front().fuel, 50 - turn * 3));
+        assert(state.fleets.front().warp == 5);
+    }
+
+    // Explicit/saved Warp 8 routes still work and retain their fuel penalty.
+    auto fast = manualFastRoute;
+    fast.fleets.front().warp = 8;
+    const auto next = processor.process(fast, {});
+    assert(next.fleets.front().warp == 8);
+    assert(next.fleets.front().position.x > 1055 && next.fleets.front().position.x < 1064);
+    assert(next.fleets.front().fuel < 1);
+
+    const auto campaign = generate_campaign(GalaxyConfig{},
+        {{"Terrans", RacePreset::Terran}, {"Ice", RacePreset::Cryophile}});
+    for (const auto& fleet : campaign.fleets) {
+        assert(fleet.warp == 5 && fleet.telemetry.warp == 5);
+        assert(fleet_fuel_consumption_for_distance(campaign, fleet, 25) == 3);
+    }
+}
+
+void verify_built_fleets_start_at_engine_cruise_warp()
+{
+    using namespace suns;
+    auto build = [](GameState state, ShipDesignId designId, std::uint8_t expectedWarp) {
+        const auto* design = find_ship_design(state, designId);
+        assert(design && ship_design_valid(*design));
+        state.planets.front().minerals = {1000, 1000, 1000};
+        state.planets.front().productionQueue = {{ProductionKind::ColonyShip, 0, designId}};
+        const auto newFleetId = state.nextFleetId;
+        const auto next = TurnProcessor{}.process(state, {});
+        const auto built = std::find_if(next.fleets.begin(), next.fleets.end(),
+            [&](const Fleet& fleet) { return fleet.id == newFleetId; });
+        assert(built != next.fleets.end() && built->design == designId);
+        assert(built->warp == expectedWarp && built->telemetry.warp == expectedWarp);
+    };
+    auto reference = generate_game(GalaxyConfig{});
+    build(reference, kScoutDesignId, 5);
+    build(reference, kColonyShipDesignId, 5);
+    // Engine changes must propagate to the production default, including W10.
+    for (const auto engine : {ShipComponentType::LongHump6, ShipComponentType::TransStar10}) {
+        reference.shipDesigns.front().components.front() = engine;
+        reference.shipDesigns.front().placements.clear();
+        normalize_ship_design_placement(reference.shipDesigns.front());
+        build(reference, kScoutDesignId, engine == ShipComponentType::LongHump6 ? 6 : 10);
+    }
+    // Multiple copies of the same engine in a required bank do not change cruise speed.
+    reference.shipDesigns.push_back({10, 1, "Hauler", ShipHullType::LargeFreighter,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5}});
+    build(reference, 10, 5);
+
+    const auto legacy = make_demo_game();
+    assert(legacy.fleets.front().warp == 8);
+    build(legacy, kScoutDesignId, 8);
+    build(legacy, kColonyShipDesignId, 7);
+}
+
 void verify_warp_squared_movement()
 {
     assert(suns::warp_distance(1) == 1.0);
@@ -418,6 +497,8 @@ void verify_unsafe_warp_accumulates_engine_damage()
 
 int main()
 {
+    verify_starting_scout_range();
+    verify_built_fleets_start_at_engine_cruise_warp();
     verify_original_fuel_tables_and_rounding();
     verify_original_collection_is_per_engine();
     verify_mixed_fleet_cargo_and_fuel_collection();

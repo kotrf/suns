@@ -88,7 +88,7 @@ the Merge action by default. An enemy fleet is marked red and uses its currently
 observed position as a fixed destination with No action rather than the friendly
 Merge action. The player may change a friendly fleet's action to No action to
 follow/rendezvous without merging. The source fleet remains selected throughout.
-Pressing Esc, closing the Route Program dock, changing the source fleet, or
+Pressing Esc, closing the Fleet dock, changing the source fleet, or
 ending/loading a game cancels target-picking mode.
 
 Selecting a system also fills one **Destination** combo with the system itself

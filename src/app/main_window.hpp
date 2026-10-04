@@ -124,6 +124,7 @@ public:
     // Adds recovery UI and enables horizontal scrolling when narrow panels
     // cannot display a technical line without clipping it.
     void installPanelLayoutFixes();
+    void installFleetOperationsPanel();
     void resetPanelLayout();
 
     // Finish the information-dashboard pass: fleet fuel/cargo gauges, distinct
@@ -180,7 +181,7 @@ private:
     void queueColonists();
     void queueColonize();
     void endTurn();
-    void newGalaxy();
+    void newGalaxy(std::optional<GalaxyConfig> config = std::nullopt);
     void newCampaign();
     void exportPlayerTurns();
     [[nodiscard]] SaveGameData campaignSnapshot() const;

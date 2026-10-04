@@ -60,7 +60,9 @@ Fleets may contain multiple ship designs and counts. Co-located idle fleets can 
 
 Route programs can target another friendly FleetId. Pursuers resolve the target's projected motion every turn and may use **Merge with fleet**. Their relative movement is checked continuously inside the annual turn, so a real crossing can merge the fleets at the intercept point while a closest-approach miss keeps the pursuit active. After merging, the surviving target FleetId continues its route for the unused part of the year at a Warp supported by every ship in the combined fleet. A lost target clears the route and produces a warning.
 
-The galaxy map is the permanent workspace while Overview, Fleet, Fleet Route Program, Production, Research and Turn Messages are dockable panels. They may be tabbed, resized or detached into operating-system windows, and the chosen layout is restored on the next launch. Fleet logistics, organization, colonization and ship design live together in the Fleet area.
+The galaxy map is the permanent workspace while Overview, Fleet, Production, Research and Turn Messages are dockable panels. Fleet orders and logistics share one panel: fleet selection, fuel, cargo and communications remain pinned above the route editor. Details and logistics expand to show ship composition, dockside loading and organization. Panels may be resized or detached, and the chosen layout is restored on the next launch.
+
+New Galaxy and New Campaign offer Stars!-style map sizes and densities. The default Tiny/Normal map has 32 systems in 400 × 400 ly; other presets reach 1000 systems. Existing saves retain their original map. See [galaxy density](docs/galaxy-density.md).
 
 Colony production is shown as an ordered list with per-item remaining work and a forecast completion turn. Items can be moved earlier or later before End Turn. An empire-wide percentage funds global research before local production, and unused output after each colony's queue also becomes RP. Energy 1 unlocks onboard fuel generation, Propulsion 3 a fuel-collecting safe Warp-9 drive, and Electronics 4 a long-distance penetrating scanner.
 

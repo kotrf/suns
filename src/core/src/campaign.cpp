@@ -273,7 +273,9 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         scout.name = empires[i].name + " Scout";
         scout.design = scoutId;
         scout.position = home->position;
-        scout.fuel = ship_design_fuel_capacity(*find_ship_design(state, scoutId));
+        const auto* scoutDesign = find_ship_design(state, scoutId);
+        scout.warp = ship_design_cruise_warp(*scoutDesign);
+        scout.fuel = ship_design_fuel_capacity(*scoutDesign);
         scout.telemetry.observedTurn = state.turn;
         scout.telemetry.position = scout.position;
         scout.telemetry.fuel = scout.fuel;

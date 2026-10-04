@@ -1,8 +1,8 @@
 # Dockable workspace
 
-The galaxy map is the central canvas. Overview, Production, Fleet — Overview & Logistics, Fleet Route Program, Research and Turn Messages are `QDockWidget` panels around it.
+The galaxy map is the central canvas. Overview, Production, Fleet — Orders & Logistics, Research and Turn Messages are `QDockWidget` panels around it.
 
-Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program start as tabs in one right-side Fleet area; Overview and Production start on the left. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
+Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program share one right-side panel; Overview and Production start on the left. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
 
 Dock tabs use a dedicated high-contrast style: inactive tabs remain visibly
 bounded, while the active tab has a brighter surface, bold white label and blue
@@ -27,3 +27,9 @@ panel remains independently available in View, and Reset panel layout still
 restores the single-monitor default.
 
 Help is placed last after all top-level menus are installed. The fixed status-bar distance readout compares the previous distinct selected object with the current object, including both stars and fleets. Fleet positions use player-visible telemetry. Selecting the same object repeatedly does not replace the reference object; loading or creating a galaxy resets selection history.
+
+The fleet selector, compact portrait, fuel/cargo/damage gauges, communications and cargo transfer stay above the scrolling editor. **Details & logistics** expands ship composition, dockside colonist loading, rename/merge/split and colonization in that same panel. The former independent Route Program dock is retired; workspace format 3 resets its old tab layout once, while retaining window geometry. Custom workspaces from earlier formats need to be saved again. The Fleet Operations preset and Reset panel layout both restore the combined panel.
+
+Overview and Production default to a 290 px column. Production scrolls vertically,
+and long design names use the dropdown popup without forcing a wider column.
+The map is fitted after the initial dock layout is ready.
