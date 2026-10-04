@@ -403,7 +403,7 @@ void verify_same_turn_designs_in_multiplayer()
         const auto colony = std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.owner == player; });
         PlayerOrders orders{player, {
-            CreateShipDesignOrder{"Same name", ShipHullType::Scout, {ShipComponentType::QuickJump5}},
+            CreateShipDesignOrder{"Same name", ShipHullType::StarsScout, {ShipComponentType::QuickJump5}},
             QueueShipDesignOrder{colony->id, 0, "Same name"}}};
         const auto preview = planned_ship_design_state(state, orders);
         assert(preview.turn == state.turn);
@@ -428,7 +428,7 @@ void verify_same_turn_designs_in_multiplayer()
         assert(!resolve_ship_design_order(result, orders.player, {colony->id, design->id, "Missing"}));
     }
     // An invalid creation must not make its queue order build some other design.
-    PlayerOrders invalid{1, {CreateShipDesignOrder{"Invalid", ShipHullType::Scout, {}},
+    PlayerOrders invalid{1, {CreateShipDesignOrder{"Invalid", ShipHullType::StarsScout, {}},
         QueueShipDesignOrder{1, state.nextShipDesignId, "Invalid"}}};
     const auto rejected = TurnProcessor{}.process(state, {invalid});
     assert(rejected.shipDesigns.size() == state.shipDesigns.size());

@@ -1,4 +1,5 @@
 #include "ship_designer_dialog.hpp"
+#include "suns/hulls.hpp"
 #include "suns/campaign.hpp"
 
 #include <QAbstractItemView>
@@ -52,7 +53,7 @@ namespace {
 
 constexpr auto kComponentMimeType = "application/x-suns-ship-component";
 constexpr auto kSlotButtonStyle =
-    "QToolButton { border: 1px solid #52677a; background: #142433; padding: 5px; }"
+    "QToolButton { color: #e4edf5; border: 1px solid #52677a; background: #142433; padding: 5px; }"
     "QToolButton:checked { border: 2px solid #52b6d9; background: #193346; }"
     "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
 
@@ -69,19 +70,17 @@ QString signedFuelRate(double value)
     return "0.00";
 }
 
-QString slotCategoryName(ShipSlotCategory category)
-{
-    switch (category) {
-    case ShipSlotCategory::Engine: return "Engine";
-    case ShipSlotCategory::General: return "General";
-    case ShipSlotCategory::Mining: return "Mining";
-    }
-    return "Unknown";
-}
-
 // Presentation art only: logical slot IDs and simulation rules stay in core.
 QPixmap hullPortrait(ShipHullType hull)
 {
+    if (const auto* spec = reference_hull(hull)) {
+        if (spec->miningSlots) hull = ShipHullType::RemoteMiner;
+        else if (spec->baseCargoCapacity >= 1000) hull = ShipHullType::HeavyTransport;
+        else if (spec->baseCargoCapacity >= 70) hull = ShipHullType::MediumTransport;
+        else if (spec->baseCargoCapacity > 0) hull = ShipHullType::LightTransport;
+        else if (spec->requiredEngines > 1) hull = ShipHullType::Utility;
+        else hull = ShipHullType::Scout;
+    }
     QPixmap image(300, 140);
     image.fill(QColor("#101d29"));
     QPainter painter(&image);
@@ -228,7 +227,7 @@ QString componentTooltip(ShipComponentType component)
 {
     const auto spec = component_spec(component);
     QStringList facts{
-        QString("%1 slot").arg(slotCategoryName(ship_component_slot_category(component))),
+        QString("%1 equipment").arg(QString::fromStdString(ship_component_equipment_name(component))),
         QString("Mass %1 kt").arg(spec.mass, 0, 'f', 1),
         QString("Cost %1").arg(spec.buildCost),
     };
@@ -376,10 +375,10 @@ protected:
     {
         const auto payload = decodeComponentDrag(event->mimeData());
         if (!payload) return;
-        const bool compatible = ship_component_slot_category(payload->component) == slot_.category;
+        const bool compatible = ship_slot_accepts(slot_, payload->component);
         setStyleSheet(compatible
-            ? "QToolButton { border: 3px solid #66d69b; background: #193a31; padding: 5px; }"
-            : "QToolButton { border: 3px solid #e07575; background: #3c222a; padding: 5px; }");
+            ? "QToolButton { color: #e4edf5; border: 3px solid #66d69b; background: #193a31; padding: 5px; }"
+            : "QToolButton { color: #e4edf5; border: 3px solid #e07575; background: #3c222a; padding: 5px; }");
         // Accept the drop even on a red cell so the editor can explain the
         // mismatch in its persistent feedback label instead of silently ignoring it.
         event->acceptProposedAction();
@@ -455,17 +454,21 @@ protected:
 private:
     void refreshText()
     {
-        const auto title = QString("%1 #%2").arg(slotCategoryName(slot_.category)).arg(slot_.id);
+        const auto fullTitle = QString::fromStdString(ship_slot_name(slot_));
+        const auto title = slot_.bank ? QString("Bank %1\n%2").arg(slot_.bank).arg(fontMetrics().elidedText(fullTitle, Qt::ElideRight, 78))
+            : QString("%1 #%2").arg(fullTitle).arg(slot_.id);
+        const auto bankHint = slot_.bank ? QString("\n%1 — bank %2, up to %3 identical components. Fit fills the bank; Delete removes one cell.")
+            .arg(fullTitle).arg(slot_.bank).arg(slot_.bankCapacity) : QString{};
         if (component_) {
             const auto fullName = QString::fromStdString(component_spec(*component_).name);
             setText(QString("%1\n%2").arg(title, fontMetrics().elidedText(fullName, Qt::ElideRight, 84)));
-            setAccessibleName(QString("%1 slot, %2 fitted").arg(title, fullName));
-            setToolTip(componentTooltip(*component_)
+            setAccessibleName(QString("%1 slot, bank %2, %3 fitted").arg(fullTitle).arg(slot_.bank).arg(fullName));
+            setToolTip(componentTooltip(*component_) + bankHint
                 + "\n\nDrag to another compatible slot. Double-click or press Delete to remove.");
         } else {
             setText(QString("%1\nEmpty").arg(title));
-            setAccessibleName(QString("%1 slot, empty").arg(title));
-            setToolTip("Select this cell and use Fit selected, or drag a compatible component here.");
+            setAccessibleName(QString("%1 slot, bank %2, empty").arg(fullTitle).arg(slot_.bank));
+            setToolTip("Select this cell and use Fit selected, or drag a compatible component here." + bankHint);
         }
     }
 
@@ -483,9 +486,8 @@ private:
 ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent)
     : QDialog(parent)
     , player_(player)
+    , initialHull_(player_uses_legacy_hulls(state, player) ? ShipHullType::Scout : ShipHullType::StarsScout)
     , initialEngine_(player_uses_legacy_propulsion(state, player) ? ShipComponentType::FusionDrive : ShipComponentType::QuickJump5)
-    , remoteMiningAvailable_(component_available_to_player(
-          state, player, ShipComponentType::RemoteMiningModule))
 {
     setWindowTitle("Suns! — Ship Designer");
     resize(980, 760);
@@ -517,30 +519,33 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
 
     hullCombo_ = new QComboBox(this);
     hullCombo_->setObjectName("shipHullCatalog");
-    addEnumItem(hullCombo_, "Scout Hull", ShipHullType::Scout);
-    addEnumItem(hullCombo_, "Light Transport", ShipHullType::LightTransport);
-    addEnumItem(hullCombo_, "Medium Transport", ShipHullType::MediumTransport);
-    const bool heavyAvailable = technology_level(state, player_, ResearchField::Construction) >= 2;
-    addEnumItem(hullCombo_, heavyAvailable ? "Heavy Transport" : "Heavy Transport (locked — Construction 2)",
-        ShipHullType::HeavyTransport);
-    if (!heavyAvailable) {
-        if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model())) {
-            model->item(hullCombo_->count() - 1)->setEnabled(false);
-        }
-    }
-    addEnumItem(hullCombo_, "Utility Hull", ShipHullType::Utility);
-    addEnumItem(hullCombo_, remoteMiningAvailable_ ? "Remote Miner" : "Remote Miner (locked — Construction 1)",
-        ShipHullType::RemoteMiner);
-    if (!remoteMiningAvailable_) {
-        if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model())) {
-            model->item(hullCombo_->count() - 1)->setEnabled(false);
-        }
-    }
-    const bool settlersAvailable = ship_hull_available_to_player(state, player_, ShipHullType::MiniColonyShip);
-    addEnumItem(hullCombo_, settlersAvailable ? "Mini-Colony Ship" : "Mini-Colony Ship (locked — Settler engine access)", ShipHullType::MiniColonyShip);
-    if (!settlersAvailable)
-        if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model()))
-            model->item(hullCombo_->count() - 1)->setEnabled(false);
+    const auto addHull = [&](const ShipHullSpec& hull, bool legacy) {
+        const bool available = ship_hull_available_to_player(state, player_, hull.type);
+        QString requirement;
+        for (const auto& unlock : research_unlocks())
+            if (unlock.hull == hull.type) requirement = QString::fromStdString(research_unlock_requirement(unlock));
+        if (requirement.isEmpty() && hull.type == ShipHullType::RemoteMiner) requirement = "Construction 1";
+        auto label = QString::fromStdString(hull.name) + (legacy ? " (legacy)" : "");
+        if (!available) label += QString(" (locked — %1)").arg(requirement);
+        addEnumItem(hullCombo_, label, hull.type);
+        QString support;
+        if (hull.fuelGenerationPerTurn > 0)
+            support += QString("\nGenerates %1 mg fuel/year per ship.").arg(hull.fuelGenerationPerTurn);
+        if (hull.fleetRepairBonus > 0)
+            support += QString("\nStationary fleet repair +%1 damage points/year; strongest tanker bonus only.").arg(hull.fleetRepairBonus);
+        hullCombo_->setItemData(hullCombo_->count() - 1,
+            QString("%1 kt; %2 resources; %3 engines; %4 kt cargo; %5 mg fuel; %6 base armor; initiative %7.\n%8")
+                .arg(hull.mass).arg(hull.buildCost).arg(hull.requiredEngines).arg(hull.baseCargoCapacity)
+                .arg(hull.baseFuelCapacity).arg(hull.armor).arg(hull.initiative).arg(requirement) + support, Qt::ToolTipRole);
+        if (!available)
+            if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model()))
+                model->item(hullCombo_->count() - 1)->setEnabled(false);
+    };
+    if (player_uses_legacy_hulls(state, player_))
+        for (int type = int(ShipHullType::Scout); type <= int(ShipHullType::MiniColonyShip); ++type)
+            addHull(hull_spec(static_cast<ShipHullType>(type)), true);
+    for (const auto& hull : reference_hulls()) addHull(hull, false);
+    hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(initialHull_)));
     form->addRow("Hull", hullCombo_);
     layout->addLayout(form);
 
@@ -611,7 +616,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) continue;
         const auto available = component_available_to_player(state, player, component);
         auto label = QString("%1 • %2")
-                         .arg(slotCategoryName(ship_component_slot_category(component)),
+                         .arg(QString::fromStdString(ship_component_equipment_name(component)),
                              QString::fromStdString(component_spec(component).name));
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
         if (legacy_propulsion_component(component)) label += "  [legacy]";
@@ -638,7 +643,12 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     slotPanel_ = new QWidget(fittingGroup);
     slotGrid_ = new QGridLayout(slotPanel_);
     slotGrid_->setSpacing(8);
-    fittingLayout->addWidget(slotPanel_, 1);
+    slotGrid_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    auto* slotScroll = new QScrollArea(fittingGroup);
+    slotScroll->setObjectName("shipHullSlotScroll");
+    slotScroll->setWidgetResizable(true);
+    slotScroll->setWidget(slotPanel_);
+    fittingLayout->addWidget(slotScroll, 1);
     fitMessage_ = new QLabel(fittingGroup);
     fitMessage_->setWordWrap(true);
     fittingLayout->addWidget(fitMessage_);
@@ -659,7 +669,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     saveButton_ = buttons->button(QDialogButtonBox::Save);
     saveButton_->setObjectName("saveShipDesign");
     layout->addWidget(buttons);
-    placements_ = autoplace_ship_components(ShipHullType::Scout,
+    placements_ = autoplace_ship_components(initialHull_,
         {initialEngine_, ShipComponentType::LongRangeScanner});
 
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -672,8 +682,8 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         });
         if (it == templates_.end()) {
             const QSignalBlocker blockHull(hullCombo_);
-            hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(ShipHullType::Scout)));
-            placements_ = autoplace_ship_components(ShipHullType::Scout,
+            hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(initialHull_)));
+            placements_ = autoplace_ship_components(initialHull_,
                 {initialEngine_, ShipComponentType::LongRangeScanner});
             nameEdit_->setText("New Design");
         } else {
@@ -700,15 +710,14 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             placements_ = replacement;
         } else {
             placements_.clear();
-            const auto fittingSlots = hull_spec(hullType).fittingSlots;
+            std::vector<ShipComponentType> fitted;
             for (const auto component : components) {
-                const auto target = std::find_if(fittingSlots.begin(), fittingSlots.end(), [&](const ShipSlotSpec& slot) {
-                    if (slot.category != ship_component_slot_category(component)) return false;
-                    return std::none_of(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placed) {
-                        return placed.slot == slot.id;
-                    });
-                });
-                if (target != fittingSlots.end()) placements_.push_back({target->id, component});
+                auto candidate = fitted;
+                candidate.push_back(component);
+                const auto placed = autoplace_ship_components(hullType, candidate);
+                if (placed.size() != candidate.size()) continue;
+                fitted = std::move(candidate);
+                placements_ = placed;
             }
         }
         selectedSlot_ = 0;
@@ -733,11 +742,11 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         }
         auto target = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
             return slot.id == selectedSlot_
-                && slot.category == ship_component_slot_category(*component);
+                && ship_slot_accepts(slot, *component);
         });
         if (target == hull.fittingSlots.end()) {
             target = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
-                if (slot.category != ship_component_slot_category(*component)) return false;
+                if (!ship_slot_accepts(slot, *component)) return false;
                 return std::none_of(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placed) {
                     return placed.slot == slot.id;
                 });
@@ -840,7 +849,7 @@ void ShipDesignerDialog::fitComponent(
         return slot.id == target;
     });
     if (targetSlot == hull.fittingSlots.end()
-        || targetSlot->category != ship_component_slot_category(component)) {
+        || !ship_slot_accepts(*targetSlot, component)) {
         fitMessage_->setText("That component is incompatible with the selected cell.");
         return;
     }
@@ -858,6 +867,21 @@ void ShipDesignerDialog::fitComponent(
         return;
     }
 
+    if (targetSlot->bank && source == 0) {
+        std::erase_if(placements_, [&](const auto& placed) {
+            return std::any_of(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const auto& slot) {
+                return slot.id == placed.slot && slot.bank == targetSlot->bank;
+            });
+        });
+        for (const auto& slot : hull.fittingSlots)
+            if (slot.bank == targetSlot->bank) placements_.push_back({slot.id, component});
+        selectedSlot_ = target;
+        refreshSlotGrid();
+        updatePreview();
+        return;
+    }
+
+    const auto previous = placements_;
     auto sourcePlacement = placements_.end();
     if (source != 0) {
         sourcePlacement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placed) {
@@ -882,12 +906,27 @@ void ShipDesignerDialog::fitComponent(
             return slot.id == source;
         });
         if (sourceSlot == hull.fittingSlots.end()
-            || sourceSlot->category != ship_component_slot_category(displaced)) {
+            || !ship_slot_accepts(*sourceSlot, displaced)) {
             fitMessage_->setText("Those components cannot be swapped between different slot categories.");
             return;
         }
         sourcePlacement->component = displaced;
         targetPlacement->component = component;
+    }
+    for (const auto& slot : hull.fittingSlots) {
+        if (!slot.bank) continue;
+        std::optional<ShipComponentType> model;
+        for (const auto& cell : hull.fittingSlots) {
+            if (cell.bank != slot.bank) continue;
+            const auto placed = std::find_if(placements_.begin(), placements_.end(), [&](const auto& p) { return p.slot == cell.id; });
+            if (placed == placements_.end()) continue;
+            if (model && *model != placed->component) {
+                placements_ = previous;
+                fitMessage_->setText("A bank holds one component model. Fit from the catalog to replace the whole bank.");
+                return;
+            }
+            model = placed->component;
+        }
     }
     selectedSlot_ = target;
     refreshSlotGrid();
@@ -936,7 +975,8 @@ void ShipDesignerDialog::refreshSlotGrid()
 
 void ShipDesignerDialog::rebuildSlotGrid()
 {
-    while (auto* item = slotGrid_->takeAt(0)) {
+    while (slotGrid_->count() > 0) {
+        auto* item = slotGrid_->takeAt(0);
         delete item->widget();
         delete item;
     }
@@ -960,7 +1000,7 @@ void ShipDesignerDialog::rebuildSlotGrid()
             slotPanel_);
         slotGrid_->addWidget(button, slot.row, slot.column);
     }
-    slotGrid_->setRowStretch(4, 1);
+    for (int row = 0; row < slotGrid_->rowCount(); ++row) slotGrid_->setRowStretch(row, 0);
     slotGrid_->setColumnStretch(3, 1);
     const auto selectedPlacement = std::find_if(
         placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placement) {
@@ -1043,6 +1083,10 @@ void ShipDesignerDialog::updatePreview()
         if (!capabilities.isEmpty()) capabilities += " • ";
         capabilities += "Field repair 8 damage points/year";
     }
+    if (hull.fleetRepairBonus > 0) {
+        if (!capabilities.isEmpty()) capabilities += " • ";
+        capabilities += QString("Stationary fleet repair +%1 damage points/year (strongest tanker only)").arg(hull.fleetRepairBonus);
+    }
     if (capabilities.isEmpty()) capabilities = "No special mission capability";
 
     fitMessage_->setText(valid
@@ -1052,13 +1096,14 @@ void ShipDesignerDialog::updatePreview()
     const auto mineralCost = ship_design_mineral_cost(design);
     previewLabel_->setText(
         QString("<hr><b>%1</b><br>"
-                "Hull: %2 — required engines <b>%3</b>, general slots <b>%4/%5</b>, Mining slots <b>%6/%7</b><br>"
+                "Hull: %2 — required engines <b>%3</b>, equipment cells <b>%4/%5</b>, Mining cells <b>%6/%7</b><br>"
                 "Dry mass: <b>%8 kt</b> &nbsp; Build cost: <b>%9</b><br>"
                 "Minerals: <b>I %10 / B %11 / G %12</b><br>"
                 "Max Warp: <b>%13</b> &nbsp; Fuel capacity: <b>%14</b> &nbsp; Fuel generation: <b>%15/turn</b><br>"
                 "Cargo capacity: <b>%16</b> (%17 colonists max)<br>"
                 "%18%19<br><br>"
-                "<b>Engine fuel curve</b> — %20<br>%21")
+                "<b>Engine fuel curve</b> — %20<br>%21<br>"
+                "%22")
             .arg(QString::fromStdString(design.name.empty() ? std::string("Unnamed design") : design.name))
             .arg(QString::fromStdString(hull.name))
             .arg(hull.requiredEngines)
@@ -1079,7 +1124,10 @@ void ShipDesignerDialog::updatePreview()
             .arg(capabilities)
             .arg(radiation > 0.0 ? " • <b>Radiation hazard</b>" : "")
             .arg(fuelLegend)
-            .arg(fuelCurve.isEmpty() ? "No engine fitted" : fuelCurve.join(" &nbsp; ")));
+            .arg(fuelCurve.isEmpty() ? "No engine fitted" : fuelCurve.join(" &nbsp; "))
+            .arg(reference_hull(design.hull)
+                ? QString("Base hull armor: <b>%1 dp</b>; initiative: <b>%2</b>.").arg(hull.armor).arg(hull.initiative)
+                : QString{}));
     saveButton_->setEnabled(valid);
 }
 

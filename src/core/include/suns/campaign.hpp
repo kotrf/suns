@@ -12,6 +12,9 @@ struct EmpireSetup {
     bool improvedFuelEfficiency{};
     bool noRamScoopEngines{};
     bool settlerEngineAccess{};
+    HullAccess hullAccess{HullAccess::Standard};
+    bool advancedRemoteMining{};
+    bool basicRemoteMining{};
 };
 struct ResearchUnlock {
     ResearchField field;
@@ -24,6 +27,7 @@ struct ResearchUnlock {
     bool excludesNoRamScoops{};
     bool legacyPropulsion{};
     std::optional<ShipHullType> hull;
+    bool legacyHull{};
 };
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);
@@ -32,6 +36,7 @@ struct ResearchUnlock {
 [[nodiscard]] bool research_unlock_available(const GameState& state, PlayerId player, const ResearchUnlock& unlock);
 [[nodiscard]] std::string research_unlock_requirement(const ResearchUnlock& unlock);
 [[nodiscard]] bool ship_hull_available_to_player(const GameState& state, PlayerId player, ShipHullType hull);
+[[nodiscard]] bool ship_hull_access_applicable(const GameState& state, PlayerId player, ShipHullType hull);
 [[nodiscard]] std::int32_t race_habitability(
     const RaceProfile& race, PlanetEnvironment environment, std::uint8_t biology);
 [[nodiscard]] std::int32_t player_planet_habitability(

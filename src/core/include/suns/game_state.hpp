@@ -103,6 +103,43 @@ enum class ShipHullType {
     Utility,
     HeavyTransport,
     MiniColonyShip,
+    SmallFreighter,
+    MediumFreighter,
+    LargeFreighter,
+    SuperFreighter,
+    StarsScout,
+    Frigate,
+    Destroyer,
+    Cruiser,
+    BattleCruiser,
+    Battleship,
+    Dreadnought,
+    Privateer,
+    Rogue,
+    Galleon,
+    StarsMiniColonyShip,
+    ColonyShip,
+    MiniBomber,
+    B17Bomber,
+    StealthBomber,
+    B52Bomber,
+    MidgetMiner,
+    MiniMiner,
+    Miner,
+    MaxiMiner,
+    UltraMiner,
+    FuelTransport,
+    SuperFuelXport,
+    MiniMineLayer,
+    SuperMineLayer,
+    Nubian,
+    MiniMorph,
+    MetaMorph,
+};
+
+// Hull access families only; population, combat and economy traits are separate.
+enum class HullAccess : std::uint8_t {
+    Standard, InnerStrength, SuperStealth, WarMonger, SpaceDemolition, HyperExpansion,
 };
 
 using ShipSlotId = std::uint16_t;
@@ -111,6 +148,7 @@ enum class ShipSlotCategory : std::uint8_t {
     Engine,
     General,
     Mining,
+    Scanner, Mechanical, Electrical, Shield, Armor, Weapon, Bomb, MineLayer, Mixed,
 };
 
 struct ShipSlotSpec {
@@ -118,6 +156,10 @@ struct ShipSlotSpec {
     ShipSlotCategory category{ShipSlotCategory::General};
     std::uint8_t column{};
     std::uint8_t row{};
+    // Original equipment mask and bank identity. Zero retains legacy fitting.
+    std::uint16_t allowedEquipment{};
+    std::uint8_t bank{};
+    std::uint8_t bankCapacity{1};
 };
 
 struct ShipHullSpec {
@@ -131,6 +173,17 @@ struct ShipHullSpec {
     std::uint8_t generalSlots{};
     std::uint8_t miningSlots{};
     std::vector<ShipSlotSpec> fittingSlots;
+    MineralCargo baseMineralCost;
+    std::uint16_t armor{};
+    std::uint8_t initiative{};
+    std::uint8_t constructionLevel{};
+    HullAccess access{HullAccess::Standard};
+    bool requiresAdvancedRemoteMining{};
+    bool excludesBasicRemoteMining{};
+    bool mysteryTrader{};
+    double fuelGenerationPerTurn{};
+    double fleetRepairBonus{};
+    bool doublesMineLaying{};
 };
 
 enum class ShipComponentType {
@@ -427,6 +480,9 @@ struct RaceProfile {
     bool improvedFuelEfficiency{};
     bool noRamScoopEngines{};
     bool settlerEngineAccess{};
+    HullAccess hullAccess{HullAccess::Standard};
+    bool advancedRemoteMining{};
+    bool basicRemoteMining{};
 };
 
 struct ColonyTurnStatistics {

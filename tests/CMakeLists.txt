@@ -3,6 +3,9 @@ add_executable(suns_core_tests
 )
 
 add_executable(suns_campaign_tests campaign_tests.cpp)
+add_executable(suns_hull_tests hull_tests.cpp)
+target_link_libraries(suns_hull_tests PRIVATE Suns::Core)
+add_test(NAME suns_hull_tests COMMAND suns_hull_tests)
 target_link_libraries(suns_campaign_tests PRIVATE Suns::Core)
 add_test(NAME suns_campaign_tests COMMAND suns_campaign_tests)
 

@@ -24,8 +24,8 @@ void local_commands_remain_immediate()
 
     MoveFleetOrder move;
     move.fleet = fleet.id;
-    move.destination = {64.0, 0.0};
-    move.warp = 8;
+    move.destination = {25.0, 0.0};
+    move.warp = 5; // Within the original Scout's fuel budget for one year.
 
     TurnProcessor processor;
     const auto next = processor.process(state, {{1, {move}}});
