@@ -1548,7 +1548,8 @@ void MainWindow::newGalaxy()
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 
     statusBar()->showMessage(QString("New galaxy: seed %1, %2 systems — Scout 1 selected at Warp %3")
-        .arg(static_cast<qulonglong>(state_.galaxySeed)).arg(static_cast<qulonglong>(state_.stars.size())).arg(kScoutCruiseWarp));
+        .arg(static_cast<qulonglong>(state_.galaxySeed)).arg(static_cast<qulonglong>(state_.stars.size()))
+        .arg(state_.fleets.front().warp));
 }
 
 } // namespace suns

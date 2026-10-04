@@ -814,6 +814,16 @@ std::uint8_t ship_design_max_warp(const ShipDesign& design)
     return maxWarp;
 }
 
+std::uint8_t ship_design_cruise_warp(const ShipDesign& design)
+{
+    ShipComponentSpec engine;
+    const auto* spec = primary_engine(design, engine);
+    if (!spec || spec->maxWarp == 0) return 1;
+    const auto preferred = spec->optimalWarp != 0 ? spec->optimalWarp
+        : (ship_design_can_colonize(design) ? kColonyShipCruiseWarp : kScoutCruiseWarp);
+    return std::min(spec->maxWarp, preferred);
+}
+
 double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp)
 {
     if (warp == 0 || warp > kMaxWarp) return 0.0;
@@ -1814,9 +1824,10 @@ GameState generate_game(const GalaxyConfig& config)
 
     const auto* scout = find_ship_design(state, kScoutDesignId);
     const auto scoutFuel = scout ? ship_design_fuel_capacity(*scout) : 0.0;
+    const std::uint8_t scoutWarp = scout ? ship_design_cruise_warp(*scout) : 1;
     state.fleets.push_back({
         1, 1, "Scout 1", FleetRole::Scout, kScoutDesignId,
-        {0.0, 0.0}, std::nullopt, kScoutCruiseWarp, scoutFuel, 0,
+        {0.0, 0.0}, std::nullopt, scoutWarp, scoutFuel, 0,
     });
     initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;

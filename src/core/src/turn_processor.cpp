@@ -192,14 +192,6 @@ void sync_fleet_presentation(GameState& state, Fleet& fleet)
     }
 }
 
-std::uint8_t initial_warp_for_design(const ShipDesign& design)
-{
-    const auto maxWarp = ship_design_max_warp(design);
-    if (maxWarp == 0) return 1;
-    const auto preferred = ship_design_can_colonize(design) ? kColonyShipCruiseWarp : kScoutCruiseWarp;
-    return std::min(maxWarp, preferred);
-}
-
 bool design_name_exists(const GameState& state, PlayerId owner, const std::string& name)
 {
     return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& design) {
@@ -294,7 +286,7 @@ std::optional<std::uint32_t> complete_production(
         design->id,
         star->position,
         std::nullopt,
-        initial_warp_for_design(*design),
+        ship_design_cruise_warp(*design),
         ship_design_fuel_capacity(*design),
         0,
     });

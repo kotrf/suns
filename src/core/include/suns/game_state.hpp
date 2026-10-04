@@ -870,6 +870,9 @@ void normalize_ship_design_placement(ShipDesign& design);
 [[nodiscard]] bool ship_design_can_colonize(const ShipDesign& design);
 [[nodiscard]] bool ship_design_can_remote_mine(const ShipDesign& design);
 [[nodiscard]] std::uint8_t ship_design_max_warp(const ShipDesign& design);
+// Initial speed only; reference engines use their catalog optimum, legacy
+// designs retain role-based defaults. Explicit/saved routes are never changed.
+[[nodiscard]] std::uint8_t ship_design_cruise_warp(const ShipDesign& design);
 [[nodiscard]] double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp);
 [[nodiscard]] double ship_design_overdrive_damage(
     const ShipDesign& design, std::uint8_t warp);
