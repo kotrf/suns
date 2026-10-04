@@ -36,9 +36,10 @@ the same planning preview used for merge and split. Save v35 and turn-order v6
 persist the order for local and PBEM turns.
 
 The Qt **Fleet** menu and unified dockable Fleet area expose logistics,
-colonization, ship design, **Rename…**, **Merge fleets…** and **Split fleet…**. Its Overview
-& Logistics and Route Program tabs share one dock zone by default, but can be
-detached like the other workspace panels. A permanent composition table lists
+colonization, ship design, **Rename…**, **Merge fleets…** and **Split fleet…**.
+Fuel, cargo and communications stay visible above the route editor. **Details
+& logistics** expands the remaining controls in that same panel, which can be
+detached like the other workspace panels. The composition table lists
 every design, ship count and hull in the selected FleetId. It previews pending
 merge and split orders, so the absorbed fleet marker may disappear without
 hiding where its ships went. The fleet dashboard also reports aggregate

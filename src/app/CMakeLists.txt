@@ -1,4 +1,7 @@
 add_library(suns_app_ui STATIC
+    galaxy_setup_widget.cpp
+    galaxy_setup_widget.hpp
+    main_window_fleet_operations.cpp
     main_window.cpp
     main_window_campaign.cpp
     main_window.hpp

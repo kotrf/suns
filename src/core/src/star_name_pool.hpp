@@ -56,6 +56,6 @@ inline constexpr std::string_view kCuratedStarNames[] = {
 };
 
 inline constexpr std::size_t kCuratedStarNameCount = sizeof(kCuratedStarNames) / sizeof(kCuratedStarNames[0]);
-static_assert(kCuratedStarNameCount >= 64, "The curated pool must cover the largest supported galaxy without reuse");
+static_assert(kCuratedStarNameCount >= 64, "Keep at least 64 curated names before numbered fallback names");
 
 } // namespace suns

@@ -8,6 +8,7 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QStatusBar>
+#include <QTimer>
 
 namespace suns {
 
@@ -34,13 +35,25 @@ void makePanelScrollable(QScrollArea* scroll, int minimumWidth, int maximumWidth
 
 void MainWindow::installPanelLayoutFixes()
 {
+    installFleetOperationsPanel();
+    if (auto* production = findChild<QDockWidget*>("productionDock")) {
+        if (auto* content = production->widget(); content && !qobject_cast<QScrollArea*>(content)) {
+            auto* scroll = new QScrollArea(production);
+            scroll->setObjectName("productionScrollArea");
+            scroll->setWidgetResizable(true);
+            scroll->setFrameShape(QFrame::NoFrame);
+            scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            scroll->setWidget(content);
+            production->setWidget(scroll);
+        }
+    }
     // The first responsive pass intentionally disabled horizontal scrollbars.
     // That works for prose labels, but technical forms and compact controls can
     // still have a real minimum width. In a narrow panel those controls were
     // clipped with no way for the player to reach their right-hand side.
-    makePanelScrollable(findChild<QScrollArea*>("commandScrollArea"), 280, 520);
-    makePanelScrollable(findChild<QScrollArea*>("fleetScrollArea"), 300, 560);
-    makePanelScrollable(findChild<QScrollArea*>("routeProgramScrollArea"), 280, 520);
+    makePanelScrollable(findChild<QScrollArea*>("commandScrollArea"), 260, 420);
+    makePanelScrollable(findChild<QScrollArea*>("productionScrollArea"), 260, 420);
+    makePanelScrollable(findChild<QScrollArea*>("fleetOrdersScrollArea"), 340, 620);
 
     auto* panels = viewMenu(menuBar());
     panels->addSection("Panels");
@@ -51,13 +64,9 @@ void MainWindow::installPanelLayoutFixes()
         if (!panels->actions().contains(dock->toggleViewAction())) {
             panels->addAction(dock->toggleViewAction());
         }
-        if (dock->objectName() == "fleetRouteProgramDock") {
-            dock->setMinimumWidth(280);
-            dock->setMaximumWidth(520);
-        }
         if (dock->objectName() == "overviewDock" || dock->objectName() == "productionDock") {
-            dock->setMinimumWidth(280);
-            dock->setMaximumWidth(520);
+            dock->setMinimumWidth(260);
+            dock->setMaximumWidth(420);
         }
     }
 
@@ -76,7 +85,6 @@ void MainWindow::installPanelLayoutFixes()
         auto* overview = findChild<QDockWidget*>("overviewDock");
         auto* production = findChild<QDockWidget*>("productionDock");
         auto* fleet = findChild<QDockWidget*>("fleetDock");
-        auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
         auto* history = findChild<QDockWidget*>("empireHistoryDock");
         auto* research = findChild<QDockWidget*>("researchDock");
         const auto show = [](QDockWidget* dock, bool visible) {
@@ -88,7 +96,6 @@ void MainWindow::installPanelLayoutFixes()
             break;
         case 1: // Fleet operations.
             show(fleet, true);
-            show(route, true);
             if (fleet) fleet->raise();
             break;
         case 2: // Empire management and reports.
@@ -121,13 +128,15 @@ void MainWindow::installPanelLayoutFixes()
     restoreCustom->setObjectName("restoreCustomWorkspaceAction");
     const auto hasCustom = [] {
         QSettings settings("SunsProject", "Suns");
-        return !settings.value("workspace/customDocks").toByteArray().isEmpty();
+        return settings.value("workspace/customVersion").toInt() == 3
+            && !settings.value("workspace/customDocks").toByteArray().isEmpty();
     };
     restoreCustom->setEnabled(hasCustom());
     connect(saveCustom, &QAction::triggered, this, [this, restoreCustom] {
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/customGeometry", saveGeometry());
-        settings.setValue("workspace/customDocks", saveState(2));
+        settings.setValue("workspace/customDocks", saveState(3));
+        settings.setValue("workspace/customVersion", 3);
         restoreCustom->setEnabled(true);
         statusBar()->showMessage("Custom workspace saved", 1800);
     });
@@ -137,16 +146,19 @@ void MainWindow::installPanelLayoutFixes()
         if (docks.isEmpty()) return;
         const auto geometry = settings.value("workspace/customGeometry").toByteArray();
         if (!geometry.isEmpty()) restoreGeometry(geometry);
-        statusBar()->showMessage(restoreState(docks, 2)
+        statusBar()->showMessage(restoreState(docks, 3)
             ? "Custom workspace restored" : "Saved workspace could not be restored", 2400);
     });
 
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         restoreGeometry(settings.value("workspace/geometry").toByteArray());
-        // Version 2 discards the old asymmetric left-column geometry once.
-        restoreState(settings.value("workspace/docks").toByteArray(), 2);
+        // Version 3 replaces the separate fleet/route tabs with one panel.
+        restoreState(settings.value("workspace/docks").toByteArray(), 3);
     }
+    // The constructor fits before docks have their final dimensions. Fit once
+    // after the first layout so the initial galaxy is not reduced to a dot.
+    QTimer::singleShot(0, this, [this] { if (!shuttingDown_) fitGalaxyView(); });
 
     // Layout setup is the last module allowed to create a top-level menu.
     // Reinsert Help here so it remains last regardless of construction order.
@@ -159,8 +171,8 @@ void MainWindow::installPanelLayoutFixes()
 void MainWindow::resetPanelLayout()
 {
     if (auto* command = findChild<QScrollArea*>("commandScrollArea")) {
-        command->setMinimumWidth(280);
-        command->setMaximumWidth(520);
+        command->setMinimumWidth(260);
+        command->setMaximumWidth(420);
         command->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         command->show();
     }
@@ -168,8 +180,7 @@ void MainWindow::resetPanelLayout()
     auto* overview = findChild<QDockWidget*>("overviewDock");
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
-    auto* route = findChild<QDockWidget*>("fleetRouteProgramDock");
-    for (auto* dock : {overview, production, fleet, route, turnMessagesDock_, historyDock_, researchDock_}) {
+    for (auto* dock : {overview, production, fleet, turnMessagesDock_, historyDock_, researchDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -189,20 +200,14 @@ void MainWindow::resetPanelLayout()
         researchDock_->hide();
     }
     if (fleet) addDockWidget(Qt::RightDockWidgetArea, fleet);
-    if (route) {
-        addDockWidget(Qt::RightDockWidgetArea, route);
-        route->setMinimumWidth(280);
-        route->setMaximumWidth(520);
-        if (fleet) tabifyDockWidget(fleet, route);
-    }
     if (fleet) fleet->raise();
     if (overview && production) {
-        resizeDocks({overview, production}, {340, 340}, Qt::Horizontal);
+        resizeDocks({overview, production}, {290, 290}, Qt::Horizontal);
         resizeDocks({overview, production}, {360, 240}, Qt::Vertical);
     } else if (overview) {
-        resizeDocks({overview}, {340}, Qt::Horizontal);
+        resizeDocks({overview}, {290}, Qt::Horizontal);
     }
-    if (fleet) resizeDocks({fleet}, {350}, Qt::Horizontal);
+    if (fleet) resizeDocks({fleet}, {400}, Qt::Horizontal);
     if (turnMessagesDock_) addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
     if (historyDock_) {
         addDockWidget(Qt::BottomDockWidgetArea, historyDock_);
@@ -210,7 +215,7 @@ void MainWindow::resetPanelLayout()
     }
     if (turnMessagesDock_) turnMessagesDock_->raise();
 
-    if (auto* routeScroll = findChild<QScrollArea*>("routeProgramScrollArea")) {
+    if (auto* routeScroll = findChild<QScrollArea*>("fleetOrdersScrollArea")) {
         routeScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         routeScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     }

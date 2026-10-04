@@ -1,6 +1,9 @@
 add_executable(suns_core_tests
     core_tests.cpp
 )
+add_executable(suns_galaxy_tests galaxy_tests.cpp)
+target_link_libraries(suns_galaxy_tests PRIVATE Suns::Core)
+add_test(NAME suns_galaxy_tests COMMAND suns_galaxy_tests)
 
 add_executable(suns_campaign_tests campaign_tests.cpp)
 add_executable(suns_hull_tests hull_tests.cpp)
@@ -207,6 +210,11 @@ target_link_libraries(suns_precursor_artifact_tests PRIVATE Suns::Core)
 add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_tests)
 
 if(SUNS_BUILD_APP)
+    add_executable(suns_fleet_operations_editor_tests fleet_operations_editor_tests.cpp)
+    target_link_libraries(suns_fleet_operations_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_fleet_operations_editor_tests COMMAND suns_fleet_operations_editor_tests)
+    set_tests_properties(suns_fleet_operations_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 20)
     add_executable(suns_propulsion_editor_tests propulsion_editor_tests.cpp)
     target_link_libraries(suns_propulsion_editor_tests PRIVATE suns_app_ui)
     add_test(NAME suns_propulsion_editor_tests COMMAND suns_propulsion_editor_tests)

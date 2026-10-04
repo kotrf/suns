@@ -820,11 +820,17 @@ struct GameState {
 
 struct GalaxyConfig {
     std::uint64_t seed{20260817};
-    std::size_t starCount{24};
-    double width{900.0};
-    double height{650.0};
-    double minimumSeparation{48.0};
+    std::size_t starCount{32};
+    double width{400.0};
+    double height{400.0};
+    double minimumSeparation{15.0};
 };
+
+enum class GalaxySize : std::uint8_t { Tiny, Small, Medium, Large, Huge };
+enum class GalaxyDensity : std::uint8_t { Sparse, Normal, Dense, Packed };
+inline constexpr std::size_t kMaximumGalaxySystems = 1000;
+[[nodiscard]] GalaxyConfig galaxy_preset(GalaxySize size, GalaxyDensity density, std::uint64_t seed);
+[[nodiscard]] GalaxyConfig normalized_galaxy_config(GalaxyConfig config);
 
 [[nodiscard]] const StarSystem* find_star(const GameState& state, StarId id);
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
