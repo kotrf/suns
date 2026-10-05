@@ -13,6 +13,9 @@ add_library(suns_app_ui STATIC
     main_window_history.cpp
     main_window_layout.cpp
     main_window_map_modes.cpp
+    main_window_map_labels.cpp
+    map_marker_items.cpp
+    map_marker_items.hpp
     main_window_mining.cpp
     main_window_planet.cpp
     main_window_production.cpp

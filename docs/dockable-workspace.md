@@ -33,3 +33,19 @@ The fleet selector, compact portrait, fuel/cargo/damage gauges, communications a
 Overview and Production default to a 290 px column. Production scrolls vertically,
 and long design names use the dropdown popup without forcing a wider column.
 The map is fitted after the initial dock layout is ready.
+
+Map clicks hit each star's visible disc with a small margin, rather than the
+large rectangle needed to paint its glow. When selectable markers overlap,
+the nearest marker center wins, with equal distances resolved by scene
+stacking order. Ordinary selection, map-target picking and right-click route
+orders use the same rule; a system core takes precedence over its own orbit
+ring. Labels, glow/selection brackets and sensor circles do
+not intercept these object clicks. Scene redraws remain deferred until after
+the current mouse event.
+
+Controls use shorter minimum heights and tighter padding, group spacing, dock
+titles and tabs. Planet portraits are 80 pixels across. Resetting the workspace
+targets a 260-pixel report dock; history charts can shrink further so the map
+retains more vertical space. Saved custom layouts continue to use version 3.
+The fleet selector and fuel/cargo/damage header remain outside the editor's
+scroll area.

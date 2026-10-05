@@ -154,7 +154,7 @@ QProgressBar* makeMineralBar(const QString& name, const char* objectName, QWidge
 
 QPixmap compactPortrait(const QPixmap& portrait)
 {
-    return portrait.scaled(108, 108, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return portrait.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 }
 
 } // namespace
@@ -206,7 +206,7 @@ void MainWindow::installPlanetPolish()
             auto* portrait = new QLabel(planetGroup);
             portrait->setObjectName("planetPortrait");
             portrait->setAlignment(Qt::AlignCenter);
-            portrait->setFixedHeight(112);
+            portrait->setFixedHeight(84);
             portrait->setPixmap(compactPortrait(unknownPortrait()));
             layout->insertWidget(0, portrait);
 

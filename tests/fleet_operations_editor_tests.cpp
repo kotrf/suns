@@ -14,9 +14,11 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
 #include <QSpinBox>
 #include <QTimer>
 #include <QToolButton>
+#include <QTemporaryDir>
 #include <QTreeWidget>
 
 #include <cassert>
@@ -54,6 +56,9 @@ static void settle()
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    QTemporaryDir settingsDirectory;
+    assert(settingsDirectory.isValid());
+    QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsDirectory.path());
     using namespace suns;
     // Both setup dialogs share this widget. Preset changes update counts and
     // dimensions together; an existing custom save is represented losslessly.

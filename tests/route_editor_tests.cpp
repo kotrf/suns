@@ -1,6 +1,8 @@
 #include "main_window.hpp"
 #include "route_program_dock.hpp"
+#include "map_marker_items.hpp"
 
+#include <QAction>
 #include <QApplication>
 #include <QBrush>
 #include <QGraphicsItem>
@@ -9,6 +11,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QMenu>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
@@ -147,7 +150,37 @@ struct MainWindowTestAccess {
         emit window.routeProgramContextChanged();
     }
 
-    static bool rightClick(MainWindow& window, QGraphicsItem* item)
+    static void moveTargetsToSpace(MainWindow& window)
+    {
+        for (auto& fleet : window.state_.fleets) if (fleet.id != 1) {
+            fleet.position = {110, -65};
+            fleet.telemetry.position = fleet.position;
+        }
+        window.rebuildScene();
+    }
+
+    static bool chooseOrbitalFleet(MainWindow& window, FleetId fleet)
+    {
+        for (auto* item : window.routeProgramScene()->items()) {
+            if (item->data(1).toInt() != kMapItemOrbit
+                || !item->data(2).toList().contains(QVariant(static_cast<unsigned int>(fleet)))) continue;
+            window.view_->resetTransform();
+            window.view_->centerOn(item);
+            const auto position = window.view_->mapFromScene(item->scenePos()) + QPoint(0, -10);
+            QMouseEvent press(QEvent::MouseButtonPress, QPointF(position),
+                QPointF(window.view_->viewport()->mapToGlobal(position)), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            if (!window.eventFilter(window.view_->viewport(), &press)) return false;
+            auto* menu = window.mapFleetPicker_.data();
+            assert(menu && menu->isVisible());
+            for (auto* action : menu->actions()) if (action->data().toUInt() == fleet) {
+                action->trigger();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool rightClick(MainWindow& window, QGraphicsItem* item, FleetId chosenFleet = 0)
     {
         assert(window.view_ && item);
         // The constructor fits the galaxy before the window is laid out.
@@ -183,7 +216,17 @@ struct MainWindowTestAccess {
             Qt::RightButton,
             Qt::RightButton,
             Qt::NoModifier);
-        return window.eventFilter(window.view_->viewport(), &press);
+        if (!window.eventFilter(window.view_->viewport(), &press)) return false;
+        if (chosenFleet != 0) {
+            auto* menu = window.mapFleetPicker_.data();
+            assert(menu && menu->isVisible());
+            for (auto* action : menu->actions()) if (action->data().toUInt() == chosenFleet) {
+                action->trigger();
+                return true;
+            }
+            return false;
+        }
+        return true;
     }
 };
 
@@ -284,12 +327,7 @@ int main(int argc, char* argv[])
     // Exercise actual map selection. Its redraw is deferred; editor identity
     // must already be correct before processing any queued events.
     window.routeProgramScene()->clearSelection();
-    for (auto* item : window.routeProgramScene()->items()) {
-        if (item->data(1).toInt() == 2 && item->data(0).toUInt() == fleets[1]) {
-            item->setSelected(true);
-            break;
-        }
-    }
+    assert(suns::MainWindowTestAccess::chooseOrbitalFleet(window, fleets[1]));
     assert(window.selectedFleetForRouteProgram() == fleets[1]);
     assert(source->currentData().toUInt() == fleets[1]);
     assert(action->currentData().toInt() == unload);
@@ -330,12 +368,7 @@ int main(int argc, char* argv[])
     pickTarget->click();
     assert(window.routeProgramMapTargetPickActive());
     window.routeProgramScene()->clearSelection();
-    for (auto* item : window.routeProgramScene()->items()) {
-        if (item->data(1).toInt() == 2 && item->data(0).toUInt() == fleets[1]) {
-            item->setSelected(true);
-            break;
-        }
-    }
+    assert(suns::MainWindowTestAccess::chooseOrbitalFleet(window, fleets[1]));
     assert(!window.routeProgramMapTargetPickActive());
     assert(!pickTarget->isChecked());
     assert(window.selectedFleetForRouteProgram() == fleets[0]);
@@ -382,6 +415,7 @@ int main(int argc, char* argv[])
     // Right-click is the fast route gesture: it captures the pointed map
     // object and appends it immediately with the editor's current settings.
     suns::MainWindowTestAccess::installTwoFleets(window);
+    suns::MainWindowTestAccess::moveTargetsToSpace(window);
     QGraphicsItem* fleetTargetItem{};
     for (auto* item : window.routeProgramScene()->items()) {
         if (item->data(1).toInt() == 2 && item->data(0).toUInt() == fleets[1]) {
@@ -389,7 +423,7 @@ int main(int argc, char* argv[])
             break;
         }
     }
-    assert(suns::MainWindowTestAccess::rightClick(window, fleetTargetItem));
+    assert(suns::MainWindowTestAccess::rightClick(window, fleetTargetItem, fleets[1]));
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     const auto& quickPursuit = std::get<suns::MoveFleetOrder>(
         suns::MainWindowTestAccess::orders(window).orders.front());
@@ -401,14 +435,15 @@ int main(int argc, char* argv[])
     // goes to the enemy's currently observed position with No action.
     suns::MainWindowTestAccess::installTwoFleets(window);
     const auto enemyFleet = destination->itemData(2, Qt::UserRole + 1).toUInt();
+    suns::MainWindowTestAccess::moveTargetsToSpace(window);
     QGraphicsItem* enemyTargetItem{};
     for (auto* item : window.routeProgramScene()->items()) {
-        if (item->data(1).toInt() == 2 && item->data(0).toUInt() == enemyFleet) {
+        if (item->data(1).toInt() == 2 && item->data(2).toList().contains(QVariant(enemyFleet))) {
             enemyTargetItem = item;
             break;
         }
     }
-    assert(suns::MainWindowTestAccess::rightClick(window, enemyTargetItem));
+    assert(suns::MainWindowTestAccess::rightClick(window, enemyTargetItem, enemyFleet));
     const auto& quickAttack = std::get<suns::MoveFleetOrder>(
         suns::MainWindowTestAccess::orders(window).orders.front());
     assert(quickAttack.fleet == fleets[0]);

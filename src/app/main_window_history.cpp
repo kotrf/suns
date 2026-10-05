@@ -45,7 +45,7 @@ public:
     explicit HistoryChart(QWidget* parent) : QWidget(parent)
     {
         setObjectName("empireHistoryChart");
-        setMinimumSize(400, 230);
+        setMinimumSize(400, 140);
         setMouseTracking(true);
     }
 

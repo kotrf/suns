@@ -462,8 +462,8 @@ void MainWindow::installTurnMessages()
 
     auto* content = new QWidget(turnMessagesDock_);
     auto* layout = new QVBoxLayout(content);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setSpacing(6);
+    layout->setContentsMargins(5, 5, 5, 5);
+    layout->setSpacing(4);
 
     turnMessagesSummary_ = new QLabel("No strategic reports.", content);
     turnMessagesSummary_->setObjectName("turnMessagesSummary");
