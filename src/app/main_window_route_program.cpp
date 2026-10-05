@@ -606,6 +606,41 @@ std::vector<FleetId> MainWindow::availableOwnedFleetsForRouteProgram() const
     return fleets;
 }
 
+std::vector<FleetId> MainWindow::ownedFleetsAtSelectedSystem() const
+{
+    const auto* star = selectedStar();
+    if (!star) return {};
+    std::vector<FleetId> fleets;
+    for (const auto id : availableOwnedFleetsForRouteProgram()) {
+        const auto* fleet = findFleet(state_, id);
+        if (fleet && same_position(fleet_player_view(state_, *fleet).position, star->position))
+            fleets.push_back(id);
+    }
+    return fleets;
+}
+
+QString MainWindow::fleetSourceNameForRouteProgram(FleetId id) const
+{
+    const auto* fleet = findFleet(state_, id);
+    if (!fleet) return fleetTargetNameForRouteProgram(id);
+    auto name = fleetTargetNameForRouteProgram(id);
+    for (const auto& order : pendingOrders_.orders) {
+        if (const auto* rename = std::get_if<RenameFleetOrder>(&order); rename && rename->fleet == id)
+            name = QString("%1 (Fleet %2)").arg(QString::fromStdString(rename->name)).arg(id);
+    }
+    return QString("%1 — %2").arg(name,
+        fleetLocationName(fleet_player_view(state_, *fleet).position));
+}
+
+QString MainWindow::selectedSystemFleetHeading() const
+{
+    const auto* star = selectedStar();
+    if (!star) return "All my fleets";
+    const auto count = ownedFleetsAtSelectedSystem().size();
+    return QString("At %1: %2 friendly fleet%3")
+        .arg(QString::fromStdString(star->name)).arg(count).arg(count == 1 ? "" : "s");
+}
+
 QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
 {
     if (const auto* fleet = findFleet(state_, fleetId)) {

@@ -24,6 +24,7 @@
 #include <QSignalBlocker>
 #include <QShortcut>
 #include <QStyle>
+#include <QStandardItemModel>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -524,11 +525,32 @@ void attachRouteProgramDock(MainWindow& window)
 
         const QSignalBlocker sourceBlocker(sourceFleetCombo);
         sourceFleetCombo->clear();
-        for (const auto source : sources) {
-            sourceFleetCombo->addItem(window.fleetTargetNameForRouteProgram(source),
+        const auto localSources = window.ownedFleetsAtSelectedSystem();
+        const auto addHeading = [sourceFleetCombo](const QString& text) {
+            const auto index = sourceFleetCombo->count();
+            sourceFleetCombo->addItem(text);
+            if (auto* model = qobject_cast<QStandardItemModel*>(sourceFleetCombo->model()))
+                model->item(index)->setFlags(Qt::NoItemFlags);
+        };
+        const auto addSource = [sourceFleetCombo, &window](FleetId source) {
+            sourceFleetCombo->addItem(window.fleetSourceNameForRouteProgram(source),
                 static_cast<quint32>(source));
-        }
+            const auto index = sourceFleetCombo->count() - 1;
+            sourceFleetCombo->setItemData(index, sourceFleetCombo->itemText(index), Qt::ToolTipRole);
+        };
+        addHeading(window.selectedSystemFleetHeading());
+        for (const auto source : localSources) addSource(source);
+        if (!window.routeProgramTargetsAtSelectedSystem().empty() && sources.size() > localSources.size())
+            addHeading("Other fleets");
+        for (const auto source : sources)
+            if (std::find(localSources.begin(), localSources.end(), source) == localSources.end()) addSource(source);
+        sourceFleetCombo->setToolTip(window.selectedSystemFleetHeading()
+            + "\nOrbiting fleets appear first. Choosing a system keeps the current source fleet.");
+        if (auto* context = window.findChild<QLabel*>("fleetSystemContext"))
+            context->setText(window.selectedSystemFleetHeading());
         sourceFleetCombo->setCurrentIndex(sourceFleetCombo->findData(static_cast<quint32>(fleet)));
+        sourceFleetCombo->setPlaceholderText(sources.empty() ? "No friendly fleets" : "Select a fleet");
+        sourceFleetCombo->setEnabled(!sources.empty());
 
         if (resetDrafts || fleet != editor->fleet) {
             auto draft = WaypointDraft{};

@@ -82,6 +82,9 @@ public:
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
     [[nodiscard]] std::vector<FleetId> availableOwnedFleetsForRouteProgram() const;
+    [[nodiscard]] std::vector<FleetId> ownedFleetsAtSelectedSystem() const;
+    [[nodiscard]] QString fleetSourceNameForRouteProgram(FleetId fleet) const;
+    [[nodiscard]] QString selectedSystemFleetHeading() const;
     [[nodiscard]] QString fleetTargetNameForRouteProgram(FleetId fleet) const;
     [[nodiscard]] std::vector<RouteProgramTargetOption> routeProgramTargetsAtSelectedSystem() const;
     bool selectFleetForRouteProgram(FleetId fleet);
@@ -105,6 +108,7 @@ public:
     void openMergeFleetsDialog();
     void openSplitFleetDialog();
     void openRenameFleetDialog();
+    void openFleetSummaryDialog();
 
     // Replace the constructor's legacy synchronous scene-selection callback
     // with a deferred rebuild. Rebuilding QGraphicsScene while Qt is still
@@ -241,6 +245,8 @@ private:
     [[nodiscard]] QString selectedPlanetPanelSummary() const;
     [[nodiscard]] QString selectedFleetPanelSummary() const;
     void refreshFleetCompositionTable();
+    [[nodiscard]] QString fleetLocationName(Position position) const;
+    void refreshFleetSummary();
     bool appendRouteWaypoint(
         Position destination,
         FleetId targetFleet,
@@ -325,6 +331,7 @@ private:
     QPushButton* endTurnButton_{};
     QDockWidget* turnMessagesDock_{};
     QDockWidget* historyDock_{};
+    QPointer<QDialog> fleetSummaryDialog_;
     QComboBox* historyMetric_{};
     QComboBox* historyScope_{};
     QComboBox* historyCompare_{};

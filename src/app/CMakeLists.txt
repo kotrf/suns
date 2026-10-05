@@ -10,6 +10,7 @@ add_library(suns_app_ui STATIC
     main_window_dashboard.cpp
     main_window_fleet_portrait.cpp
     main_window_fleet_management.cpp
+    main_window_fleet_summary.cpp
     main_window_history.cpp
     main_window_layout.cpp
     main_window_map_modes.cpp

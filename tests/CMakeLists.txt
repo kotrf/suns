@@ -210,6 +210,11 @@ target_link_libraries(suns_precursor_artifact_tests PRIVATE Suns::Core)
 add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_tests)
 
 if(SUNS_BUILD_APP)
+    add_executable(suns_fleet_summary_editor_tests fleet_summary_editor_tests.cpp)
+    target_link_libraries(suns_fleet_summary_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_fleet_summary_editor_tests COMMAND suns_fleet_summary_editor_tests)
+    set_tests_properties(suns_fleet_summary_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 20)
     add_executable(suns_map_selection_tests map_selection_tests.cpp)
     target_link_libraries(suns_map_selection_tests PRIVATE suns_app_ui)
     add_test(NAME suns_map_selection_tests COMMAND suns_map_selection_tests)

@@ -44,3 +44,21 @@ every design, ship count and hull in the selected FleetId. It previews pending
 merge and split orders, so the absorbed fleet marker may disappear without
 hiding where its ships went. The fleet dashboard also reports aggregate
 capacities, sensors and maximum Warp.
+
+## Fleet selection and summary
+
+The Fleet selector groups friendly fleets at the selected system first, followed
+by other owned fleets. Every entry includes its orbiting system or space
+coordinates. The caption reports the local fleet count, including an empty
+orbit. Clicking a system preserves the current command source, so choosing a
+route destination cannot silently redirect orders to an orbiting fleet.
+
+**Fleet → Fleet summary…**, the **Fleets** toolbar button, or **Ctrl+Shift+F**
+opens a non-modal overview of all owned fleets. It shows location, ship count
+(with composition in the tooltip), fuel, cargo, route/task and communications
+age. Search filters names, systems and routes; column headings sort the table,
+with numeric sorting for ship counts, fuel, cargo and telemetry age. Double-click,
+Enter or **Show on map** selects the fleet in the operations panel and centers
+the map. The overview updates when orders or game state change and can stay open
+across turns. Missing wormhole contacts remain listed using the last available
+information. Location and telemetry use the same player view as the map.
