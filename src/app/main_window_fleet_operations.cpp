@@ -57,6 +57,11 @@ void MainWindow::installFleetOperationsPanel()
     source->setMinimumContentsLength(12);
     if (auto* help = findChild<QToolButton*>("routeProgramHelpButton")) sourceRow->addWidget(help);
     headerLayout->addLayout(sourceRow);
+    auto* fleetContext = new QLabel(selectedSystemFleetHeading(), header);
+    fleetContext->setObjectName("fleetSystemContext");
+    fleetContext->setTextFormat(Qt::PlainText);
+    fleetContext->setWordWrap(true);
+    headerLayout->addWidget(fleetContext);
     if (auto* heading = findChild<QLabel*>("routeProgramHeading")) heading->hide();
 
     auto* telemetryRow = new QHBoxLayout;

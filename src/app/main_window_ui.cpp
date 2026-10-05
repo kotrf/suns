@@ -626,6 +626,12 @@ void MainWindow::installUiPolish()
     });
 
     auto* fleetMenu = menuBar()->addMenu("&Fleet");
+    auto* summaryAction = fleetMenu->addAction("Fleet summary…");
+    summaryAction->setObjectName("fleetSummaryAction");
+    summaryAction->setShortcut(QKeySequence("Ctrl+Shift+F"));
+    summaryAction->setToolTip("List all your fleets and show a selected fleet on the map");
+    connect(summaryAction, &QAction::triggered, this, [this] { openFleetSummaryDialog(); });
+    fleetMenu->addSeparator();
     auto* cargoAction = fleetMenu->addAction("Transfer cargo…");
     connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
     auto* renameAction = fleetMenu->addAction("Rename fleet…");
@@ -660,6 +666,11 @@ void MainWindow::installUiPolish()
     connect(researchToolAction, &QAction::triggered, this, [this] { openResearchDialog(); });
 
     dialogToolbar->addSeparator();
+
+    auto* summaryToolAction = dialogToolbar->addAction("Fleets");
+    summaryToolAction->setObjectName("fleetSummaryToolAction");
+    summaryToolAction->setToolTip(summaryAction->toolTip());
+    connect(summaryToolAction, &QAction::triggered, summaryAction, &QAction::trigger);
 
     auto* cargoToolAction = dialogToolbar->addAction("Cargo");
     cargoToolAction->setToolTip("Transfer colonists and minerals at the selected system");
