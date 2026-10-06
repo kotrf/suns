@@ -6,6 +6,7 @@
 #include "save_game.hpp"
 
 #include <QCheckBox>
+#include <QByteArray>
 #include <QComboBox>
 #include <QMainWindow>
 #include <QPointer>
@@ -132,6 +133,9 @@ public:
     // cannot display a technical line without clipping it.
     void installPanelLayoutFixes();
     void installFleetOperationsPanel();
+    void installColonyWorkspace();
+    void refreshColonyWorkspace();
+    void setMapExpanded(bool expanded);
     void resetPanelLayout();
 
     // Finish the information-dashboard pass: fleet fuel/cargo gauges, distinct
@@ -298,6 +302,12 @@ private:
     bool mapDisplayApplyPending_{};
     bool planetPolishRefreshPending_{};
     bool shuttingDown_{};
+    bool mapExpanded_{};
+    bool mapMenuWasVisible_{};
+    bool mapStatusWasVisible_{};
+    Qt::WindowStates mapPreviousWindowState_;
+    QByteArray mapWorkspaceState_;
+    QByteArray mapWorkspaceGeometry_;
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
     std::vector<GameEvent> turnMessages_;
     std::set<std::uint64_t> readTurnMessageIds_;

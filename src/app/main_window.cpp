@@ -1146,13 +1146,15 @@ void MainWindow::updateControls()
                return item.kind == ProductionKind::OrbitalStation;
            });
     buildOrbitalDockButton_->setEnabled(ownedColony && !stationExists && !stationQueued);
-    buildOrbitalDockButton_->setText(stationExists
+    const auto dockAction = stationExists
         ? "Orbital Dock already operational"
         : stationQueued
             ? "Orbital Dock already planned"
-            : QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost));
+            : QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost);
+    buildOrbitalDockButton_->setText(buildOrbitalDockButton_->property("compactColonyBuilder").toBool()
+        ? "Orbital dock" : dockAction);
     buildOrbitalDockButton_->setToolTip(
-        "Minerals charged on completion: I 12 / B 6 / G 8 kt");
+        dockAction + "\nMinerals charged on completion: I 12 / B 6 / G 8 kt");
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto planning = planned_ship_design_state(state_, pendingOrders_);
@@ -1169,9 +1171,11 @@ void MainWindow::updateControls()
         ? "Add this ship to the selected colony's production queue"
         : "Build an Orbital Dock before ships can be added to the production queue")
         + shipMaterialTip);
-    buildShipButton_->setText(buildDesign
+    const auto shipAction = buildDesign
         ? QString("Queue %1 (%2)").arg(QString::fromStdString(buildDesign->name)).arg(ship_design_cost(*buildDesign))
-        : "Queue selected ship design");
+        : "Queue selected ship design";
+    buildShipButton_->setText(buildShipButton_->property("compactColonyBuilder").toBool() ? "Ship" : shipAction);
+    buildShipButton_->setToolTip(shipAction + "\n" + buildShipButton_->toolTip());
 
     const bool canLoad = logisticsColony && fleet && effectiveFleet && fleet_cargo_capacity(state_, *fleet) > 0.0;
     loadColonistsButton_->setEnabled(false);

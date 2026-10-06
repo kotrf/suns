@@ -859,6 +859,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    setMapExpanded(false);
     shuttingDown_ = true;
     mapSelectionRebuildPending_ = false;
 
@@ -874,7 +875,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/geometry", saveGeometry());
-        settings.setValue("workspace/docks", saveState(3));
+        settings.setValue("workspace/docks", saveState(4));
     }
 
     QMainWindow::closeEvent(event);

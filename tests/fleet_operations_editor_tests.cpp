@@ -118,7 +118,10 @@ int main(int argc, char** argv)
     auto* map = window.findChild<QGraphicsView*>();
     assert(map && map->viewport()->width() >= 300);
     assert(map->transform().m11() > 0.1);
-    assert(window.findChild<QScrollArea*>("productionScrollArea"));
+    auto* production = window.findChild<QDockWidget*>("productionDock");
+    auto* queue = window.findChild<QTreeWidget*>("productionQueueTree");
+    assert(production && queue && production->isAncestorOf(queue));
+    assert(!window.findChild<QScrollArea*>("productionScrollArea"));
     assert(fleet->isAncestorOf(add) && add->isVisible());
     assert(scroll->viewport()->rect().contains(QRect(add->mapTo(scroll->viewport(), QPoint{}), add->size())));
     // Refresh connections survive destroying the old dock, and the source

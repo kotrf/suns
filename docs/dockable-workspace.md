@@ -1,8 +1,12 @@
 # Dockable workspace
 
-The galaxy map is the central canvas. Overview, Production, Fleet — Orders & Logistics, Research and Turn Messages are `QDockWidget` panels around it.
+The galaxy map is the central canvas. System — Status & Minerals, Production, Fleet — Orders & Logistics, Research and Turn Messages are `QDockWidget` panels around it.
 
-Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program share one right-side panel; Overview and Production start on the left. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
+Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program share one right-side panel. System status, minerals and Production occupy a permanent left column in the default layout. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
+
+The system panel shows intelligence age, ownership, habitability and, for a friendly colony, population/capacity, factories, mines, yearly resources and orbital station status. Its mineral table keeps stock, yearly extraction and concentration visible together. Unknown or foreign stock and extraction remain hidden; concentration follows the player's geology knowledge.
+
+The production queue has its own expanding list, with work, ETA, reorder/remove controls and compact ship/factory/mine/orbital-dock builders below it. Only the list scrolls; the surrounding panel has no outer scroll area. **System details & empire…** and **Production details…** open non-modal windows for portraits, detailed summaries and infrastructure information. Research shares the bottom report area and cannot replace the production queue.
 
 Dock tabs use a dedicated high-contrast style: inactive tabs remain visibly
 bounded, while the active tab has a brighter surface, bold white label and blue
@@ -17,22 +21,25 @@ other panels; if a referenced friendly fleet still exists, the map centers on
 its current player-visible position. Enemy contacts and vanished fleets use
 the report's system or recorded position instead.
 
-The **View → Workspaces** section offers Map (panels hidden for maximum map
-space), Fleet Operations (fleet and route tools), Empire (overview, production
-and reports), and Ship Design (map plus the non-modal designer). Each preset
-starts from the default arrangement, so a detached panel cannot be stranded by
-switching modes. **Save current as Custom** stores the current dock layout and
+The **Fullscreen map** toolbar button or **F11** expands the map to the full screen, hiding docks (including detached ones), the main toolbar, menu and status bar. Map controls remain available. **Return to panels**, **F11** or **Esc** restores the previous geometry, dock arrangement and visibility, zoom and map center. Closing the app in this mode saves the normal workspace.
+
+The **View → Workspaces** section offers Map (the temporary fullscreen view),
+Fleet Operations (colony panels plus fleet and route tools), Empire (colony
+panels and reports), and Ship Design (colony panels plus the non-modal designer).
+The three panel presets start from the default arrangement. **Save current as Custom** stores the current dock layout and
 window geometry; **Restore Custom** brings it back after trying a preset. Every
 panel remains independently available in View, and Reset panel layout still
 restores the single-monitor default.
 
 Help is placed last after all top-level menus are installed. The fixed status-bar distance readout compares the previous distinct selected object with the current object, including both stars and fleets. Fleet positions use player-visible telemetry. Selecting the same object repeatedly does not replace the reference object; loading or creating a galaxy resets selection history.
 
-The fleet selector, compact portrait, fuel/cargo/damage gauges, communications and cargo transfer stay above the scrolling editor. **Details & logistics** expands ship composition, dockside colonist loading, rename/merge/split and colonization in that same panel. The former independent Route Program dock is retired; workspace format 3 resets its old tab layout once, while retaining window geometry. Custom workspaces from earlier formats need to be saved again. The Fleet Operations preset and Reset panel layout both restore the combined panel.
+The fleet selector, compact portrait, fuel/cargo/damage gauges, communications and cargo transfer stay above the scrolling editor. **Details & logistics** expands ship composition, dockside colonist loading, rename/merge/split and colonization in that same panel. The former independent Route Program dock is retired. Workspace format 4 resets older default dock layouts once to reveal the colony panels, while retaining window geometry. Explicit custom workspaces saved in format 3 remain restorable; newly saved custom workspaces use format 4. The Fleet Operations preset and Reset panel layout both restore the combined fleet panel.
 
-Overview and Production default to a 290 px column. Production scrolls vertically,
-and long design names use the dropdown popup without forcing a wider column.
-The map is fitted after the initial dock layout is ready.
+System status and Production default to a 340 px column. Bottom reports use
+the center area without taking height from the colony column; wide report forms
+scroll inside their dock on small windows. Long design names
+use the dropdown popup without forcing a wider column. The map is fitted after
+the initial dock layout is ready.
 
 Map clicks hit each star's visible disc with a small margin, rather than the
 large rectangle needed to paint its glow. When selectable markers overlap,
@@ -45,7 +52,7 @@ the current mouse event.
 
 Controls use shorter minimum heights and tighter padding, group spacing, dock
 titles and tabs. Planet portraits are 80 pixels across. Resetting the workspace
-targets a 260-pixel report dock; history charts can shrink further so the map
-retains more vertical space. Saved custom layouts continue to use version 3.
+targets a 190-pixel report dock; history charts can shrink further so the map
+retains more vertical space.
 The fleet selector and fuel/cargo/damage header remain outside the editor's
 scroll area.
