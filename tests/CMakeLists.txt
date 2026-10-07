@@ -296,3 +296,7 @@ if(SUNS_BUILD_APP)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 30)
 endif()
+
+add_executable(suns_scanner_tests scanner_tests.cpp)
+target_link_libraries(suns_scanner_tests PRIVATE Suns::Core)
+add_test(NAME suns_scanner_tests COMMAND suns_scanner_tests)

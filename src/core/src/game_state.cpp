@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/propulsion.hpp"
+#include "suns/scanners.hpp"
 #include "suns/hulls.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
@@ -121,7 +122,7 @@ std::vector<ShipDesign> default_ship_designs(PlayerId owner, bool starsPropulsio
     const auto engine = starsPropulsion ? ShipComponentType::QuickJump5 : ShipComponentType::FusionDrive;
     std::vector<ShipDesign> designs{
         {kScoutDesignId, owner, "Scout", starsPropulsion ? ShipHullType::StarsScout : ShipHullType::Scout,
-         {engine, ShipComponentType::LongRangeScanner}},
+         {engine, starsPropulsion ? ShipComponentType::RhinoScanner : ShipComponentType::LongRangeScanner}},
         {kColonyShipDesignId, owner, "Colony Ship", starsPropulsion ? ShipHullType::ColonyShip : ShipHullType::LightTransport,
          {engine, ShipComponentType::ColonyModule}},
     };
@@ -333,6 +334,7 @@ ShipHullSpec hull_spec(ShipHullType type)
 ShipComponentSpec component_spec(ShipComponentType type)
 {
     if (const auto* engine = propulsion_technology(type)) return propulsion_component_spec(*engine);
+    if (const auto* scanner = scanner_technology(type)) return scanner_component_spec(*scanner);
     ShipComponentSpec spec;
     spec.type = type;
 
@@ -403,14 +405,14 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.kind = ShipComponentKind::Scanner;
         spec.mass = 10.0;
         spec.buildCost = 3;
-        spec.sensorRange = 90.0;
+        spec.sensorRange = 50.0;
         break;
     case ShipComponentType::PenetratingScanner:
         spec.name = "Penetrating Scanner";
         spec.kind = ShipComponentKind::Scanner;
         spec.mass = 14.0;
         spec.buildCost = 6;
-        spec.sensorRange = 70.0;
+        spec.penetratingSensorRange = 70.0;
         spec.penetratesPlanets = true;
         break;
     case ShipComponentType::CompactLongRangeScanner:
@@ -432,7 +434,7 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.kind = ShipComponentKind::Scanner;
         spec.mass = 32.0;
         spec.buildCost = 14;
-        spec.sensorRange = 145.0;
+        spec.penetratingSensorRange = 145.0;
         spec.penetratesPlanets = true;
         break;
     case ShipComponentType::RelayArray:
@@ -447,7 +449,6 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.kind = ShipComponentKind::Scanner;
         spec.mass = 20.0;
         spec.buildCost = 12;
-        spec.sensorRange = 200.0;
         break;
     case ShipComponentType::FieldRepairBay:
         spec.name = "Field Repair Bay";
@@ -718,6 +719,7 @@ bool component_available_to_player(
 {
     if (!find_player(state, player)) return false;
     if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) return false;
+    if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) return false;
     for (const auto& unlock : research_unlocks())
         if (unlock.component == component)
             return research_unlock_available(state, player, unlock);
@@ -756,23 +758,26 @@ double ship_design_speed(const ShipDesign& design)
     return mass > 0.0 && thrust > 0.0 ? thrust * 10.0 / mass : 0.0;
 }
 
+bool ship_design_has_scanner(const ShipDesign& design)
+{
+    return std::any_of(design.components.begin(), design.components.end(), [](auto component) {
+        return component_spec(component).kind == ShipComponentKind::Scanner;
+    });
+}
+
 double ship_design_sensor_range(const ShipDesign& design)
 {
-    double range = 0.0;
-    for (const auto component : design.components) range += component_spec(component).sensorRange;
-    return range;
+    return std::max(ship_design_ordinary_sensor_range(design), ship_design_penetrating_sensor_range(design));
 }
 
 double ship_design_ordinary_sensor_range(const ShipDesign& design)
 {
-    double range = 0.0;
+    double fourthPowers = 0.0;
     for (const auto component : design.components) {
-        const auto spec = component_spec(component);
-        if (spec.kind == ShipComponentKind::Scanner && !spec.penetratesPlanets) {
-            range += spec.sensorRange;
-        }
+        const auto range = component_spec(component).sensorRange;
+        fourthPowers += range * range * range * range;
     }
-    return range;
+    return std::sqrt(std::sqrt(fourthPowers));
 }
 
 double ship_design_communication_range(const ShipDesign& design)
@@ -784,12 +789,12 @@ double ship_design_communication_range(const ShipDesign& design)
 
 double ship_design_penetrating_sensor_range(const ShipDesign& design)
 {
-    double range = 0.0;
+    double fourthPowers = 0.0;
     for (const auto component : design.components) {
-        const auto spec = component_spec(component);
-        if (spec.penetratesPlanets) range += spec.sensorRange;
+        const auto range = component_spec(component).penetratingSensorRange;
+        fourthPowers += range * range * range * range;
     }
-    return range;
+    return std::sqrt(std::sqrt(fourthPowers));
 }
 
 bool ship_design_can_colonize(const ShipDesign& design)
@@ -1003,6 +1008,15 @@ double fleet_speed(const GameState& state, const Fleet& fleet)
         speed = std::min(speed, ship_design_speed(*design));
     }
     return std::isfinite(speed) ? speed : 0.0;
+}
+
+bool fleet_has_scanner(const GameState& state, const Fleet& fleet)
+{
+    const auto stacks = fleet_ship_stacks(fleet);
+    return std::any_of(stacks.begin(), stacks.end(), [&](const auto& stack) {
+        const auto* design = find_ship_design(state, stack.design);
+        return design && ship_design_has_scanner(*design);
+    });
 }
 
 double fleet_sensor_range(const GameState& state, const Fleet& fleet)
@@ -1503,7 +1517,7 @@ void refresh_sensor_intel(GameState& state)
         }
         for (const auto& fleet : state.fleets) {
             const auto range = fleet_sensor_range(state, fleet);
-            if (range > 0.0 && within_range(fleet.position, star.position, range)) {
+            if (fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
                 const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
                 set_survey_level(state, fleet.owner, star.id,
                     same_position(fleet.position, star.position)
@@ -1821,6 +1835,7 @@ GameState generate_game(const GalaxyConfig& requestedConfig)
     state.wormholeRules.width = config.width;
     state.wormholeRules.height = config.height;
     state.players.push_back({1, "Terrans", {1}});
+    state.players.back().technology.levels[research_index(ResearchField::Electronics)] = 1;
     state.shipDesigns = default_ship_designs(1, true);
     state.stars.reserve(starCount);
     state.planets.reserve(starCount);

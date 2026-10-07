@@ -2,6 +2,7 @@
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/hulls.hpp"
+#include "suns/scanners.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -55,6 +56,7 @@ const std::vector<ResearchUnlock>& research_unlocks()
             {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},
         };
         for (auto& entry : entries) {
+            entry.legacyScanner = entry.component && legacy_scanner_component(*entry.component);
             entry.legacyPropulsion = entry.component && legacy_propulsion_component(*entry.component);
             if (entry.name == "Heavy Transport") { entry.hull = ShipHullType::HeavyTransport; entry.legacyHull = true; }
         }
@@ -70,6 +72,25 @@ const std::vector<ResearchUnlock>& research_unlocks()
             entry.engineAccess = engine.access;
             entry.excludesNoRamScoops = engine.ramScoop && engine.access != EngineAccess::Settler
                 && engine.component != ShipComponentType::FuelMizer;
+            entries.push_back(std::move(entry));
+        }
+        for (const auto& scanner : scanner_technologies()) {
+            const auto field = scanner.electronics ? ResearchField::Electronics
+                : scanner.biology ? ResearchField::Biology : ResearchField::Electronics;
+            ResearchUnlock entry{field, scanner.electronics ? scanner.electronics : scanner.biology,
+                scanner.name, scanner.ordinaryRange == 0 ? "Orbital survey only; no remote radar coverage."
+                    : std::to_string(int(scanner.ordinaryRange)) + " ly ordinary; "
+                        + std::to_string(int(scanner.penetratingRange)) + " ly penetrating.", scanner.component};
+            entry.extraLevels[static_cast<std::size_t>(ResearchField::Energy)] = scanner.energy;
+            if (field != ResearchField::Biology)
+                entry.extraLevels[static_cast<std::size_t>(ResearchField::Biology)] = scanner.biology;
+            entry.extraLevels[static_cast<std::size_t>(ResearchField::Propulsion)] = scanner.propulsion;
+            entry.requiresSuperStealth = scanner.superStealth;
+            if (scanner.component == ShipComponentType::PickPocketScanner
+                || scanner.component == ShipComponentType::RobberBaronScanner)
+                entry.description += " Cargo theft is not available yet.";
+            if (scanner.component == ShipComponentType::ChameleonScanner)
+                entry.description += " Cloaking is not available yet.";
             entries.push_back(std::move(entry));
         }
         ResearchUnlock mini{ResearchField::Construction, 0, "Mini-Colony Ship",
@@ -96,6 +117,7 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
     const auto* owner = find_player(state, player);
     return owner && engine_access_available(owner->race, unlock.engineAccess)
         && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines)
+        && (!unlock.requiresSuperStealth || owner->race.hullAccess == HullAccess::SuperStealth)
         && (!unlock.hull || ship_hull_access_applicable(state, player, *unlock.hull));
 }
 
@@ -121,6 +143,7 @@ std::string research_unlock_requirement(const ResearchUnlock& unlock)
     case EngineAccess::NoRamScoops: text += "; No Ram Scoop Engines"; break;
     case EngineAccess::Settler: text += "; Settler engine access"; break;
     }
+    if (unlock.requiresSuperStealth) text += "; Super Stealth";
     if (unlock.excludesNoRamScoops) text += "; requires ram scoops enabled";
     if (unlock.hull) if (const auto* hull = reference_hull(*unlock.hull)) {
         if (hull->access != HullAccess::Standard) text += "; " + hull_access_name(hull->access) + " hull access";
@@ -241,6 +264,7 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         player.race.hullAccess = empires[i].hullAccess;
         player.race.advancedRemoteMining = empires[i].advancedRemoteMining;
         player.race.basicRemoteMining = empires[i].basicRemoteMining;
+        player.technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 1;
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.star == home->id; });

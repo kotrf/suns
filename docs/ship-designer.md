@@ -34,7 +34,8 @@ Transport hulls buy cargo efficiency through built-in hold capacity and have few
 ## Fitting
 
 The designer exposes the [15 reference engines](stars-propulsion.md), the
-following Suns! equipment, and legacy engines for existing legacy empires:
+[16 reference scanners](stars-scanners.md), and the following Suns! equipment.
+Prototype engines and scanners are shown only for existing legacy empires:
 
 - Fusion Drive
 - Advanced Fusion Drive (Propulsion 1; light, safe Warp 9, but no fuel scooping)

@@ -21,7 +21,7 @@ Star colour comes from a physical `StarClass` property in the core model. Survey
 Sensor circles are now a real game mechanic rather than decoration:
 
 - colonies provide a powerful 150 ly stationary survey and communications range;
-- the starting Scout provides a smaller 90 ly mobile survey range;
+- the starting Scout provides a smaller 50 ly mobile survey range;
 - stars keep a permanent system contact when they enter ordinary friendly coverage;
 - a moving scout sweeps its detection circle continuously across the segment travelled during a turn, so close fly-bys record system contacts without revealing planetary parameters;
 - a later-tech penetrating scanner has its own shorter field and can produce a rough planetary estimate during the same fly-by;

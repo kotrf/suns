@@ -28,9 +28,10 @@ The constants are tuning placeholders, but the relationship is intentional. Addi
 
 Survey range is derived from installed scanner components. Colonization is permitted only when the fitted design contains a component that enables it.
 
-The default designs are tuned so the existing gameplay remains stable:
+The legacy demo designs retain their original mass and speed (the starting
+scanner now has 50 ly). New campaigns use the [reference scanner catalog](stars-scanners.md):
 
-- Scout: mass 59.5, speed 100, survey range 90, build cost 8;
+- Scout: mass 59.5, speed 100, survey range 50, build cost 8;
 - Colony Ship: mass 85, speed 70, no survey scanner, build cost 12.
 
 A test hybrid made by adding the Colony Module to the Scout design keeps its scanner and gains colonization capability, but becomes slower and more expensive. This is the kind of meaningful fit tradeoff the final ship designer should produce.

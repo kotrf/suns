@@ -1,6 +1,7 @@
 #include "save_game.hpp"
 #include "suns/campaign.hpp"
 #include "suns/hulls.hpp"
+#include "suns/scanners.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -1184,10 +1185,72 @@ void stars_hulls_round_trip_and_previous_format_migration()
     assert(ship_design_fuel_capacity(loaded.state.shipDesigns[0]) == ship_design_fuel_capacity(save.state.shipDesigns[0]));
 }
 
+void scanners_round_trip_and_version_boundaries()
+{
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData save;
+    save.campaignId = 21; save.turnToken = 34;
+    save.mode = SessionMode::Host;
+    save.state = generate_campaign({}, {{"Scanner", RacePreset::Terran, false, false, false, HullAccess::SuperStealth}});
+    save.pendingOrders = {1, {}};
+    save.playerTokens = {{1, 34}};
+    for (const auto& scanner : scanner_technologies()) {
+        ShipDesign design{save.state.nextShipDesignId++, 1, scanner.name, ShipHullType::StarsScout,
+            {ShipComponentType::QuickJump5, scanner.component}};
+        normalize_ship_design_placement(design);
+        assert(ship_design_valid(design));
+        save.state.shipDesigns.push_back(design);
+        save.pendingOrders.orders.emplace_back(CreateShipDesignOrder{design.name, design.hull, design.components, design.placements});
+        save.pendingDescriptions << QString::fromStdString(design.name);
+    }
+    const auto path = dir.filePath("scanners.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    if (!read_save_game_file(path, loaded, error)) {
+        std::cerr << error.toStdString() << std::endl;
+        assert(false);
+    }
+    for (std::size_t i = 0; i < save.state.shipDesigns.size(); ++i) {
+        const auto& before = save.state.shipDesigns[i];
+        const auto& after = loaded.state.shipDesigns[i];
+        assert(after.components == before.components && after.placements == before.placements);
+        assert(ship_design_ordinary_sensor_range(after) == ship_design_ordinary_sensor_range(before));
+        assert(ship_design_penetrating_sensor_range(after) == ship_design_penetrating_sensor_range(before));
+    }
+    QFile file(path);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream header(&file); header << quint32{56}; file.close();
+    assert(!read_save_game_file(path, loaded, error));
+    const auto orders = dir.filePath("scanners.sunsorders");
+    TurnOrderFileData packet{21, save.state.turn, 34, save.pendingOrders, save.pendingDescriptions};
+    assert(write_turn_order_file(orders, packet, error));
+    TurnOrderFileData read;
+    assert(read_turn_order_file(orders, read, error));
+    assert(read.orders.orders.size() == 16);
+    for (std::size_t i = 0; i < read.orders.orders.size(); ++i)
+        assert(std::get<CreateShipDesignOrder>(read.orders.orders[i]).components
+            == std::get<CreateShipDesignOrder>(packet.orders.orders[i]).components);
+    file.setFileName(orders);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream orderHeader(&file); orderHeader << quint32{14}; file.close();
+    assert(!read_turn_order_file(orders, read, error));
+    save.state = make_demo_game();
+    save.pendingOrders = {1, {}}; save.pendingDescriptions.clear();
+    assert(write_save_game_file(path, save, error));
+    file.setFileName(path);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream compatible(&file); compatible << quint32{56}; file.close();
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.shipDesigns.front().components.back() == ShipComponentType::LongRangeScanner);
+    assert(fleet_sensor_range(loaded.state, loaded.state.fleets.front()) == 50);
+}
+
 } // namespace
 
 int main()
 {
+    scanners_round_trip_and_version_boundaries();
     stars_hulls_round_trip_and_previous_format_migration();
     stars_propulsion_and_access_round_trip();
     round_trip_preserves_communications_and_planning();

@@ -50,19 +50,21 @@ New campaigns use the [15-model Stars! propulsion line](stars-propulsion.md), in
 - Propulsion 2: High Warp Drive, a safe Warp-10 engine at 25 kt and higher mineral
   cost. It burns considerably more fuel at Warp 9–10, so scoops and the lighter
   Advanced Fusion Drive remain useful for long routes and smaller ships.
-- Electronics 0: the starting Long Range Scanner remains available.
-- Electronics 1: Compact Long Range Scanner, 55 ly range, 5 kt, cost 2 and a smaller mineral bill.
-- Electronics 2: Extended Range Scanner, a 160 ly ordinary sensor at 24 kt,
-  cost 8 and a substantial Germanium bill. It does not penetrate planets.
-- Electronics 3: Penetrating Scanner.
-- Electronics 6: Anomaly Detector, a 200 ly scanner that detects weak spatial
-  anomalies, classifies wormholes and reduces transit risk while retaining a
-  non-zero loss floor. See [wormholes](wormholes.md).
+- Ship scanners follow the [16-model Stars! catalog](stars-scanners.md), with
+  independent ordinary and penetrating ranges and multiple field requirements.
+  New empires start at Electronics 1 with a 50 ly Rhino Scanner; Bat has orbital
+  survey capability at level 0. Prototype scanner unlocks remain for older empires.
+- Electronics 6: Anomaly Detector provides dedicated 200 ly WH sensing, detects
+  weak anomalies, classifies wormholes and reduces transit risk. It adds no
+  ordinary ship radar or communications coverage. See [wormholes](wormholes.md).
 - Construction 1: dedicated Remote Miner hull plus heavy Remote Mining Module. Mining equipment fits only `Mining` slots; the persistent waypoint task deposits output into the planet's surface stockpile for cargo fleets to collect separately.
 - Construction 2: Heavy Transport hull, with 250 kt built-in cargo capacity and three required engines. It carries bulk ore from mining sites, while smaller transports cost less to build and burn less fuel per ship.
 - Construction 3: Field Repair Bay in a general slot. Equipped ships can repair 8 hull-damage points per year away from a dock; mixed fleets scale the rate by the equipped fraction. At a friendly shipyard, the dock's 20-point rate takes precedence.
 
-The scanner line offers three different engineering choices rather than automatic replacements: Compact saves mass at 55 ly, the starting scanner balances mass and a 90 ly field, and Extended reaches 160 ly at more than twice the starting scanner's mass and cost. The Advanced Fusion Drive likewise trades the ram scoops' fuel collection for lower mass, higher thrust and safe Warp 9. Existing ship designs remain unchanged. New designs are validated against the owner's technology both in the desktop Ship Designer and again in core order processing.
+Multiple scanners on one ship combine by the fourth root of the sum of their
+fourth powers, independently for ordinary and penetrating ranges. Fleet coverage
+uses the strongest ship. New designs are validated against the owner's technology
+both in the desktop Ship Designer and again in core order processing.
 
 ## Events and UI
 
@@ -78,7 +80,7 @@ its guaranteed RP contribution; unused output after local queues is additional
 research. Changes immediately update the current turn's pending orders, while
 closing the dock leaves pending orders intact.
 
-Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Compact Long Range Scanner.
+Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Mole Scanner.
 
 Future scientific expeditions and reverse engineering can add discovery or artifact requirements alongside field levels. The first slice does not implement those systems and does not assume that RP alone must unlock every late technology.
 
