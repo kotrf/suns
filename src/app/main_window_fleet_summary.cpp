@@ -65,6 +65,7 @@ QString MainWindow::fleetLocationName(Position position) const
 
 void MainWindow::openFleetSummaryDialog()
 {
+    setMapExpanded(false);
     if (!fleetSummaryDialog_) {
         auto* dialog = new QDialog(this);
         fleetSummaryDialog_ = dialog;

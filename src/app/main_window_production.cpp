@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSizePolicy>
 #include <QShortcut>
 #include <QTimer>
@@ -189,6 +190,8 @@ void MainWindow::refreshProductionQueue()
 {
     if (shuttingDown_ || !productionQueueTree_ || !productionQueueSummary_) return;
     const auto previousRow = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
+    const auto previousPlanet = productionQueuePlanet_;
+    const auto previousScroll = productionQueueTree_->verticalScrollBar()->value();
     productionQueueTree_->clear();
     productionMineralDetails_->clear();
     productionQueuePlanet_.reset();
@@ -196,6 +199,8 @@ void MainWindow::refreshProductionQueue()
     const auto* planet = selectedPlanet();
     if (!planet || planet->owner != pendingOrders_.player) {
         productionQueueSummary_->setText("Select a friendly colony to inspect its production plan.");
+        productionQueueSummary_->setToolTip({});
+        if (auto* details = findChild<QLabel*>("productionExtendedSummary")) details->setText(productionQueueSummary_->text());
         productionMoveUpButton_->setEnabled(false);
         productionMoveDownButton_->setEnabled(false);
         productionRemoveButton_->setEnabled(false);
@@ -243,6 +248,14 @@ void MainWindow::refreshProductionQueue()
     productionQueueSummary_->setText(productionQueueSummary_->text()
         + QString("<br>Stock: %1<br>Mining/turn: %2<br>Queue minerals: %3<br>Minerals are spent on completion.")
             .arg(mineralAmounts(planet->minerals), mineralAmounts(projected_mineral_mining(state_, *planet)), mineralAmounts(total)));
+    const auto fullSummary = productionQueueSummary_->text();
+    if (auto* details = findChild<QLabel*>("productionExtendedSummary")) details->setText(fullSummary);
+    if (productionQueueSummary_->property("compactColonySummary").toBool()) {
+        productionQueueSummary_->setToolTip(fullSummary);
+        productionQueueSummary_->setText(QString("Production %1 / year • Research %2<br>%3 item%4%5")
+            .arg(output - guaranteedResearch).arg(guaranteedResearch)
+            .arg(queue.size()).arg(queue.size() == 1 ? "" : "s").arg(queue.empty() ? " — queue empty" : ""));
+    }
 
     bool shipyardAvailable = colony_has_orbital_service(
         state_, planet->id, planet->owner, OrbitalStationModule::Shipyard);
@@ -284,9 +297,12 @@ void MainWindow::refreshProductionQueue()
     }
 
     if (!queue.empty()) {
-        const auto selectedRow = std::clamp(previousRow, 0, static_cast<int>(queue.size() - 1));
+        const auto selectedRow = previousPlanet == planet->id
+            ? std::clamp(previousRow, 0, static_cast<int>(queue.size() - 1)) : 0;
         productionQueueTree_->setCurrentItem(productionQueueTree_->topLevelItem(selectedRow));
     }
+    productionQueueTree_->doItemsLayout();
+    productionQueueTree_->verticalScrollBar()->setValue(previousPlanet == planet->id ? previousScroll : 0);
     const auto row = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
     productionMoveUpButton_->setEnabled(row > 0);
     productionMoveDownButton_->setEnabled(row >= 0 && row + 1 < static_cast<int>(queue.size()));
