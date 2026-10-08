@@ -345,7 +345,7 @@ QString componentSummary(const ShipDesign* design)
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , galaxyConfig_()
-    , state_(generate_game(galaxyConfig_))
+    , state_(generate_campaign(galaxyConfig_, {{"Terrans", RacePreset::Terran}}))
 {
     resetTurnExchangeIdentity();
     setWindowTitle("Suns!");
@@ -1533,7 +1533,9 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
 
     try {
         requested = normalized_galaxy_config(requested);
-        auto generated = empireSetups_.empty() ? generate_game(requested) : generate_campaign(requested, empireSetups_);
+        const auto setups = empireSetups_.empty()
+            ? std::vector<EmpireSetup>{{"Terrans", RacePreset::Terran}} : empireSetups_;
+        auto generated = generate_campaign(requested, setups);
         sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
         pendingOrders_ = {1, {}};
         inbox_.clear();
@@ -1569,8 +1571,9 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
     rebuildScene();
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 
-    statusBar()->showMessage(QString("New galaxy: seed %1, %2 systems — Scout 1 selected at Warp %3")
+    statusBar()->showMessage(QString("New galaxy: seed %1, %2 systems — %3 selected at Warp %4")
         .arg(static_cast<qulonglong>(state_.galaxySeed)).arg(static_cast<qulonglong>(state_.stars.size()))
+        .arg(QString::fromStdString(state_.fleets.front().name))
         .arg(state_.fleets.front().warp));
 }
 

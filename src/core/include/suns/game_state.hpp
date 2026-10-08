@@ -23,7 +23,7 @@ inline constexpr std::uint32_t kMineCost = 5;
 inline constexpr std::uint32_t kOrbitalDockCost = 24;
 inline constexpr double kScoutTravelSpeed = 100.0;       // Legacy UI compatibility.
 inline constexpr double kColonyShipTravelSpeed = 70.0;  // Legacy UI compatibility.
-inline constexpr double kScoutSensorRange = 90.0;
+inline constexpr double kScoutSensorRange = 50.0;
 inline constexpr double kColonySensorRange = 150.0;
 inline constexpr ShipDesignId kScoutDesignId = 1;
 inline constexpr ShipDesignId kColonyShipDesignId = 2;
@@ -221,6 +221,9 @@ enum class ShipComponentType {
     TransGalacticSuperScoop,
     TransGalacticMizerScoop,
     GalaxyScoop,
+    BatScanner, RhinoScanner, MoleScanner, DnaScanner, PossumScanner, PickPocketScanner,
+    ChameleonScanner, FerretScanner, DolphinScanner, GazelleScanner, RnaScanner,
+    CheetahScanner, ElephantScanner, EagleEyeScanner, RobberBaronScanner, PeerlessScanner,
 };
 
 enum class ShipComponentKind {
@@ -260,6 +263,8 @@ struct ShipComponentSpec {
     double remoteMiningUnits{};
     double radiationHazard{};
     double fieldRepairPerTurn{};
+    // Ordinary and penetrating channels combine independently.
+    double penetratingSensorRange{};
 };
 
 struct ShipComponentPlacement {
@@ -869,6 +874,7 @@ void normalize_ship_design_placement(ShipDesign& design);
 [[nodiscard]] MineralCargo component_mineral_cost(ShipComponentType component);
 [[nodiscard]] MineralCargo ship_design_mineral_cost(const ShipDesign& design);
 [[nodiscard]] double ship_design_speed(const ShipDesign& design);
+[[nodiscard]] bool ship_design_has_scanner(const ShipDesign& design);
 [[nodiscard]] double ship_design_sensor_range(const ShipDesign& design);
 [[nodiscard]] double ship_design_communication_range(const ShipDesign& design);
 [[nodiscard]] double ship_design_ordinary_sensor_range(const ShipDesign& design);
@@ -932,6 +938,7 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
 [[nodiscard]] double fleet_sensor_range(FleetRole role);
 [[nodiscard]] std::uint32_t fleet_eta(const Fleet& fleet);
 [[nodiscard]] double fleet_speed(const GameState& state, const Fleet& fleet);
+[[nodiscard]] bool fleet_has_scanner(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet);
 [[nodiscard]] double fleet_communication_range(const GameState& state, const Fleet& fleet);

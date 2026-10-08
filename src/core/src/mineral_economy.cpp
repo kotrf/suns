@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/propulsion.hpp"
+#include "suns/scanners.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -50,6 +51,7 @@ MineralCargo classBias(StarClass stellarClass)
 MineralCargo componentMineralCost(ShipComponentType type)
 {
     if (const auto* engine = propulsion_technology(type)) return engine->minerals;
+    if (const auto* scanner = scanner_technology(type)) return scanner->minerals;
     switch (type) {
     case ShipComponentType::FusionDrive:             return {2.0, 2.0, 1.0};
     case ShipComponentType::RamScoopDrive:           return {2.0, 3.0, 2.0};

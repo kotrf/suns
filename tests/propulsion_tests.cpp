@@ -19,10 +19,10 @@ void verify_starting_scout_range()
     using namespace suns;
     auto state = generate_game(GalaxyConfig{});
     auto scout = state.fleets.front();
-    assert(fleet_gross_mass(state, scout) == 22);
+    assert(fleet_gross_mass(state, scout) == 17);
     assert(fleet_fuel_capacity(state, scout) == 50);
     scout.warp = 8;
-    assert(fleet_fuel_consumption_for_distance(state, scout, 64) == 57);
+    assert(fleet_fuel_consumption_for_distance(state, scout, 64) == 44);
     scout.warp = 5;
     assert(fleet_fuel_consumption_for_distance(state, scout, 25) == 3);
 
@@ -46,8 +46,8 @@ void verify_starting_scout_range()
     fast.fleets.front().warp = 8;
     const auto next = processor.process(fast, {});
     assert(next.fleets.front().warp == 8);
-    assert(next.fleets.front().position.x > 1055 && next.fleets.front().position.x < 1064);
-    assert(next.fleets.front().fuel < 1);
+    assert(next.fleets.front().position.x == 1064);
+    assert(next.fleets.front().fuel == 6);
 
     const auto campaign = generate_campaign(GalaxyConfig{},
         {{"Terrans", RacePreset::Terran}, {"Ice", RacePreset::Cryophile}});

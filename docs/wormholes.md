@@ -17,8 +17,10 @@ without implementation-dependent random distributions or mutable RNG streams.
 Ordinary fleet scanners and colony sensors detect strong signatures across their
 normal range. Faint mouths use 45% of that range. Weak mouths require an Anomaly
 Detector and use 35% of its range. The detector unlocks at Electronics 6, weighs
-20 kt, costs 12 production and I 4 / B 3 / G 9, and provides a 200 ly ordinary
-sensor. It occupies a general slot.
+20 kt, costs 12 production and I 4 / B 3 / G 9, and provides a dedicated 200 ly anomaly
+footprint without ordinary radar or communications coverage. It occupies a
+scanner-compatible slot; old hulls can use a general slot. Faint mouths have
+90 ly reach and weak mouths 70 ly; stronger fitted scanners can extend it.
 
 A distant contact is an unclassified spatial anomaly. Close observation (within
 35% of its detection range), or a detector, classifies stability as unstable,

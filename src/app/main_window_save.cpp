@@ -263,7 +263,10 @@ bool MainWindow::loadGameFromPath(const QString& path)
         for (const auto& player : state_.players) {
             const auto preset = player.race.radiationImmune ? RacePreset::Radiotroph
                 : player.race.habitableTemperature.minimum == 0 ? RacePreset::Cryophile : RacePreset::Terran;
-            empireSetups_.push_back({player.name, preset});
+            empireSetups_.push_back({player.name, preset,
+                player.race.improvedFuelEfficiency, player.race.noRamScoopEngines,
+                player.race.settlerEngineAccess, player.race.hullAccess,
+                player.race.advancedRemoteMining, player.race.basicRemoteMining});
         }
     }
     campaignId_ = loaded.campaignId;

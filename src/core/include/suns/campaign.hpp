@@ -28,6 +28,8 @@ struct ResearchUnlock {
     bool legacyPropulsion{};
     std::optional<ShipHullType> hull;
     bool legacyHull{};
+    bool legacyScanner{};
+    bool requiresSuperStealth{};
 };
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);

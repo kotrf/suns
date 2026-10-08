@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "galaxy_setup_widget.hpp"
 #include "route_program_dock.hpp"
+#include "save_game.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -21,6 +22,7 @@
 #include <QTemporaryDir>
 #include <QTreeWidget>
 
+#include <algorithm>
 #include <cassert>
 
 namespace suns {
@@ -43,6 +45,9 @@ struct MainWindowTestAccess {
     static const PlayerOrders& orders(MainWindow& window) { return window.pendingOrders_; }
     static const GameState& state(MainWindow& window) { return window.state_; }
     static const GalaxyConfig& config(MainWindow& window) { return window.galaxyConfig_; }
+    static bool save(MainWindow& window, const QString& path) { return window.saveGameToPath(path); }
+    static bool load(MainWindow& window, const QString& path) { return window.loadGameFromPath(path); }
+    static void restart(MainWindow& window) { window.newGalaxy(); }
 };
 } // namespace suns
 
@@ -80,6 +85,12 @@ int main(int argc, char** argv)
     assert(smallCustom.config(42).starCount == 2);
 
     MainWindow window;
+    const auto& initial = MainWindowTestAccess::state(window);
+    assert(initial.players.size() == 1 && initial.players.front().race.environmentBased);
+    assert(player_planet_habitability(initial, 1, initial.planets.front(), initial.turn) == 100);
+    assert(std::any_of(initial.planets.begin(), initial.planets.end(), [&](const Planet& planet) {
+        return player_planet_habitability(initial, 1, planet, initial.turn) < 0;
+    }));
     window.installDeferredMapSelectionHandler();
     attachRouteProgramDock(window);
     window.installUiPolish();
@@ -177,5 +188,46 @@ int main(int argc, char** argv)
     assert(MainWindowTestAccess::config(window).width == 800);
     assert(MainWindowTestAccess::state(window).wormholeRules.width == 800);
     assert(MainWindowTestAccess::state(window).fleets.front().warp == 5);
+    assert(MainWindowTestAccess::state(window).players.front().race.environmentBased);
+
+    // The new default round-trips, while opening a legacy game keeps its
+    // scalar hab even when the physical environment would be hostile.
+    const auto modernPath = settingsDirectory.filePath("modern.suns");
+    assert(MainWindowTestAccess::save(window, modernPath));
+    assert(MainWindowTestAccess::load(window, modernPath));
+    assert(MainWindowTestAccess::state(window).players.front().race.environmentBased);
+    SaveGameData legacy;
+    legacy.campaignId = 123;
+    legacy.turnToken = 456;
+    legacy.galaxyConfig = GalaxyConfig{};
+    legacy.state = generate_game(legacy.galaxyConfig);
+    legacy.pendingOrders = {1, {}};
+    legacy.state.planets[1].habitability = 37;
+    legacy.state.planets[1].environment = {100, 100, 100};
+    legacy.state.stars[1].variability = {};
+    QString error;
+    const auto legacyPath = settingsDirectory.filePath("legacy.suns");
+    assert(write_save_game_file(legacyPath, legacy, error));
+    assert(MainWindowTestAccess::load(window, legacyPath));
+    const auto& loaded = MainWindowTestAccess::state(window);
+    assert(!loaded.players.front().race.environmentBased);
+    assert(player_planet_habitability(loaded, 1, loaded.planets[1], loaded.turn) == 37);
+    MainWindowTestAccess::restart(window);
+    assert(MainWindowTestAccess::state(window).players.front().race.environmentBased);
+
+    // Restarting a loaded racial campaign also retains its equipment access.
+    SaveGameData racial = legacy;
+    racial.state = generate_campaign(racial.galaxyConfig,
+        {{"Cold miners", RacePreset::Cryophile, true, false, true, HullAccess::SuperStealth, true, false}});
+    const auto racialPath = settingsDirectory.filePath("racial.suns");
+    assert(write_save_game_file(racialPath, racial, error));
+    assert(MainWindowTestAccess::load(window, racialPath));
+    MainWindowTestAccess::restart(window);
+    const auto& restarted = MainWindowTestAccess::state(window);
+    const auto& race = restarted.players.front().race;
+    assert(race.environmentBased && race.habitableTemperature.minimum == 0);
+    assert(race.improvedFuelEfficiency && race.settlerEngineAccess && race.advancedRemoteMining);
+    assert(race.hullAccess == HullAccess::SuperStealth && !race.noRamScoopEngines && !race.basicRemoteMining);
+    assert(player_planet_habitability(restarted, 1, restarted.planets.front(), restarted.turn) == 100);
     window.close();
 }

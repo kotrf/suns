@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/hulls.hpp"
+#include "suns/scanners.hpp"
 
 #include <QComboBox>
 #include <QDockWidget>
@@ -268,11 +269,13 @@ void MainWindow::refreshResearchPanel()
     for (std::size_t unlockIndex = 0; unlockIndex < research_unlocks().size(); ++unlockIndex) {
         const auto& unlock = research_unlocks()[unlockIndex];
         if (unlock.legacyPropulsion && !player_uses_legacy_propulsion(state_, player->id)) continue;
+        if (unlock.legacyScanner && !player_uses_legacy_scanners(state_, player->id)) continue;
         if (unlock.legacyHull && !player_uses_legacy_hulls(state_, player->id)) continue;
         auto* row = new QTreeWidgetItem(catalog);
-        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull ? " (legacy)" : ""));
+        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull || unlock.legacyScanner ? " (legacy)" : ""));
         row->setText(1, QString::fromStdString(research_unlock_requirement(unlock)));
-        const bool legacyBiology = unlock.field == ResearchField::Biology && !player->race.environmentBased;
+        const bool legacyBiology = unlock.field == ResearchField::Biology
+            && !unlock.component && !player->race.environmentBased;
         const bool applicable = research_unlock_applicable(state_, player->id, unlock);
         const auto* hull = unlock.hull ? reference_hull(*unlock.hull) : nullptr;
         row->setText(2, legacyBiology ? "Legacy rules" : !applicable ? (hull && hull->mysteryTrader ? "Acquisition required" : "Race restriction")

@@ -1,5 +1,6 @@
 #include "ship_designer_dialog.hpp"
 #include "suns/hulls.hpp"
+#include "suns/scanners.hpp"
 #include "suns/campaign.hpp"
 
 #include <QAbstractItemView>
@@ -251,12 +252,23 @@ QString componentTooltip(ShipComponentType component)
             facts << line;
         }
     }
-    if (spec.sensorRange > 0.0) {
-        facts << QString("Scanner range %1 ly").arg(spec.sensorRange, 0, 'f', 0);
-        facts << (spec.penetratesPlanets
-            ? "Penetrating: surveys planets; does not extend the communications network."
-            : "Ordinary: detects ships and extends the communications network; does not survey planets.");
+    if (spec.kind == ShipComponentKind::Scanner) {
+        facts << QString("Ordinary scanner range %1 ly; penetrating %2 ly")
+            .arg(spec.sensorRange, 0, 'f', 0).arg(spec.penetratingSensorRange, 0, 'f', 0);
+        if (spec.sensorRange > 0)
+            facts << "Ordinary: detects ships and extends the communications network.";
+        if (spec.penetratingSensorRange > 0)
+            facts << "Penetrating: surveys planets remotely.";
+        if (spec.sensorRange == 0 && spec.penetratingSensorRange == 0)
+            facts << "Orbital surveys only; no remote ship detection or communications coverage.";
+        facts << "Within one ship, each range is the fourth root of the sum of scanner ranges to the fourth power. Fleet coverage uses the best ship.";
     }
+    if (component == ShipComponentType::AnomalyDetector)
+        facts << "Dedicated anomaly range 200 ly; faint signatures 90 ly, weak signatures 70 ly. Does not extend ordinary radar or communications.";
+    for (const auto& unlock : research_unlocks())
+        if (unlock.component == component && (component == ShipComponentType::PickPocketScanner
+            || component == ShipComponentType::ChameleonScanner || component == ShipComponentType::RobberBaronScanner))
+            facts << QString::fromStdString(unlock.description);
     if (spec.relayRange > 0.0)
         facts << QString("Comms relay +%1 ly; no ship detection or planet survey")
             .arg(spec.relayRange, 0, 'f', 0);
@@ -487,6 +499,9 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     : QDialog(parent)
     , player_(player)
     , initialHull_(player_uses_legacy_hulls(state, player) ? ShipHullType::Scout : ShipHullType::StarsScout)
+    , initialScanner_(player_uses_legacy_scanners(state, player) ? ShipComponentType::LongRangeScanner
+        : component_available_to_player(state, player, ShipComponentType::RhinoScanner)
+            ? ShipComponentType::RhinoScanner : ShipComponentType::BatScanner)
     , initialEngine_(player_uses_legacy_propulsion(state, player) ? ShipComponentType::FusionDrive : ShipComponentType::QuickJump5)
 {
     setWindowTitle("Suns! — Ship Designer");
@@ -576,7 +591,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     catalogLayout->addWidget(fitButton_);
     workspace->addWidget(catalogGroup, 1);
 
-    const std::array catalog{
+    std::vector catalog{
         ShipComponentType::FusionDrive,
         ShipComponentType::RamScoopDrive,
         ShipComponentType::RadiatingRamScoopDrive,
@@ -612,14 +627,16 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::TransGalacticMizerScoop,
         ShipComponentType::GalaxyScoop,
     };
+    for (const auto& scanner : scanner_technologies()) catalog.push_back(scanner.component);
     for (const auto component : catalog) {
         if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) continue;
+        if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) continue;
         const auto available = component_available_to_player(state, player, component);
         auto label = QString("%1 • %2")
                          .arg(QString::fromStdString(ship_component_equipment_name(component)),
                              QString::fromStdString(component_spec(component).name));
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
-        if (legacy_propulsion_component(component)) label += "  [legacy]";
+        if (legacy_propulsion_component(component) || legacy_scanner_component(component)) label += "  [legacy]";
         auto* item = new QListWidgetItem(label, componentCatalog_);
         item->setIcon(componentIcon(component, available));
         item->setData(Qt::UserRole, static_cast<int>(component));
@@ -670,7 +687,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     saveButton_->setObjectName("saveShipDesign");
     layout->addWidget(buttons);
     placements_ = autoplace_ship_components(initialHull_,
-        {initialEngine_, ShipComponentType::LongRangeScanner});
+        {initialEngine_, initialScanner_});
 
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -684,7 +701,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             const QSignalBlocker blockHull(hullCombo_);
             hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(initialHull_)));
             placements_ = autoplace_ship_components(initialHull_,
-                {initialEngine_, ShipComponentType::LongRangeScanner});
+                {initialEngine_, initialScanner_});
             nameEdit_->setText("New Design");
         } else {
             const QSignalBlocker blockHull(hullCombo_);
@@ -1061,8 +1078,11 @@ void ShipDesignerDialog::updatePreview()
         fuelCurve.push_back(line);
     }
     QString capabilities;
-    if (const auto sensor = ship_design_sensor_range(design); sensor > 0.0) {
-        capabilities += QString("Scanner %1 ly").arg(sensor, 0, 'f', 0);
+    if (ship_design_has_scanner(design)) {
+        capabilities += QString("Ordinary %1 ly • Penetrating %2 ly")
+            .arg(ship_design_ordinary_sensor_range(design), 0, 'f', 1)
+            .arg(ship_design_penetrating_sensor_range(design), 0, 'f', 1);
+        if (ship_design_sensor_range(design) == 0) capabilities += " • Orbital surveys only";
     }
     const auto relay = ship_design_communication_range(design);
     if (relay > ship_design_ordinary_sensor_range(design)) {

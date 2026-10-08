@@ -82,6 +82,7 @@ void hidden_drift_and_detection()
     auto local = fixture();
     local.players.front().wormholeKnowledge.clear();
     local.wormholes.front().endpoints[0].position = {60, 0};
+    local.fleets.front().position = {20, 0};
     observe_current_wormholes(local, 1);
     auto events = deliver_wormhole_reports(local);
     assert(known_wormhole(local, 1, 10));

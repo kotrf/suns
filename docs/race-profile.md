@@ -4,8 +4,11 @@ Each player owns a serialized `RaceProfile`. Radiation tolerance and immunity,
 which already affect colonists transported by hazardous drives, now belong to
 that profile instead of being loose fields on `Player`.
 
-New campaigns created through **File → New campaign (races / multiplayer)**
-use physical environments for racial habitability. Three presets are playable:
+The desktop app starts with a solo Terran campaign using physical environments
+for racial habitability. **Game → New galaxy…** and **Restart current galaxy**
+also use this model, with the current campaign's race setup or a solo Terran
+default. **File → New campaign (races / multiplayer)** lets players choose races
+and empire settings. Three presets are playable:
 
 | Preset | Temperature | Gravity | Radiation | Tradeoff |
 | --- | --- | --- | --- | --- |
@@ -35,10 +38,12 @@ Natural-range gauges remain unchanged, so they show the race's original limits.
 The map's habitability value includes unlocked adaptations for the viewer.
 
 Save v35 stores signed habitability values. Save v31 adds
-`RaceProfile::environmentBased`. Old campaigns and the legacy
-quick-generate action keep this false, preserving their original scalar
-habitability. Use the new-campaign dialog to opt into the new rules. Presets
-are an initial balance pass; there is no point-buy editor yet.
+`RaceProfile::environmentBased`. Loading old campaigns keeps this false,
+preserving their original scalar habitability and population rules. Creating
+or restarting a galaxy uses the environment model; it does not convert an
+existing save in place. The core `generate_game` function remains a legacy
+generator for compatibility. Presets are an initial balance pass; there is no
+point-buy editor yet.
 
 The profile also stores one stable `PrimaryRaceTrait`:
 

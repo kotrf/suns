@@ -242,14 +242,10 @@ QPixmap renderShipPortrait(const ShipDesign& design)
         painter.drawEllipse(QRectF(61, 53, 12, 20));
     }
 
-    if (hasComponent(design, ShipComponentType::LongRangeScanner)
-        || hasComponent(design, ShipComponentType::CompactLongRangeScanner)
-        || hasComponent(design, ShipComponentType::PenetratingScanner)
-        || hasComponent(design, ShipComponentType::DeepPenetratingScanner)) {
+    if (ship_design_has_scanner(design)) {
         painter.setBrush(Qt::NoBrush);
         painter.setPen(QPen(
-            (hasComponent(design, ShipComponentType::PenetratingScanner)
-                || hasComponent(design, ShipComponentType::DeepPenetratingScanner))
+            (ship_design_penetrating_sensor_range(design) > 0)
                 ? QColor("#d9a6ff")
                 : QColor("#9fd5ff"),
             1.5));
