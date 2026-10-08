@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
+#include "suns/scanners.hpp"
 
 #include <QApplication>
 #include <QComboBox>
@@ -49,6 +50,10 @@ int main(int argc, char** argv)
     auto* mizer = find("Fuel Mizer");
     assert(scoop && mizer && scoop->text(1).contains("Energy 2") && scoop->text(1).contains("Propulsion 8"));
     assert(mizer->text(2) == "Race restriction");
+    assert(find("Rhino Scanner") && find("Rhino Scanner")->text(2) == "Available");
+    assert(find("Ferret Scanner") && find("Ferret Scanner")->text(1).contains("Biology 2"));
+    assert(find("Chameleon Scanner")->text(2) == "Race restriction");
+    assert(!find("Compact Scanner (legacy)"));
     const auto count = plan->topLevelItemCount();
     catalog->itemDoubleClicked(mizer, 0);
     assert(plan->topLevelItemCount() == count);
@@ -87,13 +92,22 @@ int main(int argc, char** argv)
     ShipDesignerDialog designer(state, 1);
     auto* components = designer.findChild<QListWidget*>("shipComponentCatalog");
     assert(components && designer.draft().components.front() == ShipComponentType::QuickJump5);
+    const auto initialDraft = designer.draft();
+    assert(std::find(initialDraft.components.begin(), initialDraft.components.end(), ShipComponentType::RhinoScanner)
+        != initialDraft.components.end());
+    int scanners = 0;
     int engines = 0;
     for (int row = 0; row < components->count(); ++row) {
         const auto component = static_cast<ShipComponentType>(components->item(row)->data(Qt::UserRole).toInt());
         assert(!legacy_propulsion_component(component));
+        assert(!legacy_scanner_component(component));
+        if (scanner_technology(component)) {
+            ++scanners;
+            assert(components->item(row)->toolTip().contains("penetrating"));
+        }
         engines += component_spec(component).kind == ShipComponentKind::Engine;
     }
-    assert(engines == 15);
+    assert(engines == 15 && scanners == 16);
     auto* initialHulls = designer.findChild<QComboBox*>("shipHullCatalog");
     assert(initialHulls && initialHulls->count() == 32);
     auto* hullModel = qobject_cast<QStandardItemModel*>(initialHulls->model());

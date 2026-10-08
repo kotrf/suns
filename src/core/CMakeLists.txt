@@ -7,6 +7,7 @@ add_library(suns_core
     src/player_knowledge.cpp
     src/production_forecast.cpp
     src/propulsion.cpp
+    src/scanners.cpp
     src/radiation.cpp
     src/turn_processor.cpp
     src/wormholes.cpp

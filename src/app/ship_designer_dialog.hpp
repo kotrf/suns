@@ -46,6 +46,7 @@ private:
 
     PlayerId player_{};
     ShipHullType initialHull_{ShipHullType::Scout};
+    ShipComponentType initialScanner_{ShipComponentType::LongRangeScanner};
     ShipComponentType initialEngine_{ShipComponentType::FusionDrive};
 
     QLineEdit* nameEdit_{};

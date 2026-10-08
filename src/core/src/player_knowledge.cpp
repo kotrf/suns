@@ -232,7 +232,7 @@ void observe_fleet_sensor_sweep(
 {
     observe_wormhole_sweep(state, fleet, start, end, observationTurn);
     const auto range = fleet_sensor_range(state, fleet);
-    if (range <= 0.0) return;
+    if (!fleet_has_scanner(state, fleet)) return;
     const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
 
     for (const auto& star : state.stars) {
@@ -265,7 +265,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
 
         for (const auto& fleet : state.fleets) {
             const auto range = fleet_sensor_range(state, fleet);
-            if (range > 0.0 && within_range(fleet.position, star.position, range)) {
+            if (fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
                 auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
                     const auto known = best_observed_level(state, fleet.owner, star.id);

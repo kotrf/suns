@@ -43,7 +43,7 @@ void verify_ship_designs()
 
     assert(std::abs(suns::ship_design_mass(*scout) - 59.5) < 0.000001);
     assert(std::abs(suns::ship_design_speed(*scout) - 100.0) < 0.000001);
-    assert(std::abs(suns::ship_design_sensor_range(*scout) - 90.0) < 0.000001);
+    assert(std::abs(suns::ship_design_sensor_range(*scout) - 50.0) < 0.000001);
     assert(!suns::ship_design_can_colonize(*scout));
     assert(suns::ship_design_cost(*scout) == 8);
     assert(suns::ship_design_max_warp(*scout) == 8);
@@ -63,7 +63,7 @@ void verify_ship_designs()
     auto hybrid = *scout;
     hybrid.components.push_back(suns::ShipComponentType::ColonyModule);
     assert(suns::ship_design_can_colonize(hybrid));
-    assert(suns::ship_design_sensor_range(hybrid) == 90.0);
+    assert(suns::ship_design_sensor_range(hybrid) == 50.0);
     assert(suns::ship_design_speed(hybrid) < suns::ship_design_speed(*scout));
     assert(suns::ship_design_cost(hybrid) > suns::ship_design_cost(*scout));
 
@@ -76,7 +76,7 @@ void verify_ship_designs()
     auto mismatched = state.fleets.front();
     mismatched.role = suns::FleetRole::ColonyShip;
     assert(std::abs(suns::fleet_speed(state, mismatched) - 100.0) < 0.000001);
-    assert(std::abs(suns::fleet_sensor_range(state, mismatched) - 90.0) < 0.000001);
+    assert(std::abs(suns::fleet_sensor_range(state, mismatched) - 50.0) < 0.000001);
     assert(!suns::fleet_can_colonize(state, mismatched));
 }
 
@@ -188,14 +188,14 @@ void verify_swept_sensor_coverage()
     state.planets.clear();
     state.stars = {
         {1, "Origin", {0.0, 0.0}, suns::StarClass::Yellow},
-        {2, "Flyby", {50.0, 85.0}, suns::StarClass::White},
+        {2, "Flyby", {32.0, 45.0}, suns::StarClass::White},
         {3, "Distant", {300.0, 0.0}, suns::StarClass::Red},
     };
     state.fleets = {{1, 1, "Scout 1", suns::FleetRole::Scout, suns::kScoutDesignId,
         {0.0, 0.0}, suns::Position{200.0, 0.0}}};
     const auto scannerRange = suns::fleet_sensor_range(state, state.fleets.front());
-    assert(!suns::within_range({0.0, 0.0}, {50.0, 85.0}, scannerRange));
-    assert(!suns::within_range({100.0, 0.0}, {50.0, 85.0}, scannerRange));
+    assert(!suns::within_range({0.0, 0.0}, {32.0, 45.0}, scannerRange));
+    assert(!suns::within_range({100.0, 0.0}, {32.0, 45.0}, scannerRange));
     const suns::TurnProcessor processor;
     const auto next = processor.process(state, {});
     assert(suns::survey_level(next, 1, 2) == suns::SurveyLevel::SystemScan);

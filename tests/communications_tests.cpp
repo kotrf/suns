@@ -58,17 +58,17 @@ void ordinary_scanners_automatically_form_a_relay_chain()
 
     auto secondRelay = firstRelay;
     secondRelay.id = 99;
-    secondRelay.position = {370.0, 0.0};
+    secondRelay.position = {300.0, 0.0};
     state.fleets.push_back(secondRelay);
 
-    // Homeworld R150 overlaps Scout A R90; the two scout fields then overlap.
-    assert(communication_delay_turns(state, 1, {450.0, 0.0}) == 0);
+    // Homeworld R150 overlaps Scout A R50; the two scout fields then overlap.
+    assert(communication_delay_turns(state, 1, {340.0, 0.0}) == 0);
 
     // Breaking the first overlap detaches the entire mobile branch. Its local
     // scanner island forwards instantly to Scout A, then the slow signal must
-    // cover the physical 241 ly from Scout A to Homeworld (two turns).
-    state.fleets.front().position = {241.0, 0.0};
-    assert(communication_delay_turns(state, 1, {450.0, 0.0}) == 2);
+    // cover the physical 201 ly from Scout A to Homeworld (two turns).
+    state.fleets.front().position = {201.0, 0.0};
+    assert(communication_delay_turns(state, 1, {340.0, 0.0}) == 2);
 }
 
 void penetrating_only_scanner_does_not_extend_the_network()

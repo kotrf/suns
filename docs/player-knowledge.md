@@ -14,7 +14,7 @@ The first staged model separates ordinary detection from planetary penetration:
 - `OrbitalSurvey`: arriving at the system confirms exact habitability and snapshots ownership;
 - `GeologicalSurvey`: remaining at the system for one additional turn reveals mineral concentrations and surface stocks.
 
-The starting Scout carries an ordinary 90 ly Long Range Scanner, while colonies project a stronger stationary 150 ly field. `CompactLongRangeScanner` unlocks at Electronics 1, the heavy 160 ly `ExtendedRangeScanner` at Electronics 2, and `PenetratingScanner` at Electronics 3. Penetration remains distinct from ordinary detection, so early exploration still rewards entering systems and spending time in orbit.
+The starting Scout carries an ordinary 50 ly Rhino Scanner, while colonies project a stronger stationary 150 ly field. New campaigns use the [16 reference scanners](stars-scanners.md); prototype scanners remain for legacy empires. Ordinary and penetrating ranges combine independently by the fourth-power rule within each ship, while fleet coverage uses the strongest ship. Penetration remains distinct from ordinary detection, so early exploration still rewards entering systems and spending time in orbit. Bat enables orbital surveys without remote coverage.
 
 Owned colonies have complete local knowledge. A new colony also promotes its system to geological knowledge. Colonization requires at least an orbital survey, so a rough fly-by estimate informs routing without being enough for an irreversible investment.
 

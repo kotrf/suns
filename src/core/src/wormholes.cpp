@@ -44,6 +44,8 @@ WormholeStability stability_band(double stability)
 
 double detection_range(const WormholeEndpoint& mouth, double range, bool detector)
 {
+    // Dedicated anomaly sensing does not add ordinary radar or communications coverage.
+    if (detector) range = std::max(range, 200.0);
     if (mouth.signature == WormholeSignature::Weak) return detector ? range * 0.35 : 0.0;
     return range * (mouth.signature == WormholeSignature::Faint ? 0.45 : 1.0);
 }
