@@ -36,6 +36,14 @@ void makePanelScrollable(QScrollArea* scroll, int minimumWidth, int maximumWidth
     scroll->setMaximumWidth(maximumWidth);
 }
 
+void updateWorkspaceMinimumSize(QMainWindow* window)
+{
+    // An explicit 900 px minimum can let Qt squeeze dock columns below
+    // their content minima and overlap neighbours. Honour the live layout.
+    window->setMinimumSize(window->isFullScreen() ? QSize(0, 0)
+        : window->minimumSizeHint().expandedTo(QSize(900, 600)));
+}
+
 } // namespace
 
 void MainWindow::installPanelLayoutFixes()
@@ -59,6 +67,7 @@ void MainWindow::installPanelLayoutFixes()
     // still have a real minimum width. In a narrow panel those controls were
     // clipped with no way for the player to reach their right-hand side.
     makePanelScrollable(findChild<QScrollArea*>("commandScrollArea"), 260, 420);
+    makePanelScrollable(findChild<QScrollArea*>("systemDetailsScrollArea"), 240, 380);
     makePanelScrollable(findChild<QScrollArea*>("productionScrollArea"), 260, 420);
     makePanelScrollable(findChild<QScrollArea*>("fleetOrdersScrollArea"), 340, 620);
 
@@ -100,6 +109,14 @@ void MainWindow::installPanelLayoutFixes()
     panels->addSeparator();
     panels->addSection("Panels");
     for (auto* dock : findChildren<QDockWidget*>()) {
+        const auto updateMinimum = [this] {
+            QTimer::singleShot(0, this, [this] {
+                if (!shuttingDown_) updateWorkspaceMinimumSize(this);
+            });
+        };
+        connect(dock, &QDockWidget::visibilityChanged, this, updateMinimum);
+        connect(dock, &QDockWidget::topLevelChanged, this, updateMinimum);
+        connect(dock, &QDockWidget::dockLocationChanged, this, updateMinimum);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
         dock->setFeatures(QDockWidget::DockWidgetClosable
             | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
@@ -130,6 +147,7 @@ void MainWindow::installPanelLayoutFixes()
         resetPanelLayout();
         auto* overview = findChild<QDockWidget*>("overviewDock");
         auto* production = findChild<QDockWidget*>("productionDock");
+        auto* details = findChild<QDockWidget*>("systemDetailsDock");
         auto* fleet = findChild<QDockWidget*>("fleetDock");
         auto* history = findChild<QDockWidget*>("empireHistoryDock");
         auto* research = findChild<QDockWidget*>("researchDock");
@@ -141,12 +159,14 @@ void MainWindow::installPanelLayoutFixes()
         case 1: // Fleet operations.
             show(overview, true);
             show(production, true);
+            show(details, true);
             show(fleet, true);
             if (fleet) fleet->raise();
             break;
         case 2: // Empire management and reports.
             show(overview, true);
             show(production, true);
+            show(details, true);
             show(research, true);
             show(turnMessagesDock_, true);
             show(history, true);
@@ -155,6 +175,7 @@ void MainWindow::installPanelLayoutFixes()
         case 3: // An engineering desk with the non-modal designer.
             show(overview, true);
             show(production, true);
+            show(details, true);
             openShipDesigner();
             break;
         }
@@ -177,7 +198,8 @@ void MainWindow::installPanelLayoutFixes()
     const auto hasCustom = [] {
         QSettings settings("SunsProject", "Suns");
         return (settings.value("workspace/customVersion").toInt() == 3
-            || settings.value("workspace/customVersion").toInt() == 4)
+            || settings.value("workspace/customVersion").toInt() == 4
+            || settings.value("workspace/customVersion").toInt() == 5)
             && !settings.value("workspace/customDocks").toByteArray().isEmpty();
     };
     restoreCustom->setEnabled(hasCustom());
@@ -185,8 +207,8 @@ void MainWindow::installPanelLayoutFixes()
         setMapExpanded(false);
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/customGeometry", saveGeometry());
-        settings.setValue("workspace/customDocks", saveState(4));
-        settings.setValue("workspace/customVersion", 4);
+        settings.setValue("workspace/customDocks", saveState(5));
+        settings.setValue("workspace/customVersion", 5);
         restoreCustom->setEnabled(true);
         statusBar()->showMessage("Custom workspace saved", 1800);
     });
@@ -205,9 +227,9 @@ void MainWindow::installPanelLayoutFixes()
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         restoreGeometry(settings.value("workspace/geometry").toByteArray());
-        // Version 4 gives status, minerals and the queue their own persistent
-        // column. Geometry survives the one-time reset of older dock layouts.
-        restoreState(settings.value("workspace/docks").toByteArray(), 4);
+        // Version 5 adds a separate details column beside status and production.
+        // Geometry survives the one-time reset of older dock layouts.
+        restoreState(settings.value("workspace/docks").toByteArray(), 5);
     }
     // The constructor fits before docks have their final dimensions. Fit once
     // after the first layout so the initial galaxy is not reduced to a dot.
@@ -233,10 +255,12 @@ void MainWindow::resetPanelLayout()
 
     auto* overview = findChild<QDockWidget*>("overviewDock");
     auto* production = findChild<QDockWidget*>("productionDock");
+    auto* details = findChild<QDockWidget*>("systemDetailsDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
-    for (auto* dock : {overview, production, fleet, turnMessagesDock_, historyDock_, researchDock_}) {
+    for (auto* dock : {overview, production, details, fleet, turnMessagesDock_, historyDock_, researchDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
+        removeDockWidget(dock);
         dock->setAllowedAreas(Qt::AllDockWidgetAreas);
         dock->setFeatures(QDockWidget::DockWidgetClosable
             | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
@@ -244,6 +268,12 @@ void MainWindow::resetPanelLayout()
     }
 
     if (overview) addDockWidget(Qt::LeftDockWidgetArea, overview);
+    // Split the whole left area into columns before stacking the first
+    // column's docks, so details spans the height of status and production.
+    if (details) {
+        addDockWidget(Qt::LeftDockWidgetArea, details);
+        if (overview) splitDockWidget(overview, details, Qt::Horizontal);
+    }
     if (production) {
         addDockWidget(Qt::LeftDockWidgetArea, production);
         if (overview) splitDockWidget(overview, production, Qt::Vertical);
@@ -251,12 +281,13 @@ void MainWindow::resetPanelLayout()
     if (fleet) addDockWidget(Qt::RightDockWidgetArea, fleet);
     if (fleet) fleet->raise();
     if (overview && production) {
-        resizeDocks({overview, production}, {340, 340}, Qt::Horizontal);
+        resizeDocks({overview, production}, {310, 310}, Qt::Horizontal);
         resizeDocks({overview, production}, {295, 330}, Qt::Vertical);
     } else if (overview) {
-        resizeDocks({overview}, {340}, Qt::Horizontal);
+        resizeDocks({overview}, {310}, Qt::Horizontal);
     }
-    if (fleet) resizeDocks({fleet}, {400}, Qt::Horizontal);
+    if (details) resizeDocks({details}, {270}, Qt::Horizontal);
+    if (fleet) resizeDocks({fleet}, {360}, Qt::Horizontal);
     if (turnMessagesDock_) addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
     if (historyDock_) {
         addDockWidget(Qt::BottomDockWidgetArea, historyDock_);
@@ -275,6 +306,7 @@ void MainWindow::resetPanelLayout()
         routeScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     }
 
+    updateWorkspaceMinimumSize(this);
     statusBar()->showMessage("Dockable workspace restored", 1800);
 }
 
@@ -285,7 +317,7 @@ void MainWindow::setMapExpanded(bool expanded)
     mapExpanded_ = expanded;
     cancelRouteProgramMapTargetPick();
     if (expanded) {
-        mapWorkspaceState_ = saveState(4);
+        mapWorkspaceState_ = saveState(5);
         mapWorkspaceGeometry_ = saveGeometry();
         mapPreviousWindowState_ = windowState();
         mapMenuWasVisible_ = menuBar()->isVisible();
@@ -295,15 +327,17 @@ void MainWindow::setMapExpanded(bool expanded)
             if (toolbar->objectName() != "mapViewToolbar" && toolbar->objectName() != "mapDisplayToolbar") toolbar->hide();
         menuBar()->hide();
         statusBar()->hide();
+        setMinimumSize(0, 0);
         showFullScreen();
     } else {
         setWindowState(mapPreviousWindowState_);
         restoreGeometry(mapWorkspaceGeometry_);
-        restoreState(mapWorkspaceState_, 4);
+        restoreState(mapWorkspaceState_, 5);
         menuBar()->setVisible(mapMenuWasVisible_);
         statusBar()->setVisible(mapStatusWasVisible_);
         mapWorkspaceState_.clear();
         mapWorkspaceGeometry_.clear();
+        updateWorkspaceMinimumSize(this);
     }
     if (auto* action = findChild<QAction*>("expandMapAction")) {
         const QSignalBlocker blocker(action);

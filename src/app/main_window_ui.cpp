@@ -178,6 +178,7 @@ void MainWindow::installUiPolish()
                     auto* planetGroup = makeGroup("Selected system / planet", "planetGroup", commandPanel);
                     auto* planetLayout = new QVBoxLayout(planetGroup);
                     planetInfo = new QLabel(planetGroup);
+                    planetInfo->setObjectName("selectedPlanetDetailsSummary");
                     planetInfo->setWordWrap(true);
                     planetInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
                     planetLayout->addWidget(planetInfo);
@@ -875,7 +876,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/geometry", saveGeometry());
-        settings.setValue("workspace/docks", saveState(4));
+        settings.setValue("workspace/docks", saveState(5));
     }
 
     QMainWindow::closeEvent(event);

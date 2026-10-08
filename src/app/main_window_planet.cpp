@@ -282,6 +282,9 @@ void MainWindow::refreshPlanetPolish()
                     .arg(static_cast<qulonglong>(capacity))
                     .arg(growth > 0 ? "+" : "")
                     .arg(static_cast<qlonglong>(growth)));
+            if (findChild<QWidget*>("systemDetailsDock"))
+                planetPopulationBar_->setFormat(QString("Population %1% full • %2%3/year")
+                    .arg(percent).arg(growth > 0 ? "+" : "").arg(static_cast<qlonglong>(growth)));
             planetPopulationBar_->setToolTip(
                 QString("Population uses %1% of current capacity. Projected population change next turn: %2%3.")
                     .arg(percent)
@@ -314,7 +317,9 @@ void MainWindow::refreshPlanetPolish()
     for (const auto& entry : entries) {
         entry.bar->setEnabled(true);
         entry.bar->setValue(static_cast<int>(std::lround(entry.concentration)));
-        if (planet->owner != 0) {
+        if (findChild<QWidget*>("systemDetailsDock")) {
+            entry.bar->setFormat(QString("%1 %2%").arg(entry.name).arg(entry.concentration, 0, 'f', 0));
+        } else if (planet->owner != 0) {
             entry.bar->setFormat(QString("%1 %2% • stock %3 • +%4/turn")
                                      .arg(entry.name)
                                      .arg(entry.concentration, 0, 'f', 0)
