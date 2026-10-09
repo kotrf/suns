@@ -57,7 +57,7 @@ New campaigns use the [15-model Stars! propulsion line](stars-propulsion.md), in
 - Electronics 6: Anomaly Detector provides dedicated 200 ly WH sensing, detects
   weak anomalies, classifies wormholes and reduces transit risk. It adds no
   ordinary ship radar or communications coverage. See [wormholes](wormholes.md).
-- Construction 1: dedicated Remote Miner hull plus heavy Remote Mining Module. Mining equipment fits only `Mining` slots; the persistent waypoint task deposits output into the planet's surface stockpile for cargo fleets to collect separately.
+- Mining follows the [six-model Stars! robot catalog](stars-mining.md), with Construction/Electronics prerequisites and Advanced/Basic Remote Mining access. Ordinary empires first fit Robo-Mini-Miner on a Mini-Miner hull at Construction 2 and Electronics 1; successive models change output and the mass/cost tradeoff. Prototype Construction-1 equipment remains for legacy empires. The persistent waypoint task deposits output into the planet's surface stockpile for cargo fleets to collect separately.
 - Construction 2: Heavy Transport hull, with 250 kt built-in cargo capacity and three required engines. It carries bulk ore from mining sites, while smaller transports cost less to build and burn less fuel per ship.
 - Construction 3: Field Repair Bay in a general slot. Equipped ships can repair 8 hull-damage points per year away from a dock; mixed fleets scale the rate by the equipped fraction. At a friendly shipyard, the dock's 20-point rate takes precedence.
 

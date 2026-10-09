@@ -30,6 +30,7 @@ struct ResearchUnlock {
     bool legacyHull{};
     bool legacyScanner{};
     bool requiresSuperStealth{};
+    bool legacyMining{};
 };
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);

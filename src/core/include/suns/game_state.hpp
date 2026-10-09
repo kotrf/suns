@@ -224,6 +224,7 @@ enum class ShipComponentType {
     BatScanner, RhinoScanner, MoleScanner, DnaScanner, PossumScanner, PickPocketScanner,
     ChameleonScanner, FerretScanner, DolphinScanner, GazelleScanner, RnaScanner,
     CheetahScanner, ElephantScanner, EagleEyeScanner, RobberBaronScanner, PeerlessScanner,
+    RoboMidgetMiner, RoboMiniMiner, RoboMiner, RoboMaxiMiner, RoboSuperMiner, RoboUltraMiner,
 };
 
 enum class ShipComponentKind {
@@ -260,7 +261,7 @@ struct ShipComponentSpec {
     double cargoCapacity{};
     double fuelGenerationPerTurn{};
     bool enablesColonization{};
-    double remoteMiningUnits{};
+    double remoteMiningUnits{}; // kt per mineral per year at concentration 100.
     double radiationHazard{};
     double fieldRepairPerTurn{};
     // Ordinary and penetrating channels combine independently.
