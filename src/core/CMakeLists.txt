@@ -7,6 +7,8 @@ add_library(suns_core
     src/mining.cpp
     src/player_knowledge.cpp
     src/production_forecast.cpp
+    src/production.cpp
+    src/terraforming.cpp
     src/propulsion.cpp
     src/scanners.cpp
     src/radiation.cpp

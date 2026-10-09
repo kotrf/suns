@@ -38,6 +38,8 @@ QString productionLine(const GameState& state, const Planet& planet)
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
+    } else if (item.kind == ProductionKind::Terraforming) {
+        name = "Terraforming";
     } else if (item.kind == ProductionKind::OrbitalStation) {
         name = "Orbital Dock";
     } else {
@@ -46,6 +48,8 @@ QString productionLine(const GameState& state, const Planet& planet)
         else name = "Ship";
     }
 
+    if (item.automation != ProductionAutomation::None)
+        return QString("%1: up to %2 / year ↻").arg(name).arg(item.quantity);
     if (item.kind == ProductionKind::Research) {
         QString text = "Ongoing Research — all available production becomes empire RP";
         if (planet.productionQueue.size() > 1) {

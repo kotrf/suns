@@ -31,3 +31,42 @@ Ships can be added to a colony's queue only while an operational Orbital Dock
 with a shipyard is present. The ship selector and queue button are disabled
 without one, and the host rejects forged or stale ship orders. Ship items already
 present in an older save still wait safely for a replacement shipyard.
+
+
+## Batches and annual auto rules
+
+The queue editor adds factories, mines or terraforming as either a one-off batch
+or a persistent rule. One-off quantity is the number still to complete; an auto
+quantity is the maximum completed units each year, not a total colony target.
+Factories and mines support annual rules; terraforming offers Min and Max rules.
+The same queue position sets priority for both normal and automatic work.
+
+Auto rules stay in place and are skipped if resources, minerals or eligible work
+are unavailable. They do not accumulate a fresh backlog every year. If production
+starts a unit without finishing it, that unit becomes a normal partially built
+row immediately before its rule. Completing that row consumes one unit of the
+following matching rule's annual quota. A normal build, including such unfinished
+work, can wait for minerals and block the queue as usual. Reordering or deleting
+rows follows the existing pending-order sequence.
+
+The forecast and host share the yearly queue resolver. It includes research
+allocation, production, mineral costs and physical terraforming before population
+growth. Normal batches show completion of the entire remaining batch; persistent
+rules show their first future completion and remain active afterwards. Forecasts
+with auto rules are limited to 256 years and assume current technology, without
+predicting empire research discoveries or future cargo deliveries.
+
+## Production templates
+
+Enter a name and **Save** to store the current queue's auto rules for this empire.
+One-off builds and unfinished work are excluded. **Apply** replaces the colony's
+auto rules and appends the selected template after retained normal builds. The
+new-colony checkbox takes effect when the template is saved. One template may be
+the default; it is applied on colonization or conquest, including colonies founded
+by fleet arrival actions. **Delete** removes the stored template without removing
+rules already applied to colonies. Templates are player scoped, persist in saves
+and player turn exports, and their changes travel in turn-order packets.
+
+Save v59 adds the bounded production extension and physical natural baselines;
+turn-order v17 adds batch, template-edit and template-apply orders. Earlier
+supported formats remain readable.

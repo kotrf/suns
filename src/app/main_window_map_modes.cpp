@@ -1,4 +1,6 @@
 #include "main_window.hpp"
+#include "suns/terraforming.hpp"
+#include "suns/campaign.hpp"
 #include "star_item.hpp"
 
 #include <QComboBox>
@@ -72,7 +74,7 @@ void MainWindow::installMapDisplayModes()
     mode->addItem("Population", 2);
     mode->setToolTip(
         "Spectral: real stellar-class colours\n"
-        "Habitability: red-to-green world value\n"
+        "Habitability: red-to-green world value; yellow means hostile but terraformable\n"
         "Population: marker size follows colony population");
     toolbar->addWidget(mode);
 
@@ -123,6 +125,14 @@ void MainWindow::applyMapDisplayMode()
 
         if (mapDisplayMode_ == 1) {
             color = knownHabitability ? habitabilityColor(*knownHabitability) : QColor("#687381");
+            if (planet && knownHabitability && *knownHabitability < 0
+                && (planet->owner == pendingOrders_.player || survey_level(state_, pendingOrders_.player, starId) >= SurveyLevel::OrbitalSurvey)) {
+                const auto* player = find_player(state_, pendingOrders_.player);
+                if (player && player->race.environmentBased
+                    && player_planet_habitability(state_, pendingOrders_.player,
+                        terraforming_potential(state_, pendingOrders_.player, *planet), state_.turn) >= 0)
+                    color = QColor("#e6bf59");
+            }
             if (survey_level(state_, pendingOrders_.player, starId) == SurveyLevel::BasicScan) color = color.darker(145);
         } else if (mapDisplayMode_ == 2) {
             const auto knownOwner = planet

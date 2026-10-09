@@ -1,4 +1,6 @@
 #include "main_window.hpp"
+#include "suns/terraforming.hpp"
+#include "suns/campaign.hpp"
 #include "galaxy_setup_widget.hpp"
 #include "map_marker_items.hpp"
 
@@ -200,6 +202,10 @@ void MainWindow::installUiPolish()
                     environmentLayout->addRow("Temperature", planetTemperatureBar_);
                     environmentLayout->addRow("Gravity", planetGravityBar_);
                     environmentLayout->addRow("Radiation", planetRadiationBar_);
+                    auto* terraforming = new QLabel(planetEnvironmentPanel_);
+                    terraforming->setObjectName("planetTerraformingPotential");
+                    terraforming->setWordWrap(true);
+                    environmentLayout->addRow(terraforming);
                     planetLayout->addWidget(planetEnvironmentPanel_);
                     sideLayout->addWidget(planetGroup);
 
@@ -765,6 +771,24 @@ void MainWindow::installUiPolish()
             setEnvironmentBar(planetRadiationBar_, environmentPlanet->environment.radiation,
                 race.habitableRadiation,
                 "Radiation (higher is more severe)");
+            if (auto* label = findChild<QLabel*>("planetTerraformingPotential")) {
+                if (player && player->race.environmentBased) {
+                    const auto limits = terraforming_limits(state_, pendingOrders_.player);
+                    const auto potential = terraforming_potential(state_, pendingOrders_.player, *environmentPlanet);
+                    const auto current = player_planet_habitability(state_, pendingOrders_.player, *environmentPlanet, state_.turn);
+                    const auto maximum = player_planet_habitability(state_, pendingOrders_.player, potential, state_.turn);
+                    label->setText(QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum));
+                    label->setToolTip(QString("Current technology: T ±%1 / G ±%2 / R ±%3 from natural values.\nEach change costs %4 production. Potential assumes current technology and stellar conditions.")
+                        .arg(limits.temperature).arg(limits.gravity).arg(limits.radiation).arg(kTerraformingCost));
+                    const auto natural = environmentPlanet->naturalEnvironment.value_or(environmentPlanet->environment);
+                    const std::array<QProgressBar*, 3> bars{planetTemperatureBar_, planetGravityBar_, planetRadiationBar_};
+                    const std::array<int, 3> original{natural.temperature, natural.gravity, natural.radiation};
+                    const std::array<int, 3> target{potential.environment.temperature, potential.environment.gravity, potential.environment.radiation};
+                    for (std::size_t axis = 0; axis < bars.size(); ++axis)
+                        if (bars[axis]) bars[axis]->setToolTip(bars[axis]->toolTip()
+                            + QString("\nNatural value: %1 / 100\nPotential value: %2 / 100").arg(original[axis]).arg(target[axis]));
+                } else { label->clear(); label->setToolTip({}); }
+            }
         }
 
         auto status = selectedObjectDistanceSummary();

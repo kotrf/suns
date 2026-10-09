@@ -56,6 +56,7 @@ enum class MessageTypeFilter {
 
 QString production_item_name(const GameState& state, const GameEvent& event)
 {
+    if (event.productionKind == ProductionKind::Terraforming) return "Terraforming";
     if (event.productionKind == ProductionKind::Factory) return "Factory";
     if (event.productionKind == ProductionKind::Mine) return "Mine";
     if (event.productionKind == ProductionKind::OrbitalStation) return "Orbital Dock";
@@ -331,7 +332,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             ? QString::fromStdString(planet->name)
             : QString("Colony %1").arg(event.planet);
         QString itemName;
-        if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
+        if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
+        else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
         else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital Dock";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
@@ -424,7 +426,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             ? QString::fromStdString(planet->name)
             : QString("Colony %1").arg(event.planet);
         QString itemName;
-        if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
+        if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
+        else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
         else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital Dock";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {

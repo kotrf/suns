@@ -3,6 +3,8 @@
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/production.hpp"
+#include "suns/terraforming.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -17,6 +19,7 @@ namespace suns {
 std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Research) return 0;
+    if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
     if (item.kind == ProductionKind::OrbitalStation) return kOrbitalDockCost;
@@ -250,14 +253,9 @@ std::optional<std::uint32_t> complete_production(
     GameState& state, Planet& planet, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Research) return std::nullopt;
-    if (item.kind == ProductionKind::Factory) {
-        ++planet.industry;
-        return FleetId{0};
-    }
-    if (item.kind == ProductionKind::Mine) {
-        ++planet.mines;
-        return FleetId{0};
-    }
+    // Local buildings and physical environment are resolved by the shared queue engine.
+    if (item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
+        || item.kind == ProductionKind::Terraforming) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
         if (find_orbital_station_at_planet(state, planet.id)) return std::nullopt;
         const auto id = state.nextOrbitalStationId++;
@@ -297,116 +295,37 @@ std::optional<std::uint32_t> complete_production(
 std::uint32_t run_colony_production(GameState& state, Planet& planet)
 {
     if (planet.owner == 0) return 0;
-    std::erase_if(planet.productionQueue, [](const ProductionItem& item) {
-        return item.kind == ProductionKind::Research;
-    });
-    if (planet.productionQueue.empty()) planet.productionWaitingForMinerals = false;
-
-    const auto* player = find_player(state, planet.owner);
-    const bool researchActive = player && player->technology.researchActive;
-    const auto output = colony_output(planet);
-    const auto allocated = researchActive
-        ? static_cast<std::uint32_t>(
-            static_cast<std::uint64_t>(output) * player->technology.researchAllocationPercent / 100U)
-        : 0U;
-    std::uint32_t researchProduced = allocated;
-    std::uint32_t available = output - allocated;
-    while (!planet.productionQueue.empty()) {
-        auto& item = planet.productionQueue.front();
-        if (item.kind == ProductionKind::ColonyShip
-            && !colony_has_orbital_service(
-                state, planet.id, planet.owner, OrbitalStationModule::Shipyard)) {
-            if (!planet.productionWaitingForShipyard) {
-                if (const auto* star = find_star(state, planet.star)) {
-                    const auto blockedDesign = item.shipDesign != 0
-                        ? item.shipDesign
-                        : kColonyShipDesignId;
-                    queue_player_report(
-                        state,
-                        planet.owner,
-                        PlayerReportKind::ProductionWaitingForShipyard,
-                        star->position,
-                        state.turn + 1,
-                        planet.star,
-                        planet.id,
-                        0,
-                        blockedDesign,
-                        item.kind);
-                }
-            }
-            planet.productionWaitingForShipyard = true;
-            break;
-        }
-        planet.productionWaitingForShipyard = false;
-        if (item.remainingCost > 0) {
-            planet.productionWaitingForMinerals = false;
-            if (available == 0) break;
-            const auto spent = std::min(available, item.remainingCost);
-            available -= spent;
-            item.remainingCost -= spent;
-            if (item.remainingCost != 0) break;
-        }
-
-        const auto requiredMinerals = production_item_mineral_cost(state, item);
-        if (!mineral_cargo_sufficient(planet.minerals, requiredMinerals)) {
-            if (!planet.productionWaitingForMinerals) {
-                const auto* star = find_star(state, planet.star);
-                if (star) {
-                    const auto blockedDesign = item.kind == ProductionKind::ColonyShip
-                        ? (item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId)
-                        : ShipDesignId{0};
-                    queue_player_report(
-                        state,
-                        planet.owner,
-                        PlayerReportKind::ProductionWaitingForMinerals,
-                        star->position,
-                        state.turn + 1,
-                        planet.star,
-                        planet.id,
-                        0,
-                        blockedDesign,
-                        item.kind);
-                }
-            }
-            planet.productionWaitingForMinerals = true;
-            break;
-        }
-        planet.productionWaitingForMinerals = false;
-        subtract_minerals(planet.minerals, requiredMinerals);
-
-        const auto completed = item;
-        planet.productionQueue.erase(planet.productionQueue.begin());
-        const auto completedObject = complete_production(state, planet, completed);
-        if (!completedObject) continue;
-
-        const auto* star = find_star(state, planet.star);
-        if (!star) continue;
-        std::uint32_t quantity = 0;
-        if (completed.kind == ProductionKind::Factory) quantity = planet.industry;
-        else if (completed.kind == ProductionKind::Mine) quantity = planet.mines;
-        else quantity = *completedObject;
-        const auto completedDesign = completed.kind == ProductionKind::ColonyShip
-            ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId)
-            : ShipDesignId{0};
-        queue_player_report(
-            state,
-            planet.owner,
-            PlayerReportKind::ProductionCompleted,
-            star->position,
-            state.turn + 1,
-            planet.star,
-            planet.id,
-            completed.kind == ProductionKind::ColonyShip ? *completedObject : FleetId{0},
-            completedDesign,
-            completed.kind,
-            quantity);
+    const bool wasWaitingForMinerals = planet.productionWaitingForMinerals;
+    const bool wasWaitingForShipyard = planet.productionWaitingForShipyard;
+    const auto resolved = resolve_colony_production(state, planet,
+        colony_has_orbital_service(state, planet.id, planet.owner, OrbitalStationModule::Shipyard));
+    const auto* star = find_star(state, planet.star);
+    for (const auto& completion : resolved.completions) {
+        const auto& completed = completion.item;
+        const auto object = complete_production(state, planet, completed);
+        if (!object || !star) continue;
+        const auto design = completed.kind == ProductionKind::ColonyShip
+            ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId) : ShipDesignId{0};
+        const auto quantity = completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine
+            ? completion.localQuantity : *object;
+        queue_player_report(state, planet.owner, PlayerReportKind::ProductionCompleted,
+            star->position, state.turn + 1, planet.star, planet.id,
+            completed.kind == ProductionKind::ColonyShip ? *object : FleetId{0},
+            design, completed.kind, quantity);
     }
-    if (planet.productionQueue.empty()) {
-        planet.productionWaitingForMinerals = false;
-        planet.productionWaitingForShipyard = false;
+    if (star && ((planet.productionWaitingForMinerals && !wasWaitingForMinerals)
+        || (planet.productionWaitingForShipyard && !wasWaitingForShipyard))) {
+        const auto blocked = std::find_if(planet.productionQueue.begin(), planet.productionQueue.end(),
+            [](const auto& item) { return item.automation == ProductionAutomation::None; });
+        if (blocked != planet.productionQueue.end()) {
+            const auto design = blocked->kind == ProductionKind::ColonyShip
+                ? (blocked->shipDesign != 0 ? blocked->shipDesign : kColonyShipDesignId) : ShipDesignId{0};
+            queue_player_report(state, planet.owner, planet.productionWaitingForShipyard
+                ? PlayerReportKind::ProductionWaitingForShipyard : PlayerReportKind::ProductionWaitingForMinerals,
+                star->position, state.turn + 1, planet.star, planet.id, 0, design, blocked->kind);
+        }
     }
-    if (researchActive) researchProduced += available;
-    return researchProduced;
+    return resolved.researchPoints;
 }
 
 bool fleet_at_planet(const GameState& state, const Fleet& fleet, const Planet& planet)
@@ -508,6 +427,7 @@ bool invade_colony(
         planet.owner = fleet.owner;
         planet.population = survivors;
         planet.productionQueue.clear();
+        apply_default_production_template(state, planet);
         planet.productionWaitingForMinerals = false;
         planet.productionWaitingForShipyard = false;
         set_survey_level(
@@ -699,6 +619,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     planet.industry = 1;
     planet.productionQueue.clear();
+    apply_default_production_template(state, planet);
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
     set_survey_level(
@@ -1797,9 +1718,11 @@ TurnResult TurnProcessor::process_with_events(
                                 planet->productionQueue.push_back({
                                     ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                             }
+                        } else if (concreteOrder.kind == ProductionKind::Terraforming) {
+                            (void)apply_production_batch(next, *planet, {planet->id, concreteOrder.kind});
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
-                        } else {
+                        } else if (concreteOrder.kind == ProductionKind::ColonyShip) {
                             if (!colony_has_orbital_service(next, planet->id, submission.player,
                                     OrbitalStationModule::Shipyard)) return;
                             const auto design = std::find_if(next.shipDesigns.begin(), next.shipDesigns.end(),
@@ -1809,6 +1732,19 @@ TurnResult TurnProcessor::process_with_events(
                             if (design != next.shipDesigns.end())
                                 planet->productionQueue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
                         }
+                    } else if constexpr (std::is_same_v<T, QueueProductionBatchOrder>
+                        || std::is_same_v<T, ApplyProductionTemplateOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
+                            [&](const auto& candidate) { return candidate.id == concreteOrder.colony
+                                && candidate.owner == submission.player; });
+                        if (planet == next.planets.end()) return;
+                        if constexpr (std::is_same_v<T, QueueProductionBatchOrder>)
+                            (void)apply_production_batch(next, *planet, concreteOrder);
+                        else if (const auto* player = find_player(next, submission.player))
+                            (void)apply_production_template(*planet, *player, concreteOrder.name);
+                    } else if constexpr (std::is_same_v<T, SetProductionTemplateOrder>) {
+                        if (auto* player = mutable_player(next, submission.player))
+                            (void)set_production_template(*player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

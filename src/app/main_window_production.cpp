@@ -1,6 +1,14 @@
 #include "main_window.hpp"
+#include "suns/production.hpp"
+#include "suns/terraforming.hpp"
+#include "suns/campaign.hpp"
 
 #include <QDockWidget>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QSignalBlocker>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -29,87 +37,36 @@ QString mineralAmounts(const MineralCargo& minerals)
 
 QString productionItemName(const GameState& state, const ProductionItem& item)
 {
+    QString name;
     switch (item.kind) {
-    case ProductionKind::Factory: return "Factory";
-    case ProductionKind::Mine: return "Mine";
+    case ProductionKind::Factory: name = "Factory"; break;
+    case ProductionKind::Mine: name = "Mine"; break;
+    case ProductionKind::Terraforming: name = "Terraforming"; break;
     case ProductionKind::Research: return "Legacy Research item";
-    case ProductionKind::OrbitalStation: return "Orbital Dock";
+    case ProductionKind::OrbitalStation: name = "Orbital Dock"; break;
     case ProductionKind::ColonyShip:
-        if (const auto* design = find_ship_design(
-                state, item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId)) {
+        if (const auto* design = find_ship_design(state, item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId))
             return QString::fromStdString(design->name);
-        }
         return "Ship";
     }
-    return "Production";
-}
-
-std::vector<ProductionItem> plannedQueue(
-    const GameState& state, const Planet& planet, const PlayerOrders& pending)
-{
-    auto queue = planet.productionQueue;
-    std::erase_if(queue, [](const ProductionItem& item) {
-        return item.kind == ProductionKind::Research;
-    });
-    const auto addDefaultShip = [&] {
-        const auto design = std::find_if(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& candidate) {
-            return candidate.owner == pending.player && ship_design_can_colonize(candidate);
-        });
-        if (design != state.shipDesigns.end()) {
-            queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
-        }
-    };
-
-    for (const auto& order : pending.orders) {
-        std::visit([&](const auto& concrete) {
-            using T = std::decay_t<decltype(concrete)>;
-            if constexpr (std::is_same_v<T, QueueProductionOrder>) {
-                if (concrete.colony != planet.id) return;
-                if (concrete.kind == ProductionKind::Factory) {
-                    queue.push_back({ProductionKind::Factory, kFactoryCost, 0});
-                } else if (concrete.kind == ProductionKind::Mine) {
-                    queue.push_back({ProductionKind::Mine, kMineCost, 0});
-                } else if (concrete.kind == ProductionKind::OrbitalStation) {
-                    if (!find_orbital_station_at_planet(state, planet.id)
-                        && std::none_of(queue.begin(), queue.end(), [](const ProductionItem& item) {
-                            return item.kind == ProductionKind::OrbitalStation;
-                        })) queue.push_back({ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
-                } else if (concrete.kind == ProductionKind::ColonyShip) {
-                    addDefaultShip();
-                }
-            } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
-                if (concrete.colony != planet.id) return;
-                if (const auto* design = resolve_ship_design_order(state, pending.player, concrete);
-                    design && design->owner == pending.player && ship_design_valid(*design)
-                    && colony_has_orbital_service(state, planet.id, pending.player,
-                        OrbitalStationModule::Shipyard)) {
-                    queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
-                }
-            } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
-                if (concrete.colony == planet.id && concrete.index < queue.size()) {
-                    queue.erase(queue.begin() + concrete.index);
-                }
-            } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
-                if (concrete.colony != planet.id
-                    || concrete.fromIndex >= queue.size()
-                    || concrete.toIndex >= queue.size()
-                    || concrete.fromIndex == concrete.toIndex) {
-                    return;
-                }
-                auto item = std::move(queue[concrete.fromIndex]);
-                queue.erase(queue.begin() + concrete.fromIndex);
-                queue.insert(queue.begin() + concrete.toIndex, std::move(item));
-            }
-        }, order);
+    if (item.automation != ProductionAutomation::None) {
+        if (item.automation == ProductionAutomation::MinTerraform) name = "Min Terraform";
+        if (item.automation == ProductionAutomation::MaxTerraform) name = "Max Terraform";
+        return QString("↻ %1").arg(name);
     }
-    return queue;
+    if (item.quantity > 1) name += QString(" ×%1").arg(item.quantity);
+    if (item.autoGenerated) name += " (in progress)";
+    return name;
 }
 
 } // namespace
 
 std::vector<ProductionItem> MainWindow::plannedProductionQueue(const Planet& planet) const
 {
-    return plannedQueue(planned_ship_design_state(state_, pendingOrders_), planet, pendingOrders_);
+    const auto planned = planned_production_state(state_, pendingOrders_);
+    const auto found = std::find_if(planned.planets.begin(), planned.planets.end(),
+        [&](const auto& candidate) { return candidate.id == planet.id; });
+    return found == planned.planets.end() ? std::vector<ProductionItem>{} : found->productionQueue;
 }
 
 void MainWindow::installProductionQueue()
@@ -122,6 +79,94 @@ void MainWindow::installProductionQueue()
     auto* group = new QGroupBox("Build queue", panel);
     group->setObjectName("productionQueueGroup");
     auto* layout = new QVBoxLayout(group);
+
+    auto* addRow = new QHBoxLayout;
+    auto* kind = new QComboBox(group);
+    kind->setObjectName("productionBatchKind");
+    const auto addKind = [&](const char* label, ProductionKind item, ProductionAutomation automation) {
+        kind->addItem(label, int(item));
+        kind->setItemData(kind->count() - 1, int(automation), Qt::UserRole + 1);
+    };
+    addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
+    addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Terraform", ProductionKind::Terraforming, ProductionAutomation::None);
+    addKind("Auto factories ↻", ProductionKind::Factory, ProductionAutomation::Annual);
+    addKind("Auto mines ↻", ProductionKind::Mine, ProductionAutomation::Annual);
+    addKind("Min Terraform ↻", ProductionKind::Terraforming, ProductionAutomation::MinTerraform);
+    addKind("Max Terraform ↻", ProductionKind::Terraforming, ProductionAutomation::MaxTerraform);
+    auto* amount = new QSpinBox(group);
+    amount->setObjectName("productionBatchQuantity");
+    amount->setRange(1, int(kMaximumProductionBatch));
+    amount->setValue(10);
+    amount->setToolTip("Units to build once, or maximum units each year for an auto rule. Actual output depends on queue priority, production and minerals.");
+    auto* add = new QPushButton("Add", group);
+    add->setObjectName("productionBatchAdd");
+    addRow->addWidget(kind, 1); addRow->addWidget(amount); addRow->addWidget(add);
+    layout->addLayout(addRow);
+    connect(kind, &QComboBox::currentIndexChanged, this, [this] { refreshProductionQueue(); });
+    connect(add, &QPushButton::clicked, this, [this, kind, amount] {
+        const auto* planet = selectedPlanet();
+        if (!planet || planet->owner != pendingOrders_.player) return;
+        const QueueProductionBatchOrder order{planet->id, ProductionKind(kind->currentData().toInt()),
+            std::uint32_t(amount->value()), ProductionAutomation(kind->currentData(Qt::UserRole + 1).toInt())};
+        if (!production_batch_valid(order)) return;
+        appendPendingOrder(order, QString("Queue %1 ×%2 at %3").arg(kind->currentText()).arg(amount->value())
+            .arg(QString::fromStdString(planet->name)));
+        refreshProductionQueue();
+    });
+    auto* templateRow = new QHBoxLayout;
+    auto* templates = new QComboBox(group);
+    templates->setObjectName("productionTemplateName");
+    templates->setEditable(true);
+    templates->setInsertPolicy(QComboBox::NoInsert);
+    templates->lineEdit()->setMaxLength(80);
+    templates->lineEdit()->setPlaceholderText("Template name");
+    auto* save = new QPushButton("Save", group);
+    save->setObjectName("productionTemplateSave");
+    save->setToolTip("Save the queue's persistent auto rules. One-off and partially completed builds are kept separately.");
+    auto* apply = new QPushButton("Apply", group);
+    apply->setObjectName("productionTemplateApply");
+    apply->setToolTip("Replace this colony's auto rules; keep normal builds and append the selected template after them.");
+    auto* remove = new QPushButton("Delete", group);
+    remove->setObjectName("productionTemplateDelete");
+    templateRow->addWidget(templates, 1); templateRow->addWidget(save); templateRow->addWidget(apply); templateRow->addWidget(remove);
+    layout->addLayout(templateRow);
+    auto* newColonies = new QCheckBox("Default for new colonies", group);
+    newColonies->setObjectName("productionTemplateDefault");
+    layout->addWidget(newColonies);
+    connect(save, &QPushButton::clicked, this, [this, templates, newColonies] {
+        const auto* planet = selectedPlanet();
+        if (!planet || planet->owner != pendingOrders_.player) return;
+        ProductionTemplate value{templates->currentText().trimmed().toStdString(), {}, newColonies->isChecked()};
+        for (auto item : plannedProductionQueue(*planet)) if (item.automation != ProductionAutomation::None) {
+            item.remainingCost = production_cost(item.kind);
+            item.autoGenerated = false;
+            value.items.push_back(item);
+        }
+        if (!production_template_valid(value)) return;
+        appendPendingOrder(SetProductionTemplateOrder{value}, QString("Save production template %1").arg(templates->currentText()));
+        refreshProductionQueue();
+    });
+    connect(apply, &QPushButton::clicked, this, [this, templates] {
+        const auto* planet = selectedPlanet();
+        if (!planet || planet->owner != pendingOrders_.player) return;
+        appendPendingOrder(ApplyProductionTemplateOrder{planet->id, templates->currentText().toStdString()},
+            QString("Apply production template %1").arg(templates->currentText()));
+        refreshProductionQueue();
+    });
+    connect(remove, &QPushButton::clicked, this, [this, templates] {
+        appendPendingOrder(SetProductionTemplateOrder{{templates->currentText().toStdString()}, true},
+            QString("Delete production template %1").arg(templates->currentText()));
+        refreshProductionQueue();
+    });
+    connect(templates, &QComboBox::currentIndexChanged, this, [this, templates, newColonies] {
+        const auto planned = planned_production_state(state_, pendingOrders_);
+        const auto* player = find_player(planned, pendingOrders_.player);
+        const auto name = templates->currentText().toStdString();
+        if (player) for (const auto& value : player->productionTemplates)
+            if (value.name == name) { newColonies->setChecked(value.defaultForNewColonies); break; }
+    });
+    connect(templates, &QComboBox::editTextChanged, this, [this] { refreshProductionQueue(); });
 
     productionQueueSummary_ = new QLabel(group);
     productionQueueSummary_->setWordWrap(true);
@@ -195,6 +240,13 @@ void MainWindow::refreshProductionQueue()
     productionQueueTree_->clear();
     productionMineralDetails_->clear();
     productionQueuePlanet_.reset();
+    auto* batchKind = findChild<QComboBox*>("productionBatchKind");
+    auto* batchAdd = findChild<QPushButton*>("productionBatchAdd");
+    auto* templateName = findChild<QComboBox*>("productionTemplateName");
+    auto* templateSave = findChild<QPushButton*>("productionTemplateSave");
+    auto* templateApply = findChild<QPushButton*>("productionTemplateApply");
+    auto* templateDelete = findChild<QPushButton*>("productionTemplateDelete");
+    batchAdd->setEnabled(false); templateSave->setEnabled(false); templateApply->setEnabled(false); templateDelete->setEnabled(false);
 
     const auto* planet = selectedPlanet();
     if (!planet || planet->owner != pendingOrders_.player) {
@@ -208,8 +260,10 @@ void MainWindow::refreshProductionQueue()
     }
 
     productionQueuePlanet_ = planet->id;
-    const auto queue = plannedProductionQueue(*planet);
-    auto forecastState = planned_ship_design_state(state_, pendingOrders_);
+    auto forecastState = planned_production_state(state_, pendingOrders_);
+    const auto projectedPlanet = std::find_if(forecastState.planets.begin(), forecastState.planets.end(),
+        [planet](const auto& candidate) { return candidate.id == planet->id; });
+    const auto queue = projectedPlanet->productionQueue;
     const auto forecastPlayerIt = std::find_if(
         forecastState.players.begin(), forecastState.players.end(), [this](const Player& player) {
             return player.id == pendingOrders_.player;
@@ -224,6 +278,24 @@ void MainWindow::refreshProductionQueue()
             }
         }
     }
+    if (forecastPlayer) {
+        QStringList names;
+        for (const auto& value : forecastPlayer->productionTemplates) names << QString::fromStdString(value.name);
+        if (templateName->property("templateNames").toStringList() != names) {
+            const QSignalBlocker block(templateName);
+            const auto name = templateName->currentText();
+            templateName->clear(); templateName->addItems(names); templateName->setEditText(name);
+            templateName->setProperty("templateNames", names);
+        }
+        const auto name = templateName->currentText().trimmed().toStdString();
+        const bool exists = std::any_of(forecastPlayer->productionTemplates.begin(), forecastPlayer->productionTemplates.end(),
+            [&](const auto& value) { return value.name == name; });
+        templateApply->setEnabled(exists); templateDelete->setEnabled(exists);
+        templateSave->setEnabled(!name.empty() && std::any_of(queue.begin(), queue.end(),
+            [](const auto& item) { return item.automation != ProductionAutomation::None; }));
+    }
+    batchAdd->setEnabled(batchKind->currentData().toInt() != int(ProductionKind::Terraforming)
+        || next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value());
     const auto forecast = forecast_production_queue(forecastState, *planet, queue);
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
         ? forecastPlayer->technology.researchAllocationPercent
@@ -241,12 +313,18 @@ void MainWindow::refreshProductionQueue()
             .arg(queue.size() == 1 ? "" : "s"));
 
     MineralCargo total;
-    for (const auto& item : queue) {
+    for (std::size_t index = 0; index < queue.size(); ++index) {
+        const auto& item = queue[index];
+        auto units = item.quantity;
+        if (item.automation != ProductionAutomation::None && index > 0
+            && queue[index - 1].autoGenerated && queue[index - 1].kind == item.kind) --units;
         const auto cost = production_item_mineral_cost(forecastState, item);
-        total.ironium += cost.ironium; total.boranium += cost.boranium; total.germanium += cost.germanium;
+        total.ironium += cost.ironium * units;
+        total.boranium += cost.boranium * units;
+        total.germanium += cost.germanium * units;
     }
     productionQueueSummary_->setText(productionQueueSummary_->text()
-        + QString("<br>Stock: %1<br>Mining/turn: %2<br>Queue minerals: %3<br>Minerals are spent on completion.")
+        + QString("<br>Stock: %1<br>Mining/turn: %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion.")
             .arg(mineralAmounts(planet->minerals), mineralAmounts(projected_mineral_mining(state_, *planet)), mineralAmounts(total)));
     const auto fullSummary = productionQueueSummary_->text();
     if (auto* details = findChild<QLabel*>("productionExtendedSummary")) details->setText(fullSummary);
@@ -261,7 +339,9 @@ void MainWindow::refreshProductionQueue()
         state_, planet->id, planet->owner, OrbitalStationModule::Shipyard);
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
-        QString remaining = QString::number(item.remainingCost);
+        const bool automatic = item.automation != ProductionAutomation::None;
+        QString remaining = automatic ? QString("≤%1/yr").arg(item.quantity)
+            : QString::number(item.remainingCost + (item.quantity - 1) * production_item_cost(forecastState, item));
         const bool waitingForShipyard = item.kind == ProductionKind::ColonyShip
             && !shipyardAvailable;
         if (waitingForShipyard) {
@@ -277,20 +357,29 @@ void MainWindow::refreshProductionQueue()
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn))
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn - state_.turn));
         } else completion = waitingForShipyard ? "waiting for dock" : "beyond forecast";
+        if (automatic) completion = forecast[index].completionTurn
+            ? QString("First +%1 yr").arg(*forecast[index].completionTurn - state_.turn)
+            : "Idle / beyond forecast";
 
         auto* row = new QTreeWidgetItem(productionQueueTree_);
         row->setText(0, QString::number(index + 1));
         row->setText(1, productionItemName(forecastState, item));
         row->setText(2, remaining);
         row->setText(3, completion);
+        if (automatic) { auto font = row->font(1); font.setItalic(true); row->setFont(1, font); }
         row->setData(0, Qt::UserRole, static_cast<qulonglong>(index));
         const auto cost = production_item_mineral_cost(forecastState, item);
         const MineralCargo missing{std::max(0.0, cost.ironium - planet->minerals.ironium),
             std::max(0.0, cost.boranium - planet->minerals.boranium),
             std::max(0.0, cost.germanium - planet->minerals.germanium)};
-        const auto details = QString("%1 — minerals charged on completion: %2\n"
+        auto details = QString("%1 — minerals per completed unit: %2\n"
                                      "Shortfall against current stock before other builds: %3")
             .arg(productionItemName(forecastState, item), mineralAmounts(cost), mineralAmounts(missing));
+        if (automatic) {
+            details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped. First-completion estimate assumes current technology; forecast horizon is 256 years.").arg(item.quantity);
+            if (forecast[index].completionTurn) details += QString("\nFirst completion: Turn %1").arg(*forecast[index].completionTurn);
+        }
+        if (item.kind == ProductionKind::Terraforming) details += QString("\nEach unit costs %1 production and shifts one physical axis by 1 point. Hab improvement may differ.").arg(kTerraformingCost);
         row->setData(0, Qt::UserRole + 1, details);
         for (int column = 0; column < 4; ++column) row->setToolTip(column, details);
         if (item.kind == ProductionKind::OrbitalStation) shipyardAvailable = true;

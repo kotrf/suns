@@ -75,6 +75,8 @@ Successful colonization dismantles the entire fleet, deposits all carried minera
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.
 
+Colony production supports one-off batches, annual factory/mine rules and saved empire templates, including a default for new colonies. Biology and physical sciences unlock paid [terraforming](docs/terraforming.md); the environment panel previews attainable habitability and fully surveyed hostile worlds become yellow in Habitability mode when current technology can make them habitable.
+
 The engine technology catalog follows the 15 normal Stars! models, with their field levels, mass, costs and speed bands. See [Stars! propulsion](docs/stars-propulsion.md) for access rules, legacy compatibility and Suns! fuel/damage adaptations.
 
 Remote mining equipment follows the six Stars! robots, including Construction/Electronics requirements and Advanced/Basic Remote Mining access. Rated output varies by model and concentration, with minerals left on the planet for haulers. See [Stars! mining robots](docs/stars-mining.md).

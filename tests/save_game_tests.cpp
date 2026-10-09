@@ -3,6 +3,8 @@
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
+#include "suns/production.hpp"
+#include "suns/terraforming.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -15,6 +17,28 @@
 
 namespace {
 using namespace suns;
+
+// Older fixtures must have the old record layout, not just an older header.
+// v59 appends a bounded production extension after the unchanged v58 GameState.
+bool write_pre_terraforming_fixture(const QString& path, const SaveGameData& value, QString& error)
+{
+    if (!write_save_game_file(path, value, error)) return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadWrite)) return false;
+    auto bytes = file.readAll();
+    QByteArray marker;
+    QDataStream shape(&marker, QIODevice::WriteOnly);
+    shape << quint32{0x50524F44u};
+    const auto offset = bytes.indexOf(marker);
+    assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
+    QDataStream extension(bytes.mid(offset + 4));
+    quint32 size{};
+    extension >> size;
+    bytes.remove(offset, 8 + size);
+    QDataStream header(&bytes, QIODevice::ReadWrite);
+    assert(header.device()->seek(4)); header << quint32{58};
+    return file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size();
+}
 
 void round_trip_preserves_communications_and_planning()
 {
@@ -669,7 +693,7 @@ void population_migration_and_clear_orders()
     legacy.pendingOrders = {1, {SetFleetColonistsOrder{1, 1, 400}}};
     legacy.pendingDescriptions = {"Load legacy cargo"};
     const auto path = directory.filePath("v31.suns");
-    assert(write_save_game_file(path, legacy, error));
+    assert(write_pre_terraforming_fixture(path, legacy, error));
     // v31 and v32 layouts are identical for this no-MoveFleetOrder fixture.
     {
         QFile file(path);
@@ -717,7 +741,7 @@ void population_migration_and_clear_orders()
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
     assert(migrated.state.fleets[0].arrivalAction->reservePopulation == 100'000);
     assert(std::get<SetFleetColonistsOrder>(migrated.pendingOrders.orders[0]).colonists == 40'000);
-    assert(write_save_game_file(path, migrated, error));
+    assert(write_pre_terraforming_fixture(path, migrated, error));
     assert(read_save_game_file(path, migrated, error));
     assert(!migrated.migratedPopulation && migrated.state.planets[0].population == 1'000'000);
 
@@ -885,7 +909,7 @@ void pre_wormhole_formats_remain_readable()
     old.pendingOrders = {1, {}};
     QString error;
     const auto path = dir.filePath("v53.suns");
-    assert(write_save_game_file(path, old, error));
+    assert(write_pre_terraforming_fixture(path, old, error));
     {
         QFile file(path);
         assert(file.open(QIODevice::ReadWrite));
@@ -1031,7 +1055,7 @@ void stars_propulsion_and_access_round_trip()
         save.pendingDescriptions << engine.name;
     }
     const auto path = dir.filePath("engines.suns");
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     SaveGameData loaded;
     assert(read_save_game_file(path, loaded, error));
     assert(loaded.state.players.front().race.improvedFuelEfficiency);
@@ -1041,7 +1065,7 @@ void stars_propulsion_and_access_round_trip()
     for (std::size_t i = 0; i < save.state.shipDesigns.size(); ++i)
         assert(loaded.state.shipDesigns[i].components == save.state.shipDesigns[i].components);
     const auto turn = make_player_turn(save, 1);
-    assert(write_save_game_file(path, turn, error) && read_save_game_file(path, loaded, error));
+    assert(write_pre_terraforming_fixture(path, turn, error) && read_save_game_file(path, loaded, error));
     assert(loaded.state.players.front().race.settlerEngineAccess);
     TurnOrderFileData packet{21, save.state.turn, 34, save.pendingOrders, save.pendingDescriptions};
     const auto orders = dir.filePath("engines.sunsorders");
@@ -1063,7 +1087,7 @@ void stars_propulsion_and_access_round_trip()
     save.state = make_demo_game();
     save.pendingOrders = {1, {}};
     save.pendingDescriptions.clear();
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     file.setFileName(path);
     assert(file.open(QIODevice::ReadWrite));
     auto bytes = file.readAll();
@@ -1107,7 +1131,7 @@ void stars_hulls_round_trip_and_previous_format_migration()
         save.pendingDescriptions << QString::fromStdString(design.name);
     }
     const auto path = dir.filePath("hulls.suns");
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     SaveGameData loaded;
     assert(read_save_game_file(path, loaded, error));
     assert(loaded.state.players[0].race.hullAccess == HullAccess::WarMonger);
@@ -1119,7 +1143,7 @@ void stars_hulls_round_trip_and_previous_format_migration()
         assert(loaded.state.shipDesigns[i].hull == save.state.shipDesigns[i].hull);
         assert(loaded.state.shipDesigns[i].placements == save.state.shipDesigns[i].placements);
     }
-    assert(write_save_game_file(path, make_player_turn(save, 1), error));
+    assert(write_pre_terraforming_fixture(path, make_player_turn(save, 1), error));
     assert(read_save_game_file(path, loaded, error));
     assert(loaded.state.players.size() == 1 && loaded.state.players[0].race.advancedRemoteMining);
     assert(loaded.state.players[0].race.hullAccess == HullAccess::WarMonger);
@@ -1151,7 +1175,7 @@ void stars_hulls_round_trip_and_previous_format_migration()
     save.state.players[0].race.improvedFuelEfficiency = true;
     save.pendingOrders = {1, {}}; save.pendingDescriptions.clear();
     save.playerTokens = {{1, 34}};
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     file.setFileName(path);
     assert(file.open(QIODevice::ReadOnly));
     const auto original = file.readAll(); file.close();
@@ -1206,7 +1230,7 @@ void scanners_round_trip_and_version_boundaries()
         save.pendingDescriptions << QString::fromStdString(design.name);
     }
     const auto path = dir.filePath("scanners.suns");
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     SaveGameData loaded;
     if (!read_save_game_file(path, loaded, error)) {
         std::cerr << error.toStdString() << std::endl;
@@ -1238,7 +1262,7 @@ void scanners_round_trip_and_version_boundaries()
     assert(!read_turn_order_file(orders, read, error));
     save.state = make_demo_game();
     save.pendingOrders = {1, {}}; save.pendingDescriptions.clear();
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     file.setFileName(path);
     assert(file.open(QIODevice::ReadWrite) && file.seek(4));
     QDataStream compatible(&file); compatible << quint32{56}; file.close();
@@ -1268,7 +1292,7 @@ void mining_robots_round_trip_and_version_boundaries()
         save.pendingDescriptions << QString::fromStdString(miner.name);
     }
     const auto path = dir.filePath("robots.suns");
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     SaveGameData loaded;
     assert(read_save_game_file(path, loaded, error));
     for (std::size_t i = 0; i < save.state.shipDesigns.size(); ++i) {
@@ -1306,7 +1330,7 @@ void mining_robots_round_trip_and_version_boundaries()
     save.state.shipDesigns.push_back(old);
     save.pendingOrders = {1, {CreateShipDesignOrder{old.name, old.hull, old.components, old.placements}}};
     save.pendingDescriptions = {"Old remote miner"};
-    assert(write_save_game_file(path, save, error));
+    assert(write_pre_terraforming_fixture(path, save, error));
     file.setFileName(path);
     assert(file.open(QIODevice::ReadWrite) && file.seek(4));
     QDataStream compatible(&file); compatible << quint32{57}; file.close();
@@ -1322,10 +1346,70 @@ void mining_robots_round_trip_and_version_boundaries()
     assert(std::get<CreateShipDesignOrder>(read.orders.orders.front()).components == old.components);
 }
 
+void terraforming_and_automation_round_trip()
+{
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData save;
+    save.campaignId = 9; save.turnToken = 10;
+    save.mode = SessionMode::Host; save.playerTokens = {{1, 10}};
+    save.state = generate_campaign({}, {{"Terran", RacePreset::Terran}});
+    auto& planet = *std::find_if(save.state.planets.begin(), save.state.planets.end(), [](const auto& p) { return p.owner == 1; });
+    planet.naturalEnvironment = PlanetEnvironment{80, 50, 20};
+    planet.environment = {77, 50, 20};
+    planet.productionQueue = {
+        {ProductionKind::Factory, 2, 0, ProductionAutomation::None, 1, true},
+        {ProductionKind::Factory, kFactoryCost, 0, ProductionAutomation::Annual, 10},
+        {ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MaxTerraform, 2},
+    };
+    ProductionTemplate value{"Development", {planet.productionQueue[1], planet.productionQueue[2]}, true};
+    save.state.players.front().productionTemplates = {value};
+    save.pendingOrders = {1, {QueueProductionBatchOrder{planet.id, ProductionKind::Mine, 3, ProductionAutomation::Annual},
+        SetProductionTemplateOrder{value}, ApplyProductionTemplateOrder{planet.id, value.name}}};
+    save.pendingDescriptions = {"Auto mines", "Template", "Apply"};
+    const auto path = dir.filePath("terraforming.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    const auto& read = *std::find_if(loaded.state.planets.begin(), loaded.state.planets.end(), [&](const auto& p) { return p.id == planet.id; });
+    assert(read.environment.temperature == 77 && read.naturalEnvironment->temperature == 80);
+    assert(read.productionQueue.front().autoGenerated && read.productionQueue.front().remainingCost == 2);
+    assert(read.productionQueue[1].automation == ProductionAutomation::Annual && read.productionQueue[1].quantity == 10);
+    assert(read.productionQueue[2].automation == ProductionAutomation::MaxTerraform);
+    assert(!loaded.state.players.front().race.legacyBiologyAdaptation);
+    assert(loaded.state.players.front().productionTemplates.front().defaultForNewColonies);
+    assert(loaded.state.players.front().productionTemplates.front().items.size() == 2);
+    const auto ordersPath = dir.filePath("terraforming.sunsorders");
+    TurnOrderFileData packet{9, save.state.turn, 10, save.pendingOrders, save.pendingDescriptions};
+    assert(write_turn_order_file(ordersPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(ordersPath, imported, error));
+    assert(std::get<QueueProductionBatchOrder>(imported.orders.orders[0]).quantity == 3);
+    assert(std::get<SetProductionTemplateOrder>(imported.orders.orders[1]).value.items[1].automation == ProductionAutomation::MaxTerraform);
+    assert(std::get<ApplyProductionTemplateOrder>(imported.orders.orders[2]).name == value.name);
+    assert(write_save_game_file(path, make_player_turn(save, 1), error));
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().productionTemplates.front().name == value.name);
+    save.state.players.front().race.legacyBiologyAdaptation = true;
+    assert(write_save_game_file(path, save, error));
+    assert(read_save_game_file(path, loaded, error) && loaded.state.players.front().race.legacyBiologyAdaptation);
+    save.state = generate_campaign({}, {{"Old campaign", RacePreset::Terran}});
+    save.pendingOrders = {1, {}}; save.pendingDescriptions.clear();
+    assert(write_pre_terraforming_fixture(path, save, error));
+    assert(read_save_game_file(path, loaded, error) && loaded.state.players.front().race.legacyBiologyAdaptation);
+    assert(loaded.state.players.front().productionTemplates.empty());
+    // The host rejects malformed serialized annual limits instead of loading an unbounded rule.
+    packet.orders = {1, {QueueProductionBatchOrder{1, ProductionKind::Factory, 0, ProductionAutomation::Annual}}};
+    packet.descriptions = {"Invalid"};
+    assert(write_turn_order_file(ordersPath, packet, error));
+    assert(!read_turn_order_file(ordersPath, imported, error));
+}
+
 } // namespace
 
 int main()
 {
+    terraforming_and_automation_round_trip();
     mining_robots_round_trip_and_version_boundaries();
     scanners_round_trip_and_version_boundaries();
     stars_hulls_round_trip_and_previous_format_migration();

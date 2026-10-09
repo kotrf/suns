@@ -29,13 +29,13 @@ unowned. An enemy colony cannot be colonized and must first be conquered.
 Ground invasion is separate from colonization. Unloading colonists onto an
 enemy colony starts population combat; see `ground-invasions.md`.
 
-Biology 1/2/3 unlock Sealed/Adaptive/Extreme Habitats: tolerance extends by
-5/10/15 points on each nonimmune axis, bounded by 0–100. This is automatic colony
-adaptation rather than a planet-specific terraforming project; it can move a
-borderline world from negative through zero into positive habitability. A future
-terraforming project can use the same signed scale.
-Natural-range gauges remain unchanged, so they show the race's original limits.
-The map's habitability value includes unlocked adaptations for the viewer.
+In new campaigns Biology unlocks paid physical terraforming rather than freely
+expanding racial ranges. Research prerequisites and production tasks are described
+in [Terraforming](terraforming.md). Natural-range gauges still show the race's
+original limits; their tooltips include each planet's natural, current and
+reachable values. The environment panel shows current and reachable habitability.
+Saves predating v59 preserve the previous Biology tolerance extension of 5/10/15
+points, capped at Biology 3, via `legacyBiologyAdaptation`.
 
 Save v35 stores signed habitability values. Save v31 adds
 `RaceProfile::environmentBased`. Loading old campaigns keeps this false,

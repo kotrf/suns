@@ -29,7 +29,9 @@ int main()
     const auto ice = race_preset(RacePreset::Cryophile);
     const auto hot = race_preset(RacePreset::Radiotroph);
     assert(race_habitability(terran, {20, 50, 20}, 0) < 0);
-    assert(race_habitability(terran, {20, 50, 20}, 1) > 0);
+    assert(race_habitability(terran, {20, 50, 20}, 1) < 0);
+    auto legacyTerran = terran; legacyTerran.legacyBiologyAdaptation = true;
+    assert(race_habitability(legacyTerran, {20, 50, 20}, 1) > 0);
     assert(race_habitability(ice, {20, 40, 20}, 0) == 100);
     assert(race_habitability(hot, {70, 65, 100}, 0) == 100);
     assert(race_habitability(hot, {50, 50, 20}, 0) < 0);
@@ -40,7 +42,7 @@ int main()
     assert(hostileForTerrans > static_cast<decltype(hostileForTerrans)>(state.planets.size() / 3));
 
     // Hostile worlds may be settled, but their population declines until
-    // Biology adaptation expands the race's viable range.
+    // Physical terraforming improves the world; research alone does not.
     auto colonyTrial = state;
     auto& target = *std::find_if(colonyTrial.planets.begin(), colonyTrial.planets.end(),
         [](const Planet& planet) { return planet.owner == 0; });
@@ -62,7 +64,11 @@ int main()
     const auto founded = resolve_campaign_turn(colonyTrial,
         {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
     assert(find_planet_at_star(founded, target.star)->owner == 1);
-    assert(find_planet_at_star(founded, target.star)->population > 100);
+    assert(find_planet_at_star(founded, target.star)->population < 100);
+    colonyTrial.players[0].race.legacyBiologyAdaptation = true;
+    const auto legacyFounded = resolve_campaign_turn(colonyTrial,
+        {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
+    assert(find_planet_at_star(legacyFounded, target.star)->population > 100);
 
     auto populationRules = make_demo_game();
     populationRules.planets[0].population = 1000;

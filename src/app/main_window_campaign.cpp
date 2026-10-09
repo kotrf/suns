@@ -39,7 +39,7 @@ void MainWindow::newCampaign()
         "then send .sunsorders back. All players submit before the host resolves the turn.\n\n"
         "Terrans: temperate worlds. Cryophiles: cold, lower-gravity worlds. "
         "Radiotrophs: narrow hot/heavy worlds, immune to radiation. "
-        "Biology unlocks habitats beyond these environmental limits.", &dialog);
+        "Biology and the corresponding physical science unlock paid terraforming in the production queue.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
     QTableWidget table(8, 7, &dialog);

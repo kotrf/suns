@@ -92,12 +92,16 @@ availability and capability descriptions. Double-clicking a locked technology
 appends all missing field levels to the plan, including secondary requirements, accounting for already queued
 levels. Race-restricted technologies explain their access condition and cannot queue futile research. Component legality uses that same catalog on the host.
 
-For environment-based campaigns, Biology 1/2/3 unlock Sealed, Adaptive and Extreme
-Habitats. These extend each applicable racial environment range by 5/10/15 points,
-opening previously incompatible worlds. Legacy campaigns preserve their scalar
-habitability and the catalog labels these unlocks as legacy rules.
+For new environment-based campaigns, Biology and a secondary science unlock
+paid, planet-specific terraforming. The normal limits are 3/7/11/15 axis points;
+Biology levels 1/2/3/4 pair with Energy, Propulsion or Weapons levels 1/5/10/16
+for temperature, gravity or radiation respectively. Research alone does not
+change racial tolerance or a planet. Each unit change costs 12 production and
+must complete in the local queue; see [Terraforming](terraforming.md).
 
-Weapons and levels beyond the listed unlocks remain researchable but have no
-implemented capability yet; the UI explicitly says so. This is not a complete
-combat technology tree. Each empire researches independently, including remote
+Saves made before v59 retain their existing automatic Biology tolerance bonus
+through an explicit compatibility flag. Legacy scalar-habitability campaigns
+retain their original rules and do not gain physical terraforming. Weapons now
+supports radiation terraforming; this is still not a complete combat tree.
+Each empire researches independently, including remote
 players whose settings arrive through turn-order envelopes.
