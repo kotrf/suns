@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -52,6 +53,7 @@ MineralCargo componentMineralCost(ShipComponentType type)
 {
     if (const auto* engine = propulsion_technology(type)) return engine->minerals;
     if (const auto* scanner = scanner_technology(type)) return scanner->minerals;
+    if (const auto* miner = mining_technology(type)) return miner->minerals;
     switch (type) {
     case ShipComponentType::FusionDrive:             return {2.0, 2.0, 1.0};
     case ShipComponentType::RamScoopDrive:           return {2.0, 3.0, 2.0};
@@ -169,14 +171,9 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
 MineralCargo projected_remote_mining(const GameState& state, const Planet& planet, const ShipDesign& design)
 {
     if (planet.owner != 0) return {};
-    const auto units = std::count_if(design.components.begin(), design.components.end(), [](const auto component) {
-        return component_spec(component).remoteMiningUnits > 0.0;
-    });
-    if (units == 0) return {};
-
+    const auto extractionUnits = ship_design_remote_mining_rate(design);
+    if (extractionUnits == 0) return {};
     const auto concentration = planet_mineral_concentration(state, planet);
-    constexpr double extractionUnitsPerModule = 1.25;
-    const auto extractionUnits = static_cast<double>(units) * extractionUnitsPerModule;
     return {
         extractionUnits * concentration.ironium / 100.0,
         extractionUnits * concentration.boranium / 100.0,

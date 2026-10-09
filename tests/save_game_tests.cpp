@@ -2,6 +2,7 @@
 #include "suns/campaign.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -1246,10 +1247,86 @@ void scanners_round_trip_and_version_boundaries()
     assert(fleet_sensor_range(loaded.state, loaded.state.fleets.front()) == 50);
 }
 
+void mining_robots_round_trip_and_version_boundaries()
+{
+    QTemporaryDir dir;
+    QString error;
+    SaveGameData save;
+    save.campaignId = 21; save.turnToken = 34;
+    save.mode = SessionMode::Host;
+    save.state = generate_campaign({}, {{"Miners", RacePreset::Terran, false, false, false,
+        HullAccess::Standard, true}});
+    save.pendingOrders = {1, {}};
+    save.playerTokens = {{1, 34}};
+    for (const auto& robot : mining_technologies()) {
+        ShipDesign miner{save.state.nextShipDesignId++, 1, robot.name, ShipHullType::MidgetMiner,
+            {ShipComponentType::QuickJump5, robot.component}};
+        normalize_ship_design_placement(miner);
+        assert(ship_design_valid(miner));
+        save.state.shipDesigns.push_back(miner);
+        save.pendingOrders.orders.emplace_back(CreateShipDesignOrder{miner.name, miner.hull, miner.components, miner.placements});
+        save.pendingDescriptions << QString::fromStdString(miner.name);
+    }
+    const auto path = dir.filePath("robots.suns");
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    for (std::size_t i = 0; i < save.state.shipDesigns.size(); ++i) {
+        const auto& before = save.state.shipDesigns[i];
+        const auto& after = loaded.state.shipDesigns[i];
+        assert(after.components == before.components && after.placements == before.placements);
+        assert(ship_design_remote_mining_rate(after) == ship_design_remote_mining_rate(before));
+    }
+    assert(loaded.pendingOrders.orders.size() == 6);
+    QFile file(path);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream header(&file); header << quint32{57}; file.close();
+    assert(!read_save_game_file(path, loaded, error));
+    const auto orders = dir.filePath("robots.sunsorders");
+    TurnOrderFileData packet{21, save.state.turn, 34, save.pendingOrders, save.pendingDescriptions};
+    assert(write_turn_order_file(orders, packet, error));
+    TurnOrderFileData read;
+    assert(read_turn_order_file(orders, read, error));
+    for (std::size_t i = 0; i < read.orders.orders.size(); ++i) {
+        const auto& before = std::get<CreateShipDesignOrder>(packet.orders.orders[i]);
+        const auto& after = std::get<CreateShipDesignOrder>(read.orders.orders[i]);
+        assert(after.components == before.components && after.placements == before.placements);
+    }
+    assert(read.orders.orders.size() == 6);
+    file.setFileName(orders);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream orderHeader(&file); orderHeader << quint32{15}; file.close();
+    assert(!read_turn_order_file(orders, read, error));
+
+    // v57 has the same record layout but cannot contain appended robot IDs.
+    save.state = make_demo_game();
+    ShipDesign old{90, 1, "Old remote miner", ShipHullType::RemoteMiner,
+        {ShipComponentType::FusionDrive, ShipComponentType::FusionDrive, ShipComponentType::RemoteMiningModule}};
+    normalize_ship_design_placement(old);
+    save.state.shipDesigns.push_back(old);
+    save.pendingOrders = {1, {CreateShipDesignOrder{old.name, old.hull, old.components, old.placements}}};
+    save.pendingDescriptions = {"Old remote miner"};
+    assert(write_save_game_file(path, save, error));
+    file.setFileName(path);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream compatible(&file); compatible << quint32{57}; file.close();
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.shipDesigns.back().components == old.components);
+    assert(ship_design_remote_mining_rate(loaded.state.shipDesigns.back()) == 1.25);
+    packet.orders = save.pendingOrders; packet.descriptions = save.pendingDescriptions;
+    assert(write_turn_order_file(orders, packet, error));
+    file.setFileName(orders);
+    assert(file.open(QIODevice::ReadWrite) && file.seek(4));
+    QDataStream oldOrderHeader(&file); oldOrderHeader << quint32{15}; file.close();
+    assert(read_turn_order_file(orders, read, error));
+    assert(std::get<CreateShipDesignOrder>(read.orders.orders.front()).components == old.components);
+}
+
 } // namespace
 
 int main()
 {
+    mining_robots_round_trip_and_version_boundaries();
     scanners_round_trip_and_version_boundaries();
     stars_hulls_round_trip_and_previous_format_migration();
     stars_propulsion_and_access_round_trip();

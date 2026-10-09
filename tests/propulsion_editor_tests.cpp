@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 
 #include <QApplication>
 #include <QComboBox>
@@ -54,9 +55,23 @@ int main(int argc, char** argv)
     assert(find("Ferret Scanner") && find("Ferret Scanner")->text(1).contains("Biology 2"));
     assert(find("Chameleon Scanner")->text(2) == "Race restriction");
     assert(!find("Compact Scanner (legacy)"));
+    assert(!find("Remote Mining (legacy)"));
+    assert(find("Robo-Mini-Miner") && find("Robo-Mini-Miner")->text(1).contains("Electronics 1"));
+    assert(find("Robo-Midget Miner")->text(2) == "Race restriction");
     const auto count = plan->topLevelItemCount();
     catalog->itemDoubleClicked(mizer, 0);
     assert(plan->topLevelItemCount() == count);
+    catalog->itemDoubleClicked(find("Robo-Midget Miner"), 0);
+    assert(plan->topLevelItemCount() == count);
+    catalog->itemDoubleClicked(find("Robo-Miner"), 0);
+    int miningConstruction = 0, miningElectronics = 0;
+    for (int row = 0; row < plan->topLevelItemCount(); ++row) {
+        const auto field = static_cast<ResearchField>(plan->topLevelItem(row)->data(0, Qt::UserRole).toInt());
+        miningConstruction += field == ResearchField::Construction;
+        miningElectronics += field == ResearchField::Electronics;
+    }
+    assert(miningConstruction == 4 && miningElectronics == 1); // Starting Electronics 1 is already known.
+    scoop = find("Sub-Galactic Fuel Scoop"); // The catalog rebuilds after adding research.
     catalog->itemDoubleClicked(scoop, 0);
     int energy = 0, propulsion = 0;
     for (int row = 0; row < plan->topLevelItemCount(); ++row) {
@@ -97,17 +112,23 @@ int main(int argc, char** argv)
         != initialDraft.components.end());
     int scanners = 0;
     int engines = 0;
+    int robots = 0;
     for (int row = 0; row < components->count(); ++row) {
         const auto component = static_cast<ShipComponentType>(components->item(row)->data(Qt::UserRole).toInt());
         assert(!legacy_propulsion_component(component));
         assert(!legacy_scanner_component(component));
+        assert(component != ShipComponentType::RemoteMiningModule);
+        if (mining_technology(component)) {
+            ++robots;
+            assert(components->item(row)->toolTip().contains("planet's surface"));
+        }
         if (scanner_technology(component)) {
             ++scanners;
             assert(components->item(row)->toolTip().contains("penetrating"));
         }
         engines += component_spec(component).kind == ShipComponentKind::Engine;
     }
-    assert(engines == 15 && scanners == 16);
+    assert(engines == 15 && scanners == 16 && robots == 6);
     auto* initialHulls = designer.findChild<QComboBox*>("shipHullCatalog");
     assert(initialHulls && initialHulls->count() == 32);
     auto* hullModel = qobject_cast<QStandardItemModel*>(initialHulls->model());
@@ -177,17 +198,17 @@ int main(int argc, char** argv)
         const auto draft = bankDesigner.draft();
         return std::count(draft.components.begin(), draft.components.end(), component);
     };
-    fit(ShipComponentType::CompactLongRangeScanner, 200);
-    assert(quantity(ShipComponentType::CompactLongRangeScanner) == 2);
-    assert(quantity(ShipComponentType::LongRangeScanner) == 0);
+    fit(ShipComponentType::MoleScanner, 200);
+    assert(quantity(ShipComponentType::MoleScanner) == 2);
+    assert(quantity(ShipComponentType::RhinoScanner) == 0);
     remove(201);
-    assert(quantity(ShipComponentType::CompactLongRangeScanner) == 1);
+    assert(quantity(ShipComponentType::MoleScanner) == 1);
     fit(ShipComponentType::FuelTank, 202);
     assert(quantity(ShipComponentType::FuelTank) == 3);
     remove(204);
     assert(quantity(ShipComponentType::FuelTank) == 2);
     const auto placementsBefore = bankDesigner.draft().placements;
-    fit(ShipComponentType::CompactLongRangeScanner, 204, 200);
+    fit(ShipComponentType::MoleScanner, 204, 200);
     assert(bankDesigner.draft().placements == placementsBefore); // Cannot mix models in a partly filled bank.
     fit(ShipComponentType::CargoPod, 205); // Shield/armor bank rejects a cargo pod.
     assert(bankDesigner.draft().placements == placementsBefore);
@@ -210,5 +231,38 @@ int main(int argc, char** argv)
     assert(ship_design_valid({43, 1, nubianDraft.name, nubianDraft.hull, nubianDraft.components, nubianDraft.placements}));
     if (qEnvironmentVariableIsSet("SUNS_HULL_SCREENSHOTS"))
         assert(nubianDesigner.grab().save("/tmp/suns-nubian-designer.png"));
+    auto miningState = generate_campaign({}, {{"Mining designer"}});
+    miningState.players.front().technology.levels[std::size_t(ResearchField::Construction)] = 2;
+    ShipDesignerDialog miningDesigner(miningState, 1);
+    auto* miningHulls = miningDesigner.findChild<QComboBox*>("shipHullCatalog");
+    miningHulls->setCurrentIndex(miningHulls->findData(int(ShipHullType::MiniMiner)));
+    miningDesigner.show(); QApplication::processEvents();
+    const auto miningHull = hull_spec(ShipHullType::MiniMiner);
+    const auto miningCell = std::find_if(miningHull.fittingSlots.begin(), miningHull.fittingSlots.end(),
+        [](const auto& slot) { return slot.category == ShipSlotCategory::Mining; });
+    assert(miningCell != miningHull.fittingSlots.end());
+    auto* cell = miningDesigner.findChild<QToolButton*>(QString("shipSlot_%1").arg(miningCell->id));
+    assert(cell);
+    const auto dropRobot = [&](ShipComponentType component) {
+        QMimeData payload;
+        payload.setData("application/x-suns-ship-component", QByteArray::number(int(component)) + ":0");
+        QDragEnterEvent enter(cell->rect().center(), Qt::CopyAction, &payload, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(cell, &enter);
+        QDropEvent drop(QPointF(cell->rect().center()), Qt::CopyAction, &payload, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(cell, &drop);
+    };
+    const auto emptyMiner = miningDesigner.draft().components;
+    dropRobot(ShipComponentType::RoboSuperMiner);
+    assert(miningDesigner.draft().components == emptyMiner);
+    dropRobot(ShipComponentType::RoboMidgetMiner); // No ARM access.
+    assert(miningDesigner.draft().components == emptyMiner);
+    dropRobot(ShipComponentType::RemoteMiningModule); // Legacy prototype cannot bypass new progression.
+    assert(miningDesigner.draft().components == emptyMiner);
+    dropRobot(ShipComponentType::RoboMiniMiner);
+    const auto miningDraft = miningDesigner.draft();
+    assert(std::count(miningDraft.components.begin(), miningDraft.components.end(), ShipComponentType::RoboMiniMiner) == 1);
+    preview = miningDesigner.findChild<QLabel*>("shipDesignPreview");
+    assert(preview && preview->text().contains("Remote mining 4 kt/mineral/year"));
+    assert(ship_design_valid({42, 1, miningDraft.name, miningDraft.hull, miningDraft.components, miningDraft.placements}));
     return 0;
 }

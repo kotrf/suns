@@ -3,6 +3,7 @@
 #include "suns/wormholes.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -58,6 +59,7 @@ const std::vector<ResearchUnlock>& research_unlocks()
         for (auto& entry : entries) {
             entry.legacyScanner = entry.component && legacy_scanner_component(*entry.component);
             entry.legacyPropulsion = entry.component && legacy_propulsion_component(*entry.component);
+            entry.legacyMining = entry.component == ShipComponentType::RemoteMiningModule;
             if (entry.name == "Heavy Transport") { entry.hull = ShipHullType::HeavyTransport; entry.legacyHull = true; }
         }
         for (const auto& engine : propulsion_technologies()) {
@@ -93,6 +95,14 @@ const std::vector<ResearchUnlock>& research_unlocks()
                 entry.description += " Cloaking is not available yet.";
             entries.push_back(std::move(entry));
         }
+        for (const auto& miner : mining_technologies()) {
+            ResearchUnlock entry{ResearchField::Construction, miner.construction, miner.name,
+                std::to_string(int(miner.rate)) + " kt of each mineral/year at concentration 100; "
+                    + std::to_string(int(miner.mass)) + " kt mass. Deposits output on an unowned planet's surface.",
+                miner.component};
+            entry.extraLevels[static_cast<std::size_t>(ResearchField::Electronics)] = miner.electronics;
+            entries.push_back(std::move(entry));
+        }
         ResearchUnlock mini{ResearchField::Construction, 0, "Mini-Colony Ship",
             "Small 10 kt colony transport with one engine and one general cell.", {}};
         mini.engineAccess = EngineAccess::Settler;
@@ -115,7 +125,10 @@ const std::vector<ResearchUnlock>& research_unlocks()
 bool research_unlock_applicable(const GameState& state, PlayerId player, const ResearchUnlock& unlock)
 {
     const auto* owner = find_player(state, player);
+    const auto* miner = unlock.component ? mining_technology(*unlock.component) : nullptr;
     return owner && engine_access_available(owner->race, unlock.engineAccess)
+        && (!miner || ((!miner->advancedRemoteMining || owner->race.advancedRemoteMining)
+            && (!miner->excludesBasicRemoteMining || !owner->race.basicRemoteMining)))
         && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines)
         && (!unlock.requiresSuperStealth || owner->race.hullAccess == HullAccess::SuperStealth)
         && (!unlock.hull || ship_hull_access_applicable(state, player, *unlock.hull));
@@ -144,6 +157,10 @@ std::string research_unlock_requirement(const ResearchUnlock& unlock)
     case EngineAccess::Settler: text += "; Settler engine access"; break;
     }
     if (unlock.requiresSuperStealth) text += "; Super Stealth";
+    if (unlock.component) if (const auto* miner = mining_technology(*unlock.component)) {
+        if (miner->advancedRemoteMining) text += "; Advanced Remote Mining";
+        if (miner->excludesBasicRemoteMining) text += "; unavailable with Basic Remote Mining";
+    }
     if (unlock.excludesNoRamScoops) text += "; requires ram scoops enabled";
     if (unlock.hull) if (const auto* hull = reference_hull(*unlock.hull)) {
         if (hull->access != HullAccess::Standard) text += "; " + hull_access_name(hull->access) + " hull access";

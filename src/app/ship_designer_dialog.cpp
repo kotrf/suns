@@ -1,6 +1,7 @@
 #include "ship_designer_dialog.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 #include "suns/campaign.hpp"
 
 #include <QAbstractItemView>
@@ -278,7 +279,8 @@ QString componentTooltip(ShipComponentType component)
     }
     if (spec.cargoCapacity > 0.0) facts << QString("Cargo +%1 kt").arg(spec.cargoCapacity, 0, 'f', 0);
     if (spec.remoteMiningUnits > 0.0)
-        facts << "Remote mining: 1.25 extraction units per turn × concentration of each mineral, on unowned planets.";
+        facts << QString("Remote mining: %1 kt of each mineral/year at concentration 100, scaled by concentration. Output stays on the unowned planet's surface.")
+            .arg(spec.remoteMiningUnits);
     if (spec.fieldRepairPerTurn > 0.0)
         facts << "Field repair: 8 hull-damage points per year per equipped ship; mixed fleets scale by equipped ship fraction. A friendly shipyard repairs 20 instead.";
     if (spec.radiationHazard > 0.0) facts << "Radiation hazard: 10% colonist losses per travel turn unless the race is immune or has radiation tolerance ≥ 85%.";
@@ -307,7 +309,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::GalaxyScoop)
+        || component > static_cast<int>(ShipComponentType::RoboUltraMiner)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -628,15 +630,18 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::GalaxyScoop,
     };
     for (const auto& scanner : scanner_technologies()) catalog.push_back(scanner.component);
+    for (const auto& miner : mining_technologies()) catalog.push_back(miner.component);
     for (const auto component : catalog) {
         if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) continue;
         if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) continue;
+        if (component == ShipComponentType::RemoteMiningModule && !player_uses_legacy_mining(state, player)) continue;
         const auto available = component_available_to_player(state, player, component);
         auto label = QString("%1 • %2")
                          .arg(QString::fromStdString(ship_component_equipment_name(component)),
                              QString::fromStdString(component_spec(component).name));
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
-        if (legacy_propulsion_component(component) || legacy_scanner_component(component)) label += "  [legacy]";
+        if (legacy_propulsion_component(component) || legacy_scanner_component(component)
+            || component == ShipComponentType::RemoteMiningModule) label += "  [legacy]";
         auto* item = new QListWidgetItem(label, componentCatalog_);
         item->setIcon(componentIcon(component, available));
         item->setData(Qt::UserRole, static_cast<int>(component));
@@ -856,10 +861,17 @@ void ShipDesignerDialog::focusAdjacentSlot(ShipSlotId slot, int rowDirection, in
 void ShipDesignerDialog::fitComponent(
     ShipComponentType component, ShipSlotId target, ShipSlotId source)
 {
+    bool available = false;
     for (int row = 0; row < componentCatalog_->count(); ++row) {
         const auto* item = componentCatalog_->item(row);
-        if (item->data(Qt::UserRole).toInt() == static_cast<int>(component)
-            && !item->data(Qt::UserRole + 1).toBool()) return;
+        if (item->data(Qt::UserRole).toInt() == static_cast<int>(component)) {
+            available = item->data(Qt::UserRole + 1).toBool();
+            break;
+        }
+    }
+    if (!available) {
+        fitMessage_->setText("That component is unavailable to this empire. Check its research and race requirements.");
+        return;
     }
     const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
     const auto targetSlot = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const ShipSlotSpec& slot) {
@@ -1095,7 +1107,8 @@ void ShipDesignerDialog::updatePreview()
     }
     if (ship_design_can_remote_mine(design)) {
         if (!capabilities.isEmpty()) capabilities += " • ";
-        capabilities += "Remote mining capable";
+        capabilities += QString("Remote mining %1 kt/mineral/year at concentration 100")
+            .arg(ship_design_remote_mining_rate(design));
     }
     if (std::any_of(design.components.begin(), design.components.end(), [](ShipComponentType component) {
             return component_spec(component).fieldRepairPerTurn > 0.0;

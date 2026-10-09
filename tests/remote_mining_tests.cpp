@@ -1,6 +1,9 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/campaign.hpp"
+#include "suns/mining.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <utility>
@@ -39,10 +42,141 @@ suns::GameState advance_until_task(
     return state;
 }
 
+void reference_robots_and_access()
+{
+    using namespace suns;
+    assert(mining_technologies().size() == 6);
+    auto state = generate_campaign({}, {{"Miners"}});
+    auto& levels = state.players.front().technology.levels;
+    auto& race = state.players.front().race;
+    const auto c = static_cast<std::size_t>(ResearchField::Construction);
+    const auto e = static_cast<std::size_t>(ResearchField::Electronics);
+    assert(!component_available_to_player(state, 1, ShipComponentType::RemoteMiningModule));
+    assert(!component_available_to_player(state, 1, ShipComponentType::RoboMidgetMiner));
+    race.advancedRemoteMining = true;
+    assert(component_available_to_player(state, 1, ShipComponentType::RoboMidgetMiner));
+    race.advancedRemoteMining = false;
+    for (const auto& robot : mining_technologies()) {
+        const auto spec = component_spec(robot.component);
+        assert(spec.kind == ShipComponentKind::Mining && spec.mass == robot.mass);
+        assert(spec.buildCost == robot.cost && spec.remoteMiningUnits == robot.rate);
+        const auto cost = component_mineral_cost(robot.component);
+        assert(cost.ironium == robot.minerals.ironium && cost.boranium == robot.minerals.boranium
+            && cost.germanium == robot.minerals.germanium);
+        const auto& unlocks = research_unlocks();
+        const auto unlock = std::find_if(unlocks.begin(), unlocks.end(), [&](const auto& item) {
+            return item.component == robot.component;
+        });
+        assert(unlock != unlocks.end());
+        levels[c] = robot.construction;
+        levels[e] = robot.electronics;
+        race.advancedRemoteMining = true;
+        race.basicRemoteMining = false;
+        assert(component_available_to_player(state, 1, robot.component));
+        if (robot.construction) {
+            --levels[c];
+            assert(!component_available_to_player(state, 1, robot.component));
+            ++levels[c];
+        }
+        if (robot.electronics) {
+            --levels[e];
+            assert(!component_available_to_player(state, 1, robot.component));
+            ++levels[e];
+        }
+        race.advancedRemoteMining = false;
+        assert(component_available_to_player(state, 1, robot.component) == !robot.advancedRemoteMining);
+        assert(research_unlock_applicable(state, 1, *unlock) == !robot.advancedRemoteMining);
+        race.advancedRemoteMining = true;
+        race.basicRemoteMining = true;
+        assert(component_available_to_player(state, 1, robot.component) == !robot.excludesBasicRemoteMining);
+        if (robot.advancedRemoteMining)
+            assert(research_unlock_requirement(*unlock).find("Advanced Remote Mining") != std::string::npos);
+        if (robot.excludesBasicRemoteMining)
+            assert(research_unlock_requirement(*unlock).find("Basic Remote Mining") != std::string::npos);
+    }
+    assert(component_spec(ShipComponentType::RoboMiniMiner).mass == 240);
+    assert(component_spec(ShipComponentType::RoboMiniMiner).remoteMiningUnits == 4);
+    assert(component_spec(ShipComponentType::RoboSuperMiner).remoteMiningUnits == 27);
+    assert(component_spec(ShipComponentType::RoboUltraMiner).mass == 80);
+    assert(component_spec(ShipComponentType::RoboUltraMiner).remoteMiningUnits == 25);
+}
+
+void reference_extraction_and_host_validation()
+{
+    using namespace suns;
+    auto state = generate_campaign({}, {{"Miners"}});
+    auto& levels = state.players.front().technology.levels;
+    const auto c = static_cast<std::size_t>(ResearchField::Construction);
+    const auto e = static_cast<std::size_t>(ResearchField::Electronics);
+    levels[c] = 15; levels[e] = 8;
+    auto& site = state.planets[1];
+    site.owner = 0; site.population = 0;
+    site.observedConcentration = MineralCargo{100, 50, 8};
+    site.minerals = {};
+    state.players.front().race.advancedRemoteMining = true;
+    ShipDesign old{90, 1, "Old miner", ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5, ShipComponentType::RemoteMiningModule}};
+    const auto oldOutput = projected_remote_mining(state, site, old);
+    assert(close(oldOutput.ironium, 1.25) && close(oldOutput.boranium, 0.625)
+        && close(oldOutput.germanium, 0.1));
+    for (const auto& robot : mining_technologies()) {
+        ShipDesign miner{99, 1, robot.name, ShipHullType::MiniMiner,
+            {ShipComponentType::QuickJump5, robot.component, robot.component}};
+        assert(ship_design_valid(miner));
+        const auto yield = projected_remote_mining(state, site, miner);
+        assert(close(yield.ironium, robot.rate * 2));
+        assert(close(yield.boranium, robot.rate));
+        assert(close(yield.germanium, robot.rate * 0.16));
+        auto owned = site; owned.owner = 1;
+        assert(mineral_cargo_mass(projected_remote_mining(state, owned, miner)) == 0);
+        auto mining = state;
+        mining.shipDesigns.push_back(miner);
+        mining.fleets.clear();
+        Fleet fleet;
+        fleet.id = 42; fleet.owner = 1; fleet.design = miner.id;
+        fleet.position = find_star(state, site.star)->position;
+        fleet.ships = {{miner.id, 3}}; fleet.task = FleetTask::RemoteMining;
+        mining.fleets.push_back(fleet);
+        const auto next = TurnProcessor{}.process(mining, {});
+        const auto& surface = planet(next, site.id);
+        assert(close(surface.minerals.ironium, yield.ironium * 3));
+        assert(close(surface.minerals.boranium, yield.boranium * 3));
+        assert(close(surface.minerals.germanium, yield.germanium * 3));
+        assert(mineral_cargo_mass(next.fleets.front().minerals) == 0);
+        assert(close(next.players.front().history.back().remoteExtraction.ironium, yield.ironium * 3));
+    }
+    ShipDesign mixed{99, 1, "Mixed robots", ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5, ShipComponentType::RoboMiniMiner, ShipComponentType::RoboSuperMiner}};
+    assert(ship_design_valid(mixed));
+    assert(close(projected_remote_mining(state, site, mixed).ironium, 31));
+    ShipDesign invalid = mixed; invalid.hull = ShipHullType::StarsScout;
+    assert(!ship_design_valid(invalid));
+    const PlayerOrders create{1, {CreateShipDesignOrder{mixed.name, mixed.hull, mixed.components}}};
+    levels[c] = 11;
+    assert(TurnProcessor{}.process(state, {create}).shipDesigns.size() == state.shipDesigns.size());
+    levels[c] = 12; levels[e] = 5;
+    assert(TurnProcessor{}.process(state, {create}).shipDesigns.size() == state.shipDesigns.size());
+    levels[e] = 6;
+    assert(TurnProcessor{}.process(state, {create}).shipDesigns.size() == state.shipDesigns.size() + 1);
+    const PlayerOrders advanced{1, {CreateShipDesignOrder{"Midget robot", ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5, ShipComponentType::RoboMidgetMiner}}}};
+    state.players.front().race.advancedRemoteMining = false;
+    assert(TurnProcessor{}.process(state, {advanced}).shipDesigns.size() == state.shipDesigns.size());
+    state.players.front().race.advancedRemoteMining = true;
+    assert(TurnProcessor{}.process(state, {advanced}).shipDesigns.size() == state.shipDesigns.size() + 1);
+    const PlayerOrders prototype{1, {CreateShipDesignOrder{old.name, old.hull, old.components}}};
+    assert(TurnProcessor{}.process(state, {prototype}).shipDesigns.size() == state.shipDesigns.size());
+    state.shipDesigns.push_back(old);
+    assert(component_available_to_player(state, 1, ShipComponentType::RemoteMiningModule));
+    assert(ship_design_available_to_player(state, 1, old));
+}
+
 } // namespace
 
 int main()
 {
+    reference_robots_and_access();
+    reference_extraction_and_host_validation();
     auto state = suns::make_demo_game();
     state.players.front().technology.levels[static_cast<std::size_t>(suns::ResearchField::Construction)] = 1;
     state.shipDesigns.push_back({

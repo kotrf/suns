@@ -4,6 +4,7 @@ add_library(suns_core
     src/hulls.cpp
     src/communications.cpp
     src/mineral_economy.cpp
+    src/mining.cpp
     src/player_knowledge.cpp
     src/production_forecast.cpp
     src/propulsion.cpp

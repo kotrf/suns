@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 #include "suns/hulls.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
@@ -335,6 +336,7 @@ ShipComponentSpec component_spec(ShipComponentType type)
 {
     if (const auto* engine = propulsion_technology(type)) return propulsion_component_spec(*engine);
     if (const auto* scanner = scanner_technology(type)) return scanner_component_spec(*scanner);
+    if (const auto* miner = mining_technology(type)) return mining_component_spec(*miner);
     ShipComponentSpec spec;
     spec.type = type;
 
@@ -462,7 +464,7 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.kind = ShipComponentKind::Mining;
         spec.mass = 80.0;
         spec.buildCost = 6;
-        spec.remoteMiningUnits = 1.0;
+        spec.remoteMiningUnits = 1.25;
         break;
     case ShipComponentType::ColonyModule:
         spec.name = "Colony Module";
@@ -720,6 +722,7 @@ bool component_available_to_player(
     if (!find_player(state, player)) return false;
     if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) return false;
     if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) return false;
+    if (component == ShipComponentType::RemoteMiningModule && !player_uses_legacy_mining(state, player)) return false;
     for (const auto& unlock : research_unlocks())
         if (unlock.component == component)
             return research_unlock_available(state, player, unlock);

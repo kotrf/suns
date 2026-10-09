@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
+#include "suns/mining.hpp"
 
 #include <QComboBox>
 #include <QDockWidget>
@@ -271,8 +272,9 @@ void MainWindow::refreshResearchPanel()
         if (unlock.legacyPropulsion && !player_uses_legacy_propulsion(state_, player->id)) continue;
         if (unlock.legacyScanner && !player_uses_legacy_scanners(state_, player->id)) continue;
         if (unlock.legacyHull && !player_uses_legacy_hulls(state_, player->id)) continue;
+        if (unlock.legacyMining && !player_uses_legacy_mining(state_, player->id)) continue;
         auto* row = new QTreeWidgetItem(catalog);
-        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull || unlock.legacyScanner ? " (legacy)" : ""));
+        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull || unlock.legacyScanner || unlock.legacyMining ? " (legacy)" : ""));
         row->setText(1, QString::fromStdString(research_unlock_requirement(unlock)));
         const bool legacyBiology = unlock.field == ResearchField::Biology
             && !unlock.component && !player->race.environmentBased;
