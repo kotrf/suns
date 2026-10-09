@@ -1,19 +1,19 @@
 # Dockable workspace
 
-The galaxy map is the central canvas. System — Status & Minerals, Production, Fleet — Orders & Logistics, Research and Turn Messages are `QDockWidget` panels around it.
+The galaxy map is the central canvas. System — Status & Minerals, Production, System Details, Fleet — Orders & Logistics, Research and Turn Messages are `QDockWidget` panels around it.
 
-Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program share one right-side panel. System status, minerals and Production occupy a permanent left column in the default layout. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
+Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program share one right-side panel. System status, minerals and Production occupy the outer left column in the default layout. System Details fills a second column directly to its right, beside the map. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
 
 The system panel shows intelligence age, ownership, habitability and, for a friendly colony, population/capacity, factories, mines, yearly resources and orbital station status. Its mineral table keeps stock, yearly extraction and concentration visible together. Unknown or foreign stock and extraction remain hidden; concentration follows the player's geology knowledge.
 
-The production queue has its own expanding list, with work, ETA, reorder/remove controls and compact ship/factory/mine/orbital-dock builders below it. Only the list scrolls; the surrounding panel has no outer scroll area. **System details & empire…** and **Production details…** open non-modal windows for portraits, detailed summaries and infrastructure information. Research shares the bottom report area and cannot replace the production queue.
+The production queue has its own expanding list, with work, ETA, reorder/remove controls and compact ship/factory/mine/orbital-dock builders below it. Only the list scrolls; the surrounding panel has no outer scroll area. System Details is visible by default, with the selected planet first: portrait, habitability and survey information, population/capacity and growth, mineral geology, and environment bars with racial habitable ranges. Empire and current-order summaries follow below it. Its content scrolls inside the dock on small windows. The existing widgets keep their live selection updates and knowledge gates. **Production details…** still opens a non-modal infrastructure window. Research shares the bottom report area and cannot replace the production queue.
 
 Dock tabs use a dedicated high-contrast style: inactive tabs remain visibly
 bounded, while the active tab has a brighter surface, bold white label and blue
 selection edge. They should read as navigation rather than ordinary command
 buttons in the dark theme.
 
-Window geometry and dock state are saved on normal shutdown and restored on the next launch. This provides a GIMP-like multi-window workspace without making map selection or game state depend on a particular screen arrangement.
+Window geometry and dock state are saved on normal shutdown and restored on the next launch. Layout version 5 resets the previous one-column arrangement once while retaining window geometry. Custom workspaces from versions 3 and 4 remain restorable; new ones save both columns. This provides a GIMP-like multi-window workspace without making map selection or game state depend on a particular screen arrangement.
 
 Map clicks, fleet tools and Turn Messages share a star/fleet selection context
 made of stable IDs. Activating a report selects its referenced object in the

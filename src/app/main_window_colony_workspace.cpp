@@ -63,14 +63,33 @@ void MainWindow::installColonyWorkspace()
     auto* production = findChild<QDockWidget*>("productionDock");
     if (!overview || !production || !productionQueueTree_) return;
 
-    // The old detailed dashboard remains available in its own non-modal
-    // window. Its refresh connections and portrait/geology widgets stay alive.
+    // Keep the existing live planet, environment and empire widgets in a
+    // second dock column. Reparenting retains their refresh connections.
     auto* overviewDetails = overview->widget();
     overviewDetails->setParent(nullptr);
-    auto* systemDialog = detailsWindow(this, overviewDetails, "System details & empire", "systemDetailsDialog");
+    auto* detailsDock = new QDockWidget("System Details", this);
+    detailsDock->setObjectName("systemDetailsDock");
+    detailsDock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    detailsDock->setFeatures(QDockWidget::DockWidgetClosable
+        | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    detailsDock->setMinimumWidth(240);
+    detailsDock->setMaximumWidth(380);
+    if (auto* scroll = qobject_cast<QScrollArea*>(overviewDetails)) {
+        scroll->setObjectName("systemDetailsScrollArea");
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        if (auto* column = qobject_cast<QVBoxLayout*>(scroll->widget()->layout())) {
+            if (auto* planetGroup = scroll->findChild<QGroupBox*>("planetGroup")) {
+                column->removeWidget(planetGroup);
+                column->insertWidget(0, planetGroup);
+            }
+            column->addStretch();
+        }
+    }
+    detailsDock->setWidget(overviewDetails);
+    addDockWidget(Qt::LeftDockWidgetArea, detailsDock);
     auto* statusPanel = new QWidget(overview);
     statusPanel->setObjectName("colonyStatusPanel");
-    statusPanel->setMinimumWidth(330);
+    statusPanel->setMinimumWidth(300);
     auto* statusLayout = new QVBoxLayout(statusPanel);
     statusLayout->setContentsMargins(5, 5, 5, 5);
     statusLayout->setSpacing(5);
@@ -104,10 +123,6 @@ void MainWindow::installColonyWorkspace()
     }
     mineralLayout->addWidget(table);
     statusLayout->addWidget(minerals);
-    auto* details = new QPushButton("System details & empire…", statusPanel);
-    details->setObjectName("systemDetailsButton");
-    connect(details, &QPushButton::clicked, systemDialog, [systemDialog] { openDetails(systemDialog); });
-    statusLayout->addWidget(details);
     statusLayout->addStretch();
     overview->setWidget(statusPanel);
     overview->setWindowTitle("System — Status & Minerals");
@@ -118,7 +133,7 @@ void MainWindow::installColonyWorkspace()
     auto* productionDialog = detailsWindow(this, productionDetails, "Production details", "productionDetailsDialog");
     auto* root = new QWidget(production);
     root->setObjectName("colonyProductionPanel");
-    root->setMinimumWidth(330);
+    root->setMinimumWidth(300);
     auto* layout = new QVBoxLayout(root);
     layout->setContentsMargins(5, 5, 5, 5);
     layout->setSpacing(4);

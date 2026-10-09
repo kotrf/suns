@@ -7,6 +7,8 @@
 #include <QDockWidget>
 #include <QEventLoop>
 #include <QGraphicsView>
+#include <QGroupBox>
+#include <QProgressBar>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenuBar>
@@ -19,6 +21,7 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QTreeWidget>
+#include <QVBoxLayout>
 
 #include <cassert>
 #include <cmath>
@@ -86,22 +89,9 @@ static void key(QWidget* widget, int code)
     settle();
 }
 
-int main(int argc, char** argv)
+static void installWorkspace(suns::MainWindow& window)
 {
-    QApplication app(argc, argv);
-    QTemporaryDir settingsDirectory;
-    assert(settingsDirectory.isValid());
-    QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsDirectory.path());
-    // A legacy workspace that hid production must reset to the new desk once.
-    {
-        QSettings settings("SunsProject", "Suns");
-        suns::MainWindow legacy;
-        legacy.installUiPolish();
-        legacy.findChild<QDockWidget*>("productionDock")->hide();
-        settings.setValue("workspace/docks", legacy.saveState(3));
-    }
     using namespace suns;
-    MainWindow window;
     window.installDeferredMapSelectionHandler();
     attachRouteProgramDock(window);
     window.installUiPolish();
@@ -117,11 +107,35 @@ int main(int argc, char** argv)
     window.installEmpireHistory();
     window.installWormholes();
     window.installPanelLayoutFixes();
+}
+
+int main(int argc, char** argv)
+{
+    QApplication app(argc, argv);
+    QTemporaryDir settingsDirectory;
+    assert(settingsDirectory.isValid());
+    QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settingsDirectory.path());
+    // A v4 workspace must acquire the second details column on first launch.
+    {
+        QSettings settings("SunsProject", "Suns");
+        suns::MainWindow legacy;
+        legacy.installUiPolish();
+        legacy.findChild<QDockWidget*>("productionDock")->hide();
+        settings.setValue("workspace/docks", legacy.saveState(4));
+    }
+    using namespace suns;
+    MainWindow window;
+    installWorkspace(window);
     MainWindowTestAccess::setup(window);
     window.show();
     settle();
     auto* overview = window.findChild<QDockWidget*>("overviewDock");
     auto* production = window.findChild<QDockWidget*>("productionDock");
+    auto* details = window.findChild<QDockWidget*>("systemDetailsDock");
+    auto* detailsScroll = window.findChild<QScrollArea*>("systemDetailsScrollArea");
+    auto* planetInfo = window.findChild<QLabel*>("selectedPlanetDetailsSummary");
+    auto* temperature = window.findChild<QProgressBar*>("planetTemperatureBar");
+    auto* geology = window.findChild<QProgressBar*>("ironiumConcentration");
     auto* fleet = window.findChild<QDockWidget*>("fleetDock");
     auto* reports = window.findChild<QDockWidget*>("turnMessagesDock");
     auto* research = window.findChild<QDockWidget*>("researchDock");
@@ -130,6 +144,11 @@ int main(int argc, char** argv)
     auto* queue = window.findChild<QTreeWidget*>("productionQueueTree");
     auto* view = window.findChild<QGraphicsView*>();
     auto* expand = window.findChild<QAction*>("expandMapAction");
+    assert(details && detailsScroll && planetInfo && temperature && geology);
+    assert(details->isAncestorOf(planetInfo) && details->isAncestorOf(temperature) && details->isAncestorOf(geology));
+    assert(!window.findChild<QDialog*>("systemDetailsDialog"));
+    auto* detailsColumn = qobject_cast<QVBoxLayout*>(detailsScroll->widget()->layout());
+    assert(detailsColumn && detailsColumn->itemAt(0)->widget() == window.findChild<QGroupBox*>("planetGroup"));
     assert(overview && production && fleet && reports && research && status && minerals && queue && view && expand);
     assert(!window.findChild<QScrollArea*>("productionScrollArea"));
     assert(!window.tabifiedDockWidgets(production).contains(research));
@@ -142,17 +161,27 @@ int main(int argc, char** argv)
         window.resize(size);
         window.resetPanelLayout();
         settle();
+        if (app.arguments().contains("--capture")) window.grab().save(
+            size.width() == 1366 ? "/tmp/suns-system-details-column.png" : "/tmp/suns-system-details-column-small.png");
+        assert(window.width() >= window.minimumSizeHint().width());
         assert(fullyVisible(status, overview) && fullyVisible(minerals, overview));
         assert(fullyVisible(queue, production));
         assert(queue->height() >= 96 && queue->visualItemRect(queue->topLevelItem(0)).isValid());
-        assert(production->isVisible() && overview->isVisible());
+        assert(production->isVisible() && overview->isVisible() && details->isVisible());
+        assert(window.tabifiedDockWidgets(details).isEmpty());
+        assert(overview->geometry().right() < details->geometry().left());
+        assert(production->geometry().right() < details->geometry().left());
+        const auto mapRect = QRect(view->mapTo(&window, QPoint{}), view->size());
+        assert(details->geometry().right() < mapRect.left());
+        assert(details->geometry().top() == overview->geometry().top());
+        assert(details->geometry().bottom() >= production->geometry().bottom());
+        assert(view->viewport()->width() >= (size.width() == 1366 ? 300 : 100));
+        assert(planetInfo->text().contains("Earth") && temperature->isVisible());
         assert(fullyVisible(reports, &window) && reports->geometry().right() < fleet->geometry().left());
         auto* mapToolbar = window.findChild<QToolBar*>("mapViewToolbar");
         assert(fullyVisible(mapToolbar->widgetForAction(expand), &window));
         auto* mode = window.findChild<QComboBox*>("mapDisplayModeCombo");
         assert(fullyVisible(mode, &window) && mode->width() >= 100);
-        if (app.arguments().contains("--capture")) window.grab().save(
-            size.width() == 1366 ? "/tmp/suns-colony-workspace.png" : "/tmp/suns-colony-workspace-small.png");
     }
     window.findChild<QAction*>("openResearchToolAction")->trigger();
     settle();
@@ -166,12 +195,14 @@ int main(int argc, char** argv)
     assert(queueScroll > 0);
     settle();
     assert(scroll->value() == queueScroll && queue->currentItem() == queue->topLevelItem(0));
-    // Details use separate windows and cannot push the primary fields offscreen.
-    window.findChild<QPushButton*>("systemDetailsButton")->click();
-    auto* details = window.findChild<QDialog*>("systemDetailsDialog");
-    assert(details->isVisible() && !details->isModal());
+    // The details column is visible without a button or popup. It can be
+    // hidden and restored using the same View toggle as other docks.
+    details->toggleViewAction()->trigger();
+    assert(details->isHidden());
+    details->toggleViewAction()->trigger();
+    settle();
+    assert(details->isVisible() && planetInfo->isVisible());
     assert(fullyVisible(queue, production) && fullyVisible(minerals, overview));
-    details->close();
 
     // Production controls still operate on the same persistent queue.
     queue->setCurrentItem(queue->topLevelItem(7));
@@ -188,6 +219,12 @@ int main(int argc, char** argv)
     fleet->resize(410, 600);
     fleet->show();
     settle();
+    window.findChild<QAction*>("saveCustomWorkspaceAction")->trigger();
+    assert(QSettings("SunsProject", "Suns").value("workspace/customVersion").toInt() == 5);
+    details->hide();
+    window.findChild<QAction*>("restoreCustomWorkspaceAction")->trigger();
+    settle();
+    assert(details->isVisible() && fleet->isFloating() && !reports->isVisible());
     view->resetTransform();
     view->scale(4, 4);
     view->centerOn(12, -9);
@@ -197,7 +234,7 @@ int main(int argc, char** argv)
     expand->trigger();
     settle();
     assert(window.isFullScreen() && expand->isChecked());
-    assert(!overview->isVisible() && !production->isVisible() && !fleet->isVisible());
+    assert(!overview->isVisible() && !production->isVisible() && !details->isVisible() && !fleet->isVisible());
     assert(window.findChild<QToolBar*>("mapViewToolbar")->isVisible());
     assert(window.findChild<QToolBar*>("mapDisplayToolbar")->isVisible());
     assert(!window.findChild<QToolBar*>("dialogToolbar")->isVisible());
@@ -209,7 +246,7 @@ int main(int argc, char** argv)
     settle();
     key(view, Qt::Key_Escape);
     assert(!expand->isChecked() && window.windowState() == previousState);
-    assert(overview->isVisible() && production->isVisible() && fleet->isVisible() && fleet->isFloating());
+    assert(overview->isVisible() && production->isVisible() && details->isVisible() && fleet->isVisible() && fleet->isFloating());
     assert(!reports->isVisible());
     assert(window.menuBar()->isVisible() && window.statusBar()->isVisible());
     assert(view->transform().m11() == zoom);
@@ -225,9 +262,12 @@ int main(int argc, char** argv)
     assert(!expand->isChecked() && !fleet->isFloating());
     window.findChild<QAction*>("fleetWorkspaceAction")->trigger();
     settle();
-    assert(overview->isVisible() && production->isVisible() && fleet->isVisible());
+    assert(overview->isVisible() && production->isVisible() && details->isVisible() && fleet->isVisible());
 
     MainWindowTestAccess::unknown(window);
+    settle();
+    assert(planetInfo->text().contains("never scanned") && !planetInfo->text().contains("999999"));
+    assert(!planetInfo->text().contains("9876") && !temperature->isVisible() && !geology->isEnabled());
     assert(!status->text().contains("999999"));
     assert(status->text().contains("never scanned"));
     for (int row = 0; row < 3; ++row) {
@@ -236,12 +276,16 @@ int main(int argc, char** argv)
     }
     assert(queue->topLevelItemCount() == 0);
     MainWindowTestAccess::deselect(window);
+    settle();
+    assert(planetInfo->text().contains("No system selected"));
     assert(status->text().contains("No system selected"));
+    details->hide();
     expand->trigger();
     window.close(); // Save the normal workspace, rather than fullscreen-hidden docks.
     QSettings settings("SunsProject", "Suns");
     MainWindow restored;
-    restored.installUiPolish();
-    assert(restored.restoreState(settings.value("workspace/docks").toByteArray(), 4));
+    installWorkspace(restored);
+    assert(restored.restoreState(settings.value("workspace/docks").toByteArray(), 5));
+    assert(restored.findChild<QDockWidget*>("systemDetailsDock")->isHidden());
     assert(!restored.findChild<QDockWidget*>("productionDock")->isHidden());
 }
