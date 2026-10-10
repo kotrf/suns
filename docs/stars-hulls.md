@@ -162,9 +162,9 @@ support bonuses with Suns!' aggregate damage model, rather than implementing
 all original per-ship repair-location rules.
 
 Armor and initiative are reference attributes for the future battle system.
-Weapon, Shield, Armor, Bomb and Mine layer slots already enforce fitting
-classes but their equipment catalogs and combat/bombing/minefield effects
-remain separate work. The mine-layer hulls retain their doubled-mine-laying
+Weapon, Shield, Armor, Bomb and Mine layer slots enforce fitting classes and
+now have the [reference equipment catalog](stars-equipment.md). Their
+combat/bombing/minefield effects remain separate work. The mine-layer hulls retain their doubled-mine-laying
 metadata; it has no operational effect until minefields exist. Racial cloaking,
 stealing cargo, battle movement, research cost differences/miniaturization
 and other PRT/LRT effects are not implied by choosing a hull family.

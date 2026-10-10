@@ -33,9 +33,17 @@ Transport hulls buy cargo efficiency through built-in hold capacity and have few
 
 ## Fitting
 
-The designer exposes the [15 reference engines](stars-propulsion.md), the
-[16 reference scanners](stars-scanners.md), and the following Suns! equipment.
-Prototype engines and scanners are shown only for existing legacy empires:
+The designer exposes the [15 reference engines](stars-propulsion.md),
+[16 reference scanners](stars-scanners.md), [six mining robots](stars-mining.md)
+and [113 additional reference modules](stars-equipment.md). Search, category and
+"Fits this hull" filters help browse the catalog. Armor, shields and fitted
+armament quantities appear in the design summary. Combat-related cards distinguish
+reference ratings from currently operational logistics capabilities.
+
+Suns! support equipment includes Field Repair Bay, Relay Array and Anomaly
+Detector. The following prototype equipment is retained for existing legacy
+empires; Colony Module, Fuel Tank, Cargo Pod and Antimatter Generator have
+separate reference counterparts for new campaigns:
 
 - Fusion Drive
 - Advanced Fusion Drive (Propulsion 1; light, safe Warp 9, but no fuel scooping)

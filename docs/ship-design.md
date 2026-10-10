@@ -48,4 +48,4 @@ The component system is intentionally extensible. Technologies unlock scanners, 
 
 Those components should not be added merely to create a long catalog. Each should introduce a strategic design decision through mass, cost, power, range, survivability, signature, logistics or another interacting constraint.
 
-The eventual designer should let the player save named designs and build those designs at colonies. Technology should unlock hulls and components rather than simply replacing ships with fixed higher-level classes.
+The designer lets the player save named designs and build those designs at colonies. The [reference equipment catalog](stars-equipment.md) now covers armor, shields, weapons, bombs, mine layers, electrical and mechanical modules; their combat ratings await the corresponding simulation systems. Technology should unlock hulls and components rather than simply replacing ships with fixed higher-level classes.

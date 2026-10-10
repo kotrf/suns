@@ -80,3 +80,9 @@ Colony production supports one-off batches, annual factory/mine rules and saved 
 The engine technology catalog follows the 15 normal Stars! models, with their field levels, mass, costs and speed bands. See [Stars! propulsion](docs/stars-propulsion.md) for access rules, legacy compatibility and Suns! fuel/damage adaptations.
 
 Remote mining equipment follows the six Stars! robots, including Construction/Electronics requirements and Advanced/Basic Remote Mining access. Rated output varies by model and concentration, with minerals left on the planet for haulers. See [Stars! mining robots](docs/stars-mining.md).
+
+Ship fitting includes [113 additional Stars! modules](docs/stars-equipment.md),
+with original mass, costs, technology and access gates. The designer has search,
+category and hull-compatibility filters. Logistics equipment affects gameplay;
+combat, bombardment, minefields and stealth are explicitly marked as reference
+ratings awaiting those systems.

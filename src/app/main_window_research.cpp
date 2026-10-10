@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/equipment.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -273,14 +274,17 @@ void MainWindow::refreshResearchPanel()
         if (unlock.legacyScanner && !player_uses_legacy_scanners(state_, player->id)) continue;
         if (unlock.legacyHull && !player_uses_legacy_hulls(state_, player->id)) continue;
         if (unlock.legacyMining && !player_uses_legacy_mining(state_, player->id)) continue;
+        if (unlock.legacyEquipment && !player_uses_legacy_equipment(state_, player->id)) continue;
         auto* row = new QTreeWidgetItem(catalog);
-        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull || unlock.legacyScanner || unlock.legacyMining ? " (legacy)" : ""));
+        row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull || unlock.legacyScanner || unlock.legacyMining || unlock.legacyEquipment ? " (legacy)" : ""));
         row->setText(1, QString::fromStdString(research_unlock_requirement(unlock)));
         const bool legacyBiology = unlock.field == ResearchField::Biology
             && !unlock.component && !player->race.environmentBased;
         const bool applicable = research_unlock_applicable(state_, player->id, unlock);
         const auto* hull = unlock.hull ? reference_hull(*unlock.hull) : nullptr;
-        row->setText(2, legacyBiology ? "Legacy rules" : !applicable ? (hull && hull->mysteryTrader ? "Acquisition required" : "Race restriction")
+        const auto* equipment = unlock.component ? equipment_technology(*unlock.component) : nullptr;
+        row->setText(2, legacyBiology ? "Legacy rules" : !applicable ? ((hull && hull->mysteryTrader)
+                || (equipment && equipment->access == EquipmentAccess::MysteryTrader) ? "Acquisition required" : "Race restriction")
             : research_unlock_available(state_, player->id, unlock) ? "Available" : "Locked");
         row->setText(3, QString::fromStdString(unlock.description));
         row->setData(0, Qt::UserRole, int(unlock.field));

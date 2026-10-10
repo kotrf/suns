@@ -5,6 +5,7 @@
 #include "suns/mining.hpp"
 #include "suns/production.hpp"
 #include "suns/terraforming.hpp"
+#include "suns/equipment.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -17,6 +18,19 @@
 
 namespace {
 using namespace suns;
+
+// Pre-v60 campaigns used the prototype colonizer even on reference hulls.
+GameState pre_equipment_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
+{
+    auto state = generate_campaign(config, empires);
+    for (auto& design : state.shipDesigns) {
+        std::replace(design.components.begin(), design.components.end(),
+            ShipComponentType::StarsColonizationModule, ShipComponentType::ColonyModule);
+        design.placements.clear();
+        normalize_ship_design_placement(design);
+    }
+    return state;
+}
 
 // Older fixtures must have the old record layout, not just an older header.
 // v59 appends a bounded production extension after the unchanged v58 GameState.
@@ -1045,7 +1059,7 @@ void stars_propulsion_and_access_round_trip()
     save.turnToken = 34;
     save.mode = SessionMode::Host;
     save.playerTokens = {{1, 34}};
-    save.state = generate_campaign(GalaxyConfig{}, {{"Engines", RacePreset::Terran, true, false, true}});
+    save.state = pre_equipment_campaign(GalaxyConfig{}, {{"Engines", RacePreset::Terran, true, false, true}});
     save.pendingOrders = {1, {}};
     for (const auto& engine : propulsion_technologies()) {
         const auto hull = engine.component == ShipComponentType::SettlersDelight
@@ -1116,7 +1130,7 @@ void stars_hulls_round_trip_and_previous_format_migration()
     SaveGameData save;
     save.campaignId = 21; save.turnToken = 34;
     save.mode = SessionMode::Host;
-    save.state = generate_campaign({}, {
+    save.state = pre_equipment_campaign({}, {
         {"War", RacePreset::Terran, false, false, false, HullAccess::WarMonger, true, false},
         {"Supply", RacePreset::Terran, false, false, false, HullAccess::InnerStrength, false, true}});
     save.playerTokens = {{1, 34}, {2, 35}};
@@ -1217,7 +1231,7 @@ void scanners_round_trip_and_version_boundaries()
     SaveGameData save;
     save.campaignId = 21; save.turnToken = 34;
     save.mode = SessionMode::Host;
-    save.state = generate_campaign({}, {{"Scanner", RacePreset::Terran, false, false, false, HullAccess::SuperStealth}});
+    save.state = pre_equipment_campaign({}, {{"Scanner", RacePreset::Terran, false, false, false, HullAccess::SuperStealth}});
     save.pendingOrders = {1, {}};
     save.playerTokens = {{1, 34}};
     for (const auto& scanner : scanner_technologies()) {
@@ -1278,7 +1292,7 @@ void mining_robots_round_trip_and_version_boundaries()
     SaveGameData save;
     save.campaignId = 21; save.turnToken = 34;
     save.mode = SessionMode::Host;
-    save.state = generate_campaign({}, {{"Miners", RacePreset::Terran, false, false, false,
+    save.state = pre_equipment_campaign({}, {{"Miners", RacePreset::Terran, false, false, false,
         HullAccess::Standard, true}});
     save.pendingOrders = {1, {}};
     save.playerTokens = {{1, 34}};
@@ -1393,7 +1407,7 @@ void terraforming_and_automation_round_trip()
     save.state.players.front().race.legacyBiologyAdaptation = true;
     assert(write_save_game_file(path, save, error));
     assert(read_save_game_file(path, loaded, error) && loaded.state.players.front().race.legacyBiologyAdaptation);
-    save.state = generate_campaign({}, {{"Old campaign", RacePreset::Terran}});
+    save.state = pre_equipment_campaign({}, {{"Old campaign", RacePreset::Terran}});
     save.pendingOrders = {1, {}}; save.pendingDescriptions.clear();
     assert(write_pre_terraforming_fixture(path, save, error));
     assert(read_save_game_file(path, loaded, error) && loaded.state.players.front().race.legacyBiologyAdaptation);
@@ -1407,8 +1421,84 @@ void terraforming_and_automation_round_trip()
 
 } // namespace
 
+void equipment_catalog_round_trip()
+{
+    QTemporaryDir dir;
+    assert(dir.isValid());
+    SaveGameData value;
+    value.campaignId = 1;
+    value.turnToken = 10;
+    value.state = generate_campaign({}, {{"Fitting"}});
+    value.pendingOrders.player = 1;
+    value.state.players.front().technology.levels.fill(26);
+    for (const auto& equipment : equipment_technologies()) {
+        auto hull = equipment.kind == ShipComponentKind::Bomb ? ShipHullType::B52Bomber
+            : equipment.kind == ShipComponentKind::Mining ? ShipHullType::Miner
+            : equipment.unarmedTransportOnly ? ShipHullType::SmallFreighter : ShipHullType::Nubian;
+        ShipDesign design{value.state.nextShipDesignId++, 1, equipment.name, hull, {}, {}};
+        design.components.assign(hull_spec(hull).requiredEngines, ShipComponentType::QuickJump5);
+        design.components.push_back(equipment.component);
+        normalize_ship_design_placement(design);
+        assert(ship_design_valid(design));
+        value.state.shipDesigns.push_back(design);
+        value.pendingOrders.orders.push_back(CreateShipDesignOrder{design.name, hull, design.components, design.placements});
+        value.pendingDescriptions.push_back(QString::fromStdString(design.name));
+    }
+    QString error;
+    const auto path = dir.filePath("equipment.suns");
+    assert(write_save_game_file(path, value, error));
+    SaveGameData read;
+    assert(read_save_game_file(path, read, error));
+    assert(read.state.shipDesigns.size() == 115);
+    for (std::size_t index = 2; index < read.state.shipDesigns.size(); ++index) {
+        assert(read.state.shipDesigns[index].components == value.state.shipDesigns[index].components);
+        assert(read.state.shipDesigns[index].placements == value.state.shipDesigns[index].placements);
+        assert(ship_design_mass(read.state.shipDesigns[index]) == ship_design_mass(value.state.shipDesigns[index]));
+    }
+    const auto packetPath = dir.filePath("equipment.sunsorders");
+    TurnOrderFileData packet{1, value.state.turn, 10, value.pendingOrders, value.pendingDescriptions};
+    assert(write_turn_order_file(packetPath, packet, error));
+    TurnOrderFileData imported;
+    assert(read_turn_order_file(packetPath, imported, error));
+    assert(imported.orders.orders.size() == 113);
+    assert(std::get<CreateShipDesignOrder>(imported.orders.orders.back()).components.back() == ShipComponentType::Superlatanium);
+    auto host = value;
+    host.mode = SessionMode::Host;
+    host.playerTokens = {{1, 10}};
+    const auto exportPath = dir.filePath("equipment-player.suns");
+    assert(write_save_game_file(exportPath, make_player_turn(host, 1), error));
+    SaveGameData exported;
+    assert(read_save_game_file(exportPath, exported, error));
+    assert(exported.mode == SessionMode::PlayerTurn && exported.state.shipDesigns.size() == 115);
+    assert(exported.state.shipDesigns.back().components.back() == ShipComponentType::Superlatanium);
+    // v59 has the same record shape but rejects v60 equipment IDs.
+    QFile file(path);
+    assert(file.open(QIODevice::ReadWrite));
+    QDataStream header(&file); assert(file.seek(4)); header << quint32{59}; file.close();
+    assert(!read_save_game_file(path, read, error));
+    QFile packetFile(packetPath);
+    assert(packetFile.open(QIODevice::ReadWrite));
+    QDataStream packetHeader(&packetFile); assert(packetFile.seek(4)); packetHeader << quint32{17}; packetFile.close();
+    assert(!read_turn_order_file(packetPath, imported, error));
+    // A genuine v59 snapshot and v17 orders with old IDs remain readable.
+    value.state = make_demo_game(); value.pendingOrders = {1, {}}; value.pendingDescriptions.clear();
+    assert(write_save_game_file(path, value, error));
+    assert(file.open(QIODevice::ReadWrite));
+    QDataStream oldHeader(&file); assert(file.seek(4)); oldHeader << quint32{59}; file.close();
+    assert(read_save_game_file(path, read, error));
+    assert(ship_design_mass(read.state.shipDesigns[1]) == 85);
+    packet.orders = {1, {CreateShipDesignOrder{"Legacy", ShipHullType::Scout,
+        {ShipComponentType::FusionDrive, ShipComponentType::FuelTank}, {}}}};
+    packet.descriptions = {"Legacy"};
+    assert(write_turn_order_file(packetPath, packet, error));
+    assert(packetFile.open(QIODevice::ReadWrite));
+    QDataStream oldPacketHeader(&packetFile); assert(packetFile.seek(4)); oldPacketHeader << quint32{17}; packetFile.close();
+    assert(read_turn_order_file(packetPath, imported, error));
+}
+
 int main()
 {
+    equipment_catalog_round_trip();
     terraforming_and_automation_round_trip();
     mining_robots_round_trip_and_version_boundaries();
     scanners_round_trip_and_version_boundaries();
