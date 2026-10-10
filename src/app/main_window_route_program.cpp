@@ -182,6 +182,11 @@ QString routeForecast(
     // Navigation previews must never resolve battles using hidden enemy fits,
     // routes or the authoritative seed. Combat outcomes are not forecasts.
     std::erase_if(simulated.fleets, [&](const auto& f) { return f.owner != pending.player; });
+    simulated.minefields.clear(); simulated.wrecks.clear();
+    if (const auto* p = find_player(state,pending.player)) for (const auto& i : p->strategicIntel)
+        if (i.type == StrategicObjectKind::Minefield && i.quantity > 0)
+            simulated.minefields.push_back({i.id,i.owner,i.position,i.quantity,i.kind});
+    for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining) f.task = FleetTask::None;
     simulated.wormholes.clear();
     simulated.wormholeRules.spawnChancePerTurn = 0.0;
     const auto missing = missing_fleet_contacts(state, pending.player);

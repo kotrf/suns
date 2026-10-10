@@ -98,7 +98,11 @@ void defenses_torpedoes_and_modifiers()
     assert(near(hit.armorDamage, hit.hits * component_spec(C::ArmageddonMissile).weaponPower * 2));
     const auto computers = TurnProcessor{}.process_with_events(arena({C::AlphaTorpedo, C::BattleNexus}, {}, 100), {});
     const auto noComputers = TurnProcessor{}.process_with_events(arena({C::AlphaTorpedo}, {}, 100), {});
-    const auto jammers = TurnProcessor{}.process_with_events(arena({C::AlphaTorpedo}, {C::Jammer50}, 100), {});
+    const auto jammed = TurnProcessor{}.process_with_events(arena({C::AlphaTorpedo}, {C::Jammer50}, 100), {});
+    assert(std::none_of(jammed.events.begin(), jammed.events.end(), [](const auto& e) {
+        return e.recipient == 1 && e.kind == GameEventKind::SpaceBattle;
+    })); // Strategic interference delays the original combat report by one year.
+    const auto jammers = TurnProcessor{}.process_with_events(jammed.state, {});
     assert(battle_event(computers).battle->shots.front().hits > battle_event(noComputers).battle->shots.front().hits);
     assert(battle_event(jammers).battle->shots.front().hits < battle_event(noComputers).battle->shots.front().hits);
     const auto gatling = TurnProcessor{}.process_with_events(arena({C::GatlingGun}, {}, 10), {});

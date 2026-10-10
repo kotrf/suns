@@ -1,13 +1,29 @@
 # Project status and development handoff
 
-Snapshot: **10 October 2026, Dialog #06**. Gameplay baseline is main commit
-`0f138577f27e647ada45f37b601cbdfb324b6375`, after PRs
+Snapshot: **10 October 2026, Dialog #06**. Main is now
+`09f0123a3d9b0be1fe476f1c3d1aba87b45b4595` (documentation PR #171 merged).
+The merged gameplay baseline is `0f138577f27e647ada45f37b601cbdfb324b6375`, after PRs
 [#168](https://github.com/kotrf/suns/pull/168),
 [#169](https://github.com/kotrf/suns/pull/169) and
 [#170](https://github.com/kotrf/suns/pull/170) merged in dependency order.
 The [main CI run](https://github.com/kotrf/suns/actions/runs/38078501535)
 passed; the combined Qt Debug build also passed all **47 local CTest targets**.
 The user is testing the merged game locally; results of that playtest are pending.
+
+## Current authorized implementation
+
+The user requested bombardment/minefields, stealth/EW and science from exploring
+physical objects. Branch `feat/strategic-warfare-field-science` implements
+[strategic fleet operations](strategic-operations.md): operational bombs, three
+minefield types/sweeping, cloaking, jamming, emission modes/decoys and finite field
+observations/novel wreck recovery. This work is **not yet merged**. Its focused
+issue is [#172](https://github.com/kotrf/suns/issues/172); broader #58/#59/#101
+remain partial. Do not repeat the work or close umbrella issues for this slice.
+
+Main's old limitations below describe the merged baseline; the branch implements
+bombardment, mines and initial stealth/EW. It does not add station combat, colony
+defenses, planetary scars, autonomous doctrines, diplomatic treaties or physical
+sample-return missions.
 
 ## Implemented since the previous handoff
 
@@ -50,8 +66,8 @@ adaptations, not claims of an exact Stars! implementation.
 
 ## Formats and CI
 
-Current save format is **v61** (readers v12–61); turn orders are **v18**
-(readers v1–18). Host and players must use the same build. Version numbers in
+The implementation branch uses save **v62** (readers v12–62) and orders **v19**
+(readers v1–19); merged main still uses v61/v18 until the implementation merges. Host and players must use the same build. Version numbers in
 older thematic documents describe when a feature was introduced unless explicitly
 identified as current. Legacy designs and campaigns retain documented old rules.
 
@@ -86,9 +102,9 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-First collect the user's main playtest results. Candidate next slices are station
-fitting/combat, bombardment or battle doctrines/diplomacy; choose one explicitly
-before implementation. Do not restart existing partial implementations or close
+Collect the user's main playtest results while finishing the authorized strategic
+operations branch. After it merges, candidates include station fitting/combat,
+colony defenses/scars or battle doctrines/diplomacy; choose the next slice explicitly. Do not restart existing partial implementations or close
 umbrella issues solely because a first slice landed.
 
 Implementation goes through a branch and reviewed PR; merge only on the user's

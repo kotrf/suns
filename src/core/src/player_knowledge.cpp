@@ -2,6 +2,7 @@
 
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
+#include "suns/strategic_operations.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -81,13 +82,18 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
     case PlayerReportKind::FleetMobilityRestored: return GameEventKind::FleetMobilityRestored;
     case PlayerReportKind::SpaceBattle: return GameEventKind::SpaceBattle;
+    case PlayerReportKind::Bombardment: return GameEventKind::Bombardment;
+    case PlayerReportKind::MineStrike: return GameEventKind::MineStrike;
+    case PlayerReportKind::ScientificData: return GameEventKind::ScientificData;
+    case PlayerReportKind::EmissionDetected: return GameEventKind::EmissionDetected;
     }
     return GameEventKind::FleetArrived;
 }
 
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
-    if (kind == PlayerReportKind::SpaceBattle) return GameEventSeverity::Warning;
+    if (kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
+        || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
     return kind == PlayerReportKind::EnemyFleetDetected
             || kind == PlayerReportKind::FleetStalledForFuel
@@ -120,6 +126,11 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     mix(report.quantity);
     mix(static_cast<std::uint64_t>(report.researchField));
     mix(report.technologyLevel);
+    if (report.kind >= PlayerReportKind::Bombardment) {
+        mix(std::bit_cast<std::uint64_t>(report.contactPosition.x));
+        mix(std::bit_cast<std::uint64_t>(report.contactPosition.y));
+        mix(report.deliveredColonists);
+    }
     if (report.battle) {
         mix(std::bit_cast<std::uint64_t>(report.battle->position.x));
         mix(std::bit_cast<std::uint64_t>(report.battle->position.y));
@@ -155,7 +166,8 @@ void queue_survey_report(
     auto* player = mutable_player(state, playerId);
     if (!player) return;
 
-    const auto deliveryTurn = observationTurn + communication_delay_turns(state, playerId, sourcePosition);
+    auto deliveryTurn = observationTurn + communication_delay_turns(state, playerId, sourcePosition);
+    for (const auto& f : state.fleets) if (f.id == sourceFleet) deliveryTurn = fleet_available_turn(f, observationTurn) + communication_delay_turns(state, playerId, sourcePosition);
     std::optional<PlayerId> observedOwner;
     if (level >= SurveyLevel::OrbitalSurvey) {
         if (const auto* planet = find_planet_at_star(state, star)) observedOwner = planet->owner;
@@ -208,7 +220,7 @@ void queue_player_report(
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
-    const auto deliveryTurn = observationTurn
+    const auto deliveryTurn = report_transmission_turn(state,recipient,sourcePosition,observationTurn,fleet)
         + communication_delay_turns(state, recipient, sourcePosition);
     player->pendingPlayerReports.push_back({
         kind,
@@ -238,8 +250,8 @@ void observe_fleet_sensor_sweep(
     std::uint64_t observationTurn)
 {
     observe_wormhole_sweep(state, fleet, start, end, observationTurn);
-    const auto range = fleet_sensor_range(state, fleet);
-    if (!fleet_has_scanner(state, fleet)) return;
+    const auto range = strategic_sensor_range(state, fleet);
+    if (!fleet_has_scanner(state, fleet) || fleet.electronics.mode != EmissionMode::Standard) return;
     const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
 
     for (const auto& star : state.stars) {
@@ -271,8 +283,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         }
 
         for (const auto& fleet : state.fleets) {
-            const auto range = fleet_sensor_range(state, fleet);
-            if (fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
+            const auto range = strategic_sensor_range(state, fleet);
+            if (fleet.electronics.mode == EmissionMode::Standard && fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
                 auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
                     const auto known = best_observed_level(state, fleet.owner, star.id);
@@ -307,7 +319,7 @@ void observe_enemy_fleet_contacts(GameState& state, std::uint64_t observationTur
             for (const auto& colony : state.planets) {
                 if (colony.owner != player.id || colony.population == 0) continue;
                 const auto* star = find_star(state, colony.star);
-                if (!star || distance_between(star->position, enemy.position) > kColonySensorRange + 0.000001)
+                if (!star || !colony_detects_fleet(state, colony, enemy))
                     continue;
                 const auto priority = std::tuple{communication_delay_turns(state, player.id, star->position),
                     0, colony.id};
@@ -319,9 +331,7 @@ void observe_enemy_fleet_contacts(GameState& state, std::uint64_t observationTur
                 }
             }
             for (const auto& detector : state.fleets) {
-                if (detector.owner != player.id
-                    || distance_between(detector.position, enemy.position)
-                        > fleet_sensor_range(state, detector) + 0.000001) continue;
+                if (detector.owner != player.id || !detector_detects_fleet(state, detector, enemy)) continue;
                 const auto priority = std::tuple{communication_delay_turns(state, player.id, detector.position),
                     1, detector.id};
                 if (priority < best) {
@@ -489,6 +499,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            if (report.kind == PlayerReportKind::ScientificData) apply_scientific_data(state, player, report, events);
             auto severity = event_severity(report.kind);
             if (report.battle) {
                 bool survivors = false, losses = false;
@@ -513,6 +524,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.productionKind,
                 report.kind == PlayerReportKind::EnemyFleetDetected
                         || report.kind == PlayerReportKind::EnemyFleetLost
+                        || report.kind == PlayerReportKind::ScientificData || report.kind == PlayerReportKind::EmissionDetected
                     ? report.contactPosition : report.position,
                 static_cast<std::int32_t>(report.quantity),
                 SurveyLevel::Detected,

@@ -1,6 +1,7 @@
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -383,6 +384,8 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     own.pendingPlayerReports.clear();
     own.observedEnemyFleets.clear();
     own.pendingWormholeReports.clear();
+    own.pendingStrategicIntel.clear();
+    std::erase_if(own.fieldScience, [&](const auto& r) { return r.deliveryTurn > host.turn; });
     state.players.push_back(own);
     for (const auto& star : host.stars) {
         StarSystem publicStar{star.id, star.name, star.position, star.stellarClass};
@@ -472,11 +475,11 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         bool visible = false;
         for (const auto& colony : host.planets) if (colony.owner == playerId && colony.population > 0) {
             const auto* star = find_star(host, colony.star);
-            if (star && distance_between(star->position, enemy.position) <= kColonySensorRange) visible = true;
+            if (star && colony_detects_fleet(host, colony, enemy)) visible = true;
         }
         for (const auto& detector : host.fleets) if (detector.owner == playerId
             && fleet_has_instant_link(host, detector)
-            && distance_between(detector.position, enemy.position) <= fleet_sensor_range(host, detector)) visible = true;
+            && detector_detects_fleet(host, detector, enemy)) visible = true;
         if (!visible) continue;
         Fleet contact;
         contact.id = enemy.id;

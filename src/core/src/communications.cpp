@@ -1,5 +1,6 @@
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
+#include "suns/strategic_operations.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -34,7 +35,7 @@ std::vector<CommunicationField> communication_fields(
     // Ordinary scanners and dedicated relay arrays participate in the mesh.
     // Penetrating-only scanners do not extend communications.
     for (const auto& fleet : state.fleets) {
-        if (fleet.owner != player) continue;
+        if (fleet.owner != player || !fleet_transmits(fleet, state.turn)) continue;
         const auto range = fleet_communication_range(state, fleet);
         if (range <= 0.0) continue;
         fields.push_back({fleet.position, range, false});
@@ -272,7 +273,12 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
         fleet.task = FleetTask::None;
         return true;
     }
-    if (task != FleetTask::RemoteMining || fleet.destination || fleet.targetFleet != 0
+    if (task != FleetTask::RemoteMining) {
+        if (!strategic_task_available(state, fleet, task)) return false;
+        fleet.task = task;
+        return true;
+    }
+    if (fleet.destination || fleet.targetFleet != 0
         || !fleet.waypointQueue.empty()) return false;
 
     if (!fleet_can_remote_mine(state, fleet)) return false;
@@ -296,6 +302,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.warp = fleet.warp;
     result.fuel = fleet.fuel;
     result.damagePercent = fleet.damagePercent;
+    result.electronics = fleet.electronics;
     result.colonists = fleet.colonists;
     result.arrivalAction = fleet.arrivalAction;
     result.waypointQueue = fleet.waypointQueue;
@@ -373,6 +380,7 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position)
 {
     const auto fields = communication_fields(state, player);
+    const auto jamDelay = communication_jamming_delay(state, player, position);
 
     // Compatibility for tiny test fixtures and edge states that have no colony
     // node yet. Normal generated games always begin with the homeworld relay.
@@ -380,13 +388,13 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
         || std::none_of(fields.begin(), fields.end(), [](const CommunicationField& field) {
             return field.connected;
         })) {
-        return 0;
+        return jamDelay;
     }
 
     // A position inside any field connected to a colony root belongs to the
     // instantaneous empire mesh.
     for (const auto& field : fields) {
-        if (field.connected && inside_field(position, field)) return 0;
+        if (field.connected && inside_field(position, field)) return jamDelay;
     }
 
     // A detached scanner island still communicates instantaneously inside its
@@ -404,7 +412,7 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
         if (star) connectedTransceivers.push_back(star->position);
     }
     for (const auto& fleet : state.fleets) {
-        if (fleet.owner != player) continue;
+        if (fleet.owner != player || !fleet_transmits(fleet,state.turn)) continue;
         const auto inConnectedMesh = std::any_of(
             fields.begin(), fields.end(), [&](const CommunicationField& field) {
                 return field.connected && inside_field(fleet.position, field);
@@ -421,16 +429,16 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
             nearest = std::min(nearest, distance_between(source, receiver));
         }
     }
-    if (!std::isfinite(nearest) || nearest <= 0.000001) return 0;
+    if (!std::isfinite(nearest) || nearest <= 0.000001) return jamDelay;
 
     // Any non-zero subspace hop lands at a later annual planning boundary;
     // priority can never alter this physical propagation time.
-    return static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed));
+    return static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed)) + jamDelay;
 }
 
 bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)
 {
-    return communication_delay_turns(state, fleet.owner, fleet.position) == 0;
+    return fleet_transmits(fleet, state.turn) && communication_delay_turns(state, fleet.owner, fleet.position) == 0;
 }
 
 FleetTelemetry confirmed_fleet_telemetry(const GameState& state, const Fleet& fleet)
@@ -477,6 +485,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.warp = telemetry.warp;
     view.fuel = telemetry.fuel;
     view.damagePercent = telemetry.damagePercent;
+    view.electronics = telemetry.electronics;
     view.colonists = telemetry.colonists;
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;
@@ -542,7 +551,8 @@ bool submit_fleet_route_command(
         return false;
     }
 
-    const auto delay = communication_delay_turns(state, player, fleet->position);
+    const auto delivery = fleet_available_turn(*fleet, state.turn + communication_delay_turns(state, player, fleet->position));
+    const auto delay = delivery - state.turn;
     if (delay == 0) {
         if (program.clearRoute) fleet->pendingCommands.clear();
         return apply_route_program(state, *fleet, program);
@@ -567,7 +577,8 @@ bool submit_fleet_task_command(
     });
     if (fleet == state.fleets.end()) return false;
 
-    const auto delay = communication_delay_turns(state, player, fleet->position);
+    const auto delivery = fleet_available_turn(*fleet, state.turn + communication_delay_turns(state, player, fleet->position));
+    const auto delay = delivery - state.turn;
     if (delay == 0) return apply_task_program(state, *fleet, task);
 
     fleet->pendingCommands.push_back(PendingFleetCommand{
@@ -582,6 +593,7 @@ bool submit_fleet_task_command(
 void deliver_due_fleet_commands(GameState& state)
 {
     for (auto& fleet : state.fleets) {
+        if (fleet.electronics.resumeTurn && state.turn >= fleet.electronics.resumeTurn) fleet.electronics = {};
         std::stable_sort(fleet.pendingCommands.begin(), fleet.pendingCommands.end(),
             [](const PendingFleetCommand& lhs, const PendingFleetCommand& rhs) {
                 if (lhs.deliveryTurn != rhs.deliveryTurn) return lhs.deliveryTurn < rhs.deliveryTurn;
@@ -589,18 +601,24 @@ void deliver_due_fleet_commands(GameState& state)
             });
 
         std::optional<std::uint64_t> stoppedThrough;
+        std::size_t processed = 0;
         for (const auto& pending : fleet.pendingCommands) {
-            if (pending.deliveryTurn > state.turn) break;
+            if (pending.deliveryTurn > state.turn || !fleet_transmits(fleet, state.turn)) break;
+            ++processed;
             if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
-            if (pending.task) apply_task_program(state, fleet, *pending.task);
+            if (pending.electronics) {
+                const auto& e = *pending.electronics;
+                apply_electronics_program(fleet,e.resumeTurn && e.resumeTurn <= state.turn ? ElectronicsProgram{} : e);
+            }
+            else if (pending.task) apply_task_program(state, fleet, *pending.task);
             else {
                 apply_route_program(state, fleet, pending.program);
                 if (pending.program.clearRoute) stoppedThrough = pending.issuedTurn;
             }
         }
+        fleet.pendingCommands.erase(fleet.pendingCommands.begin(), fleet.pendingCommands.begin() + processed);
         std::erase_if(fleet.pendingCommands, [&](const PendingFleetCommand& pending) {
-            return pending.deliveryTurn <= state.turn
-                || (stoppedThrough && pending.issuedTurn <= *stoppedThrough);
+            return stoppedThrough && pending.issuedTurn <= *stoppedThrough;
         });
     }
 }
@@ -623,6 +641,7 @@ void deliver_due_fleet_telemetry(GameState& state)
 void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
 {
     for (auto& fleet : state.fleets) {
+        if (!fleet_transmits(fleet, observationTurn)) continue;
         const auto snapshot = authoritative_snapshot(state, fleet, observationTurn);
         const auto delay = communication_delay_turns(state, fleet.owner, fleet.position);
         if (delay == 0) {

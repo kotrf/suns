@@ -1,4 +1,6 @@
 #include "main_window.hpp"
+#include "suns/strategic_operations.hpp"
+#include "suns/campaign.hpp"
 #include "suns/wormholes.hpp"
 
 #include "suns/communications.hpp"
@@ -619,9 +621,7 @@ void MainWindow::rebuildScene()
     selection_.star = selectionToRestore;
     addBackgroundStars(scene_, state_.galaxySeed);
 
-    auto displayFleets = state_.fleets;
-    const auto missingContacts = missing_fleet_contacts(state_, pendingOrders_.player);
-    displayFleets.insert(displayFleets.end(), missingContacts.begin(), missingContacts.end());
+    auto displayFleets = make_player_view(state_, pendingOrders_.player).state.fleets;
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
@@ -634,7 +634,7 @@ void MainWindow::rebuildScene()
         for (const auto& fleet : displayFleets) {
             if (fleet.owner != pendingOrders_.player) continue;
             const auto visibleFleet = fleet_player_view(state_, fleet);
-            const auto range = fleet_sensor_range(state_, visibleFleet);
+            const auto range = strategic_sensor_range(state_, visibleFleet);
             if (range > 0.0) {
                 addSensorRange(scene_, visibleFleet.position, range,
                     QColor(90, 165, 255, 115), QColor(90, 165, 255, 10));
@@ -847,6 +847,7 @@ void MainWindow::rebuildScene()
     }
 
     renderKnownWormholes();
+    renderStrategicObjects();
     refreshMapLabels();
     updateControls();
     emit routeProgramContextChanged();

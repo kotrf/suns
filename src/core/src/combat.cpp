@@ -2,6 +2,8 @@
 
 #include "suns/communications.hpp"
 #include "suns/equipment.hpp"
+#include "suns/campaign.hpp"
+#include "suns/strategic_operations.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -257,7 +259,8 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
     // Broadcast result packets while the pre-casualty relay network still
     // exists. This does not require a destroyed ship to transmit later.
     for (const auto recipient : recipients) {
-        const auto delivery = report.observedTurn + communication_delay_turns(state, recipient, report.position);
+        const auto delivery = report_transmission_turn(state,recipient,report.position,report.observedTurn)
+            + communication_delay_turns(state, recipient, report.position);
         deliveries[recipient] = delivery;
         auto player = std::find_if(state.players.begin(), state.players.end(),
             [&](const auto& p) { return p.id == recipient; });
@@ -276,6 +279,21 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         }
         player->pendingPlayerReports.push_back(std::move(packet));
     }
+    SalvageWreck wreck;
+    wreck.position = report.position; wreck.expiresTurn = report.observedTurn + 20;
+    bool debris = false;
+    for (const auto& u : report.units) if (u.survivingShips < u.initialShips) {
+        debris = true;
+        if (const auto* d = find_ship_design(state,u.design)) for (const auto& unlock : research_unlocks()) {
+            if ((!unlock.component || std::find(d->components.begin(),d->components.end(),*unlock.component) == d->components.end())
+                && (!unlock.hull || *unlock.hull != d->hull)) continue;
+            const auto primary = std::size_t(unlock.field);
+            wreck.technology[primary] = std::max(wreck.technology[primary],unlock.level);
+            for (std::size_t i = 0; i < kResearchFieldCount; ++i)
+                wreck.technology[i] = std::max(wreck.technology[i],unlock.extraLevels[i]);
+        }
+    }
+    if (debris) { wreck.id = state.nextWreckId++; state.wrecks.push_back(wreck); }
     std::set<FleetId> destroyed;
     for (auto& fleet : state.fleets) {
         if (!fleetIds.contains(fleet.id)) continue;

@@ -52,6 +52,13 @@ bool write_pre_combat_fixture(const QString& path, const SaveGameData& value, QS
     QDataStream extension(bytes.mid(offset + 4));
     quint32 size{}; extension >> size;
     assert(bytes.mid(offset + 8 + size, 4) == QByteArray(4, '\0'));
+    // v62 adds a bounded trailing strategic extension after the v61 loss list.
+    QByteArray strategicMarker; QDataStream strategicShape(&strategicMarker, QIODevice::WriteOnly);
+    strategicShape << quint32{0x53545241u};
+    const auto strategicOffset = bytes.indexOf(strategicMarker, offset + 8 + size + 4);
+    assert(strategicOffset >= 0);
+    QDataStream strategicHeader(bytes.mid(strategicOffset + 4)); quint32 strategicSize{};
+    strategicHeader >> strategicSize; bytes.remove(strategicOffset, 8 + strategicSize);
     bytes.remove(offset + 8 + size, 4);
     QDataStream header(&bytes, QIODevice::ReadWrite);
     assert(header.device()->seek(4)); header << quint32{60};

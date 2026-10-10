@@ -90,5 +90,5 @@ category and hull-compatibility filters. Logistics equipment affects gameplay.
 Automatic [space combat](docs/space-combat.md) resolves physically meeting
 hostile fleets with beams, torpedoes, shields, armor and persistent ship losses.
 Battle reports arrive through communications and remain readable after fleet
-destruction. Different empires are hostile in this first slice. Bombardment,
-minefields, stealth detection and station combat remain future systems.
+destruction. Different empires are hostile in this first slice. [Bombardment, minefields, stealth/EW and field science](docs/strategic-operations.md)
+now have explicit fleet missions and emission controls. Station combat remains future work.

@@ -1,4 +1,5 @@
 #include "suns/wormholes.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/communications.hpp"
 
 #include <algorithm>
@@ -146,7 +147,7 @@ bool fleet_has_anomaly_detector(const GameState& state, const Fleet& fleet)
 
 void observe_wormhole_sweep(GameState& state, const Fleet& fleet, Position start, Position end, std::uint64_t turn)
 {
-    observe(state, fleet.owner, fleet.id, start, end, fleet_sensor_range(state, fleet),
+    observe(state, fleet.owner, fleet.id, start, end, strategic_sensor_range(state, fleet),
         fleet_has_anomaly_detector(state, fleet), turn);
 }
 
@@ -169,7 +170,7 @@ void advance_wormholes(GameState& state)
         observation.wormholes = {hole};
         for (const auto& fleet : state.fleets)
             observe(observation, fleet.owner, fleet.id, fleet.position, fleet.position,
-                fleet_sensor_range(state, fleet), fleet_has_anomaly_detector(state, fleet), turn, true);
+                strategic_sensor_range(state, fleet), fleet_has_anomaly_detector(state, fleet), turn, true);
         for (const auto& planet : state.planets) if (planet.owner && planet.population) {
             if (const auto* star = find_star(state, planet.star))
                 observe(observation, planet.owner, 0, star->position, star->position, kColonySensorRange, false, turn, true);
@@ -226,7 +227,7 @@ void resolve_wormhole_approaches(GameState& state)
         if (!fleet.destination || !fleet.arrivalAction || fleet.arrivalAction->kind != FleetArrivalActionKind::EnterWormhole) continue;
         for (const auto& hole : state.wormholes) for (const auto& mouth : hole.endpoints) {
             if (mouth.id != fleet.arrivalAction->wormholeEndpoint) continue;
-            const auto reach = detection_range(mouth, fleet_sensor_range(state, fleet), fleet_has_anomaly_detector(state, fleet));
+            const auto reach = detection_range(mouth, strategic_sensor_range(state, fleet), fleet_has_anomaly_detector(state, fleet));
             if (reach > 0 && distance_between(fleet.position, mouth.position) <= reach) fleet.destination = mouth.position;
         }
     }

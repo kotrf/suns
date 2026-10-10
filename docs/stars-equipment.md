@@ -66,8 +66,8 @@ separate work.
 | Alien Miner | 10 kt per mineral/year at concentration 100, if acquired; ordinary remote-mining rules |
 | Armor and shields | Absorb battle damage; armor losses persist, shields recharge between battles |
 | Guns, torpedoes, computers, jammers, capacitors, jets | Active in automatic combat using the documented Suns! tactical rules |
-| Bombs / mine layers | Original fitting ratings only; no bombardment or minefield resolution |
-| Cloaks / tachyon detection | Reference ratings only; no stealth detection modifier |
+| Bombs / mine layers | Active stationary missions: bombing, mine laying and beam sweeping |
+| Cloaks / tachyon detection | Diminishing-return fleet cloaking and tachyon counter-detection |
 | Orbital Adjuster / AR construction / Jump Gate | Access and fitting data only; no operational special action |
 
 Weapon cards expose power, battle-board range, initiative and accuracy.
@@ -109,3 +109,5 @@ Tests cover costs and ratings, every technology prerequisite, racial/acquisition
 gates, compatible and incompatible banks, invalid IDs, forged host orders,
 actual ship construction, old module properties, all 113 save/order round trips,
 v59/v17 compatibility, UI drag/drop, search, filters and multi-copy banks.
+
+Bombing, minefield, strategic EW and emission rules are described in [Strategic operations](strategic-operations.md).
