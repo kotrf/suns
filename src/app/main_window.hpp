@@ -133,6 +133,8 @@ public:
     // cannot display a technical line without clipping it.
     void installPanelLayoutFixes();
     void installFleetOperationsPanel();
+    void installStrategicOperations();
+    void renderStrategicObjects();
     void installColonyWorkspace();
     void refreshColonyWorkspace();
     void setMapExpanded(bool expanded);

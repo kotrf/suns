@@ -254,18 +254,18 @@ std::string equipment_effect_description(const EquipmentTechnology& entry)
         else out << "Population kill " << s.bombPopulationPercent << "%; minimum " << s.bombMinimumKills
             << "; installations " << s.bombInstallations << ".\n";
         if (s.smartBomb) out << "Smart bomb; effectiveness depends on population coverage.\n";
-        out << "Reference bomb ratings; bombardment is not implemented yet.\n";
+        out << "Active with a stationary Bombard enemy colony mission.\n";
     }
     if (s.minesPerYear) out << "Lays " << s.minesPerYear << (s.mineFieldKind == 1 ? " heavy" : s.mineFieldKind == 2 ? " speed-trap" : " standard")
-        << " mines/year. Reference rating; minefields are not implemented yet.\n";
-    if (s.cloakPercent) out << "Reference cloak rating " << s.cloakPercent << "%; stealth detection is not implemented yet.\n";
-    if (s.jammingPercent) out << "Torpedo jamming " << s.jammingPercent << "%.\n";
+        << " mines/year with a stationary Lay minefields mission.\n";
+    if (s.cloakPercent) out << "Cloak rating " << s.cloakPercent << "%; affects fleet detection.\n";
+    if (s.jammingPercent) out << "Torpedo and strategic sensor/communication jamming " << s.jammingPercent << "%.\n";
     if (s.accuracyBonusPercent) out << "Reduces torpedo inaccuracy by " << s.accuracyBonusPercent << "%; initiative +" << int(s.initiativeBonus) << ".\n";
     if (s.beamBonusPercent) out << "Beam damage bonus " << s.beamBonusPercent << "%.\n";
     if (s.beamDeflectionPercent) out << "Beam deflection " << s.beamDeflectionPercent << "%.\n";
     if (s.battleMovementBonus) out << "Battle movement +" << s.battleMovementBonus << " squares/round; no change to strategic Warp.\n";
     if (s.battleMovementPenalty) out << "All ships in battle move " << s.battleMovementPenalty << " fewer squares/round; does not stack.\n";
-    if (s.tachyonPercent) out << "Reduces opposing cloak by " << s.tachyonPercent << "%; stealth detection is not implemented yet.\n";
+    if (s.tachyonPercent) out << "Reduces opposing cloak by " << s.tachyonPercent << "%; affects fleet detection.\n";
     if (s.armor || s.shields || s.weaponPower || s.jammingPercent || s.accuracyBonusPercent || s.beamBonusPercent
         || s.beamDeflectionPercent || s.battleMovementBonus || s.battleMovementPenalty)
         out << "Active in automatic space combat. Different empires are hostile in the current rules.\n";

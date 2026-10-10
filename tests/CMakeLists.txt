@@ -20,6 +20,9 @@ target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_core_tests COMMAND suns_core_tests)
 add_executable(suns_combat_tests combat_tests.cpp)
+add_executable(suns_strategic_operations_tests strategic_operations_tests.cpp)
+target_link_libraries(suns_strategic_operations_tests PRIVATE Suns::Core)
+add_test(NAME suns_strategic_operations_tests COMMAND suns_strategic_operations_tests)
 target_link_libraries(suns_combat_tests PRIVATE Suns::Core)
 add_test(NAME suns_combat_tests COMMAND suns_combat_tests)
 
@@ -221,6 +224,10 @@ add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_test
 
 if(SUNS_BUILD_APP)
     add_executable(suns_combat_editor_tests combat_editor_tests.cpp)
+    add_executable(suns_strategic_operations_editor_tests strategic_operations_editor_tests.cpp)
+    target_link_libraries(suns_strategic_operations_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_strategic_operations_editor_tests COMMAND suns_strategic_operations_editor_tests)
+    set_tests_properties(suns_strategic_operations_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 25)
     target_link_libraries(suns_combat_editor_tests PRIVATE suns_app_ui)
     add_test(NAME suns_combat_editor_tests COMMAND suns_combat_editor_tests)
     set_tests_properties(suns_combat_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 25)

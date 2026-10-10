@@ -101,6 +101,10 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::Bombardment: subject = QString("Bombardment of %1: %2 colonists, %3 installations lost").arg(planetName).arg(qulonglong(event.deliveredColonists)).arg(event.quantity); break;
+    case GameEventKind::MineStrike: subject = QString("%1 hit a minefield — damage %2%, movement stopped").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
+    case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
+    case GameEventKind::EmissionDetected: subject = QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity); break;
     case GameEventKind::AnomalyDetected: subject = QString("Spatial anomaly %1 detected").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeClassified: subject = QString("WH %1 classified").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeEntered: subject = QString("%1 entered WH %2").arg(fleetName).arg(event.wormholeEndpoint); break;
@@ -215,14 +219,15 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     case MessageTypeFilter::Freight: return event.kind == GameEventKind::FreightDelivered;
     case MessageTypeFilter::EnemyContacts:
         return event.kind == GameEventKind::EnemyFleetDetected
-            || event.kind == GameEventKind::EnemyFleetLost;
+            || event.kind == GameEventKind::EnemyFleetLost || event.kind == GameEventKind::EmissionDetected;
     case MessageTypeFilter::Combat:
-        return event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
+        return event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
+            || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
             || event.kind == GameEventKind::GroundDefenseWon
             || event.kind == GameEventKind::ColonyLost;
     case MessageTypeFilter::Research:
-        return event.kind == GameEventKind::ResearchLevelCompleted
+        return event.kind == GameEventKind::ScientificData || event.kind == GameEventKind::ResearchLevelCompleted
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::ProductionDelays:
         return event.kind == GameEventKind::ProductionWaitingForMinerals
