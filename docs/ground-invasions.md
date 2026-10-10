@@ -22,7 +22,8 @@ invasion the planet changes owner, the surviving attackers become its surface
 population and the former owner's production queue is cleared. Mines,
 factories, surface minerals and planetary history survive capture. Ownership
 of an orbital station is unchanged: capturing or destroying orbital assets
-belongs to the later space-combat layer.
+remains future station-combat work. The current
+[fleet-combat layer](space-combat.md) does not attack or capture stations.
 
 An invasion order cannot smuggle minerals onto an enemy surface. A waypoint
 using `UnloadAll` for all cargo commits the colonists first; minerals unload

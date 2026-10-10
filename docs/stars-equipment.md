@@ -98,9 +98,11 @@ still select them, marked legacy. They do not appear in fresh reference-only
 campaigns. Relay Array, Field Repair Bay and Anomaly Detector remain Suns!
 support devices.
 
-Save **v60** and turn-order **v18** append equipment IDs without changing record
+Save **v60** and turn-order **v18** introduced equipment IDs without changing record
 layouts or existing component IDs. Earlier saves/orders remain readable and
-their existing designs are not migrated to different equipment. Pre-v60 readers
+their existing designs are not migrated to different equipment. The current
+save **v61** also persists battle reports and pending remote losses; orders remain
+**v18**. Pre-v60 readers
 cannot exchange new component IDs; all PBEM participants need the new build.
 
 Tests cover costs and ratings, every technology prerequisite, racial/acquisition

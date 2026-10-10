@@ -70,7 +70,9 @@ Command in transit: delivery Turn 46
 
 `projected_fleet_position()` advances the last confirmed route program using its known Warp and waypoints. It exists to keep the strategic map usable when a fleet is out of contact.
 
-The estimate is intentionally not authoritative. It may be wrong once future systems introduce autonomous doctrines, interception, combat, failures or other events that cause a remote fleet to depart from its last reported plan.
+The estimate is intentionally not authoritative. Interception, combat, fuel
+stalls or other events can already cause a remote fleet to depart from its last
+reported plan. Autonomous contingency doctrines remain future work.
 
 The eventual map presentation should therefore visually distinguish a confirmed position from an estimated one rather than silently exposing the simulation's real coordinates.
 
@@ -80,16 +82,21 @@ Route commands and fleet telemetry use the fleet communication packet model. Pro
 
 The galaxy map (fleet marker, sensor circle and route overlays), fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: confirmed telemetry plus deterministic prediction rather than authoritative coordinates/cargo/fuel. In-flight commands and telemetry are persisted in the current save format.
 
+[Space-battle results](space-combat.md) also use delayed player reports. Packets
+are dispatched through the pre-casualty network. A destroyed remote fleet's last
+confirmed contact remains until the result arrives, without remaining a physical
+ship or relay. Delivered contact-loss/restoration and command-delivery messages
+are already available in Turn Messages.
+
 ## Future extensions
 
 The same model is intended to support:
 
-- orbital relay stations and dedicated relay ships
+- orbital relay stations (dedicated Relay Array ship modules already exist)
 - communication components in ship/station design
 - autonomous fleet doctrines when commands cannot arrive in time
 - additional delayed sensor/intelligence reports
 - jamming, interception and communication warfare
-- Turn Messages for command delivery and contact loss/restoration
 - technology improvements to range, signal speed and resistance to interference
 
 Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the subspace hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.

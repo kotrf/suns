@@ -26,7 +26,11 @@ A `MoveFleetOrder` represents the player's complete route intent:
 6. the next queued waypoint is promoted to the active leg;
 7. **movement ends for that fleet for the current turn**; the promoted leg starts on the following turn.
 
-The last rule deliberately makes arrival a clean phase boundary. Loading, unloading, refuelling, future combat and colony-side effects therefore have an unambiguous ordering before the next leg consumes fuel.
+The last rule deliberately makes arrival a clean phase boundary. Space combat
+resolves after movement and before arrival actions; destroyed fleets cannot
+unload or colonize, and surviving combatants interrupt their route. See
+[combat turn order](space-combat.md). Loading, unloading, refuelling and
+colony-side effects complete before the next leg consumes fuel.
 
 Most current tasks are one-shot. `Remote Mining` is persistent and terminal: it can appear only on the final waypoint, becomes active on arrival, starts extraction on the following turn and remains active until a replacement route or `No Task` command is delivered. `Merge with fleet` is also terminal because the pursuing FleetId is consumed when the rendezvous succeeds. Clearing a stationary fleet's route is the current `No Task` operation.
 
