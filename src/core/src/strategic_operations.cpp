@@ -50,9 +50,7 @@ std::optional<double> entry_fraction(Position start, Position end, Position cent
 
 void stage_intel(GameState& state, Player& player, StrategicIntel intel, Position source)
 {
-    auto transmit = intel.observedTurn;
-    for (const auto& fleet : state.fleets) if (fleet.owner == player.id && same_position(fleet.position,source))
-        transmit = std::max(transmit,fleet_available_turn(fleet,intel.observedTurn));
+    const auto transmit = report_transmission_turn(state,player.id,source,intel.observedTurn);
     intel.deliveryTurn = transmit + communication_delay_turns(state, player.id, source);
     const auto similar = [&](const StrategicIntel& old) {
         return old.type == intel.type && old.id == intel.id && old.observedTurn == intel.observedTurn;
@@ -273,7 +271,8 @@ bool apply_minefield_crossing(GameState& state, Fleet& fleet, Position start, Po
     first->mines -= consumed;
     if (first->kind != 2) fleet.damagePercent = std::min(100.0,
         fleet.damagePercent + 100*consumed*(first->kind == 1 ? 12 : 4)/std::max(1.0, armor));
-    const auto delivery = state.turn + 1 + communication_delay_turns(state, fleet.owner, source);
+    const auto delivery = report_transmission_turn(state,fleet.owner,source,state.turn+1,fleet.id)
+        + communication_delay_turns(state, fleet.owner, source);
     if (fleet.damagePercent >= 100 && delivery > state.turn + 1)
         state.pendingFleetLossContacts.push_back({fleet_player_view(state, fleet), delivery});
     queue_player_report(state, fleet.owner, PlayerReportKind::MineStrike, source, state.turn+1,
@@ -360,6 +359,20 @@ std::uint64_t fleet_available_turn(const Fleet& fleet, std::uint64_t turn)
     if (fleet.electronics.mode == EmissionMode::RadioSilence) return std::max(turn, fleet.electronics.resumeTurn);
     if (fleet.electronics.mode == EmissionMode::Passive) return turn + (3-turn%3)%3;
     return turn;
+}
+std::uint64_t report_transmission_turn(const GameState& state,PlayerId owner,Position position,
+    std::uint64_t turn,FleetId observer)
+{
+    // A fleet's own operation obeys its own program. Generic reports can use
+    // the earliest co-located transmitter; a silent neighbor cannot block it.
+    for (const auto& f : state.fleets) if (observer && f.id == observer && f.owner == owner)
+        return fleet_available_turn(f,turn);
+    for (const auto& p : state.planets) if (p.owner == owner && p.population)
+        if (const auto* star = find_star(state,p.star); star && same_position(star->position,position)) return turn;
+    auto earliest = std::numeric_limits<std::uint64_t>::max();
+    for (const auto& f : state.fleets) if (f.owner == owner && same_position(f.position,position))
+        earliest = std::min(earliest,fleet_available_turn(f,turn));
+    return earliest == std::numeric_limits<std::uint64_t>::max() ? turn : earliest;
 }
 std::uint32_t communication_jamming_delay(const GameState& state, PlayerId owner, Position position)
 {

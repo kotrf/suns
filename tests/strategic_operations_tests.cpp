@@ -104,6 +104,12 @@ void mines_crossings_laying_sweeping()
     s = arena(); s.minefields = {{1,2,{30,0},100,0}}; s.nextMinefieldId = 2;
     r = TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{100,0},6}}}});
     assert(event(r,GameEventKind::MineStrike) && r.state.fleets.empty()); // Destroyer armor is exhausted.
+    s.fleets[0].electronics = {EmissionMode::RadioSilence,5};
+    s.fleets[0].destination = Position{100,0}; s.fleets[0].warp = 6; // Route already aboard.
+    r = TurnProcessor{}.process_with_events(s,{});
+    assert(r.state.fleets.empty() && !event(r,GameEventKind::MineStrike));
+    assert(r.state.pendingFleetLossContacts.size() == 1 && r.state.pendingFleetLossContacts[0].deliveryTurn == 5);
+    assert(make_player_view(r.state,1).state.fleets.size() == 1);
     // Unseen fields do not leak through a player export.
     const auto view = make_player_view(s,1);
     assert(view.state.minefields.empty() && view.state.players[0].strategicIntel.empty());
@@ -145,6 +151,13 @@ void stealth_jamming_and_signals()
 void silence_resumes_and_orders_wait()
 {
     auto s = arena();
+    auto neighbor = s.fleets[0]; neighbor.id = 2; neighbor.electronics = {EmissionMode::RadioSilence,8};
+    s.fleets.push_back(neighbor); s.nextFleetId = 3;
+    assert(report_transmission_turn(s,1,{0,0},2) == 2);
+    std::reverse(s.fleets.begin(),s.fleets.end());
+    assert(report_transmission_turn(s,1,{0,0},2) == 2);
+    assert(report_transmission_turn(s,1,{0,0},2,2) == 8);
+    s = arena();
     assert(!submit_electronics_command(s,2,1,{EmissionMode::RadioSilence,4}));
     assert(!submit_electronics_command(s,1,1,{EmissionMode::RadioSilence,1}));
     assert(submit_electronics_command(s,1,1,{EmissionMode::RadioSilence,4}));

@@ -220,13 +220,8 @@ void queue_player_report(
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
-    auto deliveryTurn = observationTurn
+    const auto deliveryTurn = report_transmission_turn(state,recipient,sourcePosition,observationTurn,fleet)
         + communication_delay_turns(state, recipient, sourcePosition);
-    for (const auto& source : state.fleets) if (source.owner == recipient && same_position(source.position, sourcePosition)
-        && (source.id == fleet || !std::any_of(state.planets.begin(),state.planets.end(),[&](const auto& p) {
-            const auto* star = find_star(state,p.star); return p.owner == recipient && p.population && star && same_position(star->position,sourcePosition);
-        })))
-        deliveryTurn = fleet_available_turn(source, observationTurn) + communication_delay_turns(state, recipient, sourcePosition);
     player->pendingPlayerReports.push_back({
         kind,
         observationTurn,

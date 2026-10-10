@@ -70,7 +70,10 @@ Passive localization starts with 25% of the fitted scanner range, then uses a
 stationary signature factor of 0.5, or a moving factor
 `min(2, 0.5 + Warp/5)`, and effective cloak. Radio silence does not erase commands
 already aboard. New commands wait for a communication window; in-flight packets
-remain deliverable. Owner positions continue to be projected from confirmed
+remain deliverable. A fleet's operation reports follow its emission program;
+generic reports use the earliest co-located transmitter, with colony reports
+independent of silent orbiting fleets. Combat snapshots retain these delivery
+dates even if the reporting fleet is destroyed. Owner positions continue to be projected from confirmed
 telemetry. Silent fleets do not act as communication relays or publish new active
 surveys. A burst/single-scan route program is not implemented yet (#101).
 

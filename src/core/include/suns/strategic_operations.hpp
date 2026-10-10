@@ -28,6 +28,8 @@ void apply_scientific_data(GameState&, Player&, const PendingPlayerReport&, std:
 [[nodiscard]] bool submit_electronics_command(GameState&, PlayerId, FleetId, ElectronicsProgram);
 void apply_electronics_program(Fleet&, ElectronicsProgram);
 [[nodiscard]] std::uint64_t fleet_available_turn(const Fleet&, std::uint64_t);
+[[nodiscard]] std::uint64_t report_transmission_turn(const GameState&, PlayerId, Position,
+    std::uint64_t observationTurn, FleetId observer = 0);
 [[nodiscard]] std::uint32_t communication_jamming_delay(const GameState&, PlayerId, Position);
 [[nodiscard]] bool fleet_transmits(const Fleet&, std::uint64_t);
 }
