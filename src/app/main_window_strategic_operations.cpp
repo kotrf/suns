@@ -65,7 +65,7 @@ void MainWindow::installStrategicOperations()
         const bool owned = fleet && fleet->owner == pendingOrders_.player;
         task->setEnabled(owned); mode->setEnabled(owned); setMode->setEnabled(owned);
         years->setEnabled(owned && mode->currentIndex() == 2);
-        if (!owned) { assign->setEnabled(false); summary->setText("Select your fleet."); return; }
+        if (!owned) { assign->setEnabled(false); deception->setEnabled(false); summary->setText("Select your fleet."); return; }
         const auto known = fleet_player_view(state_, *fleet);
         bool jammer = false;
         for (const auto& stack : fleet_ship_stacks(known)) if (const auto* design = find_ship_design(state_,stack.design))

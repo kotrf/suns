@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <QFile>
 #include <QDataStream>
+#include <QListWidget>
+#include <QTextBrowser>
 #include <cassert>
 #include <cmath>
 #include <algorithm>
@@ -24,6 +26,9 @@ struct MainWindowTestAccess {
         w.state_ = s; w.pendingOrders_ = {1,{}}; w.selection_.fleet = s.fleets.front().id; w.rebuildScene();
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void messages(MainWindow& w,const std::vector<GameEvent>& events) {
+        w.resetTurnMessages(); w.appendTurnMessages(events);
+    }
 };
 }
 void settle() { QEventLoop loop; QTimer::singleShot(30,&loop,&QEventLoop::quit); loop.exec(); }
@@ -87,5 +92,19 @@ int main(int argc,char** argv)
     assert(std::any_of(pending.orders.begin(),pending.orders.end(),[](const auto& o) { return std::holds_alternative<SetFleetTaskOrder>(o); }));
     assert(std::any_of(pending.orders.begin(),pending.orders.end(),[](const auto& o) { return std::holds_alternative<SetFleetElectronicsOrder>(o); }));
     task->setCurrentIndex(task->findData(int(FleetTask::Bombardment))); settle(); assert(!assign->isEnabled());
+    window.installTurnMessages();
+    auto* messages = window.findChild<QListWidget*>("turnMessagesList");
+    auto* messageBody = window.findChild<QTextBrowser*>("turnMessageBody");
+    assert(messages && messageBody);
+    for (const auto kind : {GameEventKind::Bombardment,GameEventKind::MineStrike,
+                           GameEventKind::ScientificData,GameEventKind::EmissionDetected}) {
+        GameEvent e; e.id = 100+std::uint64_t(kind); e.recipient = 1; e.kind = kind;
+        e.observedTurn = 1; e.turn = 2; e.position = {80,120}; e.quantity = 12;
+        MainWindowTestAccess::messages(window,{e}); messages->setCurrentRow(0); settle();
+        const auto text = messageBody->toPlainText();
+        assert(text.contains("Observed turn 1; received turn 2") && !text.contains("Natural wormholes"));
+        if (kind == GameEventKind::ScientificData) assert(text.contains("research points have been delivered"));
+        if (kind == GameEventKind::EmissionDetected) assert(text.contains("unverified"));
+    }
     window.close(); settle();
 }
