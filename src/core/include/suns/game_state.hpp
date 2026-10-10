@@ -581,6 +581,44 @@ enum class PlayerReportKind {
     EnemyFleetDetected,
     EnemyFleetLost,
     FleetMobilityRestored,
+    SpaceBattle,
+};
+
+// A report is an immutable observation, independent of surviving objects and
+// designs. Only battle participants receive it, after communication delivery.
+struct SpaceBattleUnit {
+    PlayerId owner{};
+    FleetId fleet{};
+    ShipDesignId design{};
+    std::string fleetName;
+    std::string designName;
+    std::uint32_t initialShips{};
+    std::uint32_t survivingShips{};
+    double remainingArmor{};
+    double remainingShields{};
+};
+
+struct SpaceBattleShot {
+    std::uint8_t round{};
+    std::uint32_t attacker{}; // Indices into SpaceBattleReport::units.
+    std::uint32_t target{};
+    ShipComponentType weapon{ShipComponentType::Laser};
+    std::uint64_t fired{};
+    std::uint64_t hits{};
+    double range{};
+    double shieldDamage{};
+    double armorDamage{};
+    std::uint32_t shipsDestroyed{};
+};
+
+struct SpaceBattleReport {
+    std::uint64_t observedTurn{};
+    Position position;
+    std::uint8_t rounds{};
+    bool stalemate{};
+    bool logTruncated{};
+    std::vector<SpaceBattleUnit> units;
+    std::vector<SpaceBattleShot> shots;
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -603,6 +641,7 @@ struct PendingPlayerReport {
     std::uint64_t deliveredColonists{};
     Position contactPosition;
     PlayerId contactOwner{};
+    std::optional<SpaceBattleReport> battle;
 };
 
 struct TechnologyState {
@@ -705,6 +744,7 @@ enum class HistoryMilestoneKind : std::uint8_t {
     GroundInvasionWon,
     GroundInvasionLost,
     GroundDefenseWon,
+    SpaceBattle,
 };
 
 struct HistoryMilestone {
@@ -921,6 +961,11 @@ struct Fleet {
     double damagePercent{};
 };
 
+struct PendingFleetLossContact {
+    Fleet lastContact;
+    std::uint64_t deliveryTurn{};
+};
+
 struct WormholeEndpoint {
     WormholeEndpointId id{};
     Position position;
@@ -981,6 +1026,8 @@ struct GameState {
     WormholeRules wormholeRules;
     std::vector<Wormhole> wormholes;
     std::vector<WormholeTransit> wormholeTransits;
+    // Host-only pre-battle owner knowledge; never participates in simulation.
+    std::vector<PendingFleetLossContact> pendingFleetLossContacts;
 };
 
 struct GalaxyConfig {

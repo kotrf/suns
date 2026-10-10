@@ -18,6 +18,8 @@ A leg before any dynamic `Load All` result is labelled **exact navigation**. Its
 Every later leg is labelled **projected navigation** because its gross mass and fuel burn may depend on that dynamic load result.
 
 The forecast is intentionally phrased as "if no further orders are issued". Future player actions, combat and other systems may invalidate a projection; the authoritative result always comes from `TurnProcessor` when the real turn is resolved.
+Enemy fleets are excluded from navigation simulation. A preview never runs a
+battle using hidden enemy equipment, routes or the host's battle seed.
 
 
 ## Per-waypoint ETA

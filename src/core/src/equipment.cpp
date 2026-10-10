@@ -268,7 +268,7 @@ std::string equipment_effect_description(const EquipmentTechnology& entry)
     if (s.tachyonPercent) out << "Reduces opposing cloak by " << s.tachyonPercent << "%; stealth detection is not implemented yet.\n";
     if (s.armor || s.shields || s.weaponPower || s.jammingPercent || s.accuracyBonusPercent || s.beamBonusPercent
         || s.beamDeflectionPercent || s.battleMovementBonus || s.battleMovementPenalty)
-        out << "Reference combat ratings; space combat is not implemented yet.\n";
+        out << "Active in automatic space combat. Different empires are hostile in the current rules.\n";
     if (entry.component == ShipComponentType::JumpGate) out << "Ship jump gates are not implemented yet.\n";
     if (entry.component == ShipComponentType::OrbitalAdjuster) out << "Orbital terraforming is not implemented yet.\n";
     if (entry.component == ShipComponentType::OrbitalConstructionModule) out << "Alternate Reality colonization is not implemented yet.\n";

@@ -1664,7 +1664,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     }
 
     auto knownFleets = state.fleets;
-    const auto missing = wormhole_missing_contacts(state, playerId);
+    const auto missing = missing_fleet_contacts(state, playerId);
     knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
     std::sort(knownFleets.begin(), knownFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     for (const auto& source : knownFleets) {
@@ -1673,7 +1673,12 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
             [&](const auto& t) { return t.lastContact.id == source.id && t.lastContact.owner == playerId
                 && t.status != WormholeTransitStatus::EmergenceConfirmed
                 && t.status != WormholeTransitStatus::PresumedLost; });
-        const auto fleet = pendingTransit ? fleet_player_view(state, source) : source;
+        const auto* player = find_player(state, playerId);
+        const bool undeliveredBattle = player && std::any_of(player->pendingPlayerReports.begin(), player->pendingPlayerReports.end(),
+            [&](const auto& report) { return report.battle && report.deliveryTurn > state.turn
+                && std::any_of(report.battle->units.begin(), report.battle->units.end(),
+                    [&](const auto& unit) { return unit.fleet == source.id && unit.owner == playerId; }); });
+        const auto fleet = pendingTransit || undeliveredBattle ? fleet_player_view(state, source) : source;
         ++result.fleets;
         result.population += fleet.colonists;
         result.ships += fleet_ship_count(fleet);
@@ -1681,7 +1686,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.ironium += fleet.minerals.ironium;
         result.minerals.boranium += fleet.minerals.boranium;
         result.minerals.germanium += fleet.minerals.germanium;
-        if (!pendingTransit && std::none_of(missing.begin(), missing.end(), [&](const auto& contact) { return contact.id == fleet.id; })
+        if (!pendingTransit && !undeliveredBattle && std::none_of(missing.begin(), missing.end(), [&](const auto& contact) { return contact.id == fleet.id; })
             && fleet_has_instant_link(state, fleet))
             result.fleetHistory.push_back({fleet.id, fleet_ship_count(fleet),
                 fleet_gross_mass(state, fleet), fleet.fuel, fleet.minerals, fleet.colonists,

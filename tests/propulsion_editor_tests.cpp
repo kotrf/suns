@@ -314,7 +314,7 @@ int main(int argc, char** argv)
     };
     search->setText("Laser");
     assert(visibleRows() == 2);
-    assert(equipmentDetails->text().contains("space combat is not implemented"));
+    assert(equipmentDetails->text().contains("Active in automatic space combat"));
     search->clear();
     category->setCurrentIndex(category->findData(int(ShipComponentKind::Bomb)));
     assert(visibleRows() == 15);

@@ -161,7 +161,7 @@ void MainWindow::refreshFleetSummary()
     table->clear();
 
     auto contacts = state_.fleets;
-    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     contacts.insert(contacts.end(), missing.begin(), missing.end());
     std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     FleetId previous{};

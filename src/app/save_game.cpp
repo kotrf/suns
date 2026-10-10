@@ -1,6 +1,7 @@
 #include "save_game.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
+#include "suns/combat.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -19,7 +20,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 60;
+constexpr quint32 kSaveFormatVersion = 61;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -726,6 +727,84 @@ void readPlanet(QDataStream& stream, Planet& value)
 
 }
 
+void writeBattle(QDataStream& stream, const std::optional<SpaceBattleReport>& value)
+{
+    stream << quint8(value.has_value());
+    if (!value) return;
+    stream << quint64(value->observedTurn);
+    writePosition(stream, value->position);
+    stream << quint8(value->rounds) << quint8(value->stalemate) << quint8(value->logTruncated)
+           << quint32(value->units.size());
+    for (const auto& u : value->units) {
+        stream << quint32(u.owner) << quint32(u.fleet) << quint32(u.design);
+        writeString(stream, u.fleetName);
+        writeString(stream, u.designName);
+        stream << quint32(u.initialShips) << quint32(u.survivingShips) << u.remainingArmor << u.remainingShields;
+    }
+    stream << quint32(value->shots.size());
+    for (const auto& s : value->shots) {
+        stream << quint8(s.round) << quint32(s.attacker) << quint32(s.target);
+        writeEnum(stream, s.weapon);
+        stream << quint64(s.fired) << quint64(s.hits) << s.range << s.shieldDamage << s.armorDamage << quint32(s.shipsDestroyed);
+    }
+}
+
+void readBattle(QDataStream& stream, std::optional<SpaceBattleReport>& value)
+{
+    value.reset();
+    quint8 present{};
+    stream >> present;
+    if (present > 1) { markCorrupt(stream); return; }
+    if (!present) return;
+    SpaceBattleReport battle;
+    quint64 turn{};
+    quint8 rounds{}, stalemate{}, truncated{};
+    stream >> turn;
+    readPosition(stream, battle.position);
+    stream >> rounds >> stalemate >> truncated;
+    if (rounds == 0 || rounds > kSpaceBattleRoundLimit || stalemate > 1 || truncated > 1) { markCorrupt(stream); return; }
+    battle.observedTurn = turn;
+    battle.rounds = rounds;
+    battle.stalemate = stalemate;
+    battle.logTruncated = truncated;
+    quint32 count{};
+    if (!readCount(stream, count) || count < 2) { markCorrupt(stream); return; }
+    const auto validAmount = [](double n) { return std::isfinite(n) && n >= 0 && n <= 1e15; };
+    for (quint32 i = 0; i < count; ++i) {
+        SpaceBattleUnit u;
+        quint32 owner{}, fleet{}, design{}, initial{}, surviving{};
+        stream >> owner >> fleet >> design;
+        readString(stream, u.fleetName);
+        readString(stream, u.designName);
+        stream >> initial >> surviving >> u.remainingArmor >> u.remainingShields;
+        if (!owner || !fleet || !design || !initial || surviving > initial
+            || !validAmount(u.remainingArmor) || !validAmount(u.remainingShields)
+            || (surviving == 0 && (u.remainingArmor != 0 || u.remainingShields != 0))) { markCorrupt(stream); return; }
+        u.owner = owner; u.fleet = fleet; u.design = design; u.initialShips = initial; u.survivingShips = surviving;
+        battle.units.push_back(std::move(u));
+    }
+    if (!readCount(stream, count) || count > kSpaceBattleLogLimit) { markCorrupt(stream); return; }
+    for (quint32 i = 0; i < count; ++i) {
+        SpaceBattleShot s;
+        quint8 round{};
+        quint32 attacker{}, target{}, destroyed{};
+        quint64 fired{}, hits{};
+        stream >> round >> attacker >> target;
+        if (!readEnum(stream, s.weapon, quint8(ShipComponentType::Superlatanium))) return;
+        stream >> fired >> hits >> s.range >> s.shieldDamage >> s.armorDamage >> destroyed;
+        const auto spec = component_spec(s.weapon);
+        if (round == 0 || round > rounds || attacker >= battle.units.size() || target >= battle.units.size()
+            || battle.units[attacker].owner == battle.units[target].owner || hits > fired
+            || destroyed > battle.units[target].initialShips
+            || (spec.kind != ShipComponentKind::BeamWeapon && spec.kind != ShipComponentKind::Torpedo)
+            || !validAmount(s.range) || s.range > spec.weaponRange + 1e-6
+            || !validAmount(s.shieldDamage) || !validAmount(s.armorDamage)) { markCorrupt(stream); return; }
+        s.round = round; s.attacker = attacker; s.target = target; s.fired = fired; s.hits = hits; s.shipsDestroyed = destroyed;
+        battle.shots.push_back(s);
+    }
+    value = std::move(battle);
+}
+
 void writeGameEvent(QDataStream& stream, const GameEvent& value)
 {
     stream << static_cast<quint64>(value.id)
@@ -749,6 +828,7 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
     stream << static_cast<quint64>(value.deliveredColonists);
     stream << static_cast<quint32>(value.contactOwner);
     stream << static_cast<quint32>(value.wormholeEndpoint);
+    if (value.kind == GameEventKind::SpaceBattle) writeBattle(stream, value.battle);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -764,7 +844,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -822,6 +902,13 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
         quint32 endpoint{};
         stream >> endpoint;
         value.wormholeEndpoint = endpoint;
+    }
+    if (gReadSaveFormatVersion >= 61 && value.kind == GameEventKind::SpaceBattle) {
+        readBattle(stream, value.battle);
+        if (!value.battle || value.battle->observedTurn != value.observedTurn
+            || !same_position(value.battle->position, value.position)
+            || std::none_of(value.battle->units.begin(), value.battle->units.end(),
+                [&](const auto& unit) { return unit.owner == value.recipient; })) markCorrupt(stream);
     }
 }
 
@@ -1027,7 +1114,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             quint32 planet{};
             stream >> id >> observedTurn;
             if (!readEnum(stream, marker.kind,
-                    static_cast<quint8>(gReadSaveFormatVersion >= 44
+                    static_cast<quint8>(gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
                         ? gReadSaveFormatVersion >= 51
                             ? HistoryMilestoneKind::GroundDefenseWon
                             : HistoryMilestoneKind::FleetStalledForFuel
@@ -1046,7 +1133,8 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             marker.planet = planet;
             const bool fleetEvent = marker.kind == HistoryMilestoneKind::FleetStalledForFuel
                 || marker.kind == HistoryMilestoneKind::EnemyFleetDetected
-                || marker.kind == HistoryMilestoneKind::EnemyFleetLost;
+                || marker.kind == HistoryMilestoneKind::EnemyFleetLost
+                || marker.kind == HistoryMilestoneKind::SpaceBattle;
             if (marker.eventId == 0 || marker.observedTurn > value.turn
                 || (marker.kind == HistoryMilestoneKind::ResearchCompleted
                     ? marker.technologyLevel == 0
@@ -1223,6 +1311,7 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint64>(report.deliveredColonists);
         writePosition(stream, report.contactPosition);
         stream << static_cast<quint32>(report.contactOwner);
+        if (report.kind == PlayerReportKind::SpaceBattle) writeBattle(stream, report.battle);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -1343,7 +1432,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -1401,6 +1490,15 @@ void readPlayer(QDataStream& stream, Player& value)
         report.fleet = static_cast<FleetId>(fleet);
         report.shipDesign = static_cast<ShipDesignId>(shipDesign);
         report.quantity = static_cast<std::uint32_t>(quantity);
+        if (gReadSaveFormatVersion >= 61 && report.kind == PlayerReportKind::SpaceBattle) {
+            readBattle(stream, report.battle);
+            if ((report.kind == PlayerReportKind::SpaceBattle) != report.battle.has_value()
+                || (report.battle && (report.battle->observedTurn != report.observedTurn
+                    || report.deliveryTurn < report.observedTurn
+                    || !same_position(report.battle->position, report.position)
+                    || std::none_of(report.battle->units.begin(), report.battle->units.end(),
+                        [&](const auto& unit) { return unit.owner == value.id; })))) markCorrupt(stream);
+        }
         value.pendingPlayerReports.push_back(report);
     }
 
@@ -2021,6 +2119,11 @@ void writeGameState(QDataStream& stream, const GameState& value)
                << quint8(player.race.hullAccess) << quint8(player.race.advancedRemoteMining) << quint8(player.race.basicRemoteMining);
     }
     writeProductionExtension(stream, value);
+    stream << quint32(value.pendingFleetLossContacts.size());
+    for (const auto& contact : value.pendingFleetLossContacts) {
+        writeFleet(stream, contact.lastContact);
+        stream << quint64(contact.deliveryTurn);
+    }
 }
 
 void readGameState(QDataStream& stream, GameState& value)
@@ -2094,6 +2197,22 @@ void readGameState(QDataStream& stream, GameState& value)
         }
     }
     if (gReadSaveFormatVersion >= 59) readProductionExtension(stream, value);
+    if (gReadSaveFormatVersion >= 61) {
+        quint32 count{};
+        if (!readCount(stream, count)) return;
+        for (quint32 i = 0; i < count; ++i) {
+            PendingFleetLossContact contact;
+            quint64 delivery{};
+            readFleet(stream, contact.lastContact);
+            stream >> delivery;
+            contact.deliveryTurn = delivery;
+            if (delivery <= value.turn || !find_player(value, contact.lastContact.owner)
+                || std::any_of(value.fleets.begin(), value.fleets.end(), [&](const auto& f) { return f.id == contact.lastContact.id; })
+                || std::any_of(value.pendingFleetLossContacts.begin(), value.pendingFleetLossContacts.end(),
+                    [&](const auto& c) { return c.lastContact.id == contact.lastContact.id; })) { markCorrupt(stream); return; }
+            value.pendingFleetLossContacts.push_back(std::move(contact));
+        }
+    }
     if (gReadSaveFormatVersion < 22) record_empire_turn_statistics(value);
     else if (gReadSaveFormatVersion < 37) {
         // Earlier snapshots cannot be reconstructed without replay. Only the

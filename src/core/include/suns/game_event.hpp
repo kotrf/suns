@@ -35,6 +35,7 @@ enum class GameEventKind {
     WormholeOverdue,
     WormholePresumedLost,
     WormholeCollapsed,
+    SpaceBattle,
 };
 
 enum class GameEventSeverity {
@@ -65,6 +66,7 @@ struct GameEvent {
     std::uint64_t deliveredColonists{};
     PlayerId contactOwner{};
     WormholeEndpointId wormholeEndpoint{};
+    std::optional<SpaceBattleReport> battle;
 };
 
 } // namespace suns

@@ -59,7 +59,7 @@ void MainWindow::showMapFleetPicker(const QVariantList& fleets, const QPoint& po
     menu->setObjectName("mapFleetPicker");
     menu->addSection(target ? "Choose target fleet" : "Fleets at this location");
     auto contacts = state_.fleets;
-    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     contacts.insert(contacts.end(), missing.begin(), missing.end());
     for (const auto& value : fleets) {
         const auto id = static_cast<FleetId>(value.toUInt());
@@ -121,7 +121,7 @@ bool MainWindow::selectWorkspaceObject(int kind, std::uint32_t id)
         const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [id](const Fleet& candidate) {
             return candidate.id == static_cast<FleetId>(id);
         });
-        const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+        const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
         if (fleet == state_.fleets.end() && std::none_of(missing.begin(), missing.end(),
             [=](const auto& contact) { return contact.id == id; })) return false;
         selection_.fleet = static_cast<FleetId>(id);

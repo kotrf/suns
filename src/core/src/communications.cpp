@@ -452,6 +452,15 @@ Position projected_fleet_position(const GameState& state, const Fleet& fleet)
     return project_from_telemetry(telemetry, fleet_telemetry_age(state, fleet));
 }
 
+std::vector<Fleet> missing_fleet_contacts(const GameState& state, PlayerId player)
+{
+    auto contacts = wormhole_missing_contacts(state, player);
+    for (const auto& loss : state.pendingFleetLossContacts)
+        if (loss.lastContact.owner == player && loss.deliveryTurn > state.turn)
+            contacts.push_back(fleet_player_view(state, loss.lastContact));
+    return contacts;
+}
+
 Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
 {
     for (const auto& transit : state.wormholeTransits) {

@@ -19,6 +19,7 @@ namespace suns {
 [[nodiscard]] FleetTelemetry confirmed_fleet_telemetry(const GameState& state, const Fleet& fleet);
 [[nodiscard]] Position projected_fleet_position(const GameState& state, const Fleet& fleet);
 [[nodiscard]] Fleet fleet_player_view(const GameState& state, const Fleet& fleet);
+[[nodiscard]] std::vector<Fleet> missing_fleet_contacts(const GameState&, PlayerId);
 
 // Queue a route replacement for physical delivery. A zero-delay command is
 // applied immediately and therefore preserves the legacy local-fleet behavior.

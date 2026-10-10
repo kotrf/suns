@@ -451,7 +451,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         state.fleets.push_back(known);
         state.nextFleetId = std::max(state.nextFleetId, fleet.id + 1);
     }
-    for (const auto& contact : wormhole_missing_contacts(host, playerId)) {
+    for (const auto& contact : missing_fleet_contacts(host, playerId)) {
         state.fleets.push_back(contact);
         state.nextFleetId = std::max(state.nextFleetId, contact.id + 1);
     }
