@@ -44,7 +44,8 @@ fly-through with both endpoints outside the field. A dangerous passage stops at
 the first field boundary and clears the route. Armor damage is averaged over the
 fleet like existing overdrive damage; complete destruction removes the fleet.
 A delayed owner loss retains its last confirmed fleet contact until the report
-arrives. Stable fleet/field IDs break ties.
+arrives. All simultaneous movements use the year's initial field boundaries;
+mine consumption resolves by stable FleetId, and field IDs break crossing ties.
 
 `Sweep hostile mines` requires beam weapons and a stationary fleet inside or within
 10 ly of the field boundary. Sweep rate is twice summed beam power per year for

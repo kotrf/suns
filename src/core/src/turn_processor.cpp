@@ -1464,6 +1464,9 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         plan.endpoint = projected_turn_endpoint(state, *fleet, plan.destination);
     }
 
+    // Simultaneous movement uses one field geometry. Consumption in FleetId
+    // order must not invalidate a later fleet's already planned boundary.
+    const auto navigationMinefields = state.minefields;
     for (auto& plan : plans) if (plan.active) {
         if (const auto* fleet = fleet_by_id(state,plan.fleet)) {
             const auto end = minefield_navigation_endpoint(state,*fleet,plan.endpoint);
@@ -1577,6 +1580,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     }
 
     std::vector<FleetId> fixedArrivals;
+    std::vector<FleetId> mineDestroyedFleets;
 
     for (const auto id : fleetIds) {
         auto* movingFleet = fleet_by_id(state,id); if (!movingFleet) continue;
@@ -1595,7 +1599,8 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         const auto remaining = distance_between(start, endpoint);
         if (remaining <= epsilon) {
             if (plan->mineRestricted && !plan->intercepted) {
-                (void)apply_minefield_crossing(state,fleet,start,endpoint);
+                if (apply_minefield_crossing(state,fleet,start,endpoint,navigationMinefields)
+                    && fleet.damagePercent >= 100) mineDestroyedFleets.push_back(fleet.id);
                 fleet.position = endpoint;
                 continue;
             }
@@ -1620,7 +1625,8 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         }
         fleet.fuelStalled = false;
         const auto previousDamage = fleet.damagePercent;
-        const bool mineStrike = apply_minefield_crossing(state, fleet, start, endpoint);
+        const bool mineStrike = apply_minefield_crossing(state, fleet, start, endpoint,navigationMinefields);
+        if (mineStrike && fleet.damagePercent >= 100) mineDestroyedFleets.push_back(fleet.id);
         auto beforeStrike = fleet; beforeStrike.damagePercent = previousDamage;
 
         const auto budget = fleet_movement_budget(state, beforeStrike, distance_between(start, endpoint), 1.0);
@@ -1641,7 +1647,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
     // Battles precede arrival actions, so a destroyed fleet cannot unload,
     // found a colony or escape an encounter by entering a wormhole.
-    std::erase_if(state.fleets, [](const auto& f) { return f.damagePercent >= 100; });
+    std::erase_if(state.fleets, [&](const auto& f) { return fleet_id_list_contains(mineDestroyedFleets,f.id); });
     resolve_space_battles(state, state.turn + 1);
     std::sort(fixedArrivals.begin(), fixedArrivals.end());
 

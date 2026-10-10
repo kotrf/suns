@@ -1,5 +1,6 @@
 #pragma once
 #include "suns/game_event.hpp"
+#include <span>
 
 namespace suns {
 [[nodiscard]] double minefield_radius(const Minefield&);
@@ -17,7 +18,8 @@ void resolve_bombardments(GameState&, std::uint64_t);
 void advance_minefields(GameState&);
 // Called on the actual travelled segment, before arrival actions and combat.
 // Stops at the first dangerous field boundary; consumes mines and damages armor.
-[[nodiscard]] bool apply_minefield_crossing(GameState&, Fleet&, Position start, Position& end);
+[[nodiscard]] bool apply_minefield_crossing(GameState&, Fleet&, Position start, Position& end,
+    std::span<const Minefield> navigationFields = {});
 [[nodiscard]] Position minefield_navigation_endpoint(const GameState&, const Fleet&, Position end);
 void run_strategic_tasks(GameState&, std::uint64_t);
 void observe_strategic_objects(GameState&, std::uint64_t);

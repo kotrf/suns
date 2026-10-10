@@ -82,6 +82,28 @@ void mines_crossings_laying_sweeping()
     r = TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{100,0},6}}}});
     assert(event(r,GameEventKind::MineStrike));
     assert(!r.state.fleets[0].destination && r.state.fleets[0].position.x < 30);
+    // All fleets use the same boundary even after an earlier strike shrinks
+    // the field. Physical vector order cannot decide who hits it.
+    auto second = s.fleets[0]; second.id = 2;
+    s.fleets.push_back(second); s.nextFleetId = 3;
+    const std::vector<PlayerOrders> orders{{1,{MoveFleetOrder{1,{100,0},6},MoveFleetOrder{2,{100,0},6}}}};
+    const auto forward = TurnProcessor{}.process_with_events(s,orders);
+    std::reverse(s.fleets.begin(),s.fleets.end());
+    const auto reverse = TurnProcessor{}.process_with_events(s,orders);
+    for (FleetId id : {1,2}) {
+        const auto find = [id](const auto& result) -> const Fleet& {
+            return *std::find_if(result.state.fleets.begin(),result.state.fleets.end(),
+                [id](const auto& f) { return f.id == id; });
+        };
+        assert(event(forward,GameEventKind::MineStrike));
+        assert(!find(forward).destination && !find(reverse).destination);
+        assert(same_position(find(forward).position,find(reverse).position));
+        assert(find(forward).damagePercent == find(reverse).damagePercent);
+    }
+    assert(forward.state.minefields.empty() && reverse.state.minefields.empty());
+    s = arena(); s.minefields = {{1,2,{30,0},100,0}}; s.nextMinefieldId = 2;
+    r = TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{100,0},6}}}});
+    assert(event(r,GameEventKind::MineStrike) && r.state.fleets.empty()); // Destroyer armor is exhausted.
     // Unseen fields do not leak through a player export.
     const auto view = make_player_view(s,1);
     assert(view.state.minefields.empty() && view.state.players[0].strategicIntel.empty());
@@ -112,6 +134,8 @@ void stealth_jamming_and_signals()
     s.fleets[0].electronics = {}; s.fleets[1].electronics = {EmissionMode::Standard,0,true};
     s.players[0].strategicIntel.clear(); s.players[0].pendingStrategicIntel.clear();
     observe_strategic_objects(s,4); s.turn = 4; deliver_strategic_intel(s);
+    assert(s.players[0].strategicIntel.empty()); // Jammer delays the receiver's report.
+    s.turn = 5; deliver_strategic_intel(s);
     assert(std::any_of(s.players[0].strategicIntel.begin(),s.players[0].strategicIntel.end(),[](const auto& i) {
         return i.type == StrategicObjectKind::Emission && i.position.x == 90;
     }));

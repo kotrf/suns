@@ -44,7 +44,8 @@ std::optional<double> entry_fraction(Position start, Position end, Position cent
     const double discriminant = b*b - 4*a*c;
     if (discriminant < 0) return {};
     const double t = (-b - std::sqrt(discriminant))/(2*a);
-    return t >= 0 && t <= 1 ? std::optional<double>{t} : std::nullopt;
+    return t >= -epsilon && t <= 1 + epsilon
+        ? std::optional<double>{std::clamp(t, 0.0, 1.0)} : std::nullopt;
 }
 
 void stage_intel(GameState& state, Player& player, StrategicIntel intel, Position source)
@@ -247,15 +248,19 @@ Position minefield_navigation_endpoint(const GameState& state, const Fleet& flee
     return {fleet.position.x + earliest*(end.x-fleet.position.x), fleet.position.y + earliest*(end.y-fleet.position.y)};
 }
 
-bool apply_minefield_crossing(GameState& state, Fleet& fleet, Position start, Position& end)
+bool apply_minefield_crossing(GameState& state, Fleet& fleet, Position start, Position& end,
+    std::span<const Minefield> navigationFields)
 {
     Minefield* first = nullptr;
     double fraction = 2;
-    for (auto& field : state.minefields) {
+    const auto fields = navigationFields.empty() ? std::span<const Minefield>{state.minefields} : navigationFields;
+    for (const auto& field : fields) {
         if (field.owner == fleet.owner || fleet.warp <= minefield_safe_warp(field.kind)) continue;
         const auto entry = entry_fraction(start, end, field.position, minefield_radius(field));
         if (entry && (*entry < fraction || (*entry == fraction && first && field.id < first->id))) {
-            fraction = *entry; first = &field;
+            const auto physical = std::find_if(state.minefields.begin(), state.minefields.end(),
+                [&](const auto& f) { return f.id == field.id; });
+            if (physical != state.minefields.end()) { fraction = *entry; first = &*physical; }
         }
     }
     if (!first) return false;
