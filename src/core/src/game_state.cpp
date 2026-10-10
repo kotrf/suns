@@ -2,6 +2,7 @@
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
+#include "suns/equipment.hpp"
 #include "suns/hulls.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
@@ -125,7 +126,7 @@ std::vector<ShipDesign> default_ship_designs(PlayerId owner, bool starsPropulsio
         {kScoutDesignId, owner, "Scout", starsPropulsion ? ShipHullType::StarsScout : ShipHullType::Scout,
          {engine, starsPropulsion ? ShipComponentType::RhinoScanner : ShipComponentType::LongRangeScanner}},
         {kColonyShipDesignId, owner, "Colony Ship", starsPropulsion ? ShipHullType::ColonyShip : ShipHullType::LightTransport,
-         {engine, ShipComponentType::ColonyModule}},
+         {engine, starsPropulsion ? ShipComponentType::StarsColonizationModule : ShipComponentType::ColonyModule}},
     };
     for (auto& design : designs) normalize_ship_design_placement(design);
     return designs;
@@ -337,6 +338,7 @@ ShipComponentSpec component_spec(ShipComponentType type)
     if (const auto* engine = propulsion_technology(type)) return propulsion_component_spec(*engine);
     if (const auto* scanner = scanner_technology(type)) return scanner_component_spec(*scanner);
     if (const auto* miner = mining_technology(type)) return mining_component_spec(*miner);
+    if (const auto* equipment = equipment_technology(type)) return equipment_component_spec(*equipment);
     ShipComponentSpec spec;
     spec.type = type;
 
@@ -579,6 +581,21 @@ std::string ship_design_validation_error(const ShipDesign& design)
     if (design.name.empty()) return "A ship design must have a name.";
     if (design.name.size() > 48) return "A ship design name may contain at most 48 characters.";
     const auto hull = hull_spec(design.hull);
+    if (hull.name == "Unknown Hull") return "Unknown ship hull.";
+    for (const auto component : design.components) {
+        if (static_cast<int>(component) < 0 || component > ShipComponentType::Superlatanium)
+            return "Unknown ship component.";
+        if (const auto* equipment = equipment_technology(component); equipment && equipment->unarmedTransportOnly) {
+            if (design.hull != ShipHullType::SmallFreighter && design.hull != ShipHullType::MediumFreighter
+                && design.hull != ShipHullType::LargeFreighter && design.hull != ShipHullType::SuperFreighter)
+                return "Transport Cloaking fits unarmed freighter hulls only.";
+            if (std::any_of(design.components.begin(), design.components.end(), [](auto fitted) {
+                    const auto kind = component_spec(fitted).kind;
+                    return kind == ShipComponentKind::BeamWeapon || kind == ShipComponentKind::Torpedo
+                        || kind == ShipComponentKind::Bomb;
+                })) return "Transport Cloaking cannot be fitted to an armed design.";
+        }
+    }
     if (ship_design_engine_slots_used(design) != hull.requiredEngines) {
         return "The hull requires exactly " + std::to_string(hull.requiredEngines)
             + (hull.requiredEngines == 1 ? " engine." : " identical engines.");
@@ -720,6 +737,8 @@ bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component)
 {
     if (!find_player(state, player)) return false;
+    if (static_cast<int>(component) < 0 || component > ShipComponentType::Superlatanium) return false;
+    if (legacy_equipment_component(component) && !player_uses_legacy_equipment(state, player)) return false;
     if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) return false;
     if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) return false;
     if (component == ShipComponentType::RemoteMiningModule && !player_uses_legacy_mining(state, player)) return false;

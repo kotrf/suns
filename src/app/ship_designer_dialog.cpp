@@ -2,6 +2,7 @@
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
+#include "suns/equipment.hpp"
 #include "suns/campaign.hpp"
 
 #include <QAbstractItemView>
@@ -9,6 +10,7 @@
 #include <QBrush>
 #include <QComboBox>
 #include <QColor>
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QDrag>
@@ -214,6 +216,28 @@ QIcon componentIcon(ShipComponentType component, bool available = true)
         painter.drawLine(14, 1, 14, 8);
         painter.drawLine(14, 20, 14, 27);
         break;
+    case ShipComponentKind::Shield:
+    case ShipComponentKind::Armor:
+        painter.drawPolygon(QPolygonF{QPointF(5, 4), QPointF(23, 4), QPointF(22, 18), QPointF(14, 26), QPointF(6, 18)});
+        if (kind == ShipComponentKind::Armor) painter.drawLine(7, 12, 21, 12);
+        break;
+    case ShipComponentKind::BeamWeapon:
+    case ShipComponentKind::Torpedo:
+        painter.drawLine(5, 22, 20, 7);
+        painter.drawLine(14, 5, 23, 5);
+        painter.drawLine(23, 5, 23, 14);
+        break;
+    case ShipComponentKind::Bomb:
+    case ShipComponentKind::MineLayer:
+        painter.drawEllipse(QRectF(6, 8, 16, 16));
+        painter.drawLine(14, 8, 18, 2);
+        break;
+    case ShipComponentKind::Mechanical:
+    case ShipComponentKind::Electrical:
+        painter.drawRect(QRectF(7, 7, 14, 14));
+        painter.drawLine(2, 14, 7, 14);
+        painter.drawLine(21, 14, 26, 14);
+        break;
     }
     return QIcon(image);
 }
@@ -234,6 +258,8 @@ QString componentTooltip(ShipComponentType component)
         QString("Cost %1").arg(spec.buildCost),
     };
     const auto minerals = component_mineral_cost(component);
+    if (const auto* equipment = equipment_technology(component))
+        facts << QString::fromStdString(equipment_effect_description(*equipment)).trimmed();
     facts << QString("Minerals (kt): I %1 / B %2 / G %3")
         .arg(minerals.ironium).arg(minerals.boranium).arg(minerals.germanium);
     if (spec.maxWarp > 0) {
@@ -309,7 +335,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::RoboUltraMiner)
+        || component > static_cast<int>(ShipComponentType::Superlatanium)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -569,6 +595,26 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     auto* workspace = new QHBoxLayout;
     auto* catalogGroup = new QGroupBox("Component catalog", this);
     auto* catalogLayout = new QVBoxLayout(catalogGroup);
+    auto* search = new QLineEdit(catalogGroup);
+    search->setObjectName("shipComponentSearch");
+    search->setPlaceholderText("Search components…");
+    catalogLayout->addWidget(search);
+    auto* category = new QComboBox(catalogGroup);
+    category->setObjectName("shipComponentCategory");
+    category->addItem("All equipment", -1);
+    for (const auto& [name, kind] : {
+            std::pair{"Engines", ShipComponentKind::Engine}, {"Scanners", ShipComponentKind::Scanner},
+            {"Mining robots", ShipComponentKind::Mining}, {"Armor", ShipComponentKind::Armor},
+            {"Shields", ShipComponentKind::Shield}, {"Beam weapons", ShipComponentKind::BeamWeapon},
+            {"Torpedoes / missiles", ShipComponentKind::Torpedo}, {"Bombs", ShipComponentKind::Bomb},
+            {"Mine layers", ShipComponentKind::MineLayer}, {"Electrical", ShipComponentKind::Electrical},
+            {"Mechanical / logistics", ShipComponentKind::Mechanical}, {"Suns! support", ShipComponentKind::Special}})
+        category->addItem(name, int(kind));
+    catalogLayout->addWidget(category);
+    auto* fitsHull = new QCheckBox("Fits this hull", catalogGroup);
+    fitsHull->setObjectName("shipComponentFitsHull");
+    fitsHull->setToolTip("Show equipment accepted by at least one bank of the chosen hull. Research locks still apply.");
+    catalogLayout->addWidget(fitsHull);
     componentCatalog_ = new ComponentCatalog(catalogGroup);
     componentCatalog_->setObjectName("shipComponentCatalog");
     componentCatalog_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -631,17 +677,19 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     };
     for (const auto& scanner : scanner_technologies()) catalog.push_back(scanner.component);
     for (const auto& miner : mining_technologies()) catalog.push_back(miner.component);
+    for (const auto& equipment : equipment_technologies()) catalog.push_back(equipment.component);
     for (const auto component : catalog) {
         if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) continue;
         if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) continue;
         if (component == ShipComponentType::RemoteMiningModule && !player_uses_legacy_mining(state, player)) continue;
+        if (legacy_equipment_component(component) && !player_uses_legacy_equipment(state, player)) continue;
         const auto available = component_available_to_player(state, player, component);
         auto label = QString("%1 • %2")
                          .arg(QString::fromStdString(ship_component_equipment_name(component)),
                              QString::fromStdString(component_spec(component).name));
         if (!available) label += QString("  [locked — %1]").arg(unlockRequirement(component));
         if (legacy_propulsion_component(component) || legacy_scanner_component(component)
-            || component == ShipComponentType::RemoteMiningModule) label += "  [legacy]";
+            || component == ShipComponentType::RemoteMiningModule || legacy_equipment_component(component)) label += "  [legacy]";
         auto* item = new QListWidgetItem(label, componentCatalog_);
         item->setIcon(componentIcon(component, available));
         item->setData(Qt::UserRole, static_cast<int>(component));
@@ -654,6 +702,34 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         }
     }
     componentCatalog_->setCurrentRow(0);
+
+    const auto filterCatalog = [this, search, category, fitsHull] {
+        const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+        const auto query = search->text().trimmed();
+        const auto wanted = category->currentData().toInt();
+        int firstVisible = -1;
+        for (int row = 0; row < componentCatalog_->count(); ++row) {
+            auto* item = componentCatalog_->item(row);
+            const auto component = static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
+            auto kind = component_spec(component).kind;
+            if (kind == ShipComponentKind::Fuel || kind == ShipComponentKind::Cargo) kind = ShipComponentKind::Mechanical;
+            const bool compatible = std::any_of(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const auto& slot) {
+                return ship_slot_accepts(slot, component);
+            });
+            const bool visible = (query.isEmpty() || item->text().contains(query, Qt::CaseInsensitive))
+                && (wanted < 0 || wanted == int(kind)) && (!fitsHull->isChecked() || compatible);
+            item->setHidden(!visible);
+            if (visible && firstVisible < 0) firstVisible = row;
+        }
+        if (!componentCatalog_->currentItem() || componentCatalog_->currentItem()->isHidden())
+            componentCatalog_->setCurrentRow(firstVisible);
+        if (componentCatalog_->currentItem()) componentCatalog_->scrollToItem(componentCatalog_->currentItem());
+        updateComponentDetails();
+    };
+    connect(search, &QLineEdit::textChanged, this, filterCatalog);
+    connect(category, &QComboBox::currentIndexChanged, this, filterCatalog);
+    connect(fitsHull, &QCheckBox::toggled, this, filterCatalog);
+    connect(hullCombo_, &QComboBox::currentIndexChanged, this, filterCatalog);
 
     auto* fittingGroup = new QGroupBox("Hull fitting cells", this);
     auto* fittingLayout = new QVBoxLayout(fittingGroup);
@@ -1073,6 +1149,14 @@ void ShipDesignerDialog::updatePreview()
     const auto validationError = ship_design_validation_error(design);
     const auto valid = validationError.empty();
 
+    QStringList armament;
+    for (const auto& equipment : equipment_technologies()) {
+        if (equipment.kind != ShipComponentKind::BeamWeapon && equipment.kind != ShipComponentKind::Torpedo
+            && equipment.kind != ShipComponentKind::Bomb && equipment.kind != ShipComponentKind::MineLayer) continue;
+        const auto count = std::count(design.components.begin(), design.components.end(), equipment.component);
+        if (count) armament << QString("%1 × %2").arg(count).arg(QString::fromStdString(equipment.name).toHtmlEscaped());
+    }
+
     QStringList fuelCurve;
     const auto maxWarp = ship_design_max_warp(design);
     const auto referenceEngine = std::any_of(design.components.begin(), design.components.end(), [](auto component) {
@@ -1159,7 +1243,10 @@ void ShipDesignerDialog::updatePreview()
             .arg(fuelLegend)
             .arg(fuelCurve.isEmpty() ? "No engine fitted" : fuelCurve.join(" &nbsp; "))
             .arg(reference_hull(design.hull)
-                ? QString("Base hull armor: <b>%1 dp</b>; initiative: <b>%2</b>.").arg(hull.armor).arg(hull.initiative)
+                ? QString("Armor: <b>%1 dp</b> (hull %2); shields: <b>%3 dp</b>; base initiative: <b>%4</b>. "
+                          "Reference combat ratings; space combat is not implemented yet.%5")
+                    .arg(ship_design_armor(design)).arg(hull.armor).arg(ship_design_shields(design)).arg(hull.initiative)
+                    .arg(armament.isEmpty() ? QString{} : "<br>Loadout: " + armament.join(" • "))
                 : QString{}));
     saveButton_->setEnabled(valid);
 }

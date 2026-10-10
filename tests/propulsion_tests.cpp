@@ -161,7 +161,7 @@ void verify_stars_speed_bands_and_settler_restriction()
     assert(minerals.ironium == 7 && minerals.boranium == 1 && minerals.germanium == 4);
     auto state = generate_campaign(GalaxyConfig{}, {{"Settlers", RacePreset::Terran, false, true, true}});
     ShipDesign settler{44, 1, "Settler", ShipHullType::StarsMiniColonyShip,
-        {ShipComponentType::SettlersDelight, ShipComponentType::ColonyModule}};
+        {ShipComponentType::SettlersDelight, ShipComponentType::StarsColonizationModule}};
     assert(ship_design_valid(settler) && ship_design_available_to_player(state, 1, settler));
     assert(ship_design_cargo_capacity(settler) == 10);
     settler.hull = ShipHullType::Scout;

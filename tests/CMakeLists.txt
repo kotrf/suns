@@ -21,6 +21,9 @@ target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 add_test(NAME suns_core_tests COMMAND suns_core_tests)
 
 add_executable(suns_terraforming_tests terraforming_tests.cpp)
+add_executable(suns_equipment_tests equipment_tests.cpp)
+target_link_libraries(suns_equipment_tests PRIVATE Suns::Core)
+add_test(NAME suns_equipment_tests COMMAND suns_equipment_tests)
 target_link_libraries(suns_terraforming_tests PRIVATE Suns::Core)
 add_test(NAME suns_terraforming_tests COMMAND suns_terraforming_tests)
 

@@ -2,6 +2,7 @@ add_library(suns_core
     src/campaign.cpp
     src/game_state.cpp
     src/hulls.cpp
+    src/equipment.cpp
     src/communications.cpp
     src/mineral_economy.cpp
     src/mining.cpp

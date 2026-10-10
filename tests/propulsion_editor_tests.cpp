@@ -2,9 +2,12 @@
 #include "ship_designer_dialog.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
+#include "suns/equipment.hpp"
 
 #include <QApplication>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QLineEdit>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QListWidget>
@@ -203,14 +206,14 @@ int main(int argc, char** argv)
     assert(quantity(ShipComponentType::RhinoScanner) == 0);
     remove(201);
     assert(quantity(ShipComponentType::MoleScanner) == 1);
-    fit(ShipComponentType::FuelTank, 202);
-    assert(quantity(ShipComponentType::FuelTank) == 3);
+    fit(ShipComponentType::StarsFuelTank, 202);
+    assert(quantity(ShipComponentType::StarsFuelTank) == 3);
     remove(204);
-    assert(quantity(ShipComponentType::FuelTank) == 2);
+    assert(quantity(ShipComponentType::StarsFuelTank) == 2);
     const auto placementsBefore = bankDesigner.draft().placements;
     fit(ShipComponentType::MoleScanner, 204, 200);
     assert(bankDesigner.draft().placements == placementsBefore); // Cannot mix models in a partly filled bank.
-    fit(ShipComponentType::CargoPod, 205); // Shield/armor bank rejects a cargo pod.
+    fit(ShipComponentType::StarsCargoPod, 205); // Shield/armor bank rejects a cargo pod.
     assert(bankDesigner.draft().placements == placementsBefore);
     const auto bankDraft = bankDesigner.draft();
     assert(ship_design_valid({42, 1, bankDraft.name, bankDraft.hull, bankDraft.components, bankDraft.placements}));
@@ -264,5 +267,76 @@ int main(int argc, char** argv)
     preview = miningDesigner.findChild<QLabel*>("shipDesignPreview");
     assert(preview && preview->text().contains("Remote mining 4 kt/mineral/year"));
     assert(ship_design_valid({42, 1, miningDraft.name, miningDraft.hull, miningDraft.components, miningDraft.placements}));
+    auto fittingState = generate_campaign({}, {{"Equipment designer"}});
+    fittingState.players.front().technology.levels.fill(26);
+    ShipDesignerDialog fittingDesigner(fittingState, 1);
+    auto* equipmentCatalog = fittingDesigner.findChild<QListWidget*>("shipComponentCatalog");
+    auto* search = fittingDesigner.findChild<QLineEdit*>("shipComponentSearch");
+    auto* category = fittingDesigner.findChild<QComboBox*>("shipComponentCategory");
+    auto* fits = fittingDesigner.findChild<QCheckBox*>("shipComponentFitsHull");
+    auto* equipmentHulls = fittingDesigner.findChild<QComboBox*>("shipHullCatalog");
+    auto* equipmentDetails = fittingDesigner.findChild<QLabel*>("shipComponentDetails");
+    assert(equipmentCatalog && search && category && fits && equipmentHulls && equipmentDetails);
+    equipmentHulls->setCurrentIndex(equipmentHulls->findData(int(ShipHullType::Battleship)));
+    fittingDesigner.show();
+    QApplication::processEvents();
+    const auto fitHull = hull_spec(ShipHullType::Battleship);
+    const auto dropEquipment = [&](ShipComponentType type, ShipSlotCategory slotCategory) {
+        const auto bank = std::find_if(fitHull.fittingSlots.begin(), fitHull.fittingSlots.end(), [&](const auto& s) { return s.category == slotCategory; });
+        assert(bank != fitHull.fittingSlots.end());
+        auto* target = fittingDesigner.findChild<QToolButton*>(QString("shipSlot_%1").arg(bank->id));
+        assert(target);
+        QMimeData payload;
+        payload.setData("application/x-suns-ship-component", QByteArray::number(int(type)) + ":0");
+        QDragEnterEvent enter(target->rect().center(), Qt::CopyAction, &payload, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &enter);
+        QDropEvent drop(QPointF(target->rect().center()), Qt::CopyAction, &payload, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(target, &drop);
+    };
+    dropEquipment(ShipComponentType::Laser, ShipSlotCategory::Weapon);
+    dropEquipment(ShipComponentType::MoleSkinShield, ShipSlotCategory::Shield);
+    dropEquipment(ShipComponentType::Tritanium, ShipSlotCategory::Armor);
+    auto equipmentDraft = fittingDesigner.draft();
+    assert(std::count(equipmentDraft.components.begin(), equipmentDraft.components.end(), ShipComponentType::Laser) == 6);
+    assert(std::count(equipmentDraft.components.begin(), equipmentDraft.components.end(), ShipComponentType::MoleSkinShield) == 8);
+    assert(std::count(equipmentDraft.components.begin(), equipmentDraft.components.end(), ShipComponentType::Tritanium) == 6);
+    assert(ship_design_valid({99, 1, equipmentDraft.name, equipmentDraft.hull, equipmentDraft.components, equipmentDraft.placements}));
+    preview = fittingDesigner.findChild<QLabel*>("shipDesignPreview");
+    assert(preview && preview->text().contains("2300 dp") && preview->text().contains("200 dp"));
+    dropEquipment(ShipComponentType::Tritanium, ShipSlotCategory::Weapon);
+    assert(fittingDesigner.draft().components == equipmentDraft.components);
+    dropEquipment(ShipComponentType::LangstonShell, ShipSlotCategory::Shield); // No acquisition.
+    assert(fittingDesigner.draft().components == equipmentDraft.components);
+    const auto visibleRows = [&] {
+        int count = 0;
+        for (int row = 0; row < equipmentCatalog->count(); ++row) count += !equipmentCatalog->item(row)->isHidden();
+        return count;
+    };
+    search->setText("Laser");
+    assert(visibleRows() == 2);
+    assert(equipmentDetails->text().contains("space combat is not implemented"));
+    search->clear();
+    category->setCurrentIndex(category->findData(int(ShipComponentKind::Bomb)));
+    assert(visibleRows() == 15);
+    fits->setChecked(true);
+    assert(visibleRows() == 0); // Battleship cannot mount bombs.
+    equipmentHulls->setCurrentIndex(equipmentHulls->findData(int(ShipHullType::B52Bomber)));
+    assert(visibleRows() == 15);
+    fits->setChecked(false);
+    category->setCurrentIndex(0);
+    search->setText("Superlatanium");
+    assert(visibleRows() == 1);
+    assert(equipmentCatalog->currentItem()->data(Qt::UserRole).toInt() == int(ShipComponentType::Superlatanium));
+    if (qEnvironmentVariableIsSet("SUNS_EQUIPMENT_SCREENSHOT")) {
+        search->clear();
+        category->setCurrentIndex(category->findData(int(ShipComponentKind::BeamWeapon)));
+        equipmentHulls->setCurrentIndex(equipmentHulls->findData(int(ShipHullType::Battleship)));
+        dropEquipment(ShipComponentType::Laser, ShipSlotCategory::Weapon);
+        dropEquipment(ShipComponentType::MoleSkinShield, ShipSlotCategory::Shield);
+        dropEquipment(ShipComponentType::Tritanium, ShipSlotCategory::Armor);
+        fittingDesigner.resize(1100, 850);
+        QApplication::processEvents();
+        assert(fittingDesigner.grab().save(qEnvironmentVariable("SUNS_EQUIPMENT_SCREENSHOT")));
+    }
     return 0;
 }

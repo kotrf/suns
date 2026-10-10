@@ -61,6 +61,12 @@ New campaigns use the [15-model Stars! propulsion line](stars-propulsion.md), in
 - Construction 2: Heavy Transport hull, with 250 kt built-in cargo capacity and three required engines. It carries bulk ore from mining sites, while smaller transports cost less to build and burn less fuel per ship.
 - Construction 3: Field Repair Bay in a general slot. Equipped ships can repair 8 hull-damage points per year away from a dock; mixed fleets scale the rate by the equipped fraction. At a friendly shipyard, the dock's 20-point rate takes precedence.
 
+Equipment research now includes the [reference armor, shields,
+weapons, bombs, mine layers, electronics and mechanics](stars-equipment.md),
+with all prerequisite fields and supported racial restrictions. Space-combat,
+bombardment, minefield and stealth effects are explicitly marked as future work.
+Mystery Trader equipment cannot be acquired through ordinary research alone.
+
 Multiple scanners on one ship combine by the fourth root of the sum of their
 fourth powers, independently for ordinary and penetrating ranges. Fleet coverage
 uses the strongest ship. New designs are validated against the owner's technology

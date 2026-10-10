@@ -226,6 +226,120 @@ enum class ShipComponentType {
     ChameleonScanner, FerretScanner, DolphinScanner, GazelleScanner, RnaScanner,
     CheetahScanner, ElephantScanner, EagleEyeScanner, RobberBaronScanner, PeerlessScanner,
     RoboMidgetMiner, RoboMiniMiner, RoboMiner, RoboMaxiMiner, RoboSuperMiner, RoboUltraMiner,
+    // Appended Stars! equipment IDs; existing saved component IDs stay stable.
+    Laser,
+    XRayLaser,
+    MiniGun,
+    YakimoraLightPhaser,
+    Blackjack,
+    PhaserBazooka,
+    PulsedSapper,
+    ColloidalPhaser,
+    GatlingGun,
+    MiniBlaster,
+    Bludgeon,
+    MarkIVBlaster,
+    PhasedSapper,
+    HeavyBlaster,
+    GatlingNeutrinoCannon,
+    MyopicDisruptor,
+    Blunderbuss,
+    Disruptor,
+    MultiContainedMunition,
+    SyncroSapper,
+    MegaDisruptor,
+    BigMuthaCannon,
+    StreamingPulverizer,
+    AntiMatterPulverizer,
+    AlphaTorpedo,
+    BetaTorpedo,
+    DeltaTorpedo,
+    EpsilonTorpedo,
+    RhoTorpedo,
+    UpsilonTorpedo,
+    OmegaTorpedo,
+    AntiMatterTorpedo,
+    JihadMissile,
+    JuggernautMissile,
+    DoomsdayMissile,
+    ArmageddonMissile,
+    LadyFingerBomb,
+    BlackCatBomb,
+    M70Bomb,
+    M80Bomb,
+    CherryBomb,
+    Lbu17Bomb,
+    Lbu32Bomb,
+    Lbu74Bomb,
+    HushABoom,
+    RetroBomb,
+    SmartBomb,
+    NeutronBomb,
+    EnrichedNeutronBomb,
+    PeerlessBomb,
+    AnnihilatorBomb,
+    AlienMiner,
+    OrbitalAdjuster,
+    MineDispenser40,
+    MineDispenser50,
+    MineDispenser80,
+    MineDispenser130,
+    HeavyDispenser50,
+    HeavyDispenser110,
+    HeavyDispenser200,
+    SpeedTrap20,
+    SpeedTrap30,
+    SpeedTrap50,
+    StarsColonizationModule,
+    OrbitalConstructionModule,
+    StarsCargoPod,
+    SuperCargoPod,
+    MultiCargoPod,
+    StarsFuelTank,
+    SuperFuelTank,
+    ManeuveringJet,
+    Overthruster,
+    JumpGate,
+    BeamDeflector,
+    TransportCloaking,
+    StealthCloak,
+    SuperStealthCloak,
+    UltraStealthCloak,
+    MultiFunctionPod,
+    BattleComputer,
+    BattleSuperComputer,
+    BattleNexus,
+    Jammer10,
+    Jammer20,
+    Jammer30,
+    Jammer50,
+    EnergyCapacitor,
+    FluxCapacitor,
+    EnergyDampener,
+    TachyonDetector,
+    StarsAntimatterGenerator,
+    MoleSkinShield,
+    CowHideShield,
+    WolverineDiffuseShield,
+    CrobySharmor,
+    ShadowShield,
+    BearNeutrinoBarrier,
+    LangstonShell,
+    GorillaDelagator,
+    ElephantHideFortress,
+    CompletePhaseShield,
+    Tritanium,
+    Crobmnium,
+    CarbonicArmor,
+    Strobnium,
+    OrganicArmor,
+    Kelarium,
+    FieldedKelarium,
+    DepletedNeutronium,
+    Neutronium,
+    MegaPolyShell,
+    Valanium,
+    Superlatanium,
 };
 
 enum class ShipComponentKind {
@@ -235,6 +349,7 @@ enum class ShipComponentKind {
     Cargo,
     Mining,
     Special,
+    BeamWeapon, Torpedo, Bomb, MineLayer, Mechanical, Electrical, Shield, Armor,
 };
 
 struct ShipComponentSpec {
@@ -267,6 +382,33 @@ struct ShipComponentSpec {
     double fieldRepairPerTurn{};
     // Ordinary and penetrating channels combine independently.
     double penetratingSensorRange{};
+    // Reference fitting ratings. Combat, bombing, mines and stealth resolution
+    // are separate systems; these fields do not imply those rules exist.
+    double armor{};
+    double shields{};
+    double weaponPower{};
+    std::uint8_t weaponRange{};
+    std::uint8_t weaponInitiative{};
+    double weaponAccuracy{};
+    bool shieldOnly{};
+    bool gatling{};
+    bool missile{};
+    double bombPopulationPercent{};
+    std::uint32_t bombMinimumKills{};
+    std::uint16_t bombInstallations{};
+    bool smartBomb{};
+    bool unterraformingBomb{};
+    double minesPerYear{};
+    std::uint8_t mineFieldKind{}; // 0 standard, 1 heavy, 2 speed trap.
+    double cloakPercent{};
+    double jammingPercent{};
+    double accuracyBonusPercent{};
+    std::uint8_t initiativeBonus{};
+    double beamBonusPercent{};
+    double beamDeflectionPercent{};
+    double battleMovementBonus{};
+    double battleMovementPenalty{};
+    double tachyonPercent{};
 };
 
 struct ShipComponentPlacement {

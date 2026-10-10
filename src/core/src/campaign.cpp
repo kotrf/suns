@@ -4,6 +4,7 @@
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
+#include "suns/equipment.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -73,6 +74,7 @@ const std::vector<ResearchUnlock>& research_unlocks()
             entry.legacyScanner = entry.component && legacy_scanner_component(*entry.component);
             entry.legacyPropulsion = entry.component && legacy_propulsion_component(*entry.component);
             entry.legacyMining = entry.component == ShipComponentType::RemoteMiningModule;
+            entry.legacyEquipment = entry.component && legacy_equipment_component(*entry.component);
             if (entry.name == "Heavy Transport") { entry.hull = ShipHullType::HeavyTransport; entry.legacyHull = true; }
         }
         for (const auto& engine : propulsion_technologies()) {
@@ -116,6 +118,21 @@ const std::vector<ResearchUnlock>& research_unlocks()
             entry.extraLevels[static_cast<std::size_t>(ResearchField::Electronics)] = miner.electronics;
             entries.push_back(std::move(entry));
         }
+        for (const auto& equipment : equipment_technologies()) {
+            std::size_t primary = 0;
+            while (primary + 1 < kResearchFieldCount && equipment.levels[primary] == 0) ++primary;
+            if (equipment.levels[primary] == 0) {
+                primary = static_cast<std::size_t>(equipment.kind == ShipComponentKind::Shield ? ResearchField::Energy
+                    : equipment.kind == ShipComponentKind::BeamWeapon || equipment.kind == ShipComponentKind::Torpedo
+                        || equipment.kind == ShipComponentKind::Bomb ? ResearchField::Weapons : ResearchField::Construction);
+            }
+            ResearchUnlock entry{static_cast<ResearchField>(primary), equipment.levels[primary],
+                equipment.name, equipment_effect_description(equipment), equipment.component};
+            entry.extraLevels = equipment.levels;
+            entry.extraLevels[primary] = 0;
+            if (entry.description.empty()) entry.description = "Ship fitting equipment: mass, costs and capabilities shown in the designer.";
+            entries.push_back(std::move(entry));
+        }
         ResearchUnlock mini{ResearchField::Construction, 0, "Mini-Colony Ship",
             "Small 10 kt colony transport with one engine and one general cell.", {}};
         mini.engineAccess = EngineAccess::Settler;
@@ -139,6 +156,7 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
 {
     const auto* owner = find_player(state, player);
     const auto* miner = unlock.component ? mining_technology(*unlock.component) : nullptr;
+    const auto* equipment = unlock.component ? equipment_technology(*unlock.component) : nullptr;
     return owner && (!unlock.terraforming || (owner->race.environmentBased
             && !(owner->race.radiationImmune && unlock.extraLevels[static_cast<std::size_t>(ResearchField::Weapons)] != 0)))
         && engine_access_available(owner->race, unlock.engineAccess)
@@ -146,6 +164,7 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
             && (!miner->excludesBasicRemoteMining || !owner->race.basicRemoteMining)))
         && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines)
         && (!unlock.requiresSuperStealth || owner->race.hullAccess == HullAccess::SuperStealth)
+        && (!equipment || equipment_access_applicable(state, player, *equipment))
         && (!unlock.hull || ship_hull_access_applicable(state, player, *unlock.hull));
 }
 
@@ -172,6 +191,10 @@ std::string research_unlock_requirement(const ResearchUnlock& unlock)
     case EngineAccess::Settler: text += "; Settler engine access"; break;
     }
     if (unlock.requiresSuperStealth) text += "; Super Stealth";
+    if (unlock.component) if (const auto* equipment = equipment_technology(*unlock.component)) {
+        const auto access = equipment_access_requirement(*equipment);
+        if (!access.empty()) text += "; " + access;
+    }
     if (unlock.component) if (const auto* miner = mining_technology(*unlock.component)) {
         if (miner->advancedRemoteMining) text += "; Advanced Remote Mining";
         if (miner->excludesBasicRemoteMining) text += "; unavailable with Basic Remote Mining";
