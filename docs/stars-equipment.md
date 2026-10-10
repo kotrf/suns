@@ -2,7 +2,8 @@
 
 Suns! now has the remaining 113 reference ship modules, alongside its 32
 reference hulls, 15 engines, 16 scanners and six standard mining robots.
-This is a fitting catalog and technology model, not a space-combat release.
+Beams, torpedoes, shields and armor now work in Suns!' first automatic
+[space-combat model](space-combat.md). Other systems below remain pending.
 
 ## Sources
 
@@ -63,8 +64,8 @@ separate work.
 | Colonization Module | Enables ordinary colony founding |
 | Anti-matter Generator | +200 mg tank and +50 mg/year per module; reference device awaits IT access |
 | Alien Miner | 10 kt per mineral/year at concentration 100, if acquired; ordinary remote-mining rules |
-| Armor and shields | Sum across modules with hull armor; displayed as design ratings |
-| Guns, torpedoes, computers, jammers, capacitors, jets | Original fitting ratings only; space combat awaits implementation |
+| Armor and shields | Absorb battle damage; armor losses persist, shields recharge between battles |
+| Guns, torpedoes, computers, jammers, capacitors, jets | Active in automatic combat using the documented Suns! tactical rules |
 | Bombs / mine layers | Original fitting ratings only; no bombardment or minefield resolution |
 | Cloaks / tachyon detection | Reference ratings only; no stealth detection modifier |
 | Orbital Adjuster / AR construction / Jump Gate | Access and fitting data only; no operational special action |

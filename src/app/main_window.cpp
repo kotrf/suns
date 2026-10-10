@@ -620,7 +620,7 @@ void MainWindow::rebuildScene()
     addBackgroundStars(scene_, state_.galaxySeed);
 
     auto displayFleets = state_.fleets;
-    const auto missingContacts = wormhole_missing_contacts(state_, pendingOrders_.player);
+    const auto missingContacts = missing_fleet_contacts(state_, pendingOrders_.player);
     displayFleets.insert(displayFleets.end(), missingContacts.begin(), missingContacts.end());
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
@@ -886,7 +886,7 @@ void MainWindow::updateControls()
 
     auto knownFleets = state_.fleets;
     for (auto& known : knownFleets) if (known.owner == pendingOrders_.player) known = fleet_player_view(state_, known);
-    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
     const auto colonyShips = static_cast<std::size_t>(std::count_if(knownFleets.begin(), knownFleets.end(), [&](const Fleet& candidate) {
         return candidate.owner == pendingOrders_.player && fleet_can_colonize(state_, candidate);

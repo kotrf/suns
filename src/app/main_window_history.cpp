@@ -764,6 +764,10 @@ void MainWindow::refreshEmpireHistory()
                 label = QString("Planet %1 defended").arg(event.planet);
                 color = QColor("#8dcc9e");
                 break;
+            case HistoryMilestoneKind::SpaceBattle:
+                label = QString("Space battle involving fleet %1").arg(event.fleet);
+                color = QColor("#e07575");
+                break;
             }
             if (event.observedTurn && event.observedTurn != shown[index]->turn)
                 label += QString(" (observed year %1)").arg(static_cast<qulonglong>(event.observedTurn));

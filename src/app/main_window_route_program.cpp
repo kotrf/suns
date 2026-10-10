@@ -179,15 +179,19 @@ QString routeForecast(
         "Entry, lifetime, exit and survival cannot be forecast with certainty.";
 
     GameState simulated = state;
+    // Navigation previews must never resolve battles using hidden enemy fits,
+    // routes or the authoritative seed. Combat outcomes are not forecasts.
+    std::erase_if(simulated.fleets, [&](const auto& f) { return f.owner != pending.player; });
     simulated.wormholes.clear();
     simulated.wormholeRules.spawnChancePerTurn = 0.0;
-    const auto missing = wormhole_missing_contacts(state, pending.player);
+    const auto missing = missing_fleet_contacts(state, pending.player);
     simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
     if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
         *simulatedFleet = fleet_player_view(state, *simulatedFleet);
     }
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
+    lines << "<i>Navigation only: hostile encounters can interrupt this route; combat is not forecast.</i>";
 
     bool firstTurn = true;
     bool dependsOnDynamicResult = false;
@@ -589,7 +593,7 @@ std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
     for (const auto& fleet : state_.fleets) {
         if (fleet.id != source) targets.push_back(fleet.id);
     }
-    for (const auto& contact : wormhole_missing_contacts(state_, pendingOrders_.player))
+    for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player))
         if (contact.id != source) targets.push_back(contact.id);
     std::sort(targets.begin(), targets.end());
     return targets;
@@ -601,7 +605,7 @@ std::vector<FleetId> MainWindow::availableOwnedFleetsForRouteProgram() const
     for (const auto& fleet : state_.fleets) {
         if (fleet.owner == pendingOrders_.player) fleets.push_back(fleet.id);
     }
-    for (const auto& contact : wormhole_missing_contacts(state_, pendingOrders_.player)) fleets.push_back(contact.id);
+    for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player)) fleets.push_back(contact.id);
     std::sort(fleets.begin(), fleets.end());
     return fleets;
 }
@@ -646,7 +650,7 @@ QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
     if (const auto* fleet = findFleet(state_, fleetId)) {
         return QString("%1 (Fleet %2)").arg(QString::fromStdString(fleet->name)).arg(fleetId);
     }
-    for (const auto& contact : wormhole_missing_contacts(state_, pendingOrders_.player)) if (contact.id == fleetId)
+    for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player)) if (contact.id == fleetId)
         return QString("%1 (Fleet %2)").arg(QString::fromStdString(contact.name)).arg(fleetId);
     return QString("Fleet %1").arg(fleetId);
 }
@@ -684,7 +688,7 @@ std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedS
 bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
 {
     const auto* fleet = findFleet(state_, fleetId);
-    const auto missing = wormhole_missing_contacts(state_, pendingOrders_.player);
+    const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     const bool ownContact = std::any_of(missing.begin(), missing.end(), [=](const auto& contact) { return contact.id == fleetId; });
     if ((!fleet || fleet->owner != pendingOrders_.player) && !ownContact) return false;
     if (selection_.fleet == fleetId) return true;

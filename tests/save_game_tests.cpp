@@ -32,11 +32,37 @@ GameState pre_equipment_campaign(const GalaxyConfig& config, const std::vector<E
     return state;
 }
 
+// Non-battle records retain their v60 shape. Strip the new empty host-only
+// loss-contact list to produce an actual pre-combat state layout.
+bool write_pre_combat_fixture(const QString& path, const SaveGameData& value, QString& error)
+{
+    assert(value.state.pendingFleetLossContacts.empty());
+    for (const auto& p : value.state.players)
+        for (const auto& r : p.pendingPlayerReports) assert(r.kind != PlayerReportKind::SpaceBattle);
+    for (const auto& e : value.strategicMessages) assert(e.kind != GameEventKind::SpaceBattle);
+    if (!write_save_game_file(path, value, error)) return false;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadWrite)) return false;
+    auto bytes = file.readAll();
+    QByteArray marker;
+    QDataStream shape(&marker, QIODevice::WriteOnly);
+    shape << quint32{0x50524F44u};
+    const auto offset = bytes.indexOf(marker);
+    assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
+    QDataStream extension(bytes.mid(offset + 4));
+    quint32 size{}; extension >> size;
+    assert(bytes.mid(offset + 8 + size, 4) == QByteArray(4, '\0'));
+    bytes.remove(offset + 8 + size, 4);
+    QDataStream header(&bytes, QIODevice::ReadWrite);
+    assert(header.device()->seek(4)); header << quint32{60};
+    return file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size();
+}
+
 // Older fixtures must have the old record layout, not just an older header.
 // v59 appends a bounded production extension after the unchanged v58 GameState.
 bool write_pre_terraforming_fixture(const QString& path, const SaveGameData& value, QString& error)
 {
-    if (!write_save_game_file(path, value, error)) return false;
+    if (!write_pre_combat_fixture(path, value, error)) return false;
     QFile file(path);
     if (!file.open(QIODevice::ReadWrite)) return false;
     auto bytes = file.readAll();
@@ -1482,7 +1508,7 @@ void equipment_catalog_round_trip()
     assert(!read_turn_order_file(packetPath, imported, error));
     // A genuine v59 snapshot and v17 orders with old IDs remain readable.
     value.state = make_demo_game(); value.pendingOrders = {1, {}}; value.pendingDescriptions.clear();
-    assert(write_save_game_file(path, value, error));
+    assert(write_pre_combat_fixture(path, value, error));
     assert(file.open(QIODevice::ReadWrite));
     QDataStream oldHeader(&file); assert(file.seek(4)); oldHeader << quint32{59}; file.close();
     assert(read_save_game_file(path, read, error));
@@ -1496,8 +1522,74 @@ void equipment_catalog_round_trip()
     assert(read_turn_order_file(packetPath, imported, error));
 }
 
+void space_battle_round_trip()
+{
+    using C = ShipComponentType;
+    QTemporaryDir dir;
+    assert(dir.isValid());
+    SaveGameData save;
+    save.campaignId = 10; save.turnToken = 12; save.mode = SessionMode::Host;
+    save.state = generate_campaign({}, {{"One"}, {"Two"}});
+    save.playerTokens = {{1, 12}, {2, 13}};
+    save.pendingOrders = {1, {}};
+    save.state.wormholes.clear(); save.state.wormholeRules.spawnChancePerTurn = 0;
+    save.state.shipDesigns.push_back({10, 1, "Winner", ShipHullType::Destroyer, {C::QuickJump5, C::AntiMatterPulverizer}});
+    save.state.shipDesigns.push_back({20, 2, "Victim", ShipHullType::Destroyer, {C::QuickJump5}});
+    save.state.nextShipDesignId = 21;
+    save.state.fleets.clear();
+    for (PlayerId p : {1, 2}) {
+        Fleet fleet;
+        fleet.id = p; fleet.owner = p; fleet.design = p * 10; fleet.name = "Fleet " + std::to_string(p);
+        fleet.position = {1000, 1000}; fleet.ships = {{p * 10, 1}};
+        fleet.telemetry.observedTurn = save.state.turn; fleet.telemetry.position = fleet.position;
+        fleet.telemetry.ships = fleet.ships; fleet.telemetry.fuel = fleet.fuel;
+        save.state.fleets.push_back(fleet);
+    }
+    save.state.nextFleetId = 3;
+    const auto result = TurnProcessor{}.process_with_events(save.state, {});
+    save.state = result.state; save.strategicMessages = result.events;
+    assert(save.state.pendingFleetLossContacts.size() == 1);
+    const auto path = dir.filePath("remote-battle.suns");
+    QString error;
+    assert(write_save_game_file(path, save, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.pendingFleetLossContacts.size() == 1);
+    assert(loaded.state.pendingFleetLossContacts.front().lastContact.id == 2);
+    const auto& reports = loaded.state.players.back().pendingPlayerReports;
+    const auto pending = std::find_if(reports.begin(), reports.end(), [](const auto& r) { return r.battle.has_value(); });
+    assert(pending != reports.end() && pending->battle->units[1].survivingShips == 0);
+    assert(pending->battle->shots.front().shipsDestroyed == 1);
+    const auto packet = make_player_turn(loaded, 2);
+    assert(packet.state.pendingFleetLossContacts.empty() && packet.state.players.front().pendingPlayerReports.empty());
+    assert(packet.state.fleets.front().id == 2);
+    auto resolved = loaded.state;
+    std::vector<GameEvent> battleReports;
+    for (int i = 0; i < 20 && battleReports.empty(); ++i) {
+        auto next = TurnProcessor{}.process_with_events(resolved, {});
+        for (const auto& e : next.events) if (e.kind == GameEventKind::SpaceBattle) battleReports.push_back(e);
+        resolved = std::move(next.state);
+    }
+    assert(!battleReports.empty());
+    save.state = resolved; save.strategicMessages = battleReports;
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.strategicMessages.front().battle->shots.front().armorDamage > 0);
+    // A genuine v60 state keeps Stars! equipment, with no battle extension.
+    save.state = make_demo_game(); save.strategicMessages.clear();
+    save.playerTokens = {{1, 12}};
+    save.state.shipDesigns.push_back({10, 1, "Old fitted gun", ShipHullType::Destroyer, {C::QuickJump5, C::Laser}});
+    save.state.nextShipDesignId = 11;
+    assert(write_pre_combat_fixture(path, save, error));
+    const bool readLegacy = read_save_game_file(path, loaded, error);
+    if (!readLegacy) std::cerr << error.toStdString() << '\n';
+    assert(readLegacy);
+    assert(loaded.state.pendingFleetLossContacts.empty());
+    assert(loaded.state.shipDesigns.back().components.back() == C::Laser);
+}
+
 int main()
 {
+    space_battle_round_trip();
     equipment_catalog_round_trip();
     terraforming_and_automation_round_trip();
     mining_robots_round_trip_and_version_boundaries();

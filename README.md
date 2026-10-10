@@ -83,6 +83,9 @@ Remote mining equipment follows the six Stars! robots, including Construction/El
 
 Ship fitting includes [113 additional Stars! modules](docs/stars-equipment.md),
 with original mass, costs, technology and access gates. The designer has search,
-category and hull-compatibility filters. Logistics equipment affects gameplay;
-combat, bombardment, minefields and stealth are explicitly marked as reference
-ratings awaiting those systems.
+category and hull-compatibility filters. Logistics equipment affects gameplay.
+Automatic [space combat](docs/space-combat.md) resolves physically meeting
+hostile fleets with beams, torpedoes, shields, armor and persistent ship losses.
+Battle reports arrive through communications and remain readable after fleet
+destruction. Different empires are hostile in this first slice. Bombardment,
+minefields, stealth detection and station combat remain future systems.

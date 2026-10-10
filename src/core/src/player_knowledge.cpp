@@ -80,12 +80,14 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::EnemyFleetDetected: return GameEventKind::EnemyFleetDetected;
     case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
     case PlayerReportKind::FleetMobilityRestored: return GameEventKind::FleetMobilityRestored;
+    case PlayerReportKind::SpaceBattle: return GameEventKind::SpaceBattle;
     }
     return GameEventKind::FleetArrived;
 }
 
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
+    if (kind == PlayerReportKind::SpaceBattle) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
     return kind == PlayerReportKind::EnemyFleetDetected
             || kind == PlayerReportKind::FleetStalledForFuel
@@ -118,6 +120,11 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     mix(report.quantity);
     mix(static_cast<std::uint64_t>(report.researchField));
     mix(report.technologyLevel);
+    if (report.battle) {
+        mix(std::bit_cast<std::uint64_t>(report.battle->position.x));
+        mix(std::bit_cast<std::uint64_t>(report.battle->position.y));
+        for (const auto& unit : report.battle->units) { mix(unit.fleet); mix(unit.design); }
+    }
     // A receiving colony gets one aggregated freight report per year.
     // The manifest is part of the stable identity even when replaying a turn.
     if (report.kind == PlayerReportKind::FreightDelivered) {
@@ -482,13 +489,23 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            auto severity = event_severity(report.kind);
+            if (report.battle) {
+                bool survivors = false, losses = false;
+                for (const auto& unit : report.battle->units) if (unit.owner == player.id) {
+                    survivors |= unit.survivingShips > 0;
+                    losses |= unit.survivingShips < unit.initialShips;
+                }
+                severity = !survivors ? GameEventSeverity::Critical
+                    : losses || report.battle->stalemate ? GameEventSeverity::Warning : GameEventSeverity::Information;
+            }
             events.push_back({
                 stable_event_id(report, player.id),
                 state.turn,
                 report.observedTurn,
                 player.id,
                 event_kind(report.kind),
-                event_severity(report.kind),
+                severity,
                 report.star,
                 report.planet,
                 report.fleet,
@@ -505,6 +522,8 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.deliveredMinerals,
                 report.deliveredColonists,
                 report.contactOwner,
+                0,
+                report.battle,
             });
         }
 
@@ -512,6 +531,9 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
             return report.deliveryTurn <= state.turn;
         });
     }
+    std::erase_if(state.pendingFleetLossContacts, [&](const auto& contact) {
+        return contact.deliveryTurn <= state.turn;
+    });
     return events;
 }
 

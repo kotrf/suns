@@ -109,6 +109,13 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::WormholeOverdue: subject = QString("%1: OVERDUE / NO CONTACT").arg(fleetName); break;
     case GameEventKind::WormholePresumedLost: subject = QString("%1: PRESUMED LOST after WH transit").arg(fleetName); break;
     case GameEventKind::WormholeCollapsed: subject = QString("WH %1: collapse observed").arg(event.wormholeEndpoint); break;
+    case GameEventKind::SpaceBattle: {
+        std::uint64_t lost = 0;
+        if (event.battle) for (const auto& unit : event.battle->units)
+            if (unit.owner == event.recipient) lost += unit.initialShips - unit.survivingShips;
+        subject = QString("Space battle at %1 — %2 own ships lost").arg(starName).arg(qulonglong(lost));
+        break;
+    }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
     case GameEventKind::RouteCompleted: subject = QString("%1 completed its route").arg(fleetName); break;
@@ -210,7 +217,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::EnemyFleetDetected
             || event.kind == GameEventKind::EnemyFleetLost;
     case MessageTypeFilter::Combat:
-        return event.kind == GameEventKind::GroundInvasionWon
+        return event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
             || event.kind == GameEventKind::GroundDefenseWon
             || event.kind == GameEventKind::ColonyLost;
@@ -233,8 +240,54 @@ const GameEvent* find_event(const std::vector<GameEvent>& events, std::uint64_t 
     return event == events.end() ? nullptr : &*event;
 }
 
+QString space_battle_text(const GameEvent& event)
+{
+    if (!event.battle) return "Battle report unavailable.";
+    const auto& battle = *event.battle;
+    std::uint64_t ownBefore = 0, ownAfter = 0, enemyAfter = 0;
+    for (const auto& unit : battle.units) {
+        if (unit.owner == event.recipient) { ownBefore += unit.initialShips; ownAfter += unit.survivingShips; }
+        else enemyAfter += unit.survivingShips;
+    }
+    const QString outcome = battle.stalemate ? "Unresolved after round limit"
+        : ownAfter ? "Victory" : enemyAfter ? "Defeat" : "Mutual destruction";
+    QString text = QString("<b>Space battle — %1</b><br>Observation: turn %2. Report received: turn %3.<br>"
+        "Position: %4, %5. Rounds: %6. Own ships lost: %7 of %8.<br><br>")
+        .arg(outcome).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
+        .arg(battle.position.x, 0, 'f', 1).arg(battle.position.y, 0, 'f', 1).arg(battle.rounds)
+        .arg(qulonglong(ownBefore - ownAfter)).arg(qulonglong(ownBefore));
+    text += "<table cellspacing='4'><tr><th>Empire / Fleet / Design</th><th>Before</th><th>Lost</th><th>After</th><th>Armor left</th></tr>";
+    for (const auto& unit : battle.units) text += QString("<tr><td>%1%2 / %3 / %4</td><td>%5</td><td>%6</td><td>%7</td><td>%8</td></tr>")
+        .arg(unit.owner == event.recipient ? "Own " : "Empire ").arg(unit.owner)
+        .arg(QString::fromStdString(unit.fleetName).toHtmlEscaped(), QString::fromStdString(unit.designName).toHtmlEscaped())
+        .arg(unit.initialShips).arg(unit.initialShips - unit.survivingShips).arg(unit.survivingShips)
+        .arg(unit.remainingArmor, 0, 'f', 1);
+    text += "</table><br><b>Volley log</b><br>";
+    text += "<table cellspacing='4'><tr><th>Round</th><th>Shot</th><th>Range</th><th>Hits</th><th>Shield / Armor damage</th><th>Lost</th></tr>";
+    const auto shown = std::min(std::size_t(256), battle.shots.size());
+    for (std::size_t i = 0; i < shown; ++i) {
+        const auto& shot = battle.shots[i];
+        if (shot.attacker >= battle.units.size() || shot.target >= battle.units.size()) continue;
+        const auto& source = battle.units[shot.attacker];
+        const auto& target = battle.units[shot.target];
+        text += QString("<tr><td>%1</td><td>%2 (#%3) → %4 (#%5)<br>%6</td><td>%7</td><td>%8 / %9</td><td>%10 / %11</td><td>%12</td></tr>")
+            .arg(shot.round).arg(QString::fromStdString(source.designName).toHtmlEscaped()).arg(source.fleet)
+            .arg(QString::fromStdString(target.designName).toHtmlEscaped()).arg(target.fleet)
+            .arg(QString::fromStdString(component_spec(shot.weapon).name).toHtmlEscaped())
+            .arg(shot.range, 0, 'f', 1).arg(qulonglong(shot.hits)).arg(qulonglong(shot.fired))
+            .arg(shot.shieldDamage, 0, 'f', 1).arg(shot.armorDamage, 0, 'f', 1).arg(shot.shipsDestroyed);
+    }
+    text += "</table>";
+    if (shown < battle.shots.size() || battle.logTruncated)
+        text += "<br>Volley display is limited; the fleet totals above include the entire battle.";
+    text += "<br><br>Survivors interrupt their route. Armor damage persists and can be repaired; shields recharge for the next battle. "
+        "All different empires are hostile in this first combat model. Orbital station combat and battle doctrines are pending.";
+    return text;
+}
+
 QString event_text(const GameState& state, const GameEvent& event)
 {
+    if (event.kind == GameEventKind::SpaceBattle) return space_battle_text(event);
     const auto* star = find_star(state, event.star);
     const auto* planet = event.planet != 0 ? find_planet_at_star(state, event.star) : nullptr;
     const auto battlePlanetName = planet
@@ -492,7 +545,7 @@ void MainWindow::installTurnMessages()
     turnMessageTypeFilter_->addItem("New colonies", static_cast<int>(MessageTypeFilter::Colonization));
     turnMessageTypeFilter_->addItem("Cargo deliveries", static_cast<int>(MessageTypeFilter::Freight));
     turnMessageTypeFilter_->addItem("Enemy contacts", static_cast<int>(MessageTypeFilter::EnemyContacts));
-    turnMessageTypeFilter_->addItem("Ground combat", static_cast<int>(MessageTypeFilter::Combat));
+    turnMessageTypeFilter_->addItem("Combat", static_cast<int>(MessageTypeFilter::Combat));
     turnMessageTypeFilter_->addItem("Research completed", static_cast<int>(MessageTypeFilter::Research));
     turnMessageTypeFilter_->addItem("Production delays", static_cast<int>(MessageTypeFilter::ProductionDelays));
     turnMessageTypeFilter_->addItem("Warnings", static_cast<int>(MessageTypeFilter::Warnings));
@@ -580,6 +633,8 @@ void MainWindow::installTurnMessages()
     const auto showOnMap = [this, selectedEvent] {
         const auto* event = selectedEvent();
         if (!event || (event->star == 0 && event->fleet == 0)) return;
+        const bool battle = event->kind == GameEventKind::SpaceBattle;
+        const auto position = event->position;
         const auto starId = event->star;
         const auto* star = find_star(state_, starId);
         const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [&](const Fleet& candidate) {
@@ -595,7 +650,9 @@ void MainWindow::installTurnMessages()
             selectWorkspaceObject(1, starId);
         }
         rebuildScene();
-        if (ownedFleet) {
+        if (battle) {
+            view_->centerOn(position.x, position.y);
+        } else if (ownedFleet) {
             const auto visible = fleet_player_view(state_, *fleet);
             view_->centerOn(visible.position.x, visible.position.y);
         } else if (star) view_->centerOn(star->position.x, star->position.y);
@@ -613,7 +670,8 @@ void MainWindow::installTurnMessages()
         font.setBold(false);
         item->setFont(font);
         updateTurnMessagesSummary();
-        turnMessageBody_->setPlainText(event_text(state_, *event));
+        if (event->kind == GameEventKind::SpaceBattle) turnMessageBody_->setHtml(event_text(state_, *event));
+        else turnMessageBody_->setPlainText(event_text(state_, *event));
         turnMessageShowOnMapButton_->setEnabled(event->star != 0 || event->fleet != 0);
         turnMessageHideSimilarButton_->setEnabled(true);
     };
