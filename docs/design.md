@@ -11,7 +11,7 @@ Suns! is a turn-based space 4X strategy game inspired by the systemic clarity of
 5. **Readable information.** Complexity should come from decisions, not from hiding the state behind presentation layers.
 6. **Incremental vertical slices.** New mechanics should become usable in the running game as early as practical.
 
-## Near-term vertical slice
+## Original vertical slice (completed)
 
 The first playable path is intentionally small:
 
@@ -23,4 +23,7 @@ The first playable path is intentionally small:
 - produce a colony ship;
 - colonize a second world.
 
-Only after that loop is solid should the project expand into richer economics, research, ship design, scanning, diplomacy and combat.
+That loop is now implemented, alongside research, fitted ship designs, scanning,
+logistics, paid terraforming, ground invasions and automatic fleet combat.
+Diplomacy and the remaining combat systems are still future work. See
+[project status](project-status.md) for the current baseline and follow-ups.

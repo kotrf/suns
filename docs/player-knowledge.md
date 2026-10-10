@@ -27,7 +27,7 @@ that was seen when the scan happened.
 
 Reports use the same ordinary-scanner components and physical transceiver-to-transceiver subspace-hop calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
-Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range is also the future hook for transient enemy-fleet contacts; those contacts will remain separate from permanent planetary knowledge.
+Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range also supports transient enemy-fleet contacts, separate from permanent planetary knowledge. Detached scouts' delayed enemy-contact snapshots remain future work.
 
 ## Delivery and events
 
@@ -66,4 +66,10 @@ empire briefing.
 
 The desktop app presents delivered survey and operational reports in a dedicated Turn Messages dock after End Turn. Survey text distinguishes basic, orbital and geological results. Planet panels, tooltips and the habitability map use only the delivered knowledge level: estimated values are marked and dimmed, exact habitability waits for orbit, and geology remains hidden until the deep survey. New items are unread; Next unread and Previous unread step through visible reports relative to the current selection and wrap around. Selecting a report updates the unread count immediately. Clicking a report with a map location centers its referenced object or recorded position; keyboard users can use Show on map. Moving through unread reports or restoring a filtered list does not pan the map. Warning severity is visually distinct.
 
-Later issue #45 slices can add contacts and battle results without changing the separation between authoritative truth, delivered player knowledge and UI-only unread state. Research level completions already use the same typed Turn Messages channel.
+Enemy contact detection/loss, research completions, wormhole reports and
+[space-battle results](space-combat.md) now use the typed Turn Messages channel.
+Battle payloads retain observed names, counts and volley results even after
+participants disappear. Save v61 also retains knowledge-only contacts for remote
+battle losses until report delivery; player exports omit the host loss ledger
+and undelivered payloads. These additions preserve the separation between
+authoritative truth, delivered knowledge and UI-only unread state.

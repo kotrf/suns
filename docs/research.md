@@ -63,8 +63,9 @@ New campaigns use the [15-model Stars! propulsion line](stars-propulsion.md), in
 
 Equipment research now includes the [reference armor, shields,
 weapons, bombs, mine layers, electronics and mechanics](stars-equipment.md),
-with all prerequisite fields and supported racial restrictions. Space-combat,
-bombardment, minefield and stealth effects are explicitly marked as future work.
+with all prerequisite fields and supported racial restrictions. Beams, torpedoes,
+shields, armor and tactical modifiers are active in [space combat](space-combat.md).
+Bombardment, minefield and stealth effects remain future work.
 Mystery Trader equipment cannot be acquired through ordinary research alone.
 
 Multiple scanners on one ship combine by the fourth root of the sum of their

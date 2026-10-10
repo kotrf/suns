@@ -78,5 +78,10 @@ remain gaps for a colony that was not owned. Selecting the current primary
 scope twice leaves a single plot. Fleet counts, mass and research levels remain
 empire-only metrics.
 
+Delivered space-battle reports add historical markers in save v61. Undelivered
+battles do not immediately reveal remote casualties through fleet aggregates:
+those fleets use their owner player-view until the result arrives. Separate
+military-loss time series remain future work.
+
 Further event categories remain extensions of issue #48; snapshots from older
 saves start at the loaded turn.

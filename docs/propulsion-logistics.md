@@ -111,13 +111,17 @@ Mass no longer directly reduces the Warp a ship is allowed to order. Instead, a 
 
 The earlier `engineThrust / mass` speed metric remains only as a temporary Qt presentation compatibility helper. Turn resolution is Warp-based.
 
-## Planned follow-ups
+## Completed follow-ups
 
-1. Add an explicit Warp selector and fuel forecast to the Qt route UI.
-2. Make production queue a concrete `ShipDesign` rather than a hard-coded Colony Ship production kind.
-3. Add player-managed loading/unloading of colonists, minerals and fuel.
-4. Apply radiating-engine hazard to transported colonists according to race radiation tolerance.
-5. Add hull slots and a player-facing ship designer where tanks, cargo pods, engines, scanners and later combat equipment compete for space/mass/cost.
+The original follow-up list below is implemented. Current propulsion uses the
+[reference engine progression](stars-propulsion.md); remaining systems are
+tracked in [project status](project-status.md).
+
+1. Explicit Warp selection and fuel forecasts in the Qt route UI.
+2. Production of concrete `ShipDesign` orders.
+3. Player-managed colonist/mineral cargo transfer and fuel logistics.
+4. Radiating-engine hazards to transported colonists according to race tolerance.
+5. Typed hull banks and a ship designer with competing logistics/combat equipment.
 
 The guiding rule remains the same: every component should create a strategic decision, not merely add another statistic.
 

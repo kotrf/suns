@@ -2,7 +2,14 @@
 
 Suns! should eventually make ship roles emerge from fitted hardware rather than from fixed classes. The first implementation keeps the current Qt presentation compatible, but the simulation now has explicit ship designs and components.
 
-## Current model
+## Legacy demo model
+
+The foundation and figures below describe the retained prototype designs.
+New campaigns use the [Stars! hulls](stars-hulls.md),
+[engines](stars-propulsion.md), [scanners](stars-scanners.md) and
+[equipment catalog](stars-equipment.md), with typed fitting banks and research
+gates. Authoritative annual travel is Warp-based; the thrust/mass metric below
+remains a legacy presentation helper.
 
 A `Fleet` references a `ShipDesign`. A design has a hull mass, hull build cost and a list of installed components. The starter designs use a small selection from the catalog:
 
@@ -42,10 +49,18 @@ A test hybrid made by adding the Colony Module to the Scout design keeps its sca
 
 A later UI-focused step should remove this compatibility role and derive presentation from the fitted design as well.
 
-## Future direction
+## Current fitting and remaining effects
 
-The component system is intentionally extensible. Technologies unlock scanners, drives, mining modules and specialized hulls in the ship designer. Candidate future equipment includes armor, shields, beam and missile weapons, point defense, minelayers, jammers and cloaking.
+The component system is intentionally extensible. Technologies unlock scanners,
+drives, mining robots and specialized hulls in the ship designer. Armor, shields,
+beam/torpedo weapons, computers, jammers and movement modules now affect automatic
+fleet combat. Bombs, mine layers and cloaking have catalog entries; their
+operational systems remain future work.
 
 Those components should not be added merely to create a long catalog. Each should introduce a strategic design decision through mass, cost, power, range, survivability, signature, logistics or another interacting constraint.
 
-The designer lets the player save named designs and build those designs at colonies. The [reference equipment catalog](stars-equipment.md) now covers armor, shields, weapons, bombs, mine layers, electrical and mechanical modules; their combat ratings await the corresponding simulation systems. Technology should unlock hulls and components rather than simply replacing ships with fixed higher-level classes.
+The designer lets the player save named designs and build those designs at
+colonies with an active shipyard. The [reference equipment catalog](stars-equipment.md)
+documents active effects and remaining systems, including the Suns!
+[space-combat rules](space-combat.md). Technology unlocks hulls and components
+rather than simply replacing ships with fixed higher-level classes.

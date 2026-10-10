@@ -24,7 +24,9 @@
    Export and distribute the next player turns.
 
 This is asynchronous file multiplayer with a trusted host. There is no deployed
-server, matchmaking, network login, signature verification or fleet combat yet.
+server, matchmaking, network login or signature verification yet. Ground invasions
+and [automatic fleet combat](space-combat.md) resolve on the host through the
+ordinary turn processor; participants receive only their delivered reports.
 Copying a token gives its holder the ability to submit for that player that turn;
 use a private channel for each participant's files. Keep the host save private.
 
@@ -36,9 +38,11 @@ The host rejects another campaign/turn/player or an incorrect/expired token.
 All players resolve together, and missing submissions never silently become passes.
 The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 
-Save v31 stores session mode, host inbox, player tokens, racial environment rules
+Save v31 introduced session mode, host inbox, player tokens, racial environment rules
 and projected observations. Earlier saves (v12–30) remain readable with their
-original scalar habitability. Multiplayer clients should use the same build.
+original scalar habitability. The current formats are save v61 and orders v18;
+supported save readers cover v12–61 and order readers v1–18. Multiplayer clients
+should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;
 a restart creates a new campaign identity.
 
@@ -59,6 +63,9 @@ are a projection, not simulation authority:
   on site; otherwise the projection does not expose their changing host value.
 - Own fleets use delivered telemetry/projection, with physical pending command
   and telemetry queues removed. Undelivered survey/operational reports are absent.
+- Delivered battle reports preserve observed participants and losses. A destroyed
+  remote fleet's last confirmed contact remains until its result arrives; the
+  host's loss ledger, delivery times and undelivered battle payloads are stripped.
 - Enemy contacts appear only in the connected sensor mesh, with ID, owner and
   position. Their design, fuel, cargo, destination and route are omitted. They
   can be selected as fixed-position route targets, as in the existing route UI.
@@ -77,4 +84,5 @@ an untrusted host cannot inspect or alter a campaign.
 - A transport interface and authenticated network exchange.
 - Delayed enemy-contact snapshots and richer opponent intel.
 - Computer opponents consuming `PlayerView` and emitting ordinary `PlayerOrders`.
-- Combat/diplomacy and genuinely asymmetric primary racial traits.
+- Station combat, bombardment, minefields, battle doctrines and diplomacy.
+- Genuinely asymmetric primary racial traits.

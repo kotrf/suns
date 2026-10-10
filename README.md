@@ -4,6 +4,9 @@
 
 The design goal is a relatively small set of deep, interacting systems rather than complexity through sheer feature count.
 
+For the maintained development handoff, implemented slices, current formats and
+remaining work, see [project status](docs/project-status.md).
+
 ## Architecture
 
 The simulation is deliberately separated from the desktop UI:
