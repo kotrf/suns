@@ -140,5 +140,6 @@ participants need the same build; older clients reject newer packet formats.
 This completes the normal reference engine catalog, not every Stars! technology.
 The Mystery Trader's Enigma Pulser is not a normal research unlock and awaits a
 visitor/acquisition system. The complete ship hull catalog is documented in
-[Stars! hulls](stars-hulls.md). Weapons, shields, terraforming and other
-branches remain separate work under #44 and their respective mechanics.
+[Stars! hulls](stars-hulls.md). Colony [terraforming](terraforming.md) uses the
+normal Stars! axis ladder. Combat weapons, shields and other branches remain
+separate work under #44 and their respective mechanics.

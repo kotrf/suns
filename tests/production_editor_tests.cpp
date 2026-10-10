@@ -1,6 +1,11 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
 #include <QComboBox>
+#include <QSpinBox>
+#include <QCheckBox>
+#include <QEventLoop>
+#include <QTimer>
+#include "suns/campaign.hpp"
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QLabel>
@@ -62,6 +67,22 @@ struct MainWindowTestAccess {
     }
     static void queueDesign(MainWindow& w) { assert(w.buildShipButton_->isEnabled()); w.queueShipDesign(); w.refreshProductionQueue(); }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void terraformingFixture(MainWindow& w)
+    {
+        w.state_ = make_demo_game();
+        w.state_.players.front().race = race_preset(RacePreset::Terran);
+        w.state_.players.front().technology.levels.fill(1);
+        w.state_.players.front().technology.researchActive = false;
+        w.state_.planets.front().environment = {24, 50, 20};
+        w.state_.planets.front().industry = 36;
+        w.state_.planets.front().minerals = {1000, 1000, 1000};
+        w.pendingOrders_ = {1, {}};
+        w.pendingDescriptions_.clear();
+        w.selection_.star = w.state_.planets.front().star;
+        w.rebuildScene();
+        w.refreshProductionQueue();
+    }
+    static const GameState& state(const MainWindow& w) { return w.state_; }
     static bool canQueueDock(const MainWindow& w) { return w.buildOrbitalDockButton_->isEnabled(); }
 };
 }
@@ -212,4 +233,41 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::colony(window).productionQueue.size() == 1);
     assert(tree->topLevelItem(0)->text(1) == "Immediate Scout");
+
+    suns::MainWindowTestAccess::terraformingFixture(window);
+    auto* kind = window.findChild<QComboBox*>("productionBatchKind");
+    auto* quantity = window.findChild<QSpinBox*>("productionBatchQuantity");
+    auto* add = window.findChild<QPushButton*>("productionBatchAdd");
+    auto* templateName = window.findChild<QComboBox*>("productionTemplateName");
+    auto* saveTemplate = window.findChild<QPushButton*>("productionTemplateSave");
+    auto* applyTemplate = window.findChild<QPushButton*>("productionTemplateApply");
+    auto* newColonies = window.findChild<QCheckBox*>("productionTemplateDefault");
+    assert(kind && quantity && add && templateName && saveTemplate && applyTemplate && newColonies);
+    kind->setCurrentIndex(3); quantity->setValue(3); add->click();
+    assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
+    assert(tree->topLevelItem(0)->font(1).italic());
+    kind->setCurrentIndex(1); quantity->setValue(2); add->click();
+    assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1).contains("×2"));
+    templateName->setEditText("Development"); newColonies->setChecked(true);
+    assert(saveTemplate->isEnabled()); saveTemplate->click();
+    assert(applyTemplate->isEnabled()); applyTemplate->click();
+    assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(0)->text(1).contains("Mine"));
+    suns::MainWindowTestAccess::advance(window);
+    const auto& developed = suns::MainWindowTestAccess::colony(window);
+    assert(developed.mines == 2 && developed.industry == 39);
+    assert(developed.productionQueue.size() == 1);
+    assert(suns::MainWindowTestAccess::state(window).players.front().productionTemplates.front().defaultForNewColonies);
+    kind->setCurrentIndex(2); quantity->setValue(1);
+    assert(add->isEnabled()); add->click();
+    assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1) == "Terraforming");
+    assert(tree->topLevelItem(1)->text(3).startsWith("Turn "));
+    if (const auto path = qEnvironmentVariable("SUNS_TERRAFORM_SCREENSHOT"); !path.isEmpty()) {
+        window.installPanelLayoutFixes();
+        window.resize(1400, 900); window.show();
+        QEventLoop loop; QTimer::singleShot(220, &loop, &QEventLoop::quit); loop.exec();
+        assert(window.grab().save(path));
+    }
+    suns::MainWindowTestAccess::advance(window);
+    assert(suns::MainWindowTestAccess::colony(window).environment.temperature == 25);
+    assert(suns::MainWindowTestAccess::colony(window).naturalEnvironment->temperature == 24);
 }

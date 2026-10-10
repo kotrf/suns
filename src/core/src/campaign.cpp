@@ -52,10 +52,23 @@ const std::vector<ResearchUnlock>& research_unlocks()
             {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
             {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
             {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
-            {ResearchField::Biology, 1, "Sealed Habitats", "New campaigns: tolerate environments 5 points outside racial ranges.", {}},
-            {ResearchField::Biology, 2, "Adaptive Habitats", "New campaigns: expand environmental tolerance to 10 points.", {}},
-            {ResearchField::Biology, 3, "Extreme Habitats", "New campaigns: expand environmental tolerance to 15 points.", {}},
+
         };
+        constexpr std::array<std::uint8_t, 4> limits{3, 7, 11, 15};
+        constexpr std::array<std::uint8_t, 4> extra{1, 5, 10, 16};
+        for (std::size_t tier = 0; tier < limits.size(); ++tier) {
+            for (const auto field : {ResearchField::Energy, ResearchField::Propulsion, ResearchField::Weapons}) {
+                const auto axis = field == ResearchField::Energy ? "Temperature"
+                    : field == ResearchField::Propulsion ? "Gravity" : "Radiation";
+                ResearchUnlock entry{ResearchField::Biology, static_cast<std::uint8_t>(tier + 1),
+                    std::string(axis) + " Terraforming " + std::to_string(limits[tier]),
+                    "Shift " + std::string(axis) + " up to " + std::to_string(limits[tier])
+                        + " points from its natural value. Queue each unit change: 12 production, no minerals.", {}};
+                entry.extraLevels[static_cast<std::size_t>(field)] = extra[tier];
+                entry.terraforming = true;
+                entries.push_back(std::move(entry));
+            }
+        }
         for (auto& entry : entries) {
             entry.legacyScanner = entry.component && legacy_scanner_component(*entry.component);
             entry.legacyPropulsion = entry.component && legacy_propulsion_component(*entry.component);
@@ -126,7 +139,9 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
 {
     const auto* owner = find_player(state, player);
     const auto* miner = unlock.component ? mining_technology(*unlock.component) : nullptr;
-    return owner && engine_access_available(owner->race, unlock.engineAccess)
+    return owner && (!unlock.terraforming || (owner->race.environmentBased
+            && !(owner->race.radiationImmune && unlock.extraLevels[static_cast<std::size_t>(ResearchField::Weapons)] != 0)))
+        && engine_access_available(owner->race, unlock.engineAccess)
         && (!miner || ((!miner->advancedRemoteMining || owner->race.advancedRemoteMining)
             && (!miner->excludesBasicRemoteMining || !owner->race.basicRemoteMining)))
         && (!unlock.excludesNoRamScoops || !owner->race.noRamScoopEngines)
@@ -205,7 +220,7 @@ bool ship_hull_available_to_player(const GameState& state, PlayerId player, Ship
 std::int32_t race_habitability(
     const RaceProfile& race, PlanetEnvironment environment, std::uint8_t biology)
 {
-    const int adaptation = 5 * std::min<int>(biology, 3);
+    const int adaptation = race.legacyBiologyAdaptation ? 5 * std::min<int>(biology, 3) : 0;
     auto suitability = [adaptation](int value, RaceEnvironmentRange range) {
         const int lo = std::max(0, int(range.minimum) - adaptation);
         const int hi = std::min(100, int(range.maximum) + adaptation);
@@ -371,6 +386,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             if (level >= SurveyLevel::OrbitalSurvey) {
                 known.owner = known_planet_owner(host, playerId, planet.id).value_or(0);
                 known.environment = planet.environment;
+                known.naturalEnvironment = planet.naturalEnvironment;
             } else known.environment = {};
             // Surface stocks change through other empires' mining/cargo orders.
             // Only an immediately connected fleet on site knows today's stock.

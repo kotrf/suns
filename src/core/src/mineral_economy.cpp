@@ -183,7 +183,7 @@ MineralCargo projected_remote_mining(const GameState& state, const Planet& plane
 
 MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item)
 {
-    if (item.kind == ProductionKind::Research) return {};
+    if (item.kind == ProductionKind::Research || item.kind == ProductionKind::Terraforming) return {};
     if (item.kind == ProductionKind::Factory) return {2.0, 1.0, 2.0};
     if (item.kind == ProductionKind::Mine) return {1.0, 2.0, 1.0};
     if (item.kind == ProductionKind::OrbitalStation) return {12.0, 6.0, 8.0};

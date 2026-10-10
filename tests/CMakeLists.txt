@@ -20,6 +20,10 @@ target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_core_tests COMMAND suns_core_tests)
 
+add_executable(suns_terraforming_tests terraforming_tests.cpp)
+target_link_libraries(suns_terraforming_tests PRIVATE Suns::Core)
+add_test(NAME suns_terraforming_tests COMMAND suns_terraforming_tests)
+
 add_executable(suns_wormhole_tests wormhole_tests.cpp)
 target_link_libraries(suns_wormhole_tests PRIVATE Suns::Core)
 add_test(NAME suns_wormhole_tests COMMAND suns_wormhole_tests)

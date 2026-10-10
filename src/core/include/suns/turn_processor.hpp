@@ -66,6 +66,23 @@ struct CancelProductionOrder {
     std::uint32_t index{};
 };
 
+struct QueueProductionBatchOrder {
+    PlanetId colony{};
+    ProductionKind kind{ProductionKind::Factory};
+    std::uint32_t quantity{1};
+    ProductionAutomation automation{ProductionAutomation::None};
+};
+
+struct SetProductionTemplateOrder {
+    ProductionTemplate value;
+    bool remove{};
+};
+
+struct ApplyProductionTemplateOrder {
+    PlanetId colony{};
+    std::string name;
+};
+
 struct SetFleetColonistsOrder {
     PlanetId colony{};
     FleetId fleet{};
@@ -143,7 +160,10 @@ using Order = std::variant<
     MergeFleetsOrder,
     SplitFleetOrder,
     CancelProductionOrder,
-    RenameFleetOrder>;
+    RenameFleetOrder,
+    QueueProductionBatchOrder,
+    SetProductionTemplateOrder,
+    ApplyProductionTemplateOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

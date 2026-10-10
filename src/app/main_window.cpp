@@ -56,6 +56,7 @@ QString productionName(ProductionKind kind)
     case ProductionKind::Mine: return "Mine";
     case ProductionKind::Research: return "Research";
     case ProductionKind::OrbitalStation: return "Orbital Dock";
+    case ProductionKind::Terraforming: return "Terraforming";
     }
     return "Production";
 }
@@ -80,6 +81,8 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
+    } else if (item.kind == ProductionKind::Terraforming) {
+        name = "Terraforming";
     } else if (item.kind == ProductionKind::OrbitalStation) {
         name = "Orbital Dock";
     } else {
@@ -88,6 +91,8 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = design ? QString::fromStdString(design->name) : "Ship design";
     }
 
+    if (item.automation != ProductionAutomation::None)
+        return QString("%1: up to %2 / year ↻").arg(name).arg(item.quantity);
     QString summary = item.kind == ProductionKind::Research
         ? name
         : QString("%1: %2/%3").arg(name).arg(completed).arg(total);
