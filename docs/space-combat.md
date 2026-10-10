@@ -92,7 +92,9 @@ Navigation forecasts exclude enemy fleets and never resolve a battle using
 hidden enemy designs, paths or the host seed. Their route ETA remains conditional
 on avoiding hostile encounters.
 
-Save v61 persists battle reports and undelivered loss contacts. Reading save
-v12–60 remains supported. Orders remain v18; all PBEM participants should use
-the same build. Bombardment, minefields, stealth detection, station fitting,
+Save v61 introduced battle reports and undelivered loss contacts. Reading save
+v12–60 remains supported. The current format is documented in [Strategic operations](strategic-operations.md); all PBEM participants should use
+the same build. Station fitting,
 retreat doctrines and diplomacy remain separate follow-up work.
+
+[Fleet strategic missions](strategic-operations.md) resolve bombing after fleet encounters, apply mine hazards to movement, and leave recoverable wreckage after losses.

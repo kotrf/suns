@@ -36,6 +36,10 @@ enum class GameEventKind {
     WormholePresumedLost,
     WormholeCollapsed,
     SpaceBattle,
+    Bombardment,
+    MineStrike,
+    ScientificData,
+    EmissionDetected,
 };
 
 enum class GameEventSeverity {

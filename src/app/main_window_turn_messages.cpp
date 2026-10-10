@@ -101,6 +101,10 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::Bombardment: subject = QString("Bombardment of %1: %2 colonists, %3 installations lost").arg(planetName).arg(qulonglong(event.deliveredColonists)).arg(event.quantity); break;
+    case GameEventKind::MineStrike: subject = QString("%1 hit a minefield — damage %2%, movement stopped").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
+    case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
+    case GameEventKind::EmissionDetected: subject = QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity); break;
     case GameEventKind::AnomalyDetected: subject = QString("Spatial anomaly %1 detected").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeClassified: subject = QString("WH %1 classified").arg(event.wormholeEndpoint); break;
     case GameEventKind::WormholeEntered: subject = QString("%1 entered WH %2").arg(fleetName).arg(event.wormholeEndpoint); break;
@@ -215,14 +219,15 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     case MessageTypeFilter::Freight: return event.kind == GameEventKind::FreightDelivered;
     case MessageTypeFilter::EnemyContacts:
         return event.kind == GameEventKind::EnemyFleetDetected
-            || event.kind == GameEventKind::EnemyFleetLost;
+            || event.kind == GameEventKind::EnemyFleetLost || event.kind == GameEventKind::EmissionDetected;
     case MessageTypeFilter::Combat:
-        return event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
+        return event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
+            || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
             || event.kind == GameEventKind::GroundDefenseWon
             || event.kind == GameEventKind::ColonyLost;
     case MessageTypeFilter::Research:
-        return event.kind == GameEventKind::ResearchLevelCompleted
+        return event.kind == GameEventKind::ScientificData || event.kind == GameEventKind::ResearchLevelCompleted
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::ProductionDelays:
         return event.kind == GameEventKind::ProductionWaitingForMinerals
@@ -305,7 +310,20 @@ QString event_text(const GameState& state, const GameEvent& event)
         : QString("Fleet %1").arg(event.fleet);
 
     QString text;
-    if (event.kind >= GameEventKind::AnomalyDetected) {
+    if (event.kind >= GameEventKind::Bombardment && event.kind <= GameEventKind::EmissionDetected) {
+        text = event_subject(state,event) + QString("\nObserved turn %1; received turn %2.\nPosition: %3, %4.")
+            .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
+            .arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1);
+        if (event.kind == GameEventKind::ScientificData)
+            text += "\nThese research points have been delivered to your empire. Each field objective is finite; wreckage must contain unfamiliar technology.";
+        else if (event.kind == GameEventKind::EmissionDetected)
+            text += "\nThis is an uncertain signal area. The source, owner and fleet composition are unverified; it may be a decoy. The marker expires after this planning year.";
+        else if (event.kind == GameEventKind::MineStrike)
+            text += "\nThe route was interrupted. A safe Warp or beam-equipped sweeping fleet can help with known fields.";
+        else text += "\nReported population and installation losses are from this bombardment. Current colony conditions may have changed since the observation.";
+        return text.toHtmlEscaped().replace("\n","<br>");
+    }
+    if (event.kind >= GameEventKind::AnomalyDetected && event.kind <= GameEventKind::WormholeCollapsed) {
         text = event_subject(state, event) + QString("\nObservation: turn %1. Report received: turn %2.\nPosition: %3, %4.\n")
             .arg(static_cast<qulonglong>(event.observedTurn)).arg(static_cast<qulonglong>(event.turn))
             .arg(event.position.x, 0, 'f', 1).arg(event.position.y, 0, 'f', 1);
@@ -444,8 +462,8 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(battlePlanetName)
                    .arg(event.quantity);
     } else if (event.kind == GameEventKind::ColonyLost) {
-        text = QString("Turn %1  •  Critical: %2 was captured by an enemy ground invasion\n"
-                       "%3 enemy colonists survived the battle.")
+        text = QString("Turn %1  •  Critical: %2 is no longer your colony\n"
+                       "%3 enemy colonists survived; zero may indicate bombardment emptied the colony.")
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(battlePlanetName)
                    .arg(event.quantity);

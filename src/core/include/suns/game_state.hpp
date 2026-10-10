@@ -382,8 +382,8 @@ struct ShipComponentSpec {
     double fieldRepairPerTurn{};
     // Ordinary and penetrating channels combine independently.
     double penetratingSensorRange{};
-    // Reference fitting ratings. Combat, bombing, mines and stealth resolution
-    // are separate systems; these fields do not imply those rules exist.
+    // Reference fitting ratings. Their operational effects are resolved by combat
+    // and strategic_operations; special race/acquisition rules remain separate.
     double armor{};
     double shields{};
     double weaponPower{};
@@ -582,6 +582,10 @@ enum class PlayerReportKind {
     EnemyFleetLost,
     FleetMobilityRestored,
     SpaceBattle,
+    Bombardment,
+    MineStrike,
+    ScientificData,
+    EmissionDetected,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -813,6 +817,24 @@ struct PendingWormholeReport {
     WormholeKnowledge knowledge;
 };
 
+enum class StrategicObjectKind : std::uint8_t { Minefield, Wreck, Emission };
+// Immutable sensor evidence, never a reference to current hidden truth.
+struct StrategicIntel {
+    std::uint32_t id{};
+    StrategicObjectKind type{StrategicObjectKind::Minefield};
+    Position position;
+    double radius{};
+    PlayerId owner{};
+    std::uint64_t observedTurn{};
+    std::uint64_t deliveryTurn{};
+    double quantity{};
+    std::uint8_t kind{};
+};
+struct FieldScienceRecord {
+    std::uint64_t key{};
+    std::uint64_t deliveryTurn{};
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -836,6 +858,9 @@ struct Player {
     std::vector<WormholeKnowledge> wormholeKnowledge;
     std::vector<PendingWormholeReport> pendingWormholeReports;
     std::vector<ProductionTemplate> productionTemplates;
+    std::vector<StrategicIntel> strategicIntel;
+    std::vector<StrategicIntel> pendingStrategicIntel;
+    std::vector<FieldScienceRecord> fieldScience;
 };
 
 enum class FleetRole {
@@ -846,6 +871,18 @@ enum class FleetRole {
 enum class FleetTask {
     None,
     RemoteMining,
+    Bombardment,
+    LayMines,
+    SweepMines,
+    FieldResearch,
+    Salvage,
+};
+
+enum class EmissionMode : std::uint8_t { Standard, Passive, RadioSilence };
+struct ElectronicsProgram {
+    EmissionMode mode{EmissionMode::Standard};
+    std::uint64_t resumeTurn{}; // Mandatory finite wake-up for radio silence.
+    bool deception{}; // Deliberate false emissions; requires an active jammer.
 };
 
 enum class FleetArrivalActionKind {
@@ -912,6 +949,7 @@ struct FleetTelemetry {
     std::vector<FleetShipStack> ships;
     FleetId targetFleet{};
     double damagePercent{};
+    ElectronicsProgram electronics;
 };
 
 struct PendingFleetCommand {
@@ -919,6 +957,7 @@ struct PendingFleetCommand {
     std::uint64_t deliveryTurn{};
     FleetRouteProgram program;
     std::optional<FleetTask> task;
+    std::optional<ElectronicsProgram> electronics;
 };
 
 struct PendingFleetTelemetry {
@@ -959,6 +998,21 @@ struct Fleet {
     // remains a resolved position snapshot for rendering and compatibility.
     FleetId targetFleet{};
     double damagePercent{};
+    ElectronicsProgram electronics;
+};
+
+struct Minefield {
+    std::uint32_t id{};
+    PlayerId owner{};
+    Position position;
+    double mines{};
+    std::uint8_t kind{}; // Standard, heavy, speed trap.
+};
+struct SalvageWreck {
+    std::uint32_t id{};
+    Position position;
+    std::uint64_t expiresTurn{};
+    std::array<std::uint8_t, kResearchFieldCount> technology{};
 };
 
 struct PendingFleetLossContact {
@@ -1028,6 +1082,10 @@ struct GameState {
     std::vector<WormholeTransit> wormholeTransits;
     // Host-only pre-battle owner knowledge; never participates in simulation.
     std::vector<PendingFleetLossContact> pendingFleetLossContacts;
+    std::uint32_t nextMinefieldId{1};
+    std::vector<Minefield> minefields;
+    std::uint32_t nextWreckId{1};
+    std::vector<SalvageWreck> wrecks;
 };
 
 struct GalaxyConfig {

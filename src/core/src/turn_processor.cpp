@@ -1,5 +1,6 @@
 #include "suns/turn_processor.hpp"
 #include "suns/combat.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
@@ -1420,6 +1421,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         bool intercepted{};
         PlayerId owner{};
         bool armed{};
+        bool mineRestricted{};
         Position start;
     };
     std::vector<MotionPlan> plans;
@@ -1460,6 +1462,17 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         if (targetPlan == plans.end()) continue;
         plan.destination = targetPlan->baseEndpoint;
         plan.endpoint = projected_turn_endpoint(state, *fleet, plan.destination);
+    }
+
+    // Simultaneous movement uses one field geometry. Consumption in FleetId
+    // order must not invalidate a later fleet's already planned boundary.
+    const auto navigationMinefields = state.minefields;
+    for (auto& plan : plans) if (plan.active) {
+        if (const auto* fleet = fleet_by_id(state,plan.fleet)) {
+            const auto end = minefield_navigation_endpoint(state,*fleet,plan.endpoint);
+            plan.mineRestricted = !same_position(end,plan.endpoint);
+            plan.endpoint = end;
+        }
     }
 
     struct EncounterCandidate {
@@ -1567,8 +1580,11 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     }
 
     std::vector<FleetId> fixedArrivals;
+    std::vector<FleetId> mineDestroyedFleets;
 
-    for (auto& fleet : state.fleets) {
+    for (const auto id : fleetIds) {
+        auto* movingFleet = fleet_by_id(state,id); if (!movingFleet) continue;
+        auto& fleet = *movingFleet;
         const auto plan = std::find_if(plans.begin(), plans.end(), [&](const MotionPlan& candidate) {
             return candidate.fleet == fleet.id;
         });
@@ -1578,10 +1594,16 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         }
 
         const Position start = fleet.position;
-        const auto endpoint = plan->endpoint;
+        auto endpoint = plan->endpoint;
         if (plan->routed) fleet.destination = plan->destination;
         const auto remaining = distance_between(start, endpoint);
         if (remaining <= epsilon) {
+            if (plan->mineRestricted && !plan->intercepted) {
+                if (apply_minefield_crossing(state,fleet,start,endpoint,navigationMinefields)
+                    && fleet.damagePercent >= 100) mineDestroyedFleets.push_back(fleet.id);
+                fleet.position = endpoint;
+                continue;
+            }
             fleet.position = endpoint;
             const auto routeDistance = plan->routed
                 ? distance_between(start, plan->destination)
@@ -1602,8 +1624,12 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             continue;
         }
         fleet.fuelStalled = false;
+        const auto previousDamage = fleet.damagePercent;
+        const bool mineStrike = apply_minefield_crossing(state, fleet, start, endpoint,navigationMinefields);
+        if (mineStrike && fleet.damagePercent >= 100) mineDestroyedFleets.push_back(fleet.id);
+        auto beforeStrike = fleet; beforeStrike.damagePercent = previousDamage;
 
-        const auto budget = fleet_movement_budget(state, fleet, remaining, 1.0);
+        const auto budget = fleet_movement_budget(state, beforeStrike, distance_between(start, endpoint), 1.0);
         const auto capacity = fleet_fuel_capacity(state, fleet);
         fleet.fuel = std::clamp(fleet.fuel - budget.fuelChange, 0.0, capacity);
         fleet.position = endpoint;
@@ -1612,7 +1638,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         apply_fleet_radiation_attrition(state, fleet);
         apply_overdrive_damage(fleet, budget.damage);
 
-        if (fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
+        if (!mineStrike && fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
             && same_position(endpoint, plan->destination)) {
             fixedArrivals.push_back(fleet.id);
@@ -1621,6 +1647,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
     // Battles precede arrival actions, so a destroyed fleet cannot unload,
     // found a colony or escape an encounter by entering a wormhole.
+    std::erase_if(state.fleets, [&](const auto& f) { return fleet_id_list_contains(mineDestroyedFleets,f.id); });
     resolve_space_battles(state, state.turn + 1);
     std::sort(fixedArrivals.begin(), fixedArrivals.end());
 
@@ -1730,6 +1757,7 @@ TurnResult TurnProcessor::process_with_events(
     // orders and movement are resolved. A basic dock without the module does
     // not refuel, leaving room for cheaper station hulls later.
     refuel_fleets_at_orbital_services(next);
+    advance_minefields(next);
     const auto extraction = mine_colonies(next);
     std::vector<ColonyFreightDelivery> freight;
 
@@ -1941,6 +1969,10 @@ TurnResult TurnProcessor::process_with_events(
                             submission.player,
                             concreteOrder.fleet,
                             concreteOrder.enabled ? FleetTask::RemoteMining : FleetTask::None);
+                    } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
+                        (void)submit_fleet_task_command(next, submission.player, concreteOrder.fleet, concreteOrder.task);
+                    } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
+                        (void)submit_electronics_command(next, submission.player, concreteOrder.fleet, concreteOrder.program);
                     } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
                         (void)merge_fleets(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
@@ -1966,6 +1998,9 @@ TurnResult TurnProcessor::process_with_events(
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
     advance_fleets(next, freight);
+    resolve_bombardments(next, next.turn + 1);
+    run_strategic_tasks(next, next.turn + 1);
+    observe_strategic_objects(next, next.turn + 1);
     observe_current_wormholes(next, next.turn + 1);
     observe_current_sensor_coverage(next, next.turn + 1);
     observe_enemy_fleet_contacts(next, next.turn + 1);
@@ -2025,6 +2060,7 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
     publish_fleet_telemetry(next, next.turn);
     deliver_due_fleet_telemetry(next);
+    deliver_strategic_intel(next);
     auto deliveredIntel = deliver_due_survey_reports(next);
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
     deliveredReports = deliver_due_player_reports(next);
