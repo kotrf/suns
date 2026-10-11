@@ -9,6 +9,7 @@
 #include <QDialog>
 #include <QEventLoop>
 #include <QGraphicsView>
+#include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProgressBar>
@@ -160,6 +161,8 @@ int main(int argc, char** argv)
     details->click();
     scroll->verticalScrollBar()->setValue(0);
     settle();
+    const auto* routeTable = window.findChild<QTreeWidget*>("routeProgramQueue");
+    assert(routeTable->header()->length() <= routeTable->viewport()->width());
     if (app.arguments().contains("--capture")) window.grab().save("/tmp/suns-fleet-1000.png");
     // Preset and reset actions must never resurrect an empty route tab.
     window.findChild<QAction*>("mapWorkspaceAction")->trigger();

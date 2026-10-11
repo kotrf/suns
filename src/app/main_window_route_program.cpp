@@ -165,13 +165,13 @@ QString routeForecast(
     const TurnProcessor& processor,
     FleetId fleetId,
     const MoveFleetOrder& route,
-    std::vector<std::optional<std::uint32_t>>* arrivalTurns = nullptr,
+    std::vector<RouteProgramLegForecast>* legForecasts = nullptr,
     QString* fuelWarning = nullptr)
 {
     constexpr std::uint32_t kForecastHorizon = 96;
     const auto legs = routeLegs(route);
     if (legs.empty()) return {};
-    if (arrivalTurns) arrivalTurns->assign(legs.size(), std::nullopt);
+    if (legForecasts) legForecasts->assign(legs.size(), {});
     if (fuelWarning) fuelWarning->clear();
     if (std::any_of(legs.begin(), legs.end(), [](const auto& leg) {
         return leg.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole;
@@ -201,6 +201,7 @@ QString routeForecast(
     bool firstTurn = true;
     bool dependsOnDynamicResult = false;
     std::size_t legIndex = 0;
+    bool fuelShortageSeen = false;
 
     for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
         const auto* beforeFleet = findFleet(simulated, fleetId);
@@ -220,9 +221,38 @@ QString routeForecast(
         if (firstTurn && !pending.orders.empty()) submissions.push_back(pending);
         firstTurn = false;
 
-        auto next = processor.process(simulated, submissions);
+        auto result = processor.process_with_events(simulated, submissions);
+        auto next = std::move(result.state);
         const auto* after = findFleet(next, fleetId);
         const auto& leg = legs[legIndex];
+        for (const auto& movement : result.movementFuel) {
+            if (movement.fleet != fleetId
+                || (leg.targetFleet != 0 ? movement.targetFleet != leg.targetFleet
+                    : movement.targetFleet != 0 || !same_position(movement.destination, leg.destination))) continue;
+            if (legForecasts) {
+                auto& forecast = (*legForecasts)[legIndex];
+                forecast.fuelUsed = forecast.fuelUsed.value_or(0.0) + movement.consumed;
+                forecast.fuelRemaining = movement.remaining;
+            }
+            if (movement.fuelLimited && !fuelShortageSeen) {
+                fuelShortageSeen = true;
+                if (legForecasts) (*legForecasts)[legIndex].fuelShortageTurn = step;
+                if (fuelWarning) {
+                    *fuelWarning = QString("Fuel shortage forecast at T+%1, before waypoint %2 (%3). "
+                        "This preview includes earlier legs, cargo changes, fuel generation and orbital refuelling. "
+                        "Reduce Warp or add a refuelling stop.")
+                        .arg(step).arg(static_cast<qulonglong>(legIndex + 1))
+                        .arg(waypointName(state, leg.destination, leg.targetFleet));
+                }
+            }
+        }
+        const auto markArrival = [&] {
+            if (!legForecasts) return;
+            auto& forecast = (*legForecasts)[legIndex];
+            forecast.arrivalTurn = step;
+            if (!forecast.fuelUsed) forecast.fuelUsed = 0.0;
+            if (after) forecast.fuelRemaining = after->fuel;
+        };
         if (!after) {
             if (leg.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
                 && findFleet(next, leg.targetFleet)) {
@@ -231,7 +261,7 @@ QString routeForecast(
                              .arg(waypointName(state, leg.destination, leg.targetFleet))
                              .arg(step)
                              .arg(leg.warp);
-                if (arrivalTurns) (*arrivalTurns)[legIndex] = step;
+                markArrival();
                 legIndex = legs.size();
                 simulated = std::move(next);
                 break;
@@ -248,7 +278,7 @@ QString routeForecast(
                     if (legIndex + 1 < legs.size()) {
                         lines << "<i>Later waypoints cannot execute because successful colonization dismantles the fleet.</i>";
                     }
-                    if (arrivalTurns) (*arrivalTurns)[legIndex] = step;
+                    markArrival();
                     legIndex = legs.size();
                     simulated = std::move(next);
                     break;
@@ -266,16 +296,7 @@ QString routeForecast(
             return lines.join("<br>");
         }
 
-        if (fuelWarning && after->destination
-            && (after->fuelStalled || (
-                fleet_fuel_consumption_for_distance(next, *after, warp_distance(after->warp)) > 0.000001
-                && distance_between(beforeFleet->position, after->position) + 0.000001 < warp_distance(after->warp)
-                && same_position(*after->destination, leg.destination)))) {
-            *fuelWarning = QString("Fuel shortage forecast at T+%1, before waypoint %2 (%3). "
-                "This preview includes earlier legs, cargo changes, fuel generation and orbital refuelling. "
-                "Reduce Warp or add a refuelling stop.")
-                .arg(step).arg(static_cast<qulonglong>(legIndex + 1))
-                .arg(waypointName(state, leg.destination, leg.targetFleet));
+        if (fuelWarning && !fuelWarning->isEmpty() && !legForecasts) {
             break;
         }
 
@@ -291,7 +312,7 @@ QString routeForecast(
             && remainingLegs == expectedAfterRepeatRestart;
 
         if (arrived) {
-            if (arrivalTurns) (*arrivalTurns)[legIndex] = step;
+            markArrival();
             const auto navigationCertainty = leg.targetFleet != 0
                 ? (dependsOnDynamicResult ? "projected continuous intercept" : "continuous intercept")
                 : (dependsOnDynamicResult ? "projected navigation" : "exact navigation");
@@ -547,19 +568,30 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
     const auto legs = routeLegs(*route);
     rows.reserve(legs.size());
     if (routeEtaRevision_ != planningRevision_ || routeEtaFleet_ != fleet->id) {
-        (void)routeForecast(state_, pendingOrders_, processor_, fleet->id, *route, &routeEtas_);
+        (void)routeForecast(state_, pendingOrders_, processor_, fleet->id, *route, &routeLegForecasts_);
         routeEtaRevision_ = planningRevision_;
         routeEtaFleet_ = fleet->id;
     }
     for (std::size_t index = 0; index < legs.size(); ++index) {
         const auto& leg = legs[index];
+        const auto forecast = index < routeLegForecasts_.size()
+            ? routeLegForecasts_[index] : RouteProgramLegForecast{};
+        QString tooltip = "Projected movement fuel for this leg, including turn-by-turn billing and cargo changes. "
+            "Fuel left includes arrival refuelling. Preview horizon: 96 years; later orders and hostile encounters may change the result.";
+        if (!forecast.arrivalTurn) tooltip += "\nArrival is not predicted: ≥ is consumption so far, not the complete leg's cost; — means no data.";
+        if (forecast.fuelShortageTurn) tooltip += QString("\nFuel shortage at T+%1 on this leg: the ordered Warp cannot be maintained. "
+            "Reduce Warp or add a refuelling stop; free-speed coasting may still allow a later arrival.").arg(*forecast.fuelShortageTurn);
         rows.push_back({
             waypointName(state_, leg.destination, leg.targetFleet),
             actionName(leg.arrivalAction),
             leg.warp,
             index == 0,
-            index < routeEtas_.size() && routeEtas_[index]
-                ? QString::number(*routeEtas_[index]) : QString("—"),
+            forecast.arrivalTurn ? QString::number(*forecast.arrivalTurn) : QString("—"),
+            forecast.fuelUsed ? QString("%1%2").arg(forecast.arrivalTurn ? "" : "≥")
+                .arg(*forecast.fuelUsed, 0, 'f', 1) : QString("—"),
+            forecast.fuelRemaining ? QString::number(*forecast.fuelRemaining, 'f', 1) : QString("—"),
+            tooltip,
+            forecast.fuelShortageTurn.has_value(),
         });
     }
     return rows;
@@ -1016,6 +1048,26 @@ bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int directi
     route->targetFleet = legs.front().targetFleet;
     route->queuedWaypoints.assign(std::next(legs.begin()), legs.end());
     return stageSelectedFleetRoute(*fleet, *route, "Fleet route point moved");
+}
+
+bool MainWindow::setSelectedFleetRouteProgramLegWarp(std::size_t index, std::uint8_t warp)
+{
+    const auto* source = selectedFleet();
+    if (!source || warp < 1 || warp > kMaxWarp) return false;
+    const auto fleet = fleet_player_view(state_, *source);
+    if (fleet_max_warp(state_, fleet) == 0) return false;
+    auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (!route || routeIsClearIntent(fleet, *route)) return false;
+    if (index == 0) {
+        if (route->warp == warp) return true;
+        route->warp = warp;
+    } else {
+        if (index > route->queuedWaypoints.size()) return false;
+        auto& leg = route->queuedWaypoints[index - 1];
+        if (leg.warp == warp) return true;
+        leg.warp = warp;
+    }
+    return stageSelectedFleetRoute(fleet, *route, "Selected route leg Warp updated for End Turn");
 }
 
 bool MainWindow::removeSelectedFleetRouteProgramLeg(std::size_t index)

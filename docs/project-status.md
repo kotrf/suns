@@ -1,29 +1,24 @@
 # Project status and development handoff
 
-Snapshot: **10 October 2026, Dialog #06**. Main is now
-`09f0123a3d9b0be1fe476f1c3d1aba87b45b4595` (documentation PR #171 merged).
-The merged gameplay baseline is `0f138577f27e647ada45f37b601cbdfb324b6375`, after PRs
-[#168](https://github.com/kotrf/suns/pull/168),
-[#169](https://github.com/kotrf/suns/pull/169) and
-[#170](https://github.com/kotrf/suns/pull/170) merged in dependency order.
-The [main CI run](https://github.com/kotrf/suns/actions/runs/38078501535)
-passed; the combined Qt Debug build also passed all **47 local CTest targets**.
+Snapshot: **11 October 2026, Dialog #06**. Main is now
+`c8e2eb021ecc99ea2ea25dfa9ccea14ea29279a5`, after
+[PR #173](https://github.com/kotrf/suns/pull/173) merged by the user's explicit
+request. The [merge CI run](https://github.com/kotrf/suns/actions/runs/38090551662)
+passed; the branch's Qt Debug build and CI passed all **49 CTest targets**.
 The user is testing the merged game locally; results of that playtest are pending.
 
 ## Current authorized implementation
 
-The user requested bombardment/minefields, stealth/EW and science from exploring
-physical objects. Branch `feat/strategic-warfare-field-science` implements
-[strategic fleet operations](strategic-operations.md): operational bombs, three
-minefield types/sweeping, cloaking, jamming, emission modes/decoys and finite field
-observations/novel wreck recovery. This work is **not yet merged**. Its focused
-issue is [#172](https://github.com/kotrf/suns/issues/172); broader #58/#59/#101
-remain partial. Do not repeat the work or close umbrella issues for this slice.
+The current request fixes editing Warp for a selected route leg and adds fuel
+consumption/remaining fuel to the route table, with the first fuel-limited leg
+highlighted red. Branch `fix/route-leg-warp-fuel` contains this work; it is not
+yet merged. See [route forecasts](route-forecast.md).
 
-Main's old limitations below describe the merged baseline; the branch implements
-bombardment, mines and initial stealth/EW. It does not add station combat, colony
-defenses, planetary scars, autonomous doctrines, diplomatic treaties or physical
-sample-return missions.
+Main already includes [strategic fleet operations](strategic-operations.md):
+operational bombs, three minefield types/sweeping, cloaking, jamming, emission
+modes/decoys and finite field observations/novel wreck recovery. Focused issue
+[#172](https://github.com/kotrf/suns/issues/172) is closed; broader #58/#59/#101
+remain partial. Do not repeat that work or close umbrella issues for the slice.
 
 ## Implemented since the previous handoff
 
@@ -41,6 +36,7 @@ sample-return missions.
 | [#168](https://github.com/kotrf/suns/pull/168) | Paid physical terraforming, annual factory/mine/terraform rules and empire production templates | [Terraforming](terraforming.md), [Production](production-queue.md) |
 | [#169](https://github.com/kotrf/suns/pull/169) | 113 additional reference modules, typed compatibility, research/access gates and catalog search/filters | [Equipment](stars-equipment.md) |
 | [#170](https://github.com/kotrf/suns/pull/170) | Automatic simultaneous-motion fleet encounters, beams/torpedoes, shields/armor, ship losses and delayed immutable reports | [Space combat](space-combat.md) |
+| [#173](https://github.com/kotrf/suns/pull/173) | Bombardment, physical minefields, cloaking/EW, emission modes and finite field science, available in fleet operations | [Strategic operations](strategic-operations.md) |
 
 Reference equipment follows Stars! progression and ratings. Suns! remains its own
 simulation: tactical combat rules and terraforming production price are documented
@@ -49,7 +45,7 @@ adaptations, not claims of an exact Stars! implementation.
 ## Current boundaries
 
 - Combat treats all different owners as hostile; unarmed fleets do not fight
-  each other. Stations, bombardment, minefields, stealth detection, retreat
+  each other. Station combat, colony defenses, planetary scars, retreat
   doctrines and diplomacy remain unimplemented. Between battles, damage still
   uses a fleet-wide percentage rather than individual damaged-ship records.
 - Battle reports obey communications delay. A destroyed remote fleet's last
@@ -66,8 +62,9 @@ adaptations, not claims of an exact Stars! implementation.
 
 ## Formats and CI
 
-The implementation branch uses save **v62** (readers v12–62) and orders **v19**
-(readers v1–19); merged main still uses v61/v18 until the implementation merges. Host and players must use the same build. Version numbers in
+Main uses save **v62** (readers v12–62) and orders **v19**
+(readers v1–19). The route-table fix adds transient movement accounting without
+changing either format. Host and players must use the same build. Version numbers in
 older thematic documents describe when a feature was introduced unless explicitly
 identified as current. Legacy designs and campaigns retain documented old rules.
 
@@ -83,8 +80,8 @@ GitHub-hosted runners without the user's decision.
 These are open directions, not authorization to start every item:
 
 - [#44](https://github.com/kotrf/suns/issues/44): the research system and equipment
-  catalogs are implemented; remaining capabilities include station/stargate,
-  bombardment, minefield, stealth and full racial-trait systems.
+  catalogs are implemented, including initial bombardment/minefield/stealth;
+  remaining capabilities include station/stargate and full racial-trait systems.
 - [#45](https://github.com/kotrf/suns/issues/45): operational, contact, wormhole,
   ground- and space-battle messages exist; continue from unmet briefing/intel
   requirements rather than rebuilding the message pipeline.
@@ -102,9 +99,10 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-Collect the user's main playtest results while finishing the authorized strategic
-operations branch. After it merges, candidates include station fitting/combat,
-colony defenses/scars or battle doctrines/diplomacy; choose the next slice explicitly. Do not restart existing partial implementations or close
+Collect the user's main playtest results while finishing the authorized route
+editor fix ([#174](https://github.com/kotrf/suns/issues/174)). Later candidates
+include station fitting/combat, colony defenses/scars or battle doctrines/diplomacy;
+choose the next slice explicitly. Do not restart existing partial implementations or close
 umbrella issues solely because a first slice landed.
 
 Implementation goes through a branch and reviewed PR; merge only on the user's

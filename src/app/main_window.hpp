@@ -47,6 +47,17 @@ struct RouteProgramDisplayRow {
     std::uint8_t warp{};
     bool active{};
     QString eta;
+    QString fuelUsed;
+    QString fuelRemaining;
+    QString fuelTooltip;
+    bool fuelShortage{};
+};
+
+struct RouteProgramLegForecast {
+    std::optional<std::uint32_t> arrivalTurn;
+    std::optional<double> fuelUsed;
+    std::optional<double> fuelRemaining;
+    std::optional<std::uint32_t> fuelShortageTurn;
 };
 
 struct RouteProgramTargetOption {
@@ -101,6 +112,7 @@ public:
     bool setSelectedFleetRepeatOrdersForRouteProgram(bool enabled);
     bool moveSelectedFleetRouteProgramLeg(std::size_t index, int direction);
     bool removeSelectedFleetRouteProgramLeg(std::size_t index);
+    bool setSelectedFleetRouteProgramLegWarp(std::size_t index, std::uint8_t warp);
     bool clearSelectedFleetRouteProgram();
 
     // Dockside cargo editor entrypoint. Implemented separately from the map UI
@@ -275,7 +287,7 @@ private:
     std::uint64_t planningRevision_{};
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
     mutable FleetId routeEtaFleet_{};
-    mutable std::vector<std::optional<std::uint32_t>> routeEtas_;
+    mutable std::vector<RouteProgramLegForecast> routeLegForecasts_;
     mutable QString waypointFuelKey_;
     mutable QString waypointFuelWarning_;
     PlayerOrders pendingOrders_{1, {}};

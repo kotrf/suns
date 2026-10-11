@@ -102,6 +102,30 @@ void verify_warp_squared_movement()
     assert(suns::warp_distance(0) == 0.0);
 }
 
+void verify_movement_accounting_survives_arrival_refuelling()
+{
+    using namespace suns;
+    auto state = generate_game(GalaxyConfig{});
+    auto& fleet = state.fleets.front();
+    const auto id = fleet.id;
+    fleet.position = {1000, 1000};
+    fleet.fuel = 30;
+    fleet.warp = 5;
+    auto& home = state.stars.front();
+    home.position = {1025, 1000};
+    fleet.destination = home.position;
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    const auto movement = std::find_if(result.movementFuel.begin(), result.movementFuel.end(),
+        [id](const auto& entry) { return entry.fleet == id; });
+    assert(movement != result.movementFuel.end());
+    assert(near(movement->consumed, 3) && near(movement->remaining, 27));
+    assert(!movement->fuelLimited);
+    const auto arrived = std::find_if(result.state.fleets.begin(), result.state.fleets.end(),
+        [id](const auto& entry) { return entry.id == id; });
+    assert(arrived != result.state.fleets.end());
+    assert(near(arrived->fuel, 50)); // 30 - 50 cannot describe the actual burn
+}
+
 void verify_stars_progression_and_multifield_gates()
 {
     using namespace suns;
@@ -497,6 +521,7 @@ void verify_unsafe_warp_accumulates_engine_damage()
 
 int main()
 {
+    verify_movement_accounting_survives_arrival_refuelling();
     verify_starting_scout_range();
     verify_built_fleets_start_at_engine_cruise_warp();
     verify_original_fuel_tables_and_rounding();
