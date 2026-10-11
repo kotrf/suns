@@ -13,12 +13,14 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPointer>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolBar>
+#include <QTreeWidget>
 
 #include <algorithm>
 #include <cassert>
@@ -82,6 +84,10 @@ int main(int argc, char** argv)
         oldHistory->setObjectName("empireHistoryDock");
         oldWindow.addDockWidget(Qt::BottomDockWidgetArea, oldHistory);
         oldHistory->setFloating(true);
+        auto* oldResearch = new QDockWidget("Empire Research", &oldWindow);
+        oldResearch->setObjectName("researchDock");
+        oldWindow.addDockWidget(Qt::BottomDockWidgetArea, oldResearch);
+        oldWindow.tabifyDockWidget(oldHistory, oldResearch);
         auto* production = new QDockWidget("Production", &oldWindow);
         production->setObjectName("productionDock");
         oldWindow.addDockWidget(Qt::LeftDockWidgetArea, production);
@@ -97,6 +103,7 @@ int main(int argc, char** argv)
     window.show();
     settle();
     assert(!window.findChild<QDockWidget*>("empireHistoryDock"));
+    assert(!window.findChild<QDockWidget*>("researchDock"));
     assert(window.findChild<QDockWidget*>("productionDock")->isVisible());
     assert(!window.findChild<QAction*>("restoreCustomWorkspaceAction")->isEnabled());
     assert(!window.findChild<QAction*>("designWorkspaceAction"));
@@ -106,11 +113,15 @@ int main(int argc, char** argv)
     auto* designerMenu = window.findChild<QAction*>("openShipDesignerAction");
     auto* historyTool = window.findChild<QAction*>("openEmpireHistoryToolAction");
     auto* historyMenu = window.findChild<QAction*>("openEmpireHistoryAction");
+    auto* researchTool = window.findChild<QAction*>("openResearchToolAction");
+    auto* researchMenu = window.findChild<QAction*>("openResearchAction");
     auto* toolbar = window.findChild<QToolBar*>("dialogToolbar");
     auto* viewMenu = window.menuBar()->findChild<QMenu*>("sunsViewMenu");
     assert(designerTool && designerMenu && historyTool && historyMenu);
     assert(toolbar->actions().contains(historyTool) && viewMenu->actions().contains(historyMenu));
     assert(!historyMenu->isCheckable());
+    assert(researchTool && researchMenu && !researchMenu->isCheckable());
+    assert(toolbar->actions().contains(researchTool) && viewMenu->actions().contains(researchMenu));
 
     designerTool->trigger();
     settle();
@@ -149,6 +160,40 @@ int main(int argc, char** argv)
     }));
     settle();
 
+    researchTool->trigger();
+    settle();
+    auto* research = window.findChild<QDialog*>("researchDialog");
+    assert(research && research->isWindow() && research->isVisible() && !research->isModal());
+    assert(!QApplication::activeModalWidget());
+    auto* allocation = research->findChild<QSpinBox*>("researchAllocationSpin");
+    auto* plan = research->findChild<QTreeWidget*>("researchPlanTree");
+    allocation->setValue(allocation->value() == 25 ? 35 : 25);
+    const auto allocationPercent = allocation->value();
+    const auto initialPlanRows = plan->topLevelItemCount();
+    research->findChild<QPushButton*>("researchAddButton")->click();
+    const auto plannedRows = initialPlanRows + 1;
+    assert(plan->topLevelItemCount() == plannedRows);
+    const auto pendingResearchOrders = MainWindowTestAccess::orders(window).orders.size();
+    assert(std::any_of(orders.begin(), orders.end(), [](const auto& order) {
+        return std::holds_alternative<SetResearchAllocationOrder>(order);
+    }));
+    assert(std::any_of(orders.begin(), orders.end(), [](const auto& order) {
+        return std::holds_alternative<SetResearchPlanOrder>(order);
+    }));
+    research->showMinimized();
+    researchMenu->trigger();
+    assert(research->isVisible() && !research->isMinimized());
+    assert(window.findChildren<QDialog*>("researchDialog").size() == 1);
+    assert(window.saveState(6) == dockState);
+    if (app.arguments().contains("--capture")) research->grab().save("/tmp/suns-research-window.png");
+    research->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Close)->click();
+    researchMenu->trigger(); // Immediately reuse the same window and pending plan.
+    assert(window.findChild<QDialog*>("researchDialog") == research);
+    assert(allocation->value() == allocationPercent && plan->topLevelItemCount() == plannedRows);
+    assert(MainWindowTestAccess::orders(window).orders.size() == pendingResearchOrders);
+    const auto beforeResearch = research->findChild<QProgressBar*>("researchProgress")->format();
+    research->close();
+
     historyTool->trigger();
     settle();
     auto* history = window.findChild<QDialog*>("empireHistoryDialog");
@@ -176,6 +221,9 @@ int main(int argc, char** argv)
     // with the same explicit colony and comparison filters.
     MainWindowTestAccess::nextTurn(window);
     MainWindowTestAccess::nextTurn(window);
+    researchTool->trigger();
+    assert(allocation->value() == allocationPercent);
+    assert(research->findChild<QProgressBar*>("researchProgress")->format() != beforeResearch);
     const auto latest = MainWindowTestAccess::latestHistoryTurn(window);
     assert(latest > static_cast<std::uint64_t>(previousYear));
     historyTool->trigger();
@@ -194,18 +242,24 @@ int main(int argc, char** argv)
     window.resetPanelLayout();
     window.findChild<QAction*>("empireWorkspaceAction")->trigger();
     assert(history->isVisible());
+    assert(research->isVisible());
     window.setMapExpanded(true);
     settle();
     assert(history->isVisible());
+    assert(research->isVisible());
     window.setMapExpanded(false);
     settle();
     assert(history->isVisible() && !window.findChild<QDockWidget*>("empireHistoryDock"));
+    assert(research->isVisible() && !window.findChild<QDockWidget*>("researchDock"));
     window.findChild<QAction*>("saveCustomWorkspaceAction")->trigger();
     history->close();
+    research->close();
     window.findChild<QAction*>("restoreCustomWorkspaceAction")->trigger();
     assert(history->isHidden());
+    assert(research->isHidden());
     window.findChild<QAction*>("empireWorkspaceAction")->trigger();
     assert(history->isHidden());
+    assert(research->isHidden());
     window.close();
 
     MainWindow restored;
@@ -213,9 +267,13 @@ int main(int argc, char** argv)
     restored.show();
     settle();
     assert(!restored.findChild<QDockWidget*>("empireHistoryDock"));
+    assert(!restored.findChild<QDockWidget*>("researchDock"));
+    assert(restored.findChild<QDialog*>("researchDialog")->isHidden());
     assert(restored.findChild<QDialog*>("empireHistoryDialog")->isHidden());
     assert(restored.findChild<QAction*>("restoreCustomWorkspaceAction")->isEnabled());
     restored.findChild<QAction*>("openEmpireHistoryAction")->trigger();
     assert(restored.findChild<QDialog*>("empireHistoryDialog")->isVisible());
+    restored.findChild<QAction*>("openResearchAction")->trigger();
+    assert(restored.findChild<QDialog*>("researchDialog")->isVisible());
     restored.close();
 }

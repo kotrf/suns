@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
             if (auto* filter = window.findChild<QComboBox*>("turnMessageAgeFilter")) filter->setCurrentIndex(0);
             if (auto* body = window.findChild<QTextBrowser*>("turnMessageBody")) body->update();
             if (auto* openResearch = window.findChild<QAction*>("openResearchToolAction")) openResearch->trigger();
-            if (auto* research = window.findChild<QDockWidget*>("researchDock")) research->update();
+            if (auto* research = window.findChild<QDialog*>("researchDialog")) research->update();
             if (auto* history = window.findChild<QAction*>("openEmpireHistoryToolAction")) history->trigger();
             if (auto* metric = window.findChild<QComboBox*>("historyMetric")) metric->setCurrentIndex(3);
             if (auto* scope = window.findChild<QComboBox*>("historyScope")) {

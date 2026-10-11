@@ -76,7 +76,7 @@ void MainWindow::installPanelLayoutFixes()
 
     // Reports now share the narrower center column below the map. Their
     // wide forms must scroll inside that column rather than overlap the docks.
-    for (auto* dock : {turnMessagesDock_, researchDock_}) {
+    for (auto* dock : {turnMessagesDock_}) {
         if (!dock || !dock->widget() || qobject_cast<QScrollArea*>(dock->widget())) continue;
         auto* content = dock->widget();
         content->setParent(nullptr);
@@ -89,6 +89,10 @@ void MainWindow::installPanelLayoutFixes()
     }
 
     auto* panels = viewMenu(menuBar());
+    auto* research = panels->addAction("Empire research…");
+    research->setObjectName("openResearchAction");
+    research->setToolTip("Open research allocation and technology plan in a separate window");
+    connect(research, &QAction::triggered, this, [this] { openResearchDialog(); });
     auto* history = panels->addAction("Empire history…");
     history->setObjectName("openEmpireHistoryAction");
     history->setToolTip("Open empire history and graphs in a separate window");
@@ -157,7 +161,6 @@ void MainWindow::installPanelLayoutFixes()
         auto* production = findChild<QDockWidget*>("productionDock");
         auto* details = findChild<QDockWidget*>("systemDetailsDock");
         auto* fleet = findChild<QDockWidget*>("fleetDock");
-        auto* research = findChild<QDockWidget*>("researchDock");
         const auto show = [](QDockWidget* dock, bool visible) {
             if (dock) dock->setVisible(visible);
         };
@@ -174,7 +177,6 @@ void MainWindow::installPanelLayoutFixes()
             show(overview, true);
             show(production, true);
             show(details, true);
-            show(research, true);
             show(turnMessagesDock_, true);
             if (turnMessagesDock_) turnMessagesDock_->raise();
             break;
@@ -225,8 +227,8 @@ void MainWindow::installPanelLayoutFixes()
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         restoreGeometry(settings.value("workspace/geometry").toByteArray());
-        // Version 6 removes History from the dock graph. Geometry survives
-        // the one-time reset of older layouts, including old History tabs.
+        // Version 6 removes History and Research from the dock graph. Geometry
+        // survives the one-time reset of older layouts and their tool tabs.
         restoreState(settings.value("workspace/docks").toByteArray(), workspaceLayoutVersion);
     }
     // The constructor fits before docks have their final dimensions. Fit once
@@ -255,7 +257,7 @@ void MainWindow::resetPanelLayout()
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* details = findChild<QDockWidget*>("systemDetailsDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
-    for (auto* dock : {overview, production, details, fleet, turnMessagesDock_, researchDock_}) {
+    for (auto* dock : {overview, production, details, fleet, turnMessagesDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         removeDockWidget(dock);
@@ -287,11 +289,6 @@ void MainWindow::resetPanelLayout()
     if (details) resizeDocks({details}, {270}, Qt::Horizontal);
     if (fleet) resizeDocks({fleet}, {360}, Qt::Horizontal);
     if (turnMessagesDock_) addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
-    if (researchDock_) {
-        addDockWidget(Qt::BottomDockWidgetArea, researchDock_);
-        if (turnMessagesDock_) tabifyDockWidget(turnMessagesDock_, researchDock_);
-        researchDock_->hide();
-    }
     if (turnMessagesDock_) turnMessagesDock_->raise();
     if (turnMessagesDock_) resizeDocks({turnMessagesDock_}, {190}, Qt::Vertical);
 

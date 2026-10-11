@@ -670,7 +670,7 @@ void MainWindow::installUiPolish()
 
     auto* researchToolAction = dialogToolbar->addAction("Research");
     researchToolAction->setObjectName("openResearchToolAction");
-    researchToolAction->setToolTip("Edit empire research allocation and the ordered technology plan");
+    researchToolAction->setToolTip("Open research allocation and the ordered technology plan in a separate window");
     connect(researchToolAction, &QAction::triggered, this, [this] { openResearchDialog(); });
 
     auto* historyToolAction = dialogToolbar->addAction("History");

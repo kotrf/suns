@@ -9,11 +9,14 @@ The user is testing the merged game locally; results of that playtest are pendin
 
 ## Current authorized implementation
 
-The current request makes Ship Designer and Empire History exclusively separate
+The current request makes Ship Designer, Empire Research and Empire History exclusively separate
 non-modal windows, with toolbar/menu entry points and no dock/preset binding.
 Branch `fix/designer-history-windows` contains this work for
 [#176](https://github.com/kotrf/suns/issues/176); it is not yet merged. Workspace
 version 6 resets older dock layouts once while retaining main-window geometry.
+Research retains pending allocation/plan changes when closed and refreshes on
+reopening. Habitability stars are modestly enlarged, scaling up with known positive
+hab to make 100% home systems easier to see without leaking hidden values.
 
 Main already includes [strategic fleet operations](strategic-operations.md):
 operational bombs, three minefield types/sweeping, cloaking, jamming, emission
