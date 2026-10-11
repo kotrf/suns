@@ -41,8 +41,9 @@ Stop semantics do not depend on an estimated fleet coordinate and also work
 for an immobilized fleet.
 # Compact route table and fuel warning
 
-The Current program table shows destination, Warp, cumulative ETA, **Fuel used**
-and **Fuel left**. Selecting a row displays its arrival action and loads that
+The Current program table shows destination, Warp, cumulative ETA, **Fuel**
+(used on the leg) and **Left** (fuel remaining). Compact headers keep both fuel
+columns visible in a narrow fleet panel; tooltips specify mg. Selecting a row displays its arrival action and loads that
 leg's Warp into the selector. Changing Warp updates that leg's pending order,
 table, ETA and fuel forecast immediately. Other leg speeds, destinations and
 arrival actions stay intact. This also works for an already committed route:
