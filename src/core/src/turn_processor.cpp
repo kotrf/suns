@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <iterator>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -1766,6 +1767,11 @@ TurnResult TurnProcessor::process_with_events(
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+    // Establish a baseline for headless callers too, before overdue reports
+    // are delivered at the current planning boundary.
+    if (std::any_of(next.players.begin(), next.players.end(), [&](const auto& player) {
+            return player.history.empty() || player.history.back().turn != next.turn;
+        })) record_empire_turn_statistics(next);
     std::vector<FleetMovementFuel> movementFuel;
     std::vector<GameEvent> events = deliver_due_survey_reports(next);
     auto wormholeEvents = deliver_wormhole_reports(next);
@@ -2119,10 +2125,36 @@ TurnResult TurnProcessor::process_with_events(
             || *kind == HistoryMilestoneKind::SpaceBattle;
         if (*kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0
             : fleetEvent ? event.fleet == 0 : event.planet == 0) continue;
-        auto& milestones = player->history.back().milestones;
+        auto snapshot = std::prev(player->history.end());
+        if (*kind == HistoryMilestoneKind::SpaceBattle) {
+            // Packets already due on load are received at the starting boundary,
+            // not in the new year resolved by this call.
+            snapshot = std::find_if(player->history.begin(), player->history.end(),
+                [&](const auto& record) { return record.turn == event.turn; });
+            if (snapshot == player->history.end()) continue;
+            if (std::any_of(player->history.begin(), player->history.end(), [&](const auto& record) {
+                    return std::any_of(record.milestones.begin(), record.milestones.end(),
+                        [&](const auto& marker) { return marker.eventId == event.id; });
+                })) continue;
+        }
+        auto& milestones = snapshot->milestones;
         if (std::any_of(milestones.begin(), milestones.end(), [&](const auto& recorded) {
                 return recorded.eventId == event.id;
             })) continue;
+        const bool unmeasuredBattles = !snapshot->battleStatisticsRecorded
+            && std::any_of(milestones.begin(), milestones.end(), [](const auto& marker) {
+                return marker.kind == HistoryMilestoneKind::SpaceBattle;
+            });
+        if (*kind == HistoryMilestoneKind::SpaceBattle && event.battle && !unmeasuredBattles) {
+            snapshot->battleStatisticsRecorded = true;
+            auto& totals = snapshot->battles;
+            ++totals.reports;
+            for (const auto& unit : event.battle->units) {
+                const auto lost = std::uint64_t(unit.initialShips) - unit.survivingShips;
+                if (unit.owner == player->id) totals.ownShipsLost += lost;
+                else totals.opposingShipsLost += lost;
+            }
+        }
         milestones.push_back({event.id, event.observedTurn, *kind,
             event.planet, event.researchField, event.technologyLevel, event.fleet});
     }

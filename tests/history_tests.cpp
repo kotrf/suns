@@ -45,6 +45,7 @@ int main()
     assert(close(initialHistory.front().extraction.ironium, 0.0));
     assert(!initialHistory.front().extractionRecorded);
     assert(!initialHistory.front().freightRecorded);
+    assert(!initialHistory.front().battleStatisticsRecorded);
 
     const suns::TurnProcessor processor;
     const auto first = processor.process(state, {});
@@ -61,6 +62,7 @@ int main()
     const auto expectedMining = suns::projected_mineral_mining(state, state.planets.front());
     const auto& mined = first.players.front().history.back();
     assert(mined.extractionRecorded);
+    assert(mined.battleStatisticsRecorded && mined.battles.reports == 0);
     assert(close(mined.extraction.ironium, expectedMining.ironium));
     assert(close(mined.extraction.boranium, expectedMining.boranium));
     assert(close(mined.colonyHistory.front().extraction.germanium, expectedMining.germanium));

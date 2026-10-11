@@ -1,22 +1,22 @@
 # Project status and development handoff
 
 Snapshot: **11 October 2026, Dialog #06**. Main is now
-`b832b22b45bfad1a6430f6682cca42b808471165`, after
-[PR #175](https://github.com/kotrf/suns/pull/175) merged by the user's explicit
-request. The [merge CI run](https://github.com/kotrf/suns/actions/runs/38098327274)
-passed; the branch's Qt Debug build and CI passed all **49 CTest targets**.
+`95e3fcf988c7c2359e10c9e359e818dd768c1eba`, after
+[PR #177](https://github.com/kotrf/suns/pull/177) merged by the user's explicit
+request; #176 is closed. The [merge CI run](https://github.com/kotrf/suns/actions/runs/38138057042)
+passed all **50 CTest targets**. Designer, Research and History are separate
+non-modal windows, and Hab stars are larger. Workspace v6 resets older layouts
+once while retaining main-window geometry; an older Custom must be saved again.
 The user is testing the merged game locally; results of that playtest are pending.
 
 ## Current authorized implementation
 
-The current request makes Ship Designer, Empire Research and Empire History exclusively separate
-non-modal windows, with toolbar/menu entry points and no dock/preset binding.
-Branch `fix/designer-history-windows` contains this work for
-[#176](https://github.com/kotrf/suns/issues/176); it is not yet merged. Workspace
-version 6 resets older dock layouts once while retaining main-window geometry.
-Research retains pending allocation/plan changes when closed and refreshes on
-reopening. Habitability stars are modestly enlarged, scaling up with known positive
-hab to make 100% home systems easier to see without leaking hidden values.
+After merging #177, the user requested the next unfinished plan slice. Selected
+[#178](https://github.com/kotrf/suns/issues/178), a continuation of #48:
+compact statistics of received space-battle reports and confirmed own/opposing
+ship losses, with yearly graphs in History. Branch `feat/battle-history` is not
+merged. Measurements use report receipt boundaries; they do not expose remote
+battles before communication delivery. See [Empire history](empire-history.md).
 
 Main already includes [strategic fleet operations](strategic-operations.md):
 operational bombs, three minefield types/sweeping, cloaking, jamming, emission
@@ -42,6 +42,7 @@ remain partial. Do not repeat that work or close umbrella issues for the slice.
 | [#170](https://github.com/kotrf/suns/pull/170) | Automatic simultaneous-motion fleet encounters, beams/torpedoes, shields/armor, ship losses and delayed immutable reports | [Space combat](space-combat.md) |
 | [#173](https://github.com/kotrf/suns/pull/173) | Bombardment, physical minefields, cloaking/EW, emission modes and finite field science, available in fleet operations | [Strategic operations](strategic-operations.md) |
 | [#175](https://github.com/kotrf/suns/pull/175) | Immediate Warp editing for a selected route leg, per-leg fuel/remaining fuel and a red first fuel-limited leg; issue #174 closed | [Route forecasts](route-forecast.md) |
+| [#177](https://github.com/kotrf/suns/pull/177) | Separate Designer, Research and History windows; larger knowledge-safe Hab stars; issue #176 closed | [Workspace](dockable-workspace.md), [History](empire-history.md), [Map](map-visuals.md) |
 
 Reference equipment follows Stars! progression and ratings. Suns! remains its own
 simulation: tactical combat rules and terraforming production price are documented
@@ -67,9 +68,10 @@ adaptations, not claims of an exact Stars! implementation.
 
 ## Formats and CI
 
-Main uses save **v62** (readers v12–62) and orders **v19**
-(readers v1–19). The route-table fix adds transient movement accounting without
-changing either format. Host and players must use the same build. Version numbers in
+Main uses save **v62** (readers v12–62) and orders **v19** (readers v1–19).
+The battle-history branch writes save **v63**, storing compact measurements in the
+bounded state extension, and leaves orders v19 unchanged. Existing save readers
+remain; earlier history gets unknown battle statistics rather than invented totals. Host and players must use the same build. Version numbers in
 older thematic documents describe when a feature was introduced unless explicitly
 identified as current. Legacy designs and campaigns retain documented old rules.
 
@@ -100,8 +102,9 @@ These are open directions, not authorization to start every item:
   selection, presets, permanent colony details and expanded map exist; the
   separate shared GameSession refactor remains pending.
 - [#48](https://github.com/kotrf/suns/issues/48): empire/colony graphs, extraction,
-  freight, fleet aggregates and battle markers exist. Separate military-loss
-  time series and additional fleet scopes remain follow-ups.
+  freight, fleet scopes and battle markers exist. #178 implements receipt-year
+  space-battle losses/report counts; other military/event categories and history
+  refinement remain follow-ups.
 - [#94](https://github.com/kotrf/suns/issues/94): logical slot migration, graphical
   fitting, drag/drop, keyboard controls and catalog filters exist; finish the
   live UI acceptance review and remaining polish.
@@ -110,11 +113,10 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-Collect the user's main playtest results while finishing the authorized separate
-tool windows ([#176](https://github.com/kotrf/suns/issues/176)). Later candidates
-include station fitting/combat, colony defenses/scars or battle doctrines/diplomacy;
-choose the next slice explicitly. Do not restart existing partial implementations or close
-umbrella issues solely because a first slice landed.
+Collect the user's main playtest results while completing the authorized
+battle-history slice #178. Separate windows #176 are merged in #177. Later
+candidates include station fitting/combat, colony defenses/scars or battle
+doctrines/diplomacy; choose the next slice explicitly.
 
 Implementation goes through a branch and reviewed PR; merge only on the user's
 explicit instruction. GitHub [#123](https://github.com/kotrf/suns/issues/123) and

@@ -67,6 +67,13 @@ void simultaneous_and_initiative()
     assert(!report.stalemate && report.shots.size() == 2);
     assert(report.units[0].survivingShips == 0 && report.units[1].survivingShips == 0);
     assert(simultaneous.events.size() == 2); // Only participants, never the observer.
+    for (const auto& player : simultaneous.state.players) {
+        const auto& history = player.history.back();
+        assert(history.battleStatisticsRecorded);
+        assert(history.battles.reports == (player.id == 3 ? 0 : 1));
+        assert(history.battles.ownShipsLost == (player.id == 3 ? 0 : 1));
+        assert(history.battles.opposingShipsLost == (player.id == 3 ? 0 : 1));
+    }
     state.shipDesigns.front().components.push_back(C::BattleComputer);
     const auto earlier = TurnProcessor{}.process_with_events(state, {});
     assert(fleet(earlier.state, 1) && !fleet(earlier.state, 2));
@@ -241,6 +248,12 @@ void delayed_reports_and_knowledge()
     const auto contacts = missing_fleet_contacts(result.state, 2);
     assert(contacts.size() == 1 && contacts.front().id == 2 && fleet_ship_count(contacts.front()) == 1);
     assert(result.state.players[1].history.back().ships == 1);
+    for (const auto& player : result.state.players) {
+        assert(player.history.back().battleStatisticsRecorded);
+        assert(player.history.back().battles.reports == 0);
+        assert(player.history.back().battles.ownShipsLost == 0);
+        assert(player.history.back().battles.opposingShipsLost == 0);
+    }
     const auto exported = make_player_view(result.state, 2).state;
     assert(exported.fleets.size() == 1 && exported.fleets.front().id == 2);
     assert(exported.pendingFleetLossContacts.empty() && exported.players.front().pendingPlayerReports.empty());
@@ -254,6 +267,119 @@ void delayed_reports_and_knowledge()
     }
     assert(received && missing_fleet_contacts(next.state, 2).empty());
     assert(battle_event(next, 2).battle->units[1].survivingShips == 0);
+    const auto& receipt = next.state.players[1].history.back();
+    assert(receipt.turn > battle_event(next, 2).observedTurn);
+    assert(receipt.battles.reports == 1 && receipt.battles.ownShipsLost == 1
+        && receipt.battles.opposingShipsLost == 0);
+    const auto packet = make_player_view(next.state, 2).state;
+    assert(packet.players.size() == 1 && packet.players.front().history.back().battles.ownShipsLost == 1);
+    auto refreshed = next.state;
+    record_empire_turn_statistics(refreshed);
+    record_empire_turn_statistics(refreshed, {}, true);
+    assert(refreshed.players[1].history.size() == next.state.players[1].history.size());
+    assert(refreshed.players[1].history.back().battles.reports == 1);
+    assert(refreshed.players[1].history.back().battles.ownShipsLost == 1);
+    const auto following = TurnProcessor{}.process(refreshed, {});
+    assert(following.players[1].history.back().battleStatisticsRecorded);
+    assert(following.players[1].history.back().battles.reports == 0);
+    assert(following.players[1].history.back().battles.ownShipsLost == 0);
+}
+
+void yearly_battle_totals()
+{
+    auto state = arena({C::AntiMatterPulverizer}, {C::AntiMatterPulverizer}, 3);
+    for (int i = 0; i < 2; ++i) {
+        auto another = state.fleets[i];
+        another.id += 2;
+        another.position = {100, 0};
+        another.telemetry.position = another.position;
+        state.fleets.push_back(another);
+    }
+    state.nextFleetId = 5;
+    record_empire_turn_statistics(state);
+    assert(!state.players.front().history.front().battleStatisticsRecorded);
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    const auto replay = TurnProcessor{}.process_with_events(state, {});
+    for (const auto& player : result.state.players) {
+        const auto& totals = player.history.back().battles;
+        const auto& again = find_player(replay.state, player.id)->history.back().battles;
+        assert(totals.reports == (player.id == 3 ? 0 : 2));
+        std::uint64_t own = 0, opposing = 0;
+        for (const auto& event : result.events) {
+            if (event.recipient != player.id || !event.battle) continue;
+            for (const auto& unit : event.battle->units) {
+                const auto lost = std::uint64_t(unit.initialShips) - unit.survivingShips;
+                if (unit.owner == player.id) own += lost;
+                else opposing += lost;
+            }
+        }
+        assert(totals.ownShipsLost == own && totals.opposingShipsLost == opposing);
+        assert(totals.reports == again.reports && totals.ownShipsLost == again.ownShipsLost
+            && totals.opposingShipsLost == again.opposingShipsLost);
+    }
+    // Multi-owner battles count each opposing stack once, even without kill attribution.
+    auto three = arena({C::AntiMatterPulverizer}, {C::AntiMatterPulverizer});
+    auto third = three.fleets.back();
+    third.id = 3; third.owner = 3; third.design = 30; third.ships = {{30, 1}};
+    three.shipDesigns.push_back({30, 3, "Third gunboat", ShipHullType::Destroyer,
+        {C::QuickJump5, C::AntiMatterPulverizer}});
+    three.nextShipDesignId = 31;
+    three.fleets.push_back(third);
+    three.nextFleetId = 4;
+    const auto multi = TurnProcessor{}.process_with_events(three, {});
+    for (const auto& player : multi.state.players) {
+        assert(player.history.back().battles.reports == 1);
+        std::uint64_t ownSurvivors = 0, opposingSurvivors = 0;
+        for (const auto& survivor : multi.state.fleets) {
+            if (survivor.owner == player.id) ownSurvivors += fleet_ship_count(survivor);
+            else opposingSurvivors += fleet_ship_count(survivor);
+        }
+        assert(player.history.back().battles.ownShipsLost == 1 - ownSurvivors);
+        assert(player.history.back().battles.opposingShipsLost == 2 - opposingSurvivors);
+    }
+}
+
+void overdue_reports_keep_receipt_year()
+{
+    auto state = arena({}, {});
+    record_empire_turn_statistics(state);
+    // The live ships/designs need not exist when a historical packet arrives.
+    state.fleets.clear();
+    PendingPlayerReport packet;
+    packet.kind = PlayerReportKind::SpaceBattle;
+    packet.observedTurn = 1; packet.deliveryTurn = 1; packet.fleet = 42;
+    SpaceBattleReport report;
+    report.observedTurn = 1; report.rounds = 1; report.logTruncated = true;
+    const auto many = std::numeric_limits<std::uint32_t>::max();
+    report.units = {{1, 42, 10, "Lost", "One", many, 0},
+        {1, 42, 11, "Lost", "Two", many, 0}, {2, 43, 20, "Other", "Three", 5, 2}};
+    packet.battle = report;
+    state.players.front().pendingPlayerReports = {packet, packet}; // Same observation ID.
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    const auto& first = result.state.players.front().history.front();
+    assert(first.turn == battle_event(result).turn && first.turn == 1);
+    assert(first.battleStatisticsRecorded && first.battles.reports == 1);
+    assert(first.battles.ownShipsLost == std::uint64_t(many) * 2);
+    assert(first.battles.opposingShipsLost == 3);
+    assert(result.state.players.front().history.back().battles.reports == 0);
+    assert(result.state.players.back().history.front().battles.reports == 0);
+    auto repeated = result.state;
+    repeated.players.front().pendingPlayerReports = {packet};
+    const auto again = TurnProcessor{}.process(repeated, {});
+    assert(again.players.front().history[0].battles.reports == 1);
+    assert(again.players.front().history[1].battles.reports == 0);
+    assert(again.players.front().history[2].battles.reports == 0);
+
+    auto unmeasured = state;
+    unmeasured.players.front().history.front().milestones.push_back(
+        {123, 1, HistoryMilestoneKind::SpaceBattle, 0, ResearchField::Electronics, 0, 42});
+    record_empire_turn_statistics(unmeasured, {}, true);
+    assert(!unmeasured.players.front().history.front().battleStatisticsRecorded);
+    const auto unknown = TurnProcessor{}.process(unmeasured, {});
+    assert(unknown.players.front().history.front().milestones.size() == 2);
+    assert(!unknown.players.front().history.front().battleStatisticsRecorded);
+    assert(unknown.players.front().history.front().battles.reports == 0);
+    assert(unknown.players.front().history.back().battleStatisticsRecorded);
 }
 
 void founding_cannot_evade_combat()
@@ -284,4 +410,6 @@ int main()
     deterministic_contacts_and_movement();
     delayed_reports_and_knowledge();
     founding_cannot_evade_combat();
+    yearly_battle_totals();
+    overdue_reports_keep_receipt_year();
 }
