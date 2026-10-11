@@ -180,9 +180,22 @@ struct PlayerOrders {
 [[nodiscard]] const ShipDesign* resolve_ship_design_order(
     const GameState& state, PlayerId player, const QueueShipDesignOrder& order);
 
+// Transient movement accounting for navigation previews. Captured before
+// arrival actions, refuelling, merging or dismantling can change the tank.
+// This is host-side output, not a player report or persisted game state.
+struct FleetMovementFuel {
+    FleetId fleet{};
+    Position destination;
+    FleetId targetFleet{};
+    double consumed{};
+    double remaining{};
+    bool fuelLimited{};
+};
+
 struct TurnResult {
     GameState state;
     std::vector<GameEvent> events;
+    std::vector<FleetMovementFuel> movementFuel;
 };
 
 class TurnProcessor {

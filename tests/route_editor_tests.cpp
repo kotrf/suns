@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 namespace suns {
@@ -503,13 +504,80 @@ int main(int argc, char* argv[])
     auto* arrivalDetails = window.findChild<QLabel*>("routeSelectedArrivalAction");
     assert(routeTree && routeTimer && arrivalDetails);
     assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
-    assert(routeTree->columnCount() == 4 && routeTree->topLevelItemCount() == 2);
+    assert(routeTree->columnCount() == 6 && routeTree->topLevelItemCount() == 2);
     assert(routeTree->headerItem()->text(3) == "ETA");
     assert(routeTree->headerItem()->toolTip(3).contains("years"));
     routeTree->setCurrentItem(routeTree->topLevelItem(0));
     assert(arrivalDetails->text().contains("no action"));
     routeTree->setCurrentItem(routeTree->topLevelItem(1));
     assert(arrivalDetails->text().contains("Unload all colonists"));
+
+    // Selecting a row edits that exact leg immediately, including the real
+    // order, ETA and table. It must not change the new-waypoint draft.
+    warp->setValue(8);
+    assert(routeTree->topLevelItem(1)->text(2) == "W8");
+    assert(routeTree->topLevelItem(1)->text(3) == "2");
+    auto editedRoute = std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front());
+    assert(editedRoute.warp == 5 && editedRoute.queuedWaypoints.front().warp == 8);
+    assert(editedRoute.queuedWaypoints.front().arrivalAction.kind == suns::FleetArrivalActionKind::UnloadAll);
+    routeTree->setCurrentItem(routeTree->topLevelItem(0));
+    warp->setValue(4);
+    assert(routeTree->topLevelItem(0)->text(2) == "W4");
+    assert(routeTree->topLevelItem(0)->text(3) == "2");
+    assert(routeTree->topLevelItem(1)->text(3) == "3");
+    suns::MainWindowTestAccess::advance(window);
+    assert(suns::MainWindowTestAccess::state(window).fleets.front().warp == 4);
+    assert(suns::MainWindowTestAccess::state(window).fleets.front().position.x == 16);
+    // The same control edits an already committed leg without losing its
+    // queued destinations or arrival actions.
+    routeTree->setCurrentItem(routeTree->topLevelItem(0));
+    warp->setValue(5);
+    assert(std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front()).warp == 5);
+    assert(routeTree->topLevelItem(1)->text(2) == "W8");
+    auto* newWaypoint = window.findChild<QPushButton*>("routeNewWaypointButton");
+    assert(newWaypoint);
+    suns::MainWindowTestAccess::selectStar(window, 2); // End Turn clears map selection
+    newWaypoint->click();
+    assert(routeTree->selectedItems().isEmpty() && add->isEnabled());
+    warp->setValue(6);
+    assert(routeTree->topLevelItem(0)->text(2) == "W5");
+    assert(routeTree->topLevelItem(1)->text(2) == "W8");
+
+    // Spending all available fuel on the second leg marks only that leg.
+    // Later unknown legs must not display a made-up zero cost.
+    suns::MainWindowTestAccess::installFuelFixture(window, 10);
+    suns::MainWindowTestAccess::prependShortFuelLeg(window);
+    auto slowFleet = suns::MainWindowTestAccess::state(window).fleets.front();
+    slowFleet.warp = 1;
+    assert(suns::fleet_fuel_consumption_for_distance(suns::MainWindowTestAccess::state(window), slowFleet, 49) < 9);
+    assert(window.appendSelectedStarWaypoint(8, {}));
+    assert(window.appendSelectedStarWaypoint(8, {}));
+    rows = window.selectedFleetRouteProgramRows();
+    assert(rows.size() == 3 && !rows[0].fuelShortage && rows[1].fuelShortage && !rows[2].fuelShortage);
+    assert(rows[0].fuelUsed != "—" && rows[1].fuelUsed.startsWith("≥"));
+    assert(rows[1].fuelRemaining == "0.0" && rows[2].fuelUsed == "—");
+    assert(routeTree->topLevelItem(1)->data(0, Qt::UserRole + 1).toBool());
+    assert(routeTree->topLevelItem(1)->background(0).color() == QColor("#592b31"));
+    assert(routeTree->topLevelItem(1)->toolTip(4).contains("Fuel shortage"));
+    // Changing speed recalculates the fuel warning and removes old coloring.
+    routeTree->setCurrentItem(routeTree->topLevelItem(1));
+    warp->setValue(1);
+    rows = window.selectedFleetRouteProgramRows();
+    assert(!rows[1].fuelShortage);
+    assert(!routeTree->topLevelItem(1)->data(0, Qt::UserRole + 1).toBool());
+    assert(routeTree->topLevelItem(1)->background(0).style() == Qt::NoBrush);
+
+    // Fuel used is per leg, not cumulative, and does not subtract tank gains
+    // from a refuelling depot at departure.
+    suns::MainWindowTestAccess::installFuelFixture(window, 0, true);
+    assert(window.appendSelectedStarWaypoint(8, {}));
+    rows = window.selectedFleetRouteProgramRows();
+    auto fuelFleet = suns::MainWindowTestAccess::state(window).fleets.front();
+    fuelFleet.warp = 8;
+    const auto fuelCost = suns::fleet_fuel_consumption_for_distance(
+        suns::MainWindowTestAccess::state(window), fuelFleet, 100);
+    assert(rows.size() == 1 && !rows[0].fuelShortage && rows[0].eta != "—");
+    assert(std::abs(rows[0].fuelUsed.toDouble() - fuelCost) < 0.06);
 
     suns::MainWindowTestAccess::installFuelFixture(window, 2);
     warp->setValue(8);
@@ -530,6 +598,10 @@ int main(int argc, char* argv[])
     suns::MainWindowTestAccess::installFuelFixture(window, 0, false, true);
     assert(!window.selectedFleetWaypointFuelWarning(9, 0, {}).isEmpty()); // free fallback collects, but slows arrival
     assert(window.selectedFleetWaypointFuelWarning(4, 0, {}).isEmpty());
+    assert(window.appendSelectedStarWaypoint(9, {}));
+    rows = window.selectedFleetRouteProgramRows();
+    assert(rows.size() == 1 && rows[0].fuelShortage && rows[0].eta != "—");
+    assert(!rows[0].fuelUsed.startsWith("≥")); // free-speed fallback eventually arrives
 
     // Exercise the real dock controls all the way through End Turn. This
     // catches arrival actions that look correct in the table but are not

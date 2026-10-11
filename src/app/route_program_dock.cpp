@@ -25,6 +25,7 @@
 #include <QShortcut>
 #include <QStyle>
 #include <QStandardItemModel>
+#include <QStyledItemDelegate>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -44,6 +45,22 @@ namespace suns {
 namespace {
 
 constexpr int kRouteOverlayDataKey = 73;
+
+class RouteFuelDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+        const QModelIndex& index) const override
+    {
+        auto styled = option;
+        if (index.sibling(index.row(), 0).data(Qt::UserRole + 1).toBool()) {
+            styled.palette.setColor(QPalette::Highlight, QColor("#763b43"));
+            styled.palette.setColor(QPalette::HighlightedText, QColor("#ffcece"));
+        }
+        QStyledItemDelegate::paint(painter, styled, index);
+    }
+};
 
 class WarpSelector final : public QProgressBar {
 public:
@@ -201,6 +218,8 @@ void attachRouteProgramDock(MainWindow& window)
         "Choose Warp and an arrival action, then add the waypoint. Esc cancels map-target mode. "
         "For a faster order, right-click a star or fleet to append it immediately with the current settings. "
         "Selecting a system lists it and all visible orbiting fleets in Destination; enemies are red.\n\n"
+        "Select a route row to change that leg's Warp. New waypoint returns to adding route points. "
+        "Fuel used and Fuel left are projected per leg; red marks the first leg with insufficient fuel at its ordered Warp. "
         "Each leg keeps its own Warp and arrival action. Friendly moving targets are resolved every turn. Merge absorbs the pursuing fleet into the target fleet. "
         "Remote Mining is a persistent terminal task. Load and unload use the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
         "Colonization dismantles the entire fleet and recovers 33% of its ship minerals. Dockside loading and refuelling are in Fleet Logistics.");
@@ -230,8 +249,9 @@ void attachRouteProgramDock(MainWindow& window)
     routeLayout->setSpacing(3);
     auto* routeTree = new QTreeWidget(routeGroup);
     routeTree->setObjectName("routeProgramQueue");
-    routeTree->setColumnCount(4);
-    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA"});
+    routeTree->setItemDelegate(new RouteFuelDelegate(routeTree));
+    routeTree->setColumnCount(6);
+    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA", "Fuel used", "Fuel left"});
     routeTree->headerItem()->setToolTip(3, "Estimated arrival in years from the planning turn");
     routeTree->setRootIsDecorated(false);
     routeTree->setAlternatingRowColors(true);
@@ -241,6 +261,10 @@ void attachRouteProgramDock(MainWindow& window)
     routeTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     routeTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    routeTree->headerItem()->setToolTip(4, "Projected movement fuel consumed on this leg; ≥ means an incomplete forecast");
+    routeTree->headerItem()->setToolTip(5, "Projected fuel remaining at arrival, including any orbital refuelling");
     routeTree->setFixedHeight(100);
     routeLayout->addWidget(routeTree);
     auto* selectedAction = new QLabel("Select a waypoint to view its arrival action.", routeGroup);
@@ -258,9 +282,13 @@ void attachRouteProgramDock(MainWindow& window)
     auto* moveUpButton = new QPushButton("Move up", routeGroup);
     auto* moveDownButton = new QPushButton("Move down", routeGroup);
     auto* removeButton = new QPushButton("Remove", routeGroup);
+    auto* newWaypointButton = new QPushButton("New waypoint", routeGroup);
+    newWaypointButton->setObjectName("routeNewWaypointButton");
+    newWaypointButton->setToolTip("Leave route-leg editing and prepare a new waypoint");
     routeButtons->addWidget(moveUpButton);
     routeButtons->addWidget(moveDownButton);
     routeButtons->addWidget(removeButton);
+    routeButtons->addWidget(newWaypointButton);
     moveUpButton->setEnabled(false);
     moveDownButton->setEnabled(false);
     removeButton->setEnabled(false);
@@ -505,6 +533,8 @@ void attachRouteProgramDock(MainWindow& window)
     struct EditorState {
         FleetId fleet{};
         std::unordered_map<FleetId, WaypointDraft> drafts;
+        bool editingLeg{};
+        int draftWarp{1};
     };
     const auto editor = std::make_shared<EditorState>();
     const auto syncEditor = [=, &window](bool resetDrafts) {
@@ -515,7 +545,8 @@ void attachRouteProgramDock(MainWindow& window)
             editor->fleet = 0;
         } else if (editor->fleet != 0) {
             editor->drafts[editor->fleet] = {
-                warpSelector->value(), actionFromControls(actionCombo, cargoCombo, reserveSpin),
+                editor->editingLeg ? editor->draftWarp : warpSelector->value(),
+                actionFromControls(actionCombo, cargoCombo, reserveSpin),
                 targetTypeCombo->currentData().toInt(),
                 static_cast<FleetId>(targetFleetCombo->currentData().toUInt())};
         }
@@ -553,6 +584,10 @@ void attachRouteProgramDock(MainWindow& window)
         sourceFleetCombo->setEnabled(!sources.empty());
 
         if (resetDrafts || fleet != editor->fleet) {
+            const QSignalBlocker rowBlocker(routeTree);
+            routeTree->clearSelection();
+            routeTree->setCurrentItem(nullptr);
+            editor->editingLeg = false;
             auto draft = WaypointDraft{};
             draft.warp = window.selectedFleetSuggestedWarpForRouteProgram();
             if (const auto found = editor->drafts.find(fleet); found != editor->drafts.end()) {
@@ -575,6 +610,7 @@ void attachRouteProgramDock(MainWindow& window)
             }
             targetFleetCombo->setCurrentIndex(targetFleetCombo->findData(static_cast<quint32>(draft.targetFleet)));
             warpSelector->setValue(draft.warp);
+            editor->draftWarp = draft.warp;
             editor->fleet = fleet;
             if (draft.targetType == 1 && draft.targetFleet != 0) {
                 pickedTargetLabel->setText(QString("Target: <b>%1</b>")
@@ -619,11 +655,28 @@ void attachRouteProgramDock(MainWindow& window)
         appendButton->setEnabled(fleet != 0 && maxWarp > 0
             && destinationCombo->currentIndex() >= 0
             && (!fleetTarget || targetFleetCombo->currentIndex() >= 0));
+        if (editor->editingLeg) {
+            actionCombo->setEnabled(false);
+            cargoCombo->setEnabled(false);
+            reserveSpin->setEnabled(false);
+            destinationCombo->setEnabled(false);
+            pickTargetButton->setEnabled(false);
+            appendButton->setEnabled(false);
+        }
+        waypointGroup->setTitle(editor->editingLeg ? "Selected waypoint Warp" : "Add waypoint");
     };
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, syncEditor);
     syncEditor(false);
 
     const auto refreshFuelWarning = [=, &window] {
+        if (editor->editingLeg) {
+            const auto row = routeTree->currentIndex().row();
+            const auto rows = window.selectedFleetRouteProgramRows();
+            warpSelector->setFuelWarning(row >= 0 && static_cast<std::size_t>(row) < rows.size()
+                && rows[static_cast<std::size_t>(row)].fuelShortage
+                ? rows[static_cast<std::size_t>(row)].fuelTooltip : QString{});
+            return;
+        }
         const bool fleetTarget = targetTypeCombo->currentData().toInt() != 0;
         if (window.selectedFleetForRouteProgram() == 0 || destinationCombo->currentIndex() < 0
             || (fleetTarget && targetFleetCombo->currentIndex() < 0)) {
@@ -713,7 +766,10 @@ void attachRouteProgramDock(MainWindow& window)
         };
     QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
     QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
-        [appendCurrentTarget](int, std::uint32_t) { appendCurrentTarget(); });
+        [appendCurrentTarget, newWaypointButton](int, std::uint32_t) {
+            newWaypointButton->click();
+            appendCurrentTarget();
+        });
 
     const auto selectedRouteIndex = [&window, routeTree]() -> std::optional<std::size_t> {
         if (routeTree->property("fleetId").toUInt() != window.selectedFleetForRouteProgram()) {
@@ -724,6 +780,84 @@ void attachRouteProgramDock(MainWindow& window)
         const auto row = routeTree->indexOfTopLevelItem(selected.front());
         return row >= 0 ? std::optional<std::size_t>{static_cast<std::size_t>(row)} : std::nullopt;
     };
+    const auto syncRouteSelection = [=, &window] {
+        const auto row = selectedRouteIndex();
+        const auto rows = window.selectedFleetRouteProgramRows();
+        const QSignalBlocker warpBlocker(warpSelector);
+        if (row && *row < rows.size()) {
+            if (!editor->editingLeg) editor->draftWarp = warpSelector->value();
+            editor->editingLeg = true;
+            warpSelector->setValue(rows[*row].warp);
+        } else if (editor->editingLeg) {
+            editor->editingLeg = false;
+            warpSelector->setValue(editor->draftWarp);
+        }
+        syncEditor(false);
+        refreshFuelWarning();
+    };
+    QObject::connect(routeTree, &QTreeWidget::itemSelectionChanged, panel, syncRouteSelection);
+    QObject::connect(newWaypointButton, &QPushButton::clicked, panel, [=] {
+        routeTree->clearSelection();
+        routeTree->setCurrentItem(nullptr);
+        syncRouteSelection();
+    });
+    const auto refreshRouteTable = [=, &window, lastRouteSignature = std::make_shared<QString>()] {
+        const auto selectedFleet = window.selectedFleetForRouteProgram();
+        const auto rows = window.selectedFleetRouteProgramRows();
+        QString signature = QString::number(selectedFleet) + ':';
+        for (const auto& row : rows) {
+            signature += QString("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1f%6\x1f%7\x1f%8\x1f%9\x1e")
+                .arg(row.destination, row.arrivalAction).arg(row.warp).arg(row.active)
+                .arg(row.eta, row.fuelUsed, row.fuelRemaining).arg(row.fuelShortage).arg(row.fuelTooltip);
+        }
+        if (signature == *lastRouteSignature) return;
+        const auto previousRow = routeTree->property("fleetId").toUInt() == selectedFleet
+            && !routeTree->selectedItems().isEmpty() ? routeTree->currentIndex().row() : -1;
+        {
+            const QSignalBlocker blocker(routeTree);
+            routeTree->clear();
+            routeTree->setProperty("fleetId", static_cast<quint32>(selectedFleet));
+            for (std::size_t index = 0; index < rows.size(); ++index) {
+                const auto& row = rows[index];
+                auto* item = new QTreeWidgetItem(routeTree, {
+                    row.active ? QString("%1 ▶").arg(static_cast<qulonglong>(index + 1))
+                               : QString::number(static_cast<qulonglong>(index + 1)),
+                    row.destination, QString("W%1").arg(row.warp), row.eta,
+                    row.fuelUsed, row.fuelRemaining,
+                });
+                item->setData(0, Qt::UserRole, row.arrivalAction);
+                item->setData(0, Qt::UserRole + 1, row.fuelShortage);
+                item->setToolTip(0, row.active
+                    ? "Current route leg; edits replace the fleet program when delivered" : "Select to edit this leg's Warp");
+                item->setToolTip(1, row.destination + "\nOn arrival: " + row.arrivalAction);
+                item->setToolTip(3, "Years from the current planning turn, including previous waypoints and command delivery. "
+                    "Whole game turns assuming no further orders; — means no arrival predicted within 96 years.");
+                item->setToolTip(4, row.fuelTooltip);
+                item->setToolTip(5, row.fuelTooltip);
+                if (row.warp > window.selectedFleetMaxWarpForRouteProgram()) item->setForeground(2, QColor("#ff8787"));
+                if (row.fuelShortage) for (int column = 0; column < routeTree->columnCount(); ++column) {
+                    item->setBackground(column, QBrush(QColor("#592b31")));
+                    item->setForeground(column, QBrush(QColor("#ffb3b3")));
+                    item->setToolTip(column, item->toolTip(column) + "\n" + row.fuelTooltip);
+                }
+            }
+            if (previousRow >= 0 && !rows.empty()) routeTree->setCurrentItem(routeTree->topLevelItem(
+                std::clamp(previousRow, 0, static_cast<int>(rows.size()) - 1)));
+        }
+        *lastRouteSignature = signature;
+        syncRouteSelection();
+        const auto selected = routeTree->selectedItems();
+        selectedAction->setText(selected.isEmpty() ? "Select a waypoint to view its arrival action."
+            : QString("On arrival: %1").arg(selected.front()->data(0, Qt::UserRole).toString()));
+    };
+    QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, refreshRouteTable);
+    QObject::connect(warpSelector, &QProgressBar::valueChanged, panel,
+        [=, &window](int warp) {
+            if (!editor->editingLeg) return;
+            if (const auto row = selectedRouteIndex())
+                window.setSelectedFleetRouteProgramLegWarp(*row, static_cast<std::uint8_t>(warp));
+        });
+    refreshRouteTable();
     QObject::connect(moveUpButton, &QPushButton::clicked, panel, [&window, routeTree, selectedRouteIndex] {
         if (const auto row = selectedRouteIndex(); row && window.moveSelectedFleetRouteProgramLeg(*row, -1)) {
             routeTree->setCurrentItem(routeTree->topLevelItem(static_cast<int>(*row) - 1));
@@ -765,8 +899,8 @@ void attachRouteProgramDock(MainWindow& window)
         [&window, routeLabel, routeTree, moveUpButton, moveDownButton, removeButton,
             warpSelector, appendButton, clearButton, repeatCheck,
             targetTypeCombo, targetFleetCombo,
-            destinationCombo, refreshFuelWarning,
-            lastTargets = std::vector<FleetId>{}, lastRouteSignature = QString{}]() mutable {
+            destinationCombo, refreshFuelWarning, refreshRouteTable, editor, newWaypointButton,
+            lastTargets = std::vector<FleetId>{}]() mutable {
             const auto selectedFleet = window.selectedFleetForRouteProgram();
             const auto maxWarp = window.selectedFleetMaxWarpForRouteProgram();
 
@@ -790,6 +924,7 @@ void attachRouteProgramDock(MainWindow& window)
             const bool wantsFleetTarget = targetTypeCombo->currentData().toInt() != 0;
             targetFleetCombo->setEnabled(wantsFleetTarget && !targets.empty());
             appendButton->setEnabled(selectedFleet != 0 && maxWarp > 0
+                && !editor->editingLeg
                 && destinationCombo->currentIndex() >= 0
                 && (!wantsFleetTarget || targetFleetCombo->currentIndex() >= 0));
             clearButton->setEnabled(selectedFleet != 0);
@@ -798,43 +933,8 @@ void attachRouteProgramDock(MainWindow& window)
                 const QSignalBlocker blocker(repeatCheck);
                 repeatCheck->setChecked(window.selectedFleetRepeatOrdersForRouteProgram());
             }
-            const auto rows = window.selectedFleetRouteProgramRows();
-            QString signature = QString::number(selectedFleet) + ':';
-            for (const auto& row : rows) {
-                signature += QString("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1e")
-                    .arg(row.destination, row.arrivalAction)
-                    .arg(row.warp)
-                    .arg(row.active).arg(row.eta);
-            }
-            if (signature != lastRouteSignature) {
-                const auto previousRow = routeTree->currentIndex().row();
-                routeTree->clear();
-                routeTree->setProperty("fleetId", static_cast<quint32>(selectedFleet));
-                for (std::size_t index = 0; index < rows.size(); ++index) {
-                    const auto& row = rows[index];
-                    auto* item = new QTreeWidgetItem(routeTree, {
-                        row.active ? QString("%1 ▶").arg(static_cast<qulonglong>(index + 1))
-                                   : QString::number(static_cast<qulonglong>(index + 1)),
-                        row.destination,
-                        QString("W%1").arg(row.warp),
-                        row.eta,
-                    });
-                    item->setData(0, Qt::UserRole, row.arrivalAction);
-                    if (row.active) {
-                        item->setToolTip(0, "Current route leg; edits replace the fleet program");
-                    }
-                    item->setToolTip(1, row.destination + "\nOn arrival: " + row.arrivalAction);
-                    item->setToolTip(3, "Years from the current planning turn, including previous waypoints and command delivery. "
-                        "Whole game turns assuming no further orders; — means no arrival predicted within 96 years. "
-                        "Fuel, cargo operations and target movement can change the result.");
-                    if (row.warp > maxWarp) item->setForeground(2, QColor("#ff8787"));
-                }
-                if (!rows.empty()) {
-                    routeTree->setCurrentItem(routeTree->topLevelItem(
-                        std::clamp(previousRow, 0, static_cast<int>(rows.size()) - 1)));
-                }
-                lastRouteSignature = signature;
-            }
+            refreshRouteTable();
+            newWaypointButton->setEnabled(selectedFleet != 0);
             const auto selectedRow = routeTree->currentIndex().row();
             const auto rowCount = routeTree->topLevelItemCount();
             moveUpButton->setEnabled(selectedRow > 0);

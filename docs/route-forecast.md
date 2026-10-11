@@ -41,9 +41,33 @@ Stop semantics do not depend on an estimated fleet coordinate and also work
 for an immobilized fleet.
 # Compact route table and fuel warning
 
-The Current program table shows destination, Warp and cumulative ETA. Selecting
-a row displays its arrival action below the table; the destination tooltip also
-includes the action.
+The Current program table shows destination, Warp, cumulative ETA, **Fuel used**
+and **Fuel left**. Selecting a row displays its arrival action and loads that
+leg's Warp into the selector. Changing Warp updates that leg's pending order,
+table, ETA and fuel forecast immediately. Other leg speeds, destinations and
+arrival actions stay intact. This also works for an already committed route:
+the edited program takes effect when its command arrives. **New waypoint**
+clears row selection and restores the separate addition draft; changing its
+Warp does not alter existing legs.
+
+Fuel used is movement consumption on each leg, not cumulative consumption or
+the difference between tanks at two planning boundaries. Transient
+`TurnResult::movementFuel` accounting records engine consumption before arrival
+refuelling, merging or colonization. Cargo changes, generators, scoops, rounded
+turn billing and depots therefore use actual turn rules. Fuel left includes
+arrival refuelling. It is a projection, not a record of past consumption.
+
+The first leg where the fleet cannot maintain its ordered Warp due to fuel is
+highlighted red. Its tooltip identifies the projected shortage year. A free
+coasting speed may still permit a later arrival; the row remains a warning for
+the requested speed. Exact exhaustion on arrival is not itself a shortage on
+that leg. Red coloring is removed when the edited plan can sustain its speed.
+
+For an incomplete forecast, `≥` marks movement consumption observed so far
+within the 96-year preview, rather than a complete leg cost. `—` marks a leg
+for which no movement data or arrival is predicted, including later legs after
+a permanent stall. Unknown values are never presented as zero. Hidden hazards
+and hostile fleet outcomes remain excluded from the preview.
 
 Waypoint Warp turns red for unsafe overdrive or a predicted fuel shortage while
 following the current program plus the candidate waypoint. A `low fuel` suffix

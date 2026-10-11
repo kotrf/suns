@@ -1248,6 +1248,7 @@ struct MovementBudget {
     double distance{};
     double fuelChange{};
     double damage{};
+    double fuelConsumed{};
 };
 
 MovementBudget fleet_movement_budget(
@@ -1267,6 +1268,7 @@ MovementBudget fleet_movement_budget(
         paidDistance,
         fleet_fuel_change_for_distance(state, fleet, paidDistance),
         speed > 0.0 ? damageRate * paidDistance / speed : 0.0,
+        fleet_fuel_consumption_for_distance(state, fleet, paidDistance),
     };
     // Reference engines fall back to the slowest free speed in the fleet
     // for the unused part of the year. The player's requested Warp is kept.
@@ -1279,6 +1281,7 @@ MovementBudget fleet_movement_budget(
             remaining - paidDistance, warp_distance(freeWarp) * std::max(0.0, time - paidDistance / speed));
         result.distance += freeDistance;
         result.fuelChange += fleet_fuel_change_for_distance(state, coasting, freeDistance);
+        result.fuelConsumed += fleet_fuel_consumption_for_distance(state, coasting, freeDistance);
     }
     return result;
 }
@@ -1332,7 +1335,8 @@ void continue_merged_fleet_route(
     Position destination,
     double remainingTurnFraction,
     std::vector<FleetId>& consumedFleets,
-    std::vector<ColonyFreightDelivery>& freight)
+    std::vector<ColonyFreightDelivery>& freight,
+    std::vector<FleetMovementFuel>& movementFuel)
 {
     constexpr double epsilon = 0.000001;
     if (remainingTurnFraction <= epsilon) return;
@@ -1351,6 +1355,8 @@ void continue_merged_fleet_route(
     const auto endpoint = projected_movement_endpoint(
         state, fleet, destination, remainingTurnFraction);
     const auto travelled = distance_between(start, endpoint);
+    const auto requested = std::min(routeDistance, warp_distance(fleet.warp) * remainingTurnFraction);
+    const auto affordable = fleet_fuel_affordable_distance(state, fleet, requested);
     if (travelled <= epsilon) {
         const auto fuelPerLy = fleet_fuel_consumption_for_distance(state, fleet, routeDistance);
         if (routeDistance > epsilon && fuelPerLy > epsilon && !fleet.fuelStalled) {
@@ -1358,6 +1364,8 @@ void continue_merged_fleet_route(
             queue_fleet_movement_report(
                 state, fleet, PlayerReportKind::FleetStalledForFuel, state.turn + 1);
         }
+        movementFuel.push_back({fleet.id, destination, fleet.targetFleet, 0.0, fleet.fuel,
+            affordable + epsilon < requested});
         return;
     }
 
@@ -1367,6 +1375,8 @@ void continue_merged_fleet_route(
         0.0,
         fleet_fuel_capacity(state, fleet));
     fleet.position = endpoint;
+    movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuelConsumed, fleet.fuel,
+        affordable + epsilon < requested && travelled + epsilon >= affordable});
     fleet.fuelStalled = false;
     observe_fleet_sensor_sweep(state, fleet, start, endpoint, state.turn + 1);
     apply_overdrive_damage(fleet, budget.damage);
@@ -1378,7 +1388,8 @@ void continue_merged_fleet_route(
     }
 }
 
-void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freight)
+void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freight,
+    std::vector<FleetMovementFuel>& movementFuel)
 {
     constexpr double epsilon = 0.000001;
     std::vector<FleetId> consumedFleets;
@@ -1597,14 +1608,26 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         auto endpoint = plan->endpoint;
         if (plan->routed) fleet.destination = plan->destination;
         const auto remaining = distance_between(start, endpoint);
+        const auto requestedDistance = plan->routed
+            ? std::min(distance_between(start, plan->destination), warp_distance(fleet.warp)) : 0.0;
+        const auto affordableDistance = fleet_fuel_affordable_distance(state, fleet, requestedDistance);
+        const auto recordFuel = [&](double consumed, bool mineStrike = false) {
+            movementFuel.push_back({fleet.id, plan->destination, fleet.targetFleet,
+                consumed, fleet.fuel,
+                plan->routed && !plan->intercepted && !mineStrike
+                    && affordableDistance + epsilon < requestedDistance
+                    && distance_between(start, fleet.position) + epsilon >= affordableDistance});
+        };
         if (remaining <= epsilon) {
             if (plan->mineRestricted && !plan->intercepted) {
                 if (apply_minefield_crossing(state,fleet,start,endpoint,navigationMinefields)
                     && fleet.damagePercent >= 100) mineDestroyedFleets.push_back(fleet.id);
                 fleet.position = endpoint;
+                recordFuel(0.0, true);
                 continue;
             }
             fleet.position = endpoint;
+            recordFuel(0.0);
             const auto routeDistance = plan->routed
                 ? distance_between(start, plan->destination)
                 : 0.0;
@@ -1633,6 +1656,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         const auto capacity = fleet_fuel_capacity(state, fleet);
         fleet.fuel = std::clamp(fleet.fuel - budget.fuelChange, 0.0, capacity);
         fleet.position = endpoint;
+        recordFuel(budget.fuelConsumed, mineStrike);
 
         observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
         apply_fleet_radiation_attrition(state, fleet);
@@ -1692,7 +1716,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             *merged,
             encounter->targetDestination,
             1.0 - encounter->timeFraction,
-            consumedFleets, freight);
+            consumedFleets, freight, movementFuel);
     }
 
     if (!consumedFleets.empty()) {
@@ -1742,6 +1766,7 @@ TurnResult TurnProcessor::process_with_events(
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+    std::vector<FleetMovementFuel> movementFuel;
     std::vector<GameEvent> events = deliver_due_survey_reports(next);
     auto wormholeEvents = deliver_wormhole_reports(next);
     events.insert(events.end(), wormholeEvents.begin(), wormholeEvents.end());
@@ -1997,7 +2022,7 @@ TurnResult TurnProcessor::process_with_events(
     const auto remoteExtraction = mine_uncolonized_planets(next);
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
-    advance_fleets(next, freight);
+    advance_fleets(next, freight, movementFuel);
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
     observe_strategic_objects(next, next.turn + 1);
@@ -2101,7 +2126,7 @@ TurnResult TurnProcessor::process_with_events(
         milestones.push_back({event.id, event.observedTurn, *kind,
             event.planet, event.researchField, event.technologyLevel, event.fleet});
     }
-    return {std::move(next), std::move(events)};
+    return {std::move(next), std::move(events), std::move(movementFuel)};
 }
 
 GameState TurnProcessor::process(
