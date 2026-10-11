@@ -38,7 +38,16 @@ jobs:
           cmake --version
           ninja --version
           g++ --version
-          qmake6 --version
+          if [ -n "${CMAKE_PREFIX_PATH:-}" ] && [ -x "$CMAKE_PREFIX_PATH/bin/qmake" ]; then
+            "$CMAKE_PREFIX_PATH/bin/qmake" --version
+          elif command -v qmake6 >/dev/null 2>&1; then
+            qmake6 --version
+          elif command -v qmake >/dev/null 2>&1; then
+            qmake --version
+          else
+            echo "Qt qmake executable not found" >&2
+            exit 1
+          fi
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
       - name: Build
