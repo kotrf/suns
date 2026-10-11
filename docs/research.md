@@ -77,8 +77,11 @@ both in the desktop Ship Designer and again in core order processing.
 
 ## Events and UI
 
-The Research dock opens from the toolbar or View menu. It can be tabbed, hidden,
-detached and used beside the galaxy map; its layout is saved with the workspace. It shows all
+Empire Research opens in a separate non-modal window from **Research** in the
+toolbar or **View → Empire research…**. It cannot dock or tab with panels, and
+does not participate in workspace presets, Custom layouts or fullscreen-map
+visibility. Reopening restores a minimized window and refreshes current-campaign
+data while retaining pending orders; closing hides the reusable window. It shows all
 field levels, current RP progress, the next concrete unlock and an ordered plan
 with per-level target and RP work. Every row has Move Up, Move Down and Remove
 controls, including the active first row. Removing or moving it preserves its
@@ -87,7 +90,7 @@ pending research-plan order instead of leaving an accidental action in the turn
 order list. The same dialog sets the empire-wide allocation percentage and shows
 its guaranteed RP contribution; unused output after local queues is additional
 research. Changes immediately update the current turn's pending orders, while
-closing the dock leaves pending orders intact.
+closing the window leaves pending orders intact.
 
 Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Mole Scanner.
 

@@ -57,7 +57,10 @@ neutral remote-mining sites count when they reach a colony. Each delivery is
 credited to the owner at unloading, even if the colony changes hands later.
 An initial year or an older save has no freight measurement and shows a gap.
 
-The Empire History dock plots the local player's saved snapshots. Choose
+The Empire History window plots the local player's saved snapshots. Open it with
+**History** in the main toolbar or **View → Empire history…**. It is non-modal:
+the main game remains usable. Reopening raises the same window, restores it if
+minimized, retains its filters and refreshes the current campaign data. Choose
 population, colony/infrastructure counts, yearly production output, I/B/G
 stocks, fleet/ship counts, fleet mass, technology levels, invested RP or
 mineral extraction, delivered freight or remote extraction. Extraction shows the three resources actually mined each
@@ -67,7 +70,8 @@ population, infrastructure, output, stocks, extraction and freight,
 choose Whole empire, a recorded colony or Follow map. Follow map tracks the
 currently selected owned colony; with no owned colony selected it prompts for
 one instead of showing empire totals under a colony label. Missing observations show a gap and
-"No owned-colony record" on hover. The dock can be detached, hidden and restored from View; it
+"No owned-colony record" on hover. Close or Esc hides the window; it has no dock
+or tab placement and is independent of workspace presets and map expansion. It
 never reads the host's other players' histories in a player turn. It uses
 Qt Widgets painting and does not require Qt Charts.
 

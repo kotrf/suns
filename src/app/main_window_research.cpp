@@ -5,7 +5,8 @@
 #include "suns/mining.hpp"
 
 #include <QComboBox>
-#include <QDockWidget>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -49,13 +50,17 @@ QString fieldName(ResearchField field)
 
 void MainWindow::installResearch()
 {
-    if (researchDock_) return;
+    if (researchDialog_) return;
 
-    researchDock_ = new QDockWidget("Empire Research", this);
-    researchDock_->setObjectName("researchDock");
-    researchDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
+    researchDialog_ = new QDialog(this, Qt::Window | Qt::WindowTitleHint
+        | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+    researchDialog_->setObjectName("researchDialog");
+    researchDialog_->setWindowTitle("Suns! — Empire Research");
+    researchDialog_->setModal(false);
+    researchDialog_->resize(900, 750);
+    auto* windowLayout = new QVBoxLayout(researchDialog_);
 
-    auto* scroll = new QScrollArea(researchDock_);
+    auto* scroll = new QScrollArea(researchDialog_);
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     auto* content = new QWidget(scroll);
@@ -186,9 +191,10 @@ void MainWindow::installResearch()
         researchRemoveButton_->setEnabled(row >= 0);
     });
     scroll->setWidget(content);
-    researchDock_->setWidget(scroll);
-    addDockWidget(Qt::LeftDockWidgetArea, researchDock_);
-    researchDock_->hide();
+    windowLayout->addWidget(scroll, 1);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, researchDialog_);
+    connect(buttons, &QDialogButtonBox::rejected, researchDialog_, &QDialog::close);
+    windowLayout->addWidget(buttons);
     refreshResearchPanel();
 }
 
@@ -196,14 +202,16 @@ void MainWindow::openResearchDialog()
 {
     installResearch();
     refreshResearchPanel();
-    researchDock_->show();
-    researchDock_->raise();
-    if (researchDock_->isFloating()) researchDock_->activateWindow();
+    if (researchDialog_->isMinimized())
+        researchDialog_->setWindowState(researchDialog_->windowState() & ~Qt::WindowMinimized);
+    researchDialog_->show();
+    researchDialog_->raise();
+    researchDialog_->activateWindow();
 }
 
 void MainWindow::refreshResearchPanel()
 {
-    if (!researchDock_) return;
+    if (!researchDialog_) return;
     const auto* player = find_player(state_, pendingOrders_.player);
     if (!player) return;
 
@@ -261,7 +269,7 @@ void MainWindow::refreshResearchPanel()
     }
 
     QStringList nextUnlocks;
-    auto* catalog = researchDock_->findChild<QTreeWidget*>("technologyCatalog");
+    auto* catalog = researchDialog_->findChild<QTreeWidget*>("technologyCatalog");
     catalog->clear();
     auto projected = state_;
     auto& projectedPlayer = *std::find_if(projected.players.begin(), projected.players.end(),

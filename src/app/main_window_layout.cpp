@@ -50,6 +50,9 @@ void MainWindow::installPanelLayoutFixes()
 {
     installFleetOperationsPanel();
     installColonyWorkspace();
+    // History no longer supplies a width minimum through the bottom docks.
+    // Keep a usable map viewport at the smallest main-window size.
+    if (view_) view_->setMinimumWidth(120);
     if (auto* production = findChild<QDockWidget*>("productionDock")) {
         if (auto* content = production->widget(); content && !qobject_cast<QScrollArea*>(content)
             && content->objectName() != "colonyProductionPanel") {
@@ -73,7 +76,7 @@ void MainWindow::installPanelLayoutFixes()
 
     // Reports now share the narrower center column below the map. Their
     // wide forms must scroll inside that column rather than overlap the docks.
-    for (auto* dock : {turnMessagesDock_, historyDock_, researchDock_}) {
+    for (auto* dock : {turnMessagesDock_}) {
         if (!dock || !dock->widget() || qobject_cast<QScrollArea*>(dock->widget())) continue;
         auto* content = dock->widget();
         content->setParent(nullptr);
@@ -86,6 +89,15 @@ void MainWindow::installPanelLayoutFixes()
     }
 
     auto* panels = viewMenu(menuBar());
+    auto* research = panels->addAction("Empire research…");
+    research->setObjectName("openResearchAction");
+    research->setToolTip("Open research allocation and technology plan in a separate window");
+    connect(research, &QAction::triggered, this, [this] { openResearchDialog(); });
+    auto* history = panels->addAction("Empire history…");
+    history->setObjectName("openEmpireHistoryAction");
+    history->setToolTip("Open empire history and graphs in a separate window");
+    connect(history, &QAction::triggered, this, [this] { openEmpireHistory(); });
+    panels->addSeparator();
     auto* expand = panels->addAction("Fullscreen map");
     expand->setObjectName("expandMapAction");
     expand->setCheckable(true);
@@ -149,8 +161,6 @@ void MainWindow::installPanelLayoutFixes()
         auto* production = findChild<QDockWidget*>("productionDock");
         auto* details = findChild<QDockWidget*>("systemDetailsDock");
         auto* fleet = findChild<QDockWidget*>("fleetDock");
-        auto* history = findChild<QDockWidget*>("empireHistoryDock");
-        auto* research = findChild<QDockWidget*>("researchDock");
         const auto show = [](QDockWidget* dock, bool visible) {
             if (dock) dock->setVisible(visible);
         };
@@ -167,16 +177,8 @@ void MainWindow::installPanelLayoutFixes()
             show(overview, true);
             show(production, true);
             show(details, true);
-            show(research, true);
             show(turnMessagesDock_, true);
-            show(history, true);
             if (turnMessagesDock_) turnMessagesDock_->raise();
-            break;
-        case 3: // An engineering desk with the non-modal designer.
-            show(overview, true);
-            show(production, true);
-            show(details, true);
-            openShipDesigner();
             break;
         }
     };
@@ -188,7 +190,6 @@ void MainWindow::installPanelLayoutFixes()
     addPreset("Map", "mapWorkspaceAction", 0);
     addPreset("Fleet Operations", "fleetWorkspaceAction", 1);
     addPreset("Empire", "empireWorkspaceAction", 2);
-    addPreset("Ship Design", "designWorkspaceAction", 3);
 
     panels->addSeparator();
     auto* saveCustom = panels->addAction("Save current as Custom");
@@ -197,9 +198,7 @@ void MainWindow::installPanelLayoutFixes()
     restoreCustom->setObjectName("restoreCustomWorkspaceAction");
     const auto hasCustom = [] {
         QSettings settings("SunsProject", "Suns");
-        return (settings.value("workspace/customVersion").toInt() == 3
-            || settings.value("workspace/customVersion").toInt() == 4
-            || settings.value("workspace/customVersion").toInt() == 5)
+        return settings.value("workspace/customVersion").toInt() == workspaceLayoutVersion
             && !settings.value("workspace/customDocks").toByteArray().isEmpty();
     };
     restoreCustom->setEnabled(hasCustom());
@@ -207,19 +206,20 @@ void MainWindow::installPanelLayoutFixes()
         setMapExpanded(false);
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/customGeometry", saveGeometry());
-        settings.setValue("workspace/customDocks", saveState(5));
-        settings.setValue("workspace/customVersion", 5);
+        settings.setValue("workspace/customDocks", saveState(workspaceLayoutVersion));
+        settings.setValue("workspace/customVersion", workspaceLayoutVersion);
         restoreCustom->setEnabled(true);
         statusBar()->showMessage("Custom workspace saved", 1800);
     });
     connect(restoreCustom, &QAction::triggered, this, [this] {
         setMapExpanded(false);
         QSettings settings("SunsProject", "Suns");
+        if (settings.value("workspace/customVersion").toInt() != workspaceLayoutVersion) return;
         const auto docks = settings.value("workspace/customDocks").toByteArray();
         if (docks.isEmpty()) return;
         const auto geometry = settings.value("workspace/customGeometry").toByteArray();
         if (!geometry.isEmpty()) restoreGeometry(geometry);
-        statusBar()->showMessage(restoreState(docks, settings.value("workspace/customVersion", 3).toInt())
+        statusBar()->showMessage(restoreState(docks, workspaceLayoutVersion)
             ? "Custom workspace restored" : "Saved workspace could not be restored", 2400);
     });
 
@@ -227,9 +227,9 @@ void MainWindow::installPanelLayoutFixes()
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         restoreGeometry(settings.value("workspace/geometry").toByteArray());
-        // Version 5 adds a separate details column beside status and production.
-        // Geometry survives the one-time reset of older dock layouts.
-        restoreState(settings.value("workspace/docks").toByteArray(), 5);
+        // Version 6 removes History and Research from the dock graph. Geometry
+        // survives the one-time reset of older layouts and their tool tabs.
+        restoreState(settings.value("workspace/docks").toByteArray(), workspaceLayoutVersion);
     }
     // The constructor fits before docks have their final dimensions. Fit once
     // after the first layout so the initial galaxy is not reduced to a dot.
@@ -257,7 +257,7 @@ void MainWindow::resetPanelLayout()
     auto* production = findChild<QDockWidget*>("productionDock");
     auto* details = findChild<QDockWidget*>("systemDetailsDock");
     auto* fleet = findChild<QDockWidget*>("fleetDock");
-    for (auto* dock : {overview, production, details, fleet, turnMessagesDock_, historyDock_, researchDock_}) {
+    for (auto* dock : {overview, production, details, fleet, turnMessagesDock_}) {
         if (!dock) continue;
         dock->setFloating(false);
         removeDockWidget(dock);
@@ -289,15 +289,6 @@ void MainWindow::resetPanelLayout()
     if (details) resizeDocks({details}, {270}, Qt::Horizontal);
     if (fleet) resizeDocks({fleet}, {360}, Qt::Horizontal);
     if (turnMessagesDock_) addDockWidget(Qt::BottomDockWidgetArea, turnMessagesDock_);
-    if (historyDock_) {
-        addDockWidget(Qt::BottomDockWidgetArea, historyDock_);
-        if (turnMessagesDock_) tabifyDockWidget(turnMessagesDock_, historyDock_);
-    }
-    if (researchDock_) {
-        addDockWidget(Qt::BottomDockWidgetArea, researchDock_);
-        if (turnMessagesDock_) tabifyDockWidget(turnMessagesDock_, researchDock_);
-        researchDock_->hide();
-    }
     if (turnMessagesDock_) turnMessagesDock_->raise();
     if (turnMessagesDock_) resizeDocks({turnMessagesDock_}, {190}, Qt::Vertical);
 
@@ -317,7 +308,7 @@ void MainWindow::setMapExpanded(bool expanded)
     mapExpanded_ = expanded;
     cancelRouteProgramMapTargetPick();
     if (expanded) {
-        mapWorkspaceState_ = saveState(5);
+        mapWorkspaceState_ = saveState(workspaceLayoutVersion);
         mapWorkspaceGeometry_ = saveGeometry();
         mapPreviousWindowState_ = windowState();
         mapMenuWasVisible_ = menuBar()->isVisible();
@@ -332,7 +323,7 @@ void MainWindow::setMapExpanded(bool expanded)
     } else {
         setWindowState(mapPreviousWindowState_);
         restoreGeometry(mapWorkspaceGeometry_);
-        restoreState(mapWorkspaceState_, 5);
+        restoreState(mapWorkspaceState_, workspaceLayoutVersion);
         menuBar()->setVisible(mapMenuWasVisible_);
         statusBar()->setVisible(mapStatusWasVisible_);
         mapWorkspaceState_.clear();

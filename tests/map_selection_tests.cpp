@@ -5,6 +5,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
@@ -78,6 +79,16 @@ struct MainWindowTestAccess {
     static QGraphicsView* view(MainWindow& window) { return window.view_; }
     static const PlayerOrders& orders(MainWindow& window) { return window.pendingOrders_; }
     static int selectionKind(MainWindow& window) { return window.currentDistanceSelectionKind_; }
+    static void habitability(MainWindow& window, int hiddenHab)
+    {
+        setup(window);
+        window.state_.players.front().surveyedStars = {1, 2};
+        window.state_.players.front().surveyKnowledge.clear();
+        window.state_.planets[1].observedHabitability = -50;
+        window.state_.planets[2].habitability = hiddenHab;
+        window.rebuildScene();
+        window.applyMapDisplayMode();
+    }
 };
 } // namespace suns
 
@@ -321,8 +332,41 @@ int main(int argc, char** argv)
     view->scale(8, 8);
     assert(selectedLabel->deviceTransform(view->viewportTransform()).mapRect(selectedLabel->boundingRect()).size() == labelSize);
     assert(selectedMarker->deviceTransform(view->viewportTransform()).mapRect(selectedMarker->boundingRect()).size() == markerSize);
+    window.installMapDisplayModes();
+    auto* mode = window.findChild<QComboBox*>("mapDisplayModeCombo");
+    assert(mode);
+    const auto markerWidth = [&window](StarId id) {
+        for (auto* item : window.routeProgramScene()->items())
+            if (auto* star = dynamic_cast<StarItem*>(item); star && star->data(0).toUInt() == id)
+                return star->shape().boundingRect().width();
+        assert(false);
+        return qreal{};
+    };
+    MainWindowTestAccess::habitability(window, 100);
+    const auto spectralWidth = markerWidth(1);
+    mode->setCurrentIndex(mode->findData(1));
+    const auto homeWidth = markerWidth(1);
+    assert(homeWidth > spectralWidth && markerWidth(2) > spectralWidth);
+    assert(homeWidth > markerWidth(2));
+    const auto unknownWidth = markerWidth(3);
+    MainWindowTestAccess::habitability(window, -100);
+    assert(markerWidth(3) == unknownWidth); // Hidden hab cannot change the marker.
+    for (const auto zoom : {0.5, 1.0, 2.5}) {
+        view->resetTransform();
+        view->scale(zoom, zoom);
+        view->centerOn(-72.5, -55);
+        assert(markerWidth(1) == homeWidth);
+        click(window, {-80, -55}, Qt::LeftButton);
+        assert(MainWindowTestAccess::selectedStar(window) == 2);
+        assert(markerWidth(1) == homeWidth);
+        click(window, {-65, -55}, Qt::LeftButton);
+        assert(MainWindowTestAccess::selectedStar(window) == 3);
+        assert(markerWidth(1) == homeWidth);
+    }
+    mode->setCurrentIndex(mode->findData(0));
+    assert(markerWidth(1) == spectralWidth);
+
     if (app.arguments().contains("--capture")) {
-        window.installMapDisplayModes();
         window.installPlanetPolish();
         window.installProductionQueue();
         window.installFleetReadabilityPolish();

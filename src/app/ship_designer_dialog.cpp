@@ -524,7 +524,8 @@ private:
 } // namespace
 
 ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, QWidget* parent)
-    : QDialog(parent)
+    : QDialog(parent, Qt::Window | Qt::WindowTitleHint | Qt::WindowSystemMenuHint
+        | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint)
     , player_(player)
     , initialHull_(player_uses_legacy_hulls(state, player) ? ShipHullType::Scout : ShipHullType::StarsScout)
     , initialScanner_(player_uses_legacy_scanners(state, player) ? ShipComponentType::LongRangeScanner
@@ -532,6 +533,8 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             ? ShipComponentType::RhinoScanner : ShipComponentType::BatScanner)
     , initialEngine_(player_uses_legacy_propulsion(state, player) ? ShipComponentType::FusionDrive : ShipComponentType::QuickJump5)
 {
+    setObjectName("shipDesignerDialog");
+    setModal(false);
     setWindowTitle("Suns! — Ship Designer");
     resize(980, 760);
 

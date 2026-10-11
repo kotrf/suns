@@ -1,7 +1,8 @@
 #include "main_window.hpp"
 
 #include <QComboBox>
-#include <QDockWidget>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
@@ -194,11 +195,14 @@ private:
 
 void MainWindow::installEmpireHistory()
 {
-    if (historyDock_) return;
-    historyDock_ = new QDockWidget("Empire History", this);
-    historyDock_->setObjectName("empireHistoryDock");
-    historyDock_->setAllowedAreas(Qt::AllDockWidgetAreas);
-    auto* content = new QWidget(historyDock_);
+    if (historyDialog_) return;
+    historyDialog_ = new QDialog(this, Qt::Window | Qt::WindowTitleHint
+        | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+    historyDialog_->setObjectName("empireHistoryDialog");
+    historyDialog_->setWindowTitle("Suns! — Empire History");
+    historyDialog_->setModal(false);
+    historyDialog_->resize(1000, 650);
+    auto* content = historyDialog_;
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(8, 8, 8, 8);
 
@@ -253,9 +257,9 @@ void MainWindow::installEmpireHistory()
 
     historyChart_ = new HistoryChart(content);
     layout->addWidget(historyChart_, 1);
-    historyDock_->setWidget(content);
-    addDockWidget(Qt::BottomDockWidgetArea, historyDock_);
-    historyDock_->hide();
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, content);
+    connect(buttons, &QDialogButtonBox::rejected, historyDialog_, &QDialog::close);
+    layout->addWidget(buttons);
 
     connect(historyMetric_, &QComboBox::currentIndexChanged, this,
         [this] { refreshEmpireHistory(); });
@@ -266,7 +270,7 @@ void MainWindow::installEmpireHistory()
     connect(historyRange_, &QComboBox::currentIndexChanged, this,
         [this] { refreshEmpireHistory(); });
     connect(this, &MainWindow::routeProgramContextChanged, this, [this] {
-        if (historyDock_->isVisible()
+        if (historyDialog_->isVisible()
             && historyScope_->currentData().toUInt() == kFollowSelectedColony)
             refreshEmpireHistory();
     });
@@ -282,15 +286,23 @@ void MainWindow::installEmpireHistory()
         if (historyFirstTurn_->value() > year) historyFirstTurn_->setValue(year);
         else refreshEmpireHistory();
     });
-    connect(historyDock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
-        if (visible) refreshEmpireHistory();
-    });
     refreshEmpireHistory();
+}
+
+void MainWindow::openEmpireHistory()
+{
+    installEmpireHistory();
+    refreshEmpireHistory();
+    if (historyDialog_->isMinimized())
+        historyDialog_->setWindowState(historyDialog_->windowState() & ~Qt::WindowMinimized);
+    historyDialog_->show();
+    historyDialog_->raise();
+    historyDialog_->activateWindow();
 }
 
 void MainWindow::refreshEmpireHistory()
 {
-    if (!historyDock_) return;
+    if (!historyDialog_) return;
     const auto* player = find_player(state_, pendingOrders_.player);
     const std::vector<EmpireTurnStatistics> empty;
     const auto& history = player ? player->history : empty;

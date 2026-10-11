@@ -6,7 +6,7 @@ https://www.bestoldgames.net/download/games/stars/stars-win-guide.pdf
 
 The reference supplies the engine names, count, field levels, access restrictions,
 optimal/free/safe speeds, mass, base resource cost and I/B/G mineral costs. These
-values live in one core catalog, `propulsion_technologies()`. The Research dock,
+values live in one core catalog, `propulsion_technologies()`. The Research window,
 Ship Designer and host order validation use the same prerequisites. New campaigns
 and quick galaxy generation start with Quick Jump 5.
 

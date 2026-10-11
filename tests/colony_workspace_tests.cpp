@@ -138,7 +138,7 @@ int main(int argc, char** argv)
     auto* geology = window.findChild<QProgressBar*>("ironiumConcentration");
     auto* fleet = window.findChild<QDockWidget*>("fleetDock");
     auto* reports = window.findChild<QDockWidget*>("turnMessagesDock");
-    auto* research = window.findChild<QDockWidget*>("researchDock");
+    auto* research = window.findChild<QDialog*>("researchDialog");
     auto* status = window.findChild<QLabel*>("colonyStatusSummary");
     auto* minerals = window.findChild<QTreeWidget*>("colonyMineralsTable");
     auto* queue = window.findChild<QTreeWidget*>("productionQueueTree");
@@ -151,7 +151,7 @@ int main(int argc, char** argv)
     assert(detailsColumn && detailsColumn->itemAt(0)->widget() == window.findChild<QGroupBox*>("planetGroup"));
     assert(overview && production && fleet && reports && research && status && minerals && queue && view && expand);
     assert(!window.findChild<QScrollArea*>("productionScrollArea"));
-    assert(!window.tabifiedDockWidgets(production).contains(research));
+    assert(!window.findChild<QDockWidget*>("researchDock"));
     assert(window.corner(Qt::BottomLeftCorner) == Qt::LeftDockWidgetArea);
     assert(status->text().contains("25000") && status->text().contains("Resources:"));
     assert(minerals->topLevelItem(0)->text(1) == "123.0");
@@ -220,7 +220,7 @@ int main(int argc, char** argv)
     fleet->show();
     settle();
     window.findChild<QAction*>("saveCustomWorkspaceAction")->trigger();
-    assert(QSettings("SunsProject", "Suns").value("workspace/customVersion").toInt() == 5);
+    assert(QSettings("SunsProject", "Suns").value("workspace/customVersion").toInt() == 6);
     details->hide();
     window.findChild<QAction*>("restoreCustomWorkspaceAction")->trigger();
     settle();
@@ -285,7 +285,7 @@ int main(int argc, char** argv)
     QSettings settings("SunsProject", "Suns");
     MainWindow restored;
     installWorkspace(restored);
-    assert(restored.restoreState(settings.value("workspace/docks").toByteArray(), 5));
+    assert(restored.restoreState(settings.value("workspace/docks").toByteArray(), 6));
     assert(restored.findChild<QDockWidget*>("systemDetailsDock")->isHidden());
     assert(!restored.findChild<QDockWidget*>("productionDock")->isHidden());
 }

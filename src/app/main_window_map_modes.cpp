@@ -49,7 +49,7 @@ qreal populationScale(std::uint64_t population)
 
 QString modeLegend(int mode)
 {
-    if (mode == 1) return "dark red negative  ·  red 0%  ·  yellow 50%  ·  green 100%  ·  dim estimated  ·  grey unknown";
+    if (mode == 1) return "size = hab  ·  dark red negative  ·  red 0%  ·  yellow 50%  ·  green 100%  ·  dim estimated  ·  grey unknown";
     if (mode == 2) return "marker size = population  ·  green = your colony  ·  grey = empty/unknown";
     return "stellar spectral class colours";
 }
@@ -74,7 +74,7 @@ void MainWindow::installMapDisplayModes()
     mode->addItem("Population", 2);
     mode->setToolTip(
         "Spectral: real stellar-class colours\n"
-        "Habitability: red-to-green world value; yellow means hostile but terraformable\n"
+        "Habitability: larger markers for higher known hab; red-to-green world value; yellow means hostile but terraformable\n"
         "Population: marker size follows colony population");
     toolbar->addWidget(mode);
 
@@ -124,6 +124,7 @@ void MainWindow::applyMapDisplayMode()
         qreal scale = 1.0;
 
         if (mapDisplayMode_ == 1) {
+            scale = 1.15 + 0.25 * std::clamp(knownHabitability.value_or(0), 0, 100) / 100.0;
             color = knownHabitability ? habitabilityColor(*knownHabitability) : QColor("#687381");
             if (planet && knownHabitability && *knownHabitability < 0
                 && (planet->owner == pendingOrders_.player || survey_level(state_, pendingOrders_.player, starId) >= SurveyLevel::OrbitalSurvey)) {

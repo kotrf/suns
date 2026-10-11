@@ -195,6 +195,7 @@ protected:
 
 private:
     friend struct MainWindowTestAccess;
+    static constexpr int workspaceLayoutVersion = 6;
     void rebuildScene();
     [[nodiscard]] QGraphicsItem* mapObjectAtViewportPosition(const QPoint& position) const;
     void queueMapSelectionRebuild();
@@ -204,6 +205,7 @@ private:
     void updateControls();
     void refreshShipDesignChoices();
     void openShipDesigner();
+    void openEmpireHistory();
     void queueFleetMove();
     void queueFleetLoadAll();
     void queueShipDesign();
@@ -354,7 +356,7 @@ private:
     QPushButton* colonizeButton_{};
     QPushButton* endTurnButton_{};
     QDockWidget* turnMessagesDock_{};
-    QDockWidget* historyDock_{};
+    QDialog* historyDialog_{};
     QPointer<QDialog> fleetSummaryDialog_;
     QComboBox* historyMetric_{};
     QComboBox* historyScope_{};
@@ -381,7 +383,7 @@ private:
     QProgressBar* planetRadiationBar_{};
     QProgressBar* planetPopulationBar_{};
     QTreeWidget* fleetCompositionTree_{};
-    QDockWidget* researchDock_{};
+    QDialog* researchDialog_{};
     QLabel* researchSummary_{};
     QLabel* researchUnlock_{};
     QProgressBar* researchProgress_{};
