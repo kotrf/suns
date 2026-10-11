@@ -1249,6 +1249,9 @@ void MainWindow::replacePendingFleetMove(
 void MainWindow::openShipDesigner()
 {
     if (shipDesigner_) {
+        if (shipDesigner_->isMinimized())
+            shipDesigner_->setWindowState(shipDesigner_->windowState() & ~Qt::WindowMinimized);
+        shipDesigner_->show();
         shipDesigner_->raise();
         shipDesigner_->activateWindow();
         return;
@@ -1281,8 +1284,10 @@ void MainWindow::openShipDesigner()
         if (it != planning.shipDesigns.end()) shipDesignCombo_->setCurrentIndex(shipDesignCombo_->findData(it->id));
         updateControls();
     });
-    connect(dialog, &QDialog::finished, dialog, &QObject::deleteLater);
-    connect(dialog, &QObject::destroyed, this, [this] { shipDesigner_.clear(); });
+    connect(dialog, &QDialog::finished, this, [this, dialog] {
+        if (shipDesigner_ == dialog) shipDesigner_.clear();
+        dialog->deleteLater();
+    });
     dialog->show();
     dialog->raise();
     dialog->activateWindow();

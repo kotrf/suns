@@ -1,18 +1,19 @@
 # Project status and development handoff
 
 Snapshot: **11 October 2026, Dialog #06**. Main is now
-`c8e2eb021ecc99ea2ea25dfa9ccea14ea29279a5`, after
-[PR #173](https://github.com/kotrf/suns/pull/173) merged by the user's explicit
-request. The [merge CI run](https://github.com/kotrf/suns/actions/runs/38090551662)
+`b832b22b45bfad1a6430f6682cca42b808471165`, after
+[PR #175](https://github.com/kotrf/suns/pull/175) merged by the user's explicit
+request. The [merge CI run](https://github.com/kotrf/suns/actions/runs/38098327274)
 passed; the branch's Qt Debug build and CI passed all **49 CTest targets**.
 The user is testing the merged game locally; results of that playtest are pending.
 
 ## Current authorized implementation
 
-The current request fixes editing Warp for a selected route leg and adds fuel
-consumption/remaining fuel to the route table, with the first fuel-limited leg
-highlighted red. Branch `fix/route-leg-warp-fuel` contains this work; it is not
-yet merged. See [route forecasts](route-forecast.md).
+The current request makes Ship Designer and Empire History exclusively separate
+non-modal windows, with toolbar/menu entry points and no dock/preset binding.
+Branch `fix/designer-history-windows` contains this work for
+[#176](https://github.com/kotrf/suns/issues/176); it is not yet merged. Workspace
+version 6 resets older dock layouts once while retaining main-window geometry.
 
 Main already includes [strategic fleet operations](strategic-operations.md):
 operational bombs, three minefield types/sweeping, cloaking, jamming, emission
@@ -37,6 +38,7 @@ remain partial. Do not repeat that work or close umbrella issues for the slice.
 | [#169](https://github.com/kotrf/suns/pull/169) | 113 additional reference modules, typed compatibility, research/access gates and catalog search/filters | [Equipment](stars-equipment.md) |
 | [#170](https://github.com/kotrf/suns/pull/170) | Automatic simultaneous-motion fleet encounters, beams/torpedoes, shields/armor, ship losses and delayed immutable reports | [Space combat](space-combat.md) |
 | [#173](https://github.com/kotrf/suns/pull/173) | Bombardment, physical minefields, cloaking/EW, emission modes and finite field science, available in fleet operations | [Strategic operations](strategic-operations.md) |
+| [#175](https://github.com/kotrf/suns/pull/175) | Immediate Warp editing for a selected route leg, per-leg fuel/remaining fuel and a red first fuel-limited leg; issue #174 closed | [Route forecasts](route-forecast.md) |
 
 Reference equipment follows Stars! progression and ratings. Suns! remains its own
 simulation: tactical combat rules and terraforming production price are documented
@@ -67,6 +69,12 @@ Main uses save **v62** (readers v12–62) and orders **v19**
 changing either format. Host and players must use the same build. Version numbers in
 older thematic documents describe when a feature was introduced unless explicitly
 identified as current. Legacy designs and campaigns retain documented old rules.
+
+**Prototype save policy (11 October 2026):** backward compatibility of save files
+is no longer a requirement. Future save-format changes may reject old campaigns
+instead of adding migrations, with a clear unsupported-version message and a
+new game. Existing readers can remain until the corresponding code is simplified;
+this decision does not authorize a separate wholesale removal of legacy mechanics.
 
 GitHub Actions dispatches builds to our self-hosted Linux/X64 runner with label
 `suns`. Current jobs use ephemeral VM runner names such as `suns-eph-*`; the old
@@ -99,8 +107,8 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-Collect the user's main playtest results while finishing the authorized route
-editor fix ([#174](https://github.com/kotrf/suns/issues/174)). Later candidates
+Collect the user's main playtest results while finishing the authorized separate
+tool windows ([#176](https://github.com/kotrf/suns/issues/176)). Later candidates
 include station fitting/combat, colony defenses/scars or battle doctrines/diplomacy;
 choose the next slice explicitly. Do not restart existing partial implementations or close
 umbrella issues solely because a first slice landed.

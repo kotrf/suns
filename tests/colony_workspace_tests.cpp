@@ -220,7 +220,7 @@ int main(int argc, char** argv)
     fleet->show();
     settle();
     window.findChild<QAction*>("saveCustomWorkspaceAction")->trigger();
-    assert(QSettings("SunsProject", "Suns").value("workspace/customVersion").toInt() == 5);
+    assert(QSettings("SunsProject", "Suns").value("workspace/customVersion").toInt() == 6);
     details->hide();
     window.findChild<QAction*>("restoreCustomWorkspaceAction")->trigger();
     settle();
@@ -285,7 +285,7 @@ int main(int argc, char** argv)
     QSettings settings("SunsProject", "Suns");
     MainWindow restored;
     installWorkspace(restored);
-    assert(restored.restoreState(settings.value("workspace/docks").toByteArray(), 5));
+    assert(restored.restoreState(settings.value("workspace/docks").toByteArray(), 6));
     assert(restored.findChild<QDockWidget*>("systemDetailsDock")->isHidden());
     assert(!restored.findChild<QDockWidget*>("productionDock")->isHidden());
 }

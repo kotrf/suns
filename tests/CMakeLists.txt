@@ -223,6 +223,11 @@ target_link_libraries(suns_precursor_artifact_tests PRIVATE Suns::Core)
 add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_tests)
 
 if(SUNS_BUILD_APP)
+    add_executable(suns_tool_windows_tests tool_windows_tests.cpp)
+    target_link_libraries(suns_tool_windows_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_tool_windows_tests COMMAND suns_tool_windows_tests)
+    set_tests_properties(suns_tool_windows_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 25)
     add_executable(suns_combat_editor_tests combat_editor_tests.cpp)
     add_executable(suns_strategic_operations_editor_tests strategic_operations_editor_tests.cpp)
     target_link_libraries(suns_strategic_operations_editor_tests PRIVATE suns_app_ui)

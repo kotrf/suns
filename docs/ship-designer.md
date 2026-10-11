@@ -118,9 +118,13 @@ direction, including across gaps in the hull grid. Tab moves between the
 catalog, fitting cells and action buttons. The selected cell stays highlighted
 for keyboard fitting and removal.
 
-Ship Designer is a non-modal top-level dialog. The galaxy map and other docks
-remain usable while it is open, and attempting to open it again raises the
-existing window instead of creating competing drafts.
+Ship Designer is exclusively a non-modal top-level window, opened with
+**Designer** in the toolbar or **Fleet → Ship designer…**. The galaxy map and
+panels remain usable and keep their layout while it is open. The window cannot
+be docked or tabbed with a panel, and there is no Ship Design workspace preset.
+Opening it again raises the existing draft and restores a minimized window.
+Closing and immediately reopening creates a fresh draft safely, even before
+Qt finishes deleting the previous dialog.
 Each hull now has a distinct schematic silhouette above its fitting grid, and
 catalog/fitted components have compact category icons. Fitting cells are square,
 show their category and stable ID, and retain the complete component name for

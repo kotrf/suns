@@ -649,6 +649,7 @@ void MainWindow::installUiPolish()
     connect(splitAction, &QAction::triggered, this, [this] { openSplitFleetDialog(); });
     fleetMenu->addSeparator();
     auto* designerAction = fleetMenu->addAction("Ship designer…");
+    designerAction->setObjectName("openShipDesignerAction");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
 
     auto* dialogToolbar = addToolBar("Main");
@@ -671,6 +672,11 @@ void MainWindow::installUiPolish()
     researchToolAction->setObjectName("openResearchToolAction");
     researchToolAction->setToolTip("Edit empire research allocation and the ordered technology plan");
     connect(researchToolAction, &QAction::triggered, this, [this] { openResearchDialog(); });
+
+    auto* historyToolAction = dialogToolbar->addAction("History");
+    historyToolAction->setObjectName("openEmpireHistoryToolAction");
+    historyToolAction->setToolTip("Open empire history and graphs in a separate window");
+    connect(historyToolAction, &QAction::triggered, this, [this] { openEmpireHistory(); });
 
     dialogToolbar->addSeparator();
 
@@ -900,7 +906,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (!QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings settings("SunsProject", "Suns");
         settings.setValue("workspace/geometry", saveGeometry());
-        settings.setValue("workspace/docks", saveState(5));
+        settings.setValue("workspace/docks", saveState(workspaceLayoutVersion));
     }
 
     QMainWindow::closeEvent(event);
