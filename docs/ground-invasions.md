@@ -33,3 +33,11 @@ itself is not consumed.
 Both empires receive delayed Turn Messages appropriate to their perspective:
 invasion won or repelled, defense held, or colony lost. The report includes the
 winning population that remained after combat.
+
+## Casualty history
+
+Save v64 ground reports include exact own/opposing colonist losses, captured
+before subsequent growth or ownership changes. Both participants receive a
+summary, including the former defender on colony capture. Empire History credits
+these casualties only when the report arrives, in Ground losses and Operational
+reports. This does not change the battle outcome or casualty formula.

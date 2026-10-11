@@ -1609,8 +1609,60 @@ void space_battle_round_trip()
     assert(loaded.state.shipDesigns.back().components.back() == C::Laser);
 }
 
+void operational_losses_round_trip_and_player_isolation()
+{
+    QTemporaryDir dir; assert(dir.isValid());
+    SaveGameData save; save.campaignId = 10; save.turnToken = 12; save.mode = SessionMode::Host;
+    save.state = generate_campaign({}, {{"One"}, {"Two"}});
+    save.playerTokens = {{1,12},{2,13}}; save.pendingOrders = {1,{}};
+    save.state.wormholes.clear(); save.state.wormholeRules.spawnChancePerTurn = 0;
+    const auto planet = save.state.planets.front().id;
+    const auto fleet = save.state.fleets.front().id;
+    for (const auto kind : {OperationalLossKind::Ground, OperationalLossKind::Bombardment, OperationalLossKind::Mines}) {
+        PendingPlayerReport packet;
+        packet.kind = kind == OperationalLossKind::Ground ? PlayerReportKind::GroundInvasionLost
+            : kind == OperationalLossKind::Bombardment ? PlayerReportKind::Bombardment : PlayerReportKind::MineStrike;
+        packet.planet = planet; packet.fleet = fleet;
+        packet.observedTurn = 1; packet.deliveryTurn = 2;
+        packet.losses = OperationalLossReport{kind,5'000'000'001ULL,
+            kind == OperationalLossKind::Mines ? 0ULL : 17ULL,
+            kind == OperationalLossKind::Bombardment ? 3ULL : 0ULL,0,
+            kind == OperationalLossKind::Mines ? 2ULL : 0ULL};
+        save.state.players[0].pendingPlayerReports.push_back(packet);
+    }
+    auto future = save.state.players[0].pendingPlayerReports.front(); future.deliveryTurn = 20;
+    save.state.players[0].pendingPlayerReports.push_back(future);
+    const auto path = dir.filePath("operational.suns"); QString error; SaveGameData loaded;
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players[0].pendingPlayerReports.size() == 4);
+    assert(loaded.state.players[0].pendingPlayerReports[0].losses->ownColonistsLost == 5'000'000'001ULL);
+    const auto result = TurnProcessor{}.process_with_events(loaded.state,{});
+    save.state = result.state; save.strategicMessages = result.events;
+    assert(write_save_game_file(path, save, error));
+    const bool read = read_save_game_file(path, loaded, error);
+    if (!read) std::cerr << error.toStdString() << '\n';
+    assert(read);
+    for (std::size_t i = 0; i < kOperationalLossKindCount; ++i) {
+        const auto& value = loaded.state.players[0].history.back().operationalLosses[i];
+        assert(value.recorded && value.reports == 1 && value.ownColonistsLost == 5'000'000'001ULL);
+        assert(loaded.state.players[1].history.back().operationalLosses[i].reports == 0);
+    }
+    assert(std::count_if(loaded.strategicMessages.begin(),loaded.strategicMessages.end(),
+        [](const auto& e) { return e.losses && e.losses->ownColonistsLost == 5'000'000'001ULL; }) == 3);
+    auto player = make_player_turn(loaded,1); player.strategicMessages.clear();
+    assert(player.state.players.size() == 1 && player.state.players.front().pendingPlayerReports.empty());
+    assert(write_save_game_file(path, player, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().history.back().operationalLosses[2].ownShipsLost == 2);
+    loaded.state.players.front().history.back().operationalLosses[2].recorded = false;
+    assert(write_save_game_file(path, loaded, error) && !read_save_game_file(path, player, error));
+    // Reject casualty payloads attached to an unrelated report kind.
+    save.state.players[0].pendingPlayerReports.back().losses->kind = OperationalLossKind::Mines;
+    assert(write_save_game_file(path, save, error) && !read_save_game_file(path, loaded, error));
+}
+
 int main()
 {
+    operational_losses_round_trip_and_player_isolation();
     space_battle_round_trip();
     equipment_catalog_round_trip();
     terraforming_and_automation_round_trip();

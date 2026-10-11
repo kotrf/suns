@@ -139,3 +139,14 @@ snapshots; hidden hazards and future combat outcomes cannot alter a forecast.
 
 These are Suns! deterministic strategic rules built on Stars! equipment ratings;
 the bombing, mines, sensing and science formulas are initial balance policy.
+
+## Operational casualty history (save v64)
+
+Bombardment and mine-strike packets now retain immutable casualty summaries for
+receipt-year History graphs. Bombardment separates own and confirmed opposing
+colonist/installation losses for the two participants. Each attacking fleet has
+a distinct report identity for the defender. Mine strikes count reports and own
+ships destroyed; nonfatal damage and speed traps do not count as ship losses.
+Unseen enemy mine strikes are not reported to the minefield owner. Totals and
+markers wait for normal communication delivery, persist in saves/player exports,
+and do not require retained Turn Messages. Orders remain v19.

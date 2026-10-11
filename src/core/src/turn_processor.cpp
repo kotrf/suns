@@ -445,6 +445,8 @@ bool invade_colony(
     }
 
     if (const auto* star = find_star(state, planet.star)) {
+        const auto attackerLosses = attackingPopulation - (attackerWon ? survivors : 0);
+        const auto defenderLosses = defendingPopulation - (attackerWon ? 0 : survivors);
         queue_player_report(
             state,
             fleet.owner,
@@ -456,7 +458,8 @@ bool invade_colony(
             fleet.id,
             fleet.design,
             ProductionKind::ColonyShip,
-            report_population(survivors));
+            report_population(survivors), ResearchField::Electronics, 0, {}, 0, {}, 0,
+            OperationalLossReport{OperationalLossKind::Ground, attackerLosses, defenderLosses});
         queue_player_report(
             state,
             defender,
@@ -468,7 +471,8 @@ bool invade_colony(
             fleet.id,
             fleet.design,
             ProductionKind::ColonyShip,
-            report_population(survivors));
+            report_population(survivors), ResearchField::Electronics, 0, {}, 0, {}, 0,
+            OperationalLossReport{OperationalLossKind::Ground, defenderLosses, attackerLosses});
     }
     return true;
 }
@@ -2107,7 +2111,10 @@ TurnResult TurnProcessor::process_with_events(
         std::optional<HistoryMilestoneKind> kind;
         switch (event.kind) {
         case GameEventKind::ColonyFounded: kind = HistoryMilestoneKind::ColonyFounded; break;
-        case GameEventKind::ColonyLost: kind = HistoryMilestoneKind::ColonyLost; break;
+        case GameEventKind::ColonyLost:
+            kind = event.losses && event.losses->kind == OperationalLossKind::Ground
+                ? HistoryMilestoneKind::GroundDefenseLost : HistoryMilestoneKind::ColonyLost;
+            break;
         case GameEventKind::ResearchLevelCompleted: kind = HistoryMilestoneKind::ResearchCompleted; break;
         case GameEventKind::FleetStalledForFuel: kind = HistoryMilestoneKind::FleetStalledForFuel; break;
         case GameEventKind::EnemyFleetDetected: kind = HistoryMilestoneKind::EnemyFleetDetected; break;
@@ -2116,17 +2123,21 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::GroundInvasionLost: kind = HistoryMilestoneKind::GroundInvasionLost; break;
         case GameEventKind::GroundDefenseWon: kind = HistoryMilestoneKind::GroundDefenseWon; break;
         case GameEventKind::SpaceBattle: kind = HistoryMilestoneKind::SpaceBattle; break;
+        case GameEventKind::Bombardment: kind = HistoryMilestoneKind::Bombardment; break;
+        case GameEventKind::MineStrike: kind = HistoryMilestoneKind::MineStrike; break;
         default: break;
         }
         if (!kind) continue;
         const bool fleetEvent = *kind == HistoryMilestoneKind::FleetStalledForFuel
             || *kind == HistoryMilestoneKind::EnemyFleetDetected
             || *kind == HistoryMilestoneKind::EnemyFleetLost
-            || *kind == HistoryMilestoneKind::SpaceBattle;
+            || *kind == HistoryMilestoneKind::SpaceBattle
+            || *kind == HistoryMilestoneKind::MineStrike;
         if (*kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0
             : fleetEvent ? event.fleet == 0 : event.planet == 0) continue;
         auto snapshot = std::prev(player->history.end());
-        if (*kind == HistoryMilestoneKind::SpaceBattle) {
+        const auto lossKind = milestone_loss_kind(*kind);
+        if (*kind == HistoryMilestoneKind::SpaceBattle || lossKind) {
             // Packets already due on load are received at the starting boundary,
             // not in the new year resolved by this call.
             snapshot = std::find_if(player->history.begin(), player->history.end(),
@@ -2153,6 +2164,26 @@ TurnResult TurnProcessor::process_with_events(
                 const auto lost = std::uint64_t(unit.initialShips) - unit.survivingShips;
                 if (unit.owner == player->id) totals.ownShipsLost += lost;
                 else totals.opposingShipsLost += lost;
+            }
+        }
+        if (lossKind) {
+            auto& totals = snapshot->operationalLosses[static_cast<std::size_t>(*lossKind)];
+            const bool unmeasured = !totals.recorded
+                && std::any_of(milestones.begin(), milestones.end(), [&](const auto& marker) {
+                    return milestone_loss_kind(marker.kind) == lossKind;
+                });
+            if (!event.losses || event.losses->kind != *lossKind || unmeasured) {
+                // An old packet has no exact casualty summary. Keep the entire
+                // category unknown rather than present a partially measured year.
+                totals = {};
+            } else {
+                totals.recorded = true;
+                ++totals.reports;
+                totals.ownColonistsLost += event.losses->ownColonistsLost;
+                totals.opposingColonistsLost += event.losses->opposingColonistsLost;
+                totals.ownInstallationsLost += event.losses->ownInstallationsLost;
+                totals.opposingInstallationsLost += event.losses->opposingInstallationsLost;
+                totals.ownShipsLost += event.losses->ownShipsLost;
             }
         }
         milestones.push_back({event.id, event.observedTurn, *kind,

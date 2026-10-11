@@ -88,10 +88,16 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     out << quint32(state.players.size());
     for (const auto& player : state.players) {
         out << quint32(player.id) << quint32(player.history.size());
-        for (const auto& snapshot : player.history)
+        for (const auto& snapshot : player.history) {
             out << quint64(snapshot.turn) << quint8(snapshot.battleStatisticsRecorded ? 1 : 0)
                 << quint64(snapshot.battles.reports) << quint64(snapshot.battles.ownShipsLost)
                 << quint64(snapshot.battles.opposingShipsLost);
+            for (const auto& losses : snapshot.operationalLosses)
+                out << quint8(losses.recorded) << quint64(losses.reports)
+                    << quint64(losses.ownColonistsLost) << quint64(losses.opposingColonistsLost)
+                    << quint64(losses.ownInstallationsLost) << quint64(losses.opposingInstallationsLost)
+                    << quint64(losses.ownShipsLost);
+        }
     }
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
@@ -160,6 +166,23 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
                     || (!reports && (own || opposing))) { markCorrupt(stream); return; }
                 snapshot.battleStatisticsRecorded = recorded == 1;
                 snapshot.battles = {reports, own, opposing};
+                if (gReadSaveFormatVersion >= 64) {
+                    for (std::size_t i = 0; i < snapshot.operationalLosses.size(); ++i) {
+                        quint8 measured{}; quint64 reports{}, own{}, opposing{}, ownInstallations{}, opposingInstallations{}, ships{};
+                        in >> measured >> reports >> own >> opposing >> ownInstallations >> opposingInstallations >> ships;
+                        const auto category = static_cast<OperationalLossKind>(i);
+                        const auto markers = std::count_if(snapshot.milestones.begin(), snapshot.milestones.end(),
+                            [&](const auto& marker) { return milestone_loss_kind(marker.kind) == category; });
+                        if (measured > 1 || (!measured && (reports || own || opposing || ownInstallations || opposingInstallations || ships))
+                            || (measured && reports != std::uint64_t(markers))
+                            || (!reports && (own || opposing || ownInstallations || opposingInstallations || ships))
+                            || (category != OperationalLossKind::Bombardment && (ownInstallations || opposingInstallations))
+                            || (category != OperationalLossKind::Mines && ships)
+                            || (category == OperationalLossKind::Mines && opposing)) { markCorrupt(stream); return; }
+                        snapshot.operationalLosses[i] = {measured == 1, reports, own, opposing,
+                            ownInstallations, opposingInstallations, ships};
+                    }
+                }
             }
         }
     }

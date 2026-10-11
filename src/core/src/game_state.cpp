@@ -1711,6 +1711,7 @@ void record_empire_turn_statistics(
         auto snapshot = empire_turn_statistics(state, player.id);
         snapshot.extractionRecorded = elapsedYear;
         snapshot.battleStatisticsRecorded = elapsedYear;
+        for (auto& losses : snapshot.operationalLosses) losses.recorded = elapsedYear;
         for (const auto& mined : extraction) {
             if (mined.owner != player.id) continue;
             snapshot.extraction.ironium += mined.minerals.ironium;
@@ -1762,6 +1763,14 @@ void record_empire_turn_statistics(
         }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
             snapshot.milestones = player.history.back().milestones;
+            snapshot.operationalLosses = player.history.back().operationalLosses;
+            for (std::size_t i = 0; i < snapshot.operationalLosses.size(); ++i) {
+                auto& totals = snapshot.operationalLosses[i];
+                if (elapsedYear && !totals.recorded
+                    && std::none_of(snapshot.milestones.begin(), snapshot.milestones.end(), [&](const auto& marker) {
+                        return milestone_loss_kind(marker.kind) == static_cast<OperationalLossKind>(i);
+                    })) totals.recorded = true;
+            }
             // Report receipt is already measured for this boundary, even if
             // assets are refreshed or the measurement call is repeated.
             snapshot.battles = player.history.back().battles;

@@ -136,6 +136,14 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         mix(std::bit_cast<std::uint64_t>(report.battle->position.y));
         for (const auto& unit : report.battle->units) { mix(unit.fleet); mix(unit.design); }
     }
+    if (report.losses) {
+        mix(static_cast<std::uint64_t>(report.losses->kind));
+        mix(report.losses->ownColonistsLost);
+        mix(report.losses->opposingColonistsLost);
+        mix(report.losses->ownInstallationsLost);
+        mix(report.losses->opposingInstallationsLost);
+        mix(report.losses->ownShipsLost);
+    }
     // A receiving colony gets one aggregated freight report per year.
     // The manifest is part of the stable identity even when replaying a turn.
     if (report.kind == PlayerReportKind::FreightDelivered) {
@@ -216,7 +224,8 @@ void queue_player_report(
     MineralCargo deliveredMinerals,
     std::uint64_t deliveredColonists,
     Position contactPosition,
-    PlayerId contactOwner)
+    PlayerId contactOwner,
+    std::optional<OperationalLossReport> losses)
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
@@ -239,6 +248,8 @@ void queue_player_report(
         deliveredColonists,
         contactPosition,
         contactOwner,
+        {},
+        losses,
     });
 }
 
@@ -536,6 +547,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.contactOwner,
                 0,
                 report.battle,
+                report.losses,
             });
         }
 

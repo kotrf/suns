@@ -19,6 +19,10 @@ add_test(NAME suns_route_regression_tests COMMAND suns_route_regression_tests)
 target_link_libraries(suns_core_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_core_tests COMMAND suns_core_tests)
+add_executable(suns_operational_loss_history_tests operational_loss_history_tests.cpp)
+target_link_libraries(suns_operational_loss_history_tests PRIVATE Suns::Core)
+add_test(NAME suns_operational_loss_history_tests COMMAND suns_operational_loss_history_tests)
+
 add_executable(suns_combat_tests combat_tests.cpp)
 add_executable(suns_strategic_operations_tests strategic_operations_tests.cpp)
 target_link_libraries(suns_strategic_operations_tests PRIVATE Suns::Core)

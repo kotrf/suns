@@ -217,8 +217,11 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             if (!killed && !removed && !reverting) continue;
             for (auto recipient : {f->owner, defender})
                 queue_player_report(state, recipient, PlayerReportKind::Bombardment, star->position,
-                    turn, star->id, planet.id, recipient == f->owner ? f->id : 0, 0,
-                    ProductionKind::ColonyShip, removed, ResearchField::Weapons, 0, {}, killed);
+                    turn, star->id, planet.id, f->id, 0,
+                    ProductionKind::ColonyShip, removed, ResearchField::Weapons, 0, {}, killed, {}, 0,
+                    OperationalLossReport{OperationalLossKind::Bombardment,
+                        recipient == defender ? killed : 0, recipient == defender ? 0 : killed,
+                        recipient == defender ? removed : 0, recipient == defender ? 0 : removed});
             if (!planet.population) {
                 queue_player_report(state, defender, PlayerReportKind::ColonyLost, star->position, turn, star->id, planet.id);
                 planet.owner = 0;
@@ -277,7 +280,10 @@ bool apply_minefield_crossing(GameState& state, Fleet& fleet, Position start, Po
         state.pendingFleetLossContacts.push_back({fleet_player_view(state, fleet), delivery});
     queue_player_report(state, fleet.owner, PlayerReportKind::MineStrike, source, state.turn+1,
         0, 0, fleet.id, 0, ProductionKind::ColonyShip, std::uint32_t(first->kind), ResearchField::Weapons,
-        0, {}, std::uint64_t(std::round(fleet.damagePercent)));
+        0, {}, std::uint64_t(std::round(fleet.damagePercent)), {}, 0,
+        OperationalLossReport{OperationalLossKind::Mines,
+            fleet.damagePercent >= 100 ? fleet.colonists : 0, 0, 0, 0,
+            fleet.damagePercent >= 100 ? fleet_ship_count(fleet) : 0});
     fleet.destination.reset(); fleet.arrivalAction.reset(); fleet.waypointQueue.clear();
     fleet.targetFleet = 0; fleet.repeatOrders = false; fleet.routeTemplate.clear(); fleet.task = FleetTask::None;
     for (auto& p : state.players) if (p.id == fleet.owner)

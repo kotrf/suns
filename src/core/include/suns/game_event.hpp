@@ -71,6 +71,7 @@ struct GameEvent {
     PlayerId contactOwner{};
     WormholeEndpointId wormholeEndpoint{};
     std::optional<SpaceBattleReport> battle;
+    std::optional<OperationalLossReport> losses;
 };
 
 } // namespace suns

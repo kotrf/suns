@@ -625,6 +625,20 @@ struct SpaceBattleReport {
     std::vector<SpaceBattleShot> shots;
 };
 
+enum class OperationalLossKind : std::uint8_t { Ground, Bombardment, Mines };
+inline constexpr std::size_t kOperationalLossKindCount = 3;
+
+// Immutable casualties, relative to the report recipient. These facts must
+// survive changes of ownership and destruction of the referenced objects.
+struct OperationalLossReport {
+    OperationalLossKind kind{OperationalLossKind::Ground};
+    std::uint64_t ownColonistsLost{};
+    std::uint64_t opposingColonistsLost{};
+    std::uint64_t ownInstallationsLost{};
+    std::uint64_t opposingInstallationsLost{};
+    std::uint64_t ownShipsLost{};
+};
+
 // Player-facing operational facts travel independently from fleet telemetry.
 // This keeps the simulation truth authoritative while ensuring that Turn
 // Messages cannot reveal a remote result before its communication packet lands.
@@ -646,6 +660,7 @@ struct PendingPlayerReport {
     Position contactPosition;
     PlayerId contactOwner{};
     std::optional<SpaceBattleReport> battle;
+    std::optional<OperationalLossReport> losses;
 };
 
 struct TechnologyState {
@@ -749,7 +764,23 @@ enum class HistoryMilestoneKind : std::uint8_t {
     GroundInvasionLost,
     GroundDefenseWon,
     SpaceBattle,
+    GroundDefenseLost,
+    Bombardment,
+    MineStrike,
 };
+
+[[nodiscard]] inline std::optional<OperationalLossKind> milestone_loss_kind(HistoryMilestoneKind kind)
+{
+    switch (kind) {
+    case HistoryMilestoneKind::GroundInvasionWon:
+    case HistoryMilestoneKind::GroundInvasionLost:
+    case HistoryMilestoneKind::GroundDefenseWon:
+    case HistoryMilestoneKind::GroundDefenseLost: return OperationalLossKind::Ground;
+    case HistoryMilestoneKind::Bombardment: return OperationalLossKind::Bombardment;
+    case HistoryMilestoneKind::MineStrike: return OperationalLossKind::Mines;
+    default: return std::nullopt;
+    }
+}
 
 struct HistoryMilestone {
     std::uint64_t eventId{};
@@ -767,6 +798,16 @@ struct SpaceBattleTurnStatistics {
     std::uint64_t reports{};
     std::uint64_t ownShipsLost{};
     std::uint64_t opposingShipsLost{};
+};
+
+struct OperationalLossTurnStatistics {
+    bool recorded{}; // Initial and pre-v64 boundaries remain unknown.
+    std::uint64_t reports{};
+    std::uint64_t ownColonistsLost{};
+    std::uint64_t opposingColonistsLost{};
+    std::uint64_t ownInstallationsLost{};
+    std::uint64_t opposingInstallationsLost{};
+    std::uint64_t ownShipsLost{};
 };
 
 // Compact player history: owned assets and delivered reports only, never
@@ -804,6 +845,7 @@ struct EmpireTurnStatistics {
     std::vector<HistoryMilestone> milestones;
     SpaceBattleTurnStatistics battles;
     bool battleStatisticsRecorded{}; // Initial and pre-v63 boundaries are unknown.
+    std::array<OperationalLossTurnStatistics, kOperationalLossKindCount> operationalLosses;
 };
 
 enum class WormholeSignature : std::uint8_t { Strong, Faint, Weak };

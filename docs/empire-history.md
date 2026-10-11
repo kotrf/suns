@@ -106,5 +106,35 @@ later boundary. Totals survive saving and
 PBEM player export without requiring retained Turn Messages, and other players'
 histories/pending reports remain excluded.
 
+Save v64 adds three independent receipt-year operational casualty categories.
+Each report carries an immutable 64-bit loss summary relative to its recipient;
+it is not reconstructed from current objects, survivor counts or percentages.
+Ground attackers and defenders receive reversed own/opposing colonist totals,
+including a defender who loses the colony. Bombardment participants receive
+population and combined factory/mine losses. A mine strike records only its
+fleet owner's destroyed ships (and their embarked colonists); a damaged or
+speed-trap-stopped fleet contributes one report and zero destroyed ships.
+Minefield owners are not told about unseen enemy strikes.
+
+| History metric | Series |
+| --- | --- |
+| Ground losses (colonists/year) | Own and confirmed opposing casualties |
+| Bombardment losses (colonists/year) | Own and confirmed opposing population losses |
+| Bombardment losses (installations/year) | Own and confirmed opposing factories/mines destroyed |
+| Mine losses (ships/year) | Own ships destroyed by a mine strike |
+| Operational reports (reports/year) | Received ground, bombardment and mine-strike reports |
+
+These metrics are empire-wide. The charts mark receipt boundaries, with the
+observed year in marker hover text. Quiet measured years are zero, initial and
+pre-v64 years are gaps. An older report without an exact loss payload makes only
+its category unknown for that boundary, including other partial measurements;
+it cannot turn an incomplete count into a reported zero. Overdue packets go to
+the starting boundary, duplicate IDs are ignored across all historical years,
+and refreshing a boundary preserves its totals. Several bombarding fleets have
+distinct report identities even when their inflicted losses match. Hover labels
+retain exact integer counts even above the floating-point plot's precision.
+Save/PBEM exports preserve totals independently of retained Turn Messages and
+exclude other players' histories and pending packets. Orders remain v19.
+
 Further event categories remain extensions of issue #48; snapshots from older
 saves start at the loaded turn.
