@@ -363,6 +363,23 @@ void overdue_reports_keep_receipt_year()
     assert(first.battles.opposingShipsLost == 3);
     assert(result.state.players.front().history.back().battles.reports == 0);
     assert(result.state.players.back().history.front().battles.reports == 0);
+    auto repeated = result.state;
+    repeated.players.front().pendingPlayerReports = {packet};
+    const auto again = TurnProcessor{}.process(repeated, {});
+    assert(again.players.front().history[0].battles.reports == 1);
+    assert(again.players.front().history[1].battles.reports == 0);
+    assert(again.players.front().history[2].battles.reports == 0);
+
+    auto unmeasured = state;
+    unmeasured.players.front().history.front().milestones.push_back(
+        {123, 1, HistoryMilestoneKind::SpaceBattle, 0, ResearchField::Electronics, 0, 42});
+    record_empire_turn_statistics(unmeasured, {}, true);
+    assert(!unmeasured.players.front().history.front().battleStatisticsRecorded);
+    const auto unknown = TurnProcessor{}.process(unmeasured, {});
+    assert(unknown.players.front().history.front().milestones.size() == 2);
+    assert(!unknown.players.front().history.front().battleStatisticsRecorded);
+    assert(unknown.players.front().history.front().battles.reports == 0);
+    assert(unknown.players.front().history.back().battleStatisticsRecorded);
 }
 
 void founding_cannot_evade_combat()

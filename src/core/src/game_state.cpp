@@ -1767,6 +1767,12 @@ void record_empire_turn_statistics(
             snapshot.battles = player.history.back().battles;
             snapshot.battleStatisticsRecorded = snapshot.battleStatisticsRecorded
                 || player.history.back().battleStatisticsRecorded;
+            // Earlier readers can retain markers without measured casualties.
+            // Refreshing such a year must not turn an unknown total into zero.
+            if (!player.history.back().battleStatisticsRecorded
+                && std::any_of(snapshot.milestones.begin(), snapshot.milestones.end(), [](const auto& marker) {
+                    return marker.kind == HistoryMilestoneKind::SpaceBattle;
+                })) snapshot.battleStatisticsRecorded = false;
             // Rebuilding a boundary to refresh population or ownership does
             // not erase the measured mining output of that already resolved year.
             if (!elapsedYear && player.history.back().extractionRecorded) {

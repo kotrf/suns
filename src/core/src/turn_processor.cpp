@@ -2132,12 +2132,20 @@ TurnResult TurnProcessor::process_with_events(
             snapshot = std::find_if(player->history.begin(), player->history.end(),
                 [&](const auto& record) { return record.turn == event.turn; });
             if (snapshot == player->history.end()) continue;
+            if (std::any_of(player->history.begin(), player->history.end(), [&](const auto& record) {
+                    return std::any_of(record.milestones.begin(), record.milestones.end(),
+                        [&](const auto& marker) { return marker.eventId == event.id; });
+                })) continue;
         }
         auto& milestones = snapshot->milestones;
         if (std::any_of(milestones.begin(), milestones.end(), [&](const auto& recorded) {
                 return recorded.eventId == event.id;
             })) continue;
-        if (*kind == HistoryMilestoneKind::SpaceBattle && event.battle) {
+        const bool unmeasuredBattles = !snapshot->battleStatisticsRecorded
+            && std::any_of(milestones.begin(), milestones.end(), [](const auto& marker) {
+                return marker.kind == HistoryMilestoneKind::SpaceBattle;
+            });
+        if (*kind == HistoryMilestoneKind::SpaceBattle && event.battle && !unmeasuredBattles) {
             snapshot->battleStatisticsRecorded = true;
             auto& totals = snapshot->battles;
             ++totals.reports;

@@ -98,7 +98,11 @@ colony/fleet scopes and comparisons are disabled. Hover gives exact values and
 battle markers show the observed year when it differs from receipt. The range
 controls continue to work. A measured year with no reports is zero; initial and
 pre-v63 years remain gaps, labelled "No battle statistics record". Older ledgers
-are not retrospectively converted into measurements. Totals survive saving and
+are not retrospectively converted into measurements. A year with existing
+unmeasured battle markers remains a gap even when an overdue packet arrives;
+partial new counts cannot pretend to measure its earlier casualties. Report IDs
+are deduplicated across the player's history, including repeat delivery in a
+later boundary. Totals survive saving and
 PBEM player export without requiring retained Turn Messages, and other players'
 histories/pending reports remain excluded.
 
