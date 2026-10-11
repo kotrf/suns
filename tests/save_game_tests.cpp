@@ -1570,6 +1570,8 @@ void space_battle_round_trip()
     const auto packet = make_player_turn(loaded, 2);
     assert(packet.state.pendingFleetLossContacts.empty() && packet.state.players.front().pendingPlayerReports.empty());
     assert(packet.state.fleets.front().id == 2);
+    assert(packet.state.players.front().history.back().battleStatisticsRecorded);
+    assert(packet.state.players.front().history.back().battles.reports == 0);
     auto resolved = loaded.state;
     std::vector<GameEvent> battleReports;
     for (int i = 0; i < 20 && battleReports.empty(); ++i) {
@@ -1581,6 +1583,19 @@ void space_battle_round_trip()
     save.state = resolved; save.strategicMessages = battleReports;
     assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
     assert(loaded.strategicMessages.front().battle->shots.front().armorDamage > 0);
+    const auto& stats = loaded.state.players.back().history.back();
+    assert(stats.battleStatisticsRecorded && stats.battles.reports == 1
+        && stats.battles.ownShipsLost == 1 && stats.battles.opposingShipsLost == 0);
+    auto playerPacket = make_player_turn(loaded, 2);
+    playerPacket.strategicMessages.clear(); // The ledger is not needed to read saved totals.
+    assert(write_save_game_file(path, playerPacket, error));
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.size() == 1 && loaded.state.players.front().id == 2);
+    assert(loaded.state.players.front().history.back().battles.ownShipsLost == 1);
+    assert(loaded.strategicMessages.empty());
+    loaded.state.players.front().history.back().battleStatisticsRecorded = false;
+    assert(write_save_game_file(path, loaded, error));
+    assert(!read_save_game_file(path, playerPacket, error)); // Unrecorded nonzero totals are corrupt.
     // A genuine v60 state keeps Stars! equipment, with no battle extension.
     save.state = make_demo_game(); save.strategicMessages.clear();
     save.playerTokens = {{1, 12}};

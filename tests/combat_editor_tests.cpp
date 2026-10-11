@@ -5,9 +5,14 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDockWidget>
+#include <QDialog>
 #include <QEventLoop>
 #include <QGraphicsView>
 #include <QListWidget>
+#include <QLabel>
+#include <QMouseEvent>
+#include <QSpinBox>
+#include <QToolTip>
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -98,6 +103,41 @@ int main(int argc, char** argv)
         << " scale " << map->transform().m11() << " scene " << map->sceneRect().left() << "," << map->sceneRect().right() << '\n';
     assert(std::abs(center.x() - 80) < 2 && std::abs(center.y() - 120) < 2);
     dock->grab().save("/tmp/suns-combat-report.png");
+
+    window.installEmpireHistory();
+    auto* metric = window.findChild<QComboBox*>("historyMetric");
+    auto* scope = window.findChild<QComboBox*>("historyScope");
+    auto* compare = window.findChild<QComboBox*>("historyCompare");
+    auto* chart = window.findChild<QWidget*>("empireHistoryChart");
+    auto* summary = window.findChild<QLabel*>("historySummary");
+    auto* history = window.findChild<QDialog*>("empireHistoryDialog");
+    assert(metric && scope && compare && chart && summary && history);
+    history->show(); app.processEvents();
+    metric->setCurrentIndex(metric->findText("Military losses (ships/year)"));
+    assert(!scope->isEnabled() && !compare->isEnabled());
+    assert(scope->currentData().toUInt() == 0);
+    assert(summary->text().contains("report receipt year"));
+    auto hoverYear = [&](bool latest) {
+        const QPointF point(latest ? chart->width() - 18 : 72, chart->height() / 2);
+        QMouseEvent hover(QEvent::MouseMove, point, chart->mapToGlobal(point.toPoint()),
+            Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(chart, &hover);
+        app.processEvents();
+        return QToolTip::text();
+    };
+    const auto losses = hoverYear(true);
+    assert(losses.contains("Own ships lost: 1"));
+    assert(losses.contains("Opposing ships lost (confirmed): 1"));
+    assert(hoverYear(false).contains("No battle statistics record"));
+    history->grab().save("/tmp/suns-battle-history.png");
+    metric->setCurrentIndex(metric->findText("Battle reports (reports/year)"));
+    assert(hoverYear(true).contains("Reports received: 1"));
+    auto* firstYear = window.findChild<QSpinBox*>("historyFirstTurn");
+    assert(firstYear);
+    firstYear->setValue(2);
+    assert(hoverYear(false).contains("Reports received: 1"));
+    metric->setCurrentIndex(0);
+    assert(scope->isEnabled() && compare->isEnabled());
 
     SaveGameData save;
     save.campaignId = 17; save.turnToken = 18;

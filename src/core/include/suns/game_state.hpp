@@ -761,8 +761,16 @@ struct HistoryMilestone {
     FleetId fleet{};
 };
 
-// Compact player-owned history. It contains no enemy or unsurveyed truth and
-// can therefore later back statistics, PBEM exports and replay inspection.
+// Totals from immutable space-battle reports received at this boundary.
+// Opposing losses are confirmed casualties, not kills attributed to this player.
+struct SpaceBattleTurnStatistics {
+    std::uint64_t reports{};
+    std::uint64_t ownShipsLost{};
+    std::uint64_t opposingShipsLost{};
+};
+
+// Compact player history: owned assets and delivered reports only, never
+// hidden authoritative truth. Safe for statistics, PBEM exports and replays.
 struct EmpireTurnStatistics {
     std::uint64_t turn{};
     std::uint64_t population{};
@@ -794,6 +802,8 @@ struct EmpireTurnStatistics {
     bool fleetDamageRecorded{}; // False for pre-v50 history.
     // Only events delivered to this player at this planning boundary.
     std::vector<HistoryMilestone> milestones;
+    SpaceBattleTurnStatistics battles;
+    bool battleStatisticsRecorded{}; // Initial and pre-v63 boundaries are unknown.
 };
 
 enum class WormholeSignature : std::uint8_t { Strong, Faint, Weak };

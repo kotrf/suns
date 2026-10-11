@@ -1710,6 +1710,7 @@ void record_empire_turn_statistics(
     for (auto& player : state.players) {
         auto snapshot = empire_turn_statistics(state, player.id);
         snapshot.extractionRecorded = elapsedYear;
+        snapshot.battleStatisticsRecorded = elapsedYear;
         for (const auto& mined : extraction) {
             if (mined.owner != player.id) continue;
             snapshot.extraction.ironium += mined.minerals.ironium;
@@ -1761,6 +1762,11 @@ void record_empire_turn_statistics(
         }
         if (!player.history.empty() && player.history.back().turn == state.turn) {
             snapshot.milestones = player.history.back().milestones;
+            // Report receipt is already measured for this boundary, even if
+            // assets are refreshed or the measurement call is repeated.
+            snapshot.battles = player.history.back().battles;
+            snapshot.battleStatisticsRecorded = snapshot.battleStatisticsRecorded
+                || player.history.back().battleStatisticsRecorded;
             // Rebuilding a boundary to refresh population or ownership does
             // not erase the measured mining output of that already resolved year.
             if (!elapsedYear && player.history.back().extractionRecorded) {

@@ -84,6 +84,15 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     for (const auto& f : state.pendingFleetLossContacts) writeStrategicFleet(out, f.lastContact);
     out << quint32(state.wormholeTransits.size());
     for (const auto& f : state.wormholeTransits) writeStrategicFleet(out, f.lastContact);
+    // Compact receipt-year battle history, keyed to the existing snapshots.
+    out << quint32(state.players.size());
+    for (const auto& player : state.players) {
+        out << quint32(player.id) << quint32(player.history.size());
+        for (const auto& snapshot : player.history)
+            out << quint64(snapshot.turn) << quint8(snapshot.battleStatisticsRecorded ? 1 : 0)
+                << quint64(snapshot.battles.reports) << quint64(snapshot.battles.ownShipsLost)
+                << quint64(snapshot.battles.opposingShipsLost);
+    }
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -133,5 +142,26 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
     for (auto& f : state.pendingFleetLossContacts) readStrategicFleet(in, f.lastContact);
     if (!readCount(in, count) || count != state.wormholeTransits.size()) { markCorrupt(stream); return; }
     for (auto& f : state.wormholeTransits) readStrategicFleet(in, f.lastContact);
+    if (gReadSaveFormatVersion >= 63) {
+        if (!readCount(in, count) || count != state.players.size()) { markCorrupt(stream); return; }
+        for (auto& player : state.players) {
+            quint32 id{}; in >> id;
+            if (id != player.id || !readCount(in, count) || count != player.history.size()) {
+                markCorrupt(stream); return;
+            }
+            for (auto& snapshot : player.history) {
+                quint64 turn{}, reports{}, own{}, opposing{}; quint8 recorded{};
+                in >> turn >> recorded >> reports >> own >> opposing;
+                const auto markers = std::count_if(snapshot.milestones.begin(), snapshot.milestones.end(),
+                    [](const auto& marker) { return marker.kind == HistoryMilestoneKind::SpaceBattle; });
+                if (turn != snapshot.turn || recorded > 1
+                    || (!recorded && (reports || own || opposing))
+                    || (recorded && reports != std::uint64_t(markers))
+                    || (!reports && (own || opposing))) { markCorrupt(stream); return; }
+                snapshot.battleStatisticsRecorded = recorded == 1;
+                snapshot.battles = {reports, own, opposing};
+            }
+        }
+    }
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

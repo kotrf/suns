@@ -40,7 +40,7 @@ The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 
 Save v31 introduced session mode, host inbox, player tokens, racial environment rules
 and projected observations. Earlier saves (v12–30) remain readable with their
-original scalar habitability. The current formats are save v62 and orders v19;
+original scalar habitability. The battle-history branch uses save v63 and orders v19;
 supported save readers cover v12–62 and order readers v1–19. Multiplayer clients
 should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;

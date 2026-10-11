@@ -209,6 +209,7 @@ void MainWindow::installEmpireHistory()
     historySummary_ = new QLabel(content);
     historySummary_->setObjectName("historySummary");
     historySummary_->setTextFormat(Qt::PlainText);
+    historySummary_->setWordWrap(true);
     layout->addWidget(historySummary_);
 
     auto* controls = new QHBoxLayout;
@@ -219,7 +220,14 @@ void MainWindow::installEmpireHistory()
         "Technology levels", "Research invested (RP)", "Mineral extraction (kt/year)",
         "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)",
         "Confirmed fleet fuel (kt)", "Confirmed fleet cargo (kt)",
-        "Confirmed fleet damage (%)"});
+        "Confirmed fleet damage (%)", "Military losses (ships/year)",
+        "Battle reports (reports/year)"});
+    historyMetric_->setItemData(14,
+        "Confirmed space-battle losses, credited when reports arrive; opposing losses are not attributed kills",
+        Qt::ToolTipRole);
+    historyMetric_->setItemData(15,
+        "Space-battle reports received this year; a remote battle may have happened earlier",
+        Qt::ToolTipRole);
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -307,6 +315,7 @@ void MainWindow::refreshEmpireHistory()
     const std::vector<EmpireTurnStatistics> empty;
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
+    const bool battleMetric = historyMetric_->currentIndex() == 14 || historyMetric_->currentIndex() == 15;
     const bool remoteMetric = historyMetric_->currentIndex() == 10;
     const bool fleetMetric = historyMetric_->currentIndex() == 4
         || historyMetric_->currentIndex() == 5
@@ -433,6 +442,9 @@ void MainWindow::refreshEmpireHistory()
         .arg(QString::fromStdString(player->name))
         .arg(static_cast<qulonglong>(history.size()))
         .arg(static_cast<qulonglong>(history.back().turn)));
+    if (battleMetric)
+        historySummary_->setText(historySummary_->text()
+            + " — Confirmed space battles, by report receipt year");
     if (followingMap && colonyId == 0) {
         historySummary_->setText(fleetMetric
             ? "Select a recorded fleet on the map to view its history."
@@ -473,6 +485,11 @@ void MainWindow::refreshEmpireHistory()
                 if (remoteMetric && !snapshot->remoteExtractionRecorded) {
                     line.values.push_back(std::numeric_limits<double>::quiet_NaN());
                     line.exactValues.push_back("No remote mining record");
+                    continue;
+                }
+                if (battleMetric && !snapshot->battleStatisticsRecorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No battle statistics record");
                     continue;
                 }
                 const double number = value(*snapshot);
@@ -711,6 +728,14 @@ void MainWindow::refreshEmpireHistory()
             if (seriesColonyId) addFleet("Damage (%)", "#e07575",
                 [](const auto& s) { return s.damagePercent; }, 1);
             else addKnownDamage();
+            break;
+        case 14:
+            add("Own ships lost", "#e07575", [](const auto& s) { return double(s.battles.ownShipsLost); });
+            add("Opposing ships lost (confirmed)", "#e2bb70",
+                [](const auto& s) { return double(s.battles.opposingShipsLost); });
+            break;
+        case 15:
+            add("Reports received", "#78b8f0", [](const auto& s) { return double(s.battles.reports); });
             break;
         default: break;
         }

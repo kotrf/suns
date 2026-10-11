@@ -84,8 +84,23 @@ empire-only metrics.
 
 Delivered space-battle reports add historical markers in save v61. Undelivered
 battles do not immediately reveal remote casualties through fleet aggregates:
-those fleets use their owner player-view until the result arrives. Separate
-military-loss time series remain future work.
+those fleets use their owner player-view until the result arrives. Save v63 adds compact receipt-year space-battle totals for each player: received
+reports, own ships lost, and confirmed opposing ships lost. Multiple battles
+aggregate in one boundary; refreshing it preserves the measurements. Casualties
+come from complete immutable unit summaries, so truncated volley logs do not
+reduce the totals. These are confirmed opposing losses, not kills attributed to
+the player in a multi-owner battle. Mining accidents, ground invasions and
+bombardment losses are outside these space-battle series.
+
+Choose **Military losses (ships/year)** for the two casualty lines or **Battle
+reports (reports/year)** for the received report count. Both are empire-wide;
+colony/fleet scopes and comparisons are disabled. Hover gives exact values and
+battle markers show the observed year when it differs from receipt. The range
+controls continue to work. A measured year with no reports is zero; initial and
+pre-v63 years remain gaps, labelled "No battle statistics record". Older ledgers
+are not retrospectively converted into measurements. Totals survive saving and
+PBEM player export without requiring retained Turn Messages, and other players'
+histories/pending reports remain excluded.
 
 Further event categories remain extensions of issue #48; snapshots from older
 saves start at the loaded turn.
