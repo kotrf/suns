@@ -71,3 +71,5 @@ is about 9 px across, versus 6.4 px in Spectral). Unknown and hostile systems
 use the baseline enlarged size; hidden planetary data does not affect it.
 Colour, uncertainty and terraforming knowledge rules still apply.
 Markers stay screen-sized while zooming and use the same nearest-center selection.
+Scene rebuilds apply the active mode before refreshing labels, so selecting a
+system does not briefly restore Spectral sizes or colours.

@@ -358,8 +358,10 @@ int main(int argc, char** argv)
         assert(markerWidth(1) == homeWidth);
         click(window, {-80, -55}, Qt::LeftButton);
         assert(MainWindowTestAccess::selectedStar(window) == 2);
+        assert(markerWidth(1) == homeWidth);
         click(window, {-65, -55}, Qt::LeftButton);
         assert(MainWindowTestAccess::selectedStar(window) == 3);
+        assert(markerWidth(1) == homeWidth);
     }
     mode->setCurrentIndex(mode->findData(0));
     assert(markerWidth(1) == spectralWidth);
