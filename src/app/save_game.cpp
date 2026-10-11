@@ -20,7 +20,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 63;
+constexpr quint32 kSaveFormatVersion = 64;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -805,6 +805,75 @@ void readBattle(QDataStream& stream, std::optional<SpaceBattleReport>& value)
     value = std::move(battle);
 }
 
+bool hasLossPayload(GameEventKind kind)
+{
+    return kind == GameEventKind::GroundInvasionWon || kind == GameEventKind::GroundInvasionLost
+        || kind == GameEventKind::GroundDefenseWon || kind == GameEventKind::ColonyLost
+        || kind == GameEventKind::Bombardment || kind == GameEventKind::MineStrike;
+}
+
+bool hasLossPayload(PlayerReportKind kind)
+{
+    return kind == PlayerReportKind::GroundInvasionWon || kind == PlayerReportKind::GroundInvasionLost
+        || kind == PlayerReportKind::GroundDefenseWon || kind == PlayerReportKind::ColonyLost
+        || kind == PlayerReportKind::Bombardment || kind == PlayerReportKind::MineStrike;
+}
+
+void writeLosses(QDataStream& stream, const std::optional<OperationalLossReport>& losses)
+{
+    stream << quint8(losses.has_value());
+    if (!losses) return;
+    writeEnum(stream, losses->kind);
+    stream << quint64(losses->ownColonistsLost) << quint64(losses->opposingColonistsLost)
+           << quint64(losses->ownInstallationsLost) << quint64(losses->opposingInstallationsLost)
+           << quint64(losses->ownShipsLost);
+}
+
+void readLosses(QDataStream& stream, std::optional<OperationalLossReport>& losses)
+{
+    quint8 present{}; stream >> present;
+    if (present > 1) { markCorrupt(stream); return; }
+    if (!present) { losses.reset(); return; }
+    OperationalLossReport value;
+    if (!readEnum(stream, value.kind, quint8(OperationalLossKind::Mines))) return;
+    quint64 own{}, opposing{}, ownInstallations{}, opposingInstallations{}, ships{};
+    stream >> own >> opposing >> ownInstallations >> opposingInstallations >> ships;
+    value.ownColonistsLost = own; value.opposingColonistsLost = opposing;
+    value.ownInstallationsLost = ownInstallations; value.opposingInstallationsLost = opposingInstallations;
+    value.ownShipsLost = ships;
+    if ((value.kind != OperationalLossKind::Bombardment && (ownInstallations || opposingInstallations))
+        || (value.kind != OperationalLossKind::Mines && ships)
+        || (value.kind == OperationalLossKind::Mines && opposing)) markCorrupt(stream);
+    losses = value;
+}
+
+bool lossesMatchEvent(const std::optional<OperationalLossReport>& losses, GameEventKind kind)
+{
+    if (!losses) return true; // Earlier packets may have no exact summary.
+    switch (losses->kind) {
+    case OperationalLossKind::Ground:
+        return kind == GameEventKind::GroundInvasionWon || kind == GameEventKind::GroundInvasionLost
+            || kind == GameEventKind::GroundDefenseWon || kind == GameEventKind::ColonyLost;
+    case OperationalLossKind::Bombardment: return kind == GameEventKind::Bombardment;
+    case OperationalLossKind::Mines: return kind == GameEventKind::MineStrike;
+    }
+    return false;
+}
+
+bool lossesMatchReport(const std::optional<OperationalLossReport>& losses, PlayerReportKind kind)
+{
+    if (!losses) return true;
+    switch (kind) {
+    case PlayerReportKind::GroundInvasionWon: return lossesMatchEvent(losses, GameEventKind::GroundInvasionWon);
+    case PlayerReportKind::GroundInvasionLost: return lossesMatchEvent(losses, GameEventKind::GroundInvasionLost);
+    case PlayerReportKind::GroundDefenseWon: return lossesMatchEvent(losses, GameEventKind::GroundDefenseWon);
+    case PlayerReportKind::ColonyLost: return lossesMatchEvent(losses, GameEventKind::ColonyLost);
+    case PlayerReportKind::Bombardment: return lossesMatchEvent(losses, GameEventKind::Bombardment);
+    case PlayerReportKind::MineStrike: return lossesMatchEvent(losses, GameEventKind::MineStrike);
+    default: return false;
+    }
+}
+
 void writeGameEvent(QDataStream& stream, const GameEvent& value)
 {
     stream << static_cast<quint64>(value.id)
@@ -829,6 +898,7 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
     stream << static_cast<quint32>(value.contactOwner);
     stream << static_cast<quint32>(value.wormholeEndpoint);
     if (value.kind == GameEventKind::SpaceBattle) writeBattle(stream, value.battle);
+    if (hasLossPayload(value.kind)) writeLosses(stream, value.losses);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -909,6 +979,10 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
             || !same_position(value.battle->position, value.position)
             || std::none_of(value.battle->units.begin(), value.battle->units.end(),
                 [&](const auto& unit) { return unit.owner == value.recipient; })) markCorrupt(stream);
+    }
+    if (gReadSaveFormatVersion >= 64 && hasLossPayload(value.kind)) {
+        readLosses(stream, value.losses);
+        if (!lossesMatchEvent(value.losses, value.kind)) markCorrupt(stream);
     }
 }
 
@@ -1114,7 +1188,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             quint32 planet{};
             stream >> id >> observedTurn;
             if (!readEnum(stream, marker.kind,
-                    static_cast<quint8>(gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
+                    static_cast<quint8>(gReadSaveFormatVersion >= 64 ? HistoryMilestoneKind::MineStrike : gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
                         ? gReadSaveFormatVersion >= 51
                             ? HistoryMilestoneKind::GroundDefenseWon
                             : HistoryMilestoneKind::FleetStalledForFuel
@@ -1134,7 +1208,8 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             const bool fleetEvent = marker.kind == HistoryMilestoneKind::FleetStalledForFuel
                 || marker.kind == HistoryMilestoneKind::EnemyFleetDetected
                 || marker.kind == HistoryMilestoneKind::EnemyFleetLost
-                || marker.kind == HistoryMilestoneKind::SpaceBattle;
+                || marker.kind == HistoryMilestoneKind::SpaceBattle
+                || marker.kind == HistoryMilestoneKind::MineStrike;
             if (marker.eventId == 0 || marker.observedTurn > value.turn
                 || (marker.kind == HistoryMilestoneKind::ResearchCompleted
                     ? marker.technologyLevel == 0
@@ -1312,6 +1387,7 @@ void writePlayer(QDataStream& stream, const Player& value)
         writePosition(stream, report.contactPosition);
         stream << static_cast<quint32>(report.contactOwner);
         if (report.kind == PlayerReportKind::SpaceBattle) writeBattle(stream, report.battle);
+        if (hasLossPayload(report.kind)) writeLosses(stream, report.losses);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -1498,6 +1574,10 @@ void readPlayer(QDataStream& stream, Player& value)
                     || !same_position(report.battle->position, report.position)
                     || std::none_of(report.battle->units.begin(), report.battle->units.end(),
                         [&](const auto& unit) { return unit.owner == value.id; })))) markCorrupt(stream);
+        }
+        if (gReadSaveFormatVersion >= 64 && hasLossPayload(report.kind)) {
+            readLosses(stream, report.losses);
+            if (!lossesMatchReport(report.losses, report.kind)) markCorrupt(stream);
         }
         value.pendingPlayerReports.push_back(report);
     }

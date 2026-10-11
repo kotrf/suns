@@ -1,28 +1,34 @@
 # Project status and development handoff
 
-Snapshot: **11 October 2026, Dialog #06**. Main is now
-`95e3fcf988c7c2359e10c9e359e818dd768c1eba`, after
-[PR #177](https://github.com/kotrf/suns/pull/177) merged by the user's explicit
-request; #176 is closed. The [merge CI run](https://github.com/kotrf/suns/actions/runs/38138057042)
-passed all **50 CTest targets**. Designer, Research and History are separate
-non-modal windows, and Hab stars are larger. Workspace v6 resets older layouts
-once while retaining main-window geometry; an older Custom must be saved again.
-The user is testing the merged game locally; results of that playtest are pending.
+Snapshot: **12 October 2026, Dialog #07**. The starting baseline is main
+`6b90be08ee68c19c303c2d38fa57daa0c3b1e0aa`, after #179 (space-battle history)
+and #180 (official Qt toolchain diagnostics) were merged. The user authorized
+several planned tasks and merging after successful checks.
 
-## Current authorized implementation
+## Current implementation
 
-After merging #177, the user requested the next unfinished plan slice. Selected
-[#178](https://github.com/kotrf/suns/issues/178), a continuation of #48:
-compact statistics of received space-battle reports and confirmed own/opposing
-ship losses, with yearly graphs in History. Branch `feat/battle-history` is not
-merged. Measurements use report receipt boundaries; they do not expose remote
-battles before communication delivery. See [Empire history](empire-history.md).
+Focused [#181](https://github.com/kotrf/suns/issues/181), continuing #48, adds
+three planned categories: ground casualties, bombardment population/infrastructure
+losses, and mine-strike destroyed ships/report counts. Reports carry immutable
+recipient-relative summaries; History credits them to communication receipt
+boundaries, retains unknown years as gaps and ignores duplicate packet IDs.
+Save v64 stores pending/delivered summaries and compact per-category totals;
+orders remain v19. See [Empire history](empire-history.md).
 
+Validation: the full local Qt 6.4 Debug build and **51/51 CTest targets** pass.
+Core coverage includes both ground outcomes, recipient isolation, multiple
+bombarders, delayed mine destruction, overdue/duplicate packets and unknown
+older categories. Save/PBEM round trips and malformed summaries are checked;
+GUI coverage exercises all five metrics, gaps/scopes and exact 64-bit hover
+values. The charts were visually inspected. CI is tracked by the implementation
+PR linked from #181.
+
+Designer, Research and History remain separate non-modal windows. Workspace v6
+retains main-window geometry and keeps these tools independent of dock presets.
 Main already includes [strategic fleet operations](strategic-operations.md):
 operational bombs, three minefield types/sweeping, cloaking, jamming, emission
-modes/decoys and finite field observations/novel wreck recovery. Focused issue
-[#172](https://github.com/kotrf/suns/issues/172) is closed; broader #58/#59/#101
-remain partial. Do not repeat that work or close umbrella issues for the slice.
+modes/decoys and finite field observations/novel wreck recovery. Broader
+#48/#58/#59/#101 remain partial; do not close umbrellas for this slice.
 
 ## Implemented since the previous handoff
 
@@ -42,6 +48,8 @@ remain partial. Do not repeat that work or close umbrella issues for the slice.
 | [#170](https://github.com/kotrf/suns/pull/170) | Automatic simultaneous-motion fleet encounters, beams/torpedoes, shields/armor, ship losses and delayed immutable reports | [Space combat](space-combat.md) |
 | [#173](https://github.com/kotrf/suns/pull/173) | Bombardment, physical minefields, cloaking/EW, emission modes and finite field science, available in fleet operations | [Strategic operations](strategic-operations.md) |
 | [#175](https://github.com/kotrf/suns/pull/175) | Immediate Warp editing for a selected route leg, per-leg fuel/remaining fuel and a red first fuel-limited leg; issue #174 closed | [Route forecasts](route-forecast.md) |
+| [#179](https://github.com/kotrf/suns/pull/179) | Receipt-year space-battle casualties/report counts, save v63; #178 closed | [History](empire-history.md) |
+| [#180](https://github.com/kotrf/suns/pull/180) | Official and distro Qt qmake diagnostics for the self-hosted runner | CI workflow |
 | [#177](https://github.com/kotrf/suns/pull/177) | Separate Designer, Research and History windows; larger knowledge-safe Hab stars; issue #176 closed | [Workspace](dockable-workspace.md), [History](empire-history.md), [Map](map-visuals.md) |
 
 Reference equipment follows Stars! progression and ratings. Suns! remains its own
@@ -68,12 +76,12 @@ adaptations, not claims of an exact Stars! implementation.
 
 ## Formats and CI
 
-Main uses save **v62** (readers v12–62) and orders **v19** (readers v1–19).
-The battle-history branch writes save **v63**, storing compact measurements in the
-bounded state extension, and leaves orders v19 unchanged. Existing save readers
-remain; earlier history gets unknown battle statistics rather than invented totals. Host and players must use the same build. Version numbers in
-older thematic documents describe when a feature was introduced unless explicitly
-identified as current. Legacy designs and campaigns retain documented old rules.
+This slice uses save **v64** (existing readers v12–64) and orders **v19**
+(readers v1–19). Earlier casualty history remains unknown; old pending reports
+without exact summaries never invent measurements. Host and players must use
+the same build. Version numbers in older thematic documents describe when a
+feature was introduced unless explicitly identified as current. Legacy designs
+and campaigns retain documented old rules.
 
 **Prototype save policy (11 October 2026):** backward compatibility of save files
 is no longer a requirement. Future save-format changes may reject old campaigns
@@ -103,8 +111,8 @@ These are open directions, not authorization to start every item:
   separate shared GameSession refactor remains pending.
 - [#48](https://github.com/kotrf/suns/issues/48): empire/colony graphs, extraction,
   freight, fleet scopes and battle markers exist. #178 implements receipt-year
-  space-battle losses/report counts; other military/event categories and history
-  refinement remain follow-ups.
+  space-battle losses/report counts; #181 adds ground/bombardment/mine
+  categories. Further history refinement remains a follow-up.
 - [#94](https://github.com/kotrf/suns/issues/94): logical slot migration, graphical
   fitting, drag/drop, keyboard controls and catalog filters exist; finish the
   live UI acceptance review and remaining polish.
@@ -113,10 +121,10 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-Collect the user's main playtest results while completing the authorized
-battle-history slice #178. Separate windows #176 are merged in #177. Later
-candidates include station fitting/combat, colony defenses/scars or battle
-doctrines/diplomacy; choose the next slice explicitly.
+The #181 operational casualty categories are implemented. Next candidates include
+station fitting/combat, colony defenses/scars or battle doctrines/diplomacy;
+choose a focused slice from their unmet requirements and collect playtest results.
+Transport networks #53 remain late; #108 still requires separate discussion.
 
 Implementation goes through a branch and reviewed PR; merge only on the user's
 explicit instruction. GitHub [#123](https://github.com/kotrf/suns/issues/123) and

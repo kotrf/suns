@@ -46,7 +46,8 @@ void queue_player_report(
     MineralCargo deliveredMinerals = {},
     std::uint64_t deliveredColonists = 0,
     Position contactPosition = {},
-    PlayerId contactOwner = 0);
+    PlayerId contactOwner = 0,
+    std::optional<OperationalLossReport> losses = {});
 
 // Detect transitions in physical sensor coverage. Reports travel through the
 // same communication channel as fleet operations, including remote scouts.

@@ -221,13 +221,18 @@ void MainWindow::installEmpireHistory()
         "Freight delivered to colonies (kt/year)", "Remote extraction (kt/year)",
         "Confirmed fleet fuel (kt)", "Confirmed fleet cargo (kt)",
         "Confirmed fleet damage (%)", "Military losses (ships/year)",
-        "Battle reports (reports/year)"});
+        "Battle reports (reports/year)", "Ground losses (colonists/year)",
+        "Bombardment losses (colonists/year)", "Bombardment losses (installations/year)",
+        "Mine losses (ships/year)", "Operational reports (reports/year)"});
     historyMetric_->setItemData(14,
         "Confirmed space-battle losses, credited when reports arrive; opposing losses are not attributed kills",
         Qt::ToolTipRole);
     historyMetric_->setItemData(15,
         "Space-battle reports received this year; a remote battle may have happened earlier",
         Qt::ToolTipRole);
+    for (int i = 16; i <= 20; ++i)
+        historyMetric_->setItemData(i, "Confirmed casualties and reports, credited in the year communication arrives",
+            Qt::ToolTipRole);
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -316,6 +321,10 @@ void MainWindow::refreshEmpireHistory()
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
     const bool battleMetric = historyMetric_->currentIndex() == 14 || historyMetric_->currentIndex() == 15;
+    const int metric = historyMetric_->currentIndex();
+    const bool operationalMetric = metric >= 16 && metric <= 20;
+    const auto operationalKind = metric == 16 ? OperationalLossKind::Ground
+        : metric == 19 ? OperationalLossKind::Mines : OperationalLossKind::Bombardment;
     const bool remoteMetric = historyMetric_->currentIndex() == 10;
     const bool fleetMetric = historyMetric_->currentIndex() == 4
         || historyMetric_->currentIndex() == 5
@@ -445,6 +454,8 @@ void MainWindow::refreshEmpireHistory()
     if (battleMetric)
         historySummary_->setText(historySummary_->text()
             + " — Confirmed space battles, by report receipt year");
+    if (operationalMetric)
+        historySummary_->setText(historySummary_->text() + " — Confirmed losses, by report receipt year");
     if (followingMap && colonyId == 0) {
         historySummary_->setText(fleetMetric
             ? "Select a recorded fleet on the map to view its history."
@@ -469,7 +480,9 @@ void MainWindow::refreshEmpireHistory()
             return seriesLabel.isEmpty() ? name : seriesLabel + " / " + name;
         };
         const auto add = [&](QString name, QColor color,
-                             std::function<double(const EmpireTurnStatistics&)> value, int decimals = 0) {
+                             std::function<double(const EmpireTurnStatistics&)> value, int decimals = 0,
+                             std::optional<OperationalLossKind> lossKind = {},
+                             std::function<QString(const EmpireTurnStatistics&)> exact = {}) {
             HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
             for (const auto* snapshot : shown) {
                 if (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded) {
@@ -492,11 +505,22 @@ void MainWindow::refreshEmpireHistory()
                     line.exactValues.push_back("No battle statistics record");
                     continue;
                 }
+                if (lossKind && !snapshot->operationalLosses[static_cast<std::size_t>(*lossKind)].recorded) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back("No operational loss record");
+                    continue;
+                }
                 const double number = value(*snapshot);
                 line.values.push_back(number);
-                line.exactValues.push_back(QString::number(number, 'f', decimals));
+                line.exactValues.push_back(exact ? exact(*snapshot) : QString::number(number, 'f', decimals));
             }
             series.push_back(std::move(line));
+        };
+        const auto addLoss = [&](QString name, QColor color, OperationalLossKind kind,
+                                 std::uint64_t OperationalLossTurnStatistics::* member) {
+            const auto value = [=](const auto& s) { return s.operationalLosses[static_cast<std::size_t>(kind)].*member; };
+            add(std::move(name), std::move(color), [=](const auto& s) { return double(value(s)); }, 0, kind,
+                [=](const auto& s) { return QString::number(qulonglong(value(s))); });
         };
         const auto addColony = [&](QString name, QColor color,
                                   std::function<double(const ColonyTurnStatistics&)> value, int decimals = 0) {
@@ -737,6 +761,24 @@ void MainWindow::refreshEmpireHistory()
         case 15:
             add("Reports received", "#78b8f0", [](const auto& s) { return double(s.battles.reports); });
             break;
+        case 16:
+        case 17:
+        case 18:
+            addLoss(metric == 18 ? "Own installations lost" : "Own colonists lost", "#e07575", operationalKind,
+                metric == 18 ? &OperationalLossTurnStatistics::ownInstallationsLost : &OperationalLossTurnStatistics::ownColonistsLost);
+            addLoss(metric == 18 ? "Opposing installations lost (confirmed)" : "Opposing colonists lost (confirmed)", "#e2bb70", operationalKind,
+                metric == 18 ? &OperationalLossTurnStatistics::opposingInstallationsLost : &OperationalLossTurnStatistics::opposingColonistsLost);
+            break;
+        case 19:
+            addLoss("Own ships lost to mines", "#e07575", OperationalLossKind::Mines,
+                &OperationalLossTurnStatistics::ownShipsLost);
+            break;
+        case 20:
+            for (std::size_t i = 0; i < kOperationalLossKindCount; ++i)
+                addLoss(QStringList{"Ground reports", "Bombardment reports", "Mine-strike reports"}[i],
+                    QList<QColor>{QColor("#8dcc9e"), QColor("#e2bb70"), QColor("#78b8f0")}[i],
+                    static_cast<OperationalLossKind>(i), &OperationalLossTurnStatistics::reports);
+            break;
         default: break;
         }
     };
@@ -803,6 +845,18 @@ void MainWindow::refreshEmpireHistory()
                 break;
             case HistoryMilestoneKind::SpaceBattle:
                 label = QString("Space battle involving fleet %1").arg(event.fleet);
+                color = QColor("#e07575");
+                break;
+            case HistoryMilestoneKind::GroundDefenseLost:
+                label = QString("Planet %1 lost in ground combat").arg(event.planet);
+                color = QColor("#e07575");
+                break;
+            case HistoryMilestoneKind::Bombardment:
+                label = QString("Bombardment of planet %1").arg(event.planet);
+                color = QColor("#e2bb70");
+                break;
+            case HistoryMilestoneKind::MineStrike:
+                label = QString("Fleet %1 struck a minefield").arg(event.fleet);
                 color = QColor("#e07575");
                 break;
             }

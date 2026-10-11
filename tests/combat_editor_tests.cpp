@@ -139,6 +139,40 @@ int main(int argc, char** argv)
     metric->setCurrentIndex(0);
     assert(scope->isEnabled() && compare->isEnabled());
 
+    auto operationalState = result.state;
+    for (const auto kind : {OperationalLossKind::Ground, OperationalLossKind::Bombardment, OperationalLossKind::Mines}) {
+        PendingPlayerReport packet; packet.planet = 1; packet.fleet = 1;
+        packet.kind = kind == OperationalLossKind::Ground ? PlayerReportKind::GroundInvasionLost
+            : kind == OperationalLossKind::Bombardment ? PlayerReportKind::Bombardment : PlayerReportKind::MineStrike;
+        packet.observedTurn = 2; packet.deliveryTurn = 3;
+        packet.losses = OperationalLossReport{kind,kind == OperationalLossKind::Ground ? 9'007'199'254'740'993ULL : 100ULL,
+            kind == OperationalLossKind::Mines ? 0ULL : 200ULL,
+            kind == OperationalLossKind::Bombardment ? 3ULL : 0ULL,
+            kind == OperationalLossKind::Bombardment ? 4ULL : 0ULL,
+            kind == OperationalLossKind::Mines ? 2ULL : 0ULL};
+        operationalState.players[0].pendingPlayerReports.push_back(packet);
+    }
+    MainWindowTestAccess::install(window, TurnProcessor{}.process_with_events(operationalState,{}));
+    firstYear->setValue(1);
+    for (const auto name : {"Ground losses (colonists/year)", "Bombardment losses (colonists/year)",
+        "Bombardment losses (installations/year)", "Mine losses (ships/year)", "Operational reports (reports/year)"}) {
+        const auto index = metric->findText(name); assert(index >= 0);
+        metric->setCurrentIndex(index); app.processEvents();
+        assert(!scope->isEnabled() && !compare->isEnabled());
+        assert(summary->text().contains("report receipt year"));
+        assert(hoverYear(false).contains("No operational loss record"));
+        const auto text = hoverYear(true);
+        if (index == 16) assert(text.contains("Own colonists lost: 9007199254740993"));
+        if (index == 17) assert(text.contains("Opposing colonists lost (confirmed): 200"));
+        if (index == 18) assert(text.contains("Own installations lost: 3") && text.contains("Opposing installations lost (confirmed): 4"));
+        if (index == 19) assert(text.contains("Own ships lost to mines: 2"));
+        if (index == 20) assert(text.contains("Ground reports: 1") && text.contains("Bombardment reports: 1") && text.contains("Mine-strike reports: 1"));
+        history->resize(740,440); app.processEvents();
+        history->grab().save(QString("/tmp/suns-operational-history-%1.png").arg(index));
+    }
+    metric->setCurrentIndex(0);
+    assert(scope->isEnabled() && compare->isEnabled());
+
     SaveGameData save;
     save.campaignId = 17; save.turnToken = 18;
     save.state = result.state; save.mode = SessionMode::Host; save.playerTokens = {{1, 18}, {2, 19}};
