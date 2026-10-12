@@ -142,6 +142,8 @@ struct RenameFleetOrder {
     std::string name;
 };
 
+struct QueueStationOrder { PlanetId colony{}; StationConstruction construction; };
+
 struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; };
 struct SetFleetElectronicsOrder { FleetId fleet{}; ElectronicsProgram program; };
 
@@ -168,7 +170,8 @@ using Order = std::variant<
     SetProductionTemplateOrder,
     ApplyProductionTemplateOrder,
     SetFleetTaskOrder,
-    SetFleetElectronicsOrder>;
+    SetFleetElectronicsOrder,
+    QueueStationOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

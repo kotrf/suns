@@ -1,6 +1,9 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
 #include <QComboBox>
+#include <QDialog>
+#include <QTableWidget>
+#include "suns/stations.hpp"
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QEventLoop>
@@ -82,6 +85,14 @@ struct MainWindowTestAccess {
         w.rebuildScene();
         w.refreshProductionQueue();
     }
+    static void stationFixture(MainWindow& w)
+    {
+        w.state_=make_demo_game(); w.state_.players.front().technology.levels.fill(1);
+        w.state_.planets.front().productionQueue.clear();
+        w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
+        w.selection_.star=w.state_.planets.front().star; w.rebuildScene(); w.refreshProductionQueue();
+    }
+    static void stationDesigner(MainWindow& w) { w.openStationDesigner(); }
     static const GameState& state(const MainWindow& w) { return w.state_; }
     static bool canQueueDock(const MainWindow& w) { return w.buildOrbitalDockButton_->isEnabled(); }
 };
@@ -112,9 +123,45 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::colony(window).productionQueue.empty());
     suns::MainWindowTestAccess::dockFixture(window);
-    assert(!suns::MainWindowTestAccess::canQueueDock(window));
+    assert(suns::MainWindowTestAccess::canQueueDock(window)); // Existing stations remain manageable.
     remove->click();
     assert(suns::MainWindowTestAccess::canQueueDock(window));
+
+    {
+        suns::MainWindowTestAccess::stationFixture(window);
+        QTimer::singleShot(0, [&] {
+            auto* dialog=window.findChild<QDialog*>("stationDesignerDialog"); assert(dialog);
+            auto* hull=dialog->findChild<QComboBox*>("stationHull");
+            auto* table=dialog->findChild<QTableWidget*>("stationFittingTable");
+            auto* queue=dialog->findChild<QPushButton*>("queueStationFit");
+            auto* preview=dialog->findChild<QLabel*>("stationFitPreview");
+            assert(hull && table && queue && preview && table->rowCount()==6 && queue->isEnabled());
+            hull->setCurrentIndex(hull->findData(int(suns::OrbitalStationHullType::Starbase)));
+            assert(table->rowCount()==16 && !queue->isEnabled());
+            hull->setCurrentIndex(hull->findData(int(suns::OrbitalStationHullType::OrbitalDock)));
+            auto* weapon=qobject_cast<QComboBox*>(table->cellWidget(0,1)); assert(weapon);
+            assert(weapon->findData(int(suns::ShipComponentType::FuelMizer))<0);
+            const int laser=weapon->findData(int(suns::ShipComponentType::Laser)); assert(laser>=0);
+            weapon->setCurrentIndex(laser);
+            assert(queue->isEnabled() && preview->text().contains("Cost"));
+            dialog->grab().save("/tmp/station-designer.png");
+            queue->click();
+        });
+        suns::MainWindowTestAccess::stationDesigner(window);
+        const auto& orders=suns::MainWindowTestAccess::orders(window).orders;
+        assert(orders.size()==1);
+        const auto& fit=std::get<suns::QueueStationOrder>(orders.front());
+        assert(fit.construction.refitStation==1 && fit.construction.loadout.components==std::vector<suns::ShipComponentType>{suns::ShipComponentType::Laser});
+        assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1).contains("Refit"));
+        auto* kind=window.findChild<QComboBox*>("productionBatchKind"); assert(kind);
+        assert(kind->findData(int(suns::ProductionKind::ColonyDefense))>=0);
+        kind->setCurrentIndex(kind->findText("Colony defenses"));
+        auto* add=window.findChild<QPushButton*>("productionBatchAdd"); assert(add && add->isEnabled());
+        add->click(); assert(tree->topLevelItemCount()==2);
+        tree->setCurrentItem(tree->topLevelItem(0)); remove->click();
+        assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1).contains("defense"));
+
+    }
 
     {
         suns::ShipDesignerDialog designer(suns::make_demo_game(), 1);
@@ -243,10 +290,10 @@ int main(int argc, char** argv)
     auto* applyTemplate = window.findChild<QPushButton*>("productionTemplateApply");
     auto* newColonies = window.findChild<QCheckBox*>("productionTemplateDefault");
     assert(kind && quantity && add && templateName && saveTemplate && applyTemplate && newColonies);
-    kind->setCurrentIndex(3); quantity->setValue(3); add->click();
+    kind->setCurrentIndex(kind->findText("Auto factories ↻")); quantity->setValue(3); add->click();
     assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
     assert(tree->topLevelItem(0)->font(1).italic());
-    kind->setCurrentIndex(1); quantity->setValue(2); add->click();
+    kind->setCurrentIndex(kind->findText("Mines")); quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1).contains("×2"));
     templateName->setEditText("Development"); newColonies->setChecked(true);
     assert(saveTemplate->isEnabled()); saveTemplate->click();
@@ -257,7 +304,7 @@ int main(int argc, char** argv)
     assert(developed.mines == 2 && developed.industry == 39);
     assert(developed.productionQueue.size() == 1);
     assert(suns::MainWindowTestAccess::state(window).players.front().productionTemplates.front().defaultForNewColonies);
-    kind->setCurrentIndex(2); quantity->setValue(1);
+    kind->setCurrentIndex(kind->findText("Terraform")); quantity->setValue(1);
     assert(add->isEnabled()); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1) == "Terraforming");
     assert(tree->topLevelItem(1)->text(3).startsWith("Turn "));

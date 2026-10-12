@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/stations.hpp"
 
 #include "suns/communications.hpp"
 
@@ -38,10 +39,12 @@ QString productionLine(const GameState& state, const Planet& planet)
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
+    } else if (item.kind == ProductionKind::ColonyDefense) {
+        name = "Colony Defense";
     } else if (item.kind == ProductionKind::Terraforming) {
         name = "Terraforming";
     } else if (item.kind == ProductionKind::OrbitalStation) {
-        name = "Orbital Dock";
+        name = item.station ? QString("%1 %2").arg(item.station->refitStation ? "Refit" : "Build").arg(station_hull_spec(item.station->loadout.hull).name) : "Orbital Dock";
     } else {
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
         if (const auto* design = find_ship_design(state, designId)) name = QString::fromStdString(design->name);
@@ -187,7 +190,10 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(planet->industry)
                      .arg(planet->mines)
                      .arg(colony_output(*planet));
-        if (const auto* station = find_orbital_station_at_planet(state_, planet->id)) {
+        lines << QString("Defenses %1 / %2 • bombardment protection: population %3%, installations %4%")
+            .arg(planet->defenses).arg(kMaximumColonyDefenses)
+            .arg(colony_defense_coverage(*planet)*100,0,'f',1).arg(colony_defense_coverage(*planet)*50,0,'f',1);
+        if (const auto* station = known_orbital_station(state_,pendingOrders_.player,planet->id)) {
             QStringList services;
             if (orbital_station_has_module(*station, OrbitalStationModule::Shipyard)) {
                 services << "shipyard";
@@ -198,6 +204,9 @@ QString MainWindow::selectedPlanetPanelSummary() const
             lines << QString("Orbital station: <b>%1</b> • %2")
                          .arg(QString::fromStdString(station->name))
                          .arg(services.isEmpty() ? "no services" : services.join(" • "));
+            lines << QString("%1 • armor %2 • shields %3 • damage %4%")
+                .arg(station_hull_spec(station->hull).name).arg(station_armor(*station),0,'f',0)
+                .arg(station_shields(*station),0,'f',0).arg(station->damagePercent,0,'f',1);
         } else {
             lines << "Orbital station: <span style='color:#e4b77d'><b>none</b></span> • ships cannot be built or refueled";
         }

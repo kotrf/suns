@@ -1,4 +1,5 @@
 #include "suns/strategic_operations.hpp"
+#include "suns/stations.hpp"
 #include "suns/communications.hpp"
 #include "suns/equipment.hpp"
 #include "suns/player_knowledge.hpp"
@@ -186,6 +187,8 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
         for (auto& planet : state.planets) {
             const auto* star = find_star(state, planet.star);
             if (!planet.owner || planet.owner == f->owner || !star || !same_position(star->position, f->position)) continue;
+            const auto* station=find_orbital_station_at_planet(state,planet.id);
+            if(station && station->owner!=f->owner && station_has_weapons(*station)) continue;
             const auto defender = planet.owner;
             const auto population = planet.population;
             double survival = 1, minimum = 0, installations = 0, reverting = 0;
@@ -197,13 +200,17 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
                 minimum += double(s.bombMinimumKills)*count;
                 installations += double(s.bombInstallations)*count;
             });
-            const auto killed = std::uint64_t(std::min(double(population), std::max(minimum, std::floor(population*(1-survival)))));
+            const auto coverage=colony_defense_coverage(planet);
+            const auto killed = std::uint64_t(std::min(double(population), std::floor(std::max(minimum, std::floor(population*(1-survival)))*(1-coverage))));
+            installations=std::floor(installations*(1-coverage/2));
             planet.population -= killed;
-            auto removed = std::uint32_t(std::min({installations, double(planet.industry) + planet.mines, double(std::numeric_limits<std::uint32_t>::max())}));
+            auto removed = std::uint32_t(std::min({installations, double(planet.industry) + planet.mines + planet.defenses, double(std::numeric_limits<std::uint32_t>::max())}));
+            const auto defenses=std::min(std::uint32_t(planet.defenses), (removed+2)/3);
+            planet.defenses-=defenses; removed-=defenses;
             auto factories = std::min(planet.industry, removed/2 + removed%2);
             const auto mines = std::min(planet.mines,removed-factories);
             factories += std::min(planet.industry-factories,removed-factories-mines);
-            removed = factories + mines; planet.industry -= factories; planet.mines -= mines;
+            removed = factories + mines + defenses; planet.industry -= factories; planet.mines -= mines;
             if (reverting > 0 && planet.naturalEnvironment) {
                 auto restore = [&](std::uint8_t& current, std::uint8_t natural) {
                     const int step = int(std::min(reverting, 100.0));

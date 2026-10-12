@@ -18,11 +18,13 @@ per fleet per year, by encounter time and stable FleetId.
 
 Combat resolves after movement and before movement-arrival actions. A destroyed
 fleet cannot subsequently unload, colonize or enter a wormhole. Surviving
-participants interrupt their onboard route, repetition and mining task; new
+participants interrupt their onboard route, repetition and mining task. Surviving
+bombers retain their mission; an armed hostile station must be neutralized
+before they can bomb. New
 commands already in flight can still arrive normally. Manual transfers and
 ground invasions submitted at the starting planning boundary retain their
 existing pre-movement order. Manual colony founding is blocked when an armed
-hostile encounter is already present. Orbital stations do not yet participate in battle.
+hostile encounter is already present. Stations also participate; see [station combat and colony defenses](orbital-stations.md).
 
 ## Tactical resolution
 
@@ -94,7 +96,6 @@ on avoiding hostile encounters.
 
 Save v61 introduced battle reports and undelivered loss contacts. Reading save
 v12–60 remains supported. The current format is documented in [Strategic operations](strategic-operations.md); all PBEM participants should use
-the same build. Station fitting,
-retreat doctrines and diplomacy remain separate follow-up work.
+the same build. Retreat doctrines and diplomacy remain separate follow-up work.
 
 [Fleet strategic missions](strategic-operations.md) resolve bombing after fleet encounters, apply mine hazards to movement, and leave recoverable wreckage after losses.

@@ -99,6 +99,28 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
                     << quint64(losses.ownShipsLost);
         }
     }
+    // v65: station fitting, colony defenses and delayed station outcomes.
+    out << quint32(state.planets.size());
+    for(const auto& p:state.planets) {
+        out << quint32(p.id) << quint16(p.defenses) << quint32(p.productionQueue.size());
+        for(const auto& item:p.productionQueue) {
+            out << quint8(item.station.has_value()); if(item.station) writeStationFit(out,*item.station);
+        }
+    }
+    out << quint32(state.orbitalStations.size());
+    for(const auto& station:state.orbitalStations) {
+        out << quint32(station.id); writeStationFit(out,{station_loadout(station),0}); out << station.damagePercent;
+    }
+    out << quint32(state.pendingStationContacts.size());
+    for(const auto& c:state.pendingStationContacts) {
+        writeOrbitalStation(out,c.lastContact); writeStationFit(out,{station_loadout(c.lastContact),0});
+        out << c.lastContact.damagePercent << quint64(c.observedTurn) << quint64(c.deliveryTurn);
+    }
+    out << quint32(state.players.size());
+    for(const auto& p:state.players) {
+        out << quint32(p.id) << quint32(p.history.size());
+        for(const auto& h:p.history) out << quint64(h.turn) << quint64(h.battles.ownStationsLost) << quint64(h.battles.opposingStationsLost);
+    }
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -183,6 +205,52 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
                             ownInstallations, opposingInstallations, ships};
                     }
                 }
+            }
+        }
+    }
+    if(gReadSaveFormatVersion>=65) {
+        if(!readCount(in,count) || count!=state.planets.size()) { markCorrupt(stream); return; }
+        for(auto& p:state.planets) {
+            quint32 id{},items{}; in >> id >> p.defenses;
+            if(id!=p.id || p.defenses>kMaximumColonyDefenses || !readCount(in,items) || items!=p.productionQueue.size()) { markCorrupt(stream); return; }
+            for(auto& item:p.productionQueue) {
+                quint8 present{}; in >> present;
+                if(present>1 || (present && (item.kind!=ProductionKind::OrbitalStation || item.quantity!=1 || item.automation!=ProductionAutomation::None))) { markCorrupt(stream); return; }
+                if(present) { StationConstruction work; readStationFit(in,work); item.station=std::move(work); }
+            }
+        }
+        if(!readCount(in,count) || count!=state.orbitalStations.size()) { markCorrupt(stream); return; }
+        for(auto& station:state.orbitalStations) {
+            quint32 id{}; StationConstruction fit; in >> id; readStationFit(in,fit); in >> station.damagePercent;
+            if(id!=station.id || fit.refitStation || fit.loadout.hull!=station.hull
+                || fit.loadout.shipyard!=orbital_station_has_module(station,OrbitalStationModule::Shipyard)
+                || fit.loadout.refueling!=orbital_station_has_module(station,OrbitalStationModule::RefuelingDepot)
+                || !std::isfinite(station.damagePercent) || station.damagePercent<0 || station.damagePercent>=100) { markCorrupt(stream); return; }
+            station.components=std::move(fit.loadout.components);
+        }
+        if(!readCount(in,count)) { markCorrupt(stream); return; }
+        for(quint32 i=0;i<count;++i) {
+            PendingStationContact c; StationConstruction fit;
+            readOrbitalStation(in,c.lastContact); readStationFit(in,fit);
+            quint64 observed{},delivery{}; in >> c.lastContact.damagePercent >> observed >> delivery;
+            c.observedTurn=observed; c.deliveryTurn=delivery;
+            if(fit.refitStation || c.lastContact.id==0 || c.lastContact.id>=state.nextOrbitalStationId
+                || !find_player(state,c.lastContact.owner) || c.observedTurn>state.turn || c.deliveryTurn<=c.observedTurn
+                || std::none_of(state.planets.begin(),state.planets.end(),[&](const auto& p) { return p.id==c.lastContact.planet; })
+                || fit.loadout.hull!=c.lastContact.hull
+                || fit.loadout.shipyard!=orbital_station_has_module(c.lastContact,OrbitalStationModule::Shipyard)
+                || fit.loadout.refueling!=orbital_station_has_module(c.lastContact,OrbitalStationModule::RefuelingDepot)
+                || !std::isfinite(c.lastContact.damagePercent) || c.lastContact.damagePercent<0 || c.lastContact.damagePercent>=100) { markCorrupt(stream); return; }
+            c.lastContact.components=std::move(fit.loadout.components); state.pendingStationContacts.push_back(std::move(c));
+        }
+        if(!readCount(in,count) || count!=state.players.size()) { markCorrupt(stream); return; }
+        for(auto& p:state.players) {
+            quint32 id{}; in >> id;
+            if(id!=p.id || !readCount(in,count) || count!=p.history.size()) { markCorrupt(stream); return; }
+            for(auto& h:p.history) {
+                quint64 turn{},own{},opposing{}; in >> turn >> own >> opposing;
+                if(turn!=h.turn || ((!h.battleStatisticsRecorded || !h.battles.reports) && (own || opposing))) { markCorrupt(stream); return; }
+                h.battles.ownStationsLost=own; h.battles.opposingStationsLost=opposing;
             }
         }
     }

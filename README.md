@@ -92,3 +92,5 @@ hostile fleets with beams, torpedoes, shields, armor and persistent ship losses.
 Battle reports arrive through communications and remain readable after fleet
 destruction. Different empires are hostile in this first slice. [Bombardment, minefields, stealth/EW and field science](docs/strategic-operations.md)
 now have explicit fleet missions and emission controls. Station combat remains future work.
+
+Owned colonies offer **Station…** for fitted docks, starbases and fortresses. Stations defend orbit, retain battle damage and lose their services when destroyed. **Energy 1** unlocks paid **Colony defense / Auto defenses** in Production to protect against bombardment. See [stations and colony defense](docs/orbital-stations.md).

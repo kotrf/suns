@@ -136,6 +136,10 @@ int main(int argc, char** argv)
     assert(firstYear);
     firstYear->setValue(2);
     assert(hoverYear(false).contains("Reports received: 1"));
+    metric->setCurrentIndex(metric->findText("Station losses (stations/year)"));
+    assert(!scope->isEnabled() && !compare->isEnabled());
+    assert(hoverYear(true).contains("Own stations lost: 0"));
+    assert(hoverYear(true).contains("Opposing stations lost (confirmed): 0"));
     metric->setCurrentIndex(0);
     assert(scope->isEnabled() && compare->isEnabled());
 

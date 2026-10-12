@@ -134,7 +134,7 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     if (report.battle) {
         mix(std::bit_cast<std::uint64_t>(report.battle->position.x));
         mix(std::bit_cast<std::uint64_t>(report.battle->position.y));
-        for (const auto& unit : report.battle->units) { mix(unit.fleet); mix(unit.design); }
+        for (const auto& unit : report.battle->units) { mix(unit.fleet); mix(unit.design); if(unit.station) mix(unit.station); }
     }
     if (report.losses) {
         mix(static_cast<std::uint64_t>(report.losses->kind));

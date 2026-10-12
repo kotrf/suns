@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/stations.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/campaign.hpp"
 #include "suns/wormholes.hpp"
@@ -59,6 +60,7 @@ QString productionName(ProductionKind kind)
     case ProductionKind::Research: return "Research";
     case ProductionKind::OrbitalStation: return "Orbital Dock";
     case ProductionKind::Terraforming: return "Terraforming";
+    case ProductionKind::ColonyDefense: return "Colony Defense";
     }
     return "Production";
 }
@@ -83,10 +85,12 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
+    } else if (item.kind == ProductionKind::ColonyDefense) {
+        name = "Colony Defense";
     } else if (item.kind == ProductionKind::Terraforming) {
         name = "Terraforming";
     } else if (item.kind == ProductionKind::OrbitalStation) {
-        name = "Orbital Dock";
+        name = item.station ? QString("%1 %2").arg(item.station->refitStation ? "Refit" : "Build").arg(station_hull_spec(item.station->loadout.hull).name) : "Orbital Dock";
     } else {
         const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
         const auto* design = find_ship_design(state, designId);
@@ -505,7 +509,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(buildShipButton_, &QPushButton::clicked, this, [this] { queueShipDesign(); });
     connect(buildFactoryButton_, &QPushButton::clicked, this, [this] { queueProduction(ProductionKind::Factory); });
     connect(buildOrbitalDockButton_, &QPushButton::clicked, this, [this] {
-        queueProduction(ProductionKind::OrbitalStation);
+        openStationDesigner();
     });
     connect(loadColonistsButton_, &QPushButton::clicked, this, [this] { queueColonists(); });
     connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
@@ -1146,24 +1150,13 @@ void MainWindow::updateControls()
     buildFactoryButton_->setEnabled(ownedColony);
     designShipButton_->setEnabled(true);
 
-    const bool stationExists = ownedColony && colony_has_orbital_service(
-        state_, planet->id, pendingOrders_.player, OrbitalStationModule::Shipyard);
+    const auto* knownStation = ownedColony ? known_orbital_station(state_, pendingOrders_.player, planet->id) : nullptr;
+    const bool stationExists = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
     shipDesignCombo_->setEnabled(stationExists && shipDesignCombo_->count() > 0);
-    const auto buildPlan = ownedColony ? plannedProductionQueue(*planet) : std::vector<ProductionItem>{};
-    const bool stationQueued = ownedColony
-        && std::any_of(buildPlan.begin(), buildPlan.end(), [](const ProductionItem& item) {
-               return item.kind == ProductionKind::OrbitalStation;
-           });
-    buildOrbitalDockButton_->setEnabled(ownedColony && !stationExists && !stationQueued);
-    const auto dockAction = stationExists
-        ? "Orbital Dock already operational"
-        : stationQueued
-            ? "Orbital Dock already planned"
-            : QString("Queue Orbital Dock (%1)").arg(kOrbitalDockCost);
-    buildOrbitalDockButton_->setText(buildOrbitalDockButton_->property("compactColonyBuilder").toBool()
-        ? "Orbital dock" : dockAction);
-    buildOrbitalDockButton_->setToolTip(
-        dockAction + "\nMinerals charged on completion: I 12 / B 6 / G 8 kt");
+    buildOrbitalDockButton_->setEnabled(ownedColony);
+    buildOrbitalDockButton_->setObjectName("orbitalStationButton");
+    buildOrbitalDockButton_->setText("Station…");
+    buildOrbitalDockButton_->setToolTip("View, fit, build or refit the colony's orbital station through production");
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
     const auto planning = planned_ship_design_state(state_, pendingOrders_);

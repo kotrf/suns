@@ -1,5 +1,6 @@
 #include "suns/turn_processor.hpp"
 #include "suns/combat.hpp"
+#include "suns/stations.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/campaign.hpp"
@@ -25,7 +26,8 @@ std::uint32_t production_item_cost(const GameState& state, const ProductionItem&
     if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
-    if (item.kind == ProductionKind::OrbitalStation) return kOrbitalDockCost;
+    if (item.kind == ProductionKind::ColonyDefense) return production_cost(item.kind);
+    if (item.kind == ProductionKind::OrbitalStation) return item.station ? station_build_cost(item.station->loadout) : kOrbitalDockCost;
     if (item.shipDesign != 0) {
         if (const auto* design = find_ship_design(state, item.shipDesign)) return ship_design_cost(*design);
     }
@@ -258,8 +260,12 @@ std::optional<std::uint32_t> complete_production(
     if (item.kind == ProductionKind::Research) return std::nullopt;
     // Local buildings and physical environment are resolved by the shared queue engine.
     if (item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
-        || item.kind == ProductionKind::Terraforming) return FleetId{0};
+        || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
+        if (item.station) {
+            if (!complete_station_construction(state,planet,*item.station)) return std::nullopt;
+            return find_orbital_station_at_planet(state,planet.id)->id;
+        }
         if (find_orbital_station_at_planet(state, planet.id)) return std::nullopt;
         const auto id = state.nextOrbitalStationId++;
         state.orbitalStations.push_back({
@@ -309,7 +315,7 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
         if (!object || !star) continue;
         const auto design = completed.kind == ProductionKind::ColonyShip
             ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId) : ShipDesignId{0};
-        const auto quantity = completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine
+        const auto quantity = completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine || completed.kind == ProductionKind::ColonyDefense
             ? completion.localQuantity : *object;
         queue_player_report(state, planet.owner, PlayerReportKind::ProductionCompleted,
             star->position, state.turn + 1, planet.star, planet.id,
@@ -410,6 +416,9 @@ bool invade_colony(
         return false;
     }
 
+    const auto* defendingStation=find_orbital_station_at_planet(state,planet.id);
+    if(defendingStation && defendingStation->owner!=fleet.owner
+        && (station_has_weapons(*defendingStation) || fleet_has_space_weapons(state,fleet))) return false;
     const auto defender = planet.owner;
     const auto defendingPopulation = planet.population;
     const auto chance = ground_invasion_success_chance(attackingPopulation, defendingPopulation);
@@ -610,6 +619,9 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
                 && distance_between(fleet.position, other.position) <= kFleetEncounterRadius
                 && (fleet_has_space_weapons(state, fleet) || fleet_has_space_weapons(state, other));
         })) return false;
+    if (const auto* station = find_orbital_station_at_planet(state, planet.id);
+        station && station->owner != fleet.owner
+        && (station_has_weapons(*station) || fleet_has_space_weapons(state, fleet))) return false;
     if (planet.owner != 0 || fleet.colonists == 0 || !fleet_can_colonize(state, fleet)) return false;
     // A fleet physically in orbit can survey and settle locally without
     // waiting for the observation to reach the empire's communication mesh.
@@ -1498,6 +1510,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         Position position;
         Position targetDestination;
         bool targetRouted{};
+        OrbitalStationId station{};
     };
     std::vector<EncounterCandidate> encounters;
     for (const auto& plan : plans) {
@@ -1524,6 +1537,14 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             targetPlan->routed,
         });
     }
+    for (const auto& plan : plans) for (const auto& station : state.orbitalStations) {
+        if (station.owner == plan.owner || (!plan.armed && !station_has_weapons(station))) continue;
+        const auto planet = std::find_if(state.planets.begin(),state.planets.end(),[&](const auto& p) { return p.id == station.planet; });
+        const auto* star = planet == state.planets.end() ? nullptr : find_star(state,planet->star);
+        if (!star) continue;
+        const auto geometry = analyze_fleet_encounter(plan.start,plan.endpoint,star->position,star->position);
+        if (geometry.encounterTimeFraction) encounters.push_back({plan.fleet,0,*geometry.encounterTimeFraction,geometry.encounterPosition,{},false,station.id});
+    }
     // Armed hostile fleets also meet along their continuous motion segments,
     // including flybys of an idle fleet. Different-time path crossings do not.
     for (std::size_t i = 0; i < plans.size(); ++i) {
@@ -1540,7 +1561,8 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             return left.timeFraction < right.timeFraction;
         }
         if (left.pursuer != right.pursuer) return left.pursuer < right.pursuer;
-        return left.target < right.target;
+        if (left.target != right.target) return left.target < right.target;
+        return left.station < right.station;
     });
 
     // Resolve at most one encounter per fleet in a turn. Competing intercepts
@@ -1549,6 +1571,14 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     std::vector<FleetId> encounteredFleets;
     std::vector<EncounterCandidate> resolvedEncounters;
     for (const auto& encounter : encounters) {
+        if (encounter.station) {
+            if (fleet_id_list_contains(encounteredFleets,encounter.pursuer)) continue;
+            const auto plan = std::find_if(plans.begin(),plans.end(),[&](const auto& p) { return p.fleet==encounter.pursuer; });
+            if (plan == plans.end()) continue;
+            plan->endpoint=encounter.position; plan->active=true; plan->intercepted=true;
+            encounteredFleets.push_back(encounter.pursuer); resolvedEncounters.push_back(encounter);
+            continue;
+        }
         if (fleet_id_list_contains(encounteredFleets, encounter.pursuer)
             || fleet_id_list_contains(encounteredFleets, encounter.target)) {
             // A third hostile fleet meeting the same participants at the same
@@ -1814,6 +1844,8 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.repeatOrders,
                             concreteOrder.targetFleet,
                             concreteOrder.clearRoute);
+                    } else if constexpr (std::is_same_v<T, QueueStationOrder>) {
+                        (void)queue_station_construction(next,submission.player,concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -1834,7 +1866,7 @@ TurnResult TurnProcessor::process_with_events(
                                 planet->productionQueue.push_back({
                                     ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                             }
-                        } else if (concreteOrder.kind == ProductionKind::Terraforming) {
+                        } else if (concreteOrder.kind == ProductionKind::Terraforming || concreteOrder.kind == ProductionKind::ColonyDefense) {
                             (void)apply_production_batch(next, *planet, {planet->id, concreteOrder.kind});
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
@@ -2095,6 +2127,7 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
     publish_fleet_telemetry(next, next.turn);
     deliver_due_fleet_telemetry(next);
+    std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);
     auto deliveredIntel = deliver_due_survey_reports(next);
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
@@ -2134,7 +2167,7 @@ TurnResult TurnProcessor::process_with_events(
             || *kind == HistoryMilestoneKind::SpaceBattle
             || *kind == HistoryMilestoneKind::MineStrike;
         if (*kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0
-            : fleetEvent ? event.fleet == 0 : event.planet == 0) continue;
+            : fleetEvent ? (event.fleet == 0 && (*kind != HistoryMilestoneKind::SpaceBattle || event.planet == 0)) : event.planet == 0) continue;
         auto snapshot = std::prev(player->history.end());
         const auto lossKind = milestone_loss_kind(*kind);
         if (*kind == HistoryMilestoneKind::SpaceBattle || lossKind) {
@@ -2162,7 +2195,10 @@ TurnResult TurnProcessor::process_with_events(
             ++totals.reports;
             for (const auto& unit : event.battle->units) {
                 const auto lost = std::uint64_t(unit.initialShips) - unit.survivingShips;
-                if (unit.owner == player->id) totals.ownShipsLost += lost;
+                if (unit.station) {
+                    if (unit.owner == player->id) totals.ownStationsLost += lost;
+                    else totals.opposingStationsLost += lost;
+                } else if (unit.owner == player->id) totals.ownShipsLost += lost;
                 else totals.opposingShipsLost += lost;
             }
         }

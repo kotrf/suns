@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/stations.hpp"
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -188,7 +189,8 @@ MineralCargo production_item_mineral_cost(const GameState& state, const Producti
     if (item.kind == ProductionKind::Research || item.kind == ProductionKind::Terraforming) return {};
     if (item.kind == ProductionKind::Factory) return {2.0, 1.0, 2.0};
     if (item.kind == ProductionKind::Mine) return {1.0, 2.0, 1.0};
-    if (item.kind == ProductionKind::OrbitalStation) return {12.0, 6.0, 8.0};
+    if (item.kind == ProductionKind::ColonyDefense) return {2,1,1};
+    if (item.kind == ProductionKind::OrbitalStation) return item.station ? station_mineral_cost(item.station->loadout) : MineralCargo{12,6,8};
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
     if (const auto* design = find_ship_design(state, designId)) return ship_design_mineral_cost(*design);
     return {};

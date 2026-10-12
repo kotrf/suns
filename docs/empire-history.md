@@ -138,3 +138,10 @@ exclude other players' histories and pending packets. Orders remain v19.
 
 Further event categories remain extensions of issue #48; snapshots from older
 saves start at the loaded turn.
+
+## Station casualties (save v65)
+
+Station losses are separate from ship losses. The new Station losses metric
+shows own and confirmed opposing stations destroyed, using the same immutable
+battle packets, deduplication and receipt-year boundaries. Station-only battles
+have a planet marker without inventing a FleetId.
