@@ -1,11 +1,31 @@
 # Project status and development handoff
 
-Snapshot: **12 October 2026, Dialog #07**. This branch starts from main
-`d44c4f509590aec07154c0e93809db23df084200`, after station/defense PR #185.
-The user requested the next reconnaissance/EW stage and authorized merging
-successful planned work.
+Snapshot: **13 October 2026, Dialog #08 Human/Computer**. This branch starts
+from main `14fa936d4e195a7904b47f71b9f29c3dc653c8a5`, after reconnaissance/EW
+PR #187. The user requested the next controller/ordinary-orders slice of #184.
 
 ## Current implementation
+
+[#184](https://github.com/kotrf/suns/issues/184), step 1: campaign setup offers
+Human/Computer control; controller choices and a bounded 32-decision journal
+survive save/load. End Turn gathers computers' ordinary PlayerOrders from their
+own PlayerView, then resolves all empires through the regular processor. PBEM
+identities, files, imports and readiness apply only to humans. Restart preserves
+controller choices and resets decision memory. Game → Computer decisions…
+displays the host journal.
+
+The initial controller sets a zero research budget to 20% once, resumes a paused
+plan and preserves the existing focus/queue/nonzero budget. It then retains
+standing programs through explicit passes. Independent expansion/economy and
+military behavior remain subsequent stages; #184 stays open.
+See [Computer empires](computer-players.md). Save **v67**, orders **v21**.
+The full local Qt 6.4 Debug suite passed **55/55 CTest targets**. New checks
+cover fixed-seed/reordered/hidden-state-independent decisions, equivalent ordinary
+processing, bounded logs, mixed readiness, real human-only PBEM export, restart,
+save/load and malformed controller data. The setup and decision windows were
+visually inspected. CI results are recorded on the implementation PR.
+
+## Completed preparation
 
 [#186](https://github.com/kotrf/suns/issues/186), continuing #45/#58/#101,
 adds immutable delayed enemy hull snapshots with confidence, uncertainty,
@@ -82,13 +102,14 @@ adaptations, not claims of an exact Stars! implementation.
 - Reference hull/mining access families are not complete asymmetric Stars! race
   traits. Mystery Trader equipment is not acquired through ordinary research.
 - Multiplayer is asynchronous file exchange with a trusted host. Network
-  transport, signatures, an append-only resolution ledger and AI opponents remain
-  future work. Detached delayed enemy-contact snapshots are implemented; advanced traffic,
+  transport, signatures, an append-only resolution ledger and autonomous AI
+  expansion/military policies remain future work. Computer controllers and
+  ordinary automatic submissions are integrated. Detached delayed enemy-contact snapshots are implemented; advanced traffic,
   physical decoy probes and conditional doctrines remain follow-ups.
 
 ## Formats and CI
 
-This slice uses save **v66** (existing readers v12–66) and orders **v21**
+This slice uses save **v67** (existing readers v12–67) and orders **v21**
 (readers v1–21). Earlier casualty history remains unknown; old pending reports
 without exact summaries never invent measurements. Host and players must use
 the same build. Version numbers in older thematic documents describe when a
@@ -134,9 +155,9 @@ These are open directions, not authorization to start every item:
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
 The agreed sequence is **stations/colony defense (#183, done) → reconnaissance/EW
-(#186, this branch) → computer empires (#184)**. After this playable recon/EW
-stage, immediately implement computer players: controller/ordinary orders first,
-expansion/economy/research second, military behavior third. AI uses deterministic
+(#186, done, PR #187) → computer empires (#184)**. Controller/ordinary orders
+are implemented in this branch. Next are independent exploration/colonization,
+economy and research, then military behavior. AI uses deterministic
 C++ decisions on PlayerView, legal race profiles and ordinary costs, technology,
 fuel and communication constraints; no hidden host knowledge or computer-only
 economic/race advantages. Wider #45/#58/#101 stay open for remaining refinements;

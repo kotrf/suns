@@ -939,6 +939,23 @@ struct FieldScienceRecord {
     std::uint64_t deliveryTurn{};
 };
 
+enum class PlayerController : std::uint8_t { Human, Computer };
+inline constexpr std::size_t kMaximumComputerDecisionRecords = 32;
+inline constexpr std::size_t kMaximumComputerDecisionReasonBytes = 240;
+
+struct ComputerDecision {
+    std::uint64_t turn{};
+    std::uint32_t orderCount{};
+    std::string reason;
+    bool operator==(const ComputerDecision&) const = default;
+};
+
+struct ComputerState {
+    bool initialized{};
+    std::vector<ComputerDecision> decisions;
+    bool operator==(const ComputerState&) const = default;
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -969,6 +986,8 @@ struct Player {
     std::vector<StrategicIntel> strategicIntel;
     std::vector<StrategicIntel> pendingStrategicIntel;
     std::vector<FieldScienceRecord> fieldScience;
+    PlayerController controller{PlayerController::Human};
+    ComputerState computer;
 };
 
 enum class FleetRole {

@@ -1,5 +1,6 @@
 #include "save_game.hpp"
 #include "suns/campaign.hpp"
+#include "suns/computer_player.hpp"
 #include "suns/production.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
@@ -22,7 +23,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 66;
+constexpr quint32 kSaveFormatVersion = 67;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2206,6 +2207,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 }
 
 #include "recon_save.inc"
+#include "computer_save.inc"
 #include "strategic_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
@@ -2906,6 +2908,12 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
         errorMessage = "Save game is missing its turn-exchange identity.";
         return false;
     }
+    for (const auto& player : data.state.players) {
+        if (!computer_state_valid(player, data.state.turn)) {
+            errorMessage = "Invalid empire controller or computer decision history.";
+            return false;
+        }
+    }
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly)) {
         errorMessage = QString("Cannot open %1 for writing: %2").arg(filePath, file.errorString());
@@ -3086,18 +3094,26 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         return false;
     }
 
-    if (!find_player(loaded.state, loaded.pendingOrders.player)) {
-        errorMessage = "The planning player does not exist.";
+    const auto* planningPlayer = find_player(loaded.state, loaded.pendingOrders.player);
+    if (!planningPlayer || planningPlayer->controller != PlayerController::Human) {
+        errorMessage = "The local planning player must be a human empire.";
         return false;
     }
     if (loaded.mode == SessionMode::Host) {
-        if (loaded.playerTokens.size() != loaded.state.players.size()) {
-            errorMessage = "The host is missing player turn identities.";
+        const auto humans = std::count_if(loaded.state.players.begin(), loaded.state.players.end(),
+            [](const Player& player) { return player.controller == PlayerController::Human; });
+        if (loaded.playerTokens.size() != std::size_t(humans)
+            || std::any_of(loaded.playerTokens.begin(), loaded.playerTokens.end(), [&](const auto& entry) {
+                const auto* player = find_player(loaded.state, entry.first);
+                return !player || player->controller != PlayerController::Human;
+            })) {
+            errorMessage = "The host must contain turn identities for human empires only.";
             return false;
         }
         std::vector<PlayerId> accepted;
         for (const auto& orders : loaded.inbox) {
-            if (!find_player(loaded.state, orders.player)
+            const auto* player = find_player(loaded.state, orders.player);
+            if (!player || player->controller != PlayerController::Human
                 || orders.player == loaded.pendingOrders.player
                 || std::find(accepted.begin(), accepted.end(), orders.player) != accepted.end()) {
                 errorMessage = "Invalid host inbox.";
@@ -3227,6 +3243,9 @@ QString validate_turn_submission(const SaveGameData& host, const TurnOrderFileDa
     if (host.mode != SessionMode::Host) return "Open the host campaign to collect player orders.";
     if (packet.campaignId != host.campaignId) return "These orders belong to another campaign.";
     if (packet.turn != host.state.turn) return "These orders belong to another turn.";
+    const auto* player = find_player(host.state, packet.orders.player);
+    if (!player) return "Unknown player.";
+    if (player->controller != PlayerController::Human) return "Computer empires submit orders automatically on the host.";
     const auto token = host.playerTokens.find(packet.orders.player);
     if (token == host.playerTokens.end()) return "Unknown player.";
     if (token->second != packet.turnToken) return "These orders use an expired or incorrect player token.";
@@ -3237,6 +3256,9 @@ QString validate_turn_submission(const SaveGameData& host, const TurnOrderFileDa
 SaveGameData make_player_turn(const SaveGameData& host, PlayerId player)
 {
     if (host.mode != SessionMode::Host) throw std::invalid_argument("Only a host exports player turns");
+    const auto* recipient = find_player(host.state, player);
+    if (!recipient || recipient->controller != PlayerController::Human)
+        throw std::invalid_argument("Only human empires receive player turn files");
     const auto view = make_player_view(host.state, player);
     SaveGameData packet;
     packet.mode = SessionMode::PlayerTurn;

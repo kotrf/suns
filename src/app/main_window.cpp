@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/computer_player.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
@@ -1222,19 +1223,29 @@ void MainWindow::updateControls()
             .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(safeDescriptions.join("<br>")));
     }
 
-    endTurnButton_->setText(sessionMode_ == SessionMode::PlayerTurn ? "Export orders…"
-        : sessionMode_ == SessionMode::Host
-        ? QString("Resolve turn %1 — %2/%3 remote orders").arg(qulonglong(state_.turn))
-            .arg(qulonglong(inbox_.size())).arg(qulonglong(state_.players.size() - 1))
-        : QString("End Turn %1").arg(qulonglong(state_.turn)));
     QStringList readiness;
+    std::size_t remoteHumans = 0, receivedHumans = 0, computers = 0;
     if (sessionMode_ == SessionMode::Host) for (const auto& player : state_.players) {
         if (player.id == pendingOrders_.player) continue;
+        if (player.controller == PlayerController::Computer) {
+            ++computers;
+            readiness << QString("%1: computer — automatic orders").arg(QString::fromStdString(player.name));
+            continue;
+        }
+        ++remoteHumans;
         const bool ready = std::any_of(inbox_.begin(), inbox_.end(), [&](const PlayerOrders& orders) {
             return orders.player == player.id;
         });
+        receivedHumans += ready;
         readiness << QString("%1: %2").arg(QString::fromStdString(player.name), ready ? "received" : "waiting");
     }
+    endTurnButton_->setText(sessionMode_ == SessionMode::PlayerTurn ? "Export orders…"
+        : remoteHumans
+        ? QString("Resolve turn %1 — %2/%3 human orders").arg(qulonglong(state_.turn))
+            .arg(qulonglong(receivedHumans)).arg(qulonglong(remoteHumans))
+        : computers
+        ? QString("End Turn %1 — %2 computer empires").arg(qulonglong(state_.turn)).arg(qulonglong(computers))
+        : QString("End Turn %1").arg(qulonglong(state_.turn)));
     endTurnButton_->setToolTip(readiness.join("\n"));
     refreshResearchPanel();
 }
@@ -1518,13 +1529,19 @@ void MainWindow::endTurn()
 {
     cancelRouteProgramMapTargetPick();
     if (sessionMode_ == SessionMode::PlayerTurn) { exportTurnOrders(); return; }
-    if (sessionMode_ == SessionMode::Host && inbox_.size() + 1 != state_.players.size()) {
-        statusBar()->showMessage("Waiting for orders from every remote player. An empty submission is a pass.", 6000);
-        return;
-    }
     auto submissions = inbox_;
     submissions.push_back(pendingOrders_);
-    auto result = resolve_campaign_turn(state_, std::move(submissions));
+    TurnResult result;
+    try {
+        if (!missing_human_submissions(state_, submissions).empty()) {
+            statusBar()->showMessage("Waiting for orders from every remote human. An empty submission is a pass.", 6000);
+            return;
+        }
+        result = resolve_controlled_campaign_turn(state_, std::move(submissions));
+    } catch (const std::exception& error) {
+        statusBar()->showMessage(QString("Cannot resolve turn: %1").arg(error.what()), 7000);
+        return;
+    }
     inbox_.clear();
     if (sessionMode_ == SessionMode::Host)
         campaignMessages_.insert(campaignMessages_.end(), result.events.begin(), result.events.end());

@@ -3,13 +3,14 @@
 ## Playing a campaign
 
 1. The host chooses **File → New campaign (races / multiplayer)**, sets the seed,
-   galaxy size, and 1–8 human empires with names and race presets. Player 1 plays
-   locally; each other empire receives its own turn file. Homeworlds are chosen
+   galaxy size, and 1–8 empires with names, race presets and Human/Computer control.
+   Player 1 is human and plays locally; each remote human receives its own turn
+   file. Computers submit ordinary orders automatically on the host. Homeworlds are chosen
    far apart and start with equal population, industry, minerals, orbital services
    and two basic ship designs with globally unique IDs.
 2. Choose **File → Export player turns**. The app first saves the host `.suns`
-   campaign, including its turn identities, then writes one `.sunsturn` file per
-   remote player into the selected folder. Send each participant only their file.
+   campaign, including its human turn identities, then writes one `.sunsturn` file per
+   remote human into the selected folder. Send each participant only their file.
 3. Participants open their file with **File → Open game**, plan normally, and
    choose **Export orders** (also the main turn button). They can save an unfinished
    draft as `.suns`; its player-turn mode survives saving and reopening. A player
@@ -18,7 +19,8 @@
    accepted submission per remote empire. Reimport prompts before replacing it;
    imported orders and tokens are saved with the host campaign. Empty orders are
    an explicit pass.
-5. Once every participant has submitted, the host resolves the turn. Resolution
+5. Once every human has submitted, the host generates computer orders from their
+   own PlayerView projections and resolves the turn. Resolution
    sorts submissions by player ID, applies ownership/technology validation in the
    core, rotates all player tokens, clears the inbox and saves the new boundary.
    Export and distribute the next player turns.
@@ -35,13 +37,15 @@ use a private channel for each participant's files. Keep the host save private.
 `.sunsorders` includes campaign ID, turn, a random player-specific token, issuing
 player ID, typed orders and display descriptions. It contains no game state.
 The host rejects another campaign/turn/player or an incorrect/expired token.
-All players resolve together, and missing submissions never silently become passes.
+All players resolve together, and missing human submissions never silently become passes.
+Computer empires have no PBEM identities; their imported order files are rejected.
 The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 
 Save v31 introduced session mode, host inbox, player tokens, racial environment rules
 and projected observations. Earlier saves (v12–30) remain readable with their
-original scalar habitability. The operational casualty history slice uses save v64 and orders v19;
-supported save readers cover v12–62 and order readers v1–19. Multiplayer clients
+original scalar habitability. Controller integration uses save v67 and orders v21;
+supported save readers cover v12–67 and order readers v1–21. Older saves default
+to human controllers. Multiplayer clients
 should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;
 a restart creates a new campaign identity.
@@ -66,14 +70,14 @@ are a projection, not simulation authority:
 - Delivered battle reports preserve observed participants and losses. A destroyed
   remote fleet's last confirmed contact remains until its result arrives; the
   host's loss ledger, delivery times and undelivered battle payloads are stripped.
-- Enemy contacts appear only in the connected sensor mesh, with ID, owner and
-  position. Their design, fuel, cargo, destination and route are omitted. They
-  can be selected as fixed-position route targets, as in the existing route UI.
+- Enemy contacts use received or connected snapshots, including observation age,
+  confidence, position uncertainty and gated hull/count evidence. Their equipment,
+  fuel, cargo, destination and route are omitted. Route targets use the last
+  reported position; detached/dead scouts' delivered observations remain available.
 - Only own orbital station internals and own delivered messages are exported.
 
-Known limitations: detached scouts do not yet deliver delayed enemy-contact
-reports; there is no historical foreign-colony ownership/contact cache. Static
-orbital/geological observations follow the existing survey-level model. Host
+Static orbital/geological observations follow the existing survey-level model.
+Ownership is the last observed owner. Host
 UI uses authoritative state because the host is trusted. No claim is made that
 an untrusted host cannot inspect or alter a campaign.
 
@@ -82,7 +86,8 @@ an untrusted host cannot inspect or alter a campaign.
 - Append-only resolution ledger with accepted envelopes, result hashes and host
   version, for audit/replay and recovery after crashes.
 - A transport interface and authenticated network exchange.
-- Delayed enemy-contact snapshots and richer opponent intel.
-- Computer opponents consuming `PlayerView` and emitting ordinary `PlayerOrders`.
-- Station combat, bombardment, minefields, battle doctrines and diplomacy.
+- Advanced traffic analysis and conditional emission/combat doctrines.
+- Independent computer exploration, colonization, economy and military behavior;
+  [controller integration](computer-players.md) is implemented.
+- Diplomacy and retreat/battle doctrines beyond the current combat rules.
 - Genuinely asymmetric primary racial traits.

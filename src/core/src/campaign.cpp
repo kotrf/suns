@@ -309,6 +309,8 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
             throw std::invalid_argument("Empire names must contain 1–80 bytes");
         if (empires[i].hullAccess > HullAccess::HyperExpansion || (empires[i].advancedRemoteMining && empires[i].basicRemoteMining))
             throw std::invalid_argument("Invalid hull access or mutually exclusive remote-mining settings");
+        if (empires[i].controller > PlayerController::Computer)
+            throw std::invalid_argument("Invalid empire controller");
         const PlayerId id = static_cast<PlayerId>(i + 1);
         const StarSystem* home = &state.stars.front();
         double best = -1;
@@ -321,6 +323,7 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         }
         homes.push_back(home->id);
         Player player{id, empires[i].name, {home->id}};
+        player.controller = empires[i].controller;
         player.race = race_preset(empires[i].race);
         player.race.improvedFuelEfficiency = empires[i].improvedFuelEfficiency;
         player.race.noRamScoopEngines = empires[i].noRamScoopEngines;
