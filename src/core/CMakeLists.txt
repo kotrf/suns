@@ -1,5 +1,6 @@
 add_library(suns_core
     src/campaign.cpp
+    src/computer_player.cpp
     src/game_state.cpp
     src/hulls.cpp
     src/equipment.cpp

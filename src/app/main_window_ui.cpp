@@ -594,6 +594,9 @@ void MainWindow::installUiPolish()
     });
     connect(endTurnAction, &QAction::triggered, this, [this] { endTurn(); });
     gameMenu->addAction(endTurnAction);
+    auto* computerDecisionsAction = gameMenu->addAction("Computer decisions…");
+    computerDecisionsAction->setObjectName("computerDecisionsAction");
+    connect(computerDecisionsAction, &QAction::triggered, this, &MainWindow::openComputerDecisions);
     gameMenu->addSeparator();
 
     auto* newGalaxyAction = gameMenu->addAction("New galaxy…");

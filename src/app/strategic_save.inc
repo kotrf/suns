@@ -139,6 +139,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
         out << quint32(p.pendingPlayerReports.size());
         for(const auto& r:p.pendingPlayerReports) writeReconEvidence(out,r);
     }
+    writeComputerControllers(out, state);
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -306,5 +307,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
             for(auto& r:p.pendingPlayerReports) readReconEvidence(in,r);
         }
     }
+    if (gReadSaveFormatVersion >= 67) readComputerControllers(in, state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

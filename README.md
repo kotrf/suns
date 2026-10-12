@@ -45,6 +45,12 @@ ctest --test-dir build --output-on-failure
 
 The desktop app now links exploration, planet quality, economy and expansion:
 
+Campaign setup supports human and [computer empires](docs/computer-players.md).
+Computer orders are generated automatically on the host through the ordinary
+turn processor; PBEM waits only for humans. The initial controller starts
+research and retains standing orders. Independent expansion and military
+decisions are the next implementation stages.
+
 1. star positions are visible, but non-home planetary data starts unknown;
 2. an ordinary scanner fly-by records a system contact but leaves planetary data unknown;
 3. the later-tech penetrating scanner estimates habitability at range, while arriving confirms it exactly;

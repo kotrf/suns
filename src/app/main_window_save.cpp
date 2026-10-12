@@ -266,7 +266,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
             empireSetups_.push_back({player.name, preset,
                 player.race.improvedFuelEfficiency, player.race.noRamScoopEngines,
                 player.race.settlerEngineAccess, player.race.hullAccess,
-                player.race.advancedRemoteMining, player.race.basicRemoteMining});
+                player.race.advancedRemoteMining, player.race.basicRemoteMining, player.controller});
         }
     }
     campaignId_ = loaded.campaignId;
@@ -397,8 +397,11 @@ void MainWindow::importTurnOrders()
         } else inbox_.push_back(std::move(packet.orders));
         updateControls();
         if (!currentSavePath_.isEmpty()) saveGameToPath(currentSavePath_);
-        statusBar()->showMessage(QString("Orders received: %1 / %2 remote players")
-            .arg(qulonglong(inbox_.size())).arg(qulonglong(state_.players.size() - 1)), 5000);
+        const auto remoteHumans = std::count_if(state_.players.begin(), state_.players.end(), [this](const Player& player) {
+            return player.id != pendingOrders_.player && player.controller == PlayerController::Human;
+        });
+        statusBar()->showMessage(QString("Orders received: %1 / %2 remote humans")
+            .arg(qulonglong(inbox_.size())).arg(qulonglong(remoteHumans)), 5000);
         return;
     }
 
@@ -455,7 +458,8 @@ void MainWindow::rotateTurnExchangeToken()
     turnToken_ = randomTurnExchangeId();
     playerTokens_.clear();
     if (sessionMode_ == SessionMode::Host) {
-        for (const auto& player : state_.players) playerTokens_[player.id] = randomTurnExchangeId();
+        for (const auto& player : state_.players)
+            if (player.controller == PlayerController::Human) playerTokens_[player.id] = randomTurnExchangeId();
         turnToken_ = playerTokens_.at(pendingOrders_.player);
     }
 }

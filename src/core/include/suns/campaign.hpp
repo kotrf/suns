@@ -15,6 +15,7 @@ struct EmpireSetup {
     HullAccess hullAccess{HullAccess::Standard};
     bool advancedRemoteMining{};
     bool basicRemoteMining{};
+    PlayerController controller{PlayerController::Human};
 };
 struct ResearchUnlock {
     ResearchField field;
