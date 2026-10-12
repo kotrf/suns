@@ -2,6 +2,7 @@
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/combat.hpp"
+#include "suns/stations.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -20,11 +21,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 64;
+constexpr quint32 kSaveFormatVersion = 65;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 19;
+constexpr quint32 kTurnOrderFormatVersion = 20;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -550,6 +551,27 @@ void readProductionExtras(QDataStream& stream, ProductionItem& value)
             || !production_batch_valid({0, value.kind, 1})))) markCorrupt(stream);
 }
 
+void writeStationFit(QDataStream& stream, const StationConstruction& work)
+{
+    writeEnum(stream,work.loadout.hull);
+    stream << quint8(work.loadout.shipyard) << quint8(work.loadout.refueling) << quint32(work.refitStation)
+           << quint32(work.loadout.components.size());
+    for(auto c:work.loadout.components) writeEnum(stream,c);
+}
+void readStationFit(QDataStream& stream, StationConstruction& work)
+{
+    quint8 yard{},fuel{}; quint32 target{},count{};
+    if(!readEnum(stream,work.loadout.hull,quint8(OrbitalStationHullType::Fortress))) return;
+    stream >> yard >> fuel >> target;
+    if(yard>1 || fuel>1 || !readCount(stream,count) || count>30) { markCorrupt(stream); return; }
+    work.loadout.shipyard=yard; work.loadout.refueling=fuel; work.refitStation=target;
+    for(quint32 i=0;i<count;++i) {
+        ShipComponentType c; if(!readEnum(stream,c,quint8(ShipComponentType::Superlatanium))) return;
+        work.loadout.components.push_back(c);
+    }
+    if(!station_loadout_valid(work.loadout)) markCorrupt(stream);
+}
+
 void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 {
     writeEnum(stream, value.kind);
@@ -558,7 +580,7 @@ void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 
 void readProductionItem(QDataStream& stream, ProductionItem& value)
 {
-    const auto newestKind = gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming
+    const auto newestKind = gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming
         : gReadSaveFormatVersion >= 24 ? ProductionKind::OrbitalStation : ProductionKind::Research;
     if (!readEnum(stream, value.kind, quint8(newestKind))) return;
     quint32 cost{}, design{};
@@ -740,6 +762,7 @@ void writeBattle(QDataStream& stream, const std::optional<SpaceBattleReport>& va
         writeString(stream, u.fleetName);
         writeString(stream, u.designName);
         stream << quint32(u.initialShips) << quint32(u.survivingShips) << u.remainingArmor << u.remainingShields;
+        stream << quint32(u.station);
     }
     stream << quint32(value->shots.size());
     for (const auto& s : value->shots) {
@@ -777,7 +800,8 @@ void readBattle(QDataStream& stream, std::optional<SpaceBattleReport>& value)
         readString(stream, u.fleetName);
         readString(stream, u.designName);
         stream >> initial >> surviving >> u.remainingArmor >> u.remainingShields;
-        if (!owner || !fleet || !design || !initial || surviving > initial
+        if(gReadSaveFormatVersion >= 65) stream >> u.station;
+        if (!owner || (u.station ? (fleet || design || initial!=1) : (!fleet || !design)) || !initial || surviving > initial
             || !validAmount(u.remainingArmor) || !validAmount(u.remainingShields)
             || (surviving == 0 && (u.remainingArmor != 0 || u.remainingShields != 0))) { markCorrupt(stream); return; }
         u.owner = owner; u.fleet = fleet; u.design = design; u.initialShips = initial; u.survivingShips = surviving;
@@ -926,7 +950,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     if (!readEnum(stream, value.kind, static_cast<quint8>(newestEventKind))) return;
     if (!readEnum(stream, value.severity, static_cast<quint8>(GameEventSeverity::Critical))) return;
     stream >> star >> planet >> fleet >> shipDesign;
-    if (!readEnum(stream, value.productionKind, static_cast<quint8>(gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : ProductionKind::OrbitalStation))) return;
+    if (!readEnum(stream, value.productionKind, static_cast<quint8>(gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : ProductionKind::OrbitalStation))) return;
     stream >> value.position.x >> value.position.y >> quantity;
     const auto newestSurveyLevel = gReadSaveFormatVersion >= 28
         ? SurveyLevel::DeepSurvey
@@ -1027,7 +1051,7 @@ void readOrbitalStation(QDataStream& stream, OrbitalStation& value)
     value.planet = static_cast<PlanetId>(planet);
     readString(stream, value.name);
     if (!readEnum(
-            stream, value.hull, static_cast<quint8>(OrbitalStationHullType::OrbitalDock))) {
+            stream, value.hull, static_cast<quint8>(gReadSaveFormatVersion >= 65 ? OrbitalStationHullType::Fortress : OrbitalStationHullType::OrbitalDock))) {
         return;
     }
     quint32 count{};
@@ -1213,7 +1237,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             if (marker.eventId == 0 || marker.observedTurn > value.turn
                 || (marker.kind == HistoryMilestoneKind::ResearchCompleted
                     ? marker.technologyLevel == 0
-                    : fleetEvent ? marker.fleet == 0 : marker.planet == 0)
+                    : fleetEvent ? (marker.fleet == 0 && (marker.kind != HistoryMilestoneKind::SpaceBattle || marker.planet == 0)) : marker.planet == 0)
                 || std::any_of(value.milestones.begin(), value.milestones.end(), [&](const auto& other) {
                     return other.eventId == marker.eventId;
                 })) {
@@ -1526,7 +1550,7 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 fleet{};
         quint32 shipDesign{};
         stream >> observedTurn >> deliveryTurn >> star >> planet >> fleet >> shipDesign;
-        const auto newestProductionKind = gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
+        const auto newestProductionKind = gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
             ? ProductionKind::OrbitalStation
             : ProductionKind::Research;
         if (!readEnum(
@@ -2419,6 +2443,8 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, ApplyProductionTemplateOrder>) {
             stream << quint8{20} << quint32(concrete.colony);
             writeString(stream, concrete.name);
+        } else if constexpr (std::is_same_v<T, QueueStationOrder>) {
+            stream << quint8{23} << quint32(concrete.colony); writeStationFit(stream,concrete.construction);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
             stream << quint8{21} << quint32(concrete.fleet); writeEnum(stream, concrete.task);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
@@ -2482,7 +2508,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         stream >> colony;
         value.colony = static_cast<PlanetId>(colony);
-        const auto newestKind = gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
+        const auto newestKind = gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
             ? ProductionKind::OrbitalStation
             : ProductionKind::Research;
         if (!readEnum(stream, value.kind, static_cast<quint8>(newestKind))) return false;
@@ -2734,7 +2760,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{}, quantity{};
         stream >> colony;
         value.colony = colony;
-        if (!readEnum(stream, value.kind, quint8(ProductionKind::Terraforming))) return false;
+        if (!readEnum(stream, value.kind, quint8(gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : ProductionKind::Terraforming))) return false;
         stream >> quantity;
         value.quantity = quantity;
         if (!readEnum(stream, value.automation, quint8(ProductionAutomation::MaxTerraform))) return false;
@@ -2775,6 +2801,11 @@ bool readOrder(QDataStream& stream, Order& order)
         if (gReadSaveFormatVersion < 62) { markCorrupt(stream); return false; }
         SetFleetElectronicsOrder value; stream >> value.fleet; readElectronics(stream, value.program);
         order = value; return stream.status() == QDataStream::Ok;
+    }
+    case 23: {
+        if(gReadSaveFormatVersion<65) { markCorrupt(stream); return false; }
+        QueueStationOrder value; stream >> value.colony; readStationFit(stream,value.construction);
+        order=std::move(value); return stream.status()==QDataStream::Ok;
     }
     default:
         markCorrupt(stream);
@@ -3163,7 +3194,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

@@ -223,7 +223,7 @@ void MainWindow::installEmpireHistory()
         "Confirmed fleet damage (%)", "Military losses (ships/year)",
         "Battle reports (reports/year)", "Ground losses (colonists/year)",
         "Bombardment losses (colonists/year)", "Bombardment losses (installations/year)",
-        "Mine losses (ships/year)", "Operational reports (reports/year)"});
+        "Mine losses (ships/year)", "Operational reports (reports/year)", "Station losses (stations/year)"});
     historyMetric_->setItemData(14,
         "Confirmed space-battle losses, credited when reports arrive; opposing losses are not attributed kills",
         Qt::ToolTipRole);
@@ -320,7 +320,7 @@ void MainWindow::refreshEmpireHistory()
     const std::vector<EmpireTurnStatistics> empty;
     const auto& history = player ? player->history : empty;
     auto* chart = static_cast<HistoryChart*>(historyChart_);
-    const bool battleMetric = historyMetric_->currentIndex() == 14 || historyMetric_->currentIndex() == 15;
+    const bool battleMetric = historyMetric_->currentIndex() == 14 || historyMetric_->currentIndex() == 15 || historyMetric_->currentIndex() == 21;
     const int metric = historyMetric_->currentIndex();
     const bool operationalMetric = metric >= 16 && metric <= 20;
     const auto operationalKind = metric == 16 ? OperationalLossKind::Ground
@@ -761,6 +761,10 @@ void MainWindow::refreshEmpireHistory()
         case 15:
             add("Reports received", "#78b8f0", [](const auto& s) { return double(s.battles.reports); });
             break;
+        case 21:
+            add("Own stations lost", "#e07575", [](const auto& s) { return double(s.battles.ownStationsLost); });
+            add("Opposing stations lost (confirmed)", "#e2bb70", [](const auto& s) { return double(s.battles.opposingStationsLost); });
+            break;
         case 16:
         case 17:
         case 18:
@@ -844,7 +848,8 @@ void MainWindow::refreshEmpireHistory()
                 color = QColor("#8dcc9e");
                 break;
             case HistoryMilestoneKind::SpaceBattle:
-                label = QString("Space battle involving fleet %1").arg(event.fleet);
+                label = event.fleet ? QString("Space battle involving fleet %1").arg(event.fleet)
+                    : QString("Station battle at planet %1").arg(event.planet);
                 color = QColor("#e07575");
                 break;
             case HistoryMilestoneKind::GroundDefenseLost:

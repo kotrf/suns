@@ -6,6 +6,7 @@
 #include "suns/production.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/equipment.hpp"
+#include "suns/stations.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -1660,8 +1661,76 @@ void operational_losses_round_trip_and_player_isolation()
     assert(write_save_game_file(path, save, error) && !read_save_game_file(path, loaded, error));
 }
 
+void stations_defenses_and_orders_round_trip()
+{
+    QTemporaryDir dir; assert(dir.isValid()); QString error;
+    SaveGameData save; save.campaignId=22; save.turnToken=23; save.mode=SessionMode::Host;
+    save.state=generate_campaign({}, {{"One"},{"Two"}}); save.playerTokens={{1,23},{2,24}};
+    save.pendingOrders.player=1;
+    auto& station=save.state.orbitalStations.front(); station.hull=OrbitalStationHullType::Starbase;
+    station.components={ShipComponentType::Laser,ShipComponentType::MoleSkinShield,ShipComponentType::BattleComputer};
+    station.damagePercent=42.5;
+    auto& planet=save.state.planets.front(); planet.defenses=87;
+    StationConstruction work{{OrbitalStationHullType::Fortress,{ShipComponentType::MegaDisruptor},false,true},station.id};
+    ProductionItem item{ProductionKind::OrbitalStation,100}; item.station=work; planet.productionQueue={item};
+    save.state.pendingStationContacts.push_back({station,save.state.turn,save.state.turn+1});
+    save.pendingOrders.orders={QueueStationOrder{planet.id,work},QueueProductionBatchOrder{planet.id,ProductionKind::ColonyDefense,10,ProductionAutomation::Annual}};
+    save.pendingDescriptions={"Refit","Defenses"};
+    const auto path=dir.filePath("station.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.orbitalStations.front().components==station.components);
+    assert(loaded.state.orbitalStations.front().damagePercent==42.5);
+    assert(loaded.state.planets.front().defenses==87);
+    assert(loaded.state.planets.front().productionQueue.front().station->refitStation==station.id);
+    assert(loaded.state.pendingStationContacts.front().lastContact.components==station.components);
+    const auto packetPath=dir.filePath("station.sunsorders");
+    TurnOrderFileData packet{22,save.state.turn,23,save.pendingOrders,save.pendingDescriptions}, imported;
+    assert(write_turn_order_file(packetPath,packet,error) && read_turn_order_file(packetPath,imported,error));
+    const auto& read=std::get<QueueStationOrder>(imported.orders.orders.front()).construction;
+    assert(read.refitStation==station.id && read.loadout.components==work.loadout.components && !read.loadout.shipyard);
+    assert(std::get<QueueProductionBatchOrder>(imported.orders.orders[1]).kind==ProductionKind::ColonyDefense);
+    const auto player=make_player_turn(save,1);
+    assert(player.state.pendingStationContacts.empty());
+    assert(write_save_game_file(path,player,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.orbitalStations.size()==1 && loaded.state.planets.front().defenses==87);
+    // A destroyed station and its actual battle packet survive host save/load;
+    // the player export retains only the last confirmed station until delivery.
+    auto combatSave=save; combatSave.state=make_demo_game();
+    combatSave.state.players.push_back({2,"Attacker"}); combatSave.state.fleets.clear();
+    combatSave.state.wormholeRules.spawnChancePerTurn=0;
+    const auto designId=combatSave.state.nextShipDesignId++;
+    combatSave.state.shipDesigns.push_back({designId,2,"Attack",ShipHullType::Destroyer,
+        {ShipComponentType::FuelMizer,ShipComponentType::AntiMatterPulverizer,ShipComponentType::Jammer50}});
+    Fleet attacker; attacker.id=combatSave.state.nextFleetId++; attacker.owner=2; attacker.design=designId;
+    attacker.ships={{designId,100}}; attacker.position=combatSave.state.stars.front().position;
+    attacker.telemetry.position=attacker.position; attacker.telemetry.ships=attacker.ships;
+    attacker.telemetry.observedTurn=combatSave.state.turn;
+    combatSave.state.fleets.push_back(attacker); combatSave.pendingOrders={1,{}}; combatSave.pendingDescriptions.clear();
+    auto result=TurnProcessor{}.process_with_events(combatSave.state,{});
+    combatSave.state=result.state; combatSave.strategicMessages=result.events;
+    assert(combatSave.state.orbitalStations.empty() && combatSave.state.pendingStationContacts.size()==1);
+    assert(write_save_game_file(path,combatSave,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.pendingStationContacts.front().lastContact.id==1);
+    assert(make_player_turn(loaded,1).state.orbitalStations.size()==1);
+    loaded.state.fleets.clear(); result=TurnProcessor{}.process_with_events(loaded.state,{});
+    combatSave.state=result.state; combatSave.strategicMessages=result.events;
+    assert(write_save_game_file(path,combatSave,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.players.front().history.back().battles.ownStationsLost==1);
+    const auto battle=std::find_if(loaded.strategicMessages.begin(),loaded.strategicMessages.end(),[](const auto& e){return e.kind==GameEventKind::SpaceBattle && e.recipient==1;});
+    assert(battle!=loaded.strategicMessages.end() && battle->battle);
+    assert(std::any_of(battle->battle->units.begin(),battle->battle->units.end(),[](const auto& u){return u.station==1;}));
+    save.state.planets.front().defenses=101;
+    assert(write_save_game_file(path,save,error) && !read_save_game_file(path,loaded,error));
+    save.state.planets.front().defenses=87;
+    save.state.orbitalStations.front().components={ShipComponentType::FuelMizer};
+    assert(write_save_game_file(path,save,error) && !read_save_game_file(path,loaded,error));
+    std::get<QueueStationOrder>(packet.orders.orders[0]).construction.loadout.components=std::vector<ShipComponentType>(13,ShipComponentType::Laser);
+    assert(write_turn_order_file(packetPath,packet,error) && !read_turn_order_file(packetPath,imported,error));
+}
+
 int main()
 {
+    stations_defenses_and_orders_round_trip();
     operational_losses_round_trip_and_player_isolation();
     space_battle_round_trip();
     equipment_catalog_round_trip();

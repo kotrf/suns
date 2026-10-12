@@ -59,7 +59,8 @@ QString production_item_name(const GameState& state, const GameEvent& event)
     if (event.productionKind == ProductionKind::Terraforming) return "Terraforming";
     if (event.productionKind == ProductionKind::Factory) return "Factory";
     if (event.productionKind == ProductionKind::Mine) return "Mine";
-    if (event.productionKind == ProductionKind::OrbitalStation) return "Orbital Dock";
+    if (event.productionKind == ProductionKind::OrbitalStation) return "Orbital station";
+    if (event.productionKind == ProductionKind::ColonyDefense) return "Colony defense";
     if (const auto* design = find_ship_design(state, event.shipDesign)) {
         return QString::fromStdString(design->name);
     }
@@ -114,10 +115,14 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::WormholePresumedLost: subject = QString("%1: PRESUMED LOST after WH transit").arg(fleetName); break;
     case GameEventKind::WormholeCollapsed: subject = QString("WH %1: collapse observed").arg(event.wormholeEndpoint); break;
     case GameEventKind::SpaceBattle: {
-        std::uint64_t lost = 0;
+        std::uint64_t lost = 0, stationsLost = 0;
         if (event.battle) for (const auto& unit : event.battle->units)
-            if (unit.owner == event.recipient) lost += unit.initialShips - unit.survivingShips;
+            if (unit.owner == event.recipient) {
+                if (unit.station) stationsLost += unit.initialShips - unit.survivingShips;
+                else lost += unit.initialShips - unit.survivingShips;
+            }
         subject = QString("Space battle at %1 — %2 own ships lost").arg(starName).arg(qulonglong(lost));
+        if (stationsLost) subject += QString(" / %1 station lost").arg(qulonglong(stationsLost));
         break;
     }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
@@ -249,19 +254,20 @@ QString space_battle_text(const GameEvent& event)
 {
     if (!event.battle) return "Battle report unavailable.";
     const auto& battle = *event.battle;
-    std::uint64_t ownBefore = 0, ownAfter = 0, enemyAfter = 0;
+    std::uint64_t ownBefore = 0, ownAfter = 0, enemyAfter = 0, stationBefore=0, stationAfter=0;
     for (const auto& unit : battle.units) {
-        if (unit.owner == event.recipient) { ownBefore += unit.initialShips; ownAfter += unit.survivingShips; }
+        if (unit.owner == event.recipient) { if(unit.station) { stationBefore+=unit.initialShips; stationAfter+=unit.survivingShips; } else { ownBefore += unit.initialShips; ownAfter += unit.survivingShips; } }
         else enemyAfter += unit.survivingShips;
     }
     const QString outcome = battle.stalemate ? "Unresolved after round limit"
-        : ownAfter ? "Victory" : enemyAfter ? "Defeat" : "Mutual destruction";
+        : (ownAfter || stationAfter) ? "Victory" : enemyAfter ? "Defeat" : "Mutual destruction";
     QString text = QString("<b>Space battle — %1</b><br>Observation: turn %2. Report received: turn %3.<br>"
         "Position: %4, %5. Rounds: %6. Own ships lost: %7 of %8.<br><br>")
         .arg(outcome).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
         .arg(battle.position.x, 0, 'f', 1).arg(battle.position.y, 0, 'f', 1).arg(battle.rounds)
         .arg(qulonglong(ownBefore - ownAfter)).arg(qulonglong(ownBefore));
-    text += "<table cellspacing='4'><tr><th>Empire / Fleet / Design</th><th>Before</th><th>Lost</th><th>After</th><th>Armor left</th></tr>";
+    text += QString("Own stations lost: %1 of %2.<br><br>").arg(qulonglong(stationBefore-stationAfter)).arg(qulonglong(stationBefore));
+    text += "<table cellspacing='4'><tr><th>Empire / Fleet or station / Design</th><th>Before</th><th>Lost</th><th>After</th><th>Armor left</th></tr>";
     for (const auto& unit : battle.units) text += QString("<tr><td>%1%2 / %3 / %4</td><td>%5</td><td>%6</td><td>%7</td><td>%8</td></tr>")
         .arg(unit.owner == event.recipient ? "Own " : "Empire ").arg(unit.owner)
         .arg(QString::fromStdString(unit.fleetName).toHtmlEscaped(), QString::fromStdString(unit.designName).toHtmlEscaped())
@@ -276,8 +282,8 @@ QString space_battle_text(const GameEvent& event)
         const auto& source = battle.units[shot.attacker];
         const auto& target = battle.units[shot.target];
         text += QString("<tr><td>%1</td><td>%2 (#%3) → %4 (#%5)<br>%6</td><td>%7</td><td>%8 / %9</td><td>%10 / %11</td><td>%12</td></tr>")
-            .arg(shot.round).arg(QString::fromStdString(source.designName).toHtmlEscaped()).arg(source.fleet)
-            .arg(QString::fromStdString(target.designName).toHtmlEscaped()).arg(target.fleet)
+            .arg(shot.round).arg(QString::fromStdString(source.designName).toHtmlEscaped()).arg(source.station ? source.station : source.fleet)
+            .arg(QString::fromStdString(target.designName).toHtmlEscaped()).arg(target.station ? target.station : target.fleet)
             .arg(QString::fromStdString(component_spec(shot.weapon).name).toHtmlEscaped())
             .arg(shot.range, 0, 'f', 1).arg(qulonglong(shot.hits)).arg(qulonglong(shot.fired))
             .arg(shot.shieldDamage, 0, 'f', 1).arg(shot.armorDamage, 0, 'f', 1).arg(shot.shipsDestroyed);
@@ -286,7 +292,7 @@ QString space_battle_text(const GameEvent& event)
     if (shown < battle.shots.size() || battle.logTruncated)
         text += "<br>Volley display is limited; the fleet totals above include the entire battle.";
     text += "<br><br>Survivors interrupt their route. Armor damage persists and can be repaired; shields recharge for the next battle. "
-        "All different empires are hostile in this first combat model. Orbital station combat and battle doctrines are pending.";
+        "All different empires are hostile in this first combat model. Stations remain fixed in orbit and are repaired by paid refitting. Battle doctrines are pending.";
     return text;
 }
 
@@ -406,7 +412,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
         else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
-        else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital Dock";
+        else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital station";
+        else if (event.productionKind == ProductionKind::ColonyDefense) itemName = "Colony defense";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
             itemName = QString::fromStdString(design->name);
         } else {
@@ -500,7 +507,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
         else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
-        else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital Dock";
+        else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital station";
+        else if (event.productionKind == ProductionKind::ColonyDefense) itemName = "Colony defense";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
             itemName = QString::fromStdString(design->name);
         } else {

@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/stations.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
@@ -148,6 +149,12 @@ const std::vector<ResearchUnlock>& research_unlocks()
             entry.hull = hull.type;
             entries.push_back(std::move(entry));
         }
+        entries.push_back({ResearchField::Energy,1,"Colony defenses",
+            "Paid surface defenses reduce bombardment losses. Build in Production; limit 100.",{}});
+        entries.push_back({ResearchField::Construction,9,"Starbase",
+            "Orbital station: 6 weapon, 6 armor/shield and 4 electronics slots; 1600 base armor.",{}});
+        entries.push_back({ResearchField::Construction,16,"Fortress",
+            "Orbital station: 12 weapon, 12 armor/shield and 6 electronics slots; 6000 base armor.",{}});
         return entries;
     }();
     return unlocks;
@@ -493,9 +500,9 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         state.fleets.push_back(contact);
         state.nextFleetId = std::max(state.nextFleetId, contact.id + 1);
     }
-    for (const auto& station : host.orbitalStations) if (station.owner == playerId) {
-        state.orbitalStations.push_back(station);
-        state.nextOrbitalStationId = std::max(state.nextOrbitalStationId, station.id + 1);
+    for (const auto& planet : host.planets) if (const auto* station = known_orbital_station(host,playerId,planet.id)) {
+        state.orbitalStations.push_back(*station);
+        state.nextOrbitalStationId=std::max(state.nextOrbitalStationId,station->id+1);
     }
     return view;
 }

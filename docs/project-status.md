@@ -1,27 +1,30 @@
 # Project status and development handoff
 
-Snapshot: **12 October 2026, Dialog #07**. The starting baseline is main
-`6b90be08ee68c19c303c2d38fa57daa0c3b1e0aa`, after #179 (space-battle history)
-and #180 (official Qt toolchain diagnostics) were merged. The user authorized
-several planned tasks and merging after successful checks.
+Snapshot: **12 October 2026, Dialog #07**. The implementation branch starts
+from main `3f5570a565fcff0db3da218b16acbbbb21d8f59b` after PR #182. The user
+approved implementing the next stage and merging after successful checks.
 
 ## Current implementation
 
-Focused [#181](https://github.com/kotrf/suns/issues/181), continuing #48, adds
-three planned categories: ground casualties, bombardment population/infrastructure
-losses, and mine-strike destroyed ships/report counts. Reports carry immutable
-recipient-relative summaries; History credits them to communication receipt
-boundaries, retains unknown years as gaps and ignores duplicate packet IDs.
-Save v64 stores pending/delivered summaries and compact per-category totals;
-orders remain v19. See [Empire history](empire-history.md).
+[#183](https://github.com/kotrf/suns/issues/183) adds fitted Orbital Dock,
+Starbase and Fortress hulls, technology/access-gated equipment, paid production
+and refits retaining station IDs, fleet-versus-station combat and persistent
+damage/destruction. Stations lost have a separate receipt-year History metric;
+last confirmed station state remains until the battle report arrives.
+Energy 1 unlocks paid surface defenses, manual/annual batches and templates,
+with a cap of 100 and explicit population/infrastructure bombardment protection.
+See [Orbital stations and colony defense](orbital-stations.md).
 
-Validation: the full local Qt 6.4 Debug build and **51/51 CTest targets** pass.
-Core coverage includes both ground outcomes, recipient isolation, multiple
-bombarders, delayed mine destruction, overdue/duplicate packets and unknown
-older categories. Save/PBEM round trips and malformed summaries are checked;
-GUI coverage exercises all five metrics, gaps/scopes and exact 64-bit hover
-values. The charts were visually inspected. CI is tracked by the implementation
-PR linked from #181.
+Save v65 and orders v20 retain fits, damage, defense counts, refit targets,
+delayed contacts and station casualties. Validation covers resource/technology
+checks, deterministic stationary/crossing battles, loss of services, delayed
+player knowledge, defense replenishment and bombardment, save/PBEM round trips,
+malformed fits and the fitting dialog. The full local Qt 6.4 Debug suite passed
+**52/52 CTest targets**; the fitting dialog was visually inspected. CI status
+is recorded on the implementation PR.
+
+PR #182 completed receipt-year ground, bombardment and mine casualties under
+#181; #48 remains open for refinement. See [Empire history](empire-history.md).
 
 Designer, Research and History remain separate non-modal windows. Workspace v6
 retains main-window geometry and keeps these tools independent of dock presets.
@@ -59,8 +62,9 @@ adaptations, not claims of an exact Stars! implementation.
 ## Current boundaries
 
 - Combat treats all different owners as hostile; unarmed fleets do not fight
-  each other. Station combat, colony defenses, planetary scars, retreat
-  doctrines and diplomacy remain unimplemented. Between battles, damage still
+  each other. Planetary scars, retreat
+  doctrines and diplomacy remain unimplemented. Station hull prices and surface
+  protection are initial Suns! balance for playtesting. Between battles, damage still
   uses a fleet-wide percentage rather than individual damaged-ship records.
 - Battle reports obey communications delay. A destroyed remote fleet's last
   confirmed contact remains until its result arrives. Navigation forecasts omit
@@ -76,8 +80,8 @@ adaptations, not claims of an exact Stars! implementation.
 
 ## Formats and CI
 
-This slice uses save **v64** (existing readers v12–64) and orders **v19**
-(readers v1–19). Earlier casualty history remains unknown; old pending reports
+This slice uses save **v65** (existing readers v12–65) and orders **v20**
+(readers v1–20). Earlier casualty history remains unknown; old pending reports
 without exact summaries never invent measurements. Host and players must use
 the same build. Version numbers in older thematic documents describe when a
 feature was introduced unless explicitly identified as current. Legacy designs
@@ -90,8 +94,8 @@ new game. Existing readers can remain until the corresponding code is simplified
 this decision does not authorize a separate wholesale removal of legacy mechanics.
 
 GitHub Actions dispatches builds to our self-hosted Linux/X64 runner with label
-`suns`. Current jobs use ephemeral VM runner names such as `suns-eph-*`; the old
-`suns-eve` name is historical. The workflow runs on pushes into this repository,
+`suns`. The current verified runner is `suns-vps` with Qt 6.12.0. Older
+`suns-eph-*` and `suns-eve` names are historical. The workflow runs on pushes into this repository,
 including merges to main. Each merge can therefore create a new main build.
 Public fork PRs do not execute through this push-only workflow. Do not switch to
 GitHub-hosted runners without the user's decision.
@@ -102,7 +106,7 @@ These are open directions, not authorization to start every item:
 
 - [#44](https://github.com/kotrf/suns/issues/44): the research system and equipment
   catalogs are implemented, including initial bombardment/minefield/stealth;
-  remaining capabilities include station/stargate and full racial-trait systems.
+  remaining capabilities include stargates and full racial-trait systems.
 - [#45](https://github.com/kotrf/suns/issues/45): operational, contact, wormhole,
   ground- and space-battle messages exist; continue from unmet briefing/intel
   requirements rather than rebuilding the message pipeline.
@@ -121,10 +125,18 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-The #181 operational casualty categories are implemented. Next candidates include
-station fitting/combat, colony defenses/scars or battle doctrines/diplomacy;
-choose a focused slice from their unmet requirements and collect playtest results.
-Transport networks #53 remain late; #108 still requires separate discussion.
+The agreed sequence is **stations/colony defense (#183) → reconnaissance/EW
+(#45/#58/#101) → computer empires (#184)**. After this station stage, finish a
+playable recon/EW slice: dated enemy contact snapshots, confidence and clear
+jamming/false-signal behavior. Then immediately implement computer players:
+controller/ordinary orders first, expansion/economy/research second, military
+behavior third. AI uses deterministic C++ decisions on PlayerView, legal race
+profiles and ordinary costs, technology, fuel and communication constraints;
+no hidden host knowledge or computer-only economic/race advantages.
+
+Scars (#106), stargates and full race traits (#50) remain separate backlog work,
+not extra prerequisites before AI. Transport #53 remains late; #108 needs a
+separate discussion. Preserve dated snapshots as history.
 
 Implementation goes through a branch and reviewed PR; merge only on the user's
 explicit instruction. GitHub [#123](https://github.com/kotrf/suns/issues/123) and

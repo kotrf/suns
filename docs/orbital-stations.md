@@ -1,43 +1,85 @@
-# Orbital Stations
+# Orbital stations and colony defense
 
-Orbital infrastructure is a player-owned object rather than an implicit colony
-bonus. Each station has a stable id, an owner, an orbital planet, a hull type,
-a name and an explicit module list. This keeps the first playable dock simple
-while leaving room for station design, upgrades and combat damage later.
+Stations are separate player-owned objects with stable IDs, a planet, a fitted
+hull, components, service modules and persistent damage. One station occupies a
+planet's orbit. Homeworlds start with an empty basic dock; new colonies do not.
 
-## Basic orbital dock
+## Fitting and production
 
-The initial `OrbitalDock` hull provides two modules:
+Select an owned colony and use **Station…** to inspect, build or refit its
+station. The dialog shows armor, shields, damage, technology requirements and
+production/mineral costs. Equipment choices reuse the ship catalog and its
+technology/racial access gates. Stations accept beams/torpedoes, armor/shields
+and combat electronics. Engines, bombs, scanners and cloaks are excluded.
 
-- `Shipyard`: permits queued ships to be constructed at that colony;
-- `RefuelingDepot`: permits immediate and waypoint-arrival refueling.
+These hulls and prices are initial Suns! balance, rather than reproduced Stars!
+station statistics:
 
-The shipyard also repairs docked friendly fleets by 20 percentage points of
-hull damage per year. Repair resolves once after movement and production, so
-newly built docks can service arrivals that same year. A fleet immobilized at
-100% damage can fly again after a repair year. Repair is automatic and does
-not currently consume colony minerals.
+| Hull | Construction | Weapon / defense / electronics slots | Base armor | Production | I / B / G minerals |
+| --- | --- | --- | --- | --- | --- |
+| Orbital Dock | 0 | 2 / 2 / 2 | 400 | 24 | 12 / 6 / 8 |
+| Starbase | 9 | 6 / 6 / 4 | 1600 | 160 | 70 / 40 / 60 |
+| Fortress | 16 | 12 / 12 / 6 | 6000 | 500 | 200 / 160 / 180 |
 
-An orbital dock costs 24 production resources plus 12 Ironium, 6 Boranium and
-8 Germanium. It is constructed in the planet's normal ordered production queue.
-Only one station can currently occupy a planet's orbit.
+Fitted components add their ordinary production and mineral costs. Shipyard and
+refueling services can be toggled; removing them gives no cost refund. A refit
+pays the full fitted build price, preserves the station ID and repairs its hull.
+The existing station continues operating until completion. Minerals are charged
+on completion, through the normal colony queue. A missing/destroyed/foreign
+refit target discards the project without rebuilding a station or charging more
+resources. One station project may be queued per colony; cancel it before
+replacing it. A partly completed project retains the usual cancellation policy.
 
-The homeworld starts with a basic dock. Newly founded colonies do not. A ship
-may still be placed in a colony queue before a shipyard exists, but it waits at
-the front without consuming production resources. This allows a useful queue
-such as `Orbital Dock -> transport` to be planned in one turn. A player-facing
-warning is emitted once when production first becomes blocked.
+Shipyard service permits ship production and repairs docked friendly fleets by
+20 damage percentage points per year. It does not automatically repair the
+station itself. Refueling service supports dockside and arrival refueling.
+Destroying a station immediately removes both physical services. Surface cargo
+transfer remains a colony operation.
 
-Destroying or otherwise removing the station immediately removes its services:
-ship production waits, refueling orders and fleet repair no longer work. Surface cargo
-loading and unloading remain colony operations and do not require a station.
+## Station combat and knowledge
+
+Hostile armed encounters along fleet movement include stationary stations.
+A station can intercept an unarmed bomber, and an armed fleet can attack an
+unarmed dock. Stations remain fixed at the tactical origin; fleets begin one
+tactical square away so short-range guns can defend orbit. Fleet-only battles
+retain their previous four-square starting radius. Weapons, shields, initiative,
+computers, jammers and dampeners use the shared deterministic combat resolver.
+Armor damage persists until refit; shields recharge at the next battle.
+
+Manual founding/landing cannot bypass an armed station encounter. An armed hostile station must be neutralized before bombardment. Surviving
+bombers retain their mission and can bomb after the station is destroyed. Surface defenses do not shoot
+at ships and do not substitute for an armed station.
+
+Battle packets identify stations separately from fleets/designs and preserve
+their names and casualties. Stations lost are counted separately in History →
+**Station losses (stations/year)**, at the report receipt boundary. Uninvolved
+players receive no station fit or battle result. While the owner's report is in
+transit, a host-only snapshot preserves the last confirmed station for its UI
+and player export; it has no physical services. Player exports omit that host
+ledger, undelivered reports and foreign stations/defenses.
+
+## Surface defenses
+
+**Energy 1** unlocks Colony defense and Auto defenses in the Production batch
+selector and empire templates. Each unit costs **5 production, I 2 / B 1 / G 1**;
+the maximum is **100**. Annual rules remain in the queue at the cap and can
+replenish losses later. The colony panel and station dialog explain coverage.
+
+Population protection is `1 - 0.97^defenses` (about 95.2% at 100). Infrastructure
+protection is half that percentage. Protection reduces both percentage-based
+bomb kills and minimum kills, and reduces installation casualties. Bombs can
+destroy defenses: up to one third of installation casualties, rounded up, hit
+defenses; remaining casualties use the existing factory/mine distribution.
+Protection for each bombing fleet is calculated before that fleet's casualties,
+so successive attackers face depleted defenses. The ordinary immutable
+bombardment summary includes defenses among lost installations.
+
+These are initial balance rules for playtesting. Planetary scars/restoration,
+stargates, diplomacy and retreat doctrines remain separate work.
 
 ## Persistence
 
-Save format 24 stores station objects, their modules, the next stable station
-id and the shipyard-waiting state. Older supported saves are migrated by giving
-each already established colony a basic dock, preserving the shipbuilding and
-refueling behavior those campaigns had before stations became explicit.
-
-Future slices can add larger hulls, specialized modules, upgrade queues,
-defenses and station combat without replacing the identity or service model.
+Save **v65** adds station fits/damage, queued refit targets, colony defenses,
+station-loss history and undelivered station contacts. Orders **v20** adds fitted
+station construction/refit and defense batches/templates. Existing readers
+remain; all PBEM participants should use the same build.

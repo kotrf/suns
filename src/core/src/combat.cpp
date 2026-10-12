@@ -1,4 +1,5 @@
 #include "suns/combat.hpp"
+#include "suns/stations.hpp"
 
 #include "suns/communications.hpp"
 #include "suns/equipment.hpp"
@@ -25,6 +26,7 @@ struct Weapon {
 
 struct Unit {
     FleetId fleet{};
+    OrbitalStationId station{};
     PlayerId owner{};
     ShipDesignId design{};
     std::uint32_t count{};
@@ -91,8 +93,28 @@ std::optional<std::size_t> target_for(const std::vector<Unit>& units, std::size_
     return best;
 }
 
+void configure_unit(Unit& unit, const std::vector<ShipComponentType>& componentsToFit, int initiative, double& dampener)
+{
+    std::map<ShipComponentType, std::uint32_t> components;
+    for (const auto component : componentsToFit) ++components[component];
+    for (const auto& [component, copies] : components) {
+        const auto spec = component_spec(component);
+        initiative += spec.initiativeBonus * copies;
+        unit.computerFailureFactor *= std::pow(1 - spec.accuracyBonusPercent / 100, copies);
+        unit.jammerFactor *= std::pow(1 - spec.jammingPercent / 100, copies);
+        unit.beamFactor *= std::pow(1 + spec.beamBonusPercent / 100, copies);
+        unit.deflectorFactor *= std::pow(1 - spec.beamDeflectionPercent / 100, copies);
+        unit.movement += spec.battleMovementBonus * copies;
+        dampener = std::max(dampener, spec.battleMovementPenalty);
+        if (is_weapon(spec)) unit.weapons.push_back({spec, copies, 0});
+    }
+    unit.beamFactor = std::min(2.5, unit.beamFactor);
+    unit.deflectorFactor = std::max(0.1, unit.deflectorFactor);
+    for (auto& weapon : unit.weapons) weapon.initiative = initiative + weapon.spec.weaponInitiative;
+}
+
 SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& fleets,
-    Position position, std::uint64_t turn)
+    const std::vector<OrbitalStationId>& stations, Position position, std::uint64_t turn)
 {
     SpaceBattleReport report;
     report.observedTurn = turn;
@@ -124,33 +146,30 @@ SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& flee
             unit.shieldsPerShip = ship_design_shields(*design);
             unit.shields = unit.count * unit.shieldsPerShip;
             int initiative = hull_spec(design->hull).initiative;
-            std::map<ShipComponentType, std::uint32_t> components;
-            for (const auto component : design->components) ++components[component];
-            for (const auto& [component, copies] : components) {
-                const auto spec = component_spec(component);
-                initiative += spec.initiativeBonus * copies;
-                unit.computerFailureFactor *= std::pow(1 - spec.accuracyBonusPercent / 100, copies);
-                unit.jammerFactor *= std::pow(1 - spec.jammingPercent / 100, copies);
-                unit.beamFactor *= std::pow(1 + spec.beamBonusPercent / 100, copies);
-                unit.deflectorFactor *= std::pow(1 - spec.beamDeflectionPercent / 100, copies);
-                unit.movement += spec.battleMovementBonus * copies;
-                dampener = std::max(dampener, spec.battleMovementPenalty);
-                if (is_weapon(spec)) unit.weapons.push_back({spec, copies, 0});
-            }
-            unit.beamFactor = std::min(2.5, unit.beamFactor);
-            unit.deflectorFactor = std::max(0.1, unit.deflectorFactor);
-            for (auto& weapon : unit.weapons) weapon.initiative = initiative + weapon.spec.weaponInitiative;
+            configure_unit(unit,design->components,initiative,dampener);
             units.push_back(unit);
             report.units.push_back({unit.owner, id, stack.design, found->name, design->name,
                 stack.count, stack.count, unit.armor, unit.shields});
         }
     }
+    for (const auto id : stations) {
+        const auto* station=find_orbital_station(state,id); if (!station) continue;
+        owners.insert(station->owner); seed=mix(seed ^ (std::uint64_t(id)<<32) ^ 0x53544154494f4eULL);
+        Unit unit; unit.station=id; unit.owner=station->owner; unit.count=1;
+        unit.fullArmor=station_armor(*station);
+        unit.effectiveArmor=std::max(0.001,unit.fullArmor*(1-station->damagePercent/100));
+        unit.armor=unit.effectiveArmor; unit.shieldsPerShip=station_shields(*station); unit.shields=unit.shieldsPerShip;
+        configure_unit(unit,station->components,0,dampener); unit.movement=0;
+        units.push_back(unit);
+        report.units.push_back({unit.owner,0,0,station->name,station_hull_spec(station->hull).name,1,1,unit.armor,unit.shields,id});
+    }
     std::vector<PlayerId> ownerList(owners.begin(), owners.end());
     for (auto& unit : units) {
         const auto owner = std::find(ownerList.begin(), ownerList.end(), unit.owner) - ownerList.begin();
         const double angle = 2 * std::numbers::pi * owner / ownerList.size();
-        unit.position = {4 * std::cos(angle), 4 * std::sin(angle)};
-        unit.movement = std::clamp(unit.movement - dampener, 0.25, 2.5);
+        const double radius=stations.empty() ? 4 : 1;
+        unit.position = unit.station ? Position{} : Position{radius*std::cos(angle),radius*std::sin(angle)};
+        unit.movement = unit.station ? 0 : std::clamp(unit.movement-dampener,0.25,2.5);
     }
     struct Action { std::size_t unit; std::size_t weapon; int initiative; };
     std::vector<Action> actions;
@@ -168,7 +187,7 @@ SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& flee
         // Movement is simultaneous, using a single round-start snapshot.
         auto moved = units;
         for (std::size_t i = 0; i < units.size(); ++i) {
-            if (!units[i].count || units[i].weapons.empty()) continue;
+            if (!units[i].count || units[i].weapons.empty() || units[i].station) continue;
             const auto target = target_for(units, i);
             if (!target) continue;
             double range = 0;
@@ -254,7 +273,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
 {
     std::set<PlayerId> recipients;
     std::set<FleetId> fleetIds;
-    for (const auto& u : report.units) { recipients.insert(u.owner); fleetIds.insert(u.fleet); }
+    for (const auto& u : report.units) { recipients.insert(u.owner); if (u.fleet) fleetIds.insert(u.fleet); }
     std::map<PlayerId, std::uint64_t> deliveries;
     // Broadcast result packets while the pre-casualty relay network still
     // exists. This does not require a destroyed ship to transmit later.
@@ -294,6 +313,16 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         }
     }
     if (debris) { wreck.id = state.nextWreckId++; state.wrecks.push_back(wreck); }
+    std::set<OrbitalStationId> destroyedStations;
+    for(auto& station:state.orbitalStations) {
+        const auto unit=std::find_if(report.units.begin(),report.units.end(),[&](const auto& u) { return u.station==station.id; });
+        if(unit==report.units.end()) continue;
+        if(deliveries[station.owner]>report.observedTurn)
+            state.pendingStationContacts.push_back({station,report.observedTurn,deliveries[station.owner]});
+        if(!unit->survivingShips) destroyedStations.insert(station.id);
+        else station.damagePercent=std::clamp(100*(1-unit->remainingArmor/station_armor(station)),0.0,99.999999);
+    }
+    std::erase_if(state.orbitalStations,[&](const auto& s) { return destroyedStations.contains(s.id); });
     std::set<FleetId> destroyed;
     for (auto& fleet : state.fleets) {
         if (!fleetIds.contains(fleet.id)) continue;
@@ -336,7 +365,8 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         fleet.targetFleet = 0;
         fleet.repeatOrders = false;
         fleet.routeTemplate.clear();
-        fleet.task = FleetTask::None;
+        // A surviving bomber may continue its orbital mission once defenses are cleared.
+        if (fleet.task != FleetTask::Bombardment) fleet.task = FleetTask::None;
         fleet.fuelStalled = false;
     }
     std::erase_if(state.fleets, [&](const auto& f) { return destroyed.contains(f.id); });
@@ -355,28 +385,31 @@ bool fleet_has_space_weapons(const GameState& state, const Fleet& fleet)
 
 void resolve_space_battles(GameState& state, std::uint64_t observationTurn)
 {
-    struct Contact { FleetId id; PlayerId owner; Position position; bool armed; };
+    struct Contact { std::uint32_t id; PlayerId owner; Position position; bool armed; bool station{}; };
     std::vector<Contact> contacts;
-    for (const auto& f : state.fleets) contacts.push_back({f.id, f.owner, f.position, fleet_has_space_weapons(state, f)});
-    std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
-    std::set<FleetId> resolved;
-    for (const auto& anchor : contacts) {
-        if (resolved.contains(anchor.id)) continue;
-        const auto position = anchor.position;
-        std::vector<FleetId> local;
-        std::set<PlayerId> owners;
-        bool armed = false;
-        for (const auto& other : contacts) {
-            if (resolved.contains(other.id) || distance_between(position, other.position) > kFleetEncounterRadius + 1e-6) continue;
-            local.push_back(other.id);
-            owners.insert(other.owner);
-            armed |= other.armed;
+    for (const auto& f : state.fleets) contacts.push_back({f.id,f.owner,f.position,fleet_has_space_weapons(state,f),false});
+    for (const auto& station : state.orbitalStations) {
+        const auto planet=std::find_if(state.planets.begin(),state.planets.end(),[&](const auto& p) { return p.id==station.planet; });
+        const auto* star=planet==state.planets.end() ? nullptr : find_star(state,planet->star);
+        if(star) contacts.push_back({station.id,station.owner,star->position,station_has_weapons(station),true});
+    }
+    const auto key=[](const Contact& c) { return std::pair{c.station,c.id}; };
+    std::sort(contacts.begin(),contacts.end(),[&](const auto& a,const auto& b) { return key(a)<key(b); });
+    std::set<std::pair<bool,std::uint32_t>> resolved;
+    for(const auto& anchor:contacts) {
+        if(resolved.contains(key(anchor))) continue;
+        std::vector<FleetId> local; std::vector<OrbitalStationId> stations;
+        std::vector<Contact> participants; std::set<PlayerId> owners; bool armed=false;
+        for(const auto& other:contacts) {
+            if(resolved.contains(key(other)) || distance_between(anchor.position,other.position)>kFleetEncounterRadius+1e-6) continue;
+            participants.push_back(other); owners.insert(other.owner); armed|=other.armed;
+            if(other.station) stations.push_back(other.id); else local.push_back(other.id);
         }
-        if (owners.size() < 2 || !armed) continue;
-        const auto report = fight(state, local, position, observationTurn);
-        if (report.rounds == 0) continue;
-        apply_battle(state, report);
-        resolved.insert(local.begin(), local.end());
+        if(owners.size()<2 || !armed) continue;
+        const auto report=fight(state,local,stations,anchor.position,observationTurn);
+        if(!report.rounds) continue;
+        apply_battle(state,report);
+        for(const auto& c:participants) resolved.insert(key(c));
     }
 }
 

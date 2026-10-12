@@ -210,6 +210,7 @@ private:
     void queueFleetLoadAll();
     void queueShipDesign();
     void queueProduction(ProductionKind kind);
+    void openStationDesigner();
     void queueColonists();
     void queueColonize();
     void endTurn();

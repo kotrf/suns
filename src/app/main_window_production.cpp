@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/production.hpp"
+#include "suns/stations.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/campaign.hpp"
 
@@ -41,9 +42,11 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     switch (item.kind) {
     case ProductionKind::Factory: name = "Factory"; break;
     case ProductionKind::Mine: name = "Mine"; break;
+    case ProductionKind::ColonyDefense: name = "Colony defense"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;
     case ProductionKind::Research: return "Legacy Research item";
-    case ProductionKind::OrbitalStation: name = "Orbital Dock"; break;
+    case ProductionKind::OrbitalStation: name = item.station
+        ? QString(item.station->refitStation ? "Refit %1" : "Build %1").arg(station_hull_spec(item.station->loadout.hull).name) : "Orbital Dock"; break;
     case ProductionKind::ColonyShip:
         if (const auto* design = find_ship_design(state, item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId))
             return QString::fromStdString(design->name);
@@ -63,7 +66,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
 
 std::vector<ProductionItem> MainWindow::plannedProductionQueue(const Planet& planet) const
 {
-    const auto planned = planned_production_state(state_, pendingOrders_);
+    const auto planned = planned_production_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
     const auto found = std::find_if(planned.planets.begin(), planned.planets.end(),
         [&](const auto& candidate) { return candidate.id == planet.id; });
     return found == planned.planets.end() ? std::vector<ProductionItem>{} : found->productionQueue;
@@ -89,9 +92,11 @@ void MainWindow::installProductionQueue()
     };
     addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
     addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Colony defenses", ProductionKind::ColonyDefense, ProductionAutomation::None);
     addKind("Terraform", ProductionKind::Terraforming, ProductionAutomation::None);
     addKind("Auto factories ↻", ProductionKind::Factory, ProductionAutomation::Annual);
     addKind("Auto mines ↻", ProductionKind::Mine, ProductionAutomation::Annual);
+    addKind("Auto defenses ↻", ProductionKind::ColonyDefense, ProductionAutomation::Annual);
     addKind("Min Terraform ↻", ProductionKind::Terraforming, ProductionAutomation::MinTerraform);
     addKind("Max Terraform ↻", ProductionKind::Terraforming, ProductionAutomation::MaxTerraform);
     auto* amount = new QSpinBox(group);
@@ -160,7 +165,7 @@ void MainWindow::installProductionQueue()
         refreshProductionQueue();
     });
     connect(templates, &QComboBox::currentIndexChanged, this, [this, templates, newColonies] {
-        const auto planned = planned_production_state(state_, pendingOrders_);
+        const auto planned = planned_production_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
         const auto* player = find_player(planned, pendingOrders_.player);
         const auto name = templates->currentText().toStdString();
         if (player) for (const auto& value : player->productionTemplates)
@@ -260,7 +265,7 @@ void MainWindow::refreshProductionQueue()
     }
 
     productionQueuePlanet_ = planet->id;
-    auto forecastState = planned_production_state(state_, pendingOrders_);
+    auto forecastState = planned_production_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
     const auto projectedPlanet = std::find_if(forecastState.planets.begin(), forecastState.planets.end(),
         [planet](const auto& candidate) { return candidate.id == planet->id; });
     const auto queue = projectedPlanet->productionQueue;
@@ -296,6 +301,8 @@ void MainWindow::refreshProductionQueue()
     }
     batchAdd->setEnabled(batchKind->currentData().toInt() != int(ProductionKind::Terraforming)
         || next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value());
+    if(batchKind->currentData().toInt()==int(ProductionKind::ColonyDefense))
+        batchAdd->setEnabled(colony_defenses_available(forecastState,pendingOrders_.player) && planet->defenses<kMaximumColonyDefenses);
     const auto forecast = forecast_production_queue(forecastState, *planet, queue);
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
         ? forecastPlayer->technology.researchAllocationPercent
@@ -335,8 +342,8 @@ void MainWindow::refreshProductionQueue()
             .arg(queue.size()).arg(queue.size() == 1 ? "" : "s").arg(queue.empty() ? " — queue empty" : ""));
     }
 
-    bool shipyardAvailable = colony_has_orbital_service(
-        state_, planet->id, planet->owner, OrbitalStationModule::Shipyard);
+    const auto* knownStation = known_orbital_station(state_, planet->owner, planet->id);
+    bool shipyardAvailable = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
         const bool automatic = item.automation != ProductionAutomation::None;
@@ -382,7 +389,7 @@ void MainWindow::refreshProductionQueue()
         if (item.kind == ProductionKind::Terraforming) details += QString("\nEach unit costs %1 production and shifts one physical axis by 1 point. Hab improvement may differ.").arg(kTerraformingCost);
         row->setData(0, Qt::UserRole + 1, details);
         for (int column = 0; column < 4; ++column) row->setToolTip(column, details);
-        if (item.kind == ProductionKind::OrbitalStation) shipyardAvailable = true;
+        if (item.kind == ProductionKind::OrbitalStation) shipyardAvailable = !item.station || item.station->loadout.shipyard;
     }
 
     if (!queue.empty()) {

@@ -3,6 +3,7 @@ add_library(suns_core
     src/game_state.cpp
     src/hulls.cpp
     src/equipment.cpp
+    src/stations.cpp
     src/combat.cpp
     src/strategic_operations.cpp
     src/communications.cpp
