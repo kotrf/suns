@@ -42,7 +42,7 @@ void MainWindow::newCampaign()
     auto* explanation = new QLabel(
         "Player 1 is human and plays locally. Remote humans exchange .sunsturn / .sunsorders files. "
         "Computer empires submit ordinary orders automatically on this host, using their own received knowledge. "
-        "The current basic controller starts research and keeps standing orders.\n\n"
+        "Computer empires survey systems, settle known suitable worlds, develop colonies and research.\n\n"
         "Terrans: temperate worlds. Cryophiles: cold, lower-gravity worlds. "
         "Radiotrophs: narrow hot/heavy worlds, immune to radiation. "
         "Biology and the corresponding physical science unlock paid terraforming in the production queue.", &dialog);
@@ -189,9 +189,9 @@ void MainWindow::openComputerDecisions()
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setObjectName("computerDecisionsDialog");
     dialog->setWindowTitle("Computer decisions");
-    dialog->resize(950, 450);
+    dialog->resize(950, 600);
     auto* layout = new QVBoxLayout(dialog);
-    auto* summary = new QLabel("The last 32 resolved decisions per computer empire. Orders use the same turn processor as human orders. The current basic controller starts research and retains standing orders.", dialog);
+    auto* summary = new QLabel("Current fleet goals and the last 32 resolved decisions per computer empire. Exploration, settlement, production and research use ordinary orders and received knowledge. Distant commands wait for acknowledgement.", dialog);
     summary->setWordWrap(true);
     layout->addWidget(summary);
     auto* table = new QTreeWidget(dialog);
@@ -201,10 +201,17 @@ void MainWindow::openComputerDecisions()
     table->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table->header()->setSectionResizeMode(3, QHeaderView::Stretch);
     layout->addWidget(table, 1);
+    auto* goals = new QTreeWidget(dialog);
+    goals->setObjectName("computerGoalsTable");
+    goals->setHeaderLabels({"Empire", "Fleet", "Goal", "System", "Issued turn"});
+    goals->setRootIsDecorated(false);
+    goals->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    goals->header()->setSectionResizeMode(3, QHeaderView::Stretch);
+    layout->addWidget(goals, 1);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
     layout->addWidget(buttons);
-    auto refresh = [this, dialog, table,
+    auto refresh = [this, dialog, table, goals,
         previous = std::vector<std::pair<std::string, ComputerState>>{}]() mutable {
         if (shuttingDown_ || !dialog->isVisible()) return;
         std::vector<std::pair<std::string, ComputerState>> current;
@@ -215,13 +222,24 @@ void MainWindow::openComputerDecisions()
         if (current == previous) return;
         previous = current;
         table->clear();
+        goals->clear();
         if (sessionMode_ == SessionMode::PlayerTurn) return;
         for (const auto& player : state_.players) {
             if (player.controller != PlayerController::Computer) continue;
-            for (auto record = player.computer.decisions.rbegin(); record != player.computer.decisions.rend(); ++record)
-                new QTreeWidgetItem(table, {QString::fromStdString(player.name),
+            for (auto record = player.computer.decisions.rbegin(); record != player.computer.decisions.rend(); ++record) {
+                auto* item = new QTreeWidgetItem(table, {QString::fromStdString(player.name),
                     QString::number(qulonglong(record->turn)), QString::number(record->orderCount),
                     QString::fromStdString(record->reason)});
+                item->setToolTip(3, QString::fromStdString(record->reason));
+            }
+            for (const auto& goal : player.computer.fleetGoals) {
+                const auto* star = find_star(state_, goal.target);
+                const auto kind = goal.kind == ComputerFleetGoalKind::Survey ? "Survey and return"
+                    : goal.kind == ComputerFleetGoalKind::Colonize ? "Colonize" : "Resupply";
+                new QTreeWidgetItem(goals, {QString::fromStdString(player.name), QString::number(goal.fleet),
+                    kind, star ? QString::fromStdString(star->name) : QString::number(goal.target),
+                    QString::number(qulonglong(goal.issuedTurn))});
+            }
         }
     };
     auto* timer = new QTimer(dialog);
