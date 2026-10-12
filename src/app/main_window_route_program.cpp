@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/wormholes.hpp"
 
 #include "suns/communications.hpp"
@@ -531,9 +532,9 @@ QString MainWindow::selectedFleetWaypointFuelWarning(
     const auto fleet = fleet_player_view(state_, *source);
     Position destination;
     if (targetFleet != 0) {
-        const auto* target = findFleet(state_, targetFleet);
+        const auto target = knownFleetTarget(targetFleet);
         if (!target || targetFleet == fleet.id) return {};
-        destination = fleet_player_view(state_, *target).position;
+        destination = target->position;
         if (target->owner != fleet.owner) targetFleet = 0;
     } else {
         const auto* star = selectedStar();
@@ -682,9 +683,18 @@ QString MainWindow::selectedSystemFleetHeading() const
         .arg(QString::fromStdString(star->name)).arg(count).arg(count == 1 ? "" : "s");
 }
 
+std::optional<Fleet> MainWindow::knownFleetTarget(FleetId id) const
+{
+    if(const auto* f=findFleet(state_,id); f && f->owner==pendingOrders_.player) return fleet_player_view(state_,*f);
+    for(const auto& f:missing_fleet_contacts(state_,pendingOrders_.player)) if(f.id==id) return f;
+    for(const auto& c:known_enemy_contacts(state_,pendingOrders_.player))
+        if(c.fleet==id && !c.lost && c.quality!=ContactQuality::Probable) return recon_contact_fleet(c,state_.turn);
+    return {};
+}
+
 QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
 {
-    if (const auto* fleet = findFleet(state_, fleetId)) {
+    if (const auto fleet = knownFleetTarget(fleetId)) {
         return QString("%1 (Fleet %2)").arg(QString::fromStdString(fleet->name)).arg(fleetId);
     }
     for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player)) if (contact.id == fleetId)
@@ -706,9 +716,9 @@ std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedS
     });
 
     const auto source = selectedFleetForRouteProgram();
-    for (const auto& fleet : state_.fleets) {
+    for (const auto& fleet : make_player_view(state_,pendingOrders_.player).state.fleets) {
         if (fleet.id == source) continue;
-        const auto visible = fleet_player_view(state_, fleet);
+        const auto& visible = fleet;
         if (!same_position(visible.position, star->position)) continue;
         const bool enemy = fleet.owner != pendingOrders_.player;
         targets.push_back({
@@ -770,7 +780,7 @@ QString MainWindow::routeProgramMapTargetName(int kind, std::uint32_t id) const
             return QString::fromStdString(star->name);
         }
     } else if (kind == 2 || kind == 3) {
-        if (const auto* fleet = findFleet(state_, static_cast<FleetId>(id))) {
+        if (const auto fleet = knownFleetTarget(static_cast<FleetId>(id))) {
             return QString::fromStdString(fleet->name);
         }
     }
@@ -792,7 +802,7 @@ bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
         }
         if (!selectWorkspaceObject(1, id)) return false;
     } else if (kind == 2 || kind == 3) {
-        const auto* target = findFleet(state_, static_cast<FleetId>(id));
+        const auto target = knownFleetTarget(static_cast<FleetId>(id));
         if (!target || target->id == source->id) {
             statusBar()->showMessage(
                 "Choose another fleet as the route target", 3000);
@@ -893,7 +903,7 @@ bool MainWindow::appendFleetTargetWaypoint(
     FleetId targetFleetId, std::uint8_t warp, FleetArrivalAction arrivalAction)
 {
     const auto* source = selectedFleet();
-    const auto* target = findFleet(state_, targetFleetId);
+    const auto target = knownFleetTarget(targetFleetId);
     if (!source || !target || source->id == target->id
         || !fleet_warp_valid(state_, *source, warp)) {
         statusBar()->showMessage("Select another fleet as the target", 3000);
@@ -906,7 +916,7 @@ bool MainWindow::appendFleetTargetWaypoint(
             return false;
         }
         return appendRouteWaypoint(
-            fleet_player_view(state_, *target).position, 0, warp, arrivalAction);
+            target->position, 0, warp, arrivalAction);
     }
     if (arrivalAction.kind != FleetArrivalActionKind::None
         && arrivalAction.kind != FleetArrivalActionKind::MergeWithFleet) {

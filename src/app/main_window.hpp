@@ -211,6 +211,8 @@ private:
     void queueShipDesign();
     void queueProduction(ProductionKind kind);
     void openStationDesigner();
+    void openReconnaissance();
+    [[nodiscard]] std::optional<Fleet> knownFleetTarget(FleetId) const;
     void queueColonists();
     void queueColonize();
     void endTurn();

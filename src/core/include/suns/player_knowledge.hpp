@@ -47,7 +47,7 @@ void queue_player_report(
     std::uint64_t deliveredColonists = 0,
     Position contactPosition = {},
     PlayerId contactOwner = 0,
-    std::optional<OperationalLossReport> losses = {});
+    std::optional<OperationalLossReport> losses = {}, FleetId observer = 0);
 
 // Detect transitions in physical sensor coverage. Reports travel through the
 // same communication channel as fleet operations, including remote scouts.

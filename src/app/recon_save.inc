@@ -1,0 +1,92 @@
+// Private save helpers for immutable reconnaissance evidence.
+void writeReconContact(QDataStream& s,const ReconContact& c)
+{
+    s << quint32(c.fleet) << quint32(c.owner); writePosition(s,c.position);
+    s << c.uncertainty; writeEnum(s,c.quality); writeEnum(s,c.sensor);
+    s << quint64(c.observedTurn) << quint64(c.lastSeenTurn) << quint64(c.deliveryTurn)
+      << quint32(c.sourceFleet) << quint32(c.sourceColony) << quint32(c.star) << c.massMinimum << c.massMaximum
+      << quint32(c.shipCount) << quint32(c.hulls.size());
+    for(auto h:c.hulls) writeEnum(s,h);
+    s << quint8(c.lost) << quint8(c.jammed);
+}
+void readReconContact(QDataStream& s,ReconContact& c)
+{
+    quint64 observed{},seen{},due{}; quint8 lost{},jammed{}; quint32 count{};
+    s >> c.fleet >> c.owner; readPosition(s,c.position); s >> c.uncertainty;
+    if(!readEnum(s,c.quality,quint8(ContactQuality::Identified)) || !readEnum(s,c.sensor,quint8(ContactSensor::Passive))) return;
+    s >> observed >> seen >> due >> c.sourceFleet >> c.sourceColony >> c.star >> c.massMinimum >> c.massMaximum >> c.shipCount;
+    c.observedTurn=observed; c.lastSeenTurn=seen; c.deliveryTurn=due;
+    if(!readCount(s,count) || count>40) { markCorrupt(s); return; }
+    for(quint32 i=0;i<count;++i) { ShipHullType h; if(!readEnum(s,h,quint8(ShipHullType::MetaMorph))) return; c.hulls.push_back(h); }
+    s >> lost >> jammed; c.lost=lost; c.jammed=jammed;
+    if(lost>1 || jammed>1 || !recon_contact_valid(c)) markCorrupt(s);
+}
+void writeSensorStatus(QDataStream& s,const SensorStatus& x)
+{
+    s << quint32(x.fleet) << quint32(x.colony); writePosition(s,x.position);
+    s << quint64(x.observedTurn) << quint64(x.deliveryTurn) << quint8(x.interferencePercent)
+      << x.nominalRange << x.activeRange << x.passiveRange << x.emissionRange;
+}
+void readSensorStatus(QDataStream& s,SensorStatus& x)
+{
+    quint64 observed{},due{}; s >> x.fleet >> x.colony; readPosition(s,x.position);
+    s >> observed >> due >> x.interferencePercent >> x.nominalRange >> x.activeRange >> x.passiveRange >> x.emissionRange;
+    x.observedTurn=observed; x.deliveryTurn=due;
+    if(!sensor_status_valid(x)) markCorrupt(s);
+}
+template<class T> void writeReconEvidence(QDataStream& s,const T& x)
+{
+    s << quint8(x.contact.has_value()); if(x.contact) writeReconContact(s,*x.contact);
+    s << quint8(x.sensorStatus.has_value()); if(x.sensorStatus) writeSensorStatus(s,*x.sensorStatus);
+}
+bool reconEvidenceMatches(const PendingPlayerReport& x)
+{
+    if(x.contact && (x.kind!=PlayerReportKind::EnemyFleetDetected && x.kind!=PlayerReportKind::EnemyFleetLost && x.kind!=PlayerReportKind::EnemyFleetReclassified)) return false;
+    if(x.contact && (x.contact->fleet!=x.fleet || x.contact->owner!=x.contactOwner || x.contact->observedTurn!=x.observedTurn
+        || x.contact->deliveryTurn!=x.deliveryTurn || !same_position(x.contact->position,x.contactPosition)
+        || x.contact->lost!=(x.kind==PlayerReportKind::EnemyFleetLost))) return false;
+    if(x.sensorStatus && (x.kind!=PlayerReportKind::SensorInterferenceChanged || x.sensorStatus->fleet!=x.fleet
+        || x.sensorStatus->colony!=x.planet || x.sensorStatus->observedTurn!=x.observedTurn
+        || x.sensorStatus->deliveryTurn!=x.deliveryTurn || x.sensorStatus->interferencePercent!=x.quantity
+        || !same_position(x.sensorStatus->position,x.position))) return false;
+    return (x.kind!=PlayerReportKind::EnemyFleetReclassified || x.contact) && (x.kind!=PlayerReportKind::SensorInterferenceChanged || x.sensorStatus);
+}
+bool reconEvidenceMatches(const GameEvent& x)
+{
+    if(x.contact && (x.kind!=GameEventKind::EnemyFleetDetected && x.kind!=GameEventKind::EnemyFleetLost && x.kind!=GameEventKind::EnemyFleetReclassified)) return false;
+    if(x.contact && (x.contact->fleet!=x.fleet || x.contact->owner!=x.contactOwner || x.contact->observedTurn!=x.observedTurn
+        || x.contact->deliveryTurn>x.turn || !same_position(x.contact->position,x.position)
+        || x.contact->lost!=(x.kind==GameEventKind::EnemyFleetLost))) return false;
+    if(x.sensorStatus && (x.kind!=GameEventKind::SensorInterferenceChanged || x.sensorStatus->fleet!=x.fleet
+        || x.sensorStatus->colony!=x.planet || x.sensorStatus->observedTurn!=x.observedTurn
+        || x.sensorStatus->deliveryTurn>x.turn || x.sensorStatus->interferencePercent!=x.quantity
+        || !same_position(x.sensorStatus->position,x.position))) return false;
+    return (x.kind!=GameEventKind::EnemyFleetReclassified || x.contact) && (x.kind!=GameEventKind::SensorInterferenceChanged || x.sensorStatus);
+}
+template<class T> void readReconEvidence(QDataStream& s,T& x)
+{
+    quint8 present{}; s >> present;
+    if(present>1) { markCorrupt(s); return; }
+    if(present) { ReconContact c; readReconContact(s,c); x.contact=c; }
+    s >> present; if(present>1) { markCorrupt(s); return; }
+    if(present) { SensorStatus status; readSensorStatus(s,status); x.sensorStatus=status; }
+    if(!reconEvidenceMatches(x)) markCorrupt(s);
+}
+// An event-only trailing section keeps earlier record layouts intact.
+void writeReconMessages(QDataStream& stream,const SaveGameData& save)
+{
+    QByteArray payload; QDataStream s(&payload,QIODevice::WriteOnly); s.setVersion(stream.version());
+    s << quint32(save.strategicMessages.size());
+    for(const auto& e:save.strategicMessages) { s << quint64(e.id); writeReconEvidence(s,e); }
+    stream << quint32(0x5245434Eu) << quint32(payload.size()); stream.writeRawData(payload.data(),payload.size());
+}
+void readReconMessages(QDataStream& stream,SaveGameData& save)
+{
+    quint32 magic{},size{},count{}; stream >> magic >> size;
+    if(magic!=0x5245434Eu || size>64*1024*1024) { markCorrupt(stream); return; }
+    QByteArray bytes(size,'\0'); if(stream.readRawData(bytes.data(),size)!=int(size)) { markCorrupt(stream); return; }
+    QDataStream s(bytes); s.setVersion(stream.version());
+    if(!readCount(s,count) || count!=save.strategicMessages.size()) { markCorrupt(stream); return; }
+    for(auto& e:save.strategicMessages) { quint64 id{}; s >> id; if(id!=e.id) { markCorrupt(stream); return; } readReconEvidence(s,e); }
+    if(s.status()!=QDataStream::Ok || !s.atEnd()) markCorrupt(stream);
+}

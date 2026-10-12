@@ -1,4 +1,5 @@
 #include "suns/player_knowledge.hpp"
+#include "suns/reconnaissance.hpp"
 
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -86,6 +87,8 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::MineStrike: return GameEventKind::MineStrike;
     case PlayerReportKind::ScientificData: return GameEventKind::ScientificData;
     case PlayerReportKind::EmissionDetected: return GameEventKind::EmissionDetected;
+    case PlayerReportKind::EnemyFleetReclassified: return GameEventKind::EnemyFleetReclassified;
+    case PlayerReportKind::SensorInterferenceChanged: return GameEventKind::SensorInterferenceChanged;
     }
     return GameEventKind::FleetArrived;
 }
@@ -131,6 +134,8 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         mix(std::bit_cast<std::uint64_t>(report.contactPosition.y));
         mix(report.deliveredColonists);
     }
+    if(report.sensorStatus) { mix(report.sensorStatus->fleet); mix(report.sensorStatus->colony); mix(report.sensorStatus->interferencePercent); }
+    if(report.contact) { mix(std::uint64_t(report.contact->quality)); mix(report.contact->sourceFleet); mix(report.contact->sourceColony); mix(report.contact->jammed); }
     if (report.battle) {
         mix(std::bit_cast<std::uint64_t>(report.battle->position.x));
         mix(std::bit_cast<std::uint64_t>(report.battle->position.y));
@@ -174,8 +179,8 @@ void queue_survey_report(
     auto* player = mutable_player(state, playerId);
     if (!player) return;
 
-    auto deliveryTurn = observationTurn + communication_delay_turns(state, playerId, sourcePosition);
-    for (const auto& f : state.fleets) if (f.id == sourceFleet) deliveryTurn = fleet_available_turn(f, observationTurn) + communication_delay_turns(state, playerId, sourcePosition);
+    auto deliveryTurn = observationTurn + communication_delay_turns(state, playerId, sourcePosition,observationTurn);
+    for (const auto& f : state.fleets) if (f.id == sourceFleet) deliveryTurn = fleet_available_turn(f, observationTurn) + communication_delay_turns(state, playerId, sourcePosition,observationTurn);
     std::optional<PlayerId> observedOwner;
     if (level >= SurveyLevel::OrbitalSurvey) {
         if (const auto* planet = find_planet_at_star(state, star)) observedOwner = planet->owner;
@@ -225,12 +230,12 @@ void queue_player_report(
     std::uint64_t deliveredColonists,
     Position contactPosition,
     PlayerId contactOwner,
-    std::optional<OperationalLossReport> losses)
+    std::optional<OperationalLossReport> losses,FleetId observer)
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
-    const auto deliveryTurn = report_transmission_turn(state,recipient,sourcePosition,observationTurn,fleet)
-        + communication_delay_turns(state, recipient, sourcePosition);
+    const auto deliveryTurn = report_transmission_turn(state,recipient,sourcePosition,observationTurn,observer?observer:fleet)
+        + communication_delay_turns(state, recipient, sourcePosition,observationTurn);
     player->pendingPlayerReports.push_back({
         kind,
         observationTurn,
@@ -261,8 +266,8 @@ void observe_fleet_sensor_sweep(
     std::uint64_t observationTurn)
 {
     observe_wormhole_sweep(state, fleet, start, end, observationTurn);
-    const auto range = strategic_sensor_range(state, fleet);
-    if (!fleet_has_scanner(state, fleet) || fleet.electronics.mode != EmissionMode::Standard) return;
+    const auto range = strategic_sensor_range(state, fleet,observationTurn);
+    if (!fleet_has_scanner(state, fleet) || !fleet_active_sensors(fleet,observationTurn)) return;
     const auto penetratingRange = fleet_penetrating_sensor_range(state, fleet);
 
     for (const auto& star : state.stars) {
@@ -294,8 +299,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         }
 
         for (const auto& fleet : state.fleets) {
-            const auto range = strategic_sensor_range(state, fleet);
-            if (fleet.electronics.mode == EmissionMode::Standard && fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
+            const auto range = strategic_sensor_range(state, fleet,observationTurn);
+            if (fleet_active_sensors(fleet,observationTurn) && fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
                 auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
                     const auto known = best_observed_level(state, fleet.owner, star.id);
@@ -315,98 +320,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
     }
 }
 
-void observe_enemy_fleet_contacts(GameState& state, std::uint64_t observationTurn)
-{
-    for (auto& player : state.players) {
-        std::vector<Player::EnemyContact> visible;
-        for (const auto& enemy : state.fleets) {
-            if (enemy.owner == 0 || enemy.owner == player.id) continue;
-            // Prefer the shortest communication route. Ties use stable source
-            // IDs, regardless of container iteration or fleet insertion order.
-            auto best = std::tuple{std::numeric_limits<std::uint32_t>::max(), 2, std::uint32_t{0}};
-            Position source;
-            FleetId reporterFleet = 0;
-            PlanetId reporterColony = 0;
-            for (const auto& colony : state.planets) {
-                if (colony.owner != player.id || colony.population == 0) continue;
-                const auto* star = find_star(state, colony.star);
-                if (!star || !colony_detects_fleet(state, colony, enemy))
-                    continue;
-                const auto priority = std::tuple{communication_delay_turns(state, player.id, star->position),
-                    0, colony.id};
-                if (priority < best) {
-                    best = priority;
-                    source = star->position;
-                    reporterFleet = 0;
-                    reporterColony = colony.id;
-                }
-            }
-            for (const auto& detector : state.fleets) {
-                if (detector.owner != player.id || !detector_detects_fleet(state, detector, enemy)) continue;
-                const auto priority = std::tuple{communication_delay_turns(state, player.id, detector.position),
-                    1, detector.id};
-                if (priority < best) {
-                    best = priority;
-                    source = detector.position;
-                    reporterFleet = detector.id;
-                    reporterColony = 0;
-                }
-            }
-            if (std::get<0>(best) == std::numeric_limits<std::uint32_t>::max()) continue;
-            visible.push_back({enemy.id, enemy.owner, enemy.position, reporterFleet, reporterColony});
-            const auto previous = std::find_if(player.observedEnemyFleets.begin(),
-                player.observedEnemyFleets.end(), [&](const auto& contact) {
-                    return contact.fleet == enemy.id;
-                });
-            if (previous != player.observedEnemyFleets.end()) continue;
-            StarId starId = 0;
-            for (const auto& star : state.stars) if (same_position(star.position, enemy.position)) {
-                starId = star.id;
-                break;
-            }
-            queue_player_report(state, player.id, PlayerReportKind::EnemyFleetDetected,
-                source, observationTurn, starId, 0, enemy.id, 0, ProductionKind::ColonyShip,
-                0, ResearchField::Electronics, 0, {}, 0, enemy.position, enemy.owner);
-        }
-
-        for (const auto& previous : player.observedEnemyFleets) {
-            if (std::any_of(visible.begin(), visible.end(), [&](const auto& current) {
-                return current.fleet == previous.fleet;
-            })) continue;
-            // A surviving sensor can report the loss of its earlier signal.
-            // If the source itself vanished, there is nobody to send a report.
-            Position source;
-            if (previous.reportingFleet != 0) {
-                const auto detector = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& fleet) {
-                    return fleet.id == previous.reportingFleet && fleet.owner == player.id;
-                });
-                if (detector == state.fleets.end()) continue;
-                source = detector->position;
-            } else {
-                const auto colony = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
-                    return planet.id == previous.reportingColony && planet.owner == player.id
-                        && planet.population > 0;
-                });
-                if (colony == state.planets.end()) continue;
-                const auto* star = find_star(state, colony->star);
-                if (!star) continue;
-                source = star->position;
-            }
-            StarId starId = 0;
-            for (const auto& star : state.stars) if (same_position(star.position, previous.lastPosition)) {
-                starId = star.id;
-                break;
-            }
-            queue_player_report(state, player.id, PlayerReportKind::EnemyFleetLost,
-                source, observationTurn, starId, 0, previous.fleet, 0, ProductionKind::ColonyShip,
-                0, ResearchField::Electronics, 0, {}, 0, previous.lastPosition, previous.owner);
-        }
-        std::sort(visible.begin(), visible.end(), [](const auto& a, const auto& b) {
-            return a.fleet < b.fleet;
-        });
-        player.observedEnemyFleets = std::move(visible);
-    }
-}
+void observe_enemy_fleet_contacts(GameState& state,std::uint64_t turn)
+{ observe_reconnaissance(state,turn); }
 
 std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
 {
@@ -497,6 +412,7 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
 
 std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 {
+    deliver_reconnaissance(state);
     std::vector<GameEvent> events;
     for (auto& player : state.players) {
         std::stable_sort(player.pendingPlayerReports.begin(), player.pendingPlayerReports.end(),
@@ -510,8 +426,22 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            if(report.sensorStatus) {
+                const auto current=std::find_if(player.sensorStatus.begin(),player.sensorStatus.end(),[&](const auto& x){return x.fleet==report.fleet && x.colony==report.planet;});
+                if(current!=player.sensorStatus.end() && current->observedTurn>report.observedTurn) continue;
+            }
+            if(report.contact) {
+                const auto current=std::find_if(player.enemyContacts.begin(),player.enemyContacts.end(),[&](const auto& c){return c.fleet==report.fleet;});
+                if(current!=player.enemyContacts.end() && current->observedTurn>report.observedTurn) continue;
+            }
+            if(report.contact || report.sensorStatus) {
+                const auto id=stable_event_id(report,player.id);
+                if(std::any_of(events.begin(),events.end(),[&](const auto& e){return e.id==id;})
+                    || std::any_of(player.history.begin(),player.history.end(),[&](const auto& h){return std::any_of(h.milestones.begin(),h.milestones.end(),[&](const auto& m){return m.eventId==id;});})) continue;
+            }
             if (report.kind == PlayerReportKind::ScientificData) apply_scientific_data(state, player, report, events);
             auto severity = event_severity(report.kind);
+            if(report.sensorStatus) severity=report.quantity?GameEventSeverity::Warning:GameEventSeverity::Information;
             if (report.battle) {
                 bool survivors = false, losses = false;
                 for (const auto& unit : report.battle->units) if (unit.owner == player.id) {
@@ -534,7 +464,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.shipDesign,
                 report.productionKind,
                 report.kind == PlayerReportKind::EnemyFleetDetected
-                        || report.kind == PlayerReportKind::EnemyFleetLost
+                        || report.kind == PlayerReportKind::EnemyFleetLost || report.kind == PlayerReportKind::EnemyFleetReclassified
                         || report.kind == PlayerReportKind::ScientificData || report.kind == PlayerReportKind::EmissionDetected
                     ? report.contactPosition : report.position,
                 static_cast<std::int32_t>(report.quantity),
@@ -548,6 +478,8 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 0,
                 report.battle,
                 report.losses,
+                report.contact,
+                report.sensorStatus,
             });
         }
 

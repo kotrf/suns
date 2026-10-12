@@ -22,8 +22,7 @@ towards the stored natural environment, up to one point per fitted copy each yea
 
 The attacker and defender receive immutable losses, after communication delivery.
 Third parties get no bombing result. At zero population the colony becomes
-neutral, its queue is cleared and its station is removed. No permanent planetary
-scars or defense installations are added in this slice (#106 remains separate).
+neutral, its queue is cleared and its station is removed. [Paid colony defenses](orbital-stations.md) now reduce population/installation losses; armed stations block bombing until destroyed. Planetary scars (#106) remain separate.
 
 ## Minefields
 
@@ -75,7 +74,7 @@ generic reports use the earliest co-located transmitter, with colony reports
 independent of silent orbiting fleets. Combat snapshots retain these delivery
 dates even if the reporting fleet is destroyed. Owner positions continue to be projected from confirmed
 telemetry. Silent fleets do not act as communication relays or publish new active
-surveys. A burst/single-scan route program is not implemented yet (#101).
+surveys. [Programmable communication/active-scan windows](reconnaissance.md) are now implemented; more conditional doctrines remain under #101.
 
 Active jammers reduce opposing fleet scanners inside an aura of at least 30 ly
 (or the jammer fleet's ordinary scanner range). Component strengths combine with
@@ -150,3 +149,7 @@ ships destroyed; nonfatal damage and speed traps do not count as ship losses.
 Unseen enemy mine strikes are not reported to the minefield owner. Totals and
 markers wait for normal communication delivery, persist in saves/player exports,
 and do not require retained Turn Messages. Orders remain v19.
+
+## Reconnaissance follow-up (save v66/orders v21)
+
+[Reconnaissance](reconnaissance.md) adds delivered hull confidence/mass estimates, stale/lost tracks, sensor-interference reports, station jamming, colony emission reception, coalesced area reports and periodic silent communication/active-scan windows. Enemy route targets use reported positions. #58/#101 remain open for advanced traffic/decoy/doctrine work; the agreed next stage is fair computer players #184.

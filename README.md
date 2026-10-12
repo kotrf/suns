@@ -94,3 +94,5 @@ destruction. Different empires are hostile in this first slice. [Bombardment, mi
 now have explicit fleet missions and emission controls. Station combat remains future work.
 
 Owned colonies offer **Station…** for fitted docks, starbases and fortresses. Stations defend orbit, retain battle damage and lose their services when destroyed. **Energy 1** unlocks paid **Colony defense / Auto defenses** in Production to protect against bombardment. See [stations and colony defense](docs/orbital-stations.md).
+
+**Fleet → Intelligence…** shows dated enemy contact snapshots, quality, mass estimates and hull evidence. Radio silence can carry periodic communication/active-scan windows and wake on arrival. Sensor interference/clearance is reported with communication delay. See [reconnaissance](docs/reconnaissance.md).

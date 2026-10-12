@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
 
 #include <QAction>
@@ -165,10 +166,15 @@ QString event_subject(const GameState& state, const GameEvent& event)
         subject = QString("Cargo delivered to %1").arg(planetName);
         break;
     case GameEventKind::EnemyFleetDetected:
-        subject = QString("Enemy fleet %1 detected").arg(event.fleet);
+        subject = event.contact?QString("%1 contact %2 detected").arg(contact_quality_name(event.contact->quality)).arg(event.fleet)
+            : QString("Enemy fleet %1 detected").arg(event.fleet);
         break;
+    case GameEventKind::EnemyFleetReclassified:
+        subject=QString("Contact %1 reclassified: %2").arg(event.fleet).arg(event.contact?contact_quality_name(event.contact->quality):"unknown"); break;
+    case GameEventKind::SensorInterferenceChanged:
+        subject=event.quantity?QString("Sensor interference: %1% reduction").arg(event.quantity):"Sensor interference cleared"; break;
     case GameEventKind::EnemyFleetLost:
-        subject = QString("Contact lost: enemy fleet %1").arg(event.fleet);
+        subject = QString("Contact lost: %1").arg(event.fleet);
         break;
     case GameEventKind::FleetMobilityRestored:
         subject = QString("%1 can fly again after repairs").arg(fleetName);
@@ -224,7 +230,8 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     case MessageTypeFilter::Freight: return event.kind == GameEventKind::FreightDelivered;
     case MessageTypeFilter::EnemyContacts:
         return event.kind == GameEventKind::EnemyFleetDetected
-            || event.kind == GameEventKind::EnemyFleetLost || event.kind == GameEventKind::EmissionDetected;
+            || event.kind == GameEventKind::EnemyFleetLost || event.kind == GameEventKind::EmissionDetected
+            || event.kind == GameEventKind::EnemyFleetReclassified || event.kind == GameEventKind::SensorInterferenceChanged;
     case MessageTypeFilter::Combat:
         return event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
             || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
@@ -299,6 +306,30 @@ QString space_battle_text(const GameEvent& event)
 QString event_text(const GameState& state, const GameEvent& event)
 {
     if (event.kind == GameEventKind::SpaceBattle) return space_battle_text(event);
+    if(event.contact) {
+        const auto& c=*event.contact;
+        QString text=QString("Contact %1 — %2%3\nObserved year %4; received year %5. Last position seen in year %6: (%7, %8), uncertainty %9 ly.\nMass estimate: %10–%11 kt. %12 observation%13.")
+            .arg(c.fleet).arg(contact_quality_name(c.quality)).arg(c.lost?" / lost":"")
+            .arg(qulonglong(c.observedTurn)).arg(qulonglong(event.turn)).arg(qulonglong(c.lastSeenTurn))
+            .arg(c.position.x,0,'f',1).arg(c.position.y,0,'f',1).arg(c.uncertainty)
+            .arg(c.massMinimum,0,'f',0).arg(c.massMaximum,0,'f',0)
+            .arg(c.sensor==ContactSensor::Active?"Active":"Passive").arg(c.jammed?"; sensor quality reduced by interference":"");
+        if(c.owner) text+=QString("\nObserved owner: Empire %1.").arg(c.owner);
+        if(c.quality==ContactQuality::Identified) {
+            QStringList hulls; for(auto h:c.hulls) hulls<<QString::fromStdString(hull_spec(h).name);
+            text+=QString("\n%1 ships; hull classes: %2. Equipment, cargo and orders unknown.").arg(c.shipCount).arg(hulls.join(", "));
+        }
+        text+="\nThis is dated sensor evidence; loss of contact does not imply destruction.";
+        return text;
+    }
+    if(event.sensorStatus) {
+        const auto& s=*event.sensorStatus;
+        return QString("Observer %1 — sensor interference %2%\nObserved year %3; received year %4. Active range %5 ly; passive hull baseline %6 ly; emission reception %7 ly.\nInterference also delays communication. These are received measurements, not current hidden enemy equipment.")
+            .arg(s.fleet?QString("fleet %1").arg(s.fleet):QString("colony %1").arg(s.colony))
+            .arg(s.interferencePercent).arg(qulonglong(s.observedTurn)).arg(qulonglong(event.turn))
+            .arg(s.activeRange,0,'f',1).arg(s.passiveRange,0,'f',1).arg(s.emissionRange,0,'f',1);
+    }
+
     const auto* star = find_star(state, event.star);
     const auto* planet = event.planet != 0 ? find_planet_at_star(state, event.star) : nullptr;
     const auto battlePlanetName = planet
@@ -660,6 +691,7 @@ void MainWindow::installTurnMessages()
         const auto* event = selectedEvent();
         if (!event || (event->star == 0 && event->fleet == 0)) return;
         const bool battle = event->kind == GameEventKind::SpaceBattle;
+        if(event->contact || event->sensorStatus) { view_->centerOn(event->position.x,event->position.y); return; }
         const auto position = event->position;
         const auto starId = event->star;
         const auto* star = find_star(state_, starId);

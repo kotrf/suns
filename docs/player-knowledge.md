@@ -27,7 +27,7 @@ that was seen when the scan happened.
 
 Reports use the same ordinary-scanner components and physical transceiver-to-transceiver subspace-hop calculation as fleet communications, but live outside `FleetTelemetry`. This matters because intelligence can outlive a source fleet and later grow to include combat contacts, intercepted signals and reports shared by allies.
 
-Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range also supports transient enemy-fleet contacts, separate from permanent planetary knowledge. Detached scouts' delayed enemy-contact snapshots remain future work.
+Reports in flight are dominance-coalesced: a higher-quality report does not erase useful lower-quality information that would arrive earlier, while an equal-or-better report arriving no later suppresses the redundant packet. When several levels arrive together, the player receives one event for the best level. Ordinary detection range also supports transient enemy-fleet contacts, separate from permanent planetary knowledge. Detached scouts now deliver immutable dated hull snapshots; see [reconnaissance](reconnaissance.md).
 
 ## Delivery and events
 
@@ -73,3 +73,5 @@ participants disappear. Save v61 also retains knowledge-only contacts for remote
 battle losses until report delivery; player exports omit the host loss ledger
 and undelivered payloads. These additions preserve the separation between
 authoritative truth, delivered knowledge and UI-only unread state.
+
+[Reconnaissance and emission programs](reconnaissance.md) add confidence, last-seen positions, received interference measurements and programmable silent communication/scan windows. UI enemy names/route targets and PBEM use the same snapshots.

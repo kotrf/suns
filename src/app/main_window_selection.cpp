@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/campaign.hpp"
 #include "map_marker_items.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/communications.hpp"
@@ -58,9 +59,7 @@ void MainWindow::showMapFleetPicker(const QVariantList& fleets, const QPoint& po
     mapFleetPicker_ = menu;
     menu->setObjectName("mapFleetPicker");
     menu->addSection(target ? "Choose target fleet" : "Fleets at this location");
-    auto contacts = state_.fleets;
-    const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
-    contacts.insert(contacts.end(), missing.begin(), missing.end());
+    const auto contacts = make_player_view(state_,pendingOrders_.player).state.fleets;
     for (const auto& value : fleets) {
         const auto id = static_cast<FleetId>(value.toUInt());
         const auto it = std::find_if(contacts.begin(), contacts.end(),
@@ -145,13 +144,8 @@ QString MainWindow::selectedObjectDistanceSummary() const
                 return ObjectView{QString::fromStdString(star->name), star->position};
             }
         } else if (kind == kMapItemFleet) {
-            const auto fleet = std::find_if(state_.fleets.begin(), state_.fleets.end(), [id](const Fleet& candidate) {
-                return candidate.id == static_cast<FleetId>(id);
-            });
-            if (fleet != state_.fleets.end()) {
-                const auto visible = fleet_player_view(state_, *fleet);
-                return ObjectView{QString::fromStdString(visible.name), visible.position};
-            }
+            if(const auto visible=knownFleetTarget(static_cast<FleetId>(id)))
+                return ObjectView{QString::fromStdString(visible->name),visible->position};
         }
         return std::nullopt;
     };

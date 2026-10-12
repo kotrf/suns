@@ -62,7 +62,7 @@ void queue(GameState& state, PlayerId owner, WormholeReportKind kind, WormholeKn
 {
     auto* p = player_for(state, owner);
     if (!p) return;
-    const auto due = turn + communication_delay_turns(state, owner, source);
+    const auto due = report_transmission_turn(state,owner,source,turn,fleet) + communication_delay_turns(state,owner,source,turn);
     if (kind == WormholeReportKind::Observation) {
         const auto duplicate = std::find_if(p->pendingWormholeReports.begin(), p->pendingWormholeReports.end(),
             [&](const auto& r) { return r.kind == kind && r.knowledge.endpoint == knowledge.endpoint
@@ -147,7 +147,7 @@ bool fleet_has_anomaly_detector(const GameState& state, const Fleet& fleet)
 
 void observe_wormhole_sweep(GameState& state, const Fleet& fleet, Position start, Position end, std::uint64_t turn)
 {
-    observe(state, fleet.owner, fleet.id, start, end, strategic_sensor_range(state, fleet),
+    observe(state, fleet.owner, fleet.id, start, end, strategic_sensor_range(state, fleet,turn),
         fleet_has_anomaly_detector(state, fleet), turn);
 }
 
@@ -170,7 +170,7 @@ void advance_wormholes(GameState& state)
         observation.wormholes = {hole};
         for (const auto& fleet : state.fleets)
             observe(observation, fleet.owner, fleet.id, fleet.position, fleet.position,
-                strategic_sensor_range(state, fleet), fleet_has_anomaly_detector(state, fleet), turn, true);
+                strategic_sensor_range(state, fleet,turn), fleet_has_anomaly_detector(state, fleet), turn, true);
         for (const auto& planet : state.planets) if (planet.owner && planet.population) {
             if (const auto* star = find_star(state, planet.star))
                 observe(observation, planet.owner, 0, star->position, star->position, kColonySensorRange, false, turn, true);
@@ -227,7 +227,7 @@ void resolve_wormhole_approaches(GameState& state)
         if (!fleet.destination || !fleet.arrivalAction || fleet.arrivalAction->kind != FleetArrivalActionKind::EnterWormhole) continue;
         for (const auto& hole : state.wormholes) for (const auto& mouth : hole.endpoints) {
             if (mouth.id != fleet.arrivalAction->wormholeEndpoint) continue;
-            const auto reach = detection_range(mouth, strategic_sensor_range(state, fleet), fleet_has_anomaly_detector(state, fleet));
+            const auto reach = detection_range(mouth, strategic_sensor_range(state, fleet,state.turn), fleet_has_anomaly_detector(state, fleet));
             if (reach > 0 && distance_between(fleet.position, mouth.position) <= reach) fleet.destination = mouth.position;
         }
     }
