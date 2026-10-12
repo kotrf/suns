@@ -89,7 +89,7 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     const auto controllerOffset = original.lastIndexOf(marker);
     assert(controllerOffset > 0);
     // CTRL header, then the first human's empty record, then computer 2.
-    const auto roleOffset = controllerOffset + 8 + 10 + 4;
+    const auto roleOffset = controllerOffset + 8 + 15 + 4;
     const auto corrupt = [&](auto edit) {
         auto bytes = original;
         QDataStream stream(&bytes, QIODevice::ReadWrite);
@@ -103,9 +103,28 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     corrupt([](QDataStream& out, qint64 offset) { out.device()->seek(offset + 1); out << quint8{2}; });
     corrupt([](QDataStream& out, qint64 offset) { out.device()->seek(offset + 2); out << quint32{33}; });
     corrupt([&](QDataStream& out, qint64 offset) { out.device()->seek(offset + 6); out << quint64(save.state.turn); });
+    QDataStream fields(original);
+    fields.device()->seek(roleOffset + 6);
+    for (std::size_t i = 0; i < save.state.players[1].computer.decisions.size(); ++i) {
+        quint64 turn{}; quint32 orders{}; QString reason;
+        fields >> turn >> orders >> reason;
+    }
+    const auto goalsOffset = fields.device()->pos();
+    assert(!save.state.players[1].computer.fleetGoals.empty());
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset); out << quint32{129}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 4); out << quint8{3}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 5); out << quint32{0}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 9); out << quint64(save.state.turn); });
+    const auto researchOffset = goalsOffset + 4 + 25 * save.state.players[1].computer.fleetGoals.size();
+    assert(save.state.players[1].computer.researchGoal);
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(researchOffset); out << quint8{2}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(researchOffset + 1); out << quint8{6}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(researchOffset + 2); out << quint8{0}; });
     auto bad = save; bad.state.players[1].computer.decisions.back().turn = save.state.turn;
     assert(!write_save_game_file(path, bad, error));
     bad = save; bad.state.players[0].computer = bad.state.players[1].computer;
+    assert(!write_save_game_file(path, bad, error));
+    bad = save; bad.state.players[1].computer.fleetGoals.push_back(bad.state.players[1].computer.fleetGoals.front());
     assert(!write_save_game_file(path, bad, error));
 
     bad = save; bad.playerTokens[2] = 222;
@@ -117,6 +136,26 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     bad = save; bad.pendingOrders = {2, {}};
     assert(write_save_game_file(path, bad, error));
     assert(!read_save_game_file(path, loaded, error));
+
+    // Resuming ongoing exploration must make the same decisions and physical
+    // progress as an uninterrupted campaign, including later settlement goals.
+    assert(write_save_game_file(path, save, error));
+    assert(read_save_game_file(path, loaded, error));
+    auto uninterrupted = save.state;
+    auto resumed = loaded.state;
+    for (int year = 0; year < 25; ++year) {
+        uninterrupted = resolve_controlled_campaign_turn(uninterrupted, {{1, {}}, {3, {}}}).state;
+        resumed = resolve_controlled_campaign_turn(resumed, {{1, {}}, {3, {}}}).state;
+        assert(find_player(uninterrupted, 2)->computer == find_player(resumed, 2)->computer);
+        assert(uninterrupted.fleets.size() == resumed.fleets.size());
+        for (std::size_t i = 0; i < resumed.fleets.size(); ++i) {
+            assert(same_position(uninterrupted.fleets[i].position, resumed.fleets[i].position));
+            assert(uninterrupted.fleets[i].fuel == resumed.fleets[i].fuel);
+        }
+        for (std::size_t i = 0; i < resumed.planets.size(); ++i)
+            assert(uninterrupted.planets[i].owner == resumed.planets[i].owner
+                && uninterrupted.planets[i].population == resumed.planets[i].population);
+    }
 }
 
 } // namespace
@@ -166,6 +205,7 @@ int main(int argc, char** argv)
     assert(refusedComputerExport);
     assert(validate_turn_submission(host, {host.campaignId, 1, 222, {2, {}}, {}}).contains("Computer"));
 
+    const auto firstPlan = plan_computer_turn(make_player_view(host.state, 2));
     MainWindowTestAccess::receive(window, {3, {}}); // An explicit human pass is still required.
     assert(MainWindowTestAccess::turnButton(window)->text().contains("1/1 human orders"));
     MainWindowTestAccess::endTurn(window);
@@ -175,7 +215,7 @@ int main(int argc, char** argv)
     assert(host.state.players[1].technology.researchAllocationPercent == 20);
     assert(host.state.players[0].technology.researchAllocationPercent == 0);
     assert(host.state.players[1].computer.decisions.size() == 1);
-    assert(host.state.players[1].computer.decisions[0].orderCount == 1);
+    assert(host.state.players[1].computer == firstPlan.nextState);
     persist_and_reject_corrupt_controllers(host, directory);
 
     // Other empires' controller memory cannot alter a human's PBEM bytes.
@@ -192,7 +232,11 @@ int main(int argc, char** argv)
     auto* journal = window.findChild<QDialog*>("computerDecisionsDialog");
     auto* table = journal->findChild<QTreeWidget*>("computerDecisionsTable");
     assert(table->topLevelItemCount() == 1 && table->topLevelItem(0)->text(0) == "Computer");
-    assert(table->topLevelItem(0)->text(1) == "1" && table->topLevelItem(0)->text(2) == "1");
+    assert(table->topLevelItem(0)->text(1) == "1"
+        && table->topLevelItem(0)->text(2).toUInt() == firstPlan.orders.orders.size());
+    auto* goals = journal->findChild<QTreeWidget*>("computerGoalsTable");
+    assert(goals && goals->topLevelItemCount() == int(firstPlan.nextState.fleetGoals.size()));
+    assert(goals->topLevelItem(0)->text(2) == "Survey and return");
     capture(journal, "computer-decisions.png"); journal->close();
 
     // Resuming a saved host neither repeats bootstrap nor bypasses a missing human.
@@ -202,7 +246,7 @@ int main(int argc, char** argv)
     assert(MainWindowTestAccess::snapshot(window).state.turn == 2);
     MainWindowTestAccess::receive(window, {3, {}});
     MainWindowTestAccess::endTurn(window);
-    assert(MainWindowTestAccess::snapshot(window).state.players[1].computer.decisions.back().orderCount == 0);
+    assert(MainWindowTestAccess::snapshot(window).state.players[1].computer.fleetGoals == firstPlan.nextState.fleetGoals);
     MainWindowTestAccess::restart(window);
     host = MainWindowTestAccess::snapshot(window);
     assert(host.state.turn == 1 && host.state.players[1].controller == PlayerController::Computer);

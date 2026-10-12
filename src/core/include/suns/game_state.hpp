@@ -942,6 +942,26 @@ struct FieldScienceRecord {
 enum class PlayerController : std::uint8_t { Human, Computer };
 inline constexpr std::size_t kMaximumComputerDecisionRecords = 32;
 inline constexpr std::size_t kMaximumComputerDecisionReasonBytes = 240;
+inline constexpr std::size_t kMaximumComputerFleetGoals = 128;
+
+enum class ComputerFleetGoalKind : std::uint8_t { Survey, Colonize, Resupply };
+
+struct ComputerFleetGoal {
+    FleetId fleet{};
+    ComputerFleetGoalKind kind{ComputerFleetGoalKind::Survey};
+    StarId target{};
+    std::uint64_t issuedTurn{};
+    // Earliest retry after a command and its acknowledgement can make the trip.
+    // This is an estimate from received knowledge, never a host packet deadline.
+    std::uint64_t reviewTurn{};
+    bool operator==(const ComputerFleetGoal&) const = default;
+};
+
+struct ComputerResearchGoal {
+    ResearchField field{ResearchField::Electronics};
+    std::uint8_t level{};
+    bool operator==(const ComputerResearchGoal&) const = default;
+};
 
 struct ComputerDecision {
     std::uint64_t turn{};
@@ -953,6 +973,8 @@ struct ComputerDecision {
 struct ComputerState {
     bool initialized{};
     std::vector<ComputerDecision> decisions;
+    std::vector<ComputerFleetGoal> fleetGoals;
+    std::optional<ComputerResearchGoal> researchGoal;
     bool operator==(const ComputerState&) const = default;
 };
 
