@@ -12,7 +12,7 @@ namespace suns {
 [[nodiscard]] std::uint32_t communication_delay_turns(
     const GameState& state,
     PlayerId player,
-    Position position);
+    Position position, std::uint64_t atTurn = 0);
 
 [[nodiscard]] bool fleet_has_instant_link(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint64_t fleet_telemetry_age(const GameState& state, const Fleet& fleet);

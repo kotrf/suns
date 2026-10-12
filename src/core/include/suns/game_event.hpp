@@ -40,6 +40,8 @@ enum class GameEventKind {
     MineStrike,
     ScientificData,
     EmissionDetected,
+    EnemyFleetReclassified,
+    SensorInterferenceChanged,
 };
 
 enum class GameEventSeverity {
@@ -72,6 +74,8 @@ struct GameEvent {
     WormholeEndpointId wormholeEndpoint{};
     std::optional<SpaceBattleReport> battle;
     std::optional<OperationalLossReport> losses;
+    std::optional<ReconContact> contact;
+    std::optional<SensorStatus> sensorStatus;
 };
 
 } // namespace suns

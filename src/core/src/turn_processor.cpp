@@ -1116,6 +1116,7 @@ void queue_fleet_movement_report(
 bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& consumedFleets,
     std::vector<ColonyFreightDelivery>& freight)
 {
+    if(fleet.electronics.wakeOnArrival) fleet.electronics={};
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
     if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::EnterWormhole) {
@@ -2152,6 +2153,8 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::FleetStalledForFuel: kind = HistoryMilestoneKind::FleetStalledForFuel; break;
         case GameEventKind::EnemyFleetDetected: kind = HistoryMilestoneKind::EnemyFleetDetected; break;
         case GameEventKind::EnemyFleetLost: kind = HistoryMilestoneKind::EnemyFleetLost; break;
+        case GameEventKind::EnemyFleetReclassified: kind = HistoryMilestoneKind::EnemyFleetReclassified; break;
+        case GameEventKind::SensorInterferenceChanged: kind = HistoryMilestoneKind::SensorInterferenceChanged; break;
         case GameEventKind::GroundInvasionWon: kind = HistoryMilestoneKind::GroundInvasionWon; break;
         case GameEventKind::GroundInvasionLost: kind = HistoryMilestoneKind::GroundInvasionLost; break;
         case GameEventKind::GroundDefenseWon: kind = HistoryMilestoneKind::GroundDefenseWon; break;
@@ -2164,6 +2167,8 @@ TurnResult TurnProcessor::process_with_events(
         const bool fleetEvent = *kind == HistoryMilestoneKind::FleetStalledForFuel
             || *kind == HistoryMilestoneKind::EnemyFleetDetected
             || *kind == HistoryMilestoneKind::EnemyFleetLost
+            || *kind == HistoryMilestoneKind::EnemyFleetReclassified
+            || (*kind == HistoryMilestoneKind::SensorInterferenceChanged && event.fleet!=0)
             || *kind == HistoryMilestoneKind::SpaceBattle
             || *kind == HistoryMilestoneKind::MineStrike;
         if (*kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0

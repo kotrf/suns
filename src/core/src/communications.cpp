@@ -1,6 +1,7 @@
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/reconnaissance.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +20,7 @@ struct CommunicationField {
 
 std::vector<CommunicationField> communication_fields(
     const GameState& state,
-    PlayerId player)
+    PlayerId player, std::uint64_t atTurn)
 {
     std::vector<CommunicationField> fields;
 
@@ -35,7 +36,7 @@ std::vector<CommunicationField> communication_fields(
     // Ordinary scanners and dedicated relay arrays participate in the mesh.
     // Penetrating-only scanners do not extend communications.
     for (const auto& fleet : state.fleets) {
-        if (fleet.owner != player || !fleet_transmits(fleet, state.turn)) continue;
+        if (fleet.owner != player || !fleet_transmits(fleet, atTurn)) continue;
         const auto range = fleet_communication_range(state, fleet);
         if (range <= 0.0) continue;
         fields.push_back({fleet.position, range, false});
@@ -377,10 +378,11 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 
 } // namespace
 
-std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position)
+std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
 {
-    const auto fields = communication_fields(state, player);
-    const auto jamDelay = communication_jamming_delay(state, player, position);
+    if (!atTurn) atTurn = state.turn;
+    const auto fields = communication_fields(state, player, atTurn);
+    const auto jamDelay = communication_jamming_delay(state, player, position, atTurn);
 
     // Compatibility for tiny test fixtures and edge states that have no colony
     // node yet. Normal generated games always begin with the homeworld relay.
@@ -412,7 +414,7 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
         if (star) connectedTransceivers.push_back(star->position);
     }
     for (const auto& fleet : state.fleets) {
-        if (fleet.owner != player || !fleet_transmits(fleet,state.turn)) continue;
+        if (fleet.owner != player || !fleet_transmits(fleet,atTurn)) continue;
         const auto inConnectedMesh = std::any_of(
             fields.begin(), fields.end(), [&](const CommunicationField& field) {
                 return field.connected && inside_field(fleet.position, field);

@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/stations.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -390,6 +391,10 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     own.pendingSurveyReports.clear();
     own.pendingPlayerReports.clear();
     own.observedEnemyFleets.clear();
+    own.enemyContacts=known_enemy_contacts(host,playerId);
+    own.pendingEnemyContacts.clear();
+    own.sensorStatus=known_sensor_status(host,playerId);
+    own.pendingSensorStatus.clear(); own.observedSensorStatus.clear();
     own.pendingWormholeReports.clear();
     own.pendingStrategicIntel.clear();
     std::erase_if(own.fieldScience, [&](const auto& r) { return r.deliveryTurn > host.turn; });
@@ -476,29 +481,10 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     }
     std::sort(state.fleets.begin(), state.fleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     state.wormholeRules.spawnChancePerTurn = 0.0;
-    // The live map shows only the connected sensor mesh. Detached reconnaissance
-    // contributes delayed briefings without disclosing today's remote truth.
-    for (const auto& enemy : host.fleets) if (enemy.owner != playerId) {
-        bool visible = false;
-        for (const auto& colony : host.planets) if (colony.owner == playerId && colony.population > 0) {
-            const auto* star = find_star(host, colony.star);
-            if (star && colony_detects_fleet(host, colony, enemy)) visible = true;
-        }
-        for (const auto& detector : host.fleets) if (detector.owner == playerId
-            && fleet_has_instant_link(host, detector)
-            && detector_detects_fleet(host, detector, enemy)) visible = true;
-        if (!visible) continue;
-        Fleet contact;
-        contact.id = enemy.id;
-        contact.owner = enemy.owner;
-        contact.name = "Contact " + std::to_string(enemy.id) + " (Empire " + std::to_string(enemy.owner) + ")";
-        contact.design = 0;
-        contact.fuel = 0;
-        contact.position = enemy.position;
-        contact.telemetry.observedTurn = host.turn;
-        contact.telemetry.position = contact.position;
-        state.fleets.push_back(contact);
-        state.nextFleetId = std::max(state.nextFleetId, contact.id + 1);
+    // Anonymous hull evidence is built only from received/connected snapshots.
+    for(const auto& observed:state.players.front().enemyContacts) if(!observed.lost && observed.quality!=ContactQuality::Probable) {
+        auto contact=recon_contact_fleet(observed,host.turn);
+        state.fleets.push_back(contact); state.nextFleetId=std::max(state.nextFleetId,contact.id+1);
     }
     for (const auto& planet : host.planets) if (const auto* station = known_orbital_station(host,playerId,planet.id)) {
         state.orbitalStations.push_back(*station);

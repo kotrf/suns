@@ -7,11 +7,12 @@ namespace suns {
 [[nodiscard]] std::uint8_t minefield_safe_warp(std::uint8_t kind);
 [[nodiscard]] double fleet_cloak_fraction(const GameState&, const Fleet&);
 [[nodiscard]] double fleet_tachyon_fraction(const GameState&, const Fleet&);
-[[nodiscard]] double strategic_sensor_range(const GameState&, const Fleet&);
+[[nodiscard]] double strategic_sensor_range(const GameState&, const Fleet&, std::uint64_t atTurn = 0);
+[[nodiscard]] double sensor_interference(const GameState&, PlayerId, Position, std::uint64_t atTurn = 0);
 [[nodiscard]] double fleet_detection_range(const GameState&, const Fleet&, double scannerRange,
     double tachyon = 0, bool passive = false);
-[[nodiscard]] bool colony_detects_fleet(const GameState&, const Planet&, const Fleet&);
-[[nodiscard]] bool detector_detects_fleet(const GameState&, const Fleet&, const Fleet&);
+[[nodiscard]] bool colony_detects_fleet(const GameState&, const Planet&, const Fleet&, std::uint64_t atTurn = 0);
+[[nodiscard]] bool detector_detects_fleet(const GameState&, const Fleet&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] bool strategic_task_available(const GameState&, const Fleet&, FleetTask);
 [[nodiscard]] std::string fleet_task_name(FleetTask);
 void resolve_bombardments(GameState&, std::uint64_t);
@@ -30,6 +31,6 @@ void apply_electronics_program(Fleet&, ElectronicsProgram);
 [[nodiscard]] std::uint64_t fleet_available_turn(const Fleet&, std::uint64_t);
 [[nodiscard]] std::uint64_t report_transmission_turn(const GameState&, PlayerId, Position,
     std::uint64_t observationTurn, FleetId observer = 0);
-[[nodiscard]] std::uint32_t communication_jamming_delay(const GameState&, PlayerId, Position);
+[[nodiscard]] std::uint32_t communication_jamming_delay(const GameState&, PlayerId, Position, std::uint64_t atTurn = 0);
 [[nodiscard]] bool fleet_transmits(const Fleet&, std::uint64_t);
 }

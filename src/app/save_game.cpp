@@ -3,6 +3,7 @@
 #include "suns/production.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
+#include "suns/reconnaissance.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -21,11 +22,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 65;
+constexpr quint32 kSaveFormatVersion = 66;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 20;
+constexpr quint32 kTurnOrderFormatVersion = 21;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -938,7 +939,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1212,7 +1213,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             quint32 planet{};
             stream >> id >> observedTurn;
             if (!readEnum(stream, marker.kind,
-                    static_cast<quint8>(gReadSaveFormatVersion >= 64 ? HistoryMilestoneKind::MineStrike : gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
+                    static_cast<quint8>(gReadSaveFormatVersion >= 66 ? HistoryMilestoneKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 64 ? HistoryMilestoneKind::MineStrike : gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
                         ? gReadSaveFormatVersion >= 51
                             ? HistoryMilestoneKind::GroundDefenseWon
                             : HistoryMilestoneKind::FleetStalledForFuel
@@ -1232,6 +1233,8 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             const bool fleetEvent = marker.kind == HistoryMilestoneKind::FleetStalledForFuel
                 || marker.kind == HistoryMilestoneKind::EnemyFleetDetected
                 || marker.kind == HistoryMilestoneKind::EnemyFleetLost
+                || marker.kind == HistoryMilestoneKind::EnemyFleetReclassified
+                || (marker.kind == HistoryMilestoneKind::SensorInterferenceChanged && marker.fleet!=0)
                 || marker.kind == HistoryMilestoneKind::SpaceBattle
                 || marker.kind == HistoryMilestoneKind::MineStrike;
             if (marker.eventId == 0 || marker.observedTurn > value.turn
@@ -1532,7 +1535,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -2202,6 +2205,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
         std::erase_if(planet.productionQueue, [](const auto& item) { return item.kind == ProductionKind::Research; });
 }
 
+#include "recon_save.inc"
 #include "strategic_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
@@ -2927,6 +2931,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     stream << quint32(data.playerTokens.size());
     for (const auto& [player, token] : data.playerTokens) stream << quint32(player) << quint64(token);
     writeVector(stream, data.inbox, writePlayerOrders);
+    writeReconMessages(stream,data);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3013,6 +3018,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         if (!readVector(stream, loaded.inbox, readPlayerOrders)) return false;
     }
 
+    if(version>=66) readReconMessages(stream,loaded);
     if (stream.status() != QDataStream::Ok) {
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
@@ -3194,7 +3200,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

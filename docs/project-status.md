@@ -1,28 +1,35 @@
 # Project status and development handoff
 
-Snapshot: **12 October 2026, Dialog #07**. The implementation branch starts
-from main `3f5570a565fcff0db3da218b16acbbbb21d8f59b` after PR #182. The user
-approved implementing the next stage and merging after successful checks.
+Snapshot: **12 October 2026, Dialog #07**. This branch starts from main
+`d44c4f509590aec07154c0e93809db23df084200`, after station/defense PR #185.
+The user requested the next reconnaissance/EW stage and authorized merging
+successful planned work.
 
 ## Current implementation
 
-[#183](https://github.com/kotrf/suns/issues/183) adds fitted Orbital Dock,
-Starbase and Fortress hulls, technology/access-gated equipment, paid production
-and refits retaining station IDs, fleet-versus-station combat and persistent
-damage/destruction. Stations lost have a separate receipt-year History metric;
-last confirmed station state remains until the battle report arrives.
-Energy 1 unlocks paid surface defenses, manual/annual batches and templates,
-with a cap of 100 and explicit population/infrastructure bombardment protection.
+[#186](https://github.com/kotrf/suns/issues/186), continuing #45/#58/#101,
+adds immutable delayed enemy hull snapshots with confidence, uncertainty,
+mass/hull evidence and last-seen dates. Intel survives lost sources; stale,
+duplicate and out-of-order packets cannot overwrite newer knowledge. An
+Intelligence window, map markers, briefings and enemy route selectors share
+player-known evidence. Sanitized unknown fleets no longer invent a ship stack
+or fail PBEM serialization.
+
+Observers report sensor interference/clearance and effective ranges. Fleet and
+station jammers affect sensing and source communication delay; anonymous
+colony/ship emission reception and decoys retain one-year uncertainty areas.
+Radio silence supports scheduled communication windows, optional active scans
+and arrival wake-up, with an automatic finite failsafe.
+See [Reconnaissance and emission programs](reconnaissance.md).
+
+Save **v66**, orders **v21**. Validation includes detached/stale/lost contacts,
+classification/hysteresis, reordering/duplicates, jamming, burst/arrival behavior,
+source isolation, save/PBEM/malformed data and the Intel/emission controls.
+The full local Qt 6.4 Debug suite passed **53/53 CTest targets**. The Intelligence window was visually inspected; CI results are recorded on the implementation PR.
+
+Station fitting/combat and colony defenses #183 were completed in PR #185,
+main `d44c4f5`, with local and branch/main CI **52/52**, Qt 6.12.0 on suns-vps.
 See [Orbital stations and colony defense](orbital-stations.md).
-
-Save v65 and orders v20 retain fits, damage, defense counts, refit targets,
-delayed contacts and station casualties. Validation covers resource/technology
-checks, deterministic stationary/crossing battles, loss of services, delayed
-player knowledge, defense replenishment and bombardment, save/PBEM round trips,
-malformed fits and the fitting dialog. The full local Qt 6.4 Debug suite passed
-**52/52 CTest targets**; the fitting dialog was visually inspected. CI status
-is recorded on the implementation PR.
-
 PR #182 completed receipt-year ground, bombardment and mine casualties under
 #181; #48 remains open for refinement. See [Empire history](empire-history.md).
 
@@ -76,12 +83,13 @@ adaptations, not claims of an exact Stars! implementation.
   traits. Mystery Trader equipment is not acquired through ordinary research.
 - Multiplayer is asynchronous file exchange with a trusted host. Network
   transport, signatures, an append-only resolution ledger and AI opponents remain
-  future work. Detached delayed enemy-contact snapshots also remain pending.
+  future work. Detached delayed enemy-contact snapshots are implemented; advanced traffic,
+  physical decoy probes and conditional doctrines remain follow-ups.
 
 ## Formats and CI
 
-This slice uses save **v65** (existing readers v12–65) and orders **v20**
-(readers v1–20). Earlier casualty history remains unknown; old pending reports
+This slice uses save **v66** (existing readers v12–66) and orders **v21**
+(readers v1–21). Earlier casualty history remains unknown; old pending reports
 without exact summaries never invent measurements. Host and players must use
 the same build. Version numbers in older thematic documents describe when a
 feature was introduced unless explicitly identified as current. Legacy designs
@@ -125,14 +133,14 @@ These are open directions, not authorization to start every item:
   beyond the implemented colony terraforming slice. Transport networks
   [#53](https://github.com/kotrf/suns/issues/53) remain late in the roadmap.
 
-The agreed sequence is **stations/colony defense (#183) → reconnaissance/EW
-(#45/#58/#101) → computer empires (#184)**. After this station stage, finish a
-playable recon/EW slice: dated enemy contact snapshots, confidence and clear
-jamming/false-signal behavior. Then immediately implement computer players:
-controller/ordinary orders first, expansion/economy/research second, military
-behavior third. AI uses deterministic C++ decisions on PlayerView, legal race
-profiles and ordinary costs, technology, fuel and communication constraints;
-no hidden host knowledge or computer-only economic/race advantages.
+The agreed sequence is **stations/colony defense (#183, done) → reconnaissance/EW
+(#186, this branch) → computer empires (#184)**. After this playable recon/EW
+stage, immediately implement computer players: controller/ordinary orders first,
+expansion/economy/research second, military behavior third. AI uses deterministic
+C++ decisions on PlayerView, legal race profiles and ordinary costs, technology,
+fuel and communication constraints; no hidden host knowledge or computer-only
+economic/race advantages. Wider #45/#58/#101 stay open for remaining refinements;
+they must not postpone AI by adding new prerequisites.
 
 Scars (#106), stargates and full race traits (#50) remain separate backlog work,
 not extra prerequisites before AI. Transport #53 remains late; #108 needs a

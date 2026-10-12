@@ -7,6 +7,8 @@
 #include "suns/terraforming.hpp"
 #include "suns/equipment.hpp"
 #include "suns/stations.hpp"
+#include "suns/reconnaissance.hpp"
+#include "suns/player_knowledge.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -1728,8 +1730,60 @@ void stations_defenses_and_orders_round_trip()
     assert(write_turn_order_file(packetPath,packet,error) && !read_turn_order_file(packetPath,imported,error));
 }
 
+void reconnaissance_and_programs_round_trip()
+{
+    QTemporaryDir dir; assert(dir.isValid()); QString error;
+    SaveGameData save; save.campaignId=32; save.turnToken=33; save.mode=SessionMode::Host;
+    save.playerTokens={{1,33},{2,34}}; save.pendingOrders={1,{}}; save.state=make_demo_game();
+    auto& s=save.state; s.wormholeRules.spawnChancePerTurn=0; s.players.push_back({2,"Hidden opponent"});
+    s.players[0].technology.levels[std::size_t(ResearchField::Electronics)]=3;
+    s.shipDesigns[0].components={ShipComponentType::FuelMizer,ShipComponentType::RhinoScanner}; s.shipDesigns[0].placements.clear();
+    s.fleets[0].position={420,0}; s.fleets[0].telemetry.position={420,0};
+    s.shipDesigns.push_back({10,2,"Secret fit",ShipHullType::SmallFreighter,{ShipComponentType::FuelMizer}}); s.nextShipDesignId=11;
+    Fleet enemy; enemy.id=22; enemy.owner=2; enemy.design=10; enemy.ships={{10,3}}; enemy.position={430,0}; s.fleets.push_back(enemy); s.nextFleetId=23;
+    auto result=TurnProcessor{}.process_with_events(s,{}); save.state=result.state; save.strategicMessages=result.events;
+    assert(save.state.players[0].pendingEnemyContacts.size()==1);
+    auto& own=save.state.fleets.front();
+    const ElectronicsProgram program{EmissionMode::RadioSilence,11,false,2,4,true,true};
+    own.electronics=program; own.telemetry.electronics=program;
+    own.pendingCommands.push_back({2,4,{},{},program});
+    save.pendingOrders.orders={SetFleetElectronicsOrder{own.id,program}}; save.pendingDescriptions={"Burst program"};
+    const auto path=dir.filePath("reconnaissance.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error));
+    const auto good=read_save_game_file(path,loaded,error); if(!good) std::cerr<<error.toStdString()<<'\n'; assert(good);
+    assert(loaded.state.players[0].pendingEnemyContacts.front().shipCount==3);
+    assert(loaded.state.players[0].observedEnemyFleets.front().observation.quality==ContactQuality::Identified);
+    assert(loaded.state.fleets.front().electronics.burstInterval==2 && loaded.state.fleets.front().electronics.wakeOnArrival);
+    assert(loaded.state.fleets.front().telemetry.electronics.firstBurstTurn==4);
+    assert(loaded.state.fleets.front().pendingCommands.back().electronics->activeBurst);
+    TurnOrderFileData packet{32,save.state.turn,33,save.pendingOrders,save.pendingDescriptions}, imported;
+    const auto orders=dir.filePath("reconnaissance.sunsorders");
+    assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,imported,error));
+    assert(std::get<SetFleetElectronicsOrder>(imported.orders.orders.front()).program.firstBurstTurn==4);
+    const auto due=loaded.state.players[0].pendingEnemyContacts.front().deliveryTurn;
+    loaded.state.fleets.clear(); loaded.pendingOrders={1,{}}; loaded.pendingDescriptions.clear();
+    while(loaded.state.turn<due) {
+        result=TurnProcessor{}.process_with_events(loaded.state,{}); loaded.state=result.state; loaded.strategicMessages=result.events;
+    }
+    assert(loaded.state.players[0].enemyContacts.front().shipCount==3);
+    const auto evidence=std::find_if(loaded.strategicMessages.begin(),loaded.strategicMessages.end(),[](const auto& e){return e.contact.has_value();});
+    assert(evidence!=loaded.strategicMessages.end() && evidence->contact->lastSeenTurn==2);
+    assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,save,error));
+    assert(std::any_of(save.strategicMessages.begin(),save.strategicMessages.end(),[](const auto& e){return e.contact && e.contact->shipCount==3;}));
+    auto player=make_player_turn(save,1);
+    assert(player.state.players[0].pendingEnemyContacts.empty() && player.state.players[0].observedSensorStatus.empty());
+    assert(write_save_game_file(path,player,error));
+    const auto playerRead=read_save_game_file(path,loaded,error); if(!playerRead) std::cerr<<error.toStdString()<<'\n'; assert(playerRead);
+    assert(loaded.state.players[0].enemyContacts.front().shipCount==3 && loaded.state.fleets.front().design==0);
+    player.state.players[0].enemyContacts.front().massMinimum=player.state.players[0].enemyContacts.front().massMaximum+1;
+    assert(write_save_game_file(path,player,error) && !read_save_game_file(path,loaded,error));
+    std::get<SetFleetElectronicsOrder>(packet.orders.orders.front()).program.burstInterval=101;
+    assert(write_turn_order_file(orders,packet,error) && !read_turn_order_file(orders,imported,error));
+}
+
 int main()
 {
+    reconnaissance_and_programs_round_trip();
     stations_defenses_and_orders_round_trip();
     operational_losses_round_trip_and_player_isolation();
     space_battle_round_trip();

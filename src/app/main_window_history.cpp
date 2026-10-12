@@ -852,6 +852,10 @@ void MainWindow::refreshEmpireHistory()
                     : QString("Station battle at planet %1").arg(event.planet);
                 color = QColor("#e07575");
                 break;
+            case HistoryMilestoneKind::EnemyFleetReclassified:
+                label=QString("Contact %1 reclassified").arg(event.fleet); color=QColor("#d2a963"); break;
+            case HistoryMilestoneKind::SensorInterferenceChanged:
+                label=QString("Sensor interference changed at observer %1").arg(event.fleet?event.fleet:event.planet); color=QColor("#d2a963"); break;
             case HistoryMilestoneKind::GroundDefenseLost:
                 label = QString("Planet %1 lost in ground combat").arg(event.planet);
                 color = QColor("#e07575");

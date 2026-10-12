@@ -373,7 +373,7 @@ void enemy_contacts_follow_sensor_transitions_and_remote_delivery()
         return report.kind == PlayerReportKind::EnemyFleetDetected;
     });
     assert(contact != pending.end() && contact->deliveryTurn == 14);
-    assert(contact->contactOwner == 2 && same_position(contact->contactPosition, {450.0, 0.0}));
+    assert(contact->contactOwner == 2 && contact->contact && distance_between(contact->contactPosition, {450.0, 0.0}) <= contact->contact->uncertainty);
     assert(contact->contactPosition.x == replay.state.players[0].pendingPlayerReports.back().contactPosition.x);
     const auto view = make_player_view(first.state, 1);
     assert(view.state.players.front().observedEnemyFleets.empty());
@@ -393,7 +393,7 @@ void enemy_contacts_follow_sensor_transitions_and_remote_delivery()
     const auto* detected = find_event(fourth.events, GameEventKind::EnemyFleetDetected);
     assert(detected && detected->recipient == 1 && detected->fleet == 22);
     assert(detected->contactOwner == 2 && detected->observedTurn == 11 && detected->turn == 14);
-    assert(same_position(detected->position, {450.0, 0.0}));
+    assert(detected->contact && same_position(detected->position, contact->contactPosition));
     assert(find_event(fourth.events, GameEventKind::EnemyFleetLost) == nullptr);
     const auto fifth = processor.process_with_events(fourth.state, {});
     const auto* lost = find_event(fifth.events, GameEventKind::EnemyFleetLost);

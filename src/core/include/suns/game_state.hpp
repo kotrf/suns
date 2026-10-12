@@ -602,6 +602,8 @@ enum class PlayerReportKind {
     MineStrike,
     ScientificData,
     EmissionDetected,
+    EnemyFleetReclassified,
+    SensorInterferenceChanged,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -656,6 +658,33 @@ struct OperationalLossReport {
     std::uint64_t ownShipsLost{};
 };
 
+enum class ContactQuality : std::uint8_t { Probable, Confirmed, Identified };
+enum class ContactSensor : std::uint8_t { Active, Passive };
+struct SensorStatus {
+    FleetId fleet{}; PlanetId colony{};
+    Position position;
+    std::uint64_t observedTurn{}, deliveryTurn{};
+    std::uint8_t interferencePercent{};
+    double nominalRange{}, activeRange{}, passiveRange{}, emissionRange{};
+};
+// Immutable hull evidence. Lost records retain the date of their last position.
+struct ReconContact {
+    FleetId fleet{};
+    PlayerId owner{}; // Unknown until confirmed; emissions never use this record.
+    Position position;
+    double uncertainty{};
+    ContactQuality quality{ContactQuality::Probable};
+    ContactSensor sensor{ContactSensor::Active};
+    std::uint64_t observedTurn{}, lastSeenTurn{}, deliveryTurn{};
+    FleetId sourceFleet{};
+    PlanetId sourceColony{};
+    StarId star{}; // Confirmed association with an observed system.
+    double massMinimum{}, massMaximum{};
+    std::uint32_t shipCount{}; // Only identified contacts reveal counts/hull classes.
+    std::vector<ShipHullType> hulls;
+    bool lost{}, jammed{};
+};
+
 // Player-facing operational facts travel independently from fleet telemetry.
 // This keeps the simulation truth authoritative while ensuring that Turn
 // Messages cannot reveal a remote result before its communication packet lands.
@@ -678,6 +707,8 @@ struct PendingPlayerReport {
     PlayerId contactOwner{};
     std::optional<SpaceBattleReport> battle;
     std::optional<OperationalLossReport> losses;
+    std::optional<ReconContact> contact;
+    std::optional<SensorStatus> sensorStatus;
 };
 
 struct TechnologyState {
@@ -784,6 +815,8 @@ enum class HistoryMilestoneKind : std::uint8_t {
     GroundDefenseLost,
     Bombardment,
     MineStrike,
+    EnemyFleetReclassified,
+    SensorInterferenceChanged,
 };
 
 [[nodiscard]] inline std::optional<OperationalLossKind> milestone_loss_kind(HistoryMilestoneKind kind)
@@ -921,8 +954,12 @@ struct Player {
         Position lastPosition;
         FleetId reportingFleet{};
         PlanetId reportingColony{};
+        ReconContact observation;
     };
     std::vector<EnemyContact> observedEnemyFleets;
+    std::vector<ReconContact> enemyContacts;
+    std::vector<ReconContact> pendingEnemyContacts;
+    std::vector<SensorStatus> sensorStatus, pendingSensorStatus, observedSensorStatus;
     RaceProfile race;
     TechnologyState technology;
     std::vector<EmpireTurnStatistics> history;
@@ -954,6 +991,10 @@ struct ElectronicsProgram {
     EmissionMode mode{EmissionMode::Standard};
     std::uint64_t resumeTurn{}; // Mandatory finite wake-up for radio silence.
     bool deception{}; // Deliberate false emissions; requires an active jammer.
+    std::uint8_t burstInterval{}; // 0: none; otherwise a one-year window every N years.
+    std::uint64_t firstBurstTurn{};
+    bool activeBurst{};
+    bool wakeOnArrival{};
 };
 
 enum class FleetArrivalActionKind {

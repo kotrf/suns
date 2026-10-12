@@ -3,14 +3,20 @@
 constexpr quint32 kStrategicExtensionMagic = 0x53545241u; // STRA
 
 void writeElectronics(QDataStream& stream, const ElectronicsProgram& value)
-{ writeEnum(stream, value.mode); stream << quint64(value.resumeTurn) << quint8(value.deception); }
+{ writeEnum(stream, value.mode); stream << quint64(value.resumeTurn) << quint8(value.deception)
+    << quint8(value.burstInterval) << quint64(value.firstBurstTurn) << quint8(value.activeBurst) << quint8(value.wakeOnArrival); }
 void readElectronics(QDataStream& stream, ElectronicsProgram& value)
 {
     quint64 resume{}; quint8 deception{};
     if (!readEnum(stream, value.mode, quint8(EmissionMode::RadioSilence))) return;
     stream >> resume >> deception; value.resumeTurn = resume; value.deception = deception != 0;
-    if ((value.mode == EmissionMode::RadioSilence) != (resume != 0) || deception > 1
-        || (deception && value.mode != EmissionMode::Standard)) markCorrupt(stream);
+    if(gReadSaveFormatVersion>=66) {
+        quint64 first{}; quint8 active{},arrival{};
+        stream >> value.burstInterval >> first >> active >> arrival;
+        value.firstBurstTurn=first; value.activeBurst=active; value.wakeOnArrival=arrival;
+        if(active>1 || arrival>1) markCorrupt(stream);
+    }
+    if(deception>1 || !electronics_program_valid(value)) markCorrupt(stream);
 }
 void writeStrategicFleet(QDataStream& stream, const Fleet& f)
 {
@@ -120,6 +126,18 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     for(const auto& p:state.players) {
         out << quint32(p.id) << quint32(p.history.size());
         for(const auto& h:p.history) out << quint64(h.turn) << quint64(h.battles.ownStationsLost) << quint64(h.battles.opposingStationsLost);
+    }
+    // v66: immutable delivered/pending contacts and observer measurements.
+    out << quint32(state.players.size());
+    for(const auto& p:state.players) {
+        out << quint32(p.id);
+        writeVector(out,p.enemyContacts,writeReconContact); writeVector(out,p.pendingEnemyContacts,writeReconContact);
+        writeVector(out,p.sensorStatus,writeSensorStatus); writeVector(out,p.pendingSensorStatus,writeSensorStatus);
+        writeVector(out,p.observedSensorStatus,writeSensorStatus);
+        out << quint32(p.observedEnemyFleets.size());
+        for(const auto& c:p.observedEnemyFleets) { out << quint32(c.fleet) << quint8(bool(c.observation.fleet)); if(c.observation.fleet) writeReconContact(out,c.observation); }
+        out << quint32(p.pendingPlayerReports.size());
+        for(const auto& r:p.pendingPlayerReports) writeReconEvidence(out,r);
     }
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
@@ -252,6 +270,40 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
                 if(turn!=h.turn || ((!h.battleStatisticsRecorded || !h.battles.reports) && (own || opposing))) { markCorrupt(stream); return; }
                 h.battles.ownStationsLost=own; h.battles.opposingStationsLost=opposing;
             }
+        }
+    }
+    if(gReadSaveFormatVersion>=66) {
+        if(!readCount(in,count) || count!=state.players.size()) { markCorrupt(stream); return; }
+        for(auto& p:state.players) {
+            quint32 id{}; in >> id;
+            if(id!=p.id || !readVector(in,p.enemyContacts,readReconContact) || !readVector(in,p.pendingEnemyContacts,readReconContact)
+                || !readVector(in,p.sensorStatus,readSensorStatus) || !readVector(in,p.pendingSensorStatus,readSensorStatus)
+                || !readVector(in,p.observedSensorStatus,readSensorStatus)) { markCorrupt(stream); return; }
+            for(std::size_t n=0;n<p.enemyContacts.size();++n) {
+                const auto& c=p.enemyContacts[n];
+                if(c.observedTurn>state.turn || c.deliveryTurn>state.turn || c.owner==p.id
+                    || std::any_of(p.enemyContacts.begin(),p.enemyContacts.begin()+n,[&](const auto& x){return x.fleet==c.fleet;})) { markCorrupt(stream); return; }
+            }
+            for(const auto& c:p.pendingEnemyContacts) if(c.observedTurn>state.turn || c.owner==p.id) { markCorrupt(stream); return; }
+            const auto repeatedSensors=[](const auto& values) {
+                for(std::size_t n=0;n<values.size();++n) if(std::any_of(values.begin(),values.begin()+n,[&](const auto& x){return x.fleet==values[n].fleet && x.colony==values[n].colony;})) return true;
+                return false;
+            };
+            if(repeatedSensors(p.sensorStatus) || repeatedSensors(p.observedSensorStatus)) { markCorrupt(stream); return; }
+            for(const auto& x:p.sensorStatus) if(x.observedTurn>state.turn || x.deliveryTurn>state.turn) { markCorrupt(stream); return; }
+            for(const auto& x:p.pendingSensorStatus) if(x.observedTurn>state.turn) { markCorrupt(stream); return; }
+            if(!readCount(in,count) || count!=p.observedEnemyFleets.size()) { markCorrupt(stream); return; }
+            for(auto& c:p.observedEnemyFleets) {
+                quint32 id{}; quint8 present{}; in >> id >> present;
+                if(id!=c.fleet || present>1) { markCorrupt(stream); return; }
+                if(present) {
+                    readReconContact(in,c.observation);
+                    if(c.observation.fleet!=c.fleet || c.observation.sourceFleet!=c.reportingFleet
+                        || c.observation.sourceColony!=c.reportingColony || c.observation.lost || !same_position(c.observation.position,c.lastPosition)) { markCorrupt(stream); return; }
+                }
+            }
+            if(!readCount(in,count) || count!=p.pendingPlayerReports.size()) { markCorrupt(stream); return; }
+            for(auto& r:p.pendingPlayerReports) readReconEvidence(in,r);
         }
     }
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);

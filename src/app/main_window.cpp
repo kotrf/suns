@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/stations.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/campaign.hpp"
 #include "suns/wormholes.hpp"
@@ -625,20 +626,30 @@ void MainWindow::rebuildScene()
     selection_.star = selectionToRestore;
     addBackgroundStars(scene_, state_.galaxySeed);
 
-    auto displayFleets = make_player_view(state_, pendingOrders_.player).state.fleets;
+    auto playerView=make_player_view(state_,pendingOrders_.player).state;
+    auto displayFleets=playerView.fleets;
+    const auto& contactKnowledge=playerView.players.front().enemyContacts;
+    const auto& sensorKnowledge=playerView.players.front().sensorStatus;
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
             if (planet.owner != pendingOrders_.player) continue;
             if (const auto* sourceStar = find_star(state_, planet.star)) {
-                addSensorRange(scene_, sourceStar->position, kColonySensorRange,
+                const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.colony==planet.id;});
+                addSensorRange(scene_, sourceStar->position, status==sensorKnowledge.end()?kColonySensorRange:status->activeRange,
                     QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
             }
         }
         for (const auto& fleet : displayFleets) {
             if (fleet.owner != pendingOrders_.player) continue;
             const auto visibleFleet = fleet_player_view(state_, fleet);
-            const auto range = strategic_sensor_range(state_, visibleFleet);
+            const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.fleet==fleet.id;});
+            const auto range=fleet_active_sensors(visibleFleet,state_.turn)
+                ? (status==sensorKnowledge.end()?fleet_sensor_range(state_,visibleFleet):status->nominalRange*(1-status->interferencePercent/100.0)) : 0;
+            if(status!=sensorKnowledge.end()) {
+                addSensorRange(scene_,visibleFleet.position,status->passiveRange,QColor(185,160,90,75),QColor(185,160,90,4));
+                addSensorRange(scene_,visibleFleet.position,status->emissionRange,QColor(175,135,210,55),QColor(175,135,210,2));
+            }
             if (range > 0.0) {
                 addSensorRange(scene_, visibleFleet.position, range,
                     QColor(90, 165, 255, 115), QColor(90, 165, 255, 10));
@@ -825,7 +836,11 @@ void MainWindow::rebuildScene()
             other |= contact.owner != pendingOrders_.player;
             selected |= selection_.fleet && *selection_.fleet == contact.id;
         }
-        const auto color = own && other ? QColor("#c58bf0") : other ? QColor("#dd7777") : QColor("#65a6ff");
+        const bool staleOther=other && std::all_of(group.begin(),group.end(),[&](const auto& f){
+            const auto c=std::find_if(contactKnowledge.begin(),contactKnowledge.end(),[&](const auto& c){return c.fleet==f.id;});
+            return c!=contactKnowledge.end() && c->lastSeenTurn<state_.turn;
+        });
+        const auto color = own && other ? QColor("#c58bf0") : other ? QColor(staleOther?"#8b9eae":"#dd7777") : QColor("#65a6ff");
         const auto label = group.size() == 1 ? QString::fromStdString(fleet.name)
             : QString("%1 fleets").arg(group.size());
         auto* marker = new FleetMarkerItem(fleet.id, color, selected, label, [this] { queueMapLabelRefresh(); });
@@ -840,9 +855,18 @@ void MainWindow::rebuildScene()
             if (fleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));
             if (fleet.arrivalAction) tooltip += QString("\nArrival action: %1").arg(arrivalActionSummary(*fleet.arrivalAction));
         }
-        if (group.size() == 1 && other)
-            tooltip += QString("\nEmpire %1 contact\nPosition: %2, %3\nShip details unknown")
-                .arg(fleet.owner).arg(fleet.position.x, 0, 'f', 1).arg(fleet.position.y, 0, 'f', 1);
+        if(group.size()==1 && other) {
+            const auto evidence=std::find_if(contactKnowledge.begin(),contactKnowledge.end(),[&](const auto& c){return c.fleet==fleet.id;});
+            if(evidence!=contactKnowledge.end()) {
+                const auto& c=*evidence;
+                tooltip+=QString("\n%1 • Empire %2 • last seen %3 (age %4)\nReported position: %5, %6 ±%7 ly\nMass estimate: %8–%9 kt%10")
+                    .arg(contact_quality_name(c.quality)).arg(c.owner).arg(qulonglong(c.lastSeenTurn)).arg(qulonglong(state_.turn-c.lastSeenTurn))
+                    .arg(c.position.x,0,'f',1).arg(c.position.y,0,'f',1).arg(c.uncertainty).arg(c.massMinimum,0,'f',0).arg(c.massMaximum,0,'f',0)
+                    .arg(c.jammed?"\nObservation degraded by interference":"");
+                if(c.quality==ContactQuality::Identified) tooltip+=QString("\n%1 ships; see Intelligence for hull classes").arg(c.shipCount);
+                else tooltip+="\nShip details unknown";
+            }
+        }
         if (group.size() == 1 && own && fleet_sensor_range(state_, fleet) > 0.0)
             tooltip += QString("\nSensor range %1").arg(fleet_sensor_range(state_, fleet), 0, 'f', 0);
         if (group.size() > 1) tooltip += "\nClick to choose a fleet";

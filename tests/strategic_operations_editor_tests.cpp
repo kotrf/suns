@@ -2,8 +2,13 @@
 #include "route_program_dock.hpp"
 #include "save_game.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/reconnaissance.hpp"
 
 #include <QApplication>
+#include <QCheckBox>
+#include <QSpinBox>
+#include <QTableWidget>
+#include <QDialog>
 #include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
@@ -23,7 +28,7 @@
 namespace suns {
 struct MainWindowTestAccess {
     static void install(MainWindow& w, const GameState& s) {
-        w.state_ = s; w.pendingOrders_ = {1,{}}; w.selection_.fleet = s.fleets.front().id; w.rebuildScene();
+        w.state_ = s; w.pendingOrders_ = {1,{}}; w.pendingDescriptions_.clear(); w.selection_.fleet = s.fleets.front().id; w.rebuildScene();
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void messages(MainWindow& w,const std::vector<GameEvent>& events) {
@@ -106,5 +111,34 @@ int main(int argc,char** argv)
         if (kind == GameEventKind::ScientificData) assert(text.contains("research points have been delivered"));
         if (kind == GameEventKind::EmissionDetected) assert(text.contains("unverified"));
     }
+
+    auto* interval=window.findChild<QSpinBox*>("emissionBurstInterval");
+    auto* scan=window.findChild<QCheckBox*>("activeEmissionBurst");
+    auto* arrival=window.findChild<QCheckBox*>("emissionWakeOnArrival");
+    assert(interval && scan && arrival); interval->setValue(2); settle();
+    assert(scan->isEnabled()); scan->setChecked(true); arrival->setChecked(true); setMode->click();
+    const auto& program=std::get<SetFleetElectronicsOrder>(MainWindowTestAccess::orders(window).orders.back()).program;
+    assert(program.burstInterval==2 && program.firstBurstTurn==3 && program.activeBurst && program.wakeOnArrival);
+    interval->setValue(20); settle(); assert(!setMode->isEnabled()); interval->setValue(2); settle();
+    auto intel=make_demo_game(); intel.turn=5;
+    ReconContact c; c.fleet=22; c.owner=2; c.position={200,200}; c.quality=ContactQuality::Identified;
+    c.observedTurn=c.lastSeenTurn=3; c.deliveryTurn=4; c.sourceFleet=1; c.massMinimum=150; c.massMaximum=250;
+    c.shipCount=3; c.hulls={ShipHullType::SmallFreighter}; intel.players[0].enemyContacts={c};
+    auto uncertain=c; uncertain.fleet=23; uncertain.owner=0; uncertain.quality=ContactQuality::Probable;
+    uncertain.shipCount=0; uncertain.hulls.clear(); uncertain.uncertainty=7.5; uncertain.position={300,300};
+    uncertain.observedTurn=uncertain.lastSeenTurn=uncertain.deliveryTurn=5; intel.players[0].enemyContacts.push_back(uncertain);
+    MainWindowTestAccess::install(window,intel);
+    auto* open=window.findChild<QPushButton*>("openReconnaissance"); assert(open); open->click(); settle();
+    auto* dialog=window.findChild<QDialog*>("intelligenceDialog"); auto* table=window.findChild<QTableWidget*>("reconnaissanceTable");
+    assert(dialog && table && table->rowCount()==2);
+    assert(table->item(0,2)->text()=="Stale" && table->item(0,5)->text()=="2");
+    assert(table->item(0,8)->text().contains("Small Freighter"));
+    assert(table->item(1,1)->text()=="Probable" && table->item(1,3)->text()=="Unknown" && table->item(1,8)->text()=="Unknown");
+    assert(dialog->grab().save("/tmp/reconnaissance-intelligence.png"));
+    GameEvent contact; contact.id=9000; contact.recipient=1; contact.kind=GameEventKind::EnemyFleetReclassified;
+    contact.fleet=22; contact.contactOwner=2; contact.observedTurn=3; contact.turn=4; contact.position=c.position; contact.contact=c;
+    MainWindowTestAccess::messages(window,{contact}); messages->setCurrentRow(0); settle();
+    assert(messageBody->toPlainText().contains("Mass estimate: 150–250 kt") && messageBody->toPlainText().contains("Last position seen in year 3"));
+    dialog->hide();
     window.close(); settle();
 }

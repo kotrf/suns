@@ -1,5 +1,6 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/stations.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
 #include "suns/equipment.hpp"
 #include "suns/player_knowledge.hpp"
@@ -49,10 +50,10 @@ std::optional<double> entry_fraction(Position start, Position end, Position cent
         ? std::optional<double>{std::clamp(t, 0.0, 1.0)} : std::nullopt;
 }
 
-void stage_intel(GameState& state, Player& player, StrategicIntel intel, Position source)
+void stage_intel(GameState& state, Player& player, StrategicIntel intel, Position source,FleetId observer=0)
 {
-    const auto transmit = report_transmission_turn(state,player.id,source,intel.observedTurn);
-    intel.deliveryTurn = transmit + communication_delay_turns(state, player.id, source);
+    const auto transmit = report_transmission_turn(state,player.id,source,intel.observedTurn,observer);
+    intel.deliveryTurn = transmit + communication_delay_turns(state, player.id, source,intel.observedTurn);
     const auto similar = [&](const StrategicIntel& old) {
         return old.type == intel.type && old.id == intel.id && old.observedTurn == intel.observedTurn;
     };
@@ -68,7 +69,8 @@ bool science_once(GameState& state, Fleet& fleet, std::uint64_t key,
     auto p = std::find_if(state.players.begin(), state.players.end(), [&](const auto& p) { return p.id == fleet.owner; });
     if (p == state.players.end() || std::any_of(p->fieldScience.begin(), p->fieldScience.end(),
         [&](const auto& r) { return r.key == key; })) return false;
-    const auto delivery = turn + communication_delay_turns(state, p->id, fleet.position);
+    const auto delivery = report_transmission_turn(state,p->id,fleet.position,turn,fleet.id)
+        + communication_delay_turns(state,p->id,fleet.position,turn);
     p->fieldScience.push_back({key, delivery});
     queue_player_report(state, p->id, PlayerReportKind::ScientificData, fleet.position,
         turn, star, 0, fleet.id, 0, ProductionKind::Research, points, field, 0, {}, 0, target);
@@ -108,17 +110,27 @@ double fleet_cloak_fraction(const GameState& state, const Fleet& fleet)
 double fleet_tachyon_fraction(const GameState& state, const Fleet& fleet)
 { return combined_rating(state, fleet, &ShipComponentSpec::tachyonPercent); }
 
-double strategic_sensor_range(const GameState& state, const Fleet& detector)
+double sensor_interference(const GameState& state,PlayerId owner,Position position,std::uint64_t turn)
 {
-    if (detector.electronics.mode != EmissionMode::Standard) return 0;
-    double interference = 0;
-    for (const auto& enemy : state.fleets) {
-        if (enemy.owner == detector.owner || enemy.electronics.mode != EmissionMode::Standard) continue;
-        const double radius = std::max(30.0, fleet_sensor_range(state, enemy));
-        if (distance_between(enemy.position, detector.position) <= radius)
-            interference = std::max(interference, combined_rating(state, enemy, &ShipComponentSpec::jammingPercent));
+    if(!turn) turn=state.turn;
+    double strength=0;
+    for(const auto& enemy:state.fleets) if(enemy.owner!=owner && fleet_active_sensors(enemy,turn)
+        && distance_between(enemy.position,position)<=std::max(30.0,fleet_sensor_range(state,enemy)))
+        strength=std::max(strength,combined_rating(state,enemy,&ShipComponentSpec::jammingPercent));
+    for(const auto& station:state.orbitalStations) if(station.owner!=owner) {
+        const auto p=std::find_if(state.planets.begin(),state.planets.end(),[&](const auto& p){return p.id==station.planet;});
+        const auto* star=p==state.planets.end()?nullptr:find_star(state,p->star);
+        if(!star || distance_between(position,star->position)>30) continue;
+        double remaining=1; for(auto c:station.components) remaining*=1-component_spec(c).jammingPercent/100;
+        strength=std::max(strength,1-remaining);
     }
-    return fleet_sensor_range(state, detector) * (1 - std::min(0.75, interference));
+    return std::min(0.75,strength);
+}
+double strategic_sensor_range(const GameState& state,const Fleet& detector,std::uint64_t turn)
+{
+    if(!turn) turn=state.turn;
+    if(!fleet_active_sensors(detector,turn)) return 0;
+    return fleet_sensor_range(state,detector)*(1-sensor_interference(state,detector.owner,detector.position,turn));
 }
 
 double fleet_detection_range(const GameState& state, const Fleet& target, double range, double tachyon, bool passive)
@@ -132,16 +144,18 @@ double fleet_detection_range(const GameState& state, const Fleet& target, double
     }
     return reflected;
 }
-bool colony_detects_fleet(const GameState& state, const Planet& colony, const Fleet& target)
+bool colony_detects_fleet(const GameState& state, const Planet& colony, const Fleet& target,std::uint64_t turn)
 {
+    if(!turn) turn=state.turn;
     const auto* star = find_star(state, colony.star);
     return colony.population && star && distance_between(star->position, target.position)
-        <= fleet_detection_range(state, target, kColonySensorRange) + epsilon;
+        <= fleet_detection_range(state, target, kColonySensorRange*(1-sensor_interference(state,colony.owner,star->position,turn))) + epsilon;
 }
-bool detector_detects_fleet(const GameState& state, const Fleet& detector, const Fleet& target)
+bool detector_detects_fleet(const GameState& state, const Fleet& detector, const Fleet& target,std::uint64_t turn)
 {
-    const bool passive = detector.electronics.mode != EmissionMode::Standard;
-    const double range = passive ? fleet_sensor_range(state, detector) : strategic_sensor_range(state, detector);
+    if(!turn) turn=state.turn;
+    const bool passive = !fleet_active_sensors(detector,turn);
+    const double range = passive ? fleet_sensor_range(state, detector)*(1-sensor_interference(state,detector.owner,detector.position,turn)) : strategic_sensor_range(state, detector,turn);
     return fleet_has_scanner(state, detector) && distance_between(detector.position, target.position)
         <= fleet_detection_range(state, target, range, fleet_tachyon_fraction(state, detector), passive) + epsilon;
 }
@@ -332,7 +346,7 @@ void run_strategic_tasks(GameState& state, std::uint64_t turn)
             for (auto& field : state.minefields) if (field.owner != fleet->owner
                 && distance_between(field.position, fleet->position) <= minefield_radius(field) + 10)
                 field.mines = std::max(0.0, field.mines - strength*(field.kind == 1 ? 0.5 : 2));
-        } else if (fleet->task == FleetTask::FieldResearch && fleet->electronics.mode == EmissionMode::Standard) {
+        } else if (fleet->task == FleetTask::FieldResearch && fleet_active_sensors(*fleet,turn)) {
             for (const auto& star : state.stars) if (same_position(star.position, fleet->position)) {
                 const auto* planet = find_planet_at_star(state, star.id);
                 // Explicit, finite objectives: stellar observation and a deep planetary survey.
@@ -367,11 +381,32 @@ void run_strategic_tasks(GameState& state, std::uint64_t turn)
     std::erase_if(state.minefields, [](const auto& f) { return f.mines < 1; });
 }
 
-std::uint64_t fleet_available_turn(const Fleet& fleet, std::uint64_t turn)
+bool electronics_program_valid(const ElectronicsProgram& e)
 {
-    if (fleet.electronics.mode == EmissionMode::RadioSilence) return std::max(turn, fleet.electronics.resumeTurn);
-    if (fleet.electronics.mode == EmissionMode::Passive) return turn + (3-turn%3)%3;
-    return turn;
+    return e.mode<=EmissionMode::RadioSilence
+        && ((e.mode==EmissionMode::RadioSilence)==bool(e.resumeTurn))
+        && (!e.deception || e.mode==EmissionMode::Standard)
+        && (e.mode==EmissionMode::RadioSilence || (!e.burstInterval && !e.firstBurstTurn && !e.activeBurst && !e.wakeOnArrival))
+        && ((e.burstInterval!=0)==bool(e.firstBurstTurn)) && e.burstInterval<=100
+        && (!e.activeBurst || e.burstInterval) && (!e.firstBurstTurn || e.firstBurstTurn<=e.resumeTurn);
+}
+bool burst_window(const ElectronicsProgram& e,std::uint64_t turn)
+{ return e.mode==EmissionMode::RadioSilence && e.burstInterval && turn>=e.firstBurstTurn && (turn-e.firstBurstTurn)%e.burstInterval==0; }
+bool fleet_active_sensors(const Fleet& f,std::uint64_t turn)
+{ return f.electronics.mode==EmissionMode::Standard || (f.electronics.activeBurst && burst_window(f.electronics,turn))
+    || (f.electronics.resumeTurn && turn>=f.electronics.resumeTurn); }
+std::uint64_t fleet_available_turn(const Fleet& f,std::uint64_t turn)
+{
+    if(f.electronics.mode==EmissionMode::Passive) return turn+(3-turn%3)%3;
+    if(f.electronics.mode!=EmissionMode::RadioSilence) return turn;
+    auto next=std::max(turn,f.electronics.resumeTurn);
+    if(f.electronics.burstInterval) {
+        const auto first=f.electronics.firstBurstTurn;
+        const std::uint64_t interval=f.electronics.burstInterval;
+        const auto burst=turn<=first?first:turn+(interval-(turn-first)%interval)%interval;
+        next=std::min(next,burst);
+    }
+    return next;
 }
 std::uint64_t report_transmission_turn(const GameState& state,PlayerId owner,Position position,
     std::uint64_t turn,FleetId observer)
@@ -387,86 +422,82 @@ std::uint64_t report_transmission_turn(const GameState& state,PlayerId owner,Pos
         earliest = std::min(earliest,fleet_available_turn(f,turn));
     return earliest == std::numeric_limits<std::uint64_t>::max() ? turn : earliest;
 }
-std::uint32_t communication_jamming_delay(const GameState& state, PlayerId owner, Position position)
+std::uint32_t communication_jamming_delay(const GameState& s,PlayerId owner,Position position,std::uint64_t turn)
+{ const double strength=sensor_interference(s,owner,position,turn); return strength>0?std::uint32_t(std::ceil(std::min(2.0,strength*2))):0; }
+bool fleet_transmits(const Fleet& f,std::uint64_t turn)
 {
-    double strength = 0;
-    for (const auto& enemy : state.fleets)
-        if (enemy.owner != owner && enemy.electronics.mode == EmissionMode::Standard
-            && distance_between(enemy.position, position) <= std::max(30.0, fleet_sensor_range(state, enemy)))
-            strength = std::max(strength, combined_rating(state, enemy, &ShipComponentSpec::jammingPercent));
-    return strength > 0 ? std::uint32_t(std::ceil(std::min(2.0, strength*2))) : 0;
-}
-
-bool fleet_transmits(const Fleet& fleet, std::uint64_t turn)
-{
-    return fleet.electronics.mode == EmissionMode::Standard
-        || (fleet.electronics.mode == EmissionMode::Passive && turn % 3 == 0)
-        || (fleet.electronics.resumeTurn && turn >= fleet.electronics.resumeTurn);
+    return f.electronics.mode==EmissionMode::Standard || (f.electronics.mode==EmissionMode::Passive && turn%3==0)
+        || burst_window(f.electronics,turn) || (f.electronics.resumeTurn && turn>=f.electronics.resumeTurn);
 }
 void apply_electronics_program(Fleet& fleet, ElectronicsProgram program) { fleet.electronics = program; }
 bool submit_electronics_command(GameState& state, PlayerId player, FleetId id, ElectronicsProgram program)
 {
     auto* fleet = fleet_by_id(state, id);
-    if (!fleet || fleet->owner != player || program.mode > EmissionMode::RadioSilence) return false;
+    if (!fleet || fleet->owner != player || !electronics_program_valid(program)) return false;
     if (program.deception && (program.mode != EmissionMode::Standard
         || combined_rating(state,*fleet,&ShipComponentSpec::jammingPercent) <= 0)) return false;
     if (program.mode == EmissionMode::RadioSilence && (program.resumeTurn <= state.turn
         || program.resumeTurn > state.turn + 100)) return false;
-    if (program.mode != EmissionMode::RadioSilence) program.resumeTurn = 0;
+    if(program.firstBurstTurn && (program.firstBurstTurn<=state.turn || program.firstBurstTurn>state.turn+100)) return false;
     auto delay = communication_delay_turns(state, player, fleet->position);
     if (!delay && fleet_transmits(*fleet, state.turn)) { apply_electronics_program(*fleet, program); return true; }
     std::uint64_t delivery = state.turn + delay;
-    if (fleet->electronics.mode == EmissionMode::RadioSilence) delivery = std::max(delivery, fleet->electronics.resumeTurn);
-    else if (fleet->electronics.mode == EmissionMode::Passive) while (delivery % 3) ++delivery;
+    delivery=fleet_available_turn(*fleet,delivery);
     fleet->pendingCommands.push_back({state.turn, delivery, {}, {}, program});
     return true;
 }
 
 void observe_strategic_objects(GameState& state, std::uint64_t turn)
 {
+    const auto record=[&](Player& player,Position area,std::uint32_t id,Position source,FleetId observer) {
+        stage_intel(state,player,{id,StrategicObjectKind::Emission,area,15,0,turn,0,0,0},source,observer);
+        PendingPlayerReport report; report.kind=PlayerReportKind::EmissionDetected; report.observedTurn=turn;
+        report.deliveryTurn=report_transmission_turn(state,player.id,source,turn,observer)+communication_delay_turns(state,player.id,source,turn);
+        report.position=source; report.quantity=15; report.contactPosition=area;
+        auto old=std::find_if(player.pendingPlayerReports.begin(),player.pendingPlayerReports.end(),[&](const auto& x){return x.kind==report.kind && x.observedTurn==turn && same_position(x.contactPosition,area);});
+        if(old==player.pendingPlayerReports.end()) player.pendingPlayerReports.push_back(report); else if(report.deliveryTurn<old->deliveryTurn) *old=report;
+    };
+    const auto signals=[&](Player& player,Position source,FleetId observer,const Planet* colony,double range,double tachyon) {
+        const auto detector=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f){return f.id==observer && f.owner==player.id;});
+        for(const auto& enemy:state.fleets) {
+            if(enemy.owner==player.id || !fleet_transmits(enemy,turn) || distance_between(enemy.position,source)>range*2) continue;
+            if(enemy.electronics.deception && tachyon<combined_rating(state,enemy,&ShipComponentSpec::jammingPercent)) {
+                const Position ghost{std::floor((enemy.position.x+40)/20)*20+10,std::floor((enemy.position.y+20)/20)*20+10};
+                const auto id=std::uint32_t((std::uint64_t(enemy.id)*2246822519ULL+turn*3266489917ULL+state.galaxySeed)&0xffffffff);
+                record(player,ghost,id,source,observer);
+            }
+            const bool detected=colony?colony_detects_fleet(state,*colony,enemy,turn)
+                : detector!=state.fleets.end() && detector_detects_fleet(state,*detector,enemy,turn);
+            if(detected) continue;
+            const Position area{std::floor(enemy.position.x/20)*20+10,std::floor(enemy.position.y/20)*20+10};
+            const auto id=std::uint32_t((std::uint64_t(enemy.id)*2654435761ULL+turn*40503+state.galaxySeed)&0xffffffff);
+            record(player,area,id,source,observer);
+        }
+    };
+
     for (auto& player : state.players) {
+        for(const auto& colony:state.planets) if(colony.owner==player.id && colony.population)
+            if(const auto* star=find_star(state,colony.star)) signals(player,star->position,0,&colony,
+                kColonySensorRange*(1-sensor_interference(state,player.id,star->position,turn)),0);
         for (const auto& detector : state.fleets) {
             if (detector.owner != player.id || !fleet_has_scanner(state, detector)) continue;
-            const double range = strategic_sensor_range(state, detector);
+            const double range = strategic_sensor_range(state, detector,turn);
             if (range > 0) for (const auto& old : player.strategicIntel) {
                 if (old.type == StrategicObjectKind::Emission || distance_between(old.position,detector.position) > range*0.5) continue;
                 const bool exists = old.type == StrategicObjectKind::Minefield
                     ? std::any_of(state.minefields.begin(),state.minefields.end(),[&](const auto& f) { return f.id == old.id; })
                     : std::any_of(state.wrecks.begin(),state.wrecks.end(),[&](const auto& w) { return w.id == old.id; });
-                if (!exists) { auto gone = old; gone.quantity = 0; gone.observedTurn = turn; stage_intel(state,player,gone,detector.position); }
+                if (!exists) { auto gone = old; gone.quantity = 0; gone.observedTurn = turn; stage_intel(state,player,gone,detector.position,detector.id); }
             }
             for (const auto& field : state.minefields) if (field.owner == player.id
                 || distance_between(field.position, detector.position) <= range*0.5 + minefield_radius(field))
                 stage_intel(state, player, {field.id, StrategicObjectKind::Minefield, field.position,
-                    minefield_radius(field), field.owner, turn, 0, field.mines, field.kind}, detector.position);
+                    minefield_radius(field), field.owner, turn, 0, field.mines, field.kind}, detector.position,detector.id);
             for (const auto& wreck : state.wrecks) if (distance_between(wreck.position, detector.position) <= range)
                 stage_intel(state, player, {wreck.id, StrategicObjectKind::Wreck, wreck.position, 10, 0, turn,
-                    0, double(wreck.expiresTurn), 0}, detector.position);
-            for (const auto& enemy : state.fleets) {
-                if (enemy.owner != player.id && enemy.electronics.deception && fleet_transmits(enemy,turn)
-                    && distance_between(enemy.position,detector.position) <= fleet_sensor_range(state,detector)*2
-                    && fleet_tachyon_fraction(state,detector) < combined_rating(state,enemy,&ShipComponentSpec::jammingPercent)) {
-                    const Position ghost{std::floor((enemy.position.x + 40)/20)*20+10,
-                        std::floor((enemy.position.y + 20)/20)*20+10};
-                    const auto id = std::uint32_t((std::uint64_t(enemy.id)*2246822519ULL + turn*3266489917ULL + state.galaxySeed) & 0xffffffff);
-                    const auto before = player.pendingStrategicIntel.size();
-                    stage_intel(state,player,{id,StrategicObjectKind::Emission,ghost,15,0,turn,0,0,0},detector.position);
-                    if (player.pendingStrategicIntel.size() > before)
-                        queue_player_report(state,player.id,PlayerReportKind::EmissionDetected,detector.position,turn,
-                            0,0,0,0,ProductionKind::ColonyShip,15,ResearchField::Electronics,0,{},0,ghost);
-                }
-                if (enemy.owner == player.id || !fleet_transmits(enemy, turn) || detector_detects_fleet(state, detector, enemy)) continue;
-                if (distance_between(enemy.position, detector.position) > fleet_sensor_range(state, detector)*2) continue;
-                // Stable quantized area: no fleet ID, owner, exact position or composition leaks.
-                const Position area{std::floor(enemy.position.x/20)*20+10, std::floor(enemy.position.y/20)*20+10};
-                const auto key = std::uint32_t((std::uint64_t(enemy.id)*2654435761ULL + turn*40503 + state.galaxySeed) & 0xffffffff);
-                StrategicIntel signal{key, StrategicObjectKind::Emission, area, 15, 0, turn, 0, 0, 0};
-                const auto prior = player.pendingStrategicIntel.size();
-                stage_intel(state, player, signal, detector.position);
-                if (player.pendingStrategicIntel.size() > prior)
-                    queue_player_report(state, player.id, PlayerReportKind::EmissionDetected, detector.position,
-                        turn, 0, 0, 0, 0, ProductionKind::ColonyShip, 15, ResearchField::Electronics, 0, {}, 0, area);
-            }
+                    0, double(wreck.expiresTurn), 0}, detector.position,detector.id);
+            signals(player,detector.position,detector.id,nullptr,
+                fleet_sensor_range(state,detector)*(1-sensor_interference(state,player.id,detector.position,turn)),fleet_tachyon_fraction(state,detector));
         }
     }
 }

@@ -253,7 +253,7 @@ const ShipDesign* fleet_design(const GameState& state, const Fleet& fleet)
 
 std::vector<FleetShipStack> fleet_ship_stacks(const Fleet& fleet)
 {
-    if (fleet.ships.empty()) return {{fleet.design, 1}};
+    if (fleet.ships.empty()) return fleet.design ? std::vector<FleetShipStack>{{fleet.design,1}} : std::vector<FleetShipStack>{};
 
     std::vector<FleetShipStack> result;
     for (const auto& stack : fleet.ships) {
