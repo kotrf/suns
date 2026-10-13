@@ -2,6 +2,8 @@
 #include "suns/computer_player.hpp"
 
 #include <QApplication>
+#include <QClipboard>
+#include <QComboBox>
 #include <QDataStream>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -55,7 +57,7 @@ void create_campaign(MainWindow& window, bool remoteHuman)
         auto* count = dialog->findChild<QSpinBox*>("campaignEmpireCount");
         auto* table = dialog->findChild<QTableWidget*>("campaignEmpiresTable");
         assert(count && table && table->columnCount() == 8);
-        count->setValue(remoteHuman ? 3 : 2);
+        count->setValue(3);
         auto* local = qobject_cast<QComboBox*>(table->cellWidget(0, 7));
         auto* computer = qobject_cast<QComboBox*>(table->cellWidget(1, 7));
         assert(local->currentText() == "Human" && !local->isEnabled());
@@ -65,6 +67,10 @@ void create_campaign(MainWindow& window, bool remoteHuman)
         if (remoteHuman) {
             qobject_cast<QComboBox*>(table->cellWidget(2, 7))->setCurrentIndex(0);
             table->item(2, 0)->setText("Remote");
+        } else {
+            auto* secondComputer = qobject_cast<QComboBox*>(table->cellWidget(2, 7));
+            assert(secondComputer && secondComputer->currentText() == "Computer");
+            table->item(2, 0)->setText("Second Computer");
         }
         capture(dialog, "campaign-controllers.png");
         dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
@@ -246,6 +252,15 @@ int main(int argc, char** argv)
     auto* goals = journal->findChild<QTreeWidget*>("computerGoalsTable");
     assert(goals && goals->topLevelItemCount() == int(firstPlan.nextState.fleetGoals.size()));
     assert(goals->topLevelItem(0)->text(2) == "Survey and return");
+    auto* filter = journal->findChild<QComboBox*>("computerDecisionsEmpireFilter");
+    auto* copyReport = journal->findChild<QPushButton*>("copyComputerDecisionsReport");
+    assert(filter && copyReport && filter->count() == 2);
+    assert(filter->itemData(1).toInt() == 2);
+    copyReport->click();
+    assert(QApplication::clipboard()->text().contains("Computer | turn 1"));
+    assert(QApplication::clipboard()->text().contains("Survey and return"));
+    filter->setCurrentIndex(1);
+    assert(table->topLevelItemCount() == 1 && goals->topLevelItemCount() > 0);
     capture(journal, "computer-decisions.png"); journal->close();
     auto military = host;
     military.state.players[1].computer.fleetGoals.front().kind = ComputerFleetGoalKind::Invade;
@@ -278,6 +293,32 @@ int main(int argc, char** argv)
     assert(window.statusBar()->currentMessage().contains("No remote human"));
     MainWindowTestAccess::endTurn(window);
     assert(MainWindowTestAccess::snapshot(window).state.turn == 2);
+    MainWindowTestAccess::journal(window); app.processEvents();
+    auto* aiDialog = window.findChild<QDialog*>("computerDecisionsDialog");
+    assert(aiDialog);
+    auto* aiFilter = aiDialog->findChild<QComboBox*>("computerDecisionsEmpireFilter");
+    auto* aiRecords = aiDialog->findChild<QTreeWidget*>("computerDecisionsTable");
+    auto* aiGoals = aiDialog->findChild<QTreeWidget*>("computerGoalsTable");
+    auto* aiCopy = aiDialog->findChild<QPushButton*>("copyComputerDecisionsReport");
+    assert(aiFilter && aiRecords && aiGoals && aiCopy);
+    assert(aiFilter->count() == 3 && aiRecords->topLevelItemCount() == 2);
+    aiFilter->setCurrentIndex(2);
+    assert(aiRecords->topLevelItemCount() == 1);
+    assert(aiRecords->topLevelItem(0)->text(0) == "Second Computer");
+    for (int i = 0; i < aiGoals->topLevelItemCount(); ++i)
+        assert(aiGoals->topLevelItem(i)->text(0) == "Second Computer");
+    aiCopy->click();
+    const auto filteredReport = QApplication::clipboard()->text();
+    assert(filteredReport.contains("Empire filter: Second Computer"));
+    assert(filteredReport.contains("\nSecond Computer | turn "));
+    assert(!filteredReport.contains("\nComputer | turn "));
+    aiFilter->setCurrentIndex(0);
+    assert(aiRecords->topLevelItemCount() == 2);
+    aiCopy->click();
+    const auto fullReport = QApplication::clipboard()->text();
+    assert(fullReport.contains("\nComputer | turn "));
+    assert(fullReport.contains("\nSecond Computer | turn "));
+    aiDialog->close();
 
     MainWindow recipient;
     assert(MainWindowTestAccess::load(recipient, remotePath));

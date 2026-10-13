@@ -1,6 +1,9 @@
 #include "main_window.hpp"
 #include "galaxy_setup_widget.hpp"
 
+#include <QApplication>
+#include <QClipboard>
+#include <QComboBox>
 #include <QDialog>
 #include <QCheckBox>
 #include <QDialogButtonBox>
@@ -14,11 +17,16 @@
 #include <QStatusBar>
 #include <QTableWidget>
 #include <QHeaderView>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QStringList>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <tuple>
 
 namespace suns {
 
@@ -194,6 +202,15 @@ void MainWindow::openComputerDecisions()
     auto* summary = new QLabel("Current fleet goals and the last 32 resolved decisions per computer empire. Exploration, economy, defense, raids, bombardment and invasion use ordinary orders and received intelligence. Distant commands wait for acknowledgement.", dialog);
     summary->setWordWrap(true);
     layout->addWidget(summary);
+    auto* filterRow = new QHBoxLayout;
+    filterRow->addWidget(new QLabel("Empire:", dialog));
+    auto* filter = new QComboBox(dialog);
+    filter->setObjectName("computerDecisionsEmpireFilter");
+    filter->setToolTip("Show decisions and fleet goals for one computer empire.");
+    filter->addItem("All computer empires", 0);
+    filterRow->addWidget(filter);
+    filterRow->addStretch();
+    layout->addLayout(filterRow);
     auto* table = new QTreeWidget(dialog);
     table->setObjectName("computerDecisionsTable");
     table->setHeaderLabels({"Empire", "Planned turn", "Orders", "Decision"});
@@ -209,23 +226,41 @@ void MainWindow::openComputerDecisions()
     goals->header()->setSectionResizeMode(3, QHeaderView::Stretch);
     layout->addWidget(goals, 1);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    auto* copyReport = buttons->addButton("Copy report", QDialogButtonBox::ActionRole);
+    copyReport->setObjectName("copyComputerDecisionsReport");
+    copyReport->setToolTip("Copy the visible full decisions and ongoing fleet goals as plain text.");
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
     layout->addWidget(buttons);
-    auto refresh = [this, dialog, table, goals,
-        previous = std::vector<std::pair<std::string, ComputerState>>{}]() mutable {
+    auto refresh = [this, dialog, table, goals, filter,
+        previous = std::vector<std::tuple<PlayerId, std::string, ComputerState>>{},
+        previousFilter = -1]() mutable {
         if (shuttingDown_ || !dialog->isVisible()) return;
-        std::vector<std::pair<std::string, ComputerState>> current;
+        std::vector<std::tuple<PlayerId, std::string, ComputerState>> current;
         if (sessionMode_ != SessionMode::PlayerTurn)
             for (const auto& player : state_.players)
                 if (player.controller == PlayerController::Computer)
-                    current.emplace_back(player.name, player.computer);
-        if (current == previous) return;
+                    current.emplace_back(player.id, player.name, player.computer);
+        if (current != previous) {
+            const auto selectedId = filter->currentData().toInt();
+            const QSignalBlocker blocked(filter);
+            filter->clear();
+            filter->addItem("All computer empires", 0);
+            for (const auto& player : state_.players)
+                if (player.controller == PlayerController::Computer)
+                    filter->addItem(QString::fromStdString(player.name), int(player.id));
+            const auto index = filter->findData(selectedId);
+            filter->setCurrentIndex(index >= 0 ? index : 0);
+        }
+        const auto selectedId = filter->currentData().toInt();
+        if (current == previous && selectedId == previousFilter) return;
         previous = current;
+        previousFilter = selectedId;
         table->clear();
         goals->clear();
         if (sessionMode_ == SessionMode::PlayerTurn) return;
         for (const auto& player : state_.players) {
-            if (player.controller != PlayerController::Computer) continue;
+            if (player.controller != PlayerController::Computer
+                || (selectedId != 0 && int(player.id) != selectedId)) continue;
             for (auto record = player.computer.decisions.rbegin(); record != player.computer.decisions.rend(); ++record) {
                 auto* item = new QTreeWidgetItem(table, {QString::fromStdString(player.name),
                     QString::number(qulonglong(record->turn)), QString::number(record->orderCount),
@@ -254,6 +289,31 @@ void MainWindow::openComputerDecisions()
     auto* timer = new QTimer(dialog);
     timer->setInterval(500);
     connect(timer, &QTimer::timeout, dialog, refresh);
+    connect(filter, &QComboBox::currentIndexChanged, dialog, refresh);
+    connect(copyReport, &QPushButton::clicked, dialog, [this, filter, table, goals] {
+        QStringList report;
+        report << "Suns! computer report"
+               << QString("Campaign turn: %1").arg(qulonglong(state_.turn))
+               << QString("Empire filter: %1").arg(filter->currentText())
+               << "" << "Decisions";
+        if (table->topLevelItemCount() == 0) report << "(none)";
+        for (int row = 0; row < table->topLevelItemCount(); ++row) {
+            const auto* item = table->topLevelItem(row);
+            report << QString("%1 | turn %2 | %3 orders")
+                          .arg(item->text(0)).arg(item->text(1)).arg(item->text(2))
+                   << item->text(3);
+        }
+        report << "" << "Fleet goals";
+        if (goals->topLevelItemCount() == 0) report << "(none)";
+        for (int row = 0; row < goals->topLevelItemCount(); ++row) {
+            const auto* item = goals->topLevelItem(row);
+            report << QString("%1 | fleet %2 | %3 | system %4 | issued turn %5")
+                          .arg(item->text(0)).arg(item->text(1)).arg(item->text(2))
+                          .arg(item->text(3)).arg(item->text(4));
+        }
+        QApplication::clipboard()->setText(report.join('\n') + '\n');
+        statusBar()->showMessage("Computer report copied to clipboard.", 4000);
+    });
     timer->start();
     dialog->show(); refresh();
 }
