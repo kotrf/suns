@@ -238,7 +238,6 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
             || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
             || event.kind == GameEventKind::GroundDefenseWon
-            || event.kind == GameEventKind::GroundDefenseLost
             || event.kind == GameEventKind::ColonyLost;
     case MessageTypeFilter::ObservedHostileActivity:
         // Only delivered recipient-specific reports are displayed. A computer
