@@ -42,7 +42,7 @@ void MainWindow::newCampaign()
     auto* explanation = new QLabel(
         "Player 1 is human and plays locally. Remote humans exchange .sunsturn / .sunsorders files. "
         "Computer empires submit ordinary orders automatically on this host, using their own received knowledge. "
-        "Computer empires survey systems, settle known suitable worlds, develop colonies and research.\n\n"
+        "Computer empires explore, settle, develop colonies and conduct military missions using received intelligence.\n\n"
         "Terrans: temperate worlds. Cryophiles: cold, lower-gravity worlds. "
         "Radiotrophs: narrow hot/heavy worlds, immune to radiation. "
         "Biology and the corresponding physical science unlock paid terraforming in the production queue.", &dialog);
@@ -191,7 +191,7 @@ void MainWindow::openComputerDecisions()
     dialog->setWindowTitle("Computer decisions");
     dialog->resize(950, 600);
     auto* layout = new QVBoxLayout(dialog);
-    auto* summary = new QLabel("Current fleet goals and the last 32 resolved decisions per computer empire. Exploration, settlement, production and research use ordinary orders and received knowledge. Distant commands wait for acknowledgement.", dialog);
+    auto* summary = new QLabel("Current fleet goals and the last 32 resolved decisions per computer empire. Exploration, economy, defense, raids, bombardment and invasion use ordinary orders and received intelligence. Distant commands wait for acknowledgement.", dialog);
     summary->setWordWrap(true);
     layout->addWidget(summary);
     auto* table = new QTreeWidget(dialog);
@@ -234,8 +234,17 @@ void MainWindow::openComputerDecisions()
             }
             for (const auto& goal : player.computer.fleetGoals) {
                 const auto* star = find_star(state_, goal.target);
-                const auto kind = goal.kind == ComputerFleetGoalKind::Survey ? "Survey and return"
-                    : goal.kind == ComputerFleetGoalKind::Colonize ? "Colonize" : "Resupply";
+                const char* kind = "Unknown";
+                switch (goal.kind) {
+                case ComputerFleetGoalKind::Survey: kind = "Survey and return"; break;
+                case ComputerFleetGoalKind::Colonize: kind = "Colonize"; break;
+                case ComputerFleetGoalKind::Resupply: kind = "Resupply"; break;
+                case ComputerFleetGoalKind::Gather: kind = "Gather task group"; break;
+                case ComputerFleetGoalKind::Defend: kind = "Defend colony"; break;
+                case ComputerFleetGoalKind::Raid: kind = "Raid colony"; break;
+                case ComputerFleetGoalKind::Bombard: kind = "Bombard colony"; break;
+                case ComputerFleetGoalKind::Invade: kind = "Land assault troops"; break;
+                }
                 new QTreeWidgetItem(goals, {QString::fromStdString(player.name), QString::number(goal.fleet),
                     kind, star ? QString::fromStdString(star->name) : QString::number(goal.target),
                     QString::number(qulonglong(goal.issuedTurn))});

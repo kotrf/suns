@@ -944,7 +944,9 @@ inline constexpr std::size_t kMaximumComputerDecisionRecords = 32;
 inline constexpr std::size_t kMaximumComputerDecisionReasonBytes = 240;
 inline constexpr std::size_t kMaximumComputerFleetGoals = 128;
 
-enum class ComputerFleetGoalKind : std::uint8_t { Survey, Colonize, Resupply };
+enum class ComputerFleetGoalKind : std::uint8_t {
+    Survey, Colonize, Resupply, Gather, Defend, Raid, Bombard, Invade
+};
 
 struct ComputerFleetGoal {
     FleetId fleet{};

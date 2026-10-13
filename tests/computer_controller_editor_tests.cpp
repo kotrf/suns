@@ -82,6 +82,15 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     assert(loaded.state.players[1].controller == PlayerController::Computer);
     assert(loaded.state.players[1].computer == save.state.players[1].computer);
     assert(loaded.playerTokens.size() == 2 && !loaded.playerTokens.contains(2));
+    for (const auto kind : {ComputerFleetGoalKind::Gather, ComputerFleetGoalKind::Defend,
+        ComputerFleetGoalKind::Raid, ComputerFleetGoalKind::Bombard, ComputerFleetGoalKind::Invade}) {
+        auto military = save;
+        military.state.players[1].computer.fleetGoals.front().kind = kind;
+        assert(write_save_game_file(directory.filePath("military-goals.suns"), military, error));
+        SaveGameData restored;
+        assert(read_save_game_file(directory.filePath("military-goals.suns"), restored, error));
+        assert(restored.state.players[1].computer == military.state.players[1].computer);
+    }
 
     QFile file(path); assert(file.open(QIODevice::ReadOnly));
     const auto original = file.readAll(); file.close();
@@ -112,7 +121,7 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     const auto goalsOffset = fields.device()->pos();
     assert(!save.state.players[1].computer.fleetGoals.empty());
     corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset); out << quint32{129}; });
-    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 4); out << quint8{3}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 4); out << quint8{8}; });
     corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 5); out << quint32{0}; });
     corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 9); out << quint64(save.state.turn); });
     const auto researchOffset = goalsOffset + 4 + 25 * save.state.players[1].computer.fleetGoals.size();
@@ -238,6 +247,17 @@ int main(int argc, char** argv)
     assert(goals && goals->topLevelItemCount() == int(firstPlan.nextState.fleetGoals.size()));
     assert(goals->topLevelItem(0)->text(2) == "Survey and return");
     capture(journal, "computer-decisions.png"); journal->close();
+    auto military = host;
+    military.state.players[1].computer.fleetGoals.front().kind = ComputerFleetGoalKind::Invade;
+    const auto militaryPath = directory.filePath("military-ui.suns");
+    assert(write_save_game_file(militaryPath, military, error));
+    MainWindow militaryWindow;
+    assert(MainWindowTestAccess::load(militaryWindow, militaryPath));
+    MainWindowTestAccess::journal(militaryWindow); app.processEvents();
+    auto* militaryDialog = militaryWindow.findChild<QDialog*>("computerDecisionsDialog");
+    auto* militaryGoals = militaryDialog->findChild<QTreeWidget*>("computerGoalsTable");
+    assert(militaryGoals->topLevelItem(0)->text(2) == "Land assault troops");
+    capture(militaryDialog, "computer-military-goals.png");
 
     // Resuming a saved host neither repeats bootstrap nor bypasses a missing human.
     assert(MainWindowTestAccess::load(window, hostPath));

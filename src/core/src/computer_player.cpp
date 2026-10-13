@@ -1,14 +1,16 @@
 #include "suns/computer_player.hpp"
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
+#include "computer_policy.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
 
 namespace suns {
-namespace {
+namespace computer_detail {
 
 constexpr std::uint64_t kMinimumSettlers = 50'000;
 
@@ -114,7 +116,8 @@ std::optional<ShipDesign> civilian_design(const GameState& state, PlayerId playe
     std::optional<ShipDesign> best;
     double bestScore = std::numeric_limits<double>::infinity();
     for (const auto& design : state.shipDesigns) {
-        if (design.owner != player || ship_design_can_colonize(design) != colonizer
+        Fleet example; example.owner = player; example.design = design.id;
+        if (design.owner != player || military_fleet(state, example) || ship_design_can_colonize(design) != colonizer
             || (!colonizer && !ship_design_has_scanner(design))) continue;
         const auto candidate = score(design);
         if (candidate < bestScore || (candidate == bestScore && best && design.id < best->id)) {
@@ -161,7 +164,7 @@ std::optional<ShipDesign> civilian_design(const GameState& state, PlayerId playe
         name += " / " + component_spec(component).name; break;
     }
     if (ship_design_fuel_capacity(*best) > hull_spec(best->hull).baseFuelCapacity) name += " + fuel";
-    name.resize(std::min<std::size_t>(name.size(), 72));
+    name.resize(std::min<std::size_t>(name.size(), 40));
     best->name = name;
     for (unsigned suffix = 2; std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(),
         [&](const auto& existing) { return existing.owner == player && existing.name == best->name; }); ++suffix)
@@ -195,11 +198,16 @@ void plan_research(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
     if (technology.levels[static_cast<std::size_t>(goal->field)] < goal->level) return;
     // Expansion sciences first; ties have a fixed order, independent of storage.
     constexpr std::array fields{ResearchField::Propulsion, ResearchField::Construction,
-        ResearchField::Biology, ResearchField::Energy, ResearchField::Electronics};
+        ResearchField::Biology, ResearchField::Energy, ResearchField::Electronics, ResearchField::Weapons};
     auto next = fields.front();
     for (const auto field : fields)
         if (technology.levels[static_cast<std::size_t>(field)]
             < technology.levels[static_cast<std::size_t>(next)]) next = field;
+    if (hostile_intel(view)) {
+        if (technology.levels[static_cast<std::size_t>(ResearchField::Construction)] < 3) next = ResearchField::Construction;
+        else if (technology.levels[static_cast<std::size_t>(ResearchField::Weapons)] < 2) next = ResearchField::Weapons;
+        else if (technology.levels[static_cast<std::size_t>(ResearchField::Energy)] < 1) next = ResearchField::Energy;
+    }
     goal = ComputerResearchGoal{next, static_cast<std::uint8_t>(
         std::min(255, int(technology.levels[static_cast<std::size_t>(next)]) + 1))};
     if (next != technology.focus) {
@@ -225,7 +233,9 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     std::sort(fleets.begin(), fleets.end(), [](auto a, auto b) { return a->id < b->id; });
 
     std::erase_if(goals, [&](const auto& goal) {
+        if (goal.kind > ComputerFleetGoalKind::Resupply) return false;
         const auto fleet = std::find_if(fleets.begin(), fleets.end(), [&](auto f) { return f->id == goal.fleet; });
+        if (fleet != fleets.end() && military_fleet(state, **fleet)) return false;
         if (fleet == fleets.end()) return true; // Only received disappearance, never host losses.
         if (!confirmed_idle(**fleet, goal.issuedTurn)) return false;
         if (goal.kind == ComputerFleetGoalKind::Survey)
@@ -235,6 +245,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     });
 
     for (const auto* original : fleets) {
+        if (military_fleet(state, *original)) continue;
         auto fleet = *original;
         const auto existing = std::find_if(goals.begin(), goals.end(), [&](const auto& g) { return g.fleet == fleet.id; });
         if (existing != goals.end()) {
@@ -318,7 +329,11 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         } else if (!colonizer && fleet_has_scanner(state, fleet) && depot) {
             const auto* depotStar = find_star(state, depot->star);
             for (const auto* star : stars) {
-                if (survey_level(state, view.player, star->id) >= SurveyLevel::OrbitalSurvey
+                const auto* planet = find_planet_at_star(state, star->id);
+                const auto owner = planet ? known_planet_owner(state, view.player, planet->id) : std::nullopt;
+                const bool refreshEnemy = owner && *owner != 0 && *owner != view.player
+                    && system_intel_age(state, view.player, star->id).value_or(0) > 12;
+                if ((survey_level(state, view.player, star->id) >= SurveyLevel::OrbitalSurvey && !refreshEnemy)
                     || std::any_of(goals.begin(), goals.end(), [&](const auto& goal) {
                         return goal.kind == ComputerFleetGoalKind::Survey && goal.target == star->id;
                     })) continue;
@@ -356,14 +371,17 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     std::size_t settlers = 0, scouts = 0, sites = 0;
     for (const auto* fleet : fleets) {
         if (fleet_can_colonize(state, *fleet)) ++settlers;
-        else if (fleet_has_scanner(state, *fleet)) ++scouts;
+        else if (!military_fleet(state, *fleet) && fleet_has_scanner(state, *fleet)) ++scouts;
     }
     for (const auto& planet : state.planets) if (suitable(state, view.player, planet)) ++sites;
     for (const auto* colony : colonies) for (const auto& item : colony->productionQueue) {
         if (item.kind != ProductionKind::ColonyShip) continue;
         if (const auto* design = find_ship_design(state, item.shipDesign)) {
             if (ship_design_can_colonize(*design)) settlers += item.quantity;
-            else if (ship_design_has_scanner(*design)) scouts += item.quantity;
+            else {
+                Fleet example; example.owner = view.player; example.design = design->id;
+                if (!military_fleet(state, example) && ship_design_has_scanner(*design)) scouts += item.quantity;
+            }
         }
     }
     const bool unexplored = std::any_of(stars.begin(), stars.end(), [&](auto star) {
@@ -375,6 +393,14 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     std::vector<std::string> createdDesigns;
     for (const auto* colony : colonies) {
         if (!colony->productionQueue.empty()) continue; // Preserve paid work and standing queues.
+        if (std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [&](const Order& order) {
+            return std::visit([&](const auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, QueueShipDesignOrder> || std::is_same_v<T, QueueStationOrder>
+                    || std::is_same_v<T, QueueProductionBatchOrder>) return value.colony == colony->id;
+                return false;
+            }, order);
+        })) continue;
         const auto canAfford = [&](ProductionKind kind) {
             return mineral_cargo_sufficient(colony->minerals,
                 production_item_mineral_cost(state, ProductionItem{kind, production_cost(kind), 0}));
@@ -418,7 +444,9 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     std::sort(goals.begin(), goals.end(), [](const auto& a, const auto& b) { return a.fleet < b.fleet; });
 }
 
-} // namespace
+} // namespace computer_detail
+
+using namespace computer_detail;
 
 bool computer_state_valid(const Player& player, std::uint64_t boundaryTurn)
 {
@@ -437,7 +465,7 @@ bool computer_state_valid(const Player& player, std::uint64_t boundaryTurn)
     }
     FleetId previousFleet = 0;
     for (const auto& goal : player.computer.fleetGoals) {
-        if (goal.fleet <= previousFleet || goal.kind > ComputerFleetGoalKind::Resupply
+        if (goal.fleet <= previousFleet || goal.kind > ComputerFleetGoalKind::Invade
             || goal.target == 0 || goal.issuedTurn == 0 || goal.issuedTurn >= boundaryTurn
             || goal.reviewTurn < goal.issuedTurn) return false;
         previousFleet = goal.fleet;
@@ -462,9 +490,12 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
     ComputerTurnPlan plan{{view.player, {}}, player->computer};
     std::string reason;
     plan_research(view, plan, reason);
+    plan_military(view, plan, reason);
     plan_expansion(view, plan, reason);
     plan.nextState.initialized = true;
-    if (reason.empty()) reason = "Await route acknowledgements; retain production and research goals.";
+    if (reason.empty()) reason = plan.nextState.fleetGoals.empty()
+        ? "Retain paid queues and research; no safe new missions available."
+        : "Await mission acknowledgements; retain production and research goals.";
     plan.nextState.decisions.push_back({view.state.turn,
         static_cast<std::uint32_t>(plan.orders.orders.size()), std::move(reason)});
     if (plan.nextState.decisions.size() > kMaximumComputerDecisionRecords)

@@ -58,6 +58,14 @@ void same_plan(const ComputerTurnPlan& a, const ComputerTurnPlan& b)
                 assert(order.colony == other.colony && order.kind == other.kind);
             else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>)
                 assert(order.colony == other.colony && order.fleet == other.fleet && order.colonists == other.colonists);
+            else if constexpr (std::is_same_v<T, MergeFleetsOrder>)
+                assert(order.destination == other.destination && order.source == other.source);
+            else if constexpr (std::is_same_v<T, SetFleetTaskOrder>)
+                assert(order.fleet == other.fleet && order.task == other.task);
+            else if constexpr (std::is_same_v<T, QueueStationOrder>)
+                assert(order.colony == other.colony && order.construction.refitStation == other.construction.refitStation
+                    && order.construction.loadout.hull == other.construction.loadout.hull
+                    && order.construction.loadout.components == other.construction.loadout.components);
             else assert(false && "Unexpected computer order in replay comparison");
         }, a.orders.orders[i]);
     }
@@ -362,7 +370,7 @@ void autonomous_fixed_seed_campaigns()
             }
             state = resolve_controlled_campaign_turn(state, {{1, {}}}).state;
             for (const auto& fleet : state.fleets) if (fleet.owner != 1) {
-                assert(!fleet.fuelStalled && fleet.damagePercent == 0);
+                assert(!fleet.fuelStalled && fleet.damagePercent >= 0 && fleet.damagePercent <= 100);
                 assert(fleet.pendingCommands.size() <= 1);
             }
         }
