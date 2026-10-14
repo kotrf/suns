@@ -371,6 +371,7 @@ void paid_stargates_validate_technology_and_safe_transport()
     assert(!destination.productionQueue.empty());
     assert(destination.productionQueue.back().remainingCost == station_build_cost(gateFit));
     assert(complete_station_construction(s, destination, build.construction));
+    destination.productionQueue.clear(); // Completion removed this paid work.
     assert(stargate_station_available(s, 1, destination.id));
     assert(!stargate_station_available(s, 1, 1));
     // Earth must be refitted; a stock shipyard/refueling dock is not a gate.
