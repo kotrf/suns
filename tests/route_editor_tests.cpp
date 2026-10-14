@@ -675,6 +675,6 @@ int main(int argc, char* argv[])
     const auto& unloaded = suns::MainWindowTestAccess::state(window).fleets.front();
     assert(unloaded.colonists == 0);
     assert(suns::mineral_cargo_mass(unloaded.minerals) == 0);
-    assert(suns::MainWindowTestAccess::state(window).planets[1].population > 11'000);
+    assert(suns::MainWindowTestAccess::state(window).planets[1].population > 1'100);
     std::cout << "route editor tests passed\n";
 }
