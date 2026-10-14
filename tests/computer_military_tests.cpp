@@ -29,7 +29,7 @@ GameState fixture(bool known = true)
         star->variability = {}; p.environment = ownEnvironment; p.naturalEnvironment.reset();
         if (p.owner) { p.industry = 24; p.mines = 12; p.minerals = {1000, 1000, 1000}; }
         if (p.owner == 2) p.population = 2'000'000;
-        if (p.owner == 1) p.population = 2'500;
+        if (p.owner == 1) p.population = 250;
     }
     for (auto& player : state.players) { player.technology.levels.fill(6); player.surveyKnowledge.clear(); player.surveyedStars.clear(); }
     for (auto& f : state.fleets) {
@@ -295,7 +295,7 @@ void withhold_unsafe_or_unverified_attack()
     auto& group = state.fleets.back();
     group.design = designs[0].id;
     group.ships = {{designs[0].id, 2}, {designs[1].id, 1}, {designs[2].id, 2}};
-    group.colonists = 10'000; group.telemetry.colonists = group.colonists;
+    group.colonists = 1'000; group.telemetry.colonists = group.colonists;
     group.fuel = fleet_fuel_capacity(state, group); group.telemetry.fuel = group.fuel; group.telemetry.ships = group.ships;
     auto view = make_player_view(state, 2);
     view.state.players.front().enemyContacts.push_back({900, 1, {120, 0}, 0, ContactQuality::Confirmed,
