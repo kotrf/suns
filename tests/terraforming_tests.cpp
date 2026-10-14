@@ -214,7 +214,7 @@ void founding_a_colony_applies_the_default_template()
     fleet.design = kColonyShipDesignId;
     fleet.ships = {{kColonyShipDesignId, 1}};
     fleet.position = find_star(state, starId)->position;
-    fleet.colonists = 20'000;
+    fleet.colonists = 200;
     assert(fleet_cargo_used(state, fleet) <= fleet_cargo_capacity(state, fleet));
     set_survey_level(state, 1, starId, SurveyLevel::OrbitalSurvey, state.turn);
     const auto next = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{value}, ColonizePlanetOrder{fleet.id, targetId}}}});
