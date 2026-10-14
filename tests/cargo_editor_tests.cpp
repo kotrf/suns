@@ -88,7 +88,7 @@ int main(int argc, char** argv)
         source->setCurrentIndex(source->findData(0));
         destination->setCurrentIndex(destination->findData(1));
         distinct();
-        assert(people->maximum() == 30'000); // 5 kt hold, 2 kt already aboard
+        assert(people->maximum() == 3'000); // 5 kt hold, 2 kt already aboard
         assert(iron->maximum() == 300 && boron->maximum() == 300);
         boron->setValue(boron->maximum());
         assert(boron->value() == 25 && boron->maximum() == 300); // stock limits handle, not scale
