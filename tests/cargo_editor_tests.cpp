@@ -21,7 +21,7 @@ struct MainWindowTestAccess {
         fleet.design = kColonyShipDesignId;
         fleet.ships = {{kColonyShipDesignId, 1}};
         fleet.role = FleetRole::ColonyShip;
-        fleet.colonists = 1'000;
+        fleet.colonists = 100;
         fleet.minerals = {1, 0, 0};
         assert(fleet_cargo_capacity(w.state_, fleet) == 5);
         auto other = fleet;
@@ -81,17 +81,17 @@ int main(int argc, char** argv)
         // limits the handle, not the scale.
         assert(source->currentData().toInt() == 1);
         assert(destination->currentData().toInt() == 0);
-        assert(people->maximum() == 5'000);
+        assert(people->maximum() == 500);
         assert(iron->maximum() == 500);
         people->setValue(people->maximum());
-        assert(people->value() == 1'000);
+        assert(people->value() == 100);
         iron->setValue(iron->maximum());
         assert(iron->value() == 100);
 
         source->setCurrentIndex(source->findData(0));
         destination->setCurrentIndex(destination->findData(1));
         distinct();
-        assert(people->maximum() == 3'000); // 5 kt hold, 2 kt already aboard
+        assert(people->maximum() == 300); // 5 kt hold, 2 kt already aboard
         assert(iron->maximum() == 300 && boron->maximum() == 300);
         boron->setValue(boron->maximum());
         assert(boron->value() == 25 && boron->maximum() == 300); // stock limits handle, not scale
@@ -99,27 +99,27 @@ int main(int argc, char** argv)
         iron->setValue(iron->maximum());
         assert(exactIron->value() == 3 && people->maximum() == 0 && boron->maximum() == 0);
         exactIron->setValue(1);
-        assert(people->maximum() == 2'000);
+        assert(people->maximum() == 200);
         people->setValue(people->maximum());
-        assert(exactPeople->value() == 2'000 && boron->maximum() == 0);
-        exactPeople->setValue(1'000);
+        assert(exactPeople->value() == 200 && boron->maximum() == 0);
+        exactPeople->setValue(100);
         assert(iron->maximum() == 200 && boron->maximum() == 100);
 
         // Selecting the old destination as source rebuilds the destination list.
         source->setCurrentIndex(source->findData(1));
         distinct();
         destination->setCurrentIndex(destination->findData(0)); // unload to planet
-        assert(people->maximum() == 5'000 && iron->maximum() == 500);
+        assert(people->maximum() == 500 && iron->maximum() == 500);
         people->setValue(people->maximum());
-        assert(people->value() == 1'000 && people->maximum() == 5'000);
+        assert(people->value() == 100 && people->maximum() == 500);
         destination->setCurrentIndex(destination->findData(2)); // fleet-to-fleet
         distinct();
-        assert(people->maximum() == 5'000 && iron->maximum() == 500);
+        assert(people->maximum() == 500 && iron->maximum() == 500);
         iron->setValue(iron->maximum());
         assert(iron->value() == 100 && iron->maximum() == 500);
         source->setCurrentIndex(source->findData(2));
         distinct();
-        assert(people->maximum() == 5'000 && iron->maximum() == 500);
+        assert(people->maximum() == 500 && iron->maximum() == 500);
         people->setValue(people->maximum());
         iron->setValue(iron->maximum());
         assert(people->value() == 0 && iron->value() == 0);
@@ -129,7 +129,7 @@ int main(int argc, char** argv)
         destination->setCurrentIndex(destination->findData(1));
         distinct();
         exactIron->setValue(1);
-        exactPeople->setValue(1'000);
+        exactPeople->setValue(100);
         assert(buttons->button(QDialogButtonBox::Ok)->isEnabled());
         buttons->button(QDialogButtonBox::Ok)->click();
     });
@@ -138,9 +138,9 @@ int main(int argc, char** argv)
     assert(orders.size() == 1);
     const auto& transfer = std::get<suns::TransferCargoOrder>(orders.front());
     assert(transfer.source.planet == 1 && transfer.destination.fleet == 1);
-    assert(transfer.colonists == 1'000 && transfer.minerals.ironium == 1);
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -1000 / +0"));
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~999000"));
+    assert(transfer.colonists == 100 && transfer.minerals.ironium == 1);
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -100 / +0"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~999900"));
 
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -150,7 +150,7 @@ int main(int argc, char** argv)
         auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
         auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
         assert(source->currentData().toInt() == 1 && destination->currentData().toInt() == 0);
-        assert(people->maximum() == 5'000 && iron->maximum() == 500);
+        assert(people->maximum() == 500 && iron->maximum() == 500);
         dialog->reject();
     });
     window.openCargoManifestDialog();
@@ -160,13 +160,13 @@ int main(int argc, char** argv)
     // The final value can exceed the old population despite the exact debit.
     const auto& before = suns::MainWindowTestAccess::state(window);
     auto afterCargo = before.planets.front();
-    afterCargo.population -= 1'000;
+    afterCargo.population -= 100;
     const auto expected = afterCargo.population +
         suns::projected_population_growth(before, afterCargo, before.turn);
     suns::MainWindowTestAccess::endTurn(window);
     const auto& resolved = suns::MainWindowTestAccess::state(window);
     assert(resolved.planets.front().population == expected);
-    assert(resolved.fleets.front().colonists == 2'000);
+    assert(resolved.fleets.front().colonists == 200);
 
     suns::MainWindowTestAccess::installEnemyColony(window);
     QTimer::singleShot(0, [&] {
@@ -183,7 +183,7 @@ int main(int argc, char** argv)
         destination->setCurrentIndex(destination->findData(0));
         assert(iron->maximum() == 0);
         people->setValue(people->maximum());
-        assert(people->value() == 1'000);
+        assert(people->value() == 100);
         assert(buttons->button(QDialogButtonBox::Ok)->text() == "Queue invasion");
         assert(buttons->button(QDialogButtonBox::Ok)->isEnabled());
         buttons->button(QDialogButtonBox::Ok)->click();
@@ -193,6 +193,6 @@ int main(int argc, char** argv)
     assert(invasionOrders.size() == 1);
     const auto& invasion = std::get<suns::TransferCargoOrder>(invasionOrders.front());
     assert(invasion.source.fleet == 1 && invasion.destination.planet == 1);
-    assert(invasion.colonists == 1'000);
+    assert(invasion.colonists == 100);
     assert(suns::mineral_cargo_mass(invasion.minerals) == 0.0);
 }
