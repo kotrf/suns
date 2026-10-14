@@ -943,7 +943,8 @@ bool MainWindow::appendRouteWaypoint(
         const auto& finalAction = existing->queuedWaypoints.empty()
             ? existing->arrivalAction
             : existing->queuedWaypoints.back().arrivalAction;
-        if (finalAction.kind == FleetArrivalActionKind::RemoteMining
+        if (finalAction.kind == FleetArrivalActionKind::Colonize
+            || finalAction.kind == FleetArrivalActionKind::RemoteMining
             || finalAction.kind == FleetArrivalActionKind::MergeWithFleet
             || finalAction.kind == FleetArrivalActionKind::EnterWormhole) {
             statusBar()->showMessage("The current terminal action must be cleared before adding another waypoint", 3000);
