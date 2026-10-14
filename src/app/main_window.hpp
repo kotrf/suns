@@ -112,6 +112,8 @@ public:
     bool setSelectedFleetRepeatOrdersForRouteProgram(bool enabled);
     bool moveSelectedFleetRouteProgramLeg(std::size_t index, int direction);
     bool removeSelectedFleetRouteProgramLeg(std::size_t index);
+    [[nodiscard]] std::optional<FleetArrivalAction> selectedFleetRouteProgramLegAction(std::size_t index) const;
+    bool setSelectedFleetRouteProgramLegAction(std::size_t index, FleetArrivalAction action);
     bool setSelectedFleetRouteProgramLegWarp(std::size_t index, std::uint8_t warp);
     bool clearSelectedFleetRouteProgram();
 
