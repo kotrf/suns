@@ -47,6 +47,9 @@ struct MainWindowTestAccess {
         w.rebuildScene();
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static const GameState& state(const MainWindow& w) { return w.state_; }
+    static QString systemInfo(const MainWindow& w) { return w.selectionLabel_->text(); }
+    static void endTurn(MainWindow& w) { w.endTurn(); }
 };
 }
 
@@ -136,6 +139,8 @@ int main(int argc, char** argv)
     const auto& transfer = std::get<suns::TransferCargoOrder>(orders.front());
     assert(transfer.source.planet == 1 && transfer.destination.fleet == 1);
     assert(transfer.colonists == 1'000 && transfer.minerals.ironium == 1);
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -1000 / +0"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~999000"));
 
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -150,6 +155,18 @@ int main(int argc, char** argv)
     });
     window.openCargoManifestDialog();
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+
+    // A queued load changes the surface at resolution, *before* annual growth.
+    // The final value can exceed the old population despite the exact debit.
+    const auto& before = suns::MainWindowTestAccess::state(window);
+    auto afterCargo = before.planets.front();
+    afterCargo.population -= 1'000;
+    const auto expected = afterCargo.population +
+        suns::projected_population_growth(before, afterCargo, before.turn);
+    suns::MainWindowTestAccess::endTurn(window);
+    const auto& resolved = suns::MainWindowTestAccess::state(window);
+    assert(resolved.planets.front().population == expected);
+    assert(resolved.fleets.front().colonists == 2'000);
 
     suns::MainWindowTestAccess::installEnemyColony(window);
     QTimer::singleShot(0, [&] {
