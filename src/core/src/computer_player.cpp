@@ -12,7 +12,7 @@
 namespace suns {
 namespace computer_detail {
 
-constexpr std::uint64_t kMinimumSettlers = 5'000;
+constexpr std::uint64_t kMinimumSettlers = 100;
 
 bool idle(const Fleet& fleet)
 {
@@ -102,7 +102,7 @@ std::optional<ShipDesign> civilian_design(const GameState& state, PlayerId playe
         evaluation.shipDesigns.push_back(design);
         Fleet fleet;
         fleet.owner = player; fleet.design = temporaryId; fleet.fuel = ship_design_fuel_capacity(design);
-        if (colonizer) fleet.colonists = std::min<std::uint64_t>(25'000,
+        if (colonizer) fleet.colonists = std::min<std::uint64_t>(2'500,
             static_cast<std::uint64_t>(ship_design_cargo_capacity(design) * kColonistsPerCargoUnit));
         const auto warp = route_warp(evaluation, fleet, colonizer
             ? std::vector<Position>{{250, 0}} : std::vector<Position>{{200, 0}, {0, 0}});
@@ -287,7 +287,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 [&](const auto& entry) { return entry.first == local->id; })->second;
             const auto capacity = static_cast<std::uint64_t>(std::floor(std::max(0.0,
                 fleet_cargo_capacity(state, fleet) - mineral_cargo_mass(fleet.minerals)) * kColonistsPerCargoUnit));
-            const auto settlers = std::min({capacity, population / 4, std::uint64_t{25'000}});
+            const auto settlers = std::min({capacity, population / 4, std::uint64_t{2'500}});
             if (settlers >= kMinimumSettlers && settlers > fleet.colonists) {
                 plan.orders.orders.push_back(SetFleetColonistsOrder{local->id, fleet.id, settlers});
                 population -= settlers - fleet.colonists;
