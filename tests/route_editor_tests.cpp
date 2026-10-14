@@ -627,6 +627,39 @@ int main(int argc, char* argv[])
         suns::MainWindowTestAccess::state(window).fleets.end(),
         [](const suns::Fleet& fleet) { return fleet.id == 1; }));
 
+    // Stars!-style order: set the waypoint first, then select Colonize on
+    // that already queued route row. The edited action must reach TurnProcessor.
+    suns::MainWindowTestAccess::installArrivalActionFixture(window, false);
+    window.findChild<QPushButton*>("routeNewWaypointButton")->click();
+    action->setCurrentIndex(action->findData(none));
+    warp->setValue(5);
+    add->click();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+    assert(std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front()).arrivalAction.kind
+        == suns::FleetArrivalActionKind::None);
+    assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
+    assert(routeTree->topLevelItemCount() == 1);
+    routeTree->setCurrentItem(routeTree->topLevelItem(0));
+    assert(action->isEnabled());
+    QTimer::singleShot(0, [] {
+        auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        assert(warning);
+        warning->done(QMessageBox::Yes);
+    });
+    action->setCurrentIndex(action->findData(
+        static_cast<int>(suns::FleetArrivalActionKind::Colonize)));
+    assert(std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front()).arrivalAction.kind
+        == suns::FleetArrivalActionKind::Colonize);
+    assert(routeTree->topLevelItem(0)->data(0, Qt::UserRole).toString().contains("Colonize"));
+    suns::MainWindowTestAccess::advance(window);
+    assert(suns::MainWindowTestAccess::state(window).planets[1].owner == 1);
+    assert(std::none_of(
+        suns::MainWindowTestAccess::state(window).fleets.begin(),
+        suns::MainWindowTestAccess::state(window).fleets.end(),
+        [](const suns::Fleet& fleet) { return fleet.id == 1; }));
+
     suns::MainWindowTestAccess::installArrivalActionFixture(window, true);
     warp->setValue(5);
     action->setCurrentIndex(action->findData(unload));
