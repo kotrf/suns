@@ -1060,6 +1060,101 @@ bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int directi
     return stageSelectedFleetRoute(*fleet, *route, "Fleet route point moved");
 }
 
+std::optional<FleetArrivalAction> MainWindow::selectedFleetRouteProgramLegAction(std::size_t index) const
+{
+    const auto* source = selectedFleet();
+    if (!source) return std::nullopt;
+    const auto fleet = fleet_player_view(state_, *source);
+    const auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (!route || routeIsClearIntent(fleet, *route)) return std::nullopt;
+    if (index == 0) return route->arrivalAction;
+    if (index > route->queuedWaypoints.size()) return std::nullopt;
+    return route->queuedWaypoints[index - 1].arrivalAction;
+}
+
+bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetArrivalAction action)
+{
+    const auto* source = selectedFleet();
+    if (!source || source->owner != pendingOrders_.player) return false;
+    const auto fleet = fleet_player_view(state_, *source);
+    auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (!route || routeIsClearIntent(fleet, *route)) return false;
+    auto legs = routeLegs(*route);
+    if (index >= legs.size()) return false;
+    auto& leg = legs[index];
+    if (leg.arrivalAction.kind == action.kind
+        && leg.arrivalAction.cargo == action.cargo
+        && leg.arrivalAction.reservePopulation == action.reservePopulation) return true;
+
+    const bool terminal = action.kind == FleetArrivalActionKind::Colonize
+        || action.kind == FleetArrivalActionKind::RemoteMining
+        || action.kind == FleetArrivalActionKind::MergeWithFleet
+        || action.kind == FleetArrivalActionKind::EnterWormhole;
+    if (terminal && (index + 1 != legs.size() || route->repeatOrders)) {
+        statusBar()->showMessage("Colonize and other terminal actions require a final, non-repeating waypoint", 5000);
+        return false;
+    }
+    if (leg.targetFleet != 0) {
+        if (action.kind != FleetArrivalActionKind::None
+            && action.kind != FleetArrivalActionKind::MergeWithFleet) {
+            statusBar()->showMessage("Fleet targets support only No action or Merge", 4000);
+            return false;
+        }
+    } else if (action.kind == FleetArrivalActionKind::MergeWithFleet) {
+        return false;
+    }
+
+    const auto* star = leg.targetFleet == 0 ? findStarAtPosition(state_, leg.destination) : nullptr;
+    const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
+    if (action.kind == FleetArrivalActionKind::Colonize) {
+        if (!star || !fleet_can_colonize(state_, fleet)
+            || (planet && survey_level(state_, fleet.owner, star->id) >= SurveyLevel::OrbitalSurvey
+                && known_planet_owner(state_, fleet.owner, planet->id).value_or(0) != 0)) {
+            statusBar()->showMessage("Colonize needs a colony ship and an unowned destination", 4000);
+            return false;
+        }
+        Planet unknown;
+        unknown.star = star->id;
+        unknown.name = "world at " + star->name;
+        if (!confirmFleetColonization(fleet,
+                planet && survey_level(state_, fleet.owner, star->id) >= SurveyLevel::BasicScan
+                    ? *planet : unknown, true)) return false;
+    }
+    if (action.kind == FleetArrivalActionKind::Refuel
+        && (!planet || !colony_has_orbital_service(
+            state_, planet->id, fleet.owner, OrbitalStationModule::RefuelingDepot))) {
+        statusBar()->showMessage("Refuel requires a friendly orbital depot at the waypoint", 4000);
+        return false;
+    }
+    if (action.kind == FleetArrivalActionKind::RemoteMining
+        && (!planet || planet->owner != 0 || !fleet_can_remote_mine(state_, fleet))) {
+        statusBar()->showMessage("Remote Mining requires an unowned planet and mining fleet", 4000);
+        return false;
+    }
+    if (action.kind == FleetArrivalActionKind::EnterWormhole) {
+        statusBar()->showMessage("Use the wormhole navigator for this action", 4000);
+        return false;
+    }
+    if (action.kind == FleetArrivalActionKind::UnloadAll
+        && (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All)
+        && planet) {
+        const auto known = known_planet_owner(state_, fleet.owner, planet->id);
+        if (known && *known != 0 && *known != fleet.owner) {
+            const auto answer = QMessageBox::warning(this, "Queue ground invasion",
+                "Unloading colonists at this enemy colony attempts a ground invasion. Continue?",
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (answer != QMessageBox::Yes) return false;
+        }
+    }
+    leg.arrivalAction = action;
+    route->destination = legs.front().destination;
+    route->warp = legs.front().warp;
+    route->arrivalAction = legs.front().arrivalAction;
+    route->targetFleet = legs.front().targetFleet;
+    route->queuedWaypoints.assign(std::next(legs.begin()), legs.end());
+    return stageSelectedFleetRoute(fleet, *route, "Waypoint arrival action updated for End Turn");
+}
+
 bool MainWindow::setSelectedFleetRouteProgramLegWarp(std::size_t index, std::uint8_t warp)
 {
     const auto* source = selectedFleet();
