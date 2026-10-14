@@ -56,6 +56,10 @@ public:
         turns_ = std::move(turns);
         series_ = std::move(series);
         markers_ = std::move(markers);
+        QStringList description;
+        description << QString("History chart: %1 recorded years").arg(turns_.size());
+        for (const auto& line : series_) description << line.name;
+        setAccessibleDescription(description.join("; "));
         update();
     }
 
@@ -223,7 +227,8 @@ void MainWindow::installEmpireHistory()
         "Confirmed fleet damage (%)", "Military losses (ships/year)",
         "Battle reports (reports/year)", "Ground losses (colonists/year)",
         "Bombardment losses (colonists/year)", "Bombardment losses (installations/year)",
-        "Mine losses (ships/year)", "Operational reports (reports/year)", "Station losses (stations/year)"});
+        "Mine losses (ships/year)", "Operational reports (reports/year)", "Station losses (stations/year)",
+        "Received combat activity (reports/year)"});
     historyMetric_->setItemData(14,
         "Confirmed space-battle losses, credited when reports arrive; opposing losses are not attributed kills",
         Qt::ToolTipRole);
@@ -233,6 +238,9 @@ void MainWindow::installEmpireHistory()
     for (int i = 16; i <= 20; ++i)
         historyMetric_->setItemData(i, "Confirmed casualties and reports, credited in the year communication arrives",
             Qt::ToolTipRole);
+    historyMetric_->setItemData(22,
+        "Space battles, ground fighting, bombardments and mine strikes confirmed in the year "
+        "reports arrive. Undetected enemy actions are not included.", Qt::ToolTipRole);
     controls->addWidget(historyMetric_, 1);
     historyScope_ = new QComboBox(content);
     historyScope_->setObjectName("historyScope");
@@ -456,6 +464,9 @@ void MainWindow::refreshEmpireHistory()
             + " — Confirmed space battles, by report receipt year");
     if (operationalMetric)
         historySummary_->setText(historySummary_->text() + " — Confirmed losses, by report receipt year");
+    if (metric == 22)
+        historySummary_->setText(historySummary_->text()
+            + " — Received reports only; undetected opponent actions remain unknown");
     if (followingMap && colonyId == 0) {
         historySummary_->setText(fleetMetric
             ? "Select a recorded fleet on the map to view its history."
@@ -500,7 +511,7 @@ void MainWindow::refreshEmpireHistory()
                     line.exactValues.push_back("No remote mining record");
                     continue;
                 }
-                if (battleMetric && !snapshot->battleStatisticsRecorded) {
+                if ((battleMetric || (metric == 22 && !lossKind)) && !snapshot->battleStatisticsRecorded) {
                     line.values.push_back(std::numeric_limits<double>::quiet_NaN());
                     line.exactValues.push_back("No battle statistics record");
                     continue;
@@ -760,6 +771,16 @@ void MainWindow::refreshEmpireHistory()
             break;
         case 15:
             add("Reports received", "#78b8f0", [](const auto& s) { return double(s.battles.reports); });
+            break;
+        case 22:
+            add("Space-battle reports", "#e07575",
+                [](const auto& s) { return double(s.battles.reports); });
+            addLoss("Ground reports", "#8dcc9e", OperationalLossKind::Ground,
+                &OperationalLossTurnStatistics::reports);
+            addLoss("Bombardment reports", "#e2bb70", OperationalLossKind::Bombardment,
+                &OperationalLossTurnStatistics::reports);
+            addLoss("Mine-strike reports", "#78b8f0", OperationalLossKind::Mines,
+                &OperationalLossTurnStatistics::reports);
             break;
         case 21:
             add("Own stations lost", "#e07575", [](const auto& s) { return double(s.battles.ownStationsLost); });

@@ -9,6 +9,7 @@
 #include <QDockWidget>
 #include <QEventLoop>
 #include <QLabel>
+#include <QListWidget>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -30,6 +31,10 @@ struct MainWindowTestAccess {
     static ShipDesignerDialog* designer(const MainWindow& w) { return w.shipDesigner_; }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void nextTurn(MainWindow& w) { w.endTurn(); }
+    static void deliverReports(MainWindow& w, const std::vector<GameEvent>& reports)
+    {
+        w.appendTurnMessages(reports);
+    }
     static std::uint64_t latestHistoryTurn(const MainWindow& w)
     {
         return w.state_.players.front().history.back().turn;
@@ -202,6 +207,16 @@ int main(int argc, char** argv)
     auto* metric = history->findChild<QComboBox*>("historyMetric");
     auto* scope = history->findChild<QComboBox*>("historyScope");
     auto* compare = history->findChild<QComboBox*>("historyCompare");
+    assert(metric->itemText(22) == "Received combat activity (reports/year)");
+    metric->setCurrentIndex(22);
+    auto* historyChart = history->findChild<QWidget*>("empireHistoryChart");
+    assert(historyChart);
+    const auto chartDescription = historyChart->accessibleDescription();
+    for (const auto& name : {"Space-battle reports", "Ground reports",
+                             "Bombardment reports", "Mine-strike reports"})
+        assert(chartDescription.contains(name));
+    assert(history->findChild<QLabel*>("historySummary")->text().contains(
+        "undetected opponent actions remain unknown"));
     metric->setCurrentIndex(3);
     const auto colonyIndex = scope->findData(static_cast<quint32>(MainWindowTestAccess::firstColony(window)));
     assert(colonyIndex >= 0);
@@ -236,6 +251,33 @@ int main(int argc, char** argv)
     assert(history->findChild<QSpinBox*>("historyLastTurn")->value() == static_cast<int>(latest));
     assert(window.saveState(6) == dockState);
     if (app.arguments().contains("--capture")) history->grab().save("/tmp/suns-history-window.png");
+
+    // A hostile-activity briefing is made only from recipient-delivered reports.
+    // Another empire's event must not become visible through the grouped filter.
+    GameEvent contact; contact.id = 900001; contact.turn = latest; contact.observedTurn = latest;
+    contact.recipient = 1; contact.kind = GameEventKind::EnemyFleetDetected; contact.fleet = 123;
+    GameEvent battle; battle.id = 900002; battle.turn = latest; battle.observedTurn = latest;
+    battle.recipient = 1; battle.kind = GameEventKind::SpaceBattle;
+    GameEvent science; science.id = 900003; science.turn = latest; science.observedTurn = latest;
+    science.recipient = 1; science.kind = GameEventKind::ResearchLevelCompleted;
+    science.researchField = ResearchField::Biology; science.technologyLevel = 1;
+    GameEvent hidden = contact; hidden.id = 900004; hidden.recipient = 2;
+    MainWindowTestAccess::deliverReports(window, {contact, battle, science, hidden});
+    auto* reportFilter = window.findChild<QComboBox*>("turnMessageTypeFilter");
+    auto* reportList = window.findChild<QListWidget*>("turnMessagesList");
+    assert(reportFilter && reportList);
+    const auto allReports = reportList->count();
+    assert(allReports >= 3);
+    const int activityIndex = reportFilter->findText("Observed hostile activity");
+    assert(activityIndex >= 0);
+    reportFilter->setCurrentIndex(activityIndex);
+    assert(reportList->count() == 2);
+    reportFilter->setCurrentIndex(reportFilter->findText("Enemy contacts"));
+    assert(reportList->count() == 1);
+    reportFilter->setCurrentIndex(reportFilter->findText("Combat"));
+    assert(reportList->count() == 1);
+    reportFilter->setCurrentIndex(0);
+    assert(reportList->count() == allReports);
 
     // Window visibility is independent of panel presets, resets and the
     // temporary fullscreen map. The tools never become dock tabs.

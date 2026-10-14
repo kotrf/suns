@@ -50,6 +50,7 @@ enum class MessageTypeFilter {
     Freight,
     EnemyContacts,
     Combat,
+    ObservedHostileActivity,
     Research,
     ProductionDelays,
     Warnings,
@@ -238,6 +239,11 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
             || event.kind == GameEventKind::GroundInvasionLost
             || event.kind == GameEventKind::GroundDefenseWon
             || event.kind == GameEventKind::ColonyLost;
+    case MessageTypeFilter::ObservedHostileActivity:
+        // Only delivered recipient-specific reports are displayed. A computer
+        // opponent's hidden goals and undiscovered combat remain invisible.
+        return matches_type(event, MessageTypeFilter::EnemyContacts)
+            || matches_type(event, MessageTypeFilter::Combat);
     case MessageTypeFilter::Research:
         return event.kind == GameEventKind::ScientificData || event.kind == GameEventKind::ResearchLevelCompleted
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
@@ -603,6 +609,12 @@ void MainWindow::installTurnMessages()
     turnMessageTypeFilter_->addItem("Cargo deliveries", static_cast<int>(MessageTypeFilter::Freight));
     turnMessageTypeFilter_->addItem("Enemy contacts", static_cast<int>(MessageTypeFilter::EnemyContacts));
     turnMessageTypeFilter_->addItem("Combat", static_cast<int>(MessageTypeFilter::Combat));
+    turnMessageTypeFilter_->addItem("Observed hostile activity",
+        static_cast<int>(MessageTypeFilter::ObservedHostileActivity));
+    turnMessageTypeFilter_->setItemData(
+        turnMessageTypeFilter_->findData(static_cast<int>(MessageTypeFilter::ObservedHostileActivity)),
+        "Received enemy contacts, emissions, interference and combat reports only; "
+        "unknown opponent actions remain hidden.", Qt::ToolTipRole);
     turnMessageTypeFilter_->addItem("Research completed", static_cast<int>(MessageTypeFilter::Research));
     turnMessageTypeFilter_->addItem("Production delays", static_cast<int>(MessageTypeFilter::ProductionDelays));
     turnMessageTypeFilter_->addItem("Warnings", static_cast<int>(MessageTypeFilter::Warnings));
