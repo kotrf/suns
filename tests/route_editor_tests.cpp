@@ -82,7 +82,7 @@ struct MainWindowTestAccess {
         fleet.role = FleetRole::ColonyShip;
         fleet.ships = {{kColonyShipDesignId, 1}};
         fleet.fuel = fleet_fuel_capacity(window.state_, fleet);
-        fleet.colonists = 10'000;
+        fleet.colonists = 1'000;
         fleet.minerals = friendlyDestination ? MineralCargo{1, 1, 1} : MineralCargo{};
         fleet.telemetry = {};
         fleet.telemetry.observedTurn = window.state_.turn;
