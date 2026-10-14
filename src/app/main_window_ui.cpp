@@ -644,6 +644,10 @@ void MainWindow::installUiPolish()
     fleetMenu->addSeparator();
     auto* cargoAction = fleetMenu->addAction("Transfer cargo…");
     connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
+    auto* gateAction = fleetMenu->addAction("Transit stargate…");
+    gateAction->setObjectName("fleetGateTransitAction");
+    gateAction->setToolTip("Transfer a stationary unloaded fleet between two owned, equipped orbital gates.");
+    connect(gateAction, &QAction::triggered, this, [this] { openGateTransit(); });
     auto* renameAction = fleetMenu->addAction("Rename fleet…");
     connect(renameAction, &QAction::triggered, this, [this] { openRenameFleetDialog(); });
     auto* mergeAction = fleetMenu->addAction("Merge fleets…");
