@@ -14,6 +14,7 @@
 #include <cmath>
 #include <limits>
 #include <iterator>
+#include <set>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -1827,6 +1828,7 @@ TurnResult TurnProcessor::process_with_events(
     const auto extraction = mine_colonies(next);
     std::vector<ColonyFreightDelivery> freight;
 
+    std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
             std::visit(
@@ -1845,6 +1847,11 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.repeatOrders,
                             concreteOrder.targetFleet,
                             concreteOrder.clearRoute);
+                    } else if constexpr (std::is_same_v<T, GateFleetOrder>) {
+                        if (!gatedThisTurn.contains(concreteOrder.fleet)
+                            && transfer_fleet_through_stargate(next, submission.player,
+                                concreteOrder.fleet, concreteOrder.source, concreteOrder.destination))
+                            gatedThisTurn.insert(concreteOrder.fleet);
                     } else if constexpr (std::is_same_v<T, QueueStationOrder>) {
                         (void)queue_station_construction(next,submission.player,concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
