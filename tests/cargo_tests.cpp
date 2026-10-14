@@ -151,6 +151,29 @@ int main()
     assert(planet(allUnloaded, 1).minerals.boranium >= surfaceBeforeAll.minerals.boranium + 5.0);
     assert(planet(allUnloaded, 1).minerals.germanium >= surfaceBeforeAll.minerals.germanium + 5.0);
 
+    // The older SetFleetColonists order follows the same conservation rule.
+    // Annual population growth happens after the loading debit.
+    auto manual = suns::make_demo_game();
+    manual.fleets.front().design = suns::kColonyShipDesignId;
+    manual.fleets.front().ships = {{suns::kColonyShipDesignId, 1}};
+    manual.fleets.front().colonists = 0;
+    auto debitedPlanet = manual.planets.front();
+    debitedPlanet.population -= 2'500;
+    const auto manualExpected = debitedPlanet.population +
+        suns::projected_population_growth(manual, debitedPlanet, manual.turn);
+    const auto manualLoaded = processor.process(manual,
+        {{1, {suns::SetFleetColonistsOrder{1, 1, 2'500}}}});
+    assert(manualLoaded.fleets.front().colonists == 2'500);
+    assert(manualLoaded.planets.front().population == manualExpected);
+    assert(suns::fleet_cargo_used(manualLoaded, manualLoaded.fleets.front()) <=
+        suns::fleet_cargo_capacity(manualLoaded, manualLoaded.fleets.front()));
+    const auto rejectedManual = processor.process(manual,
+        {{1, {suns::SetFleetColonistsOrder{1, 1, 25'000}}}});
+    assert(rejectedManual.fleets.front().colonists == 0);
+    assert(rejectedManual.planets.front().population ==
+        manual.planets.front().population +
+        suns::projected_population_growth(manual, manual.planets.front(), manual.turn));
+
     // The source/destination transfer primitive moves mixed cargo atomically
     // between a planetary surface and any friendly fleet at that system.
     auto transferState = suns::make_demo_game();
