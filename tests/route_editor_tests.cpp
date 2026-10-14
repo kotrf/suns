@@ -653,6 +653,8 @@ int main(int argc, char* argv[])
         suns::MainWindowTestAccess::orders(window).orders.front()).arrivalAction.kind
         == suns::FleetArrivalActionKind::Colonize);
     assert(routeTree->topLevelItem(0)->data(0, Qt::UserRole).toString().contains("Colonize"));
+    assert(!window.appendSelectedStarWaypoint(5, {})); // Colonize is terminal.
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::state(window).planets[1].owner == 1);
     assert(std::none_of(
