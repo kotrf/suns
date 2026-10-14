@@ -249,7 +249,7 @@ void known_targets_and_conservative_fuel()
     });
     Fleet colonizer;
     colonizer.id = state.nextFleetId++; colonizer.owner = 2; colonizer.design = design->id;
-    colonizer.position = {0, 0}; colonizer.colonists = 5'000;
+    colonizer.position = {0, 0}; colonizer.colonists = 500;
     colonizer.fuel = ship_design_fuel_capacity(*design);
     colonizer.telemetry.observedTurn = 1; colonizer.telemetry.position = colonizer.position;
     colonizer.telemetry.colonists = colonizer.colonists; colonizer.telemetry.fuel = colonizer.fuel;
