@@ -389,7 +389,7 @@ void attachRouteProgramDock(MainWindow& window)
     form->addRow("Destination", destinationCombo);
     form->addRow("Warp", warpRow);
     form->addRow("On arrival", actionCombo);
-    actionCombo->setToolTip("Action for the new waypoint of this fleet. Add the waypoint to apply it; existing route rows keep their own actions.");
+    actionCombo->setToolTip("Select a route row to edit its arrival order, or New waypoint to choose an action before adding a destination.");
     form->addRow("Cargo", cargoCombo);
     form->addRow("Leave population", reserveSpin);
     waypointLayout->addLayout(form);
@@ -535,6 +535,7 @@ void attachRouteProgramDock(MainWindow& window)
         FleetId fleet{};
         std::unordered_map<FleetId, WaypointDraft> drafts;
         bool editingLeg{};
+        FleetArrivalAction draftAction{FleetArrivalActionKind::None, 1000};
         int draftWarp{1};
     };
     const auto editor = std::make_shared<EditorState>();
@@ -544,7 +545,7 @@ void attachRouteProgramDock(MainWindow& window)
         if (resetDrafts) {
             editor->drafts.clear();
             editor->fleet = 0;
-        } else if (editor->fleet != 0) {
+        } else if (editor->fleet != 0 && !editor->editingLeg) {
             editor->drafts[editor->fleet] = {
                 editor->editingLeg ? editor->draftWarp : warpSelector->value(),
                 actionFromControls(actionCombo, cargoCombo, reserveSpin),
@@ -657,14 +658,14 @@ void attachRouteProgramDock(MainWindow& window)
             && destinationCombo->currentIndex() >= 0
             && (!fleetTarget || targetFleetCombo->currentIndex() >= 0));
         if (editor->editingLeg) {
-            actionCombo->setEnabled(false);
+            actionCombo->setEnabled(true);
             cargoCombo->setEnabled(false);
             reserveSpin->setEnabled(false);
             destinationCombo->setEnabled(false);
             pickTargetButton->setEnabled(false);
             appendButton->setEnabled(false);
         }
-        waypointGroup->setTitle(editor->editingLeg ? "Selected waypoint Warp" : "Add waypoint");
+        waypointGroup->setTitle(editor->editingLeg ? "Edit waypoint — Warp / On arrival" : "Add waypoint");
     };
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, syncEditor);
     syncEditor(false);
@@ -786,17 +787,47 @@ void attachRouteProgramDock(MainWindow& window)
         const auto rows = window.selectedFleetRouteProgramRows();
         const QSignalBlocker warpBlocker(warpSelector);
         if (row && *row < rows.size()) {
-            if (!editor->editingLeg) editor->draftWarp = warpSelector->value();
+            if (!editor->editingLeg) {
+                editor->draftWarp = warpSelector->value();
+                editor->draftAction = actionFromControls(actionCombo, cargoCombo, reserveSpin);
+            }
             editor->editingLeg = true;
             warpSelector->setValue(rows[*row].warp);
+            if (const auto selected = window.selectedFleetRouteProgramLegAction(*row)) {
+                const QSignalBlocker actionBlocker(actionCombo);
+                const QSignalBlocker cargoBlocker(cargoCombo);
+                const QSignalBlocker reserveBlocker(reserveSpin);
+                actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(selected->kind)));
+                cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(selected->cargo)));
+                reserveSpin->setValue(static_cast<int>(selected->reservePopulation));
+            }
         } else if (editor->editingLeg) {
             editor->editingLeg = false;
             warpSelector->setValue(editor->draftWarp);
+            const QSignalBlocker actionBlocker(actionCombo);
+            const QSignalBlocker cargoBlocker(cargoCombo);
+            const QSignalBlocker reserveBlocker(reserveSpin);
+            actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(editor->draftAction.kind)));
+            cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(editor->draftAction.cargo)));
+            reserveSpin->setValue(static_cast<int>(editor->draftAction.reservePopulation));
         }
         syncEditor(false);
         refreshFuelWarning();
     };
     QObject::connect(routeTree, &QTreeWidget::itemSelectionChanged, panel, syncRouteSelection);
+    QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel,
+        [=, &window](int) {
+            if (!editor->editingLeg) return;
+            const auto row = selectedRouteIndex();
+            if (!row) return;
+            if (!window.setSelectedFleetRouteProgramLegAction(*row,
+                    actionFromControls(actionCombo, cargoCombo, reserveSpin))) {
+                if (const auto original = window.selectedFleetRouteProgramLegAction(*row)) {
+                    const QSignalBlocker blocked(actionCombo);
+                    actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(original->kind)));
+                }
+            }
+        });
     QObject::connect(newWaypointButton, &QPushButton::clicked, panel, [=] {
         routeTree->clearSelection();
         routeTree->setCurrentItem(nullptr);

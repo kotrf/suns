@@ -45,6 +45,7 @@
 #include <limits>
 #include <type_traits>
 #include <utility>
+#include <unordered_map>
 
 namespace suns {
 
@@ -1053,12 +1054,59 @@ void MainWindow::updateControls()
         }
         QString populationLine;
         if (planet->owner == pendingOrders_.player) {
-            const auto populationChange = projected_population_growth(state_, *planet, state_.turn);
-            populationLine = QString("Population: %1 / %2 (%3%4 next turn)<br>")
+            // Orders are intentions until End Turn. Present the predicted
+            // cargo debit separately from the confirmed surface population,
+            // because annual population growth may partly obscure the debit.
+            std::uint64_t orderedOut = 0;
+            std::uint64_t orderedIn = 0;
+            std::unordered_map<FleetId, std::uint64_t> plannedFleetLoads;
+            for (const auto& pending : pendingOrders_.orders) {
+                if (const auto* transfer = std::get_if<TransferCargoOrder>(&pending)) {
+                    if (transfer->source.planet == planet->id) orderedOut += transfer->colonists;
+                    if (transfer->destination.planet == planet->id) orderedIn += transfer->colonists;
+                    const auto updateLoad = [&](FleetId id, bool receiving) {
+                        if (!id) return;
+                        const auto found = std::find_if(state_.fleets.begin(), state_.fleets.end(),
+                            [id](const Fleet& candidate) { return candidate.id == id; });
+                        if (found == state_.fleets.end()) return;
+                        auto [item, inserted] = plannedFleetLoads.try_emplace(id, found->colonists);
+                        if (receiving) item->second += transfer->colonists;
+                        else item->second = item->second > transfer->colonists
+                            ? item->second - transfer->colonists : 0;
+                    };
+                    updateLoad(transfer->destination.fleet, true);
+                    updateLoad(transfer->source.fleet, false);
+                } else if (const auto* load = std::get_if<SetFleetColonistsOrder>(&pending);
+                    load && load->colony == planet->id) {
+                    const auto found = std::find_if(state_.fleets.begin(), state_.fleets.end(),
+                        [load](const Fleet& candidate) { return candidate.id == load->fleet; });
+                    if (found == state_.fleets.end()) continue;
+                    auto [item, inserted] = plannedFleetLoads.try_emplace(load->fleet, found->colonists);
+                    if (load->colonists > item->second) orderedOut += load->colonists - item->second;
+                    else orderedIn += item->second - load->colonists;
+                    item->second = load->colonists;
+                }
+            }
+            const auto afterOutgoing = orderedOut >= planet->population
+                ? std::uint64_t{0} : planet->population - orderedOut;
+            const auto afterCargo = orderedIn > std::numeric_limits<std::uint64_t>::max() - afterOutgoing
+                ? std::numeric_limits<std::uint64_t>::max() : afterOutgoing + orderedIn;
+            Planet projected = *planet;
+            projected.population = afterCargo;
+            const auto populationChange = projected_population_growth(state_, projected, state_.turn);
+            populationLine = QString("Population now: %1 / %2<br>")
                                  .arg(static_cast<qulonglong>(planet->population))
-                                 .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)))
-                                 .arg(populationChange > 0 ? "+" : "")
-                                 .arg(static_cast<qlonglong>(populationChange));
+                                 .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)));
+            if (orderedOut || orderedIn) {
+                populationLine += QString(
+                    "Queued cargo: -%1 / +%2 colonists; after valid orders: ~%3 (before growth)<br>")
+                    .arg(static_cast<qulonglong>(orderedOut))
+                    .arg(static_cast<qulonglong>(orderedIn))
+                    .arg(static_cast<qulonglong>(afterCargo));
+            }
+            populationLine += QString("Estimated growth after cargo: %1%2 next turn<br>")
+                .arg(populationChange > 0 ? "+" : "")
+                .arg(static_cast<qlonglong>(populationChange));
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")

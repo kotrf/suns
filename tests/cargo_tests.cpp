@@ -51,7 +51,7 @@ int main()
     hauler.position = {0.0, 0.0};
     hauler.warp = 6;
     hauler.fuel = suns::ship_design_fuel_capacity(state.shipDesigns.back());
-    hauler.colonists = 100'000; // 10 cargo units.
+    hauler.colonists = 1'000; // 10 cargo units.
     state.fleets = {hauler};
 
     assert(close(suns::fleet_cargo_capacity(state, state.fleets.front()), 50.0));
@@ -104,12 +104,12 @@ int main()
         1,
     };
     const auto dynamicallyLoaded = processor.process(dynamic, {});
-    assert(fleet(dynamicallyLoaded, 2).colonists == 100'000); // the remaining 10 kt fills before the colony is depleted.
+    assert(fleet(dynamicallyLoaded, 2).colonists == 1'000); // the remaining 10 kt fills before the colony is depleted.
 
     // Waypoint mineral policies use the real surface stockpile at arrival and
     // fill only the space left in the shared hold.
     auto mineralPolicy = state;
-    mineralPolicy.fleets.front().colonists = 100'000; // 10/50 cargo units used.
+    mineralPolicy.fleets.front().colonists = 1'000; // 10/50 cargo units used.
     mineralPolicy.fleets.front().destination = suns::Position{0.0, 0.0};
     mineralPolicy.fleets.front().arrivalAction = suns::FleetArrivalAction{
         suns::FleetArrivalActionKind::LoadAllAvailable,
@@ -134,7 +134,7 @@ int main()
     // "All cargo" really means the complete mixed manifest, not a cargo type
     // chosen in another control.
     auto unloadEverything = state;
-    unloadEverything.fleets.front().colonists = 100'000;
+    unloadEverything.fleets.front().colonists = 1'000;
     unloadEverything.fleets.front().minerals = {10.0, 5.0, 5.0};
     unloadEverything.fleets.front().destination = suns::Position{0.0, 0.0};
     unloadEverything.fleets.front().arrivalAction = suns::FleetArrivalAction{
@@ -146,10 +146,33 @@ int main()
     const auto allUnloaded = processor.process(unloadEverything, {});
     assert(fleet(allUnloaded, 2).colonists == 0);
     assert(close(suns::mineral_cargo_mass(fleet(allUnloaded, 2).minerals), 0.0));
-    assert(planet(allUnloaded, 1).population > surfaceBeforeAll.population + 100'000);
+    assert(planet(allUnloaded, 1).population > surfaceBeforeAll.population + 1'000);
     assert(planet(allUnloaded, 1).minerals.ironium >= surfaceBeforeAll.minerals.ironium + 10.0);
     assert(planet(allUnloaded, 1).minerals.boranium >= surfaceBeforeAll.minerals.boranium + 5.0);
     assert(planet(allUnloaded, 1).minerals.germanium >= surfaceBeforeAll.minerals.germanium + 5.0);
+
+    // The older SetFleetColonists order follows the same conservation rule.
+    // Annual population growth happens after the loading debit.
+    auto manual = suns::make_demo_game();
+    manual.fleets.front().design = suns::kColonyShipDesignId;
+    manual.fleets.front().ships = {{suns::kColonyShipDesignId, 1}};
+    manual.fleets.front().colonists = 0;
+    auto debitedPlanet = manual.planets.front();
+    debitedPlanet.population -= 250;
+    const auto manualExpected = debitedPlanet.population +
+        suns::projected_population_growth(manual, debitedPlanet, manual.turn);
+    const auto manualLoaded = processor.process(manual,
+        {{1, {suns::SetFleetColonistsOrder{1, 1, 250}}}});
+    assert(manualLoaded.fleets.front().colonists == 250);
+    assert(manualLoaded.planets.front().population == manualExpected);
+    assert(suns::fleet_cargo_used(manualLoaded, manualLoaded.fleets.front()) <=
+        suns::fleet_cargo_capacity(manualLoaded, manualLoaded.fleets.front()));
+    const auto rejectedManual = processor.process(manual,
+        {{1, {suns::SetFleetColonistsOrder{1, 1, 2'500}}}});
+    assert(rejectedManual.fleets.front().colonists == 0);
+    assert(rejectedManual.planets.front().population ==
+        manual.planets.front().population +
+        suns::projected_population_growth(manual, manual.planets.front(), manual.turn));
 
     // The source/destination transfer primitive moves mixed cargo atomically
     // between a planetary surface and any friendly fleet at that system.
@@ -205,6 +228,10 @@ int main()
     assert(close(
         planet(fromSurface, 1).minerals.ironium + 5.0,
         planet(transferControl, 1).minerals.ironium));
+    // UI must not compare against the original population after End Turn:
+    // physical loading debits exactly 200 before the annual growth is applied.
+    assert(planet(fromSurface, 1).population == expectedSourcePopulation);
+    assert(expectedSourcePopulation != planet(transferControl, 1).population);
 
     suns::PlayerOrders fleetTransfer{1, {}};
     fleetTransfer.orders.emplace_back(suns::TransferCargoOrder{
