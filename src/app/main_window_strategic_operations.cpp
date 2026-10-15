@@ -139,7 +139,10 @@ void MainWindow::installStrategicOperations()
     connect(mode,&QComboBox::currentIndexChanged,this,[timer] { timer->start(0); });
     connect(interval,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
     connect(years,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
-    connect(this,&MainWindow::routeProgramContextChanged,this,[timer](bool){timer->start(0);});
+    connect(this,&MainWindow::routeProgramContextChanged,this,[timer,selected](bool reset) {
+        if(reset) *selected=0; // A loaded/new session can reuse both fleet ID and year.
+        timer->start(0);
+    });
     refresh();
 }
 

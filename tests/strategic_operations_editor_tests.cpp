@@ -30,6 +30,7 @@ namespace suns {
 struct MainWindowTestAccess {
     static void install(MainWindow& w, const GameState& s) {
         w.state_ = s; w.pendingOrders_ = {1,{}}; w.pendingDescriptions_.clear(); w.selection_.fleet = s.fleets.front().id; w.rebuildScene();
+        emit w.routeProgramContextChanged(true); // Match load/new-game session replacement.
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void messages(MainWindow& w,const std::vector<GameEvent>& events) {
