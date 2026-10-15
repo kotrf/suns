@@ -26,6 +26,10 @@ void MainWindow::installFleetOperationsPanel()
     auto* root = new QWidget(fleetDock);
     routePanel->setParent(root);
     details->setParent(root);
+    details->setObjectName("fleetDetailsPanel");
+    // QScrollArea::setWidget enabled this on the old scroll content. Once
+    // nested in the route panel it must inherit the surrounding dark surface.
+    details->setAutoFillBackground(false);
     root->setObjectName("fleetOperationsPanel");
     auto* layout = new QVBoxLayout(root);
     layout->setContentsMargins(4, 4, 4, 4);
@@ -80,7 +84,7 @@ void MainWindow::installFleetOperationsPanel()
     if (auto* transfer = findChild<QPushButton*>("fleetTransferCargoButton")) actions->addWidget(transfer, 1);
     auto* detailsButton = new QToolButton(header);
     detailsButton->setObjectName("fleetDetailsButton");
-    detailsButton->setText("Details & logistics");
+    detailsButton->setText("Details / logistics");
     detailsButton->setCheckable(true);
     detailsButton->setArrowType(Qt::RightArrow);
     detailsButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
