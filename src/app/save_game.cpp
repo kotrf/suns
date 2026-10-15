@@ -641,7 +641,6 @@ void writePlanet(QDataStream& stream, const Planet& value)
     if (value.observedHabitability) stream << qint32(*value.observedHabitability);
     stream << quint8(value.observedConcentration.has_value());
     if (value.observedConcentration) writeMinerals(stream, *value.observedConcentration);
-    stream << quint8(value.radar) << quint8(value.homeworld ? 1 : 0);
 
 }
 
@@ -748,21 +747,6 @@ void readPlanet(QDataStream& stream, Planet& value)
             value.observedConcentration = concentration;
         }
     }
-    if (gReadSaveFormatVersion >= 71) {
-        quint8 radar{}, homeworld{};
-        stream >> radar >> homeworld;
-        if (radar > quint8(PlanetaryRadarLevel::Full) || homeworld > 1) {
-            markCorrupt(stream); return;
-        }
-        value.radar = PlanetaryRadarLevel(radar);
-        value.homeworld = homeworld != 0;
-    } else if (value.owner && value.population) {
-        // Older saves never stored radar equipment. Preserve their legacy
-        // built-in scanners until a new campaign is created.
-        value.radar = PlanetaryRadarLevel::Full;
-        value.homeworld = true;
-    }
-
 }
 
 void writeBattle(QDataStream& stream, const std::optional<SpaceBattleReport>& value)
@@ -2966,6 +2950,11 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     for (const auto& [player, token] : data.playerTokens) stream << quint32(player) << quint64(token);
     writeVector(stream, data.inbox, writePlayerOrders);
     writeReconMessages(stream,data);
+    // Radar infrastructure is a trailing v71 extension. Keep the historical
+    // planet record binary layout intact for previous save migration fixtures.
+    stream << quint32(data.state.planets.size());
+    for (const auto& planet : data.state.planets)
+        stream << quint32(planet.id) << quint8(planet.radar) << quint8(planet.homeworld);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3053,6 +3042,31 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     }
 
     if(version>=66) readReconMessages(stream,loaded);
+    if (version >= 71) {
+        quint32 count{};
+        if (!readCount(stream, count) || count != loaded.state.planets.size()) {
+            markCorrupt(stream);
+        } else {
+            for (auto& planet : loaded.state.planets) {
+                quint32 id{};
+                quint8 radar{}, homeworld{};
+                stream >> id >> radar >> homeworld;
+                if (id != planet.id || radar > quint8(PlanetaryRadarLevel::Full) || homeworld > 1) {
+                    markCorrupt(stream);
+                    break;
+                }
+                planet.radar = PlanetaryRadarLevel(radar);
+                planet.homeworld = homeworld != 0;
+            }
+        }
+    } else {
+        // Existing colonies in older saves retain their previous implicit
+        // scanners; fresh colonies in new campaigns begin without radar.
+        for (auto& planet : loaded.state.planets) if (planet.owner && planet.population) {
+            planet.radar = PlanetaryRadarLevel::Full;
+            planet.homeworld = true;
+        }
+    }
     if (stream.status() != QDataStream::Ok) {
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
