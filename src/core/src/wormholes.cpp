@@ -62,14 +62,15 @@ void queue(GameState& state, PlayerId owner, WormholeReportKind kind, WormholeKn
 {
     auto* p = player_for(state, owner);
     if (!p) return;
-    const auto due = report_transmission_turn(state,owner,source,turn,fleet) + communication_delay_turns(state,owner,source,turn);
+    const auto due = fleet_report_delivery_turn(state,owner,source,turn,fleet);
     if (kind == WormholeReportKind::Observation) {
         const auto duplicate = std::find_if(p->pendingWormholeReports.begin(), p->pendingWormholeReports.end(),
             [&](const auto& r) { return r.kind == kind && r.knowledge.endpoint == knowledge.endpoint
                 && r.observedTurn == turn && r.deliveryTurn <= due && r.knowledge.stability >= knowledge.stability; });
         if (duplicate != p->pendingWormholeReports.end()) return;
     }
-    p->pendingWormholeReports.push_back({kind, turn, due, fleet, knowledge});
+    p->pendingWormholeReports.push_back({kind, turn, due, fleet, knowledge,
+        held_report_source(state,owner,source,turn,fleet)});
 }
 
 void observe(GameState& state, PlayerId owner, FleetId fleet, Position start, Position end,

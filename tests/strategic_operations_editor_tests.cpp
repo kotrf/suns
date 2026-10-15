@@ -82,6 +82,10 @@ int main(int argc,char** argv)
     state.players[0].pendingFriendlyFleetContacts={pendingRadar};
     PendingPlayerReport report; report.kind = PlayerReportKind::ScientificData; report.observedTurn = 1; report.deliveryTurn = 3;
     report.quantity = 12; report.researchField = ResearchField::Energy; state.players[0].pendingPlayerReports.push_back(report);
+    auto unsent=report; unsent.kind=PlayerReportKind::FleetArrived; unsent.quantity=0;
+    unsent.deliveryTurn=kAwaitingTransmission; unsent.transmissionFleet=fleet.id;
+    state.players[0].pendingPlayerReports.push_back(unsent);
+    state.players[0].fieldScience.push_back({(1ULL<<32)|2,kAwaitingTransmission,fleet.id});
     value.pendingOrders.orders = {SetFleetTaskOrder{fleet.id,FleetTask::LayMines},SetFleetElectronicsOrder{fleet.id,{EmissionMode::RadioSilence,6}}};
     value.pendingDescriptions = {"Lay mines","Radio silence"};
     QString error; const auto path = dir.filePath("strategy.suns");
@@ -96,6 +100,13 @@ int main(int argc,char** argv)
     assert(loaded.players[0].friendlyFleetContacts.front().sourceColony==1);
     assert(loaded.players[0].pendingFriendlyFleetContacts.front().deliveryTurn==3
         && loaded.players[0].pendingFriendlyFleetContacts.front().sourceFleet==99);
+    assert(loaded.players[0].pendingPlayerReports.back().transmissionFleet==fleet.id
+        && loaded.players[0].pendingPlayerReports.back().deliveryTurn==kAwaitingTransmission);
+    auto transmitting=loaded; apply_electronics_program(transmitting.fleets.front(),{});
+    dispatch_fleet_report_outbox(transmitting);
+    assert(transmitting.players[0].pendingPlayerReports.back().deliveryTurn==transmitting.turn
+        && !transmitting.players[0].pendingPlayerReports.back().transmissionFleet);
+    assert(transmitting.players[0].fieldScience.back().deliveryTurn==transmitting.turn);
     assert(std::holds_alternative<SetFleetTaskOrder>(restored.pendingOrders.orders[0]));
     TurnOrderFileData packet; packet.orders = value.pendingOrders; packet.descriptions = value.pendingDescriptions;
     packet.campaignId = 1; packet.turn = 1; packet.turnToken = 1;
@@ -106,6 +117,9 @@ int main(int argc,char** argv)
     auto invalid = value; invalid.state.fleets[0].electronics.mode = EmissionMode(255);
     assert(write_save_game_file(dir.filePath("bad.suns"),invalid,error));
     SaveGameData rejected; assert(!read_save_game_file(dir.filePath("bad.suns"),rejected,error));
+    auto invalidOutbox=value; invalidOutbox.state.players[0].pendingPlayerReports.back().transmissionFleet=0;
+    assert(write_save_game_file(dir.filePath("bad-outbox.suns"),invalidOutbox,error));
+    assert(!read_save_game_file(dir.filePath("bad-outbox.suns"),rejected,error));
     auto invalidRadar=value; invalidRadar.state.players[0].friendlyFleetContacts.front().owner=2;
     assert(write_save_game_file(dir.filePath("bad-radar.suns"),invalidRadar,error));
     assert(!read_save_game_file(dir.filePath("bad-radar.suns"),rejected,error));

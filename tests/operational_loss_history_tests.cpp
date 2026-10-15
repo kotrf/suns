@@ -101,9 +101,15 @@ void mines_only_count_destroyed_ships_and_wait_for_communication()
     assert(delayed.fleets.empty() && totals(delayed,1,OperationalLossKind::Mines).reports == 0);
     while (delayed.turn < 5) {
         delayed = TurnProcessor{}.process(delayed,{});
-        assert(totals(delayed,1,OperationalLossKind::Mines).reports == (delayed.turn == 5 ? 1 : 0));
+        assert(totals(delayed,1,OperationalLossKind::Mines).reports == 0);
     }
-    assert(totals(delayed,1,OperationalLossKind::Mines).ownShipsLost == 1);
+    // A destroyed silent transmitter cannot send a posthumous report. A
+    // surviving silent observer does transmit its stored report on wake-up.
+    s.shipDesigns.front().hull=ShipHullType::Cruiser;
+    delayed=TurnProcessor{}.process(s,{}); assert(!delayed.fleets.empty());
+    while(delayed.turn<5) delayed=TurnProcessor{}.process(delayed,{});
+    assert(totals(delayed,1,OperationalLossKind::Mines).reports==1);
+    assert(totals(delayed,1,OperationalLossKind::Mines).ownShipsLost==0);
     s = arena(); s.minefields = {{1,2,{30,0},100,2}}; s.nextMinefieldId = 2;
     const auto stopped = TurnProcessor{}.process(s,{{1,{MoveFleetOrder{1,{100,0},6}}}});
     assert(!stopped.fleets.empty() && totals(stopped,1,OperationalLossKind::Mines).reports == 1);

@@ -66,16 +66,17 @@ fleet is governed by its least cloaked stack, capped at 95% cloak. Tachyon
 equipment combines similarly and reduces effective opposing cloak. Active hull
 detection range is `scanner range × (1 − effective cloak)`.
 
-| Fleet mode | Active scans/jamming | Telemetry/commands |
+| Fleet mode | Active scans/jamming | Outgoing telemetry/reports |
 | --- | --- | --- |
 | Standard | Enabled | Normal communication delay |
-| Passive | Disabled; passive receiver remains | Transmission at years divisible by 3 |
+| Passive | Disabled; passive receiver remains | No automatic transmissions |
 | Radio silence | Disabled; passive receiver remains | Automatic resume year is mandatory (1–100 years ahead) |
 
 Passive localization starts with 25% of the fitted scanner range, then uses a
 stationary signature factor of 0.5, or a moving factor
 `min(2, 0.5 + Warp/5)`, and effective cloak. Radio silence does not erase commands
-already aboard. New commands wait for a communication window; in-flight packets
+already aboard. All modes receive new commands after normal signal delay;
+reception creates no acknowledgement or telemetry. In-flight packets
 remain deliverable. A fleet's operation reports follow its emission program;
 generic reports use the earliest co-located transmitter, with colony reports
 independent of silent orbiting fleets. Combat snapshots retain these delivery
@@ -83,12 +84,11 @@ dates even if the reporting fleet is destroyed. Owner positions continue to be p
 telemetry, or a newer received friendly radar observation. Silent fleets do not act as communication relays or publish new active
 surveys. [Programmable communication/active-scan windows](reconnaissance.md) are now implemented; more conditional doctrines remain under #101.
 
-The passive schedule uses absolute game years divisible by three (3, 6, 9, …),
-not three years after the mode was selected. Radio silence has no such automatic
-three-year transmission: the player chooses its finite duration, optional window
+Passive has no periodic exchange or automatic wake-up. Radio silence adds a
+programmable finite duration, optional window
 interval, optional active scanning in those windows, and wake on arrival. A window
 lasts one game year and does not permanently cancel silence. Without active scan,
-it only transmits reports and admits commands, leaving active scanners/jammers
+it only transmits reports, leaving active scanners/jammers
 off. Active scan enables those systems for the window. Wake on arrival instead
 returns permanently to Standard at the first reached waypoint, including an
 intermediate one. These options are enabled only for Radio silence; active scan
@@ -97,9 +97,11 @@ also requires a nonzero window interval.
 For example, an order issued in year 10 with a 9-year silence duration and a
 3-year window interval opens windows in years 13 and 16, then wakes in year 19.
 Active scan adds a scan to each window; without it those windows are radio-only.
-Under the current command model, both Passive and Radio silence defer incoming
-commands until an allowed communication year. A passive receiver listening for
-signatures is separate from the command-exchange schedule.
+Incoming commands never wait for these outgoing windows. Passive receiver
+operation is independent of transmission. Reports collected without TX remain
+aboard until their source actually transmits; the subsequent signal delay starts
+from that source's dispatch position. Friendly colony radars report observed
+arrivals independently, without revealing a silent ship's cargo/fuel/program.
 
 Active jammers reduce opposing fleet scanners inside an aura of at least 30 ly
 (or the jammer fleet's ordinary scanner range). Component strengths combine with

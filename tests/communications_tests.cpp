@@ -1,7 +1,12 @@
 #include "suns/communications.hpp"
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/strategic_operations.hpp"
+#include "suns/player_knowledge.hpp"
+#include "suns/reconnaissance.hpp"
+#include "suns/campaign.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -329,6 +334,104 @@ void stale_telemetry_predicts_without_revealing_route_change()
     assert(!same_position(playerView.position, actual.position));
 }
 
+void passive_and_silent_receivers_accept_orders_without_acknowledging()
+{
+    for(auto mode:{EmissionMode::Passive,EmissionMode::RadioSilence}) {
+        auto s=make_demo_game(); s.turn=2;
+        auto& f=s.fleets.front(); f.electronics={mode,mode==EmissionMode::RadioSilence?20u:0u};
+        const auto old=f.telemetry.observedTurn;
+        assert(submit_fleet_route_command(s,1,f.id,{25,0},5,{},{}));
+        assert(f.pendingCommands.empty() && f.destination && !fleet_transmits(f,s.turn));
+        assert(f.telemetry.observedTurn==old); // Receiving sends no acknowledgement.
+        assert(submit_fleet_task_command(s,1,f.id,FleetTask::None));
+        assert(f.electronics.mode==mode);
+        assert(submit_electronics_command(s,1,f.id,{EmissionMode::Standard,0}));
+        assert(f.pendingCommands.empty() && f.electronics.mode==EmissionMode::Standard);
+    }
+    Fleet passive; passive.electronics.mode=EmissionMode::Passive;
+    for(std::uint64_t turn=1;turn<=12;++turn) assert(!fleet_transmits(passive,turn));
+    assert(fleet_available_turn(passive,3)==kAwaitingTransmission);
+}
+
+void silent_slow_reception_preserves_propagation_and_holds_outgoing_reports()
+{
+    for(auto mode:{EmissionMode::Passive,EmissionMode::RadioSilence}) {
+        auto s=make_demo_game(); s.turn=10; s.wormholeRules.spawnChancePerTurn=0;
+        auto& f=s.fleets.front(); f.position={420,0}; f.destination.reset();
+        f.telemetry.observedTurn=10; f.telemetry.position=f.position; f.telemetry.destination.reset();
+        f.electronics={mode,mode==EmissionMode::RadioSilence?30u:0u};
+        f.fuel=fleet_fuel_capacity(s,f);
+        assert(communication_delay_turns(s,1,f.position)==3);
+        assert(submit_fleet_route_command(s,1,f.id,{600,0},5,{},{}));
+        assert(f.pendingCommands.front().deliveryTurn==13);
+        queue_player_report(s,1,PlayerReportKind::FleetArrived,f.position,10,0,0,f.id);
+        assert(s.players[0].pendingPlayerReports.back().deliveryTurn==kAwaitingTransmission);
+        assert(s.players[0].pendingPlayerReports.back().transmissionFleet==f.id);
+        for(int year=0;year<3;++year) {
+            const auto result=TurnProcessor{}.process_with_events(s,{}); s=result.state;
+            assert(s.fleets.front().telemetry.observedTurn==10 && s.fleets.front().telemetryInTransit.empty());
+            assert(std::none_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived;}));
+        }
+        assert(s.turn==13 && s.fleets.front().pendingCommands.empty() && s.fleets.front().destination);
+        assert(!fleet_transmits(s.fleets.front(),s.turn));
+        const auto view=make_player_view(s,1).state;
+        assert(view.players[0].pendingPlayerReports.empty() && view.players[0].pendingSensorStatus.empty());
+        apply_electronics_program(s.fleets.front(),{});
+        const auto sent=s.turn;
+        const auto due=sent+communication_delay_turns(s,1,s.fleets.front().position);
+        dispatch_fleet_report_outbox(s);
+        const auto held=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::FleetArrived;});
+        assert(held!=s.players[0].pendingPlayerReports.end() && held->deliveryTurn==due && !held->transmissionFleet);
+        assert(deliver_due_player_reports(s).empty());
+        // Already transmitted data continues in flight after switching off TX.
+        apply_electronics_program(s.fleets.front(),{EmissionMode::Passive,0}); s.turn=due;
+        const auto events=deliver_due_player_reports(s);
+        assert(std::any_of(events.begin(),events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived && e.observedTurn==10;}));
+        assert(s.fleets.front().telemetry.observedTurn==10);
+    }
+}
+
+void colony_radar_reports_passive_arrival_without_an_onboard_manifest()
+{
+    for(bool isolated:{false,true}) {
+        auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0;
+        const auto target=isolated?Position{420,0}:Position{0,0};
+        if(isolated) {
+            s.stars[1].position=target;
+            auto& colony=s.planets[1]; colony.owner=1; colony.population=1000; colony.radar=PlanetaryRadarLevel::Local;
+        }
+        auto& f=s.fleets.front(); f.position={target.x+25,0}; f.destination=target; f.warp=5;
+        f.fuel=fleet_fuel_capacity(s,f); f.electronics={EmissionMode::Passive,0};
+        f.telemetry.position=f.position; f.telemetry.destination.reset(); f.telemetry.colonists=100; f.colonists=200;
+        const auto result=TurnProcessor{}.process_with_events(s,{}); s=result.state;
+        assert(same_position(s.fleets.front().position,target));
+        assert(s.fleets.front().telemetry.observedTurn==1 && !fleet_transmits(s.fleets.front(),s.turn));
+        const auto arrival=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::FleetArrived;});
+        const auto delay=communication_delay_turns(s,1,target);
+        if(isolated) {
+            assert(arrival!=s.players[0].pendingPlayerReports.end() && arrival->deliveryTurn==2+delay && !arrival->transmissionFleet);
+            assert(!fleet_radar_position(s,s.fleets.front()));
+            while(s.turn<2+delay) s=TurnProcessor{}.process(s,{});
+        } else assert(std::any_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived && e.observedTurn==2;}));
+        assert(fleet_radar_position(s,s.fleets.front())->star==(isolated?2u:1u));
+        assert(same_position(fleet_player_view(s,s.fleets.front()).position,target));
+        assert(fleet_player_view(s,s.fleets.front()).colonists==100 && s.fleets.front().colonists==200);
+        assert(s.fleets.front().telemetryInTransit.empty());
+    }
+}
+
+void merged_fleet_keeps_unsent_observations()
+{
+    auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0;
+    auto second=s.fleets.front(); second.id=2; second.electronics={EmissionMode::Passive,0};
+    s.fleets.push_back(second); s.nextFleetId=3;
+    queue_player_report(s,1,PlayerReportKind::FleetArrived,second.position,s.turn,1,0,2);
+    assert(s.players[0].pendingPlayerReports.back().transmissionFleet==2);
+    const auto result=TurnProcessor{}.process_with_events(s,{{1,{MergeFleetsOrder{1,2}}}});
+    assert(result.state.fleets.size()==1 && result.state.fleets.front().id==1);
+    assert(std::any_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived && e.observedTurn==1;}));
+}
+
 } // namespace
 
 int main()
@@ -344,6 +447,10 @@ int main()
     remote_command_arrives_after_signal_delay();
     remote_clear_route_stops_when_command_arrives();
     stale_telemetry_predicts_without_revealing_route_change();
+    passive_and_silent_receivers_accept_orders_without_acknowledging();
+    silent_slow_reception_preserves_propagation_and_holds_outgoing_reports();
+    colony_radar_reports_passive_arrival_without_an_onboard_manifest();
+    merged_fleet_keeps_unsent_observations();
     std::cout << "communications tests passed\n";
     return 0;
 }

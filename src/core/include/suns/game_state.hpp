@@ -577,6 +577,7 @@ struct PendingSurveyReport {
     std::uint64_t deliveryTurn{};
     SurveyLevel level{SurveyLevel::SystemScan};
     std::optional<PlayerId> observedOwner;
+    FleetId transmissionFleet{}; // Nonzero only while awaiting an onboard transmission.
 };
 
 enum class ResearchField : std::uint8_t {
@@ -679,6 +680,7 @@ struct SensorStatus {
     std::uint64_t observedTurn{}, deliveryTurn{};
     std::uint8_t interferencePercent{};
     double nominalRange{}, activeRange{}, passiveRange{}, emissionRange{};
+    FleetId transmissionFleet{};
 };
 // Immutable hull evidence. Lost records retain the date of their last position.
 struct ReconContact {
@@ -696,6 +698,7 @@ struct ReconContact {
     std::uint32_t shipCount{}; // Only identified contacts reveal counts/hull classes.
     std::vector<ShipHullType> hulls;
     bool lost{}, jammed{};
+    FleetId transmissionFleet{};
 };
 
 // Player-facing operational facts travel independently from fleet telemetry.
@@ -722,6 +725,7 @@ struct PendingPlayerReport {
     std::optional<OperationalLossReport> losses;
     std::optional<ReconContact> contact;
     std::optional<SensorStatus> sensorStatus;
+    FleetId transmissionFleet{};
 };
 
 struct TechnologyState {
@@ -932,6 +936,7 @@ struct PendingWormholeReport {
     std::uint64_t deliveryTurn{};
     FleetId fleet{};
     WormholeKnowledge knowledge;
+    FleetId transmissionFleet{};
 };
 
 enum class StrategicObjectKind : std::uint8_t { Minefield, Wreck, Emission };
@@ -946,10 +951,12 @@ struct StrategicIntel {
     std::uint64_t deliveryTurn{};
     double quantity{};
     std::uint8_t kind{};
+    FleetId transmissionFleet{};
 };
 struct FieldScienceRecord {
     std::uint64_t key{};
     std::uint64_t deliveryTurn{};
+    FleetId transmissionFleet{};
 };
 
 enum class PlayerController : std::uint8_t { Human, Computer };

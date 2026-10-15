@@ -110,7 +110,7 @@ void mines_crossings_laying_sweeping()
     s.fleets[0].destination = Position{100,0}; s.fleets[0].warp = 6; // Route already aboard.
     r = TurnProcessor{}.process_with_events(s,{});
     assert(r.state.fleets.empty() && !event(r,GameEventKind::MineStrike));
-    assert(r.state.pendingFleetLossContacts.size() == 1 && r.state.pendingFleetLossContacts[0].deliveryTurn == 5);
+    assert(r.state.pendingFleetLossContacts.size() == 1 && r.state.pendingFleetLossContacts[0].deliveryTurn == kAwaitingTransmission);
     assert(make_player_view(r.state,1).state.fleets.size() == 1);
     // Unseen fields do not leak through a player export.
     const auto view = make_player_view(s,1);
@@ -150,7 +150,7 @@ void stealth_jamming_and_signals()
     assert(!submit_electronics_command(s,1,1,{EmissionMode::Standard,0,true})); // no jammer aboard
 }
 
-void silence_resumes_and_orders_wait()
+void silence_keeps_command_reception_and_resumes_transmissions()
 {
     auto s = arena();
     auto neighbor = s.fleets[0]; neighbor.id = 2; neighbor.electronics = {EmissionMode::RadioSilence,8};
@@ -165,10 +165,10 @@ void silence_resumes_and_orders_wait()
     assert(submit_electronics_command(s,1,1,{EmissionMode::RadioSilence,4}));
     assert(!fleet_has_instant_link(s,s.fleets[0]));
     assert(submit_fleet_route_command(s,1,1,{100,0},4,{},{}));
-    assert(s.fleets[0].pendingCommands[0].deliveryTurn == 4);
-    s = TurnProcessor{}.process(s,{}); assert(!s.fleets[0].destination);
-    s = TurnProcessor{}.process(s,{}); assert(!s.fleets[0].destination);
-    s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].destination && s.fleets[0].electronics.mode == EmissionMode::Standard);
+    assert(s.fleets[0].pendingCommands.empty() && s.fleets[0].destination);
+    s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].position.x>0 && !fleet_transmits(s.fleets[0],s.turn));
+    s = TurnProcessor{}.process(s,{}); assert(!fleet_transmits(s.fleets[0],s.turn));
+    s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].electronics.mode == EmissionMode::Standard);
 }
 
 void field_science_is_finite_delayed_and_real()
@@ -208,5 +208,5 @@ void field_science_is_finite_delayed_and_real()
 int main()
 {
     bombardment_orders_and_targets(); mines_crossings_laying_sweeping(); stealth_jamming_and_signals();
-    silence_resumes_and_orders_wait(); field_science_is_finite_delayed_and_real();
+    silence_keeps_command_reception_and_resumes_transmissions(); field_science_is_finite_delayed_and_real();
 }

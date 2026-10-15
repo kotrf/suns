@@ -121,3 +121,24 @@ void readFriendlyRadar(QDataStream& stream,GameState& state)
         if(!valid(player.friendlyFleetContacts,false) || !valid(player.pendingFriendlyFleetContacts,true)) { markCorrupt(stream); return; }
     }
 }
+
+void writeReportSources(QDataStream& stream,const GameState& state)
+{
+    quint32 count=0;
+    visit_fleet_report_outbox(state,[&](PlayerId,const auto&){++count;});
+    stream << quint32(0x54584F42u) << count; // "TXOB"
+    visit_fleet_report_outbox(state,[&](PlayerId owner,const auto& report) {
+        stream << quint32(owner) << quint32(report.transmissionFleet);
+    });
+}
+void readReportSources(QDataStream& stream,GameState& state)
+{
+    quint32 magic{},count{},seen{}; stream >> magic >> count;
+    if(magic!=0x54584F42u) { markCorrupt(stream); return; }
+    visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
+        quint32 id{},source{}; stream >> id >> source; ++seen;
+        if(id!=owner || seen>count || (source!=0)!=(report.deliveryTurn==kAwaitingTransmission)) markCorrupt(stream);
+        report.transmissionFleet=source;
+    });
+    if(seen!=count) markCorrupt(stream);
+}

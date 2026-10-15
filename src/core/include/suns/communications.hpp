@@ -3,8 +3,35 @@
 #include "suns/game_state.hpp"
 
 #include <cstdint>
+#include <limits>
 
 namespace suns {
+
+inline constexpr std::uint64_t kAwaitingTransmission = std::numeric_limits<std::uint64_t>::max();
+
+// Shared host outbox order for dispatch and save metadata. Already dispatched
+// packets have a finite deliveryTurn and transmissionFleet == 0.
+template<class State, class Visit> void visit_fleet_report_outbox(State& state, Visit visit)
+{
+    for(auto& player:state.players) {
+        for(auto& r:player.pendingSurveyReports) visit(player.id,r);
+        for(auto& r:player.pendingPlayerReports) visit(player.id,r);
+        for(auto& r:player.pendingWormholeReports) visit(player.id,r);
+        for(auto& r:player.pendingStrategicIntel) visit(player.id,r);
+        for(auto& r:player.pendingEnemyContacts) visit(player.id,r);
+        for(auto& r:player.pendingFriendlyFleetContacts) visit(player.id,r);
+        for(auto& r:player.pendingSensorStatus) visit(player.id,r);
+        for(auto& r:player.fieldScience) visit(player.id,r);
+    }
+}
+
+// Schedule an actual outgoing observation. A passive/silent source keeps it
+// aboard; listening for incoming orders does not imply any outgoing packet.
+[[nodiscard]] std::uint64_t fleet_report_delivery_turn(const GameState&, PlayerId,
+    Position source, std::uint64_t observedTurn, FleetId observer=0);
+[[nodiscard]] FleetId held_report_source(const GameState&, PlayerId, Position,
+    std::uint64_t observedTurn, FleetId observer=0);
+void dispatch_fleet_report_outbox(GameState&);
 
 // Round-trip infrastructure is intentionally simple in the first playable
 // slice: friendly established colonies are relay nodes. Later station/ship

@@ -71,6 +71,7 @@ void MainWindow::installCommunicationStatus()
                                   telemetry.observedTurn == 0 ? state_.turn : telemetry.observedTurn))
                               .arg(telemetry.position.x, 0, 'f', 1)
                               .arg(telemetry.position.y, 0, 'f', 1);
+        details += "\nCommand reception remains on in Passive and Radio silence. Transmission is separate; receiving a command sends no acknowledgement or telemetry.";
         if (radar) details += QString("\nPosition measured by %1 %2 in year %3; received year %4. Uncertainty: %5 ly.\n"
                                      "Radar sees the hull; it does not receive cargo, fuel, mission or radio settings.")
             .arg(radar->sourceColony ? "colony" : "fleet")

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <utility>
+#include <type_traits>
 
 namespace suns {
 
@@ -17,6 +18,18 @@ struct CommunicationField {
     double radius{};
     bool connected{};
 };
+
+const Fleet* report_source(const GameState& state, PlayerId owner, Position position,
+    std::uint64_t turn, FleetId observer)
+{
+    if(observer) for(const auto& f:state.fleets) if(f.id==observer && f.owner==owner) return &f;
+    for(const auto& p:state.planets) if(p.owner==owner && p.population)
+        if(const auto* star=find_star(state,p.star); star && same_position(star->position,position)) return nullptr;
+    const Fleet* best=nullptr;
+    for(const auto& f:state.fleets) if(f.owner==owner && same_position(f.position,position))
+        if(!best || std::pair{fleet_available_turn(f,turn),f.id}<std::pair{fleet_available_turn(*best,turn),best->id}) best=&f;
+    return best;
+}
 
 std::vector<CommunicationField> communication_fields(
     const GameState& state,
@@ -579,7 +592,7 @@ bool submit_fleet_route_command(
         return false;
     }
 
-    const auto delivery = fleet_available_turn(*fleet, state.turn + communication_delay_turns(state, player, fleet->position));
+    const auto delivery = state.turn + communication_delay_turns(state, player, fleet->position);
     const auto delay = delivery - state.turn;
     if (delay == 0) {
         if (program.clearRoute) fleet->pendingCommands.clear();
@@ -605,7 +618,7 @@ bool submit_fleet_task_command(
     });
     if (fleet == state.fleets.end()) return false;
 
-    const auto delivery = fleet_available_turn(*fleet, state.turn + communication_delay_turns(state, player, fleet->position));
+    const auto delivery = state.turn + communication_delay_turns(state, player, fleet->position);
     const auto delay = delivery - state.turn;
     if (delay == 0) return apply_task_program(state, *fleet, task);
 
@@ -631,7 +644,7 @@ void deliver_due_fleet_commands(GameState& state)
         std::optional<std::uint64_t> stoppedThrough;
         std::size_t processed = 0;
         for (const auto& pending : fleet.pendingCommands) {
-            if (pending.deliveryTurn > state.turn || !fleet_transmits(fleet, state.turn)) break;
+            if (pending.deliveryTurn > state.turn) break;
             ++processed;
             if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
             if (pending.electronics) {
@@ -684,6 +697,43 @@ void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
             });
         }
     }
+}
+
+FleetId held_report_source(const GameState& state, PlayerId owner, Position position,
+    std::uint64_t turn, FleetId observer)
+{
+    const auto* source=report_source(state,owner,position,turn,observer);
+    return source && !fleet_transmits(*source,turn) ? source->id : 0;
+}
+
+std::uint64_t fleet_report_delivery_turn(const GameState& state, PlayerId owner, Position position,
+    std::uint64_t turn, FleetId observer)
+{
+    if(held_report_source(state,owner,position,turn,observer)) return kAwaitingTransmission;
+    return turn+communication_delay_turns(state,owner,position,turn);
+}
+
+void dispatch_fleet_report_outbox(GameState& state)
+{
+    visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
+        if(report.deliveryTurn!=kAwaitingTransmission || !report.transmissionFleet) return;
+        const auto source=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f) {
+            return f.id==report.transmissionFleet && f.owner==owner;
+        });
+        if(source==state.fleets.end() || !fleet_transmits(*source,state.turn)) return;
+        report.deliveryTurn=state.turn+communication_delay_turns(state,owner,source->position);
+        report.transmissionFleet=0;
+        if constexpr(std::is_same_v<std::remove_cvref_t<decltype(report)>,PendingPlayerReport>) {
+            if(report.contact) { report.contact->deliveryTurn=report.deliveryTurn; report.contact->transmissionFleet=0; }
+            if(report.sensorStatus) { report.sensorStatus->deliveryTurn=report.deliveryTurn; report.sensorStatus->transmissionFleet=0; }
+            if(report.battle) {
+                for(auto& loss:state.pendingFleetLossContacts) if(loss.deliveryTurn==kAwaitingTransmission && loss.lastContact.owner==owner)
+                    if(std::any_of(report.battle->units.begin(),report.battle->units.end(),[&](const auto& u){return u.owner==owner && u.fleet==loss.lastContact.id;})) loss.deliveryTurn=report.deliveryTurn;
+                for(auto& loss:state.pendingStationContacts) if(loss.deliveryTurn==kAwaitingTransmission && loss.lastContact.owner==owner)
+                    if(std::any_of(report.battle->units.begin(),report.battle->units.end(),[&](const auto& u){return u.owner==owner && u.station==loss.lastContact.id;})) loss.deliveryTurn=report.deliveryTurn;
+            }
+        }
+    });
 }
 
 } // namespace suns

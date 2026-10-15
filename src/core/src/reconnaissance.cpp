@@ -42,8 +42,8 @@ bool live_receiver_allowed(const GameState& s,PlayerId owner,const Receiver& r)
 SensorStatus sensor_status(const GameState& s,PlayerId owner,const Receiver& r,std::uint64_t turn)
 {
     SensorStatus status; status.fleet=r.fleet; status.colony=r.colony; status.position=r.position;
-    status.observedTurn=turn; status.deliveryTurn=report_transmission_turn(s,owner,r.position,turn,r.fleet)
-        + communication_delay_turns(s,owner,r.position,turn);
+    status.observedTurn=turn; status.deliveryTurn=fleet_report_delivery_turn(s,owner,r.position,turn,r.fleet);
+    status.transmissionFleet=held_report_source(s,owner,r.position,turn,r.fleet);
     status.interferencePercent=std::uint8_t(std::lround(r.interference*100));
     status.nominalRange=r.nominal; status.activeRange=r.passive?0:r.range;
     status.passiveRange=r.range*0.25; status.emissionRange=r.range*2;
@@ -85,8 +85,8 @@ std::optional<ReconContact> observe(const GameState& s,PlayerId owner,const Flee
         for(const auto& stack:fleet_ship_stacks(target)) if(const auto* design=find_ship_design(s,stack.design)) c.hulls.push_back(design->hull);
         std::sort(c.hulls.begin(),c.hulls.end()); c.hulls.erase(std::unique(c.hulls.begin(),c.hulls.end()),c.hulls.end());
     }
-    c.deliveryTurn=report_transmission_turn(s,owner,receiver.position,turn,receiver.fleet)
-        + communication_delay_turns(s,owner,receiver.position,turn);
+    c.deliveryTurn=fleet_report_delivery_turn(s,owner,receiver.position,turn,receiver.fleet);
+    c.transmissionFleet=held_report_source(s,owner,receiver.position,turn,receiver.fleet);
     return c;
 }
 void stage(Player& player,ReconContact c,std::optional<PlayerReportKind> event)
@@ -100,6 +100,7 @@ void stage(Player& player,ReconContact c,std::optional<PlayerReportKind> event)
     if(std::any_of(player.pendingPlayerReports.begin(),player.pendingPlayerReports.end(),[&](const auto& r){return r.kind==*event && r.fleet==c.fleet && r.observedTurn==c.observedTurn;})) return;
     PendingPlayerReport report; report.kind=*event; report.observedTurn=c.observedTurn; report.deliveryTurn=c.deliveryTurn;
     report.fleet=c.fleet; report.star=c.star; report.contactPosition=c.position; report.contactOwner=c.owner; report.contact=c;
+    report.transmissionFleet=c.transmissionFleet;
     player.pendingPlayerReports.push_back(std::move(report));
 }
 }
@@ -187,6 +188,7 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
                 report.observedTurn=turn; report.deliveryTurn=status.deliveryTurn; report.fleet=status.fleet;
                 report.planet=status.colony; report.position=status.position; report.quantity=status.interferencePercent;
                 report.sensorStatus=status; player.pendingPlayerReports.push_back(report);
+                player.pendingPlayerReports.back().transmissionFleet=status.transmissionFleet;
             }
         }
         player.observedSensorStatus=std::move(statuses);
@@ -219,8 +221,8 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
             const auto source=std::find_if(sensors.begin(),sensors.end(),[&](const auto& r){return r.fleet==old.reportingFleet && r.colony==old.reportingColony;});
             if(source==sensors.end() || !old.observation.fleet) continue; // No surviving observer; age remains unknown.
             auto lost=old.observation; lost.lost=true; lost.observedTurn=turn;
-            lost.deliveryTurn=report_transmission_turn(s,player.id,source->position,turn,source->fleet)
-                + communication_delay_turns(s,player.id,source->position,turn);
+            lost.deliveryTurn=fleet_report_delivery_turn(s,player.id,source->position,turn,source->fleet);
+            lost.transmissionFleet=held_report_source(s,player.id,source->position,turn,source->fleet);
             stage(player,lost,PlayerReportKind::EnemyFleetLost);
         }
         std::sort(visible.begin(),visible.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});

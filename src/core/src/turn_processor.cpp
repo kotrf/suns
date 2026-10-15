@@ -1019,6 +1019,9 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     destination->warp = std::min(destination->warp, fleet_max_warp(state, *destination));
     destination->fuel = std::min(destination->fuel, fleet_fuel_capacity(state, *destination));
     refresh_merged_fleet_manifest(*destination);
+    visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
+        if(owner==player && report.transmissionFleet==sourceId) report.transmissionFleet=order.destination;
+    });
     std::erase_if(state.fleets, [&](const Fleet& fleet) { return fleet.id == sourceId; });
     return true;
 }
@@ -1138,6 +1141,20 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     std::vector<ColonyFreightDelivery>& freight)
 {
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
+    // The colony reports only the arriving hull, independently of its radio.
+    if(!fleet_transmits(fleet,state.turn+1)) for(const auto& planet:state.planets)
+        if(planet.owner==fleet.owner && planet.population && planet.radar!=PlanetaryRadarLevel::None)
+            if(const auto* star=find_star(state,planet.star); star && same_position(star->position,fleet.position)) {
+                auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==fleet.owner;});
+                if(player!=state.players.end()) {
+                    PendingPlayerReport arrival;
+                    arrival.kind=PlayerReportKind::FleetArrived; arrival.observedTurn=state.turn+1;
+                    arrival.deliveryTurn=arrival.observedTurn+communication_delay_turns(state,fleet.owner,star->position,arrival.observedTurn);
+                    arrival.star=star->id; arrival.planet=planet.id; arrival.fleet=fleet.id; arrival.position=star->position;
+                    player->pendingPlayerReports.push_back(arrival);
+                }
+                break;
+            }
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
     if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::EnterWormhole) {
@@ -1898,6 +1915,7 @@ TurnResult TurnProcessor::process_with_events(
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+    dispatch_fleet_report_outbox(next);
     // Establish a baseline for headless callers too, before overdue reports
     // are delivered at the current planning boundary.
     if (std::any_of(next.players.begin(), next.players.end(), [&](const auto& player) {
@@ -2184,6 +2202,7 @@ TurnResult TurnProcessor::process_with_events(
     ++next.turn;
     deliver_due_fleet_commands(next);
     publish_fleet_telemetry(next, next.turn);
+    dispatch_fleet_report_outbox(next);
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);

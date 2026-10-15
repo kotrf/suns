@@ -40,6 +40,20 @@ Delivery happens at a turn boundary. A command that arrives after the fleet has 
 
 Multiple commands may be in flight. They are delivered deterministically by delivery turn and issue turn.
 
+Command reception stays on in Standard, Passive and Radio silence. An arriving
+route, task or emission command is accepted after ordinary propagation/jamming
+delay; it does not wait for a transmission window. Receiving it does not publish
+an acknowledgement, telemetry, an emission contact or a new relay field. The
+owner can therefore have issued a successful command without yet knowing that
+it was received.
+
+Passive never transmits automatically, including years divisible by three.
+Radio silence transmits only in its programmed windows or after finite/arrival
+wake-up. Fleet reports collected without an allowed transmission stay aboard in
+an outbox. When their source transmits, propagation starts from its current
+position. Already transmitted packets continue to arrive after TX is disabled.
+Save v73 preserves this distinction; player turn exports omit unsent reports.
+
 ## Telemetry and player knowledge
 
 The simulation keeps the authoritative `Fleet` state, but player-facing information is represented by a confirmed `FleetTelemetry` snapshot and packets that are still in transit.
@@ -104,14 +118,19 @@ ages; it never follows the hidden physical fleet. Newer onboard telemetry
 supersedes older radar evidence. Player turn exports retain received evidence
 and strip radar reports still in flight.
 
+Arrival at a friendly populated colony with radar also creates an independent
+Fleet arrived report from that colony. Its network delay is the colony's own,
+not the silent ship's. This conveys the observed arrival, without a current
+manifest or a claim that the onboard route has completed.
+
 Locations derived only from old telemetry are marked **Estimated**. The Comms
 panel distinguishes the position source from telemetry age. Cargo still needs
 current onboard telemetry and a live link; a radar hull detection cannot supply
 a current manifest. Its disabled control explains this distinction.
 
 Idle changes a stationary mission only. Emissions are a separate order: choose
-the mode and press Set, then End Turn. Radio silence admits commands at the next
-scheduled window or finite wake-up. The mission panel shows the last reported
+the mode and press Set, then End Turn. Commands can arrive while the transmitter
+is off, with normal signal delay. The mission panel shows the last reported
 emission mode separately from draft selections and queued emission orders.
 
 ## Future extensions
