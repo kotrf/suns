@@ -286,7 +286,9 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
         for (const auto& planet : state.planets) {
             if (planet.owner == 0) continue;
             const auto* sourceStar = find_star(state, planet.star);
-            if (sourceStar && within_range(sourceStar->position, star.position, kColonySensorRange)) {
+            const auto radar = planetary_radar_range(planet.radar);
+            if (sourceStar && radar > 0
+                && within_range(sourceStar->position, star.position, radar)) {
                 queue_survey_report(
                     state,
                     planet.owner,

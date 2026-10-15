@@ -641,10 +641,14 @@ void MainWindow::rebuildScene()
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
-            if (planet.owner != pendingOrders_.player) continue;
+            if (planet.owner != pendingOrders_.player
+                || planet.radar == PlanetaryRadarLevel::None) continue;
             if (const auto* sourceStar = find_star(state_, planet.star)) {
                 const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.colony==planet.id;});
-                addSensorRange(scene_, sourceStar->position, status==sensorKnowledge.end()?kColonySensorRange:status->activeRange,
+                const auto nominal = planetary_radar_range(planet.radar);
+                const auto actual = status == sensorKnowledge.end() ? nominal
+                    : nominal * (1 - status->interferencePercent / 100.0);
+                addSensorRange(scene_, sourceStar->position, actual,
                     QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
             }
         }
