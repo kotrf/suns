@@ -91,8 +91,15 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     const auto* player = find_player(state, planet.owner);
     const auto output = colony_output(planet);
     const bool researchActive = player && player->technology.researchActive;
-    const auto allocated = researchActive ? static_cast<std::uint32_t>(
+    const auto requestedResearch = researchActive ? static_cast<std::uint32_t>(
         std::uint64_t(output) * player->technology.researchAllocationPercent / 100U) : 0U;
+    const bool bootstrappingReceiver = planet.radar == PlanetaryRadarLevel::None
+        && std::any_of(planet.productionQueue.begin(), planet.productionQueue.end(),
+            [](const ProductionItem& item) { return item.kind == ProductionKind::LocalRadar; });
+    // A remote settlement must always be able to bootstrap its local receiver,
+    // including when the empire's research allocation is set to 100%.
+    const auto allocated = bootstrappingReceiver && output > 0
+        ? std::min(requestedResearch, output - 1) : requestedResearch;
     result.researchPoints = allocated;
     auto available = output - allocated;
     auto& queue = planet.productionQueue;

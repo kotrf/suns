@@ -41,6 +41,7 @@ void bombardment_orders_and_targets()
     assert(!event(r,GameEventKind::Bombardment,3));
     assert(event(r,GameEventKind::Bombardment)->deliveredColonists == 600);
     assert(event(r,GameEventKind::Bombardment)->quantity == 2);
+    assert(r.state.planets[0].radar == PlanetaryRadarLevel::Local); // Installation hit damages the built radar.
     s.planets[0].owner = 1;
     r = TurnProcessor{}.process_with_events(s,{{1,{SetFleetTaskOrder{1,FleetTask::Bombardment}}}});
     assert(!event(r,GameEventKind::Bombardment));

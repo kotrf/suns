@@ -28,6 +28,8 @@ void colony_radar_bootstraps_detection_and_links()
     outpost.homeworld = false;
     outpost.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}};
     state.stars[1].position = {175, 0};
+    state.players.front().technology.researchActive = true;
+    state.players.front().technology.researchAllocationPercent = 100;
     assert(planetary_radar_range(outpost.radar) == 0);
     assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
     auto first = TurnProcessor{}.process(state, {});
