@@ -411,6 +411,15 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 + (kind == ProductionKind::Mine ? "mine" : kind == ProductionKind::Factory ? "factory" : "terraform")
                 + " at colony " + std::to_string(colony->id));
         };
+        // Fair frontier infrastructure: local receivers are constructed by
+        // every newly founded colony through its autonomous queue. Computer
+        // empires can then pay for a 150 ly upgrade through the same ordinary
+        // production order and mineral constraints as human empires.
+        if (!colony->homeworld && colony->radar == PlanetaryRadarLevel::Local
+            && colony->industry >= 8 && canAfford(ProductionKind::PlanetaryRadar)) {
+            build(ProductionKind::PlanetaryRadar);
+            continue;
+        }
         const auto minesWanted = std::max(2u, colony->industry / 2);
         const bool lowStock = std::min({colony->minerals.ironium, colony->minerals.boranium, colony->minerals.germanium}) < 15;
         if (colony->mines < minesWanted && (colony->mines < 2 || lowStock) && canAfford(ProductionKind::Mine)) {
