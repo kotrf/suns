@@ -23,11 +23,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 69;
+constexpr quint32 kSaveFormatVersion = 70;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 21;
+constexpr quint32 kTurnOrderFormatVersion = 22;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -2449,6 +2449,9 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, ApplyProductionTemplateOrder>) {
             stream << quint8{20} << quint32(concrete.colony);
             writeString(stream, concrete.name);
+        } else if constexpr (std::is_same_v<T, GateFleetOrder>) {
+            stream << quint8{24} << quint32(concrete.fleet)
+                   << quint32(concrete.source) << quint32(concrete.destination);
         } else if constexpr (std::is_same_v<T, QueueStationOrder>) {
             stream << quint8{23} << quint32(concrete.colony); writeStationFit(stream,concrete.construction);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
@@ -2812,6 +2815,15 @@ bool readOrder(QDataStream& stream, Order& order)
         if(gReadSaveFormatVersion<65) { markCorrupt(stream); return false; }
         QueueStationOrder value; stream >> value.colony; readStationFit(stream,value.construction);
         order=std::move(value); return stream.status()==QDataStream::Ok;
+    }
+    case 24: {
+        if (gReadSaveFormatVersion < 70) { markCorrupt(stream); return false; }
+        GateFleetOrder value;
+        stream >> value.fleet >> value.source >> value.destination;
+        if (!value.fleet || !value.source || !value.destination
+            || value.source == value.destination) { markCorrupt(stream); return false; }
+        order = value;
+        return stream.status() == QDataStream::Ok;
     }
     default:
         markCorrupt(stream);
@@ -3216,7 +3228,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

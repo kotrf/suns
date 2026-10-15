@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/stations.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -338,6 +339,76 @@ void production_forecast_understands_shipyard_dependency()
     assert(sequenced[1].completionTurn == state.turn + 1);
 }
 
+
+void paid_stargates_validate_technology_and_safe_transport()
+{
+    auto s = make_demo_game();
+    auto& owner = s.players.front();
+    auto& destination = s.planets.at(1);
+    destination.owner = 1;
+    destination.population = 2'000'000;
+    destination.industry = 150;
+    destination.minerals = {500, 500, 500};
+    const StationLoadout gateFit{
+        OrbitalStationHullType::Starbase, {ShipComponentType::JumpGate}, true, true};
+    assert(station_loadout_valid(gateFit));
+    assert(station_build_cost(gateFit) > station_hull_spec(OrbitalStationHullType::Starbase).cost);
+    assert(!station_loadout_available(s, 1, gateFit));
+    owner.technology.levels[std::size_t(ResearchField::Energy)] = kStargateEnergyLevel;
+    owner.technology.levels[std::size_t(ResearchField::Electronics)] = kStargateElectronicsLevel;
+    owner.technology.levels[std::size_t(ResearchField::Construction)] = 9;
+    assert(station_loadout_available(s, 1, gateFit));
+    auto twoGates = gateFit;
+    twoGates.components.push_back(ShipComponentType::JumpGate);
+    assert(!station_loadout_valid(twoGates));
+    auto dock = gateFit;
+    dock.hull = OrbitalStationHullType::OrbitalDock;
+    assert(!station_loadout_valid(dock));
+
+    // Construction is a paid normal colony project, not a free research reward.
+    const QueueStationOrder build{destination.id, {gateFit, 0}};
+    assert(queue_station_construction(s, 1, build));
+    assert(!destination.productionQueue.empty());
+    assert(destination.productionQueue.back().remainingCost == station_build_cost(gateFit));
+    assert(complete_station_construction(s, destination, build.construction));
+    destination.productionQueue.clear(); // Completion removed this paid work.
+    assert(stargate_station_available(s, 1, destination.id));
+    assert(!stargate_station_available(s, 1, 1));
+    // Earth must be refitted; a stock shipyard/refueling dock is not a gate.
+    auto& sourceGate = s.orbitalStations.front();
+    sourceGate.hull = OrbitalStationHullType::Starbase;
+    sourceGate.components = {ShipComponentType::JumpGate};
+    assert(stargate_station_available(s, 1, 1));
+
+    const auto id = s.fleets.front().id;
+    const auto initialFuel = s.fleets.front().fuel;
+    assert(stargate_transfer_valid(s, 1, id, 1, 2));
+    auto tooFar = s;
+    tooFar.stars.at(1).position = {1000, 1000};
+    assert(!stargate_transfer_valid(tooFar, 1, id, 1, 2));
+    auto loaded = s;
+    loaded.fleets.front().colonists = 1000;
+    assert(!stargate_transfer_valid(loaded, 1, id, 1, 2));
+    loaded = s;
+    loaded.fleets.front().minerals.ironium = 1;
+    assert(!stargate_transfer_valid(loaded, 1, id, 1, 2));
+    loaded = s;
+    loaded.fleets.front().destination = s.stars.at(1).position;
+    assert(!stargate_transfer_valid(loaded, 1, id, 1, 2));
+    loaded = s;
+    loaded.orbitalStations.back().components.clear();
+    assert(!stargate_transfer_valid(loaded, 1, id, 1, 2));
+    assert(!stargate_transfer_valid(s, 1, id, 2, 1));
+    assert(!stargate_transfer_valid(s, 2, id, 1, 2));
+
+    const auto arrived = TurnProcessor{}.process(s, {{1, {
+        GateFleetOrder{id, 1, 2}, GateFleetOrder{id, 2, 1}
+    }}});
+    assert(same_position(arrived.fleets.front().position, arrived.stars.at(1).position));
+    assert(arrived.fleets.front().fuel == initialFuel);
+    // No same-year chain of arbitrary gates; the reciprocal order is ignored.
+    assert(!same_position(arrived.fleets.front().position, s.stars.front().position));
+}
 } // namespace
 
 int main()
@@ -356,4 +427,5 @@ int main()
     field_bays_repair_remote_fleets_in_proportion_to_equipped_ships();
     restored_mobility_is_reported_once_and_respects_communications_delay();
     production_forecast_understands_shipyard_dependency();
+    paid_stargates_validate_technology_and_safe_transport();
 }

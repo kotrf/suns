@@ -143,6 +143,12 @@ struct RenameFleetOrder {
 };
 
 struct QueueStationOrder { PlanetId colony{}; StationConstruction construction; };
+// Transit is explicit and revalidated against real paid gates during resolution.
+struct GateFleetOrder {
+    FleetId fleet{};
+    PlanetId source{};
+    PlanetId destination{};
+};
 
 struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; };
 struct SetFleetElectronicsOrder { FleetId fleet{}; ElectronicsProgram program; };
@@ -171,7 +177,8 @@ using Order = std::variant<
     ApplyProductionTemplateOrder,
     SetFleetTaskOrder,
     SetFleetElectronicsOrder,
-    QueueStationOrder>;
+    QueueStationOrder,
+    GateFleetOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

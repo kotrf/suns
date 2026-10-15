@@ -12,8 +12,19 @@ struct StationHullSpec {
     MineralCargo minerals;
 };
 inline constexpr std::uint16_t kMaximumColonyDefenses = 100;
+// Initial finite-range fleet gates; these are paid station fittings, not
+// universal movement shortcuts. Full race-specific networks come later.
+inline constexpr double kStargateRangeLy = 160.0;
+inline constexpr double kStargateMaximumMassKt = 450.0;
+inline constexpr std::uint8_t kStargateEnergyLevel = 8;
+inline constexpr std::uint8_t kStargateElectronicsLevel = 8;
 [[nodiscard]] const StationHullSpec& station_hull_spec(OrbitalStationHullType);
 [[nodiscard]] bool station_component_supported(ShipComponentType);
+[[nodiscard]] bool stargate_station_available(const GameState&, PlayerId, PlanetId);
+[[nodiscard]] bool stargate_transfer_valid(
+    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination);
+bool transfer_fleet_through_stargate(
+    GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination);
 [[nodiscard]] bool station_loadout_valid(const StationLoadout&);
 [[nodiscard]] bool station_loadout_available(const GameState&, PlayerId, const StationLoadout&);
 [[nodiscard]] StationLoadout station_loadout(const OrbitalStation&);

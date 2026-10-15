@@ -56,6 +56,9 @@ const std::vector<ResearchUnlock>& research_unlocks()
             {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
             {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
             {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
+            {ResearchField::Energy, kStargateEnergyLevel, "Orbital Jump Gate",
+                "Requires Electronics 8 and a Starbase or Fortress. Paid orbital fitting connects two owned gates "
+                "within 160 ly; stationary unloaded fleets up to 450 kt transfer without burning fuel.", {}},
 
         };
         constexpr std::array<std::uint8_t, 4> limits{3, 7, 11, 15};

@@ -6,6 +6,8 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QMessageBox>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
@@ -105,8 +107,11 @@ void MainWindow::openStationDesigner()
                 auto* choice=new QComboBox(table); choice->addItem("Empty",-1);
                 for(unsigned i=0;i<=unsigned(ShipComponentType::Superlatanium);++i) {
                     const auto c=ShipComponentType(i);
+                    const bool gateAvailable = c == ShipComponentType::JumpGate
+                        && technology_level(known,pendingOrders_.player,ResearchField::Energy) >= kStargateEnergyLevel
+                        && technology_level(known,pendingOrders_.player,ResearchField::Electronics) >= kStargateElectronicsLevel;
                     if(station_component_supported(c) && category(c)==group
-                        && (component_available_to_player(known,pendingOrders_.player,c)
+                        && (gateAvailable || component_available_to_player(known,pendingOrders_.player,c)
                             || (slot<int(fitted.size()) && fitted[slot]==c))) {
                         const auto info=component_spec(c); choice->addItem(QString::fromStdString(info.name),int(c));
                         choice->setItemData(choice->count()-1,QString("Armor %1 • Shields %2 • Weapon power %3, range %4 • Production %5")
@@ -142,4 +147,60 @@ void MainWindow::openStationDesigner()
     appendPendingOrder(QueueStationOrder{planetId,work},description);
     refreshProductionQueue();
 }
+void MainWindow::openGateTransit()
+{
+    const auto* fleet = selectedFleet();
+    if (!fleet || fleet->owner != pendingOrders_.player) {
+        QMessageBox::information(this, "Stargate transit", "Select one of your fleets first.");
+        return;
+    }
+    const auto known = make_player_view(state_, pendingOrders_.player).state;
+    const auto knownFleet = std::find_if(known.fleets.begin(), known.fleets.end(),
+        [&](const Fleet& candidate) { return candidate.id == fleet->id; });
+    if (knownFleet == known.fleets.end()) return;
+    PlanetId source{};
+    for (const auto& planet : known.planets) {
+        if (!stargate_station_available(known, pendingOrders_.player, planet.id)) continue;
+        const auto* star = find_star(known, planet.star);
+        if (star && same_position(knownFleet->position, star->position)) {
+            source = planet.id;
+            break;
+        }
+    }
+    QDialog dialog(this);
+    dialog.setObjectName("stargateTransitDialog");
+    dialog.setWindowTitle("Stargate transit");
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* summary = new QLabel(
+        QString("%1 — gross mass %2 kt. Transit requires two paid Jump Gates, a live command link, "
+                "no cargo or pending route, and a maximum of %3 ly / %4 kt.")
+            .arg(QString::fromStdString(fleet->name))
+            .arg(fleet_gross_mass(known, *knownFleet), 0, 'f', 1)
+            .arg(kStargateRangeLy, 0, 'f', 0)
+            .arg(kStargateMaximumMassKt, 0, 'f', 0), &dialog);
+    summary->setWordWrap(true);
+    layout->addWidget(summary);
+    auto* destinations = new QComboBox(&dialog);
+    destinations->setObjectName("stargateDestinations");
+    for (const auto& planet : known.planets) {
+        if (stargate_transfer_valid(known, pendingOrders_.player,
+                fleet->id, source, planet.id))
+            destinations->addItem(QString::fromStdString(planet.name), uint(planet.id));
+    }
+    auto* form = new QFormLayout;
+    form->addRow("Destination gate", destinations);
+    layout->addLayout(form);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->button(QDialogButtonBox::Ok)->setEnabled(destinations->count() != 0);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted || destinations->count() == 0) return;
+    const PlanetId target = destinations->currentData().toUInt();
+    if (!stargate_transfer_valid(known, pendingOrders_.player, fleet->id, source, target)) return;
+    appendPendingOrder(GateFleetOrder{fleet->id, source, target},
+        QString("Transit fleet %1 through Jump Gate to %2")
+            .arg(QString::fromStdString(fleet->name), destinations->currentText()));
+}
+
 } // namespace suns

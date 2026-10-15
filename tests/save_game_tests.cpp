@@ -1781,9 +1781,42 @@ void reconnaissance_and_programs_round_trip()
     assert(write_turn_order_file(orders,packet,error) && !read_turn_order_file(orders,imported,error));
 }
 
+void stargate_orders_round_trip()
+{
+    QTemporaryDir dir;
+    assert(dir.isValid());
+    QString error;
+    SaveGameData save;
+    save.campaignId = 981;
+    save.turnToken = 982;
+    save.mode = SessionMode::Host;
+    save.state = make_demo_game();
+    save.playerTokens = {{1, 982}};
+    save.pendingOrders = {1, {GateFleetOrder{1, 1, 2}}};
+    save.pendingDescriptions = {"Transit Jump Gate to Centauri II"};
+    const auto path = dir.filePath("gates.suns");
+    SaveGameData loaded;
+    assert(write_save_game_file(path, save, error));
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.pendingOrders.orders.size() == 1);
+    const auto gate = std::get<GateFleetOrder>(loaded.pendingOrders.orders.front());
+    assert(gate.fleet == 1 && gate.source == 1 && gate.destination == 2);
+    TurnOrderFileData packet{save.campaignId, save.state.turn, save.turnToken,
+        save.pendingOrders, save.pendingDescriptions};
+    const auto ordersPath = dir.filePath("gates.sunsorders");
+    TurnOrderFileData imported;
+    assert(write_turn_order_file(ordersPath, packet, error));
+    assert(read_turn_order_file(ordersPath, imported, error));
+    assert(std::get<GateFleetOrder>(imported.orders.orders.front()).destination == 2);
+    packet.orders.orders.front() = GateFleetOrder{1, 1, 1};
+    assert(write_turn_order_file(ordersPath, packet, error));
+    assert(!read_turn_order_file(ordersPath, imported, error));
+}
+
 int main()
 {
     reconnaissance_and_programs_round_trip();
+    stargate_orders_round_trip();
     stations_defenses_and_orders_round_trip();
     operational_losses_round_trip_and_player_isolation();
     space_battle_round_trip();
