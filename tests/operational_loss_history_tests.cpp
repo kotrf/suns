@@ -32,10 +32,14 @@ void ground_casualties_are_exact_and_relative_to_recipient()
     bool won = false, lost = false;
     for (std::uint64_t year = 1; year <= 100 && (!won || !lost); ++year) {
         auto s = arena(); s.turn = year;
-        s.stars = {{1,"Target",{0,0}}};
+        // A capital receiver near the battle delivers the attacker report
+        // immediately, even when the conquered world starts without a radar.
+        s.stars = {{1,"Target",{0,0}}, {2,"One home",{50,0}}};
         Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 1000;
         p.radar = PlanetaryRadarLevel::Full; p.homeworld = true;
-        s.planets = {p}; s.fleets[0].colonists = 1250;
+        Planet home; home.id = 2; home.star = 2; home.owner = 1; home.population = 1000;
+        home.radar = PlanetaryRadarLevel::Full; home.homeworld = true;
+        s.planets = {p,home}; s.fleets[0].colonists = 1250;
         const auto r = TurnProcessor{}.process_with_events(s, {{1,{TransferCargoOrder{{0,1},{1,0},1250,{}}}}});
         const bool victory = r.state.planets[0].owner == 1;
         won |= victory; lost |= !victory;

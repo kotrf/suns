@@ -181,6 +181,9 @@ void field_science_is_finite_delayed_and_real()
     assert(!event(repeated,GameEventKind::ScientificData));
     s.players[0].technology.researchActive = false;
     Planet home; home.id = 1; home.star = 2; home.owner = 1; home.population = 1000;
+    // This regression exercises signal travel time from a real remote capital
+    // receiver. In the new radar model population alone is not a transceiver.
+    home.radar = PlanetaryRadarLevel::Full; home.homeworld = true;
     s.planets = {home}; s.stars.push_back({2,"Home",{600,0}});
     r = TurnProcessor{}.process_with_events(s,{{1,{SetFleetTaskOrder{1,FleetTask::FieldResearch}}}});
     // Command itself must travel out first.
