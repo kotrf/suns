@@ -49,6 +49,7 @@ void colony_radar_bootstraps_detection_and_links()
     assert(communication_delay_turns(isolated, 1, {220, 0}) > 0);
     isolated.planets[1].industry = 50;
     isolated.planets[1].minerals = {20, 20, 20};
+    isolated.players.front().technology.researchAllocationPercent = 0; // Upgrade is ordinary paid production.
     const auto upgraded = TurnProcessor{}.process(isolated,
         {{1, {QueueProductionBatchOrder{2, ProductionKind::PlanetaryRadar, 1, ProductionAutomation::None}}}});
     assert(upgraded.planets[1].radar == PlanetaryRadarLevel::Full);
