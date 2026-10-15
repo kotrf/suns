@@ -26,8 +26,16 @@ void colony_radar_bootstraps_detection_and_links()
     outpost.industry = 1;
     outpost.radar = PlanetaryRadarLevel::None;
     outpost.homeworld = false;
-    outpost.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}};
+    // A nearby colony needs no local scanner to receive instant orders from
+    // the homeworld scanner, but it must not extend that scanner's range.
+    outpost.productionQueue.clear();
+    state.stars[1].position = {100, 0};
+    assert(communication_delay_turns(state, 1, state.stars[1].position) == 0);
+    assert(outpost.productionQueue.empty());
     state.stars[1].position = {175, 0};
+    assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
+    // An explicit build programme can still make an isolated colony connect.
+    outpost.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}};
     state.players.front().technology.researchActive = true;
     state.players.front().technology.researchAllocationPercent = 100;
     assert(planetary_radar_range(outpost.radar) == 0);

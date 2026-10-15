@@ -83,11 +83,9 @@ void invasion_consumes_only_the_landing_force_and_reports_both_sides()
     const bool victory = result.state.planets[1].owner == 1;
     assert(result.state.planets[1].population > 0);
     if (victory) {
-        // A captured colony has no inherited radar and begins rebuilding its
-        // own cheap receiver through the local autonomous production queue.
+        // No implicit radar or production programme after conquest.
         assert(result.state.planets[1].radar == PlanetaryRadarLevel::None);
-        assert(result.state.planets[1].productionQueue.size() == 1);
-        assert(result.state.planets[1].productionQueue.front().kind == ProductionKind::LocalRadar);
+        assert(result.state.planets[1].productionQueue.empty());
     }
     else assert(result.state.planets[1].owner == 2);
 

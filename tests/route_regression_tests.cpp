@@ -36,6 +36,10 @@ int main()
     const auto founded = TurnProcessor{}.process(state, {});
     assert(founded.planets[1].owner == 1);
     assert(founded.planets[1].population >= 100);
+    // Colonization without an explicitly selected plan leaves the new colony
+    // with neither a free radar nor a silently inserted production order.
+    assert(founded.planets[1].radar == PlanetaryRadarLevel::None);
+    assert(founded.planets[1].productionQueue.empty());
     assert(founded.fleets.empty());
 
     auto occupied = state;

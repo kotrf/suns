@@ -443,7 +443,8 @@ bool invade_colony(
         planet.homeworld = false;
         planet.population = survivors;
         planet.productionQueue.clear();
-        planet.productionQueue.push_back({ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)});
+        // Capture never forces infrastructure. An explicitly user-selected
+        // default production template is still honored when one exists.
         apply_default_production_template(state, planet);
         planet.productionWaitingForMinerals = false;
         planet.productionWaitingForShipyard = false;
@@ -652,9 +653,9 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     planet.industry = 1;
     planet.productionQueue.clear();
-    // Local settlers bootstrap a paid receiver through their own production
-    // without needing a remote instruction from a disconnected capital.
-    planet.productionQueue.push_back({ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)});
+    // Founding does not imply a radar or an automatic build programme. Nearby
+    // colonies may be controlled through the existing homeworld radar field;
+    // remote colonies use only an explicitly assigned autonomous template.
     apply_default_production_template(state, planet);
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
