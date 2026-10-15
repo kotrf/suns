@@ -26,6 +26,7 @@ inline constexpr double kScoutTravelSpeed = 100.0;       // Legacy UI compatibil
 inline constexpr double kColonyShipTravelSpeed = 70.0;  // Legacy UI compatibility.
 inline constexpr double kScoutSensorRange = 50.0;
 inline constexpr double kColonySensorRange = 150.0;
+inline constexpr double kLocalColonySensorRange = 30.0;
 inline constexpr ShipDesignId kScoutDesignId = 1;
 inline constexpr ShipDesignId kColonyShipDesignId = 2;
 inline constexpr ShipDesignId kFirstCustomShipDesignId = 3;
@@ -450,6 +451,8 @@ enum class ProductionKind {
     OrbitalStation,
     Terraforming,
     ColonyDefense,
+    LocalRadar,
+    PlanetaryRadar,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -493,6 +496,13 @@ struct PrecursorArtifactSite {
     std::uint16_t researchPoints{};
 };
 
+enum class PlanetaryRadarLevel : std::uint8_t { None, Local, Full };
+inline constexpr double planetary_radar_range(PlanetaryRadarLevel level)
+{
+    return level == PlanetaryRadarLevel::Full ? kColonySensorRange
+        : level == PlanetaryRadarLevel::Local ? kLocalColonySensorRange : 0.0;
+}
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -513,6 +523,8 @@ struct Planet {
     std::optional<MineralCargo> observedConcentration;
     std::optional<PlanetEnvironment> naturalEnvironment;
     std::uint16_t defenses{};
+    PlanetaryRadarLevel radar{PlanetaryRadarLevel::None};
+    bool homeworld{}; // A capital relay roots the shared sensor/communications mesh.
 };
 
 struct OrbitalStation {
@@ -1422,6 +1434,8 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::Research: return 0;
     case ProductionKind::OrbitalStation: return kOrbitalDockCost;
     case ProductionKind::ColonyDefense: return 5;
+    case ProductionKind::LocalRadar: return 2;
+    case ProductionKind::PlanetaryRadar: return 16;
     case ProductionKind::Terraforming: return kTerraformingCost;
     }
     return kColonyShipCost;

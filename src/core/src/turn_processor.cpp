@@ -261,7 +261,8 @@ std::optional<std::uint32_t> complete_production(
     if (item.kind == ProductionKind::Research) return std::nullopt;
     // Local buildings and physical environment are resolved by the shared queue engine.
     if (item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
-        || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense) return FleetId{0};
+        || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense
+        || item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
         if (item.station) {
             if (!complete_station_construction(state,planet,*item.station)) return std::nullopt;
@@ -438,8 +439,11 @@ bool invade_colony(
                 static_cast<long double>(defendingPopulation) * casualtyFactor)));
         survivors = attackingPopulation - losses;
         planet.owner = fleet.owner;
+        planet.radar = PlanetaryRadarLevel::None;
+        planet.homeworld = false;
         planet.population = survivors;
         planet.productionQueue.clear();
+        planet.productionQueue.push_back({ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)});
         apply_default_production_template(state, planet);
         planet.productionWaitingForMinerals = false;
         planet.productionWaitingForShipyard = false;
@@ -640,12 +644,17 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     const auto salvage = fleet_colonization_salvage(state, fleet);
 
     planet.owner = fleet.owner;
+    planet.radar = PlanetaryRadarLevel::None;
+    planet.homeworld = false;
     planet.population = fleet.colonists;
     planet.minerals.ironium += fleet.minerals.ironium + salvage.ironium;
     planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     planet.industry = 1;
     planet.productionQueue.clear();
+    // Local settlers bootstrap a paid receiver through their own production
+    // without needing a remote instruction from a disconnected capital.
+    planet.productionQueue.push_back({ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)});
     apply_default_production_template(state, planet);
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
@@ -701,6 +710,19 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     const auto action = *fleet.arrivalAction;
     fleet.arrivalAction.reset();
     if (action.kind == FleetArrivalActionKind::None) return false;
+    // Keep a blocked colonization programme visible and retryable instead
+    // of erasing its last waypoint and silently discarding the order.
+    if (action.kind == FleetArrivalActionKind::Colonize) {
+        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
+        });
+        if (planet == state.planets.end() || !establish_colony(state, fleet, *planet)) {
+            fleet.arrivalAction = action;
+            fleet.destination = fleet.position;
+            return false;
+        }
+        return true;
+    }
 
     switch (action.kind) {
     case FleetArrivalActionKind::EnterWormhole:
@@ -807,10 +829,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         return false;
     }
     case FleetArrivalActionKind::Colonize: {
-        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
-            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
-        });
-        return planet != state.planets.end() && establish_colony(state, fleet, *planet);
+        return false; // Handled before this switch, including blocked orders.
     }
     case FleetArrivalActionKind::RemoteMining: {
         if (!fleet_can_remote_mine(state, fleet)) return false;

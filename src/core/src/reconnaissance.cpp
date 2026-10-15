@@ -17,10 +17,10 @@ bool newer(const ReconContact& a,const ReconContact& b)
 std::vector<Receiver> receivers(const GameState& s,PlayerId owner,std::uint64_t turn)
 {
     std::vector<Receiver> result;
-    for(const auto& p:s.planets) if(p.owner==owner && p.population)
+    for(const auto& p:s.planets) if(p.owner==owner && p.population && p.radar!=PlanetaryRadarLevel::None)
         if(const auto* star=find_star(s,p.star)) {
             const double jam=sensor_interference(s,owner,star->position,turn);
-            result.push_back({star->position,0,p.id,kColonySensorRange*(1-jam),0,jam,false,kColonySensorRange});
+            result.push_back({star->position,0,p.id,planetary_radar_range(p.radar)*(1-jam),0,jam,false,planetary_radar_range(p.radar)});
         }
     for(const auto& f:s.fleets) if(f.owner==owner && fleet_has_scanner(s,f)) {
         const bool passive=!fleet_active_sensors(f,turn);

@@ -1531,7 +1531,7 @@ void refresh_sensor_intel(GameState& state)
         for (const auto& planet : state.planets) {
             if (planet.owner == 0) continue;
             const auto* sourceStar = find_star(state, planet.star);
-            if (sourceStar && within_range(sourceStar->position, star.position, kColonySensorRange)) {
+            if (sourceStar && within_range(sourceStar->position, star.position, planetary_radar_range(planet.radar))) {
                 set_survey_level(state, planet.owner, star.id,
                     star.id == planet.star ? SurveyLevel::GeologicalSurvey : SurveyLevel::SystemScan,
                     state.turn);
@@ -1892,6 +1892,8 @@ GameState generate_game(const GalaxyConfig& requestedConfig)
     state.planets.push_back({1, 1, "Earth", 100, 1, kInitialHomePopulation, 4, {}});
     state.planets.front().environment = {50, 50, 8};
     state.planets.front().minerals = {100.0, 100.0, 100.0};
+    state.planets.front().radar = PlanetaryRadarLevel::Full;
+    state.planets.front().homeworld = true;
     state.orbitalStations.push_back({
         1, 1, 1, "Earth Orbital Dock", OrbitalStationHullType::OrbitalDock,
         {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
@@ -1953,6 +1955,8 @@ GameState make_demo_game()
         {8, 8, "Procyon II", 76, 0, 0, 1, {}},
     };
     state.planets.front().minerals = {100.0, 100.0, 100.0};
+    state.planets.front().radar = PlanetaryRadarLevel::Full;
+    state.planets.front().homeworld = true;
     state.orbitalStations.push_back({
         1, 1, 1, "Earth Orbital Dock", OrbitalStationHullType::OrbitalDock,
         {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
