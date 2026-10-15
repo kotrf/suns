@@ -31,8 +31,8 @@ void colony_radar_bootstraps_detection_and_links()
     state.players.front().technology.researchActive = true;
     state.players.front().technology.researchAllocationPercent = 100;
     assert(planetary_radar_range(outpost.radar) == 0);
-    state.stars[2].position = {200, 0}; // Beyond Home R150; within outpost Local R30.
-    assert(survey_level(state, 1, state.stars[2].id) < SurveyLevel::SystemScan);
+    state.stars[3].position = {200, 0}; // Vega was unscanned at start; now in outpost R30.
+    assert(survey_level(state, 1, state.stars[3].id) < SurveyLevel::SystemScan);
     assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
     auto first = TurnProcessor{}.process(state, {});
     assert(first.planets[1].radar == PlanetaryRadarLevel::None);
@@ -42,7 +42,7 @@ void colony_radar_bootstraps_detection_and_links()
     assert(communication_delay_turns(built, 1, {175, 0}) == 0);
     assert(planetary_radar_range(built.planets[1].radar) == 30.0);
     auto scanned = TurnProcessor{}.process(built, {});
-    assert(survey_level(scanned, 1, scanned.stars[2].id) >= SurveyLevel::SystemScan);
+    assert(survey_level(scanned, 1, scanned.stars[3].id) >= SurveyLevel::SystemScan);
 
     auto isolated = built;
     isolated.stars[1].position = {220, 0};
