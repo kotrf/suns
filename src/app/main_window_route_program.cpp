@@ -692,8 +692,11 @@ QString MainWindow::fleetSourceNameForRouteProgram(FleetId id) const
         if (const auto* rename = std::get_if<RenameFleetOrder>(&order); rename && rename->fleet == id)
             name = QString("%1 (Fleet %2)").arg(QString::fromStdString(rename->name)).arg(id);
     }
-    return QString("%1 — %2").arg(name,
-        fleetLocationName(fleet_player_view(state_, *fleet).position));
+    const auto location = fleetLocationName(fleet_player_view(state_, *fleet).position);
+    const auto age = fleet_telemetry_age(state_, *fleet);
+    return age == 0 ? QString("%1 — %2").arg(name, location)
+        : QString("%1 — Estimated: %2 • report %3 turn(s) old")
+            .arg(name, location).arg(static_cast<qulonglong>(age));
 }
 
 QString MainWindow::selectedSystemFleetHeading() const

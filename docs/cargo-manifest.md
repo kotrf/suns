@@ -6,7 +6,7 @@ Suns! uses one physical cargo hold for population and minerals. Cargo is deliber
 
 The current manifest contains:
 
-- colonists: 10,000 colonists = 1 kt of cargo (100 kg per person);
+- colonists: 100 colonists = 1 kt of cargo;
 - Ironium: 1 unit = 1 cargo unit;
 - Boranium: 1 unit = 1 cargo unit;
 - Germanium: 1 unit = 1 cargo unit.
@@ -22,6 +22,15 @@ This total may not exceed the fitted design's cargo capacity.
 All carried cargo contributes to fleet gross mass. The existing Warp fuel model therefore automatically makes a mineral-loaded freighter more expensive to move than the same empty freighter. Colonists and minerals use the same mass path; there is no special fuel exception for population.
 
 ## Dockside transfers
+
+Select a fleet and press **Transfer cargo** in its panel, the Fleet menu or
+the toolbar. The editor determines the system from the fleet's confirmed
+current orbit; selecting a star separately is unnecessary, and an unrelated
+map selection stays unchanged. The local surface and connected friendly fleets
+there are available as endpoints. Unavailable cargo controls explain why in
+their tooltip; direct calls show a status message instead of a modal prompt.
+An old or predicted orbit does not permit immediate dockside transfers or
+reveal remote surface stock. Use on-arrival cargo orders for remote fleets.
 
 `SetFleetMineralCargoOrder` sets the desired mineral manifest for a fleet docked at a friendly colony. The turn processor transfers only the delta between colony stores and the fleet, rejects negative manifests, rejects unavailable minerals and rejects any target manifest that would overflow the shared hold.
 

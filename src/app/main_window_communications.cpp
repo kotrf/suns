@@ -57,7 +57,8 @@ void MainWindow::installCommunicationStatus()
                   .arg(static_cast<qulonglong>(age))
                   .arg(age == 1 ? "" : "s");
 
-        summary->setText(text);
+        summary->setText(text + (age > 0
+            ? "<br>Position unconfirmed; a plotted orbit is based on old telemetry." : ""));
         status->setText(text);
         QString details = QString("Last confirmed: turn %1 at (%2, %3)")
                               .arg(static_cast<qulonglong>(
@@ -69,8 +70,9 @@ void MainWindow::installCommunicationStatus()
                 "\nFriendly ordinary-scanner fields relay through overlapping circles to a colony. "
                 "The fleet can be outside a colony's own radar circle and still have LIVE communications.";
         } else {
-            details += QString("\nEstimated current position: (%1, %2)\nNew-command latency: %3 turn%4\n"
-                               "Reception is not confirmed until delayed telemetry reports it.")
+            details += QString("\nEstimated current position: (%1, %2)\nEstimated latency at the plotted position: %3 turn%4\n"
+                               "A plotted orbit does not confirm the fleet is still there. "
+                               "Command reception is not confirmed until delayed telemetry reports it.")
                            .arg(projected.x, 0, 'f', 1)
                            .arg(projected.y, 0, 'f', 1)
                            .arg(estimatedDelay)
@@ -79,9 +81,10 @@ void MainWindow::installCommunicationStatus()
         summary->setToolTip(details);
         status->setToolTip(details);
         if (fleetMoveButton_) {
-            fleetMoveButton_->setToolTip(estimatedDelay == 0
+            fleetMoveButton_->setToolTip(connected
                 ? "Command will reach this fleet immediately."
-                : QString("Estimated command delivery delay: %1 turn%2. The fleet keeps executing its onboard program until then.")
+                : QString("Estimated delivery from last report: %1 turn%2; receipt is unconfirmed. "
+                          "The fleet keeps executing its onboard program until the command arrives.")
                       .arg(estimatedDelay)
                       .arg(estimatedDelay == 1 ? "" : "s"));
         }

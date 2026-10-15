@@ -88,6 +88,15 @@ confirmed contact remains until the result arrives, without remaining a physical
 ship or relay. Delivered contact-loss/restoration and command-delivery messages
 are already available in Turn Messages.
 
+## Fleet location freshness
+
+Fleet selector locations derived from old telemetry are explicitly marked
+**Estimated**, with the report age. A last report placing a ship at Sol is not
+confirmation that it is still there. The Comms panel marks that position
+unconfirmed; latency calculated at the plotted position is only an estimate.
+Cargo availability uses the same freshness rule and never resolves a stale
+marker against hidden physical coordinates to open a remote manifest.
+
 ## Future extensions
 
 The same model is intended to support:

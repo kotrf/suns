@@ -1,5 +1,7 @@
 #include "main_window.hpp"
+#include "suns/communications.hpp"
 
+#include <QAction>
 #include <QComboBox>
 #include <QColor>
 #include <QDialog>
@@ -9,11 +11,11 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStatusBar>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -75,25 +77,70 @@ QString cargoValues(std::uint64_t colonists, const MineralCargo& minerals)
 
 } // namespace
 
+const StarSystem* MainWindow::selectedFleetCargoStar(QString* unavailableReason) const
+{
+    const auto unavailable = [unavailableReason](const QString& reason) -> const StarSystem* {
+        if (unavailableReason) *unavailableReason = reason;
+        return nullptr;
+    };
+    const auto* fleet = selectedFleet();
+    if (!fleet) return unavailable("Select a friendly fleet to transfer cargo.");
+    const auto age = fleet_telemetry_age(state_, *fleet);
+    // A remembered orbit is not evidence of a current docking. Never inspect
+    // remote truth to choose a cargo system or reveal its surface stock.
+    if (age > 0) return unavailable(QString(
+        "Cargo transfer needs a confirmed current orbit. Last telemetry is %1 turn(s) old; "
+        "the displayed position is an estimate.").arg(static_cast<qulonglong>(age)));
+    const bool currentFleet = std::any_of(state_.fleets.begin(), state_.fleets.end(),
+        [fleet](const Fleet& candidate) { return &candidate == fleet; });
+    if (!currentFleet || !fleet_has_instant_link(state_, *fleet))
+        return unavailable("Cargo transfer needs a live link at the fleet's current orbit. "
+            "Remote fleets can use on-arrival cargo orders.");
+    const auto visible = fleet_player_view(state_, *fleet);
+    const auto star = std::find_if(state_.stars.begin(), state_.stars.end(),
+        [&](const StarSystem& candidate) { return same_position(candidate.position, visible.position); });
+    if (star == state_.stars.end())
+        return unavailable("Cargo transfer is available when the selected fleet is at a star system.");
+    if (unavailableReason) unavailableReason->clear();
+    return &*star;
+}
+
+void MainWindow::refreshCargoTransferControls()
+{
+    QString reason;
+    const auto* star = selectedFleetCargoStar(&reason);
+    const auto tooltip = star
+        ? QString("Transfer cargo at %1 for the selected fleet. No separate system selection is needed.")
+            .arg(QString::fromStdString(star->name))
+        : reason;
+    if (auto* button = findChild<QPushButton*>("fleetTransferCargoButton")) {
+        button->setEnabled(star != nullptr);
+        button->setToolTip(tooltip);
+    }
+    for (const auto* name : {"fleetTransferCargoAction", "fleetTransferCargoToolAction"}) {
+        if (auto* action = findChild<QAction*>(name)) {
+            action->setEnabled(star != nullptr);
+            action->setToolTip(tooltip);
+        }
+    }
+}
+
 void MainWindow::openCargoManifestDialog()
 {
-    const auto* selectedStar = this->selectedStar();
-    const auto* authoritativeFleet = selectedFleet();
-    if (!selectedStar || !authoritativeFleet
-        || !same_position(authoritativeFleet->position, selectedStar->position)) {
-        QMessageBox::information(
-            this,
-            "Transfer cargo",
-            "Select a friendly fleet currently stationed at the selected star system.");
+    QString unavailableReason;
+    const auto* cargoStar = selectedFleetCargoStar(&unavailableReason);
+    if (!cargoStar) {
+        statusBar()->showMessage(unavailableReason, 7000);
         return;
     }
+    const auto selectedFleetId = *selection_.fleet;
 
     // Exact command-boundary projection. Replaying End Turn here would also
     // grow population, mine ore, run combat, and move ships. Repeated dialog
     // openings must not advance the world or alter a single colonist.
     GameState planned = projected_cargo_order_state(state_, pendingOrders_);
 
-    const auto* star = find_star(planned, selectedStar->id);
+    const auto* star = find_star(planned, cargoStar->id);
     if (!star) return;
 
     std::vector<CargoEndpointView> endpoints;
@@ -109,7 +156,8 @@ void MainWindow::openCargoManifestDialog()
         });
     }
     for (const auto& fleet : planned.fleets) {
-        if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, star->position)) continue;
+        if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, star->position)
+            || fleet_telemetry_age(state_, fleet) != 0 || !fleet_has_instant_link(state_, fleet)) continue;
         endpoints.push_back({
             {0, fleet.id},
             nullptr,
@@ -119,10 +167,8 @@ void MainWindow::openCargoManifestDialog()
     }
 
     if (endpoints.size() < 2) {
-        QMessageBox::information(
-            this,
-            "Transfer cargo",
-            "Cargo transfer needs a planetary surface and a friendly fleet, or at least two friendly fleets at this system.");
+        statusBar()->showMessage(
+            "Cargo transfer needs a planetary surface and a friendly fleet, or two friendly fleets at this system.", 7000);
         return;
     }
 
@@ -169,7 +215,7 @@ void MainWindow::openCargoManifestDialog()
 
     int selectedFleetIndex = -1;
     for (std::size_t index = 0; index < endpoints.size(); ++index) {
-        if (endpoints[index].fleet && endpoints[index].fleet->id == authoritativeFleet->id) {
+        if (endpoints[index].fleet && endpoints[index].fleet->id == selectedFleetId) {
             selectedFleetIndex = static_cast<int>(index);
             break;
         }
