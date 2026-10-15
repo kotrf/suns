@@ -121,6 +121,9 @@ void defense_production_and_bombardment()
     assert(std::any_of(breached.state.players.begin(),breached.state.players.end(),[](const auto& p){return std::any_of(p.pendingPlayerReports.begin(),p.pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::Bombardment;});})
         || std::any_of(breached.events.begin(),breached.events.end(),[](const auto& e){return e.kind==GameEventKind::Bombardment;}));
     auto naked=battle(false,false); naked.orbitalStations.clear(); naked.fleets.front().task=FleetTask::Bombardment;
+    // Isolate defense-installation bombard damage; an installed radar also
+    // competes for installation hits and has its own separate regression.
+    naked.planets.front().radar = PlanetaryRadarLevel::None;
     naked.planets.front().industry=20; naked.planets.front().mines=20;
     auto protectedState=naked; protectedState.planets.front().defenses=100;
     resolve_bombardments(naked,2); resolve_bombardments(protectedState,2);

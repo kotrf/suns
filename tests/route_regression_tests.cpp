@@ -36,6 +36,10 @@ int main()
     const auto founded = TurnProcessor{}.process(state, {});
     assert(founded.planets[1].owner == 1);
     assert(founded.planets[1].population >= 100);
+    // Colonization without an explicitly selected plan leaves the new colony
+    // with neither a free radar nor a silently inserted production order.
+    assert(founded.planets[1].radar == PlanetaryRadarLevel::None);
+    assert(founded.planets[1].productionQueue.empty());
     assert(founded.fleets.empty());
 
     auto occupied = state;
@@ -45,6 +49,41 @@ int main()
     overloaded.fleets[0].colonists = 600;
     assert(fleet_cargo_used(overloaded, overloaded.fleets[0]) > fleet_cargo_capacity(overloaded, overloaded.fleets[0]));
     assert(TurnProcessor{}.process(overloaded, {}).planets[1].owner == 0);
+
+    // When Colonize fails on arrival, preserve the terminal intent on the
+    // final waypoint instead of deleting it before the next opportunity.
+    auto blocked = state;
+    blocked.planets[1].owner = 2;
+    auto stillOrbiting = TurnProcessor{}.process(blocked, {});
+    assert(stillOrbiting.fleets.size() == 1);
+    assert(stillOrbiting.fleets.front().arrivalAction);
+    assert(stillOrbiting.fleets.front().arrivalAction->kind == FleetArrivalActionKind::Colonize);
+    assert(stillOrbiting.fleets.front().destination.has_value());
+    assert(same_position(*stillOrbiting.fleets.front().destination, stillOrbiting.stars[1].position));
+    stillOrbiting.planets[1].owner = 0;
+    const auto retried = TurnProcessor{}.process(stillOrbiting, {});
+    assert(retried.planets[1].owner == 1);
+    assert(retried.fleets.empty());
+
+    // Arrival can precede a delayed command to Colonize. The onboard order
+    // must execute when the packet physically reaches the fleet, even though
+    // the old travel waypoint has long since completed.
+    auto delayed = make_demo_game();
+    delayed.stars[1].position = {600, 0};
+    auto& waiting = delayed.fleets.front();
+    waiting.design = kColonyShipDesignId;
+    waiting.ships = {{kColonyShipDesignId, 1}};
+    waiting.colonists = 100;
+    waiting.position = delayed.stars[1].position;
+    waiting.destination.reset();
+    assert(submit_fleet_route_command(delayed, 1, waiting.id,
+        delayed.stars[1].position, 5,
+        {FleetArrivalActionKind::Colonize}, {}, false, 0, false));
+    assert(!delayed.fleets.front().pendingCommands.empty());
+    for (int year = 0; year < 10 && delayed.planets[1].owner == 0; ++year)
+        delayed = TurnProcessor{}.process(delayed, {});
+    assert(delayed.planets[1].owner == 1);
+    assert(delayed.fleets.empty());
 
     // An explicit stop ignores stale position coordinates, clears tasks and
     // works for an immobilized ship. It still travels through the comms layer.

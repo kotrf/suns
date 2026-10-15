@@ -185,6 +185,10 @@ struct PlayerOrders {
     std::vector<Order> orders;
 };
 
+// Replay only valid queued local cargo orders, using the same rules as End
+// Turn, without advancing a year or changing the actual physical state.
+[[nodiscard]] GameState projected_cargo_order_state(const GameState&, const PlayerOrders&);
+
 // Apply design creation only, without advancing the year or spending resources.
 [[nodiscard]] GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending);
 [[nodiscard]] const ShipDesign* resolve_ship_design_order(

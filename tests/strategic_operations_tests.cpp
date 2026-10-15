@@ -33,6 +33,7 @@ void bombardment_orders_and_targets()
     auto s = arena({C::LadyFingerBomb});
     s.stars = {{1,"Target",{0,0}}};
     Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 100000; p.industry = 20; p.mines = 20;
+    p.radar = PlanetaryRadarLevel::Full; p.homeworld = true;
     s.planets = {p};
     assert(!event(TurnProcessor{}.process_with_events(s,{}),GameEventKind::Bombardment));
     auto r = TurnProcessor{}.process_with_events(s,{{1,{SetFleetTaskOrder{1,FleetTask::Bombardment}}}});
@@ -40,6 +41,7 @@ void bombardment_orders_and_targets()
     assert(!event(r,GameEventKind::Bombardment,3));
     assert(event(r,GameEventKind::Bombardment)->deliveredColonists == 600);
     assert(event(r,GameEventKind::Bombardment)->quantity == 2);
+    assert(r.state.planets[0].radar == PlanetaryRadarLevel::Local); // Installation hit damages the built radar.
     s.planets[0].owner = 1;
     r = TurnProcessor{}.process_with_events(s,{{1,{SetFleetTaskOrder{1,FleetTask::Bombardment}}}});
     assert(!event(r,GameEventKind::Bombardment));
@@ -179,6 +181,9 @@ void field_science_is_finite_delayed_and_real()
     assert(!event(repeated,GameEventKind::ScientificData));
     s.players[0].technology.researchActive = false;
     Planet home; home.id = 1; home.star = 2; home.owner = 1; home.population = 1000;
+    // This regression exercises signal travel time from a real remote capital
+    // receiver. In the new radar model population alone is not a transceiver.
+    home.radar = PlanetaryRadarLevel::Full; home.homeworld = true;
     s.planets = {home}; s.stars.push_back({2,"Home",{600,0}});
     r = TurnProcessor{}.process_with_events(s,{{1,{SetFleetTaskOrder{1,FleetTask::FieldResearch}}}});
     // Command itself must travel out first.

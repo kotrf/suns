@@ -261,7 +261,8 @@ std::optional<std::uint32_t> complete_production(
     if (item.kind == ProductionKind::Research) return std::nullopt;
     // Local buildings and physical environment are resolved by the shared queue engine.
     if (item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
-        || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense) return FleetId{0};
+        || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense
+        || item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
         if (item.station) {
             if (!complete_station_construction(state,planet,*item.station)) return std::nullopt;
@@ -438,8 +439,12 @@ bool invade_colony(
                 static_cast<long double>(defendingPopulation) * casualtyFactor)));
         survivors = attackingPopulation - losses;
         planet.owner = fleet.owner;
+        planet.radar = PlanetaryRadarLevel::None;
+        planet.homeworld = false;
         planet.population = survivors;
         planet.productionQueue.clear();
+        // Capture never forces infrastructure. An explicitly user-selected
+        // default production template is still honored when one exists.
         apply_default_production_template(state, planet);
         planet.productionWaitingForMinerals = false;
         planet.productionWaitingForShipyard = false;
@@ -640,12 +645,17 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     const auto salvage = fleet_colonization_salvage(state, fleet);
 
     planet.owner = fleet.owner;
+    planet.radar = PlanetaryRadarLevel::None;
+    planet.homeworld = false;
     planet.population = fleet.colonists;
     planet.minerals.ironium += fleet.minerals.ironium + salvage.ironium;
     planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     planet.industry = 1;
     planet.productionQueue.clear();
+    // Founding does not imply a radar or an automatic build programme. Nearby
+    // colonies may be controlled through the existing homeworld radar field;
+    // remote colonies use only an explicitly assigned autonomous template.
     apply_default_production_template(state, planet);
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
@@ -701,6 +711,19 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     const auto action = *fleet.arrivalAction;
     fleet.arrivalAction.reset();
     if (action.kind == FleetArrivalActionKind::None) return false;
+    // Keep a blocked colonization programme visible and retryable instead
+    // of erasing its last waypoint and silently discarding the order.
+    if (action.kind == FleetArrivalActionKind::Colonize) {
+        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
+        });
+        if (planet == state.planets.end() || !establish_colony(state, fleet, *planet)) {
+            fleet.arrivalAction = action;
+            fleet.destination = fleet.position;
+            return false;
+        }
+        return true;
+    }
 
     switch (action.kind) {
     case FleetArrivalActionKind::EnterWormhole:
@@ -807,10 +830,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         return false;
     }
     case FleetArrivalActionKind::Colonize: {
-        const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
-            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
-        });
-        return planet != state.planets.end() && establish_colony(state, fleet, *planet);
+        return false; // Handled before this switch, including blocked orders.
     }
     case FleetArrivalActionKind::RemoteMining: {
         if (!fleet_can_remote_mine(state, fleet)) return false;
@@ -1773,7 +1793,82 @@ void grow_colonies(GameState& state)
     }
 }
 
+// Apply exactly the same cargo validation at the planning boundary and in
+// the UI preview. This must not run mining, research, population growth or a
+// whole year merely to display the previously queued ship manifest.
+void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
+    std::vector<ColonyFreightDelivery>& freight)
+{
+    std::visit([&](const auto& concreteOrder) {
+        using T = std::decay_t<decltype(concreteOrder)>;
+        if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony && candidate.owner == player;
+                        });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet && candidate.owner == player;
+                        });
+                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
+                        if (!fleet_at_planet(next, *fleet, *planet)) return;
+
+                        const auto requestedLoad = colonist_cargo_mass(concreteOrder.colonists)
+                            + mineral_cargo_mass(fleet->minerals);
+                        if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
+
+                        if (concreteOrder.colonists > fleet->colonists) {
+                            const auto load = concreteOrder.colonists - fleet->colonists;
+                            if (planet->population <= load) return;
+                            planet->population -= load;
+                        } else {
+                            const auto delivered = fleet->colonists - concreteOrder.colonists;
+                            planet->population += delivered;
+                            record_freight_delivery(freight, *planet, {}, delivered);
+                        }
+                        fleet->colonists = concreteOrder.colonists;
+        } else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>) {
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
+                            return candidate.id == concreteOrder.colony
+                                && (candidate.owner == player || candidate.owner == 0);
+                        });
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
+                            return candidate.id == concreteOrder.fleet && candidate.owner == player;
+                        });
+                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
+                        if (!fleet_at_planet(next, *fleet, *planet) || !valid_mineral_cargo(concreteOrder.minerals)) return;
+
+                        const auto requestedLoad = colonist_cargo_mass(fleet->colonists)
+                            + mineral_cargo_mass(concreteOrder.minerals);
+                        if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
+                        if (!minerals_available(planet->minerals, fleet->minerals, concreteOrder.minerals)) return;
+
+                        if (planet->owner == player) {
+                            record_freight_delivery(freight, *planet, {
+                                std::max(0.0, fleet->minerals.ironium - concreteOrder.minerals.ironium),
+                                std::max(0.0, fleet->minerals.boranium - concreteOrder.minerals.boranium),
+                                std::max(0.0, fleet->minerals.germanium - concreteOrder.minerals.germanium)});
+                        }
+                        transfer_minerals(planet->minerals, fleet->minerals, concreteOrder.minerals);
+        } else if constexpr (std::is_same_v<T, TransferCargoOrder>) {
+            (void)transfer_cargo(next, player, concreteOrder, freight);
+        }
+    }, order);
+}
+
 } // namespace
+
+GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending)
+{
+    GameState projected = current;
+    std::vector<ColonyFreightDelivery> unusedFreight;
+    for (const auto& order : pending.orders) {
+        if (std::holds_alternative<SetFleetColonistsOrder>(order)
+            || std::holds_alternative<SetFleetMineralCargoOrder>(order)
+            || std::holds_alternative<TransferCargoOrder>(order)) {
+            apply_cargo_order(projected, pending.player, order, unusedFreight);
+        }
+    }
+    return projected;
+}
 
 GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending)
 {
@@ -1965,55 +2060,10 @@ TurnResult TurnProcessor::process_with_events(
                             planet->productionWaitingForMinerals = false;
                             planet->productionWaitingForShipyard = false;
                         }
-                    } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
-                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
-                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
-                        });
-                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
-                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                        });
-                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
-                        if (!fleet_at_planet(next, *fleet, *planet)) return;
-
-                        const auto requestedLoad = colonist_cargo_mass(concreteOrder.colonists)
-                            + mineral_cargo_mass(fleet->minerals);
-                        if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
-
-                        if (concreteOrder.colonists > fleet->colonists) {
-                            const auto load = concreteOrder.colonists - fleet->colonists;
-                            if (planet->population <= load) return;
-                            planet->population -= load;
-                        } else {
-                            const auto delivered = fleet->colonists - concreteOrder.colonists;
-                            planet->population += delivered;
-                            record_freight_delivery(freight, *planet, {}, delivered);
-                        }
-                        fleet->colonists = concreteOrder.colonists;
-                    } else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>) {
-                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
-                            return candidate.id == concreteOrder.colony
-                                && (candidate.owner == submission.player || candidate.owner == 0);
-                        });
-                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
-                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                        });
-                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
-                        if (!fleet_at_planet(next, *fleet, *planet) || !valid_mineral_cargo(concreteOrder.minerals)) return;
-
-                        const auto requestedLoad = colonist_cargo_mass(fleet->colonists)
-                            + mineral_cargo_mass(concreteOrder.minerals);
-                        if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
-                        if (!minerals_available(planet->minerals, fleet->minerals, concreteOrder.minerals)) return;
-
-                        if (planet->owner == submission.player) {
-                            record_freight_delivery(freight, *planet, {
-                                std::max(0.0, fleet->minerals.ironium - concreteOrder.minerals.ironium),
-                                std::max(0.0, fleet->minerals.boranium - concreteOrder.minerals.boranium),
-                                std::max(0.0, fleet->minerals.germanium - concreteOrder.minerals.germanium)});
-                        }
-                        transfer_minerals(planet->minerals, fleet->minerals, concreteOrder.minerals);
-                    } else if constexpr (std::is_same_v<T, TransferCargoOrder>) {
-                        (void)transfer_cargo(next, submission.player, concreteOrder, freight);
+                    } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>
+                        || std::is_same_v<T, SetFleetMineralCargoOrder>
+                        || std::is_same_v<T, TransferCargoOrder>) {
+                        apply_cargo_order(next, submission.player, order, freight);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

@@ -43,6 +43,8 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::Factory: name = "Factory"; break;
     case ProductionKind::Mine: name = "Mine"; break;
     case ProductionKind::ColonyDefense: name = "Colony defense"; break;
+    case ProductionKind::LocalRadar: name = "Local planetary radar (30 ly)"; break;
+    case ProductionKind::PlanetaryRadar: name = "Planetary radar (150 ly)"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;
     case ProductionKind::Research: return "Legacy Research item";
     case ProductionKind::OrbitalStation: name = item.station
@@ -93,6 +95,10 @@ void MainWindow::installProductionQueue()
     addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
     addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
     addKind("Colony defenses", ProductionKind::ColonyDefense, ProductionAutomation::None);
+    addKind("Local radar (30 ly)", ProductionKind::LocalRadar, ProductionAutomation::None);
+    addKind("Planetary radar (150 ly)", ProductionKind::PlanetaryRadar, ProductionAutomation::None);
+    addKind("Auto local radar ↻", ProductionKind::LocalRadar, ProductionAutomation::Annual);
+    addKind("Auto planetary radar ↻", ProductionKind::PlanetaryRadar, ProductionAutomation::Annual);
     addKind("Terraform", ProductionKind::Terraforming, ProductionAutomation::None);
     addKind("Auto factories ↻", ProductionKind::Factory, ProductionAutomation::Annual);
     addKind("Auto mines ↻", ProductionKind::Mine, ProductionAutomation::Annual);
@@ -108,7 +114,13 @@ void MainWindow::installProductionQueue()
     add->setObjectName("productionBatchAdd");
     addRow->addWidget(kind, 1); addRow->addWidget(amount); addRow->addWidget(add);
     layout->addLayout(addRow);
-    connect(kind, &QComboBox::currentIndexChanged, this, [this] { refreshProductionQueue(); });
+    connect(kind, &QComboBox::currentIndexChanged, this, [this, kind, amount] {
+        const auto selected = ProductionKind(kind->currentData().toInt());
+        const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
+        amount->setMaximum(radar ? 1 : static_cast<int>(kMaximumProductionBatch));
+        if (radar) amount->setValue(1);
+        refreshProductionQueue();
+    });
     connect(add, &QPushButton::clicked, this, [this, kind, amount] {
         const auto* planet = selectedPlanet();
         if (!planet || planet->owner != pendingOrders_.player) return;

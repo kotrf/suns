@@ -5,12 +5,14 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTimer>
 #include <cassert>
+#include <cmath>
 
 namespace suns {
 struct MainWindowTestAccess {
@@ -35,6 +37,20 @@ struct MainWindowTestAccess {
         w.pendingDescriptions_.clear();
         w.selection_.star = w.state_.planets.front().star;
         w.selection_.fleet = 1;
+        w.rebuildScene();
+    }
+    static void installFullTransport(MainWindow& w)
+    {
+        install(w);
+        w.state_.shipDesigns.push_back({3, 1, "Five light transports",
+            ShipHullType::LightTransport, {ShipComponentType::FusionDrive}});
+        auto& fleet = w.state_.fleets.front();
+        fleet.design = 3;
+        fleet.ships = {{3, 5}};
+        fleet.minerals = {};
+        fleet.colonists = 0;
+        w.state_.fleets.resize(1);
+        assert(fleet_cargo_capacity(w.state_, fleet) == 25);
         w.rebuildScene();
     }
     static void installEnemyColony(MainWindow& w)
@@ -77,21 +93,15 @@ int main(int argc, char** argv)
             assert(destination->count() == source->count() - 1);
         };
         distinct();
-        // A selected fleet that already carries cargo opens in unloading
-        // direction. The sliders still span the full hold; source stock only
-        // limits the handle, not the scale.
-        assert(source->currentData().toInt() == 1);
-        assert(destination->currentData().toInt() == 0);
-        assert(people->maximum() == 500);
-        assert(iron->maximum() == 500);
-        people->setValue(people->maximum());
-        assert(people->value() == 100);
-        iron->setValue(iron->maximum());
-        assert(iron->value() == 100);
-
-        source->setCurrentIndex(source->findData(0));
-        destination->setCurrentIndex(destination->findData(1));
-        distinct();
+        // The dialog starts with planet on the left and selected ship on
+        // the right regardless of existing cargo; it must never silently
+        // reverse into unload mode when an earlier order filled the hold.
+        assert(source->currentData().toInt() == 0);
+        assert(destination->currentData().toInt() == 1);
+        assert(dialog->findChild<QGroupBox*>("cargoSourceContainer"));
+        assert(dialog->findChild<QGroupBox*>("cargoDestinationContainer"));
+        const auto* destinationPeople = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        assert(destinationPeople && destinationPeople->value() == 100);
         assert(people->maximum() == 300); // 5 kt hold, 2 kt already aboard
         assert(iron->maximum() == 300 && boron->maximum() == 300);
         boron->setValue(boron->maximum());
@@ -141,7 +151,23 @@ int main(int argc, char** argv)
     assert(transfer.source.planet == 1 && transfer.destination.fleet == 1);
     assert(transfer.colonists == 100 && transfer.minerals.ironium == 1);
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -100 / +0"));
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~999900"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 999900"));
+    // The growth display is an explicit one-rate estimate, not a simulated
+    // End Turn. Its percentage is anchored to the *confirmed* population and
+    // its next-year estimate to the *after-cargo* population.
+    {
+        const auto& baseline = suns::MainWindowTestAccess::state(window);
+        const auto& planet = baseline.planets.front();
+        const auto growth = suns::projected_population_growth(baseline, planet, baseline.turn);
+        const double rate = static_cast<double>(growth) / planet.population;
+        const auto estimated = static_cast<std::int64_t>(std::llround(999900.0 * rate));
+        const auto nextPopulation = static_cast<std::uint64_t>(999900 + estimated);
+        const auto info = suns::MainWindowTestAccess::systemInfo(window);
+        assert(info.contains(QString("Current estimated annual growth: %1%2%")
+            .arg(rate >= 0.0 ? "+" : "").arg(rate * 100.0, 0, 'f', 2)));
+        assert(info.contains(QString("Simple next-year estimate: ~%1")
+            .arg(static_cast<qulonglong>(nextPopulation))));
+    }
 
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -150,8 +176,14 @@ int main(int argc, char** argv)
         auto* iron = dialog->findChild<QSlider*>("cargoMineralSlider0");
         auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
         auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
-        assert(source->currentData().toInt() == 1 && destination->currentData().toInt() == 0);
-        assert(people->maximum() == 500 && iron->maximum() == 500);
+        assert(source->currentData().toInt() == 0 && destination->currentData().toInt() == 1);
+        assert(people->maximum() == 100 && iron->maximum() == 100);
+        const auto* destinationPeople = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        const auto* surfaceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
+        const auto* manifestAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
+        assert(destinationPeople && destinationPeople->value() == 200);
+        assert(surfaceAfter && surfaceAfter->text().contains("999900"));
+        assert(manifestAfter && manifestAfter->text().contains("colonists 200"));
         dialog->reject();
     });
     window.openCargoManifestDialog();
@@ -168,6 +200,40 @@ int main(int argc, char** argv)
     const auto& resolved = suns::MainWindowTestAccess::state(window);
     assert(resolved.planets.front().population == expected);
     assert(resolved.fleets.front().colonists == 200);
+
+    // Full-hold scenario: exactly 2500 colonists must remain visibly aboard
+    // when the transfer dialog opens for the second time, without growing
+    // planet population or queuing an accidental duplicate.
+    suns::MainWindowTestAccess::installFullTransport(window);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* transfer = dialog->findChild<QSlider*>("cargoColonistSlider");
+        auto* destination = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        auto* buttons = dialog->findChild<QDialogButtonBox*>();
+        assert(transfer && destination && buttons);
+        assert(transfer->maximum() == 2500 && destination->value() == 0);
+        transfer->setValue(2500);
+        assert(destination->value() == 2500 && destination->maximum() == 2500);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    window.openCargoManifestDialog();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -2500 / +0"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 997500"));
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        const auto* destination = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        const auto* sourceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
+        const auto* destinationAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
+        assert(destination && destination->value() == 2500 && destination->maximum() == 2500);
+        assert(sourceAfter && sourceAfter->text().contains("997500"));
+        assert(destinationAfter && destinationAfter->text().contains("colonists 2500"));
+        dialog->reject();
+    });
+    window.openCargoManifestDialog();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
 
     suns::MainWindowTestAccess::installEnemyColony(window);
     QTimer::singleShot(0, [&] {

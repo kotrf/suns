@@ -24,13 +24,14 @@ std::vector<CommunicationField> communication_fields(
 {
     std::vector<CommunicationField> fields;
 
-    // Every established colony is a root of the instantaneous backbone and
-    // projects the same field as its ordinary planetary scanner.
+    // A built radar serves both scanning and communications. Only a homeworld
+    // receiver roots the capital mesh: outposts form separate radio islands
+    // until their radar or allied fleet scanner range overlaps that mesh.
     for (const auto& planet : state.planets) {
-        if (planet.owner != player || planet.population == 0) continue;
+        if (planet.owner != player || planet.population == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
         if (!star) continue;
-        fields.push_back({star->position, kColonySensorRange, true});
+        fields.push_back({star->position, planetary_radar_range(planet.radar), planet.homeworld});
     }
 
     // Ordinary scanners and dedicated relay arrays participate in the mesh.
@@ -384,13 +385,15 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
     const auto fields = communication_fields(state, player, atTurn);
     const auto jamDelay = communication_jamming_delay(state, player, position, atTurn);
 
-    // Compatibility for tiny test fixtures and edge states that have no colony
-    // node yet. Normal generated games always begin with the homeworld relay.
-    if (fields.empty()
-        || std::none_of(fields.begin(), fields.end(), [](const CommunicationField& field) {
+    // A colony without its capital radar has no instant route. Synthetic
+    // ship-only combat scenarios have no colony/root and resolve onboard
+    // orders locally, without a fictitious distant receiver.
+    if (std::none_of(fields.begin(), fields.end(), [](const CommunicationField& field) {
             return field.connected;
         })) {
-        return jamDelay;
+        const bool hasColony = std::any_of(state.planets.begin(), state.planets.end(),
+            [&](const Planet& planet) { return planet.owner == player && planet.population > 0; });
+        return (hasColony ? 1U : 0U) + jamDelay;
     }
 
     // A position inside any field connected to a colony root belongs to the
@@ -409,9 +412,11 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
     std::vector<Position> connectedTransceivers;
 
     for (const auto& planet : state.planets) {
-        if (planet.owner != player || planet.population == 0) continue;
+        if (planet.owner != player || planet.population == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
-        if (star) connectedTransceivers.push_back(star->position);
+        if (star && std::any_of(fields.begin(), fields.end(), [&](const CommunicationField& field) {
+            return field.connected && inside_field(star->position, field);
+        })) connectedTransceivers.push_back(star->position);
     }
     for (const auto& fleet : state.fleets) {
         if (fleet.owner != player || !fleet_transmits(fleet,atTurn)) continue;
@@ -431,7 +436,8 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
             nearest = std::min(nearest, distance_between(source, receiver));
         }
     }
-    if (!std::isfinite(nearest) || nearest <= 0.000001) return jamDelay;
+    if (!std::isfinite(nearest)) return 1 + jamDelay;
+    if (nearest <= 0.000001) return jamDelay;
 
     // Any non-zero subspace hop lands at a later annual planning boundary;
     // priority can never alter this physical propagation time.

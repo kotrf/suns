@@ -14,8 +14,13 @@ bool production_batch_valid(const QueueProductionBatchOrder& order)
 {
     if (order.quantity == 0 || order.quantity > kMaximumProductionBatch) return false;
     if (order.kind != ProductionKind::Factory && order.kind != ProductionKind::Mine
-        && order.kind != ProductionKind::Terraforming && order.kind != ProductionKind::ColonyDefense) return false;
+        && order.kind != ProductionKind::Terraforming && order.kind != ProductionKind::ColonyDefense
+        && order.kind != ProductionKind::LocalRadar && order.kind != ProductionKind::PlanetaryRadar) return false;
     if (static_cast<unsigned>(order.automation) > static_cast<unsigned>(ProductionAutomation::MaxTerraform)) return false;
+    // A planet can install at most one receiver tier at once. Annual radar
+    // rules may appear in default templates; they retire when built.
+    if ((order.kind == ProductionKind::LocalRadar || order.kind == ProductionKind::PlanetaryRadar)
+        && order.quantity != 1) return false;
     if (order.kind == ProductionKind::Terraforming) return order.automation != ProductionAutomation::Annual;
     return order.automation == ProductionAutomation::None || order.automation == ProductionAutomation::Annual;
 }
@@ -26,6 +31,8 @@ bool apply_production_batch(const GameState& state, Planet& planet, const QueueP
     if (order.kind == ProductionKind::Terraforming
         && !next_terraforming_environment(state, planet.owner, planet)) return false;
     if (order.kind == ProductionKind::ColonyDefense && !colony_defenses_available(state,planet.owner)) return false;
+    if (order.kind == ProductionKind::LocalRadar && planet.radar != PlanetaryRadarLevel::None) return false;
+    if (order.kind == ProductionKind::PlanetaryRadar && planet.radar == PlanetaryRadarLevel::Full) return false;
     planet.productionQueue.push_back({order.kind, production_cost(order.kind), 0,
         order.automation, order.quantity});
     return true;
@@ -88,8 +95,15 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     const auto* player = find_player(state, planet.owner);
     const auto output = colony_output(planet);
     const bool researchActive = player && player->technology.researchActive;
-    const auto allocated = researchActive ? static_cast<std::uint32_t>(
+    const auto requestedResearch = researchActive ? static_cast<std::uint32_t>(
         std::uint64_t(output) * player->technology.researchAllocationPercent / 100U) : 0U;
+    const bool bootstrappingReceiver = planet.radar == PlanetaryRadarLevel::None
+        && std::any_of(planet.productionQueue.begin(), planet.productionQueue.end(),
+            [](const ProductionItem& item) { return item.kind == ProductionKind::LocalRadar; });
+    // A remote settlement must always be able to bootstrap its local receiver,
+    // including when the empire's research allocation is set to 100%.
+    const auto allocated = bootstrappingReceiver && output > 0
+        ? std::min(requestedResearch, output - 1) : requestedResearch;
     result.researchPoints = allocated;
     auto available = output - allocated;
     auto& queue = planet.productionQueue;
@@ -108,6 +122,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         if (item.kind == ProductionKind::Factory) ++planet.industry;
         else if (item.kind == ProductionKind::Mine) ++planet.mines;
         else if (item.kind == ProductionKind::ColonyDefense) ++planet.defenses;
+        else if (item.kind == ProductionKind::LocalRadar) planet.radar = std::max(planet.radar, PlanetaryRadarLevel::Local);
+        else if (item.kind == ProductionKind::PlanetaryRadar) planet.radar = PlanetaryRadarLevel::Full;
         else if (item.kind == ProductionKind::Terraforming) (void)terraform_planet(state, planet);
         else if (item.kind == ProductionKind::OrbitalStation) {
             stationExists = true;
@@ -122,6 +138,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         if (queue[index].kind == ProductionKind::Research || queue[index].quantity == 0
             || (queue[index].kind == ProductionKind::OrbitalStation
                 && (queue[index].station ? !station_construction_valid(state,planet,*queue[index].station) : stationExists))
+            || (queue[index].kind == ProductionKind::LocalRadar && planet.radar != PlanetaryRadarLevel::None)
+            || (queue[index].kind == ProductionKind::PlanetaryRadar && planet.radar == PlanetaryRadarLevel::Full)
             || (queue[index].kind == ProductionKind::ColonyDefense
                 && ((planet.defenses >= kMaximumColonyDefenses && queue[index].automation == ProductionAutomation::None)
                     || !colony_defenses_available(state,planet.owner)))) { erase(index); continue; }

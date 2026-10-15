@@ -82,7 +82,11 @@ void invasion_consumes_only_the_landing_force_and_reports_both_sides()
 
     const bool victory = result.state.planets[1].owner == 1;
     assert(result.state.planets[1].population > 0);
-    if (victory) assert(result.state.planets[1].productionQueue.empty());
+    if (victory) {
+        // No implicit radar or production programme after conquest.
+        assert(result.state.planets[1].radar == PlanetaryRadarLevel::None);
+        assert(result.state.planets[1].productionQueue.empty());
+    }
     else assert(result.state.planets[1].owner == 2);
 
     const auto attackerKind = victory

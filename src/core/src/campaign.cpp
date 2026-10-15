@@ -305,6 +305,8 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         planet.population = 0;
         planet.industry = 1;
         planet.minerals = {};
+        planet.radar = PlanetaryRadarLevel::None;
+        planet.homeworld = false;
     }
     std::vector<StarId> homes;
     for (std::size_t i = 0; i < empires.size(); ++i) {
@@ -375,6 +377,8 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         scout.telemetry.fuel = scout.fuel;
         scout.telemetry.warp = scout.warp;
         state.fleets.push_back(scout);
+        planet.radar = PlanetaryRadarLevel::Full;
+        planet.homeworld = true;
         state.orbitalStations.push_back({state.nextOrbitalStationId++, id, planet.id,
             empires[i].name + " Orbital Dock", OrbitalStationHullType::OrbitalDock,
             {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}});

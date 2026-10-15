@@ -111,10 +111,26 @@ const MoveFleetOrder* pendingMove(const PlayerOrders& pending, FleetId fleet)
     return nullptr;
 }
 
-std::optional<MoveFleetOrder> effectiveRoute(const GameState&, const PlayerOrders& pending, const Fleet& fleet)
+std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const PlayerOrders& pending, const Fleet& fleet)
 {
     if (const auto* move = pendingMove(pending, fleet.id)) return *move;
-    if (!fleet.destination) return std::nullopt;
+    if (!fleet.destination) {
+        // Confirmed fleet telemetry intentionally omits the remote command
+        // journal. A delayed Colonize order must still be visible in the
+        // route table while its packet is travelling to an already-arrived
+        // fleet; otherwise the last waypoint seems to disappear.
+        const auto actual = std::find_if(state.fleets.begin(), state.fleets.end(),
+            [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
+        if (actual != state.fleets.end()) {
+            for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
+                if (it->task || it->electronics || it->program.clearRoute) continue;
+                const auto& command = it->program;
+                return MoveFleetOrder{fleet.id, command.destination, command.warp,
+                    command.arrivalAction, command.queuedWaypoints, command.repeatOrders, command.targetFleet};
+            }
+        }
+        return std::nullopt;
+    }
 
     return MoveFleetOrder{
         fleet.id,
@@ -489,6 +505,12 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
                            .arg(task);
         if (route && routeIsClearIntent(*fleet, *route)) {
             summary += "<br><i>Pending: clear route and set No Task when the command arrives.</i>";
+        }
+        const auto age = authoritativeFleet ? fleet_telemetry_age(state_, *authoritativeFleet) : 0;
+        if (!route && age > 0) {
+            summary += QString("<br><i>No confirmed waypoint in telemetry (%1 year(s) old). "
+                "A late command or unreported onboard Colonize action may still exist; "
+                "an empty list is not confirmation that the order was cancelled.</i>").arg(age);
         }
         return summary;
     }

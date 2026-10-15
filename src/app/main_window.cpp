@@ -64,6 +64,8 @@ QString productionName(ProductionKind kind)
     case ProductionKind::OrbitalStation: return "Orbital Dock";
     case ProductionKind::Terraforming: return "Terraforming";
     case ProductionKind::ColonyDefense: return "Colony Defense";
+    case ProductionKind::LocalRadar: return "Local Planetary Radar";
+    case ProductionKind::PlanetaryRadar: return "Planetary Radar";
     }
     return "Production";
 }
@@ -90,6 +92,10 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = "Mine";
     } else if (item.kind == ProductionKind::ColonyDefense) {
         name = "Colony Defense";
+    } else if (item.kind == ProductionKind::LocalRadar) {
+        name = "Local Planetary Radar";
+    } else if (item.kind == ProductionKind::PlanetaryRadar) {
+        name = "Planetary Radar";
     } else if (item.kind == ProductionKind::Terraforming) {
         name = "Terraforming";
     } else if (item.kind == ProductionKind::OrbitalStation) {
@@ -635,10 +641,14 @@ void MainWindow::rebuildScene()
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
         for (const auto& planet : state_.planets) {
-            if (planet.owner != pendingOrders_.player) continue;
+            if (planet.owner != pendingOrders_.player
+                || planet.radar == PlanetaryRadarLevel::None) continue;
             if (const auto* sourceStar = find_star(state_, planet.star)) {
                 const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.colony==planet.id;});
-                addSensorRange(scene_, sourceStar->position, status==sensorKnowledge.end()?kColonySensorRange:status->activeRange,
+                const auto nominal = planetary_radar_range(planet.radar);
+                const auto actual = status == sensorKnowledge.end() ? nominal
+                    : nominal * (1 - status->interferencePercent / 100.0);
+                addSensorRange(scene_, sourceStar->position, actual,
                     QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
             }
         }
@@ -771,7 +781,7 @@ void MainWindow::rebuildScene()
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
                                .arg(colony_output(*planet))
                                .arg(productionSummary(state_, *planet))
-                               .arg(kColonySensorRange, 0, 'f', 0);
+                               .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
             }
         }
         marker->setToolTip(tooltip);
@@ -1057,56 +1067,50 @@ void MainWindow::updateControls()
             // Orders are intentions until End Turn. Present the predicted
             // cargo debit separately from the confirmed surface population,
             // because annual population growth may partly obscure the debit.
-            std::uint64_t orderedOut = 0;
-            std::uint64_t orderedIn = 0;
-            std::unordered_map<FleetId, std::uint64_t> plannedFleetLoads;
-            for (const auto& pending : pendingOrders_.orders) {
-                if (const auto* transfer = std::get_if<TransferCargoOrder>(&pending)) {
-                    if (transfer->source.planet == planet->id) orderedOut += transfer->colonists;
-                    if (transfer->destination.planet == planet->id) orderedIn += transfer->colonists;
-                    const auto updateLoad = [&](FleetId id, bool receiving) {
-                        if (!id) return;
-                        const auto found = std::find_if(state_.fleets.begin(), state_.fleets.end(),
-                            [id](const Fleet& candidate) { return candidate.id == id; });
-                        if (found == state_.fleets.end()) return;
-                        auto [item, inserted] = plannedFleetLoads.try_emplace(id, found->colonists);
-                        if (receiving) item->second += transfer->colonists;
-                        else item->second = item->second > transfer->colonists
-                            ? item->second - transfer->colonists : 0;
-                    };
-                    updateLoad(transfer->destination.fleet, true);
-                    updateLoad(transfer->source.fleet, false);
-                } else if (const auto* load = std::get_if<SetFleetColonistsOrder>(&pending);
-                    load && load->colony == planet->id) {
-                    const auto found = std::find_if(state_.fleets.begin(), state_.fleets.end(),
-                        [load](const Fleet& candidate) { return candidate.id == load->fleet; });
-                    if (found == state_.fleets.end()) continue;
-                    auto [item, inserted] = plannedFleetLoads.try_emplace(load->fleet, found->colonists);
-                    if (load->colonists > item->second) orderedOut += load->colonists - item->second;
-                    else orderedIn += item->second - load->colonists;
-                    item->second = load->colonists;
-                }
-            }
-            const auto afterOutgoing = orderedOut >= planet->population
-                ? std::uint64_t{0} : planet->population - orderedOut;
-            const auto afterCargo = orderedIn > std::numeric_limits<std::uint64_t>::max() - afterOutgoing
-                ? std::numeric_limits<std::uint64_t>::max() : afterOutgoing + orderedIn;
-            Planet projected = *planet;
-            projected.population = afterCargo;
-            const auto populationChange = projected_population_growth(state_, projected, state_.turn);
-            populationLine = QString("Population now: %1 / %2<br>")
+            const auto plannedCargo = projected_cargo_order_state(state_, pendingOrders_);
+            const auto predictedPlanet = std::find_if(plannedCargo.planets.begin(),
+                plannedCargo.planets.end(), [planet](const Planet& candidate) {
+                    return candidate.id == planet->id;
+                });
+            const auto afterCargo = predictedPlanet == plannedCargo.planets.end()
+                ? planet->population : predictedPlanet->population;
+            const auto orderedOut = afterCargo < planet->population ? planet->population - afterCargo : 0;
+            const auto orderedIn = afterCargo > planet->population ? afterCargo - planet->population : 0;
+            // One simple forecast: take the estimated annual growth rate
+            // under current conditions and apply that rate to the population
+            // after valid queued cargo orders. We deliberately do not simulate
+            // next year's arrivals, production, battles, or other events.
+            const auto currentGrowth = projected_population_growth(state_, *planet, state_.turn);
+            const double annualRate = planet->population != 0
+                ? static_cast<double>(currentGrowth) / static_cast<double>(planet->population)
+                : 0.0;
+            const auto estimatedChange = static_cast<std::int64_t>(std::llround(
+                annualRate * static_cast<double>(afterCargo)));
+            const auto approximatePopulation = estimatedChange >= 0
+                ? afterCargo + static_cast<std::uint64_t>(estimatedChange)
+                : afterCargo - std::min(afterCargo, static_cast<std::uint64_t>(-estimatedChange));
+            populationLine = QString("Radar: %1 (%2 ly, scanning + communications)<br>"
+                                     "Population confirmed now: %3 / %4<br>")
+                                 .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full"
+                                      : planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
+                                 .arg(planetary_radar_range(planet->radar), 0, 'f', 0)
                                  .arg(static_cast<qulonglong>(planet->population))
                                  .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)));
             if (orderedOut || orderedIn) {
                 populationLine += QString(
-                    "Queued cargo: -%1 / +%2 colonists; after valid orders: ~%3 (before growth)<br>")
+                    "Queued cargo: -%1 / +%2 colonists; population after validated orders: %3 (before growth)<br>")
                     .arg(static_cast<qulonglong>(orderedOut))
                     .arg(static_cast<qulonglong>(orderedIn))
                     .arg(static_cast<qulonglong>(afterCargo));
             }
-            populationLine += QString("Estimated growth after cargo: %1%2 next turn<br>")
-                .arg(populationChange > 0 ? "+" : "")
-                .arg(static_cast<qlonglong>(populationChange));
+            populationLine += QString(
+                "Current estimated annual growth: %1%2%<br>"
+                "Simple next-year estimate: ~%3 (%4%5 people; excludes future events)<br>")
+                .arg(annualRate >= 0.0 ? "+" : "")
+                .arg(annualRate * 100.0, 0, 'f', 2)
+                .arg(static_cast<qulonglong>(approximatePopulation))
+                .arg(estimatedChange >= 0 ? "+" : "")
+                .arg(static_cast<qlonglong>(estimatedChange));
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")

@@ -16,6 +16,59 @@ Fleet& scout(GameState& state)
     return state.fleets.front();
 }
 
+void colony_radar_bootstraps_detection_and_links()
+{
+    auto state = make_demo_game();
+    state.fleets.clear();
+    auto& outpost = state.planets[1];
+    outpost.owner = 1;
+    outpost.population = 100;
+    outpost.industry = 1;
+    outpost.radar = PlanetaryRadarLevel::None;
+    outpost.homeworld = false;
+    // A nearby colony needs no local scanner to receive instant orders from
+    // the homeworld scanner, but it must not extend that scanner's range.
+    outpost.productionQueue.clear();
+    state.stars[1].position = {100, 0};
+    assert(communication_delay_turns(state, 1, state.stars[1].position) == 0);
+    assert(outpost.productionQueue.empty());
+    state.stars[1].position = {175, 0};
+    assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
+    // An explicit build programme can still make an isolated colony connect.
+    outpost.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}};
+    state.players.front().technology.researchActive = true;
+    state.players.front().technology.researchAllocationPercent = 100;
+    assert(planetary_radar_range(outpost.radar) == 0);
+    state.stars[3].position = {200, 0}; // Vega was unscanned at start; now in outpost R30.
+    assert(survey_level(state, 1, state.stars[3].id) < SurveyLevel::SystemScan);
+    assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
+    auto first = TurnProcessor{}.process(state, {});
+    assert(first.planets[1].radar == PlanetaryRadarLevel::None);
+    const auto built = TurnProcessor{}.process(first, {});
+    assert(built.planets[1].radar == PlanetaryRadarLevel::Local);
+    assert(built.planets[1].productionQueue.empty());
+    assert(communication_delay_turns(built, 1, {175, 0}) == 0);
+    assert(planetary_radar_range(built.planets[1].radar) == 30.0);
+    auto scanned = TurnProcessor{}.process(built, {});
+    assert(survey_level(scanned, 1, scanned.stars[3].id) >= SurveyLevel::SystemScan);
+
+    auto isolated = built;
+    isolated.stars[1].position = {220, 0};
+    assert(communication_delay_turns(isolated, 1, {220, 0}) > 0);
+    isolated.planets[1].industry = 50;
+    isolated.planets[1].minerals = {20, 20, 20};
+    isolated.players.front().technology.researchAllocationPercent = 0; // Upgrade is ordinary paid production.
+    const auto upgraded = TurnProcessor{}.process(isolated,
+        {{1, {QueueProductionBatchOrder{2, ProductionKind::PlanetaryRadar, 1, ProductionAutomation::None}}}});
+    assert(upgraded.planets[1].radar == PlanetaryRadarLevel::Full);
+    assert(planetary_radar_range(upgraded.planets[1].radar) == 150.0);
+    assert(communication_delay_turns(upgraded, 1, {220, 0}) == 0);
+
+    auto noHome = built;
+    noHome.planets.front().radar = PlanetaryRadarLevel::None;
+    assert(communication_delay_turns(noHome, 1, {175, 0}) > 0);
+}
+
 void local_commands_remain_immediate()
 {
     auto state = generate_game(GalaxyConfig{});
@@ -132,16 +185,18 @@ void nearest_colony_scanner_field_is_used()
 {
     auto state = generate_game(GalaxyConfig{});
 
-    auto relayPlanet = state.planets.front();
-    relayPlanet.id = 999;
-    relayPlanet.star = state.stars[1].id;
+    // A local receiver is not a second artificial capital. Its field must
+    // overlap the actual homeworld network to provide an instant connection.
+    auto& relayPlanet = state.planets[1];
+    assert(relayPlanet.star == state.stars[1].id);
     relayPlanet.owner = 1;
     relayPlanet.population = 1000;
-    state.planets.push_back(relayPlanet);
-
-    const auto& relay = state.stars[1];
-    const Position nearRelay{relay.position.x + 10.0, relay.position.y};
-    assert(communication_delay_turns(state, 1, nearRelay) == 0);
+    relayPlanet.radar = PlanetaryRadarLevel::Local;
+    relayPlanet.homeworld = false;
+    state.stars[1].position = {175, 0};
+    assert(communication_delay_turns(state, 1, {185, 0}) == 0);
+    state.stars[1].position = {200, 0};
+    assert(communication_delay_turns(state, 1, {210, 0}) > 0);
 }
 
 void remote_command_arrives_after_signal_delay()
@@ -278,6 +333,7 @@ void stale_telemetry_predicts_without_revealing_route_change()
 
 int main()
 {
+    colony_radar_bootstraps_detection_and_links();
     local_commands_remain_immediate();
     homeworld_scanner_defines_the_initial_network_field();
     ordinary_scanners_automatically_form_a_relay_chain();

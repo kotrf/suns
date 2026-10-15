@@ -32,9 +32,14 @@ void ground_casualties_are_exact_and_relative_to_recipient()
     bool won = false, lost = false;
     for (std::uint64_t year = 1; year <= 100 && (!won || !lost); ++year) {
         auto s = arena(); s.turn = year;
-        s.stars = {{1,"Target",{0,0}}};
+        // A capital receiver near the battle delivers the attacker report
+        // immediately, even when the conquered world starts without a radar.
+        s.stars = {{1,"Target",{0,0}}, {2,"One home",{50,0}}};
         Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 1000;
-        s.planets = {p}; s.fleets[0].colonists = 1250;
+        p.radar = PlanetaryRadarLevel::Full; p.homeworld = true;
+        Planet home; home.id = 2; home.star = 2; home.owner = 1; home.population = 1000;
+        home.radar = PlanetaryRadarLevel::Full; home.homeworld = true;
+        s.planets = {p,home}; s.fleets[0].colonists = 1250;
         const auto r = TurnProcessor{}.process_with_events(s, {{1,{TransferCargoOrder{{0,1},{1,0},1250,{}}}}});
         const bool victory = r.state.planets[0].owner == 1;
         won |= victory; lost |= !victory;
@@ -56,9 +61,14 @@ void ground_casualties_are_exact_and_relative_to_recipient()
 
 void bombardments_sum_even_for_identical_fleets()
 {
-    auto s = arena({C::LadyFingerBomb}); s.stars = {{1,"Target",{0,0}}};
+    auto s = arena({C::LadyFingerBomb});
+    s.stars = {{1,"Target",{0,0}}, {2,"Defender home",{50,0}}};
     Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 100000; p.industry = 20; p.mines = 20;
-    s.planets = {p}; s.fleets[0].task = FleetTask::Bombardment;
+    // The target is deliberately unfortified. A separate nearby capital
+    // receiver delivers reports without absorbing any installation hits.
+    Planet home; home.id = 2; home.star = 2; home.owner = 2; home.population = 1000;
+    home.radar = PlanetaryRadarLevel::Full; home.homeworld = true;
+    s.planets = {p, home}; s.fleets[0].task = FleetTask::Bombardment;
     auto second = s.fleets[0]; second.id = 2; s.fleets.push_back(second); s.nextFleetId = 3;
     const auto r = TurnProcessor{}.process_with_events(s,{});
     const auto& a = totals(r.state,1,OperationalLossKind::Bombardment);

@@ -217,6 +217,47 @@ int main()
         200,
         {5.0, 4.0, 3.0},
     });
+    // Planned orders must be projected at the present turn boundary, not by
+    // running another year of mining, growth, movement or combat. Reopening
+    // twice gives the same manifest and never debits population twice.
+    const auto preview = suns::projected_cargo_order_state(transferState, surfaceTransfer);
+    const auto again = suns::projected_cargo_order_state(transferState, surfaceTransfer);
+    assert(preview.turn == transferState.turn);
+    assert(planet(preview, 1).population == planet(transferState, 1).population - 200);
+    assert(fleet(preview, 3).colonists == 200);
+    assert(planet(again, 1).population == planet(preview, 1).population);
+    assert(fleet(again, 3).colonists == fleet(preview, 3).colonists);
+    assert(planet(transferState, 1).population == 1'000'000);
+    // The same replay also preserves the native atomic validation: an
+    // impossible second load is ignored without partially moving minerals.
+    auto invalidPreview = surfaceTransfer;
+    invalidPreview.orders.emplace_back(suns::TransferCargoOrder{
+        {1, 0}, {0, 3}, 2'500'000, {100000, 0, 0}});
+    const auto afterInvalid = suns::projected_cargo_order_state(transferState, invalidPreview);
+    assert(planet(afterInvalid, 1).population == planet(preview, 1).population);
+    assert(fleet(afterInvalid, 3).colonists == fleet(preview, 3).colonists);
+    // Regression: a 25 kt hold carries exactly 2500 colonists. The complete
+    // planning-boundary projection is stable across repeated UI openings.
+    auto fullHold = transferState;
+    fullHold.shipDesigns.push_back({5, 1, "Five light transports",
+        suns::ShipHullType::LightTransport, {suns::ShipComponentType::FusionDrive}});
+    auto& fullShip = fullHold.fleets[1];
+    fullShip.design = 5;
+    fullShip.ships = {{5, 5}};
+    fullShip.minerals = {};
+    fullShip.colonists = 0;
+    assert(suns::fleet_cargo_capacity(fullHold, fullShip) == 25);
+    suns::PlayerOrders fullOrder{1, {suns::TransferCargoOrder{{1, 0}, {0, 3}, 2500, {}}}};
+    const auto fullPreview = suns::projected_cargo_order_state(fullHold, fullOrder);
+    assert(fleet(fullPreview, 3).colonists == 2500);
+    assert(suns::fleet_cargo_used(fullPreview, fleet(fullPreview, 3)) == 25);
+    assert(planet(fullPreview, 1).population == planet(fullHold, 1).population - 2500);
+    const auto fullAgain = suns::projected_cargo_order_state(fullHold, fullOrder);
+    assert(planet(fullAgain, 1).population == planet(fullPreview, 1).population);
+    fullOrder.orders.push_back(suns::TransferCargoOrder{{1, 0}, {0, 3}, 2500, {}});
+    const auto rejectedRepeat = suns::projected_cargo_order_state(fullHold, fullOrder);
+    assert(fleet(rejectedRepeat, 3).colonists == 2500);
+    assert(planet(rejectedRepeat, 1).population == planet(fullPreview, 1).population);
     const auto fromSurface = processor.process(transferState, {surfaceTransfer});
     auto sourceAfterTransfer = planet(transferState, 1);
     sourceAfterTransfer.population -= 200;

@@ -218,13 +218,25 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             const auto killed = std::uint64_t(std::min(double(population), std::floor(std::max(minimum, std::floor(population*(1-survival)))*(1-coverage))));
             installations=std::floor(installations*(1-coverage/2));
             planet.population -= killed;
-            auto removed = std::uint32_t(std::min({installations, double(planet.industry) + planet.mines + planet.defenses, double(std::numeric_limits<std::uint32_t>::max())}));
+            auto removed = std::uint32_t(std::min({installations,
+                double(planet.industry) + planet.mines + planet.defenses
+                    + (planet.radar != PlanetaryRadarLevel::None ? 1.0 : 0.0),
+                double(std::numeric_limits<std::uint32_t>::max())}));
+            // A scanner is physical infrastructure, not an immortal free
+            // sensing perk. Installation hits can knock out one radar tier.
+            const bool radarHit = removed > 0 && planet.radar != PlanetaryRadarLevel::None;
+            if (radarHit) {
+                planet.radar = planet.radar == PlanetaryRadarLevel::Full
+                    ? PlanetaryRadarLevel::Local : PlanetaryRadarLevel::None;
+                --removed;
+            }
             const auto defenses=std::min(std::uint32_t(planet.defenses), (removed+2)/3);
             planet.defenses-=defenses; removed-=defenses;
             auto factories = std::min(planet.industry, removed/2 + removed%2);
             const auto mines = std::min(planet.mines,removed-factories);
             factories += std::min(planet.industry-factories,removed-factories-mines);
-            removed = factories + mines + defenses; planet.industry -= factories; planet.mines -= mines;
+            removed = factories + mines + defenses + (radarHit ? 1U : 0U);
+            planet.industry -= factories; planet.mines -= mines;
             if (reverting > 0 && planet.naturalEnvironment) {
                 auto restore = [&](std::uint8_t& current, std::uint8_t natural) {
                     const int step = int(std::min(reverting, 100.0));
@@ -246,6 +258,8 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             if (!planet.population) {
                 queue_player_report(state, defender, PlayerReportKind::ColonyLost, star->position, turn, star->id, planet.id);
                 planet.owner = 0;
+                planet.radar = PlanetaryRadarLevel::None;
+                planet.homeworld = false;
                 planet.productionQueue.clear();
                 std::erase_if(state.orbitalStations, [&](const auto& s) { return s.planet == planet.id; });
             }
