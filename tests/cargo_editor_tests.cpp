@@ -12,6 +12,7 @@
 #include <QSpinBox>
 #include <QTimer>
 #include <cassert>
+#include <cmath>
 
 namespace suns {
 struct MainWindowTestAccess {
@@ -151,6 +152,22 @@ int main(int argc, char** argv)
     assert(transfer.colonists == 100 && transfer.minerals.ironium == 1);
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -100 / +0"));
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 999900"));
+    // The growth display is an explicit one-rate estimate, not a simulated
+    // End Turn. Its percentage is anchored to the *confirmed* population and
+    // its next-year estimate to the *after-cargo* population.
+    {
+        const auto& baseline = suns::MainWindowTestAccess::state(window);
+        const auto& planet = baseline.planets.front();
+        const auto growth = suns::projected_population_growth(baseline, planet, baseline.turn);
+        const double rate = static_cast<double>(growth) / planet.population;
+        const auto estimated = static_cast<std::int64_t>(std::llround(999900.0 * rate));
+        const auto nextPopulation = static_cast<std::uint64_t>(999900 + estimated);
+        const auto info = suns::MainWindowTestAccess::systemInfo(window);
+        assert(info.contains(QString("Current estimated annual growth: %1%2%")
+            .arg(rate >= 0.0 ? "+" : "").arg(rate * 100.0, 0, 'f', 2)));
+        assert(info.contains(QString("Simple next-year estimate: ~%1")
+            .arg(static_cast<qulonglong>(nextPopulation))));
+    }
 
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());

@@ -1076,9 +1076,19 @@ void MainWindow::updateControls()
                 ? planet->population : predictedPlanet->population;
             const auto orderedOut = afterCargo < planet->population ? planet->population - afterCargo : 0;
             const auto orderedIn = afterCargo > planet->population ? afterCargo - planet->population : 0;
-            Planet projected = *planet;
-            projected.population = afterCargo;
-            const auto populationChange = projected_population_growth(state_, projected, state_.turn);
+            // One simple forecast: take the estimated annual growth rate
+            // under current conditions and apply that rate to the population
+            // after valid queued cargo orders. We deliberately do not simulate
+            // next year's arrivals, production, battles, or other events.
+            const auto currentGrowth = projected_population_growth(state_, *planet, state_.turn);
+            const double annualRate = planet->population != 0
+                ? static_cast<double>(currentGrowth) / static_cast<double>(planet->population)
+                : 0.0;
+            const auto estimatedChange = static_cast<std::int64_t>(std::llround(
+                annualRate * static_cast<double>(afterCargo)));
+            const auto approximatePopulation = estimatedChange >= 0
+                ? afterCargo + static_cast<std::uint64_t>(estimatedChange)
+                : afterCargo - std::min(afterCargo, static_cast<std::uint64_t>(-estimatedChange));
             populationLine = QString("Radar: %1 (%2 ly, scanning + communications)<br>"
                                      "Population confirmed now: %3 / %4<br>")
                                  .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full"
@@ -1093,9 +1103,14 @@ void MainWindow::updateControls()
                     .arg(static_cast<qulonglong>(orderedIn))
                     .arg(static_cast<qulonglong>(afterCargo));
             }
-            populationLine += QString("Estimated growth after cargo: %1%2 next turn<br>")
-                .arg(populationChange > 0 ? "+" : "")
-                .arg(static_cast<qlonglong>(populationChange));
+            populationLine += QString(
+                "Current estimated annual growth: %1%2%<br>"
+                "Simple next-year estimate: ~%3 (%4%5 people; excludes future events)<br>")
+                .arg(annualRate >= 0.0 ? "+" : "")
+                .arg(annualRate * 100.0, 0, 'f', 2)
+                .arg(static_cast<qulonglong>(approximatePopulation))
+                .arg(estimatedChange >= 0 ? "+" : "")
+                .arg(static_cast<qlonglong>(estimatedChange));
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")
