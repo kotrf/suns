@@ -787,7 +787,7 @@ void population_migration_and_clear_orders()
     assert(!migrated.state.players[0].history[0].remoteExtractionRecorded);
     assert(migrated.state.players[0].history[0].fleetHistory.empty());
     assert(migrated.state.fleets[0].colonists == 30'000);
-    assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 3.0);
+    assert(colonist_cargo_mass(migrated.state.fleets[0].colonists) == 300.0);
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
     assert(migrated.state.fleets[0].arrivalAction->reservePopulation == 100'000);
     assert(std::get<SetFleetColonistsOrder>(migrated.pendingOrders.orders[0]).colonists == 40'000);

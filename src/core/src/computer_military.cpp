@@ -246,7 +246,7 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
                 if (owner && *owner != 0 && *owner != view.player) {
                     if (fleet.telemetry.task != FleetTask::Bombardment) {
                         if (state.turn < goal->reviewTurn) continue;
-                    } else if (state.turn - goal->issuedTurn < 8 || fleet.colonists < 1'000'000) continue;
+                    } else if (state.turn - goal->issuedTurn < 8 || fleet.colonists < 1'000) continue;
                     else {
                         (void)emit(fleet, goal->target, ComputerFleetGoalKind::Invade,
                             {FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::Colonists});
@@ -299,11 +299,11 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
                 plan.orders.orders.push_back(MergeFleetsOrder{group.id, ready[i].id});
             explain(reason, "Assemble task group at " + std::to_string(rally->star));
         } else {
-            if (fleet_cargo_capacity(state, group) >= 100 && fleet_radiation_safe(state, group)
-                && group.colonists < 1'000'000 && rally->population > 500'000) {
+            if (fleet_cargo_capacity(state, group) >= 10 && fleet_radiation_safe(state, group)
+                && group.colonists < 1'000 && rally->population > 500'000) {
                 const auto available = std::min(rally->population / 4, rally->population - 500'000);
                 const auto capacity = std::uint64_t(std::max(0.0, fleet_cargo_capacity(state, group) - mineral_cargo_mass(group.minerals)) * kColonistsPerCargoUnit);
-                const auto load = std::min({capacity, std::uint64_t{1'000'000}, group.colonists + available});
+                const auto load = std::min({capacity, std::uint64_t{1'000}, group.colonists + available});
                 if (load > group.colonists) {
                     plan.orders.orders.push_back(SetFleetColonistsOrder{rally->id, group.id, load});
                     group.colonists = load; explain(reason, "Load assault troops into fleet " + std::to_string(group.id));
@@ -312,7 +312,7 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
             const auto* targetStar = find_star(state, target->star);
             const auto required = 800 + 1.3 * contact_threat(view, targetStar->position, 60);
             const auto bomber = military_design(state, view.player, Role::Bomber);
-            if (strength(state, group) >= required && (!bomber || (fleet_bombs(state, group) && group.colonists >= 1'000'000))) {
+            if (strength(state, group) >= required && (!bomber || (fleet_bombs(state, group) && group.colonists >= 1'000))) {
                 explain(reason, "Attack rating " + std::to_string(std::uint64_t(strength(state, group)))
                     + "; assumed threat up to " + std::to_string(std::uint64_t(std::ceil(required))));
                 (void)emit(group, target->star, ComputerFleetGoalKind::Raid);

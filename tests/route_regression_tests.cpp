@@ -12,8 +12,8 @@ int main()
     assert(population_capacity(state.planets[0]) == 2'500'000);
     assert(colony_output(state.planets[0]) == 6);
     assert(projected_population_growth(state.planets[0]) == 60'000);
-    assert(std::abs(colonist_cargo_mass(1) - 0.0001) < 1e-12);
-    assert(colonist_cargo_mass(10'000) == 1.0);
+    assert(std::abs(colonist_cargo_mass(1) - 0.01) < 1e-12);
+    assert(colonist_cargo_mass(100) == 1.0);
 
     // Onboard arrival actions do not wait for an orbital report at HQ.
     state.stars[1].position = {500, 0};
@@ -29,20 +29,20 @@ int main()
     colonizer.destination = state.stars[1].position;
     colonizer.warp = 5;
     colonizer.fuel = 300;
-    colonizer.colonists = 10'000;
+    colonizer.colonists = 100;
     colonizer.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::Colonize};
     state.fleets.push_back(colonizer);
     assert(survey_level(state, 1, 2) < SurveyLevel::OrbitalSurvey);
     const auto founded = TurnProcessor{}.process(state, {});
     assert(founded.planets[1].owner == 1);
-    assert(founded.planets[1].population >= 10'000);
+    assert(founded.planets[1].population >= 100);
     assert(founded.fleets.empty());
 
     auto occupied = state;
     occupied.planets[1].owner = 2;
     assert(TurnProcessor{}.process(occupied, {}).planets[1].owner == 2);
     auto overloaded = state;
-    overloaded.fleets[0].colonists = 60'000;
+    overloaded.fleets[0].colonists = 600;
     assert(fleet_cargo_used(overloaded, overloaded.fleets[0]) > fleet_cargo_capacity(overloaded, overloaded.fleets[0]));
     assert(TurnProcessor{}.process(overloaded, {}).planets[1].owner == 0);
 

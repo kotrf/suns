@@ -33,7 +33,8 @@ inline constexpr std::uint8_t kMaxWarp = 10;
 inline constexpr std::uint8_t kScoutCruiseWarp = 8;
 inline constexpr std::uint8_t kColonyShipCruiseWarp = 7;
 // Cargo and ship mass are in kilotonnes (1 kt = 1,000,000 kg).
-inline constexpr double kColonistMassKg = 100.0;
+// Stars! reference ratio: 100 colonists occupy 1 kt of cargo (10,000 kg each).
+inline constexpr double kColonistMassKg = 10'000.0;
 inline constexpr double kColonistsPerCargoUnit = 1'000'000.0 / kColonistMassKg;
 inline constexpr std::uint64_t kInitialHomePopulation = 1'000'000;
 inline constexpr std::uint64_t kPopulationPerHabitability = 25'000;
