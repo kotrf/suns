@@ -31,6 +31,9 @@ void radar_builds_obey_cost_and_no_duplicate_rule()
     p.radar = PlanetaryRadarLevel::None;
     p.minerals = {20, 20, 20};
     const auto radar = QueueProductionBatchOrder{p.id, ProductionKind::PlanetaryRadar, 1};
+    assert(!production_batch_valid({p.id, ProductionKind::PlanetaryRadar, 2}));
+    assert(production_batch_valid({p.id, ProductionKind::PlanetaryRadar, 1,
+        ProductionAutomation::Annual}));
     const auto forecast = forecast_production_queue(state, p,
         {{ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)}});
     assert(forecast.size() == 1 && forecast[0].completionTurn);

@@ -17,6 +17,10 @@ bool production_batch_valid(const QueueProductionBatchOrder& order)
         && order.kind != ProductionKind::Terraforming && order.kind != ProductionKind::ColonyDefense
         && order.kind != ProductionKind::LocalRadar && order.kind != ProductionKind::PlanetaryRadar) return false;
     if (static_cast<unsigned>(order.automation) > static_cast<unsigned>(ProductionAutomation::MaxTerraform)) return false;
+    // A planet can install at most one receiver tier at once. Annual radar
+    // rules may appear in default templates; they retire when built.
+    if ((order.kind == ProductionKind::LocalRadar || order.kind == ProductionKind::PlanetaryRadar)
+        && order.quantity != 1) return false;
     if (order.kind == ProductionKind::Terraforming) return order.automation != ProductionAutomation::Annual;
     return order.automation == ProductionAutomation::None || order.automation == ProductionAutomation::Annual;
 }
