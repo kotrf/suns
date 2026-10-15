@@ -61,9 +61,14 @@ void ground_casualties_are_exact_and_relative_to_recipient()
 
 void bombardments_sum_even_for_identical_fleets()
 {
-    auto s = arena({C::LadyFingerBomb}); s.stars = {{1,"Target",{0,0}}};
+    auto s = arena({C::LadyFingerBomb});
+    s.stars = {{1,"Target",{0,0}}, {2,"Defender home",{50,0}}};
     Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 100000; p.industry = 20; p.mines = 20;
-    s.planets = {p}; s.fleets[0].task = FleetTask::Bombardment;
+    // The target is deliberately unfortified. A separate nearby capital
+    // receiver delivers reports without absorbing any installation hits.
+    Planet home; home.id = 2; home.star = 2; home.owner = 2; home.population = 1000;
+    home.radar = PlanetaryRadarLevel::Full; home.homeworld = true;
+    s.planets = {p, home}; s.fleets[0].task = FleetTask::Bombardment;
     auto second = s.fleets[0]; second.id = 2; s.fleets.push_back(second); s.nextFleetId = 3;
     const auto r = TurnProcessor{}.process_with_events(s,{});
     const auto& a = totals(r.state,1,OperationalLossKind::Bombardment);
