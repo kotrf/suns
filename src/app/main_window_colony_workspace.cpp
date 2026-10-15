@@ -229,6 +229,10 @@ void MainWindow::refreshColonyWorkspace()
                 survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan ? "~" : "").arg(*habitability) : "");
             if (own) {
                 lines << QString("Population: %1 / %2").arg(planet->population).arg(population_capacity(state_, *planet, state_.turn));
+                lines << QString("Planetary radar: %1 (%2 ly)")
+                    .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
+                         planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
+                    .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
                 lines << QString("Factories: %1 • Mines: %2").arg(planet->industry).arg(planet->mines);
                 lines << QString("Resources: %1 / year • Orbit: %2").arg(colony_output(*planet))
                     .arg(find_orbital_station_at_planet(state_, planet->id) ? "station" : "no station");

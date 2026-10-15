@@ -64,6 +64,8 @@ QString productionName(ProductionKind kind)
     case ProductionKind::OrbitalStation: return "Orbital Dock";
     case ProductionKind::Terraforming: return "Terraforming";
     case ProductionKind::ColonyDefense: return "Colony Defense";
+    case ProductionKind::LocalRadar: return "Local Planetary Radar";
+    case ProductionKind::PlanetaryRadar: return "Planetary Radar";
     }
     return "Production";
 }
@@ -90,6 +92,10 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = "Mine";
     } else if (item.kind == ProductionKind::ColonyDefense) {
         name = "Colony Defense";
+    } else if (item.kind == ProductionKind::LocalRadar) {
+        name = "Local Planetary Radar";
+    } else if (item.kind == ProductionKind::PlanetaryRadar) {
+        name = "Planetary Radar";
     } else if (item.kind == ProductionKind::Terraforming) {
         name = "Terraforming";
     } else if (item.kind == ProductionKind::OrbitalStation) {
@@ -771,7 +777,7 @@ void MainWindow::rebuildScene()
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
                                .arg(colony_output(*planet))
                                .arg(productionSummary(state_, *planet))
-                               .arg(kColonySensorRange, 0, 'f', 0);
+                               .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
             }
         }
         marker->setToolTip(tooltip);
@@ -1094,7 +1100,11 @@ void MainWindow::updateControls()
             Planet projected = *planet;
             projected.population = afterCargo;
             const auto populationChange = projected_population_growth(state_, projected, state_.turn);
-            populationLine = QString("Population now: %1 / %2<br>")
+            populationLine = QString("Radar: %1 (%2 ly, scanning + communications)<br>"
+                                     "Population now: %3 / %4<br>")
+                                 .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full"
+                                      : planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
+                                 .arg(planetary_radar_range(planet->radar), 0, 'f', 0)
                                  .arg(static_cast<qulonglong>(planet->population))
                                  .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)));
             if (orderedOut || orderedIn) {

@@ -43,6 +43,8 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::Factory: name = "Factory"; break;
     case ProductionKind::Mine: name = "Mine"; break;
     case ProductionKind::ColonyDefense: name = "Colony defense"; break;
+    case ProductionKind::LocalRadar: name = "Local planetary radar (30 ly)"; break;
+    case ProductionKind::PlanetaryRadar: name = "Planetary radar (150 ly)"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;
     case ProductionKind::Research: return "Legacy Research item";
     case ProductionKind::OrbitalStation: name = item.station
@@ -93,6 +95,8 @@ void MainWindow::installProductionQueue()
     addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
     addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
     addKind("Colony defenses", ProductionKind::ColonyDefense, ProductionAutomation::None);
+    addKind("Local radar (30 ly)", ProductionKind::LocalRadar, ProductionAutomation::None);
+    addKind("Planetary radar (150 ly)", ProductionKind::PlanetaryRadar, ProductionAutomation::None);
     addKind("Terraform", ProductionKind::Terraforming, ProductionAutomation::None);
     addKind("Auto factories ↻", ProductionKind::Factory, ProductionAutomation::Annual);
     addKind("Auto mines ↻", ProductionKind::Mine, ProductionAutomation::Annual);
