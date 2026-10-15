@@ -182,6 +182,9 @@ int main(int argc, char** argv)
     settle();
     assert(fleet->isVisible() && fuel->isVisible() && add->isVisible());
     assert(!window.findChild<QDockWidget*>("fleetRouteProgramDock"));
+    // The added waypoint remains selected across workspace changes. Leave
+    // leg editing before choosing a new destination on the map.
+    window.findChild<QPushButton*>("routeNewWaypointButton")->click();
     window.findChild<QPushButton*>("routePickTargetButton")->click();
     assert(window.routeProgramMapTargetPickActive());
     fleet->hide();
