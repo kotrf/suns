@@ -506,6 +506,12 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
         if (route && routeIsClearIntent(*fleet, *route)) {
             summary += "<br><i>Pending: clear route and set No Task when the command arrives.</i>";
         }
+        const auto age = authoritativeFleet ? fleet_telemetry_age(state_, *authoritativeFleet) : 0;
+        if (!route && age > 0) {
+            summary += QString("<br><i>No confirmed waypoint in telemetry (%1 year(s) old). "
+                "A late command or unreported onboard Colonize action may still exist; "
+                "an empty list is not confirmation that the order was cancelled.</i>").arg(age);
+        }
         return summary;
     }
 
