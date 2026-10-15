@@ -10,6 +10,7 @@
 #include <QEventLoop>
 #include <QGraphicsView>
 #include <QHeaderView>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QProgressBar>
@@ -155,6 +156,17 @@ int main(int argc, char** argv)
     settle();
     scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
     QApplication::processEvents();
+    // The old scroll content used to paint a white strip around the dark
+    // fleet group after it was reparented into the combined orders panel.
+    auto* detailsPanel = window.findChild<QWidget*>("fleetDetailsPanel");
+    assert(detailsPanel && detailsPanel->isVisible());
+    const auto border = detailsPanel->mapTo(scroll->viewport(),
+        QPoint(1, detailsPanel->height() - 2));
+    assert(scroll->viewport()->rect().contains(border));
+    const auto rendered = scroll->viewport()->grab().toImage();
+    const auto scale = rendered.devicePixelRatio();
+    assert(rendered.pixelColor(qRound(border.x() * scale), qRound(border.y() * scale)).lightness() < 128);
+    if (app.arguments().contains("--capture")) window.grab().save("/tmp/suns-fleet-details-1000.png");
     assert(fuel->isVisible() && cargo->isVisible() && source->isVisible());
     assert(fleet->rect().contains(QRect(fuel->mapTo(fleet, QPoint{}), fuel->size())));
     assert(header->rect().contains(QRect(source->mapTo(header, QPoint{}), source->size())));

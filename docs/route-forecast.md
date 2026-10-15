@@ -51,6 +51,12 @@ the edited program takes effect when its command arrives. **New waypoint**
 clears row selection and restores the separate addition draft; changing its
 Warp does not alter existing legs.
 
+Adding a waypoint with the button or a right-click on the map immediately
+selects the newly appended row and opens its Warp / On arrival editor. Choosing
+Colonize after that gesture updates that exact leg, without another row click
+or waiting for the periodic refresh. Use **New waypoint** to prepare a separate
+addition draft; a failed append does not select another leg.
+
 Fuel used is movement consumption on each leg, not cumulative consumption or
 the difference between tanks at two planning boundaries. Transient
 `TurnResult::movementFuel` accounting records engine consumption before arrival

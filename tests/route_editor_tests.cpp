@@ -288,6 +288,10 @@ int main(int argc, char* argv[])
         suns::MainWindowTestAccess::orders(window).orders.front());
     assert(comboAttack.fleet == fleets[0]);
     assert(comboAttack.targetFleet == 0);
+    auto* addedRouteTree = window.findChild<QTreeWidget*>("routeProgramQueue");
+    assert(addedRouteTree && addedRouteTree->selectedItems().size() == 1);
+    assert(addedRouteTree->currentItem() == addedRouteTree->topLevelItem(0));
+    assert(!add->isEnabled()); // Further control changes edit the added leg.
 
     // Reset before checking that editor drafts remain isolated per source.
     suns::MainWindowTestAccess::installTwoFleets(window);
@@ -309,6 +313,7 @@ int main(int argc, char* argv[])
     assert(secondOrder.fleet == fleets[1]);
     assert(secondOrder.arrivalAction.kind == suns::FleetArrivalActionKind::None);
 
+    window.findChild<QPushButton*>("routeNewWaypointButton")->click();
     action->setCurrentIndex(action->findData(unload));
     cargo->setCurrentIndex(cargo->findData(static_cast<int>(suns::FleetCargoKind::All)));
     warp->setValue(5);
@@ -345,6 +350,7 @@ int main(int argc, char* argv[])
     assert(std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.back())
         .queuedWaypoints.empty());
 
+    window.findChild<QPushButton*>("routeNewWaypointButton")->click();
     targetType->setCurrentIndex(targetType->findData(1));
     target->setCurrentIndex(target->findData(static_cast<quint32>(fleets[0])));
     window.selectFleetForRouteProgram(fleets[0]);
@@ -468,6 +474,25 @@ int main(int argc, char* argv[])
         suns::MainWindowTestAccess::orders(window).orders.front());
     assert(quickStarRoute.fleet == fleets[0]);
     assert(quickStarRoute.targetFleet == 0);
+
+    // A subsequent quick target selects the new last leg, rather than leaving
+    // the previous leg selected. Its Warp edit must affect only that new leg.
+    const auto firstQuickWarp = quickStarRoute.warp;
+    QGraphicsItem* nextStarTarget{};
+    for (auto* item : window.routeProgramScene()->items()) {
+        if (item->data(1).toInt() == 1 && item->data(0).toUInt() == 3) {
+            nextStarTarget = item;
+            break;
+        }
+    }
+    assert(suns::MainWindowTestAccess::rightClick(window, nextStarTarget));
+    assert(addedRouteTree->topLevelItemCount() == 2);
+    assert(addedRouteTree->currentItem() == addedRouteTree->topLevelItem(1));
+    warp->setValue(4);
+    const auto& quickProgram = std::get<suns::MoveFleetOrder>(
+        suns::MainWindowTestAccess::orders(window).orders.front());
+    assert(quickProgram.warp == firstQuickWarp);
+    assert(quickProgram.queuedWaypoints.front().warp == 4);
 
     // Editing committed navigation must not use the logistics preview (which
     // clears destinations). ETAs are cumulative from the current planning year.
@@ -627,20 +652,28 @@ int main(int argc, char* argv[])
         suns::MainWindowTestAccess::state(window).fleets.end(),
         [](const suns::Fleet& fleet) { return fleet.id == 1; }));
 
-    // Stars!-style order: set the waypoint first, then select Colonize on
-    // that already queued route row. The edited action must reach TurnProcessor.
+    // Actual playtest sequence: right-click a destination, then choose Colonize
+    // immediately, without selecting a row or waiting for the refresh timer.
+    // The newly appended row must be selected and the action must reach core.
     suns::MainWindowTestAccess::installArrivalActionFixture(window, false);
     window.findChild<QPushButton*>("routeNewWaypointButton")->click();
     action->setCurrentIndex(action->findData(none));
     warp->setValue(5);
-    add->click();
+    QGraphicsItem* colonizationTarget{};
+    for (auto* item : window.routeProgramScene()->items()) {
+        if (item->data(1).toInt() == 1 && item->data(0).toUInt() == 2) {
+            colonizationTarget = item;
+            break;
+        }
+    }
+    assert(suns::MainWindowTestAccess::rightClick(window, colonizationTarget));
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     assert(std::get<suns::MoveFleetOrder>(
         suns::MainWindowTestAccess::orders(window).orders.front()).arrivalAction.kind
         == suns::FleetArrivalActionKind::None);
-    assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
     assert(routeTree->topLevelItemCount() == 1);
-    routeTree->setCurrentItem(routeTree->topLevelItem(0));
+    assert(routeTree->selectedItems().size() == 1);
+    assert(routeTree->currentItem() == routeTree->topLevelItem(0));
     assert(action->isEnabled());
     QTimer::singleShot(0, [] {
         auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());

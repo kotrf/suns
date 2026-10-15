@@ -751,28 +751,6 @@ void attachRouteProgramDock(MainWindow& window)
             "Hover over the selector for the predicted turn and waypoint. The preview includes earlier route legs and refuelling, up to 96 years.");
     });
 
-    const auto appendCurrentTarget =
-        [&window, sourceFleetCombo, warpSelector, actionCombo, cargoCombo,
-            reserveSpin, targetTypeCombo, targetFleetCombo] {
-            window.cancelRouteProgramMapTargetPick();
-            const auto source = static_cast<FleetId>(sourceFleetCombo->currentData().toUInt());
-            if (source == 0 || source != window.selectedFleetForRouteProgram()) return;
-            const auto warp = static_cast<std::uint8_t>(warpSelector->value());
-            const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin);
-            if (targetTypeCombo->currentData().toInt() != 0) {
-                window.appendFleetTargetWaypoint(
-                    static_cast<FleetId>(targetFleetCombo->currentData().toUInt()), warp, action);
-            } else {
-                window.appendSelectedStarWaypoint(warp, action);
-            }
-        };
-    QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
-    QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
-        [appendCurrentTarget, newWaypointButton](int, std::uint32_t) {
-            newWaypointButton->click();
-            appendCurrentTarget();
-        });
-
     const auto selectedRouteIndex = [&window, routeTree]() -> std::optional<std::size_t> {
         if (routeTree->property("fleetId").toUInt() != window.selectedFleetForRouteProgram()) {
             return std::nullopt;
@@ -890,6 +868,34 @@ void attachRouteProgramDock(MainWindow& window)
                 window.setSelectedFleetRouteProgramLegWarp(*row, static_cast<std::uint8_t>(warp));
         });
     refreshRouteTable();
+    const auto appendCurrentTarget =
+        [=, &window] {
+            window.cancelRouteProgramMapTargetPick();
+            const auto source = static_cast<FleetId>(sourceFleetCombo->currentData().toUInt());
+            if (source == 0 || source != window.selectedFleetForRouteProgram()) return;
+            const auto warp = static_cast<std::uint8_t>(warpSelector->value());
+            const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin);
+            const bool appended = targetTypeCombo->currentData().toInt() != 0
+                ? window.appendFleetTargetWaypoint(
+                    static_cast<FleetId>(targetFleetCombo->currentData().toUInt()), warp, action)
+                : window.appendSelectedStarWaypoint(warp, action);
+            if (!appended) return;
+
+            // Edits immediately after adding a destination belong to that
+            // leg, including a quick right-click on the map. Do not leave
+            // Colonize/Warp editing an unsent draft until the refresh timer.
+            refreshRouteTable();
+            auto* added = routeTree->topLevelItem(routeTree->topLevelItemCount() - 1);
+            if (!added) return;
+            routeTree->setCurrentItem(added);
+            routeTree->scrollToItem(added);
+        };
+    QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
+    QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
+        [appendCurrentTarget, newWaypointButton](int, std::uint32_t) {
+            newWaypointButton->click();
+            appendCurrentTarget();
+        });
     QObject::connect(moveUpButton, &QPushButton::clicked, panel, [&window, routeTree, selectedRouteIndex] {
         if (const auto row = selectedRouteIndex(); row && window.moveSelectedFleetRouteProgramLeg(*row, -1)) {
             routeTree->setCurrentItem(routeTree->topLevelItem(static_cast<int>(*row) - 1));
