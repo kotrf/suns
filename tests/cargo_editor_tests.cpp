@@ -38,6 +38,20 @@ struct MainWindowTestAccess {
         w.selection_.fleet = 1;
         w.rebuildScene();
     }
+    static void installFullTransport(MainWindow& w)
+    {
+        install(w);
+        w.state_.shipDesigns.push_back({3, 1, "Five light transports",
+            ShipHullType::LightTransport, {ShipComponentType::FusionDrive}});
+        auto& fleet = w.state_.fleets.front();
+        fleet.design = 3;
+        fleet.ships = {{3, 5}};
+        fleet.minerals = {};
+        fleet.colonists = 0;
+        w.state_.fleets.resize(1);
+        assert(fleet_cargo_capacity(w.state_, fleet) == 25);
+        w.rebuildScene();
+    }
     static void installEnemyColony(MainWindow& w)
     {
         install(w);
@@ -169,6 +183,40 @@ int main(int argc, char** argv)
     const auto& resolved = suns::MainWindowTestAccess::state(window);
     assert(resolved.planets.front().population == expected);
     assert(resolved.fleets.front().colonists == 200);
+
+    // Full-hold scenario: exactly 2500 colonists must remain visibly aboard
+    // when the transfer dialog opens for the second time, without growing
+    // planet population or queuing an accidental duplicate.
+    suns::MainWindowTestAccess::installFullTransport(window);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* transfer = dialog->findChild<QSlider*>("cargoColonistSlider");
+        auto* destination = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        auto* buttons = dialog->findChild<QDialogButtonBox*>();
+        assert(transfer && destination && buttons);
+        assert(transfer->maximum() == 2500 && destination->value() == 0);
+        transfer->setValue(2500);
+        assert(destination->value() == 2500 && destination->maximum() == 2500);
+        buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    window.openCargoManifestDialog();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -2500 / +0"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~997500"));
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        const auto* destination = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        const auto* sourceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
+        const auto* destinationAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
+        assert(destination && destination->value() == 2500 && destination->maximum() == 2500);
+        assert(sourceAfter && sourceAfter->text().contains("997500"));
+        assert(destinationAfter && destinationAfter->text().contains("colonists 2500"));
+        dialog->reject();
+    });
+    window.openCargoManifestDialog();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
 
     suns::MainWindowTestAccess::installEnemyColony(window);
     QTimer::singleShot(0, [&] {
