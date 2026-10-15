@@ -245,15 +245,21 @@ void MainWindow::openCargoManifestDialog()
     }
     destinationLayout->addLayout(receivingGrid);
 
+    auto* sourceBefore = new QLabel(&dialog);
+    auto* destinationBefore = new QLabel(&dialog);
     auto* sourceAfter = new QLabel(&dialog);
     auto* destinationAfter = new QLabel(&dialog);
     auto* capacitySummary = new QLabel(&dialog);
     auto* validation = new QLabel(&dialog);
-    for (auto* label : {sourceAfter, destinationAfter, capacitySummary, validation}) label->setWordWrap(true);
+    for (auto* label : {sourceBefore, destinationBefore, sourceAfter, destinationAfter, capacitySummary, validation}) label->setWordWrap(true);
+    sourceBefore->setObjectName("cargoSourceBeforeLabel");
+    destinationBefore->setObjectName("cargoDestinationBeforeLabel");
     sourceAfter->setObjectName("cargoSourceAfterLabel");
     destinationAfter->setObjectName("cargoDestinationAfterLabel");
     capacitySummary->setObjectName("cargoCapacityLabel");
+    sourceLayout->addWidget(sourceBefore);
     sourceLayout->addWidget(sourceAfter);
+    destinationLayout->addWidget(destinationBefore);
     destinationLayout->addWidget(destinationAfter);
     destinationLayout->addWidget(capacitySummary);
     layout->addWidget(validation);
@@ -376,7 +382,11 @@ void MainWindow::openCargoManifestDialog()
             destinationCurrentMinerals.germanium + minerals.germanium,
         };
 
-        sourceAfter->setText(QString("<b>Source after:</b> %1 — %2")
+        sourceBefore->setText(QString("<b>Current source (including queued orders):</b> %1")
+            .arg(cargoValues(sourceCurrentColonists, sourceCurrentMinerals)));
+        destinationBefore->setText(QString("<b>Current destination (including queued orders):</b> %1")
+            .arg(cargoValues(destinationCurrentColonists, destinationCurrentMinerals)));
+        sourceAfter->setText(QString("<b>Source after this order:</b> %1 — %2")
             .arg(source.name)
             .arg(cargoValues(sourceCurrentColonists - colonists, sourceRemainder)));
         if (invasion) {
@@ -389,7 +399,7 @@ void MainWindow::openCargoManifestDialog()
                 .arg(static_cast<qulonglong>(destinationCurrentColonists))
                 .arg(chance, 0, 'f', 1));
         } else {
-            destinationAfter->setText(QString("<b>Destination after:</b> %1 — %2")
+            destinationAfter->setText(QString("<b>Destination after this order:</b> %1 — %2")
                 .arg(destination.name)
                 .arg(cargoValues(destinationCurrentColonists + colonists, destinationResult)));
         }

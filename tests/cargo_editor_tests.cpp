@@ -150,7 +150,7 @@ int main(int argc, char** argv)
     assert(transfer.source.planet == 1 && transfer.destination.fleet == 1);
     assert(transfer.colonists == 100 && transfer.minerals.ironium == 1);
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -100 / +0"));
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~999900"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 999900"));
 
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -203,7 +203,7 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -2500 / +0"));
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("after valid orders: ~997500"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 997500"));
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
         assert(dialog);

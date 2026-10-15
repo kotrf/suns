@@ -1080,7 +1080,7 @@ void MainWindow::updateControls()
             projected.population = afterCargo;
             const auto populationChange = projected_population_growth(state_, projected, state_.turn);
             populationLine = QString("Radar: %1 (%2 ly, scanning + communications)<br>"
-                                     "Population now: %3 / %4<br>")
+                                     "Population confirmed now: %3 / %4<br>")
                                  .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full"
                                       : planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
                                  .arg(planetary_radar_range(planet->radar), 0, 'f', 0)
@@ -1088,7 +1088,7 @@ void MainWindow::updateControls()
                                  .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)));
             if (orderedOut || orderedIn) {
                 populationLine += QString(
-                    "Queued cargo: -%1 / +%2 colonists; after valid orders: ~%3 (before growth)<br>")
+                    "Queued cargo: -%1 / +%2 colonists; population after validated orders: %3 (before growth)<br>")
                     .arg(static_cast<qulonglong>(orderedOut))
                     .arg(static_cast<qulonglong>(orderedIn))
                     .arg(static_cast<qulonglong>(afterCargo));
