@@ -96,7 +96,11 @@ wake-up. Reports collected while silent wait for an allowed transmission.
 The same observation year is used for active scanning, relay membership,
 telemetry, jamming, survey/field/anonymous-signal reports and battle packets.
 Burst windows do not silently turn into permanent Standard mode. The owner's
-route/position continues to use confirmed telemetry and its known onboard plan.
+route continues to use confirmed telemetry and its known onboard plan. Position
+can also come from a newer received friendly radar measurement: silence stops
+the target's transmissions, not its reflected hull signature. Friendly radar
+reports have their own observation date, delivery delay and uncertainty; they
+never refresh the target's onboard telemetry or command link.
 
 ## Persistence and current limits
 

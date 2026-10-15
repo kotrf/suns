@@ -86,11 +86,16 @@ const StarSystem* MainWindow::selectedFleetCargoStar(QString* unavailableReason)
     const auto* fleet = selectedFleet();
     if (!fleet) return unavailable("Select a friendly fleet to transfer cargo.");
     const auto age = fleet_telemetry_age(state_, *fleet);
-    // A remembered orbit is not evidence of a current docking. Never inspect
-    // remote truth to choose a cargo system or reveal its surface stock.
-    if (age > 0) return unavailable(QString(
-        "Cargo transfer needs a confirmed current orbit. Last telemetry is %1 turn(s) old; "
-        "the displayed position is an estimate.").arg(static_cast<qulonglong>(age)));
+    // Radar can locate a silent hull without receiving its current manifest.
+    // Never inspect remote truth to choose or populate a cargo endpoint.
+    if (age > 0) {
+        if (fleet_radar_position(state_, *fleet)) return unavailable(QString(
+            "Radar locates this fleet, but cargo transfer needs current onboard telemetry and a live link. "
+            "Last telemetry is %1 turn(s) old.").arg(static_cast<qulonglong>(age)));
+        return unavailable(QString(
+            "Cargo transfer needs a confirmed current orbit. Last telemetry is %1 turn(s) old; "
+            "the displayed position is an estimate.").arg(static_cast<qulonglong>(age)));
+    }
     const bool currentFleet = std::any_of(state_.fleets.begin(), state_.fleets.end(),
         [fleet](const Fleet& candidate) { return &candidate == fleet; });
     if (!currentFleet || !fleet_has_instant_link(state_, *fleet))

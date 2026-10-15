@@ -1013,6 +1013,9 @@ struct Player {
     std::vector<EnemyContact> observedEnemyFleets;
     std::vector<ReconContact> enemyContacts;
     std::vector<ReconContact> pendingEnemyContacts;
+    // Independent hull measurements of owned fleets; never refresh onboard
+    // telemetry or imply that the target's radio is accepting commands.
+    std::vector<ReconContact> friendlyFleetContacts, pendingFriendlyFleetContacts;
     std::vector<SensorStatus> sensorStatus, pendingSensorStatus, observedSensorStatus;
     RaceProfile race;
     TechnologyState technology;

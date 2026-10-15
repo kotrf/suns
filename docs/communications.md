@@ -80,7 +80,7 @@ The eventual map presentation should therefore visually distinguish a confirmed 
 
 Route commands and fleet telemetry use the fleet communication packet model. Progressive ordinary-contact/penetrating/orbital/geological surveys and operational messages use the separate player-knowledge layer: a physical observation or fleet result creates a report, and player-visible knowledge changes only when that report reaches the empire. Higher survey levels can remain in flight while an earlier system contact or rough estimate is already usable. Arrival, route-completion and fuel-stall messages likewise cannot reveal remote truth before telemetry. Reports are never smuggled through fleet telemetry.
 
-The galaxy map (fleet marker, sensor circle and route overlays), fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: confirmed telemetry plus deterministic prediction rather than authoritative coordinates/cargo/fuel. In-flight commands and telemetry are persisted in the current save format.
+The galaxy map (fleet marker, sensor circle and route overlays), fleet dashboard, gauges and Route Program consume the owner player-view for remote fleets: received radar positions or confirmed telemetry plus deterministic prediction. Hidden physical coordinates/cargo/fuel are never a display source. In-flight commands, telemetry and radar reports are persisted in the current save format.
 
 [Space-battle results](space-combat.md) also use delayed player reports. Packets
 are dispatched through the pre-casualty network. A destroyed remote fleet's last
@@ -90,12 +90,29 @@ are already available in Turn Messages.
 
 ## Fleet location freshness
 
-Fleet selector locations derived from old telemetry are explicitly marked
-**Estimated**, with the report age. A last report placing a ship at Sol is not
-confirmation that it is still there. The Comms panel marks that position
-unconfirmed; latency calculated at the plotted position is only an estimate.
-Cargo availability uses the same freshness rule and never resolves a stale
-marker against hidden physical coordinates to open a remote manifest.
+Friendly planetary radars and other scanner fleets detect owned hulls by the
+same range, cloaking, interference and active/passive rules as opposing hulls.
+The target does not need to transmit. A fleet cannot provide an independent
+radar report about itself. Reports travel from the observing colony or fleet;
+an isolated observer's transmission schedule and propagation delay still apply.
+
+A received radar position newer than onboard telemetry takes precedence for
+the map and fleet selector. It is labelled **Radar** with its own age and
+uncertainty. This updates position only, without refreshing cargo, fuel, mission,
+emissions or the command link. Outside detection range, that last measurement
+ages; it never follows the hidden physical fleet. Newer onboard telemetry
+supersedes older radar evidence. Player turn exports retain received evidence
+and strip radar reports still in flight.
+
+Locations derived only from old telemetry are marked **Estimated**. The Comms
+panel distinguishes the position source from telemetry age. Cargo still needs
+current onboard telemetry and a live link; a radar hull detection cannot supply
+a current manifest. Its disabled control explains this distinction.
+
+Idle changes a stationary mission only. Emissions are a separate order: choose
+the mode and press Set, then End Turn. Radio silence admits commands at the next
+scheduled window or finite wake-up. The mission panel shows the last reported
+emission mode separately from draft selections and queued emission orders.
 
 ## Future extensions
 

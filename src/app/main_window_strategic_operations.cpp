@@ -53,8 +53,8 @@ void MainWindow::installStrategicOperations()
     deception->setToolTip("Requires a jammer and Standard mode. Creates an ambiguous false signal area. Tachyon receivers can reject it; broadcasting may also expose your real emission area.");
     auto* summary = new QLabel(group); summary->setObjectName("strategicMissionSummary");
     summary->setWordWrap(true); summary->setTextFormat(Qt::PlainText); body->addWidget(summary);
-    task->setToolTip("Stationary mission. Bombing requires bombs and an enemy colony in orbit. Mine laying requires a mine layer; sweeping uses beams. Field research needs a scanner; salvage also needs a cargo hold. Travel replaces the mission.");
-    mode->setToolTip("Standard: active scans and jamming. Passive: listen, transmit every third year. Radio silence: listen only until automatic wake-up. Cloaks reduce hull detection; active emissions may still be intercepted.");
+    task->setToolTip("Stationary mission. Idle stops the mission; it does not change emissions or cancel radio silence. Bombing requires bombs and an enemy colony in orbit. Mine laying requires a mine layer; sweeping uses beams. Field research needs a scanner; salvage also needs a cargo hold. Travel replaces the mission.");
+    mode->setToolTip("Choose a mode, then press Set to queue an emission order. Standard: active scans and jamming. Passive: listen, transmit every third year. Radio silence: listen only until automatic wake-up. Silent hulls can still be detected by other radars. Cloaks and interference reduce detection range.");
     layout->insertWidget(1,group);
     connect(assign,&QPushButton::clicked,this,[this,task] {
         const auto* fleet = selectedFleet(); if (!fleet || fleet->owner != pendingOrders_.player) return;
@@ -73,7 +73,8 @@ void MainWindow::installStrategicOperations()
         appendPendingOrder(SetFleetElectronicsOrder{fleet->id,e},QString("%1: %2").arg(QString::fromStdString(fleet->name),mode->currentText()));
     });
     auto selected = std::make_shared<FleetId>(0);
-    auto refresh = [this,task,assign,mode,years,setMode,summary,selected,deception,interval,scan,arrival] {
+    auto selectedTurn = std::make_shared<std::uint64_t>(0);
+    auto refresh = [this,task,assign,mode,years,setMode,summary,selected,selectedTurn,deception,interval,scan,arrival] {
         if (shuttingDown_) return;
         const auto* fleet = selectedFleet();
         const bool owned = fleet && fleet->owner == pendingOrders_.player;
@@ -88,8 +89,9 @@ void MainWindow::installStrategicOperations()
         for (const auto& stack : fleet_ship_stacks(known)) if (const auto* design = find_ship_design(state_,stack.design))
             for (auto component : design->components) jammer |= component_spec(component).jammingPercent > 0;
         deception->setEnabled(jammer && mode->currentIndex() == 0);
-        if (*selected != fleet->id) {
+        if (*selected != fleet->id || *selectedTurn != state_.turn) {
             *selected = fleet->id;
+            *selectedTurn = state_.turn;
             task->setCurrentIndex(task->findData(int(known.task))); mode->setCurrentIndex(int(known.electronics.mode));
             deception->setChecked(known.electronics.deception);
             interval->setValue(known.electronics.burstInterval); scan->setChecked(known.electronics.activeBurst);
@@ -99,14 +101,24 @@ void MainWindow::installStrategicOperations()
         const bool available = requested == FleetTask::RemoteMining ? fleet_can_remote_mine(state_, known)
             : strategic_task_available(state_,known,requested);
         assign->setEnabled(available);
-        QString text = QString("Mission: %1 • Cloak %2% • %3")
-            .arg(QString::fromStdString(fleet_task_name(known.task)))
+        const auto emissionName=[](EmissionMode m) { return m==EmissionMode::RadioSilence ? "Radio silence" : m==EmissionMode::Passive ? "Passive" : "Standard"; };
+        QString text = QString("Last onboard report, year %1: Mission: %2 • Emissions: %3 • Cloak %4% • %5")
+            .arg(qulonglong(confirmed_fleet_telemetry(state_,*fleet).observedTurn))
+            .arg(QString::fromStdString(fleet_task_name(known.task)), emissionName(known.electronics.mode))
             .arg(fleet_cloak_fraction(state_,known)*100,0,'f',0)
             .arg(fleet_active_sensors(known,state_.turn) ? "Active scan window" : "Passive listening");
         if (known.electronics.resumeTurn) text += QString(" • wake year %1").arg(qulonglong(known.electronics.resumeTurn));
         if(known.electronics.burstInterval) text+=QString(" • window every %1 yr, first %2%3").arg(known.electronics.burstInterval)
             .arg(qulonglong(known.electronics.firstBurstTurn)).arg(known.electronics.activeBurst?" (active scan)":" (comms only)");
         if(known.electronics.wakeOnArrival) text+=" • wake on arrival";
+        const SetFleetElectronicsOrder* pendingEmission=nullptr;
+        for(const auto& order:pendingOrders_.orders)
+            if(const auto* e=std::get_if<SetFleetElectronicsOrder>(&order); e && e->fleet==fleet->id) pendingEmission=e;
+        if(pendingEmission) text+=QString("\nQueued emission order: %1. Applies after End Turn and command delivery.")
+            .arg(emissionName(pendingEmission->program.mode));
+        else if(mode->currentIndex()!=int(known.electronics.mode))
+            text+="\nEmission selection is a draft. Press Set to queue it.";
+        text+="\nIdle changes only the mission. Emission changes use Set; a silent radio waits for its next communication window.";
         const auto statuses=known_sensor_status(state_,pendingOrders_.player);
         const auto status=std::find_if(statuses.begin(),statuses.end(),[&](const auto& s){return s.fleet==known.id;});
         if(status!=statuses.end()) text+=QString("\nReceived sensor status, year %1: interference %2%; active %3 / passive baseline %4 / emission reception %5 ly.")
@@ -127,6 +139,7 @@ void MainWindow::installStrategicOperations()
     connect(mode,&QComboBox::currentIndexChanged,this,[timer] { timer->start(0); });
     connect(interval,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
     connect(years,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
+    connect(this,&MainWindow::routeProgramContextChanged,this,[timer](bool){timer->start(0);});
     refresh();
 }
 

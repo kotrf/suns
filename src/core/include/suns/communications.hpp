@@ -16,6 +16,9 @@ namespace suns {
 
 [[nodiscard]] bool fleet_has_instant_link(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint64_t fleet_telemetry_age(const GameState& state, const Fleet& fleet);
+[[nodiscard]] std::uint64_t fleet_position_age(const GameState& state, const Fleet& fleet);
+// Only received radar evidence newer than the fleet's own telemetry.
+[[nodiscard]] std::optional<ReconContact> fleet_radar_position(const GameState&, const Fleet&);
 [[nodiscard]] FleetTelemetry confirmed_fleet_telemetry(const GameState& state, const Fleet& fleet);
 [[nodiscard]] Position projected_fleet_position(const GameState& state, const Fleet& fleet);
 [[nodiscard]] Fleet fleet_player_view(const GameState& state, const Fleet& fleet);

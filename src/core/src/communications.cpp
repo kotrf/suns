@@ -464,8 +464,28 @@ std::uint64_t fleet_telemetry_age(const GameState& state, const Fleet& fleet)
 
 Position projected_fleet_position(const GameState& state, const Fleet& fleet)
 {
+    if (const auto contact = fleet_radar_position(state, fleet)) return contact->position;
     const auto telemetry = confirmed_fleet_telemetry(state, fleet);
     return project_from_telemetry(telemetry, fleet_telemetry_age(state, fleet));
+}
+
+std::optional<ReconContact> fleet_radar_position(const GameState& state, const Fleet& fleet)
+{
+    const auto* player = find_player(state, fleet.owner);
+    if (!player) return {};
+    const auto telemetry = confirmed_fleet_telemetry(state, fleet);
+    for (const auto& contact : player->friendlyFleetContacts)
+        if (contact.fleet == fleet.id && !contact.lost && contact.deliveryTurn <= state.turn
+            && contact.lastSeenTurn <= state.turn && contact.lastSeenTurn > telemetry.observedTurn)
+            return contact;
+    return {};
+}
+
+std::uint64_t fleet_position_age(const GameState& state, const Fleet& fleet)
+{
+    const auto contact = fleet_radar_position(state, fleet);
+    const auto observed = contact ? contact->lastSeenTurn : confirmed_fleet_telemetry(state, fleet).observedTurn;
+    return state.turn > observed ? state.turn - observed : 0;
 }
 
 std::vector<Fleet> missing_fleet_contacts(const GameState& state, PlayerId player)
@@ -488,7 +508,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     }
     const auto telemetry = confirmed_fleet_telemetry(state, fleet);
     Fleet view = fleet;
-    view.position = project_from_telemetry(telemetry, fleet_telemetry_age(state, fleet));
+    view.position = projected_fleet_position(state, fleet);
     view.destination = telemetry.destination;
     view.warp = telemetry.warp;
     view.fuel = telemetry.fuel;

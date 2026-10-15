@@ -53,7 +53,7 @@ std::optional<ReconContact> observe(const GameState& s,PlayerId owner,const Flee
     std::uint64_t turn,bool tracked,ContactQuality held=ContactQuality::Probable)
 {
     // A player export's anonymous fleet placeholders are evidence, never truth to rescan.
-    if(target.owner==owner || target.owner==0 || (!target.design && target.ships.empty())) return {};
+    if(target.id==receiver.fleet || target.owner==0 || (!target.design && target.ships.empty())) return {};
     const double range=fleet_detection_range(s,target,receiver.range,receiver.tachyon,receiver.passive);
     const double distance=distance_between(receiver.position,target.position);
     if(range<=0 || distance>range*(tracked?1.10:1.0)+1e-6) return {};
@@ -137,6 +137,7 @@ std::vector<ReconContact> known_enemy_contacts(const GameState& s,PlayerId owner
     // Connected measurements are available immediately, including the first planning boundary.
     const auto sensors=receivers(s,owner,s.turn);
     for(const auto& target:s.fleets) for(const auto& receiver:sensors) {
+        if(target.owner==owner) continue;
         if(!live_receiver_allowed(s,owner,receiver)) continue;
         const auto prior=std::find_if(player->observedEnemyFleets.begin(),player->observedEnemyFleets.end(),[&](const auto& x){return x.fleet==target.id && x.reportingFleet==receiver.fleet && x.reportingColony==receiver.colony;});
         auto c=observe(s,owner,target,receiver,s.turn,prior!=player->observedEnemyFleets.end(),prior!=player->observedEnemyFleets.end()?prior->observation.quality:ContactQuality::Probable);
@@ -199,6 +200,14 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
                         <std::tuple{best->deliveryTurn,-int(best->quality),best->uncertainty,bool(best->sourceFleet),best->sourceColony,best->sourceFleet}) best=*c;
             }
             if(!best) continue;
+            if(target.owner==player.id) {
+                auto& pending=player.pendingFriendlyFleetContacts;
+                auto duplicate=std::find_if(pending.begin(),pending.end(),[&](const auto& c){return c.fleet==target.id && c.observedTurn==turn;});
+                if(duplicate==pending.end()) pending.push_back(*best);
+                else if(best->deliveryTurn<duplicate->deliveryTurn
+                    || (best->deliveryTurn==duplicate->deliveryTurn && newer(*best,*duplicate))) *duplicate=*best;
+                continue;
+            }
             const auto event=previous==player.observedEnemyFleets.end()?std::optional{PlayerReportKind::EnemyFleetDetected}
                 : previous->observation.quality!=best->quality || previous->observation.jammed!=best->jammed
                     ?std::optional{PlayerReportKind::EnemyFleetReclassified}:std::nullopt;
@@ -234,6 +243,15 @@ void deliver_reconnaissance(GameState& s)
         }
         std::erase_if(player.pendingEnemyContacts,[&](const auto& c){return c.deliveryTurn<=s.turn;});
         std::sort(player.enemyContacts.begin(),player.enemyContacts.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
+        auto& pending=player.pendingFriendlyFleetContacts;
+        std::sort(pending.begin(),pending.end(),[](const auto& a,const auto& b){return std::tuple{a.deliveryTurn,a.observedTurn,a.fleet}<std::tuple{b.deliveryTurn,b.observedTurn,b.fleet};});
+        for(const auto& c:pending) if(c.deliveryTurn<=s.turn) {
+            auto& contacts=player.friendlyFleetContacts;
+            auto old=std::find_if(contacts.begin(),contacts.end(),[&](const auto& x){return x.fleet==c.fleet;});
+            if(old==contacts.end()) contacts.push_back(c); else if(newer(c,*old)) *old=c;
+        }
+        std::erase_if(pending,[&](const auto& c){return c.deliveryTurn<=s.turn;});
+        std::sort(player.friendlyFleetContacts.begin(),player.friendlyFleetContacts.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
     }
 }
 }

@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "route_program_dock.hpp"
 #include "suns/communications.hpp"
+#include "suns/reconnaissance.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -77,6 +78,16 @@ struct MainWindowTestAccess {
         w.rebuildScene();
     }
     static std::optional<StarId> selectedStar(const MainWindow& w) { return w.selection_.star; }
+    static void installRadarPosition(MainWindow& w)
+    {
+        installOldSolReport(w, 100);
+        auto& fleet=w.state_.fleets.front();
+        fleet.electronics={EmissionMode::RadioSilence,9};
+        fleet.telemetry.electronics=fleet.electronics;
+        observe_reconnaissance(w.state_,w.state_.turn);
+        deliver_reconnaissance(w.state_);
+        w.rebuildScene();
+    }
     static void installOldSolReport(MainWindow& w, double actualX)
     {
         install(w);
@@ -334,6 +345,13 @@ int main(int argc, char** argv)
     QTimer::singleShot(0, checkInferredSol);
     transferTool->trigger();
     assert(suns::MainWindowTestAccess::selectedStar(dockWindow) == suns::StarId{2});
+
+    suns::MainWindowTestAccess::installRadarPosition(dockWindow);
+    assert(comms->text().contains("DELAYED") && comms->text().contains("telemetry 4 turns old"));
+    assert(comms->text().contains("Radar position: current") && !comms->text().contains("Position unconfirmed"));
+    assert(dockWindow.fleetSourceNameForRouteProgram(1).contains("Radar:")
+        && !dockWindow.fleetSourceNameForRouteProgram(1).contains("Orbit: Sol"));
+    assert(!transferButton->isEnabled() && transferButton->toolTip().contains("Radar locates this fleet"));
 
     // Reproduce a four-year-old stationary Sol report while the real fleet is
     // elsewhere. Do not label that orbit confirmed or leak remote cargo data.
