@@ -61,6 +61,26 @@ int main()
     assert(retried.planets[1].owner == 1);
     assert(retried.fleets.empty());
 
+    // Arrival can precede a delayed command to Colonize. The onboard order
+    // must execute when the packet physically reaches the fleet, even though
+    // the old travel waypoint has long since completed.
+    auto delayed = make_demo_game();
+    delayed.stars[1].position = {600, 0};
+    auto& waiting = delayed.fleets.front();
+    waiting.design = kColonyShipDesignId;
+    waiting.ships = {{kColonyShipDesignId, 1}};
+    waiting.colonists = 100;
+    waiting.position = delayed.stars[1].position;
+    waiting.destination.reset();
+    assert(submit_fleet_route_command(delayed, 1, waiting.id,
+        delayed.stars[1].position, 5,
+        {FleetArrivalActionKind::Colonize}, {}, false, 0, false));
+    assert(!delayed.fleets.front().pendingCommands.empty());
+    for (int year = 0; year < 10 && delayed.planets[1].owner == 0; ++year)
+        delayed = TurnProcessor{}.process(delayed, {});
+    assert(delayed.planets[1].owner == 1);
+    assert(delayed.fleets.empty());
+
     // An explicit stop ignores stale position coordinates, clears tasks and
     // works for an immobilized ship. It still travels through the comms layer.
     auto local = make_demo_game();
