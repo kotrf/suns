@@ -177,16 +177,18 @@ void nearest_colony_scanner_field_is_used()
 {
     auto state = generate_game(GalaxyConfig{});
 
-    auto relayPlanet = state.planets.front();
-    relayPlanet.id = 999;
-    relayPlanet.star = state.stars[1].id;
+    // A local receiver is not a second artificial capital. Its field must
+    // overlap the actual homeworld network to provide an instant connection.
+    auto& relayPlanet = state.planets[1];
+    assert(relayPlanet.star == state.stars[1].id);
     relayPlanet.owner = 1;
     relayPlanet.population = 1000;
-    state.planets.push_back(relayPlanet);
-
-    const auto& relay = state.stars[1];
-    const Position nearRelay{relay.position.x + 10.0, relay.position.y};
-    assert(communication_delay_turns(state, 1, nearRelay) == 0);
+    relayPlanet.radar = PlanetaryRadarLevel::Local;
+    relayPlanet.homeworld = false;
+    state.stars[1].position = {175, 0};
+    assert(communication_delay_turns(state, 1, {185, 0}) == 0);
+    state.stars[1].position = {200, 0};
+    assert(communication_delay_turns(state, 1, {210, 0}) > 0);
 }
 
 void remote_command_arrives_after_signal_delay()
