@@ -12,6 +12,7 @@
 #include <QDialog>
 #include <QComboBox>
 #include <QLabel>
+#include <QImage>
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -21,6 +22,8 @@
 #include <QDataStream>
 #include <QListWidget>
 #include <QTextBrowser>
+#include <QStyle>
+#include <QStyleOptionButton>
 #include <cassert>
 #include <cmath>
 #include <algorithm>
@@ -39,6 +42,21 @@ struct MainWindowTestAccess {
 };
 }
 void settle() { QEventLoop loop; QTimer::singleShot(30,&loop,&QEventLoop::quit); loop.exec(); }
+
+int brightIndicatorPixels(QCheckBox& box)
+{
+    QStyleOptionButton option; option.initFrom(&box); option.text=box.text();
+    const auto indicator=box.style()->subElementRect(QStyle::SE_CheckBoxIndicator,&option,&box);
+    QImage image(box.size(),QImage::Format_ARGB32_Premultiplied); image.fill(Qt::transparent);
+    box.render(&image);
+    int count=0;
+    for(int y=indicator.top()+2;y<indicator.bottom()-1;++y)
+        for(int x=indicator.left()+2;x<indicator.right()-1;++x) {
+            const auto c=image.pixelColor(x,y);
+            if(c.red()>=200 && c.green()>=210 && c.blue()>=220) ++count;
+        }
+    return count;
+}
 
 int main(int argc,char** argv)
 {
@@ -136,6 +154,17 @@ int main(int argc,char** argv)
     assert(scan->isEnabled()); scan->setChecked(true); arrival->setChecked(true); setMode->click();
     const auto& program=std::get<SetFleetElectronicsOrder>(MainWindowTestAccess::orders(window).orders.back()).program;
     assert(program.burstInterval==2 && program.firstBurstTurn==3 && program.activeBurst && program.wakeOnArrival);
+    // Check the rendered marks, including a checked option that becomes
+    // unavailable after changing emission mode. Empty boxes remain distinct.
+    for(auto* check:{scan,arrival}) {
+        check->setChecked(true); check->setEnabled(true);
+        assert(brightIndicatorPixels(*check)>=8);
+        check->setEnabled(false);
+        assert(brightIndicatorPixels(*check)>=8);
+        check->setChecked(false);
+        assert(brightIndicatorPixels(*check)==0);
+        check->setChecked(true); check->setEnabled(true);
+    }
     interval->setValue(20); settle(); assert(!setMode->isEnabled()); interval->setValue(2); settle();
     auto intel=make_demo_game(); intel.turn=5;
     ReconContact c; c.fleet=22; c.owner=2; c.position={200,200}; c.quality=ContactQuality::Identified;

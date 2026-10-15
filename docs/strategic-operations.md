@@ -5,6 +5,13 @@ an idle fleet a task, or issue a new emission program. These are core orders;
 commands travel through the same delayed channel as routes. Travel cancels
 stationary work. Different empires remain hostile in the current combat rules.
 
+The current Assign control starts stationary work at the fleet's present
+position; it does not attach that work to the selected route waypoint. Remote
+Mining already has a persistent arrival action. Lay minefields, sweeping,
+bombardment and field science still need equivalent waypoint orders. The intended
+route interaction is destination → work on arrival → continue until replaced or
+cancelled, without requiring a later manual Assign command.
+
 ## Bombardment
 
 `Bombard enemy colony` requires fitted bombs and physical orbit above a foreign
@@ -73,8 +80,26 @@ remain deliverable. A fleet's operation reports follow its emission program;
 generic reports use the earliest co-located transmitter, with colony reports
 independent of silent orbiting fleets. Combat snapshots retain these delivery
 dates even if the reporting fleet is destroyed. Owner positions continue to be projected from confirmed
-telemetry. Silent fleets do not act as communication relays or publish new active
+telemetry, or a newer received friendly radar observation. Silent fleets do not act as communication relays or publish new active
 surveys. [Programmable communication/active-scan windows](reconnaissance.md) are now implemented; more conditional doctrines remain under #101.
+
+The passive schedule uses absolute game years divisible by three (3, 6, 9, …),
+not three years after the mode was selected. Radio silence has no such automatic
+three-year transmission: the player chooses its finite duration, optional window
+interval, optional active scanning in those windows, and wake on arrival. A window
+lasts one game year and does not permanently cancel silence. Without active scan,
+it only transmits reports and admits commands, leaving active scanners/jammers
+off. Active scan enables those systems for the window. Wake on arrival instead
+returns permanently to Standard at the first reached waypoint, including an
+intermediate one. These options are enabled only for Radio silence; active scan
+also requires a nonzero window interval.
+
+For example, an order issued in year 10 with a 9-year silence duration and a
+3-year window interval opens windows in years 13 and 16, then wakes in year 19.
+Active scan adds a scan to each window; without it those windows are radio-only.
+Under the current command model, both Passive and Radio silence defer incoming
+commands until an allowed communication year. A passive receiver listening for
+signatures is separate from the command-exchange schedule.
 
 Active jammers reduce opposing fleet scanners inside an aura of at least 30 ly
 (or the jammer fleet's ordinary scanner range). Component strengths combine with

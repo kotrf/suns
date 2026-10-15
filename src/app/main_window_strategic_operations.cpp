@@ -11,14 +11,49 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStyle>
+#include <QStyleOptionButton>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <memory>
 
 namespace suns {
+namespace {
+// Retain native checkbox interaction and focus, but make the indicator legible
+// on the dark fleet panel in both enabled and disabled states.
+class FleetCheckBox : public QCheckBox {
+public:
+    using QCheckBox::QCheckBox;
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QCheckBox::paintEvent(event);
+        QStyleOptionButton option;
+        initStyleOption(&option);
+        const QRectF box=style()->subElementRect(QStyle::SE_CheckBoxIndicator,&option,this);
+        const bool enabled=isEnabled(), checked=isChecked();
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(enabled ? "#89b6d5" : "#607b90"),1.0));
+        painter.setBrush(QColor(checked ? (enabled ? "#286b9a" : "#314d65") : "#0b121b"));
+        painter.drawRoundedRect(box.adjusted(0.5,0.5,-0.5,-0.5),2,2);
+        if(checked) {
+            QPainterPath tick;
+            tick.moveTo(box.left()+box.width()*0.22,box.top()+box.height()*0.52);
+            tick.lineTo(box.left()+box.width()*0.43,box.top()+box.height()*0.73);
+            tick.lineTo(box.left()+box.width()*0.79,box.top()+box.height()*0.29);
+            painter.setPen(QPen(QColor(enabled ? "#ffffff" : "#d3e3f0"),2.2,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+            painter.drawPath(tick);
+        }
+    }
+};
+}
+
 void MainWindow::installStrategicOperations()
 {
     auto* root = findChild<QWidget*>("fleetOperationsPanel");
@@ -41,14 +76,16 @@ void MainWindow::installStrategicOperations()
     years->setToolTip("Radio silence ends automatically after this many years. Orders wait for the next transmission.");
     auto* interval=new QSpinBox(group); interval->setObjectName("emissionBurstInterval"); interval->setRange(0,100);
     interval->setSpecialValueText("No bursts"); interval->setSuffix(" yr"); interval->setToolTip("One-year communication window every N years, beginning N years after this order. Finite wake-up remains the failsafe.");
-    auto* scan=new QCheckBox("Active scan in window",group); scan->setObjectName("activeEmissionBurst");
-    auto* arrival=new QCheckBox("Wake on arrival",group); arrival->setObjectName("emissionWakeOnArrival");
+    auto* scan=new FleetCheckBox("Active scan in window",group); scan->setObjectName("activeEmissionBurst");
+    scan->setToolTip("Radio silence: enable active sensors and jamming during each scheduled one-year communication window. Requires a window interval above zero. Between windows the fleet listens passively.");
+    auto* arrival=new FleetCheckBox("Wake on arrival",group); arrival->setObjectName("emissionWakeOnArrival");
+    arrival->setToolTip("Radio silence: return to Standard on arrival at any route waypoint, including intermediate waypoints. The return is permanent until another emission order.");
     auto* setMode = new QPushButton("Set", group); setMode->setObjectName("setFleetEmissionMode");
     row->addWidget(mode,1); row->addWidget(years); row->addWidget(setMode); body->addLayout(row);
     row=new QHBoxLayout; row->addWidget(interval); row->addWidget(scan); row->addWidget(arrival); body->addLayout(row);
     auto* contacts=new QPushButton("Intelligence…",group); contacts->setObjectName("openReconnaissance"); body->addWidget(contacts);
     connect(contacts,&QPushButton::clicked,this,&MainWindow::openReconnaissance);
-    auto* deception = new QCheckBox("Broadcast decoy signatures (jammer)",group);
+    auto* deception = new FleetCheckBox("Broadcast decoy signatures (jammer)",group);
     deception->setObjectName("fleetDeceptionCheck"); body->addWidget(deception);
     deception->setToolTip("Requires a jammer and Standard mode. Creates an ambiguous false signal area. Tachyon receivers can reject it; broadcasting may also expose your real emission area.");
     auto* summary = new QLabel(group); summary->setObjectName("strategicMissionSummary");
