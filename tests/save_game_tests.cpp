@@ -1813,6 +1813,39 @@ void stargate_orders_round_trip()
     assert(!read_turn_order_file(ordersPath, imported, error));
 }
 
+void planetary_radars_round_trip_and_keep_queued_bootstrap()
+{
+    QTemporaryDir directory;
+    assert(directory.isValid());
+    QString error;
+    SaveGameData original;
+    original.galaxyConfig = GalaxyConfig{};
+    original.state = make_demo_game();
+    original.campaignId = 91;
+    original.turnToken = 92;
+    original.pendingOrders = {1, {}};
+    original.state.planets[0].radar = PlanetaryRadarLevel::Full;
+    original.state.planets[0].homeworld = true;
+    original.state.planets[1].owner = 1;
+    original.state.planets[1].population = 100;
+    original.state.planets[1].radar = PlanetaryRadarLevel::None;
+    original.state.planets[1].productionQueue = {
+        {ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)},
+        {ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)},
+    };
+    const auto path = directory.filePath("radar.suns");
+    assert(write_save_game_file(path, original, error));
+    SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.planets[0].radar == PlanetaryRadarLevel::Full);
+    assert(loaded.state.planets[0].homeworld);
+    assert(loaded.state.planets[1].radar == PlanetaryRadarLevel::None);
+    assert(!loaded.state.planets[1].homeworld);
+    assert(loaded.state.planets[1].productionQueue.size() == 2);
+    assert(loaded.state.planets[1].productionQueue.front().kind == ProductionKind::LocalRadar);
+    assert(loaded.state.planets[1].productionQueue.back().kind == ProductionKind::PlanetaryRadar);
+}
+
 int main()
 {
     reconnaissance_and_programs_round_trip();
@@ -1836,6 +1869,7 @@ int main()
     old_format_is_rejected_cleanly();
     population_migration_and_clear_orders();
     cancellation_round_trips_in_save_and_turn_packet();
+    planetary_radars_round_trip_and_keep_queued_bootstrap();
     std::cout << "save game tests passed\n";
     return 0;
 }
