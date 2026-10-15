@@ -46,6 +46,21 @@ int main()
     assert(fleet_cargo_used(overloaded, overloaded.fleets[0]) > fleet_cargo_capacity(overloaded, overloaded.fleets[0]));
     assert(TurnProcessor{}.process(overloaded, {}).planets[1].owner == 0);
 
+    // When Colonize fails on arrival, preserve the terminal intent on the
+    // final waypoint instead of deleting it before the next opportunity.
+    auto blocked = state;
+    blocked.planets[1].owner = 2;
+    auto stillOrbiting = TurnProcessor{}.process(blocked, {});
+    assert(stillOrbiting.fleets.size() == 1);
+    assert(stillOrbiting.fleets.front().arrivalAction);
+    assert(stillOrbiting.fleets.front().arrivalAction->kind == FleetArrivalActionKind::Colonize);
+    assert(stillOrbiting.fleets.front().destination.has_value());
+    assert(same_position(*stillOrbiting.fleets.front().destination, stillOrbiting.stars[1].position));
+    stillOrbiting.planets[1].owner = 0;
+    const auto retried = TurnProcessor{}.process(stillOrbiting, {});
+    assert(retried.planets[1].owner == 1);
+    assert(retried.fleets.empty());
+
     // An explicit stop ignores stale position coordinates, clears tasks and
     // works for an immobilized ship. It still travels through the comms layer.
     auto local = make_demo_game();

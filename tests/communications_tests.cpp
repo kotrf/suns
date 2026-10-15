@@ -16,6 +16,44 @@ Fleet& scout(GameState& state)
     return state.fleets.front();
 }
 
+void colony_radar_bootstraps_detection_and_links()
+{
+    auto state = make_demo_game();
+    state.fleets.clear();
+    auto& outpost = state.planets[1];
+    outpost.owner = 1;
+    outpost.population = 100;
+    outpost.industry = 1;
+    outpost.radar = PlanetaryRadarLevel::None;
+    outpost.homeworld = false;
+    outpost.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}};
+    state.stars[1].position = {175, 0};
+    assert(planetary_radar_range(outpost.radar) == 0);
+    assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
+    auto first = TurnProcessor{}.process(state, {});
+    assert(first.planets[1].radar == PlanetaryRadarLevel::None);
+    const auto built = TurnProcessor{}.process(first, {});
+    assert(built.planets[1].radar == PlanetaryRadarLevel::Local);
+    assert(built.planets[1].productionQueue.empty());
+    assert(communication_delay_turns(built, 1, {175, 0}) == 0);
+    assert(planetary_radar_range(built.planets[1].radar) == 30.0);
+
+    auto isolated = built;
+    isolated.stars[1].position = {220, 0};
+    assert(communication_delay_turns(isolated, 1, {220, 0}) > 0);
+    isolated.planets[1].industry = 50;
+    isolated.planets[1].minerals = {20, 20, 20};
+    const auto upgraded = TurnProcessor{}.process(isolated,
+        {{1, {QueueProductionBatchOrder{2, ProductionKind::PlanetaryRadar, 1, ProductionAutomation::None}}}});
+    assert(upgraded.planets[1].radar == PlanetaryRadarLevel::Full);
+    assert(planetary_radar_range(upgraded.planets[1].radar) == 150.0);
+    assert(communication_delay_turns(upgraded, 1, {220, 0}) == 0);
+
+    auto noHome = built;
+    noHome.planets.front().radar = PlanetaryRadarLevel::None;
+    assert(communication_delay_turns(noHome, 1, {175, 0}) > 0);
+}
+
 void local_commands_remain_immediate()
 {
     auto state = generate_game(GalaxyConfig{});
@@ -278,6 +316,7 @@ void stale_telemetry_predicts_without_revealing_route_change()
 
 int main()
 {
+    colony_radar_bootstraps_detection_and_links();
     local_commands_remain_immediate();
     homeworld_scanner_defines_the_initial_network_field();
     ordinary_scanners_automatically_form_a_relay_chain();

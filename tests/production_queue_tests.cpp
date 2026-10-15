@@ -24,6 +24,27 @@ void reorder_is_applied_before_production()
     assert(result.planets.front().productionQueue.front().kind == ProductionKind::Factory);
 }
 
+void radar_builds_obey_cost_and_no_duplicate_rule()
+{
+    auto state = make_demo_game();
+    auto& p = state.planets.front();
+    p.radar = PlanetaryRadarLevel::None;
+    p.minerals = {20, 20, 20};
+    const auto radar = QueueProductionBatchOrder{p.id, ProductionKind::PlanetaryRadar, 1};
+    const auto forecast = forecast_production_queue(state, p,
+        {{ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)}});
+    assert(forecast.size() == 1 && forecast[0].completionTurn);
+    const auto produced = TurnProcessor{}.process(state, {{1, {radar}}});
+    if (produced.planets.front().radar != PlanetaryRadarLevel::Full) {
+        auto current = produced;
+        for (int i = 0; i < 16 && current.planets.front().radar != PlanetaryRadarLevel::Full; ++i)
+            current = TurnProcessor{}.process(current, {});
+        assert(current.planets.front().radar == PlanetaryRadarLevel::Full);
+        assert(current.planets.front().productionQueue.empty());
+    }
+    assert(production_cost(ProductionKind::LocalRadar) < production_cost(ProductionKind::PlanetaryRadar));
+}
+
 void forecast_matches_resolved_completion_turns()
 {
     TurnProcessor processor;
@@ -114,6 +135,7 @@ void cancelled_build_does_not_spend_minerals_or_complete()
 
 int main()
 {
+    radar_builds_obey_cost_and_no_duplicate_rule();
     reorder_is_applied_before_production();
     forecast_matches_resolved_completion_turns();
     guaranteed_research_allocation_reduces_local_production();
