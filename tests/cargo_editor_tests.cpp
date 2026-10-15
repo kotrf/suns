@@ -5,6 +5,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QSlider>
@@ -77,21 +78,15 @@ int main(int argc, char** argv)
             assert(destination->count() == source->count() - 1);
         };
         distinct();
-        // A selected fleet that already carries cargo opens in unloading
-        // direction. The sliders still span the full hold; source stock only
-        // limits the handle, not the scale.
-        assert(source->currentData().toInt() == 1);
-        assert(destination->currentData().toInt() == 0);
-        assert(people->maximum() == 500);
-        assert(iron->maximum() == 500);
-        people->setValue(people->maximum());
-        assert(people->value() == 100);
-        iron->setValue(iron->maximum());
-        assert(iron->value() == 100);
-
-        source->setCurrentIndex(source->findData(0));
-        destination->setCurrentIndex(destination->findData(1));
-        distinct();
+        // The dialog starts with planet on the left and selected ship on
+        // the right regardless of existing cargo; it must never silently
+        // reverse into unload mode when an earlier order filled the hold.
+        assert(source->currentData().toInt() == 0);
+        assert(destination->currentData().toInt() == 1);
+        assert(dialog->findChild<QGroupBox*>("cargoSourceContainer"));
+        assert(dialog->findChild<QGroupBox*>("cargoDestinationContainer"));
+        const auto* destinationPeople = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        assert(destinationPeople && destinationPeople->value() == 100);
         assert(people->maximum() == 300); // 5 kt hold, 2 kt already aboard
         assert(iron->maximum() == 300 && boron->maximum() == 300);
         boron->setValue(boron->maximum());
@@ -150,8 +145,14 @@ int main(int argc, char** argv)
         auto* iron = dialog->findChild<QSlider*>("cargoMineralSlider0");
         auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
         auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
-        assert(source->currentData().toInt() == 1 && destination->currentData().toInt() == 0);
-        assert(people->maximum() == 500 && iron->maximum() == 500);
+        assert(source->currentData().toInt() == 0 && destination->currentData().toInt() == 1);
+        assert(people->maximum() == 100 && iron->maximum() == 100);
+        const auto* destinationPeople = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        const auto* surfaceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
+        const auto* manifestAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
+        assert(destinationPeople && destinationPeople->value() == 200);
+        assert(surfaceAfter && surfaceAfter->text().contains("999900"));
+        assert(manifestAfter && manifestAfter->text().contains("colonists 200"));
         dialog->reject();
     });
     window.openCargoManifestDialog();

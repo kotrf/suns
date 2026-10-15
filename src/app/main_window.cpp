@@ -1067,40 +1067,15 @@ void MainWindow::updateControls()
             // Orders are intentions until End Turn. Present the predicted
             // cargo debit separately from the confirmed surface population,
             // because annual population growth may partly obscure the debit.
-            std::uint64_t orderedOut = 0;
-            std::uint64_t orderedIn = 0;
-            std::unordered_map<FleetId, std::uint64_t> plannedFleetLoads;
-            for (const auto& pending : pendingOrders_.orders) {
-                if (const auto* transfer = std::get_if<TransferCargoOrder>(&pending)) {
-                    if (transfer->source.planet == planet->id) orderedOut += transfer->colonists;
-                    if (transfer->destination.planet == planet->id) orderedIn += transfer->colonists;
-                    const auto updateLoad = [&](FleetId id, bool receiving) {
-                        if (!id) return;
-                        const auto found = std::find_if(state_.fleets.begin(), state_.fleets.end(),
-                            [id](const Fleet& candidate) { return candidate.id == id; });
-                        if (found == state_.fleets.end()) return;
-                        auto [item, inserted] = plannedFleetLoads.try_emplace(id, found->colonists);
-                        if (receiving) item->second += transfer->colonists;
-                        else item->second = item->second > transfer->colonists
-                            ? item->second - transfer->colonists : 0;
-                    };
-                    updateLoad(transfer->destination.fleet, true);
-                    updateLoad(transfer->source.fleet, false);
-                } else if (const auto* load = std::get_if<SetFleetColonistsOrder>(&pending);
-                    load && load->colony == planet->id) {
-                    const auto found = std::find_if(state_.fleets.begin(), state_.fleets.end(),
-                        [load](const Fleet& candidate) { return candidate.id == load->fleet; });
-                    if (found == state_.fleets.end()) continue;
-                    auto [item, inserted] = plannedFleetLoads.try_emplace(load->fleet, found->colonists);
-                    if (load->colonists > item->second) orderedOut += load->colonists - item->second;
-                    else orderedIn += item->second - load->colonists;
-                    item->second = load->colonists;
-                }
-            }
-            const auto afterOutgoing = orderedOut >= planet->population
-                ? std::uint64_t{0} : planet->population - orderedOut;
-            const auto afterCargo = orderedIn > std::numeric_limits<std::uint64_t>::max() - afterOutgoing
-                ? std::numeric_limits<std::uint64_t>::max() : afterOutgoing + orderedIn;
+            const auto plannedCargo = projected_cargo_order_state(state_, pendingOrders_);
+            const auto predictedPlanet = std::find_if(plannedCargo.planets.begin(),
+                plannedCargo.planets.end(), [planet](const Planet& candidate) {
+                    return candidate.id == planet->id;
+                });
+            const auto afterCargo = predictedPlanet == plannedCargo.planets.end()
+                ? planet->population : predictedPlanet->population;
+            const auto orderedOut = afterCargo < planet->population ? planet->population - afterCargo : 0;
+            const auto orderedIn = afterCargo > planet->population ? afterCargo - planet->population : 0;
             Planet projected = *planet;
             projected.population = afterCargo;
             const auto populationChange = projected_population_growth(state_, projected, state_.turn);

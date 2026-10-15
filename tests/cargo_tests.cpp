@@ -217,6 +217,25 @@ int main()
         200,
         {5.0, 4.0, 3.0},
     });
+    // Planned orders must be projected at the present turn boundary, not by
+    // running another year of mining, growth, movement or combat. Reopening
+    // twice gives the same manifest and never debits population twice.
+    const auto preview = suns::projected_cargo_order_state(transferState, surfaceTransfer);
+    const auto again = suns::projected_cargo_order_state(transferState, surfaceTransfer);
+    assert(preview.turn == transferState.turn);
+    assert(planet(preview, 1).population == planet(transferState, 1).population - 200);
+    assert(fleet(preview, 3).colonists == 200);
+    assert(planet(again, 1).population == planet(preview, 1).population);
+    assert(fleet(again, 3).colonists == fleet(preview, 3).colonists);
+    assert(planet(transferState, 1).population == 1'000'000);
+    // The same replay also preserves the native atomic validation: an
+    // impossible second load is ignored without partially moving minerals.
+    auto invalidPreview = surfaceTransfer;
+    invalidPreview.orders.emplace_back(suns::TransferCargoOrder{
+        {1, 0}, {0, 3}, 2'500'000, {100000, 0, 0}});
+    const auto afterInvalid = suns::projected_cargo_order_state(transferState, invalidPreview);
+    assert(planet(afterInvalid, 1).population == planet(preview, 1).population);
+    assert(fleet(afterInvalid, 3).colonists == fleet(preview, 3).colonists);
     const auto fromSurface = processor.process(transferState, {surfaceTransfer});
     auto sourceAfterTransfer = planet(transferState, 1);
     sourceAfterTransfer.population -= 200;
