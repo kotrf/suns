@@ -34,6 +34,7 @@ void ground_casualties_are_exact_and_relative_to_recipient()
         auto s = arena(); s.turn = year;
         s.stars = {{1,"Target",{0,0}}};
         Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 1000;
+        p.radar = PlanetaryRadarLevel::Full; p.homeworld = true;
         s.planets = {p}; s.fleets[0].colonists = 1250;
         const auto r = TurnProcessor{}.process_with_events(s, {{1,{TransferCargoOrder{{0,1},{1,0},1250,{}}}}});
         const bool victory = r.state.planets[0].owner == 1;

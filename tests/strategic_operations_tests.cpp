@@ -33,6 +33,7 @@ void bombardment_orders_and_targets()
     auto s = arena({C::LadyFingerBomb});
     s.stars = {{1,"Target",{0,0}}};
     Planet p; p.id = 1; p.star = 1; p.owner = 2; p.population = 100000; p.industry = 20; p.mines = 20;
+    p.radar = PlanetaryRadarLevel::Full; p.homeworld = true;
     s.planets = {p};
     assert(!event(TurnProcessor{}.process_with_events(s,{}),GameEventKind::Bombardment));
     auto r = TurnProcessor{}.process_with_events(s,{{1,{SetFleetTaskOrder{1,FleetTask::Bombardment}}}});

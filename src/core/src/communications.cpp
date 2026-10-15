@@ -385,11 +385,15 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
     const auto fields = communication_fields(state, player, atTurn);
     const auto jamDelay = communication_jamming_delay(state, player, position, atTurn);
 
-    // Empty infrastructure is not a free instantaneous interstellar link.
+    // A colony without its capital radar has no instant route. Synthetic
+    // ship-only combat scenarios have no colony/root and resolve onboard
+    // orders locally, without a fictitious distant receiver.
     if (std::none_of(fields.begin(), fields.end(), [](const CommunicationField& field) {
             return field.connected;
         })) {
-        return 1 + jamDelay;
+        const bool hasColony = std::any_of(state.planets.begin(), state.planets.end(),
+            [&](const Planet& planet) { return planet.owner == player && planet.population > 0; });
+        return (hasColony ? 1U : 0U) + jamDelay;
     }
 
     // A position inside any field connected to a colony root belongs to the
