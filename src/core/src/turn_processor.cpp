@@ -1141,20 +1141,6 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     std::vector<ColonyFreightDelivery>& freight)
 {
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
-    // The colony reports only the arriving hull, independently of its radio.
-    if(!fleet_transmits(fleet,state.turn+1)) for(const auto& planet:state.planets)
-        if(planet.owner==fleet.owner && planet.population && planet.radar!=PlanetaryRadarLevel::None)
-            if(const auto* star=find_star(state,planet.star); star && same_position(star->position,fleet.position)) {
-                auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==fleet.owner;});
-                if(player!=state.players.end()) {
-                    PendingPlayerReport arrival;
-                    arrival.kind=PlayerReportKind::FleetArrived; arrival.observedTurn=state.turn+1;
-                    arrival.deliveryTurn=arrival.observedTurn+communication_delay_turns(state,fleet.owner,star->position,arrival.observedTurn);
-                    arrival.star=star->id; arrival.planet=planet.id; arrival.fleet=fleet.id; arrival.position=star->position;
-                    player->pendingPlayerReports.push_back(arrival);
-                }
-                break;
-            }
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
     if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::EnterWormhole) {

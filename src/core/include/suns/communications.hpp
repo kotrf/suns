@@ -26,7 +26,8 @@ template<class State, class Visit> void visit_fleet_report_outbox(State& state, 
 }
 
 // Schedule an actual outgoing observation. A passive/silent source keeps it
-// aboard; listening for incoming orders does not imply any outgoing packet.
+// aboard until transmission or local exchange with a friendly populated colony;
+// listening for incoming orders does not imply any outgoing packet.
 [[nodiscard]] std::uint64_t fleet_report_delivery_turn(const GameState&, PlayerId,
     Position source, std::uint64_t observedTurn, FleetId observer=0);
 [[nodiscard]] FleetId held_report_source(const GameState&, PlayerId, Position,
@@ -41,6 +42,8 @@ void dispatch_fleet_report_outbox(GameState&);
     PlayerId player,
     Position position, std::uint64_t atTurn = 0);
 
+// A fleet can also exchange data through its friendly orbital colony without
+// enabling its own long-range transmitter. The colony's network delay applies.
 [[nodiscard]] bool fleet_has_instant_link(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint64_t fleet_telemetry_age(const GameState& state, const Fleet& fleet);
 [[nodiscard]] std::uint64_t fleet_position_age(const GameState& state, const Fleet& fleet);

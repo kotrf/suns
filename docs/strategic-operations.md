@@ -69,7 +69,7 @@ detection range is `scanner range × (1 − effective cloak)`.
 | Fleet mode | Active scans/jamming | Outgoing telemetry/reports |
 | --- | --- | --- |
 | Standard | Enabled | Normal communication delay |
-| Passive | Disabled; passive receiver remains | No automatic transmissions |
+| Passive | Disabled; passive receiver remains | No automatic long-range transmissions |
 | Radio silence | Disabled; passive receiver remains | Automatic resume year is mandatory (1–100 years ahead) |
 
 Passive localization starts with 25% of the fitted scanner range, then uses a
@@ -100,8 +100,11 @@ Active scan adds a scan to each window; without it those windows are radio-only.
 Incoming commands never wait for these outgoing windows. Passive receiver
 operation is independent of transmission. Reports collected without TX remain
 aboard until their source actually transmits; the subsequent signal delay starts
-from that source's dispatch position. Friendly colony radars report observed
-arrivals independently, without revealing a silent ship's cargo/fuel/program.
+from that source's dispatch position. An owned populated colony in the fleet's
+exact orbit receives full status and buffered observations locally in every mode,
+even without radar. Its own network forwards them with ordinary delay. This
+neither wakes the fleet nor enables its active sensors/long-range relay field;
+remote radar sightings elsewhere still disclose only hull evidence.
 
 Active jammers reduce opposing fleet scanners inside an aura of at least 30 ly
 (or the jammer fleet's ordinary scanner range). Component strengths combine with
@@ -114,6 +117,11 @@ the receiver's fitted scanner range, even when its hull is cloaked. The contact 
 a 20 ly grid cell center with 15 ly uncertainty, never a fleet ID, owner,
 composition or exact position. Received signal markers live for one planning year;
 the report remains in Turn Messages. Detached receivers report with delay.
+Silence suppresses this self-emission contact, but not reflected-hull detection
+by someone else's active radar. Local and Full planetary radars use their actual
+30/150 ly fitted ranges for emission reception; a radar-free colony cannot scan
+for signals. Receiving or locally uploading data does not enable a fleet's
+long-range transmitter signature.
 
 `Broadcast decoy signatures` requires a jammer and Standard mode. It adds a false
 ambiguous signal area. A receiver whose combined tachyon strength is at least the

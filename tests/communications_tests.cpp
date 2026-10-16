@@ -391,38 +391,101 @@ void silent_slow_reception_preserves_propagation_and_holds_outgoing_reports()
     }
 }
 
-void colony_radar_reports_passive_arrival_without_an_onboard_manifest()
+void friendly_orbit_shares_full_status_over_the_colony_link()
 {
-    for(bool isolated:{false,true}) {
+    for(auto mode:{EmissionMode::Passive,EmissionMode::RadioSilence}) for(int site=0;site<4;++site) {
         auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0;
-        const auto target=isolated?Position{420,0}:Position{0,0};
-        if(isolated) {
+        // Homeworld; a nearby radar-free colony; isolated colonies with and
+        // without radar. Local exchange never requires a planetary scanner.
+        const auto target=site==0?Position{0,0}:site==1?Position{100,0}:Position{420,0};
+        if(site) {
             s.stars[1].position=target;
-            auto& colony=s.planets[1]; colony.owner=1; colony.population=1000; colony.radar=PlanetaryRadarLevel::Local;
+            auto& colony=s.planets[1]; colony.owner=1; colony.population=1000;
+            colony.radar=site==2?PlanetaryRadarLevel::Local:PlanetaryRadarLevel::None;
         }
         auto& f=s.fleets.front(); f.position={target.x+25,0}; f.destination=target; f.warp=5;
-        f.fuel=fleet_fuel_capacity(s,f); f.electronics={EmissionMode::Passive,0};
+        f.fuel=fleet_fuel_capacity(s,f); f.electronics={mode,mode==EmissionMode::RadioSilence?30u:0u};
         f.telemetry.position=f.position; f.telemetry.destination.reset(); f.telemetry.colonists=100; f.colonists=200;
+        f.telemetry.damagePercent=50; f.damagePercent=12;
+        queue_player_report(s,1,PlayerReportKind::FleetArrived,f.position,1,0,0,f.id);
+        assert(s.players[0].pendingPlayerReports.back().transmissionFleet==f.id);
         const auto result=TurnProcessor{}.process_with_events(s,{}); s=result.state;
         assert(same_position(s.fleets.front().position,target));
-        assert(s.fleets.front().telemetry.observedTurn==1 && !fleet_transmits(s.fleets.front(),s.turn));
-        const auto arrival=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::FleetArrived;});
+        assert(!fleet_transmits(s.fleets.front(),s.turn) && s.fleets.front().electronics.mode==mode);
         const auto delay=communication_delay_turns(s,1,target);
-        if(isolated) {
-            assert(arrival!=s.players[0].pendingPlayerReports.end() && arrival->deliveryTurn==2+delay && !arrival->transmissionFleet);
-            assert(!fleet_radar_position(s,s.fleets.front()));
-            while(s.turn<2+delay) s=TurnProcessor{}.process(s,{});
-        } else assert(std::any_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived && e.observedTurn==2;}));
-        assert(fleet_radar_position(s,s.fleets.front())->star==(isolated?2u:1u));
-        assert(same_position(fleet_player_view(s,s.fleets.front()).position,target));
-        assert(fleet_player_view(s,s.fleets.front()).colonists==100 && s.fleets.front().colonists==200);
-        assert(s.fleets.front().telemetryInTransit.empty());
+        assert(fleet_has_instant_link(s,s.fleets.front())==(site<2));
+        if(delay) {
+            const auto& fleet=s.fleets.front();
+            assert(fleet.telemetry.observedTurn==1 && fleet.telemetry.colonists==100);
+            assert(fleet.telemetryInTransit.size()==1);
+            const auto& packet=fleet.telemetryInTransit.front();
+            assert(packet.deliveryTurn==2+delay && packet.telemetry.colonists==200);
+            assert(packet.telemetry.damagePercent==fleet.damagePercent && packet.telemetry.fuel==fleet.fuel);
+            const auto route=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::RouteCompleted;});
+            assert(route!=s.players[0].pendingPlayerReports.end() && route->deliveryTurn==2+delay && !route->transmissionFleet);
+            const auto exported=make_player_view(s,1).state;
+            assert(exported.fleets.front().colonists==100 && exported.fleets.front().telemetryInTransit.empty());
+            assert(exported.players[0].pendingPlayerReports.empty());
+            while(s.turn<2+delay) {
+                s=TurnProcessor{}.process(s,{});
+                if(s.turn<2+delay) assert(s.fleets.front().telemetry.observedTurn==1);
+            }
+        } else {
+            assert(std::count_if(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::RouteCompleted && e.observedTurn==2;})==1);
+            assert(std::none_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::FleetArrived && e.observedTurn==2;}));
+        }
+        const auto known=confirmed_fleet_telemetry(s,s.fleets.front());
+        assert(known.observedTurn==2 && same_position(known.position,target));
+        assert(known.colonists==200 && !known.destination && known.electronics.mode==mode);
+        assert(fleet_player_view(s,s.fleets.front()).colonists==200);
+        const auto report=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return r.observedTurn==1 && r.kind==PlayerReportKind::FleetArrived;});
+        assert(report==s.players[0].pendingPlayerReports.end()); // The local upload also emptied the old outbox.
+    }
+}
+
+void orbital_snapshot_survives_silent_departure_without_following_hidden_changes()
+{
+    auto s=make_demo_game(); s.turn=10;
+    s.stars[1].position={420,0};
+    auto& colony=s.planets[1]; colony.owner=1; colony.population=1000; colony.radar=PlanetaryRadarLevel::None;
+    auto& f=s.fleets.front(); f.position={420,0}; f.electronics={EmissionMode::RadioSilence,30};
+    f.destination=Position{600,0}; f.waypointQueue={{{750,0},5,{}}};
+    f.fuel=147; f.damagePercent=17; f.colonists=200; f.minerals={1,2,3}; f.ships={{f.design,2}};
+    f.telemetry.observedTurn=8; f.telemetry.colonists=100;
+    publish_fleet_telemetry(s,10);
+    assert(f.telemetryInTransit.size()==1 && f.telemetryInTransit.front().deliveryTurn==13);
+    assert(report_transmission_turn(s,1,f.position,10,f.id)==10);
+    f.position={600,0}; f.fuel=5; f.damagePercent=55; f.colonists=99; f.minerals={}; f.ships={{f.design,3}};
+    f.destination=Position{900,0}; f.waypointQueue.clear();
+    s.turn=12; publish_fleet_telemetry(s,12); deliver_due_fleet_telemetry(s);
+    assert(f.telemetry.observedTurn==8 && f.telemetryInTransit.size()==1);
+    s.turn=13; deliver_due_fleet_telemetry(s);
+    const auto view=make_player_view(s,1).state.fleets.front();
+    assert(view.telemetry.observedTurn==10 && same_position(view.telemetry.position,Position{420,0}));
+    assert(view.fuel==147 && view.damagePercent==17 && view.colonists==200 && view.minerals.boranium==2);
+    assert(view.ships.size()==1 && view.ships.front().count==2 && view.electronics.mode==EmissionMode::RadioSilence);
+    assert(view.destination && same_position(*view.destination,Position{600,0}) && view.waypointQueue.size()==1);
+    assert(f.telemetryInTransit.empty() && !fleet_transmits(f,s.turn));
+}
+
+void local_status_exchange_requires_an_owned_populated_colony()
+{
+    for(int site=0;site<3;++site) {
+        auto s=make_demo_game(); s.turn=2;
+        auto& f=s.fleets.front(); f.position=s.stars[1].position; f.electronics={EmissionMode::Passive,0};
+        auto& colony=s.planets[1]; colony.owner=site==0?2:site==1?0:1; colony.population=site==2?0:1000;
+        f.telemetry.observedTurn=1; f.telemetry.colonists=100; f.colonists=200;
+        publish_fleet_telemetry(s,s.turn);
+        assert(f.telemetry.observedTurn==1 && f.telemetryInTransit.empty() && !fleet_has_instant_link(s,f));
+        queue_player_report(s,1,PlayerReportKind::FleetArrived,f.position,s.turn,0,0,f.id);
+        assert(s.players[0].pendingPlayerReports.back().transmissionFleet==f.id);
     }
 }
 
 void merged_fleet_keeps_unsent_observations()
 {
     auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0;
+    s.fleets.front().position={25,0}; // Away from local ship/surface exchange.
     auto second=s.fleets.front(); second.id=2; second.electronics={EmissionMode::Passive,0};
     s.fleets.push_back(second); s.nextFleetId=3;
     queue_player_report(s,1,PlayerReportKind::FleetArrived,second.position,s.turn,1,0,2);
@@ -449,7 +512,9 @@ int main()
     stale_telemetry_predicts_without_revealing_route_change();
     passive_and_silent_receivers_accept_orders_without_acknowledging();
     silent_slow_reception_preserves_propagation_and_holds_outgoing_reports();
-    colony_radar_reports_passive_arrival_without_an_onboard_manifest();
+    friendly_orbit_shares_full_status_over_the_colony_link();
+    orbital_snapshot_survives_silent_departure_without_following_hidden_changes();
+    local_status_exchange_requires_an_owned_populated_colony();
     merged_fleet_keeps_unsent_observations();
     std::cout << "communications tests passed\n";
     return 0;

@@ -147,8 +147,8 @@ bool colony_detects_fleet(const GameState& state, const Planet& colony, const Fl
 {
     if(!turn) turn=state.turn;
     const auto* star = find_star(state, colony.star);
-    return colony.population && star && distance_between(star->position, target.position)
-        <= fleet_detection_range(state, target, kColonySensorRange*(1-sensor_interference(state,colony.owner,star->position,turn))) + epsilon;
+    return colony.population && colony.radar!=PlanetaryRadarLevel::None && star && distance_between(star->position, target.position)
+        <= fleet_detection_range(state, target, planetary_radar_range(colony.radar)*(1-sensor_interference(state,colony.owner,star->position,turn))) + epsilon;
 }
 bool detector_detects_fleet(const GameState& state, const Fleet& detector, const Fleet& target,std::uint64_t turn)
 {
@@ -423,12 +423,13 @@ std::uint64_t fleet_available_turn(const Fleet& f,std::uint64_t turn)
 std::uint64_t report_transmission_turn(const GameState& state,PlayerId owner,Position position,
     std::uint64_t turn,FleetId observer)
 {
-    // A fleet's own operation obeys its own program. Generic reports can use
-    // the earliest co-located transmitter; a silent neighbor cannot block it.
-    for (const auto& f : state.fleets) if (observer && f.id == observer && f.owner == owner)
-        return fleet_available_turn(f,turn);
+    // Local ship/surface exchange uses the colony's transmitter, even when
+    // the observing fleet keeps its own long-range transmitter off.
     for (const auto& p : state.planets) if (p.owner == owner && p.population)
         if (const auto* star = find_star(state,p.star); star && same_position(star->position,position)) return turn;
+    // Away from a friendly colony, an explicit observer uses its own program.
+    for (const auto& f : state.fleets) if (observer && f.id == observer && f.owner == owner)
+        return fleet_available_turn(f,turn);
     auto earliest = std::numeric_limits<std::uint64_t>::max();
     bool found=false;
     for (const auto& f : state.fleets) if (f.owner == owner && same_position(f.position,position)) {
@@ -491,9 +492,9 @@ void observe_strategic_objects(GameState& state, std::uint64_t turn)
     };
 
     for (auto& player : state.players) {
-        for(const auto& colony:state.planets) if(colony.owner==player.id && colony.population)
+        for(const auto& colony:state.planets) if(colony.owner==player.id && colony.population && colony.radar!=PlanetaryRadarLevel::None)
             if(const auto* star=find_star(state,colony.star)) signals(player,star->position,0,&colony,
-                kColonySensorRange*(1-sensor_interference(state,player.id,star->position,turn)),0);
+                planetary_radar_range(colony.radar)*(1-sensor_interference(state,player.id,star->position,turn)),0);
         for (const auto& detector : state.fleets) {
             if (detector.owner != player.id || !fleet_has_scanner(state, detector)) continue;
             const double range = strategic_sensor_range(state, detector,turn);

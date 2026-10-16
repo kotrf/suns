@@ -4,11 +4,14 @@ Suns! treats a distant fleet as an autonomous spacecraft rather than an object t
 
 ## First playable model
 
-Established friendly colonies are roots of an empire-wide instantaneous network. The network coverage is not a separate communications statistic: it is the union of connected ordinary-scanner fields.
+Homeworld radars root the empire-wide instantaneous network. Network coverage is
+the union of connected ordinary-scanner fields; population alone does not create
+a radar field.
 
-- every colony projects a 150 ly ordinary planetary scanner field, stronger
-  than the starting 50 ly ship scanner;
-- every friendly ship with an ordinary scanner automatically joins and extends the network when its field overlaps an already-connected field;
+- built planetary radars project None/Local/Full fields of 0/30/150 ly; a new
+  colony starts without a radar unless its explicit production program builds one;
+- every transmitting friendly ship with an ordinary scanner automatically joins
+  and extends the network when its field overlaps an already-connected field;
 - chains of overlapping scanner fields relay instantaneously and can move with their ships;
 - a ship without a scanner is still connected while its position lies inside the connected field;
 - a detached scanner field is not part of the network;
@@ -47,11 +50,12 @@ an acknowledgement, telemetry, an emission contact or a new relay field. The
 owner can therefore have issued a successful command without yet knowing that
 it was received.
 
-Passive never transmits automatically, including years divisible by three.
+Passive never transmits automatically over long range, including years divisible by three.
 Radio silence transmits only in its programmed windows or after finite/arrival
-wake-up. Fleet reports collected without an allowed transmission stay aboard in
-an outbox. When their source transmits, propagation starts from its current
-position. Already transmitted packets continue to arrive after TX is disabled.
+wake-up. Fleet reports collected without an allowed transmission or local colony
+exchange stay aboard in an outbox. When their source transmits or uploads to a
+friendly orbital colony, propagation starts from that dispatch position.
+Already transmitted packets continue to arrive after TX is disabled.
 Save v73 preserves this distinction; player turn exports omit unsent reports.
 
 ## Telemetry and player knowledge
@@ -64,9 +68,25 @@ A telemetry snapshot includes:
 - position and route program
 - Warp
 - fuel
+- damage, composition, mission and emission program
 - colonists and mineral cargo
 
 When the fleet is connected the newest telemetry is confirmed immediately. When it is remote, the snapshot is delivered later using the same communication-delay model.
+
+## Friendly orbital exchange
+
+At the exact orbit of an owned populated colony, every emission mode shares the
+fleet's full status and buffered observations with the surface. This is a local
+ship/surface exchange, not remote radar inference. It requires neither a built
+planetary radar nor a separate order, and does not cancel Passive/Radio silence,
+activate the fleet's radar/jammer or make its scanner a long-range relay.
+
+The colony forwards an immutable full snapshot over its own available connection.
+Inside the capital mesh it is current immediately, so a silent fleet at Sol can
+use Cargo Transfer. At an isolated colony, the surface has the data locally while
+headquarters receives it only after ordinary slow-link/jamming delay. Departure
+does not cancel an already sent snapshot or update its contents retroactively.
+An enemy, uninhabited or uncolonized system cannot provide this friendly exchange.
 
 The UI can therefore distinguish:
 
@@ -118,10 +138,10 @@ ages; it never follows the hidden physical fleet. Newer onboard telemetry
 supersedes older radar evidence. Player turn exports retain received evidence
 and strip radar reports still in flight.
 
-Arrival at a friendly populated colony with radar also creates an independent
-Fleet arrived report from that colony. Its network delay is the colony's own,
-not the silent ship's. This conveys the observed arrival, without a current
-manifest or a claim that the onboard route has completed.
+Arrival at an owned populated colony shares the full onboard status through the
+local exchange above, including route completion when applicable. The normal
+arrival/route report uses the colony's connection; there is no duplicate hull-only
+arrival message. Radar sightings elsewhere remain position evidence only.
 
 Locations derived only from old telemetry are marked **Estimated**. The Comms
 panel distinguishes the position source from telemetry age. Cargo still needs

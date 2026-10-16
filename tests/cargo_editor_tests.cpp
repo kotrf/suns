@@ -88,6 +88,16 @@ struct MainWindowTestAccess {
         deliver_reconnaissance(w.state_);
         w.rebuildScene();
     }
+    static void installSilentOrbit(MainWindow& w, EmissionMode mode)
+    {
+        install(w); w.state_.fleets.resize(1);
+        auto& fleet=w.state_.fleets.front();
+        fleet.electronics={mode,mode==EmissionMode::RadioSilence?20u:0u};
+        fleet.telemetry.colonists=0;
+        publish_fleet_telemetry(w.state_,w.state_.turn);
+        w.selection_.star.reset();
+        w.rebuildScene();
+    }
     static void installOldSolReport(MainWindow& w, double actualX)
     {
         install(w);
@@ -345,6 +355,22 @@ int main(int argc, char** argv)
     QTimer::singleShot(0, checkInferredSol);
     transferTool->trigger();
     assert(suns::MainWindowTestAccess::selectedStar(dockWindow) == suns::StarId{2});
+
+    for(auto mode:{suns::EmissionMode::Passive,suns::EmissionMode::RadioSilence}) {
+        suns::MainWindowTestAccess::installSilentOrbit(dockWindow,mode);
+        suns::MainWindowTestAccess::endTurn(dockWindow);
+        assert(comms->text().contains("LIVE") && transferButton->isEnabled());
+        assert(comms->toolTip().contains("share full status with the colony"));
+        const auto& fleet=suns::MainWindowTestAccess::state(dockWindow).fleets.front();
+        assert(fleet.electronics.mode==mode && fleet.telemetry.colonists==100);
+        QTimer::singleShot(0, [&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            assert(dialog && dialog->windowTitle()=="Transfer cargo — Sol");
+            assert(dialog->findChild<QSlider*>("cargoDestinationColonistSlider")->value()==100);
+            dialog->reject();
+        });
+        transferButton->click();
+    }
 
     suns::MainWindowTestAccess::installRadarPosition(dockWindow);
     assert(comms->text().contains("DELAYED") && comms->text().contains("telemetry 4 turns old"));

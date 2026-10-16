@@ -73,7 +73,7 @@ void MainWindow::installStrategicOperations()
     mode->addItems({"Standard", "Passive", "Radio silence"});
     auto* years = new QSpinBox(group); years->setObjectName("radioSilenceYears");
     years->setRange(1,100); years->setValue(5); years->setSuffix(" yr");
-    years->setToolTip("Radio silence ends automatically after this many years. Incoming commands can arrive while the transmitter is off; outgoing reports wait for a permitted transmission.");
+    years->setToolTip("Radio silence ends automatically after this many years. Incoming commands can arrive while the transmitter is off; outgoing reports wait for a permitted transmission or local exchange with a friendly orbital colony.");
     auto* interval=new QSpinBox(group); interval->setObjectName("emissionBurstInterval"); interval->setRange(0,100);
     interval->setSpecialValueText("No bursts"); interval->setSuffix(" yr"); interval->setToolTip("One-year communication window every N years, beginning N years after this order. Finite wake-up remains the failsafe.");
     auto* scan=new FleetCheckBox("Active scan in window",group); scan->setObjectName("activeEmissionBurst");
@@ -91,7 +91,7 @@ void MainWindow::installStrategicOperations()
     auto* summary = new QLabel(group); summary->setObjectName("strategicMissionSummary");
     summary->setWordWrap(true); summary->setTextFormat(Qt::PlainText); body->addWidget(summary);
     task->setToolTip("Stationary mission. Idle stops the mission; it does not change emissions or cancel radio silence. Bombing requires bombs and an enemy colony in orbit. Mine laying requires a mine layer; sweeping uses beams. Field research needs a scanner; salvage also needs a cargo hold. Travel replaces the mission.");
-    mode->setToolTip("Choose a mode, then press Set to queue an emission order. Standard: active scans, jamming and transmissions. Passive: receive commands and listen, with no telemetry or automatic transmissions. Radio silence: the same listening posture with scheduled transmission/scan windows and wake-up. All modes receive commands with normal propagation delay. Other radars can still detect silent hulls.");
+    mode->setToolTip("Choose a mode, then press Set to queue an emission order. Standard: active scans, jamming and transmissions. Passive: receive commands and listen, with no automatic long-range transmissions. Radio silence: the same listening posture with scheduled transmission/scan windows and wake-up. All modes receive commands with normal propagation delay and share full status locally with a friendly populated colony in orbit; the colony forwards it over its own link. Other radars can still detect silent hulls.");
     layout->insertWidget(1,group);
     connect(assign,&QPushButton::clicked,this,[this,task] {
         const auto* fleet = selectedFleet(); if (!fleet || fleet->owner != pendingOrders_.player) return;
@@ -155,7 +155,7 @@ void MainWindow::installStrategicOperations()
             .arg(emissionName(pendingEmission->program.mode));
         else if(mode->currentIndex()!=int(known.electronics.mode))
             text+="\nEmission selection is a draft. Press Set to queue it.";
-        text+="\nIdle changes only the mission. Emission changes use Set. Command reception stays on while silent; outgoing reports wait for transmission.";
+        text+="\nIdle changes only the mission. Emission changes use Set. Command reception stays on while silent; reports wait for transmission or friendly orbital exchange.";
         const auto statuses=known_sensor_status(state_,pendingOrders_.player);
         const auto status=std::find_if(statuses.begin(),statuses.end(),[&](const auto& s){return s.fleet==known.id;});
         if(status!=statuses.end()) text+=QString("\nReceived sensor status, year %1: interference %2%; active %3 / passive baseline %4 / emission reception %5 ly.")

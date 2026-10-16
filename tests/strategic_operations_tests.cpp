@@ -171,6 +171,45 @@ void silence_keeps_command_reception_and_resumes_transmissions()
     s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].electronics.mode == EmissionMode::Standard);
 }
 
+void silence_hides_transmissions_but_not_active_radar_reflections()
+{
+    for(auto mode:{EmissionMode::Standard,EmissionMode::Passive,EmissionMode::RadioSilence}) {
+        auto s=arena();
+        s.shipDesigns.push_back({20,2,"Target",ShipHullType::Destroyer,{C::FuelMizer}});
+        Fleet target; target.id=2; target.owner=2; target.design=20; target.ships={{20,1}};
+        target.position={80,0}; target.electronics={mode,mode==EmissionMode::RadioSilence?20u:0u};
+        s.fleets.push_back(target);
+        assert(!detector_detects_fleet(s,s.fleets[0],s.fleets[1],2)); // R50 reflected-hull limit.
+        observe_strategic_objects(s,2); s.turn=2; deliver_strategic_intel(s);
+        const bool signal=std::any_of(s.players[0].strategicIntel.begin(),s.players[0].strategicIntel.end(),[](const auto& i){return i.type==StrategicObjectKind::Emission;});
+        assert(signal==(mode==EmissionMode::Standard)); // Emission reception reaches R100.
+        s.fleets[1].position={20,0};
+        assert(detector_detects_fleet(s,s.fleets[0],s.fleets[1],2)); // Silence is not hull cloaking.
+    }
+}
+
+void emission_interception_uses_the_built_planetary_receiver()
+{
+    for(auto radar:{PlanetaryRadarLevel::None,PlanetaryRadarLevel::Local,PlanetaryRadarLevel::Full}) {
+        auto s=arena(); s.fleets.front().owner=2; s.fleets.front().position={80,0};
+        s.stars={{1,"Receiver",{0,0}}};
+        Planet colony; colony.id=1; colony.star=1; colony.owner=1; colony.population=1000;
+        colony.radar=radar; colony.homeworld=true; s.planets={colony};
+        assert(colony_detects_fleet(s,colony,s.fleets.front(),2)==(radar==PlanetaryRadarLevel::Full));
+        observe_strategic_objects(s,2); s.turn=2; deliver_strategic_intel(s);
+        // Full radar sees the hull, so no redundant anonymous emission marker.
+        // Local R30 cannot intercept a signal at 80 ly; None has no receiver.
+        assert(s.players[0].strategicIntel.empty());
+        s.fleets.front().position={40,0};
+        observe_strategic_objects(s,3); s.turn=3; deliver_strategic_intel(s);
+        assert(s.players[0].strategicIntel.empty()==(radar!=PlanetaryRadarLevel::Local));
+        if(radar==PlanetaryRadarLevel::Local)
+            assert(s.players[0].strategicIntel.front().type==StrategicObjectKind::Emission);
+        s.fleets.front().position={0,0};
+        assert(colony_detects_fleet(s,colony,s.fleets.front(),3)==(radar!=PlanetaryRadarLevel::None));
+    }
+}
+
 void field_science_is_finite_delayed_and_real()
 {
     auto s = arena(); s.stars = {{1,"Target",{0,0}}};
@@ -209,4 +248,6 @@ int main()
 {
     bombardment_orders_and_targets(); mines_crossings_laying_sweeping(); stealth_jamming_and_signals();
     silence_keeps_command_reception_and_resumes_transmissions(); field_science_is_finite_delayed_and_real();
+    silence_hides_transmissions_but_not_active_radar_reflections();
+    emission_interception_uses_the_built_planetary_receiver();
 }

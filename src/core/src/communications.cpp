@@ -19,12 +19,27 @@ struct CommunicationField {
     bool connected{};
 };
 
+bool has_friendly_colony(const GameState& state, PlayerId owner, Position position)
+{
+    return std::any_of(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
+        if (planet.owner != owner || planet.population == 0) return false;
+        const auto* star = find_star(state, planet.star);
+        return star && same_position(star->position, position);
+    });
+}
+
+bool fleet_can_share_reports(const GameState& state, const Fleet& fleet, std::uint64_t turn)
+{
+    // Local ship/surface exchange does not enable the fleet's long-range
+    // transmitter, active sensors or relay field. The colony forwards the data.
+    return fleet_transmits(fleet, turn) || has_friendly_colony(state, fleet.owner, fleet.position);
+}
+
 const Fleet* report_source(const GameState& state, PlayerId owner, Position position,
     std::uint64_t turn, FleetId observer)
 {
+    if (has_friendly_colony(state, owner, position)) return nullptr;
     if(observer) for(const auto& f:state.fleets) if(f.id==observer && f.owner==owner) return &f;
-    for(const auto& p:state.planets) if(p.owner==owner && p.population)
-        if(const auto* star=find_star(state,p.star); star && same_position(star->position,position)) return nullptr;
     const Fleet* best=nullptr;
     for(const auto& f:state.fleets) if(f.owner==owner && same_position(f.position,position))
         if(!best || std::pair{fleet_available_turn(f,turn),f.id}<std::pair{fleet_available_turn(*best,turn),best->id}) best=&f;
@@ -459,7 +474,8 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
 
 bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)
 {
-    return fleet_transmits(fleet, state.turn) && communication_delay_turns(state, fleet.owner, fleet.position) == 0;
+    return fleet_can_share_reports(state, fleet, state.turn)
+        && communication_delay_turns(state, fleet.owner, fleet.position) == 0;
 }
 
 FleetTelemetry confirmed_fleet_telemetry(const GameState& state, const Fleet& fleet)
@@ -682,9 +698,9 @@ void deliver_due_fleet_telemetry(GameState& state)
 void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
 {
     for (auto& fleet : state.fleets) {
-        if (!fleet_transmits(fleet, observationTurn)) continue;
+        if (!fleet_can_share_reports(state, fleet, observationTurn)) continue;
         const auto snapshot = authoritative_snapshot(state, fleet, observationTurn);
-        const auto delay = communication_delay_turns(state, fleet.owner, fleet.position);
+        const auto delay = communication_delay_turns(state, fleet.owner, fleet.position, observationTurn);
         if (delay == 0) {
             if (snapshot.observedTurn >= fleet.telemetry.observedTurn) fleet.telemetry = snapshot;
             std::erase_if(fleet.telemetryInTransit, [&](const PendingFleetTelemetry& packet) {
@@ -720,7 +736,7 @@ void dispatch_fleet_report_outbox(GameState& state)
         const auto source=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f) {
             return f.id==report.transmissionFleet && f.owner==owner;
         });
-        if(source==state.fleets.end() || !fleet_transmits(*source,state.turn)) return;
+        if(source==state.fleets.end() || !fleet_can_share_reports(state,*source,state.turn)) return;
         report.deliveryTurn=state.turn+communication_delay_turns(state,owner,source->position);
         report.transmissionFleet=0;
         if constexpr(std::is_same_v<std::remove_cvref_t<decltype(report)>,PendingPlayerReport>) {

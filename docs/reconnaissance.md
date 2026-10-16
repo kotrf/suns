@@ -103,8 +103,17 @@ Burst windows do not silently turn into permanent Standard mode. The owner's
 route continues to use confirmed telemetry and its known onboard plan. Position
 can also come from a newer received friendly radar measurement: silence stops
 the target's transmissions, not its reflected hull signature. Friendly radar
-reports have their own observation date, delivery delay and uncertainty; they
-never refresh the target's onboard telemetry or command link.
+reports have their own observation date, delivery delay and uncertainty. Remote
+hull detection never refreshes the target's onboard telemetry or command link.
+At an owned populated colony, a separate local ship/surface exchange shares the
+full status in every emission mode, without requiring a planetary radar. The
+colony forwards it with its own normal network delay; see [communications](communications.md).
+
+Silence already prevents anonymous contacts from the fleet's own long-range
+transmissions. It grants no arbitrary reduction in active reflected-hull range.
+Between programmed windows, Passive and Radio silence have the same listening
+posture; their distinction is the transmission/wake schedule. Planetary emission
+reception uses the built radar's range (None/Local/Full), not an implicit Full radar.
 
 ## Persistence and current limits
 
