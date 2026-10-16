@@ -625,6 +625,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
         const bool medium=state_.interstellarMediumEnabled;
         if (medium) tooltip+="\nMedium estimate uses received profiles only. The fuel range covers density 0–1 for the forecast flown segments, with fitted engines and rounding. "
             "Unsurveyed density can change fuel-limited coasting, arrival time and refuelling; ETA and fuel left are estimates.";
+        if (medium && forecast.fuelUsed) tooltip+=QString("\nReceived-profile consumption estimate: ≈%1 mg.").arg(*forecast.fuelUsed,0,'f',1);
         if (!forecast.arrivalTurn) tooltip += "\nArrival is not predicted: ≥ is consumption so far, not the complete leg's cost; — means no data.";
         if (forecast.fuelShortageTurn) tooltip += QString("\nFuel shortage at T+%1 on this leg: the ordered Warp cannot be maintained. "
             "Reduce Warp or add a refuelling stop; free-speed coasting may still allow a later arrival.").arg(*forecast.fuelShortageTurn);
@@ -634,8 +635,8 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             leg.warp,
             index == 0,
             forecast.arrivalTurn ? (medium?QString("≈%1").arg(*forecast.arrivalTurn):QString::number(*forecast.arrivalTurn)) : QString("—"),
-            medium && forecast.fuelMinimum && forecast.fuelMaximum ? QString("%1%2–%3 (≈%4)").arg(forecast.arrivalTurn?"":"≥")
-                .arg(*forecast.fuelMinimum,0,'f',1).arg(*forecast.fuelMaximum,0,'f',1).arg(forecast.fuelUsed.value_or(0),0,'f',1) :
+            medium && forecast.fuelMinimum && forecast.fuelMaximum ? QString("%1%2–%3").arg(forecast.arrivalTurn?"":"≥")
+                .arg(*forecast.fuelMinimum,0,'f',1).arg(*forecast.fuelMaximum,0,'f',1) :
             forecast.fuelUsed ? QString("%1%2").arg(forecast.arrivalTurn ? "" : "≥")
                 .arg(*forecast.fuelUsed, 0, 'f', 1) : QString("—"),
             forecast.fuelRemaining ? (medium?QString("≈%1").arg(*forecast.fuelRemaining,0,'f',1):QString::number(*forecast.fuelRemaining, 'f', 1)) : QString("—"),
