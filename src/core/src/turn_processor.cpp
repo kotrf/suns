@@ -443,9 +443,8 @@ bool invade_colony(
         planet.homeworld = false;
         planet.population = survivors;
         planet.productionQueue.clear();
-        // Capture never forces infrastructure. An explicitly user-selected
-        // default production template is still honored when one exists.
-        apply_default_production_template(state, planet);
+        // A settlement default is not a conquest program. Captured worlds
+        // await explicit production orders even when that default is selected.
         planet.productionWaitingForMinerals = false;
         planet.productionWaitingForShipyard = false;
         set_survey_level(

@@ -36,6 +36,7 @@ struct MainWindowTestAccess {
         w.state_ = s; w.pendingOrders_ = {1,{}}; w.pendingDescriptions_.clear(); w.selection_.fleet = s.fleets.front().id; w.rebuildScene();
         emit w.routeProgramContextChanged(true); // Match load/new-game session replacement.
     }
+    static bool selectSystem(MainWindow& w, StarId star) { return w.selectWorkspaceObject(1,star); }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void messages(MainWindow& w,const std::vector<GameEvent>& events) {
         w.resetTurnMessages(); w.appendTurnMessages(events);
@@ -188,7 +189,7 @@ int main(int argc,char** argv)
     for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
              FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage})
         assert(action->findData(int(kind))>=0);
-    assert(window.selectWorkspaceObject(1,1)); settle();
+    assert(MainWindowTestAccess::selectSystem(window,1)); settle();
     action->setCurrentIndex(action->findData(int(FleetArrivalActionKind::FieldResearch))); settle();
     assert(add->isEnabled()); add->click(); settle();
     mode->setCurrentIndex(2); settle(); setMode->click();
@@ -285,9 +286,9 @@ int main(int argc,char** argv)
     for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
              FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage}) {
         MainWindowTestAccess::install(window,supported); settle();
-        assert(window.selectWorkspaceObject(1,supported.stars[0].id));
+        assert(MainWindowTestAccess::selectSystem(window,supported.stars[0].id));
         assert(window.appendSelectedStarWaypoint(4,{}));
-        assert(window.selectWorkspaceObject(1,supported.stars[1].id));
+        assert(MainWindowTestAccess::selectSystem(window,supported.stars[1].id));
         assert(window.appendSelectedStarWaypoint(4,{kind})); settle();
         assert(window.selectedFleetRouteProgramLegAction(0)->kind==FleetArrivalActionKind::None);
         assert(window.selectedFleetRouteProgramLegAction(1)->kind==kind);

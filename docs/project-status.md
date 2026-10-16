@@ -17,10 +17,12 @@ Save v74 / orders v24 retain actions in all route/command/telemetry/PBEM paths.
 Local focused core and UI/save CI evidence is recorded in its implementation PR;
 this branch is not merged merely because #203 was authorized.
 
-The no-program colony behavior requested in #201 already exists in main and
-has a regression: no free radar, no automatic radar queue, empty development
-queue unless the player explicitly chose a default template. The dedicated
-template editor and per-Colonize frozen snapshots remain #201. #205 remains a
+Founding with no chosen/default program already starts with no radar and an
+empty queue in main. This branch fixes the remaining #201 conquest exception:
+new-colony defaults are no longer applied to captured worlds. Conquest always
+starts with no radar and an empty queue, including when a settlement default
+is explicitly enabled. The dedicated template editor and per-Colonize frozen
+snapshots remain #201. #205 remains a
 design discussion, without new hardware or independent channel switches.
 
 Fair computer empires' initial three phases are complete in #188/#189/#190 and
