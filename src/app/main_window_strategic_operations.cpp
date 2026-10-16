@@ -191,7 +191,10 @@ void MainWindow::renderStrategicObjects()
         const double radius = std::max(2.0,intel.radius);
         auto* circle = scene_->addEllipse(intel.position.x-radius,intel.position.y-radius,radius*2,radius*2,pen);
         circle->setZValue(-12); circle->setAcceptedMouseButtons(Qt::NoButton);
-        circle->setToolTip(intel.type == StrategicObjectKind::Emission ? QString("Unidentified emission area, uncertainty %1 ly; observed year %2").arg(intel.radius).arg(qulonglong(intel.observedTurn))
+        circle->setToolTip(intel.type == StrategicObjectKind::Emission ? QString("Unidentified %1 emission area, uncertainty %2 ly; emitted year %3; intercepted year %4; received year %5. Emission-time position; current source unknown.")
+            .arg(intel.emission ? (intel.emission->channel==SignalChannel::Slow?"slow-channel":"fast-channel") : "legacy")
+            .arg(intel.radius).arg(qulonglong(intel.emission?intel.emission->emittedTurn:intel.observedTurn))
+            .arg(qulonglong(intel.observedTurn)).arg(qulonglong(intel.deliveryTurn))
             : intel.type == StrategicObjectKind::Wreck ? QString("Wreck %1 — recover within 10 ly; expires year %2").arg(intel.id).arg(intel.quantity,0,'f',0)
             : QString("%1 minefield %2 — %3 mines, safe Warp %4; observed year %5").arg(intel.kind == 1 ? "Heavy" : intel.kind == 2 ? "Speed trap" : "Standard")
                 .arg(intel.id).arg(intel.quantity,0,'f',0).arg(minefield_safe_warp(intel.kind)).arg(qulonglong(intel.observedTurn)));

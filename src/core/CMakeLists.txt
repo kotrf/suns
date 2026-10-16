@@ -9,6 +9,7 @@ add_library(suns_core
     src/combat.cpp
     src/strategic_operations.cpp
     src/communications.cpp
+    src/emission_interception.cpp
     src/mineral_economy.cpp
     src/mining.cpp
     src/player_knowledge.cpp

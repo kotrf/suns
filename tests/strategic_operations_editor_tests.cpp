@@ -210,11 +210,12 @@ int main(int argc,char** argv)
                            GameEventKind::ScientificData,GameEventKind::EmissionDetected}) {
         GameEvent e; e.id = 100+std::uint64_t(kind); e.recipient = 1; e.kind = kind;
         e.observedTurn = 1; e.turn = 2; e.position = {80,120}; e.quantity = 12;
+        if(kind==GameEventKind::EmissionDetected) e.emission=EmissionObservation{1,SignalChannel::Slow};
         MainWindowTestAccess::messages(window,{e}); messages->setCurrentRow(0); settle();
         const auto text = messageBody->toPlainText();
         assert(text.contains("Observed turn 1; received turn 2") && !text.contains("Natural wormholes"));
         if (kind == GameEventKind::ScientificData) assert(text.contains("research points have been delivered"));
-        if (kind == GameEventKind::EmissionDetected) assert(text.contains("unverified"));
+        if (kind == GameEventKind::EmissionDetected) assert(text.contains("unverified") && text.contains("Slow channel") && text.contains("Emitted year 1; intercepted year 1; received year 2") && text.contains("does not track"));
     }
 
     auto* interval=window.findChild<QSpinBox*>("emissionBurstInterval");

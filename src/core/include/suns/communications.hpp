@@ -42,6 +42,19 @@ void dispatch_fleet_report_outbox(GameState&);
     PlayerId player,
     Position position, std::uint64_t atTurn = 0);
 
+struct CommunicationRoute {
+    SignalChannel channel{SignalChannel::Fast};
+    Position transmitter, receiver;
+    std::uint32_t propagationTurns{}, receiverDelay{};
+};
+[[nodiscard]] CommunicationRoute communication_route(const GameState&, PlayerId, Position,
+    std::uint64_t atTurn = 0);
+// Only call for a dispatched packet; pure delay/knowledge queries never emit.
+void record_report_transmission(GameState&, PlayerId, Position, std::uint64_t, FleetId observer=0);
+void record_command_transmission(GameState&, PlayerId, Position target, std::uint64_t);
+[[nodiscard]] std::uint64_t dispatch_report_delivery_turn(GameState&, PlayerId, Position,
+    std::uint64_t, FleetId observer=0);
+
 // A fleet can also exchange data through its friendly orbital colony without
 // enabling its own long-range transmitter. The colony's network delay applies.
 [[nodiscard]] bool fleet_has_instant_link(const GameState& state, const Fleet& fleet);

@@ -9,6 +9,8 @@
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/communications.hpp"
+#include "suns/strategic_operations.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -1916,8 +1918,56 @@ void colony_programs_round_trip_without_mutable_template_lookups()
     assert(!read_turn_order_file(packetPath, imported, error));
 }
 
+void emission_pulses_and_dated_reports_round_trip()
+{
+    QTemporaryDir dir; QString error;
+    SaveGameData save; save.campaignId=81; save.turnToken=82; save.pendingOrders={1,{}};
+    save.mode=SessionMode::Host; save.playerTokens={{1,82},{2,83}};
+    auto& state=save.state; state.turn=10; state.players={{1,"Receiver"},{2,"Sender"}};
+    state.stars={{1,"Home",{0,0}},{2,"Far",{1000,0}}};
+    for(auto id:{1U,2U}) {
+        Planet p; p.id=id; p.star=id; p.owner=id; p.population=10000; p.homeworld=true;
+        p.radar=PlanetaryRadarLevel::Full; state.planets.push_back(p);
+    }
+    state.shipDesigns={{1,1,"Listener",ShipHullType::Destroyer,{ShipComponentType::FuelMizer,ShipComponentType::MoleScanner}},
+        {2,2,"Sender",ShipHullType::Destroyer,{ShipComponentType::FuelMizer,ShipComponentType::RhinoScanner}}};
+    for(auto& d:state.shipDesigns) normalize_ship_design_placement(d);
+    for(auto id:{1U,2U}) {
+        Fleet f; f.id=id; f.owner=id; f.design=id; f.ships={{id,1}}; f.fuel=100;
+        f.position={id==1?400.0:600.0,0}; state.fleets.push_back(f);
+    }
+    state.nextShipDesignId=3; state.nextFleetId=3;
+    state.fleets[1].electronics={EmissionMode::RadioSilence,100,false,10,10,false,false};
+    publish_fleet_telemetry(state,10);
+    const auto path=dir.filePath("signals.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error));
+    const auto ok=read_save_game_file(path,loaded,error); if(!ok) std::cerr<<error.toStdString()<<'\n'; assert(ok);
+    assert(loaded.state.emissions.size()==3 && loaded.state.emissions.back().emittedTurn==10);
+    loaded.state.fleets.pop_back(); loaded.state.turn=12; observe_emission_pulses(loaded.state,12);
+    assert(loaded.state.players[0].pendingStrategicIntel.front().emission->emittedTurn==10);
+    assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,save,error));
+    const auto sourcePulse=std::find_if(save.state.emissions.begin(),save.state.emissions.end(),[](const auto& pulse) {
+        return pulse.owner==2 && pulse.emittedTurn==10 && pulse.channel==SignalChannel::Slow;
+    });
+    assert(sourcePulse!=save.state.emissions.end() && sourcePulse->receipts.size()==1);
+    assert(sourcePulse->receipts.front().player==1 && sourcePulse->receipts.front().fleet==1);
+    assert(save.state.players[0].pendingStrategicIntel.front().observedTurn==12);
+    const auto packet=make_player_turn(save,1);
+    assert(packet.state.emissions.empty() && packet.state.players[0].pendingStrategicIntel.empty());
+    save.state.turn=15; deliver_strategic_intel(save.state);
+    save.strategicMessages=deliver_due_player_reports(save.state);
+    assert(save.strategicMessages.size()==1 && save.strategicMessages.front().emission->emittedTurn==10);
+    assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.strategicMessages.front().emission->channel==SignalChannel::Slow);
+    auto invalid=save; invalid.state.emissions.back().emittedTurn=99;
+    assert(write_save_game_file(path,invalid,error) && !read_save_game_file(path,loaded,error));
+    invalid=save; invalid.strategicMessages.front().emission->emittedTurn=99;
+    assert(write_save_game_file(path,invalid,error) && !read_save_game_file(path,loaded,error));
+}
+
 int main()
 {
+    emission_pulses_and_dated_reports_round_trip();
     reconnaissance_and_programs_round_trip();
     stargate_orders_round_trip();
     stations_defenses_and_orders_round_trip();

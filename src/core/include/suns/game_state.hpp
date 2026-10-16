@@ -705,6 +705,12 @@ struct ReconContact {
     FleetId transmissionFleet{};
 };
 
+enum class SignalChannel : std::uint8_t { Fast, Slow };
+struct EmissionObservation {
+    std::uint64_t emittedTurn{};
+    SignalChannel channel{SignalChannel::Fast};
+};
+
 // Player-facing operational facts travel independently from fleet telemetry.
 // This keeps the simulation truth authoritative while ensuring that Turn
 // Messages cannot reveal a remote result before its communication packet lands.
@@ -730,6 +736,7 @@ struct PendingPlayerReport {
     std::optional<ReconContact> contact;
     std::optional<SensorStatus> sensorStatus;
     FleetId transmissionFleet{};
+    std::optional<EmissionObservation> emission;
 };
 
 struct TechnologyState {
@@ -943,6 +950,20 @@ struct PendingWormholeReport {
     FleetId transmissionFleet{};
 };
 
+// Host-only physical pulses. Receiver receipts prevent the same moving receiver
+// from intercepting a pulse twice. Neither source identities nor pulses export.
+struct EmissionReceipt { PlayerId player{}; FleetId fleet{}; PlanetId colony{}; };
+struct EmissionPulse {
+    std::uint32_t id{};
+    PlayerId owner{};
+    Position position;
+    std::uint64_t emittedTurn{};
+    SignalChannel channel{SignalChannel::Fast};
+    double maximumRange{}, deceptionStrength{};
+    FleetId fleet{};
+    PlanetId colony{};
+    std::vector<EmissionReceipt> receipts;
+};
 enum class StrategicObjectKind : std::uint8_t { Minefield, Wreck, Emission };
 // Immutable sensor evidence, never a reference to current hidden truth.
 struct StrategicIntel {
@@ -956,6 +977,7 @@ struct StrategicIntel {
     double quantity{};
     std::uint8_t kind{};
     FleetId transmissionFleet{};
+    std::optional<EmissionObservation> emission;
 };
 struct FieldScienceRecord {
     std::uint64_t key{};
@@ -1297,6 +1319,8 @@ struct GameState {
     std::vector<Minefield> minefields;
     std::uint32_t nextWreckId{1};
     std::vector<SalvageWreck> wrecks;
+    std::uint32_t nextEmissionId{1};
+    std::vector<EmissionPulse> emissions;
 };
 
 struct GalaxyConfig {

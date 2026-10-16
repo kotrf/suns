@@ -69,6 +69,7 @@ void queue(GameState& state, PlayerId owner, WormholeReportKind kind, WormholeKn
                 && r.observedTurn == turn && r.deliveryTurn <= due && r.knowledge.stability >= knowledge.stability; });
         if (duplicate != p->pendingWormholeReports.end()) return;
     }
+    if(due!=kAwaitingTransmission) record_report_transmission(state,owner,source,turn,fleet);
     p->pendingWormholeReports.push_back({kind, turn, due, fleet, knowledge,
         held_report_source(state,owner,source,turn,fleet)});
 }

@@ -180,6 +180,7 @@ void observe_reconnaissance(GameState& s,std::uint64_t turn)
         std::vector<SensorStatus> statuses;
         for(const auto& receiver:sensors) {
             const auto status=sensor_status(s,player.id,receiver,turn); statuses.push_back(status);
+            if(status.deliveryTurn!=kAwaitingTransmission) record_report_transmission(s,player.id,receiver.position,turn,receiver.fleet);
             auto duplicate=std::find_if(player.pendingSensorStatus.begin(),player.pendingSensorStatus.end(),[&](const auto& x){return x.fleet==status.fleet && x.colony==status.colony && x.observedTurn==turn;});
             if(duplicate==player.pendingSensorStatus.end()) player.pendingSensorStatus.push_back(status);
             const auto old=std::find_if(player.observedSensorStatus.begin(),player.observedSensorStatus.end(),[&](const auto& x){return x.fleet==status.fleet && x.colony==status.colony;});

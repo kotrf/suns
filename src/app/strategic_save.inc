@@ -49,6 +49,7 @@ void writeStrategicIntel(QDataStream& stream, const StrategicIntel& i)
     stream << quint32(i.id); writeEnum(stream, i.type); writePosition(stream, i.position);
     stream << i.radius << quint32(i.owner) << quint64(i.observedTurn) << quint64(i.deliveryTurn)
            << i.quantity << quint8(i.kind);
+    writeEmissionObservation(stream,i.emission);
 }
 void readStrategicIntel(QDataStream& stream, StrategicIntel& i)
 {
@@ -58,9 +59,50 @@ void readStrategicIntel(QDataStream& stream, StrategicIntel& i)
     readPosition(stream, i.position);
     stream >> i.radius >> owner >> observed >> delivery >> i.quantity >> kind;
     i.owner = owner; i.observedTurn = observed; i.deliveryTurn = delivery; i.kind = kind;
+    if(gReadSaveFormatVersion>=76) {
+        readEmissionObservation(stream,i.emission,observed);
+        if(i.emission && (i.type!=StrategicObjectKind::Emission || kind!=quint8(i.emission->channel))) markCorrupt(stream);
+    }
     if (!std::isfinite(i.radius) || i.radius < 0 || i.radius > 10000 || !std::isfinite(i.quantity)
         || i.quantity < 0 || kind > 2 || delivery < observed
         || (i.type == StrategicObjectKind::Emission && owner != 0)) markCorrupt(stream);
+}
+void writeEmissionPulses(QDataStream& stream,const GameState& state)
+{
+    stream << quint32(state.nextEmissionId) << quint32(state.emissions.size());
+    for(const auto& pulse:state.emissions) {
+        stream << quint32(pulse.id) << quint32(pulse.owner); writePosition(stream,pulse.position);
+        stream << quint64(pulse.emittedTurn) << quint8(pulse.channel) << pulse.maximumRange << pulse.deceptionStrength
+            << quint32(pulse.fleet) << quint32(pulse.colony) << quint32(pulse.receipts.size());
+        for(const auto& receipt:pulse.receipts) stream << quint32(receipt.player) << quint32(receipt.fleet) << quint32(receipt.colony);
+    }
+}
+void readEmissionPulses(QDataStream& stream,GameState& state)
+{
+    quint32 count{}; stream >> state.nextEmissionId;
+    if(!state.nextEmissionId || state.nextEmissionId>0x7fffffffU || !readCount(stream,count)) { markCorrupt(stream); return; }
+    for(quint32 n=0;n<count;++n) {
+        EmissionPulse pulse; quint64 turn{}; quint8 channel{}; quint32 receipts{};
+        stream >> pulse.id >> pulse.owner; readPosition(stream,pulse.position);
+        stream >> turn >> channel >> pulse.maximumRange >> pulse.deceptionStrength >> pulse.fleet >> pulse.colony;
+        pulse.emittedTurn=turn; pulse.channel=SignalChannel(channel);
+        if(!pulse.id || pulse.id>=state.nextEmissionId || !find_player(state,pulse.owner)
+            || !turn || turn>state.turn || channel>quint8(SignalChannel::Slow)
+            || !std::isfinite(pulse.maximumRange) || pulse.maximumRange<0 || pulse.maximumRange>20000
+            || !std::isfinite(pulse.deceptionStrength) || pulse.deceptionStrength<0 || pulse.deceptionStrength>0.95
+            || (pulse.fleet && pulse.colony) || (pulse.colony && pulse.deceptionStrength)
+            || std::any_of(state.emissions.begin(),state.emissions.end(),[&](const auto& p){return p.id==pulse.id;})
+            || !readCount(stream,receipts)) { markCorrupt(stream); return; }
+        for(quint32 i=0;i<receipts;++i) {
+            EmissionReceipt receipt; stream >> receipt.player >> receipt.fleet >> receipt.colony;
+            if(!find_player(state,receipt.player) || receipt.player==pulse.owner || bool(receipt.fleet)==bool(receipt.colony)
+                || std::any_of(pulse.receipts.begin(),pulse.receipts.end(),[&](const auto& r) {
+                    return r.player==receipt.player && r.fleet==receipt.fleet && r.colony==receipt.colony;
+                })) { markCorrupt(stream); return; }
+            pulse.receipts.push_back(receipt);
+        }
+        state.emissions.push_back(std::move(pulse));
+    }
 }
 void writeStrategicExtension(QDataStream& stream, const GameState& state)
 {
@@ -140,6 +182,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
         for(const auto& r:p.pendingPlayerReports) writeReconEvidence(out,r);
     }
     writeComputerControllers(out, state);
+    writeEmissionPulses(out,state);
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -308,5 +351,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
         }
     }
     if (gReadSaveFormatVersion >= 67) readComputerControllers(in, state);
+    if (gReadSaveFormatVersion >= 76) readEmissionPulses(in,state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }
