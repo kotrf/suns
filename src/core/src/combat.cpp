@@ -278,8 +278,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
     // Broadcast result packets while the pre-casualty relay network still
     // exists. This does not require a destroyed ship to transmit later.
     for (const auto recipient : recipients) {
-        const auto delivery = report_transmission_turn(state,recipient,report.position,report.observedTurn)
-            + communication_delay_turns(state, recipient, report.position,report.observedTurn);
+        const auto delivery = fleet_report_delivery_turn(state,recipient,report.position,report.observedTurn);
         deliveries[recipient] = delivery;
         auto player = std::find_if(state.players.begin(), state.players.end(),
             [&](const auto& p) { return p.id == recipient; });
@@ -290,6 +289,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         packet.deliveryTurn = delivery;
         packet.position = report.position;
         packet.battle = report;
+        packet.transmissionFleet = held_report_source(state,recipient,report.position,report.observedTurn);
         for (const auto& u : report.units) if (u.owner == recipient) { packet.fleet = u.fleet; break; }
         for (const auto& star : state.stars) if (distance_between(star.position, report.position) <= kFleetEncounterRadius) {
             packet.star = star.id;
@@ -341,7 +341,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
             if (deliveries[fleet.owner] > report.observedTurn) {
                 auto contact = fleet_player_view(state, fleet);
                 contact.pendingCommands.clear();
-                contact.telemetryInTransit.clear();
+                contact.telemetryInTransit = fleet.telemetryInTransit;
                 state.pendingFleetLossContacts.push_back({std::move(contact), deliveries[fleet.owner]});
             }
             continue;

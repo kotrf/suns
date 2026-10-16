@@ -77,7 +77,8 @@ emission marker lives for one planning year; its dated briefing remains.
 
 ## Programmable silence
 
-Standard and Passive keep their existing behavior. Radio silence still requires
+Standard transmits normally. Passive listens and receives commands without any
+automatic transmissions. Radio silence still requires
 a finite wake-up 1–100 years ahead. It can additionally carry:
 
 - a one-year communication window every N years (N 1–100), beginning N years
@@ -86,17 +87,33 @@ a finite wake-up 1–100 years ahead. It can additionally carry:
 - wake-up to Standard at arrival at a waypoint.
 
 The interval must fit before the failsafe wake-up. A communication-only window
-publishes telemetry and admits commands while keeping active scanners off.
+publishes telemetry and queued reports while keeping active scanners off.
 An active-scan window also performs surveys/contact observations and emits a
 signature. After the window the fleet remains silent automatically. A late
 program follows its original absolute schedule; an already expired program
-falls back safely to Standard. Commands wait for the next window or finite
-wake-up. Reports collected while silent wait for an allowed transmission.
+falls back safely to Standard. All modes accept incoming commands after normal
+propagation delay, independently of those outgoing windows. Reports collected
+while silent wait aboard for an actual allowed transmission. Unsent reports
+cannot be delivered posthumously by a destroyed source; packets already emitted
+remain deliverable.
 
 The same observation year is used for active scanning, relay membership,
 telemetry, jamming, survey/field/anonymous-signal reports and battle packets.
 Burst windows do not silently turn into permanent Standard mode. The owner's
-route/position continues to use confirmed telemetry and its known onboard plan.
+route continues to use confirmed telemetry and its known onboard plan. Position
+can also come from a newer received friendly radar measurement: silence stops
+the target's transmissions, not its reflected hull signature. Friendly radar
+reports have their own observation date, delivery delay and uncertainty. Remote
+hull detection never refreshes the target's onboard telemetry or command link.
+At an owned populated colony, a separate local ship/surface exchange shares the
+full status in every emission mode, without requiring a planetary radar. The
+colony forwards it with its own normal network delay; see [communications](communications.md).
+
+Silence already prevents anonymous contacts from the fleet's own long-range
+transmissions. It grants no arbitrary reduction in active reflected-hull range.
+Between programmed windows, Passive and Radio silence have the same listening
+posture; their distinction is the transmission/wake schedule. Planetary emission
+reception uses the built radar's range (None/Local/Full), not an implicit Full radar.
 
 ## Persistence and current limits
 

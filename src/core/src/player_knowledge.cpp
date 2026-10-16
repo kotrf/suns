@@ -179,14 +179,14 @@ void queue_survey_report(
     auto* player = mutable_player(state, playerId);
     if (!player) return;
 
-    auto deliveryTurn = observationTurn + communication_delay_turns(state, playerId, sourcePosition,observationTurn);
-    for (const auto& f : state.fleets) if (f.id == sourceFleet) deliveryTurn = fleet_available_turn(f, observationTurn) + communication_delay_turns(state, playerId, sourcePosition,observationTurn);
+    const auto deliveryTurn = fleet_report_delivery_turn(state, playerId, sourcePosition,observationTurn,sourceFleet);
     std::optional<PlayerId> observedOwner;
     if (level >= SurveyLevel::OrbitalSurvey) {
         if (const auto* planet = find_planet_at_star(state, star)) observedOwner = planet->owner;
     }
     const PendingSurveyReport candidate{
-        star, sourceFleet, observationTurn, deliveryTurn, level, observedOwner};
+        star, sourceFleet, observationTurn, deliveryTurn, level, observedOwner,
+        held_report_source(state,playerId,sourcePosition,observationTurn,sourceFleet)};
     const auto dominated = std::any_of(player->pendingSurveyReports.begin(), player->pendingSurveyReports.end(),
         [&](const PendingSurveyReport& report) {
             return report.star == star && report.level >= level && report.deliveryTurn <= deliveryTurn;
@@ -234,8 +234,10 @@ void queue_player_report(
 {
     auto* player = mutable_player(state, recipient);
     if (!player) return;
-    const auto deliveryTurn = report_transmission_turn(state,recipient,sourcePosition,observationTurn,observer?observer:fleet)
-        + communication_delay_turns(state, recipient, sourcePosition,observationTurn);
+    // The new colony reports its founding itself; a dismantled silent colony
+    // ship is not a transmitter that can wake up and send a report later.
+    const auto source = observer ? observer : kind==PlayerReportKind::ColonyFounded ? FleetId{0} : fleet;
+    const auto deliveryTurn = fleet_report_delivery_turn(state,recipient,sourcePosition,observationTurn,source);
     player->pendingPlayerReports.push_back({
         kind,
         observationTurn,
@@ -256,6 +258,8 @@ void queue_player_report(
         {},
         losses,
     });
+    player->pendingPlayerReports.back().transmissionFleet =
+        held_report_source(state,recipient,sourcePosition,observationTurn,source);
 }
 
 void observe_fleet_sensor_sweep(

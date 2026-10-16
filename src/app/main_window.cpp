@@ -574,8 +574,8 @@ std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
 
 const Planet* MainWindow::selectedFriendlyColonyForFleet() const
 {
-    const auto* star = selectedStar();
-    const auto* planet = selectedPlanet();
+    const auto* star = selectedFleetCargoStar();
+    const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
     const auto* fleet = selectedFleet();
     if (!star || !planet || !fleet || planet->owner != fleet->owner) return nullptr;
     return same_position(fleet->position, star->position) ? planet : nullptr;
@@ -898,6 +898,7 @@ void MainWindow::rebuildScene()
 
 void MainWindow::updateControls()
 {
+    refreshCargoTransferControls();
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     const auto* authoritativeFleet = selectedFleet();

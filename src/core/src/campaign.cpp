@@ -403,6 +403,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     own.observedEnemyFleets.clear();
     own.enemyContacts=known_enemy_contacts(host,playerId);
     own.pendingEnemyContacts.clear();
+    own.pendingFriendlyFleetContacts.clear();
     own.sensorStatus=known_sensor_status(host,playerId);
     own.pendingSensorStatus.clear(); own.observedSensorStatus.clear();
     own.pendingWormholeReports.clear();

@@ -5,6 +5,13 @@ an idle fleet a task, or issue a new emission program. These are core orders;
 commands travel through the same delayed channel as routes. Travel cancels
 stationary work. Different empires remain hostile in the current combat rules.
 
+The current Assign control starts stationary work at the fleet's present
+position; it does not attach that work to the selected route waypoint. Remote
+Mining already has a persistent arrival action. Lay minefields, sweeping,
+bombardment and field science still need equivalent waypoint orders. The intended
+route interaction is destination → work on arrival → continue until replaced or
+cancelled, without requiring a later manual Assign command.
+
 ## Bombardment
 
 `Bombard enemy colony` requires fitted bombs and physical orbit above a foreign
@@ -59,22 +66,45 @@ fleet is governed by its least cloaked stack, capped at 95% cloak. Tachyon
 equipment combines similarly and reduces effective opposing cloak. Active hull
 detection range is `scanner range × (1 − effective cloak)`.
 
-| Fleet mode | Active scans/jamming | Telemetry/commands |
+| Fleet mode | Active scans/jamming | Outgoing telemetry/reports |
 | --- | --- | --- |
 | Standard | Enabled | Normal communication delay |
-| Passive | Disabled; passive receiver remains | Transmission at years divisible by 3 |
+| Passive | Disabled; passive receiver remains | No automatic long-range transmissions |
 | Radio silence | Disabled; passive receiver remains | Automatic resume year is mandatory (1–100 years ahead) |
 
 Passive localization starts with 25% of the fitted scanner range, then uses a
 stationary signature factor of 0.5, or a moving factor
 `min(2, 0.5 + Warp/5)`, and effective cloak. Radio silence does not erase commands
-already aboard. New commands wait for a communication window; in-flight packets
+already aboard. All modes receive new commands after normal signal delay;
+reception creates no acknowledgement or telemetry. In-flight packets
 remain deliverable. A fleet's operation reports follow its emission program;
 generic reports use the earliest co-located transmitter, with colony reports
 independent of silent orbiting fleets. Combat snapshots retain these delivery
 dates even if the reporting fleet is destroyed. Owner positions continue to be projected from confirmed
-telemetry. Silent fleets do not act as communication relays or publish new active
+telemetry, or a newer received friendly radar observation. Silent fleets do not act as communication relays or publish new active
 surveys. [Programmable communication/active-scan windows](reconnaissance.md) are now implemented; more conditional doctrines remain under #101.
+
+Passive has no periodic exchange or automatic wake-up. Radio silence adds a
+programmable finite duration, optional window
+interval, optional active scanning in those windows, and wake on arrival. A window
+lasts one game year and does not permanently cancel silence. Without active scan,
+it only transmits reports, leaving active scanners/jammers
+off. Active scan enables those systems for the window. Wake on arrival instead
+returns permanently to Standard at the first reached waypoint, including an
+intermediate one. These options are enabled only for Radio silence; active scan
+also requires a nonzero window interval.
+
+For example, an order issued in year 10 with a 9-year silence duration and a
+3-year window interval opens windows in years 13 and 16, then wakes in year 19.
+Active scan adds a scan to each window; without it those windows are radio-only.
+Incoming commands never wait for these outgoing windows. Passive receiver
+operation is independent of transmission. Reports collected without TX remain
+aboard until their source actually transmits; the subsequent signal delay starts
+from that source's dispatch position. An owned populated colony in the fleet's
+exact orbit receives full status and buffered observations locally in every mode,
+even without radar. Its own network forwards them with ordinary delay. This
+neither wakes the fleet nor enables its active sensors/long-range relay field;
+remote radar sightings elsewhere still disclose only hull evidence.
 
 Active jammers reduce opposing fleet scanners inside an aura of at least 30 ly
 (or the jammer fleet's ordinary scanner range). Component strengths combine with
@@ -87,6 +117,11 @@ the receiver's fitted scanner range, even when its hull is cloaked. The contact 
 a 20 ly grid cell center with 15 ly uncertainty, never a fleet ID, owner,
 composition or exact position. Received signal markers live for one planning year;
 the report remains in Turn Messages. Detached receivers report with delay.
+Silence suppresses this self-emission contact, but not reflected-hull detection
+by someone else's active radar. Local and Full planetary radars use their actual
+30/150 ly fitted ranges for emission reception; a radar-free colony cannot scan
+for signals. Receiving or locally uploading data does not enable a fleet's
+long-range transmitter signature.
 
 `Broadcast decoy signatures` requires a jammer and Standard mode. It adds a false
 ambiguous signal area. A receiver whose combined tachyon strength is at least the

@@ -266,6 +266,8 @@ private:
     [[nodiscard]] const StarSystem* selectedStar() const;
     [[nodiscard]] const Planet* selectedPlanet() const;
     [[nodiscard]] const Fleet* selectedFleet() const;
+    [[nodiscard]] const StarSystem* selectedFleetCargoStar(QString* unavailableReason = nullptr) const;
+    void refreshCargoTransferControls();
     [[nodiscard]] std::optional<Fleet> selectedFleetPlanningView() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
     [[nodiscard]] const Planet* selectedFriendlyColonyForFleet() const;

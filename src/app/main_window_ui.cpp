@@ -643,6 +643,7 @@ void MainWindow::installUiPolish()
     connect(summaryAction, &QAction::triggered, this, [this] { openFleetSummaryDialog(); });
     fleetMenu->addSeparator();
     auto* cargoAction = fleetMenu->addAction("Transfer cargo…");
+    cargoAction->setObjectName("fleetTransferCargoAction");
     connect(cargoAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
     auto* gateAction = fleetMenu->addAction("Transit stargate…");
     gateAction->setObjectName("fleetGateTransitAction");
@@ -693,7 +694,8 @@ void MainWindow::installUiPolish()
     connect(summaryToolAction, &QAction::triggered, summaryAction, &QAction::trigger);
 
     auto* cargoToolAction = dialogToolbar->addAction("Cargo");
-    cargoToolAction->setToolTip("Transfer colonists and minerals at the selected system");
+    cargoToolAction->setObjectName("fleetTransferCargoToolAction");
+    refreshCargoTransferControls();
     connect(cargoToolAction, &QAction::triggered, this, [this] { openCargoManifestDialog(); });
 
     auto* mergeToolAction = dialogToolbar->addAction("Merge");

@@ -119,4 +119,75 @@ void periodic_scan_and_anonymous_emissions()
     assert(signal.type==StrategicObjectKind::Emission && signal.owner==0 && signal.radius==15);
     assert(std::all_of(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return !r.fleet && !r.contactOwner;}));
 }
-int main() { detached_snapshot_survives_both_fleets(); confidence_hysteresis_and_knowledge(); interference_and_program_windows(); periodic_scan_and_anonymous_emissions(); }
+void friendly_silence_does_not_hide_a_hull_from_homeworld_radar()
+{
+    auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0;
+    s.shipDesigns.front().components={C::FuelMizer,C::RhinoScanner}; s.shipDesigns.front().placements.clear();
+    auto& fleet=s.fleets.front();
+    fleet.destination=Position{100,0}; fleet.warp=5; fleet.fuel=fleet_fuel_capacity(s,fleet);
+    fleet.electronics={EmissionMode::RadioSilence,9}; fleet.telemetry.electronics=fleet.electronics;
+    fleet.telemetry.destination.reset(); // The old Sol report knows no departure.
+    fleet.telemetry.colonists=100; fleet.colonists=200;
+    for(int year=0;year<4;++year) {
+        s=TurnProcessor{}.process(s,{});
+        const auto& f=s.fleets.front();
+        const auto contact=fleet_radar_position(s,f);
+        assert(contact && contact->sourceColony==1 && !contact->sourceFleet);
+        assert(contact->observedTurn==s.turn && fleet_position_age(s,f)==0);
+        assert(distance_between(fleet_player_view(s,f).position,f.position)<=contact->uncertainty+1e-6);
+        assert(!fleet_has_instant_link(s,f) && fleet_telemetry_age(s,f)==std::uint64_t(year+1));
+        assert(fleet_player_view(s,f).colonists==100 && f.colonists==200);
+        assert(s.players[0].enemyContacts.empty() && s.players[0].pendingEnemyContacts.empty());
+        const auto view=make_player_view(s,1).state;
+        assert(view.players[0].pendingFriendlyFleetContacts.empty());
+        const auto again=make_player_view(view,1).state;
+        assert(same_position(again.fleets.front().position,view.fleets.front().position));
+        assert(fleet_telemetry_age(again,again.fleets.front())==std::uint64_t(year+1));
+    }
+    assert(submit_fleet_task_command(s,1,s.fleets.front().id,FleetTask::None));
+    assert(s.fleets.front().electronics.mode==EmissionMode::RadioSilence); // Idle is not an emission command.
+    // Outside the scanner circle, old radar evidence ages instead of using hidden truth.
+    const auto last=projected_fleet_position(s,s.fleets.front());
+    s.fleets.front().position={800,0}; s.fleets.front().destination.reset();
+    s=TurnProcessor{}.process(s,{});
+    assert(fleet_position_age(s,s.fleets.front())==1);
+    assert(same_position(projected_fleet_position(s,s.fleets.front()),last));
+    // A later onboard packet supersedes hull-only evidence.
+    s.fleets.front().position={0,0}; s.fleets.front().electronics={EmissionMode::Standard,0};
+    publish_fleet_telemetry(s,s.turn);
+    assert(!fleet_radar_position(s,s.fleets.front()) && fleet_telemetry_age(s,s.fleets.front())==0);
+    assert(fleet_player_view(s,s.fleets.front()).colonists==200);
+}
+void friendly_radar_reports_travel_from_the_observer_and_respect_detection_limits()
+{
+    auto s=fixture(); auto target=s.fleets.back(); target.owner=1;
+    target.electronics={EmissionMode::RadioSilence,20}; s.fleets.back()=target;
+    s.turn=2; observe_reconnaissance(s,2); deliver_reconnaissance(s);
+    assert(s.players[0].friendlyFleetContacts.empty() && s.players[0].pendingFriendlyFleetContacts.size()==1);
+    const auto packet=s.players[0].pendingFriendlyFleetContacts.front();
+    assert(packet.sourceFleet==1 && packet.deliveryTurn==5);
+    assert(!fleet_radar_position(s,s.fleets.back()));
+    assert(make_player_view(s,1).state.players[0].pendingFriendlyFleetContacts.empty());
+    s.fleets.erase(s.fleets.begin()); // Observation survives losing its scanner source.
+    s.turn=5; deliver_reconnaissance(s);
+    assert(fleet_radar_position(s,s.fleets.front())->observedTurn==2);
+    auto older=packet; older.observedTurn=older.lastSeenTurn=1; older.deliveryTurn=5; older.position={999,999};
+    s.players[0].pendingFriendlyFleetContacts={older}; deliver_reconnaissance(s);
+    assert(same_position(fleet_radar_position(s,s.fleets.front())->position,packet.position));
+    // Without a planetary radar the target cannot report its own location in silence.
+    s=make_demo_game(); s.turn=2; s.planets.front().radar=PlanetaryRadarLevel::None;
+    s.fleets.front().electronics={EmissionMode::RadioSilence,20};
+    observe_reconnaissance(s,2); deliver_reconnaissance(s);
+    assert(s.players[0].friendlyFleetContacts.empty());
+    // Target radio silence does not prevent enemy hull detection either.
+    s=fixture({0,0},{20,0}); s.fleets.back().electronics={EmissionMode::RadioSilence,20};
+    s.turn=2; observe_reconnaissance(s,2); deliver_reconnaissance(s);
+    assert(!s.players[0].enemyContacts.empty());
+    // Own target must also obey real radar range and cloaking, not a blanket own-fleet reveal.
+    s=fixture({0,0},{100,0}); s.fleets.resize(1); s.fleets.front().position={100,0};
+    s.shipDesigns.front().components.push_back(C::SuperStealthCloak);
+    s.fleets.front().electronics={EmissionMode::RadioSilence,20};
+    s.turn=2; observe_reconnaissance(s,2); deliver_reconnaissance(s);
+    assert(s.players[0].friendlyFleetContacts.empty());
+}
+int main() { detached_snapshot_survives_both_fleets(); confidence_hysteresis_and_knowledge(); interference_and_program_windows(); periodic_scan_and_anonymous_emissions(); friendly_silence_does_not_hide_a_hull_from_homeworld_radar(); friendly_radar_reports_travel_from_the_observer_and_respect_detection_limits(); }

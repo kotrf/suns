@@ -1,5 +1,9 @@
 #include "main_window.hpp"
+#include "route_program_dock.hpp"
+#include "suns/communications.hpp"
+#include "suns/reconnaissance.hpp"
 
+#include <QAction>
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
@@ -10,6 +14,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStatusBar>
 #include <QTimer>
 #include <cassert>
 #include <cmath>
@@ -67,6 +72,46 @@ struct MainWindowTestAccess {
     static const GameState& state(const MainWindow& w) { return w.state_; }
     static QString systemInfo(const MainWindow& w) { return w.selectionLabel_->text(); }
     static void endTurn(MainWindow& w) { w.endTurn(); }
+    static void selectStar(MainWindow& w, std::optional<StarId> star)
+    {
+        w.selection_.star = star;
+        w.rebuildScene();
+    }
+    static std::optional<StarId> selectedStar(const MainWindow& w) { return w.selection_.star; }
+    static void installRadarPosition(MainWindow& w)
+    {
+        installOldSolReport(w, 100);
+        auto& fleet=w.state_.fleets.front();
+        fleet.electronics={EmissionMode::RadioSilence,9};
+        fleet.telemetry.electronics=fleet.electronics;
+        observe_reconnaissance(w.state_,w.state_.turn);
+        deliver_reconnaissance(w.state_);
+        w.rebuildScene();
+    }
+    static void installSilentOrbit(MainWindow& w, EmissionMode mode)
+    {
+        install(w); w.state_.fleets.resize(1);
+        auto& fleet=w.state_.fleets.front();
+        fleet.electronics={mode,mode==EmissionMode::RadioSilence?20u:0u};
+        fleet.telemetry.colonists=0;
+        publish_fleet_telemetry(w.state_,w.state_.turn);
+        w.selection_.star.reset();
+        w.rebuildScene();
+    }
+    static void installOldSolReport(MainWindow& w, double actualX)
+    {
+        install(w);
+        w.state_.fleets.resize(1);
+        w.state_.turn = 5;
+        auto& fleet = w.state_.fleets.front();
+        fleet.position = {actualX, 0};
+        fleet.destination = Position{actualX + 50, 0};
+        fleet.telemetry.observedTurn = 1;
+        fleet.telemetry.position = w.state_.stars.front().position;
+        fleet.telemetry.destination.reset();
+        w.selection_.star = w.state_.stars.front().id;
+        w.rebuildScene();
+    }
 };
 }
 
@@ -262,4 +307,90 @@ int main(int argc, char** argv)
     assert(invasion.source.fleet == 1 && invasion.destination.planet == 1);
     assert(invasion.colonists == 100);
     assert(suns::mineral_cargo_mass(invasion.minerals) == 0.0);
+
+    // Select only a fleet, then use the real dock button/menu/toolbar. Cargo
+    // always belongs to its orbit, regardless of the independent map selection.
+    suns::MainWindow dockWindow;
+    suns::attachRouteProgramDock(dockWindow);
+    dockWindow.installUiPolish();
+    dockWindow.installCommunicationStatus();
+    suns::MainWindowTestAccess::install(dockWindow);
+    suns::MainWindowTestAccess::selectStar(dockWindow, std::nullopt);
+    auto* transferButton = dockWindow.findChild<QPushButton*>("fleetTransferCargoButton");
+    auto* transferAction = dockWindow.findChild<QAction*>("fleetTransferCargoAction");
+    auto* transferTool = dockWindow.findChild<QAction*>("fleetTransferCargoToolAction");
+    auto* comms = dockWindow.findChild<QLabel*>("fleetCommunicationSummary");
+    assert(transferButton && transferAction && transferTool && comms);
+    assert(transferButton->isEnabled() && transferAction->isEnabled() && transferTool->isEnabled());
+    assert(comms->text().contains("LIVE"));
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog && dialog->objectName() == "cargoTransferDialog");
+        assert(dialog->windowTitle() == "Transfer cargo — Sol");
+        dialog->findChild<QSpinBox*>("cargoColonistSpin")->setValue(100);
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    });
+    transferButton->click();
+    const auto& fleetOnlyLoad = std::get<suns::TransferCargoOrder>(
+        suns::MainWindowTestAccess::orders(dockWindow).orders.front());
+    assert(fleetOnlyLoad.source.planet == 1 && fleetOnlyLoad.destination.fleet == 1);
+    for (int year = 0; year < 4; ++year) {
+        suns::MainWindowTestAccess::endTurn(dockWindow);
+        assert(comms->text().contains("LIVE"));
+        assert(transferButton->isEnabled());
+    }
+    assert(suns::MainWindowTestAccess::state(dockWindow).fleets.front().colonists == 200);
+
+    suns::MainWindowTestAccess::selectStar(dockWindow, suns::StarId{2});
+    dockWindow.selectFleetForRouteProgram(2);
+    const auto checkInferredSol = [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog && dialog->windowTitle() == "Transfer cargo — Sol");
+        const auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+        assert(destination && destination->currentText().contains("Second transport"));
+        dialog->reject();
+    };
+    QTimer::singleShot(0, checkInferredSol);
+    transferAction->trigger();
+    QTimer::singleShot(0, checkInferredSol);
+    transferTool->trigger();
+    assert(suns::MainWindowTestAccess::selectedStar(dockWindow) == suns::StarId{2});
+
+    for(auto mode:{suns::EmissionMode::Passive,suns::EmissionMode::RadioSilence}) {
+        suns::MainWindowTestAccess::installSilentOrbit(dockWindow,mode);
+        suns::MainWindowTestAccess::endTurn(dockWindow);
+        assert(comms->text().contains("LIVE") && transferButton->isEnabled());
+        assert(comms->toolTip().contains("share full status with the colony"));
+        const auto& fleet=suns::MainWindowTestAccess::state(dockWindow).fleets.front();
+        assert(fleet.electronics.mode==mode && fleet.telemetry.colonists==100);
+        QTimer::singleShot(0, [&] {
+            auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            assert(dialog && dialog->windowTitle()=="Transfer cargo — Sol");
+            assert(dialog->findChild<QSlider*>("cargoDestinationColonistSlider")->value()==100);
+            dialog->reject();
+        });
+        transferButton->click();
+    }
+
+    suns::MainWindowTestAccess::installRadarPosition(dockWindow);
+    assert(comms->text().contains("DELAYED") && comms->text().contains("telemetry 4 turns old"));
+    assert(comms->text().contains("Radar position: current") && !comms->text().contains("Position unconfirmed"));
+    assert(dockWindow.fleetSourceNameForRouteProgram(1).contains("Radar:")
+        && !dockWindow.fleetSourceNameForRouteProgram(1).contains("Orbit: Sol"));
+    assert(!transferButton->isEnabled() && transferButton->toolTip().contains("Radar locates this fleet"));
+
+    // Reproduce a four-year-old stationary Sol report while the real fleet is
+    // elsewhere. Do not label that orbit confirmed or leak remote cargo data.
+    suns::MainWindowTestAccess::installOldSolReport(dockWindow, 900);
+    assert(comms->text().contains("DELAYED") && comms->text().contains("Position unconfirmed"));
+    assert(dockWindow.fleetSourceNameForRouteProgram(1).contains("Estimated:"));
+    assert(dockWindow.fleetSourceNameForRouteProgram(1).contains("report 4 turn(s) old"));
+    assert(!transferButton->isEnabled() && !transferAction->isEnabled() && !transferTool->isEnabled());
+    const auto explanation = transferButton->toolTip();
+    assert(explanation.contains("4 turn(s) old"));
+    dockWindow.openCargoManifestDialog();
+    assert(!QApplication::activeModalWidget());
+    assert(dockWindow.statusBar()->currentMessage() == explanation);
+    suns::MainWindowTestAccess::installOldSolReport(dockWindow, 1500);
+    assert(transferButton->toolTip() == explanation);
 }

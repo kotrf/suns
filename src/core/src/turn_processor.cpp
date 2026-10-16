@@ -1019,6 +1019,9 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     destination->warp = std::min(destination->warp, fleet_max_warp(state, *destination));
     destination->fuel = std::min(destination->fuel, fleet_fuel_capacity(state, *destination));
     refresh_merged_fleet_manifest(*destination);
+    visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
+        if(owner==player && report.transmissionFleet==sourceId) report.transmissionFleet=order.destination;
+    });
     std::erase_if(state.fleets, [&](const Fleet& fleet) { return fleet.id == sourceId; });
     return true;
 }
@@ -1898,6 +1901,7 @@ TurnResult TurnProcessor::process_with_events(
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+    dispatch_fleet_report_outbox(next);
     // Establish a baseline for headless callers too, before overdue reports
     // are delivered at the current planning boundary.
     if (std::any_of(next.players.begin(), next.players.end(), [&](const auto& player) {
@@ -2184,6 +2188,7 @@ TurnResult TurnProcessor::process_with_events(
     ++next.turn;
     deliver_due_fleet_commands(next);
     publish_fleet_telemetry(next, next.turn);
+    dispatch_fleet_report_outbox(next);
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);

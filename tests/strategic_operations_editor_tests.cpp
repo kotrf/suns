@@ -3,6 +3,7 @@
 #include "save_game.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/communications.hpp"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -11,6 +12,7 @@
 #include <QDialog>
 #include <QComboBox>
 #include <QLabel>
+#include <QImage>
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -20,6 +22,8 @@
 #include <QDataStream>
 #include <QListWidget>
 #include <QTextBrowser>
+#include <QStyle>
+#include <QStyleOptionButton>
 #include <cassert>
 #include <cmath>
 #include <algorithm>
@@ -29,6 +33,7 @@ namespace suns {
 struct MainWindowTestAccess {
     static void install(MainWindow& w, const GameState& s) {
         w.state_ = s; w.pendingOrders_ = {1,{}}; w.pendingDescriptions_.clear(); w.selection_.fleet = s.fleets.front().id; w.rebuildScene();
+        emit w.routeProgramContextChanged(true); // Match load/new-game session replacement.
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void messages(MainWindow& w,const std::vector<GameEvent>& events) {
@@ -37,6 +42,21 @@ struct MainWindowTestAccess {
 };
 }
 void settle() { QEventLoop loop; QTimer::singleShot(30,&loop,&QEventLoop::quit); loop.exec(); }
+
+int brightIndicatorPixels(QCheckBox& box)
+{
+    QStyleOptionButton option; option.initFrom(&box); option.text=box.text();
+    const auto indicator=box.style()->subElementRect(QStyle::SE_CheckBoxIndicator,&option,&box);
+    QImage image(box.size(),QImage::Format_ARGB32_Premultiplied); image.fill(Qt::transparent);
+    box.render(&image);
+    int count=0;
+    for(int y=indicator.top()+2;y<indicator.bottom()-1;++y)
+        for(int x=indicator.left()+2;x<indicator.right()-1;++x) {
+            const auto c=image.pixelColor(x,y);
+            if(c.red()>=200 && c.green()>=210 && c.blue()>=220) ++count;
+        }
+    return count;
+}
 
 int main(int argc,char** argv)
 {
@@ -54,8 +74,22 @@ int main(int argc,char** argv)
     state.players[0].fieldScience = {{(1ULL<<32)|1,state.turn+2}};
     state.players[0].strategicIntel = {{1,StrategicObjectKind::Minefield,{100,100},std::sqrt(80),1,1,1,80,2}};
     state.players[0].pendingStrategicIntel = {{1,StrategicObjectKind::Wreck,{200,200},10,0,1,3,20,0}};
+    ReconContact radar; radar.fleet=fleet.id; radar.owner=1; radar.position={12,0};
+    radar.quality=ContactQuality::Confirmed; radar.sourceColony=1;
+    radar.observedTurn=radar.lastSeenTurn=radar.deliveryTurn=1;
+    state.players[0].friendlyFleetContacts={radar};
+    auto pendingRadar=radar; pendingRadar.sourceColony=0; pendingRadar.sourceFleet=99; pendingRadar.deliveryTurn=3;
+    state.players[0].pendingFriendlyFleetContacts={pendingRadar};
     PendingPlayerReport report; report.kind = PlayerReportKind::ScientificData; report.observedTurn = 1; report.deliveryTurn = 3;
     report.quantity = 12; report.researchField = ResearchField::Energy; state.players[0].pendingPlayerReports.push_back(report);
+    auto unsent=report; unsent.kind=PlayerReportKind::FleetArrived; unsent.quantity=0;
+    unsent.deliveryTurn=kAwaitingTransmission; unsent.transmissionFleet=fleet.id;
+    state.players[0].pendingPlayerReports.push_back(unsent);
+    state.players[0].fieldScience.push_back({(1ULL<<32)|2,kAwaitingTransmission,fleet.id});
+    auto lost=fleet_player_view(state,fleet); lost.id=state.nextFleetId++;
+    auto sent=fleet.telemetry; sent.fuel=123; sent.damagePercent=7;
+    lost.telemetryInTransit.push_back({state.turn+2,sent});
+    state.pendingFleetLossContacts.push_back({lost,state.turn+4});
     value.pendingOrders.orders = {SetFleetTaskOrder{fleet.id,FleetTask::LayMines},SetFleetElectronicsOrder{fleet.id,{EmissionMode::RadioSilence,6}}};
     value.pendingDescriptions = {"Lay mines","Radio silence"};
     QString error; const auto path = dir.filePath("strategy.suns");
@@ -67,6 +101,20 @@ int main(int argc,char** argv)
     assert(loaded.fleets[0].electronics.resumeTurn == 6 && loaded.fleets[0].telemetry.electronics.mode == EmissionMode::Passive);
     assert(loaded.fleets[0].pendingCommands.back().electronics && loaded.fleets[0].task == FleetTask::FieldResearch);
     assert(loaded.players[0].fieldScience[0].deliveryTurn == 3 && loaded.players[0].pendingStrategicIntel[0].deliveryTurn == 3);
+    assert(loaded.players[0].friendlyFleetContacts.front().sourceColony==1);
+    assert(loaded.players[0].pendingFriendlyFleetContacts.front().deliveryTurn==3
+        && loaded.players[0].pendingFriendlyFleetContacts.front().sourceFleet==99);
+    assert(loaded.players[0].pendingPlayerReports.back().transmissionFleet==fleet.id
+        && loaded.players[0].pendingPlayerReports.back().deliveryTurn==kAwaitingTransmission);
+    assert(loaded.pendingFleetLossContacts.size()==1);
+    const auto& sentAfterLoss=loaded.pendingFleetLossContacts.front().lastContact.telemetryInTransit;
+    assert(sentAfterLoss.size()==1 && sentAfterLoss.front().deliveryTurn==3
+        && sentAfterLoss.front().telemetry.fuel==123 && sentAfterLoss.front().telemetry.damagePercent==7);
+    auto transmitting=loaded; apply_electronics_program(transmitting.fleets.front(),{});
+    dispatch_fleet_report_outbox(transmitting);
+    assert(transmitting.players[0].pendingPlayerReports.back().deliveryTurn==transmitting.turn
+        && !transmitting.players[0].pendingPlayerReports.back().transmissionFleet);
+    assert(transmitting.players[0].fieldScience.back().deliveryTurn==transmitting.turn);
     assert(std::holds_alternative<SetFleetTaskOrder>(restored.pendingOrders.orders[0]));
     TurnOrderFileData packet; packet.orders = value.pendingOrders; packet.descriptions = value.pendingDescriptions;
     packet.campaignId = 1; packet.turn = 1; packet.turnToken = 1;
@@ -77,6 +125,15 @@ int main(int argc,char** argv)
     auto invalid = value; invalid.state.fleets[0].electronics.mode = EmissionMode(255);
     assert(write_save_game_file(dir.filePath("bad.suns"),invalid,error));
     SaveGameData rejected; assert(!read_save_game_file(dir.filePath("bad.suns"),rejected,error));
+    auto invalidOutbox=value; invalidOutbox.state.players[0].pendingPlayerReports.back().transmissionFleet=0;
+    assert(write_save_game_file(dir.filePath("bad-outbox.suns"),invalidOutbox,error));
+    assert(!read_save_game_file(dir.filePath("bad-outbox.suns"),rejected,error));
+    auto invalidRadar=value; invalidRadar.state.players[0].friendlyFleetContacts.front().owner=2;
+    assert(write_save_game_file(dir.filePath("bad-radar.suns"),invalidRadar,error));
+    assert(!read_save_game_file(dir.filePath("bad-radar.suns"),rejected,error));
+    auto duplicateRadar=value; duplicateRadar.state.players[0].friendlyFleetContacts.push_back(radar);
+    assert(write_save_game_file(dir.filePath("duplicate-radar.suns"),duplicateRadar,error));
+    assert(!read_save_game_file(dir.filePath("duplicate-radar.suns"),rejected,error));
     QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes = file.readAll();
     QByteArray magic; QDataStream marker(&magic,QIODevice::WriteOnly); marker << quint32(0x53545241u);
     const auto offset = bytes.indexOf(magic); assert(offset >= 0); bytes[offset] = char(0);
@@ -119,6 +176,17 @@ int main(int argc,char** argv)
     assert(scan->isEnabled()); scan->setChecked(true); arrival->setChecked(true); setMode->click();
     const auto& program=std::get<SetFleetElectronicsOrder>(MainWindowTestAccess::orders(window).orders.back()).program;
     assert(program.burstInterval==2 && program.firstBurstTurn==3 && program.activeBurst && program.wakeOnArrival);
+    // Check the rendered marks, including a checked option that becomes
+    // unavailable after changing emission mode. Empty boxes remain distinct.
+    for(auto* check:{scan,arrival}) {
+        check->setChecked(true); check->setEnabled(true);
+        assert(brightIndicatorPixels(*check)>=8);
+        check->setEnabled(false);
+        assert(brightIndicatorPixels(*check)>=8);
+        check->setChecked(false);
+        assert(brightIndicatorPixels(*check)==0);
+        check->setChecked(true); check->setEnabled(true);
+    }
     interval->setValue(20); settle(); assert(!setMode->isEnabled()); interval->setValue(2); settle();
     auto intel=make_demo_game(); intel.turn=5;
     ReconContact c; c.fleet=22; c.owner=2; c.position={200,200}; c.quality=ContactQuality::Identified;
@@ -140,5 +208,24 @@ int main(int argc,char** argv)
     MainWindowTestAccess::messages(window,{contact}); messages->setCurrentRow(0); settle();
     assert(messageBody->toPlainText().contains("Mass estimate: 150–250 kt") && messageBody->toPlainText().contains("Last position seen in year 3"));
     dialog->hide();
+    // A selected Standard draft and an Idle mission cannot masquerade as a
+    // received command cancelling a silent radio.
+    auto silent=make_demo_game(); silent.turn=5;
+    silent.fleets.front().position={100,0};
+    silent.fleets.front().electronics={EmissionMode::RadioSilence,9};
+    silent.fleets.front().telemetry.electronics=silent.fleets.front().electronics;
+    observe_reconnaissance(silent,5); deliver_reconnaissance(silent);
+    MainWindowTestAccess::install(window,silent); settle();
+    auto* missionSummary=window.findChild<QLabel*>("strategicMissionSummary"); assert(missionSummary);
+    assert(mode->currentIndex()==2 && missionSummary->text().contains("Emissions: Radio silence"));
+    mode->setCurrentIndex(0); task->setCurrentIndex(task->findData(int(FleetTask::None))); settle();
+    assert(missionSummary->text().contains("selection is a draft"));
+    assert(missionSummary->text().contains("Idle changes only the mission"));
+    assign->click(); settle();
+    assert(MainWindowTestAccess::orders(window).orders.size()==1
+        && std::holds_alternative<SetFleetTaskOrder>(MainWindowTestAccess::orders(window).orders.front()));
+    setMode->click(); settle();
+    assert(missionSummary->text().contains("Queued emission order: Standard"));
+    assert(missionSummary->text().contains("Emissions: Radio silence"));
     window.close(); settle();
 }

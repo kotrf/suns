@@ -5,6 +5,7 @@
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/communications.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -23,7 +24,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 71;
+constexpr quint32 kSaveFormatVersion = 73;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2955,6 +2956,8 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     stream << quint32(data.state.planets.size());
     for (const auto& planet : data.state.planets)
         stream << quint32(planet.id) << quint8(planet.radar) << quint8(planet.homeworld);
+    writeFriendlyRadar(stream, data.state);
+    writeReportSources(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3067,6 +3070,8 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
             planet.homeworld = true;
         }
     }
+    if (version >= 72) readFriendlyRadar(stream, loaded.state);
+    if (version >= 73) readReportSources(stream, loaded.state);
     if (stream.status() != QDataStream::Ok) {
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;

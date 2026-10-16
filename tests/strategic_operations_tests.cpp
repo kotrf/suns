@@ -110,7 +110,7 @@ void mines_crossings_laying_sweeping()
     s.fleets[0].destination = Position{100,0}; s.fleets[0].warp = 6; // Route already aboard.
     r = TurnProcessor{}.process_with_events(s,{});
     assert(r.state.fleets.empty() && !event(r,GameEventKind::MineStrike));
-    assert(r.state.pendingFleetLossContacts.size() == 1 && r.state.pendingFleetLossContacts[0].deliveryTurn == 5);
+    assert(r.state.pendingFleetLossContacts.size() == 1 && r.state.pendingFleetLossContacts[0].deliveryTurn == kAwaitingTransmission);
     assert(make_player_view(r.state,1).state.fleets.size() == 1);
     // Unseen fields do not leak through a player export.
     const auto view = make_player_view(s,1);
@@ -150,7 +150,7 @@ void stealth_jamming_and_signals()
     assert(!submit_electronics_command(s,1,1,{EmissionMode::Standard,0,true})); // no jammer aboard
 }
 
-void silence_resumes_and_orders_wait()
+void silence_keeps_command_reception_and_resumes_transmissions()
 {
     auto s = arena();
     auto neighbor = s.fleets[0]; neighbor.id = 2; neighbor.electronics = {EmissionMode::RadioSilence,8};
@@ -165,10 +165,49 @@ void silence_resumes_and_orders_wait()
     assert(submit_electronics_command(s,1,1,{EmissionMode::RadioSilence,4}));
     assert(!fleet_has_instant_link(s,s.fleets[0]));
     assert(submit_fleet_route_command(s,1,1,{100,0},4,{},{}));
-    assert(s.fleets[0].pendingCommands[0].deliveryTurn == 4);
-    s = TurnProcessor{}.process(s,{}); assert(!s.fleets[0].destination);
-    s = TurnProcessor{}.process(s,{}); assert(!s.fleets[0].destination);
-    s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].destination && s.fleets[0].electronics.mode == EmissionMode::Standard);
+    assert(s.fleets[0].pendingCommands.empty() && s.fleets[0].destination);
+    s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].position.x>0 && !fleet_transmits(s.fleets[0],s.turn));
+    s = TurnProcessor{}.process(s,{}); assert(!fleet_transmits(s.fleets[0],s.turn));
+    s = TurnProcessor{}.process(s,{}); assert(s.fleets[0].electronics.mode == EmissionMode::Standard);
+}
+
+void silence_hides_transmissions_but_not_active_radar_reflections()
+{
+    for(auto mode:{EmissionMode::Standard,EmissionMode::Passive,EmissionMode::RadioSilence}) {
+        auto s=arena();
+        s.shipDesigns.push_back({20,2,"Target",ShipHullType::Destroyer,{C::FuelMizer}});
+        Fleet target; target.id=2; target.owner=2; target.design=20; target.ships={{20,1}};
+        target.position={80,0}; target.electronics={mode,mode==EmissionMode::RadioSilence?20u:0u};
+        s.fleets.push_back(target);
+        assert(!detector_detects_fleet(s,s.fleets[0],s.fleets[1],2)); // R50 reflected-hull limit.
+        observe_strategic_objects(s,2); s.turn=2; deliver_strategic_intel(s);
+        const bool signal=std::any_of(s.players[0].strategicIntel.begin(),s.players[0].strategicIntel.end(),[](const auto& i){return i.type==StrategicObjectKind::Emission;});
+        assert(signal==(mode==EmissionMode::Standard)); // Emission reception reaches R100.
+        s.fleets[1].position={20,0};
+        assert(detector_detects_fleet(s,s.fleets[0],s.fleets[1],2)); // Silence is not hull cloaking.
+    }
+}
+
+void emission_interception_uses_the_built_planetary_receiver()
+{
+    for(auto radar:{PlanetaryRadarLevel::None,PlanetaryRadarLevel::Local,PlanetaryRadarLevel::Full}) {
+        auto s=arena(); s.fleets.front().owner=2; s.fleets.front().position={80,0};
+        s.stars={{1,"Receiver",{0,0}}};
+        Planet colony; colony.id=1; colony.star=1; colony.owner=1; colony.population=1000;
+        colony.radar=radar; colony.homeworld=true; s.planets={colony};
+        assert(colony_detects_fleet(s,colony,s.fleets.front(),2)==(radar==PlanetaryRadarLevel::Full));
+        observe_strategic_objects(s,2); s.turn=2; deliver_strategic_intel(s);
+        // Full radar sees the hull, so no redundant anonymous emission marker.
+        // Local R30 cannot intercept a signal at 80 ly; None has no receiver.
+        assert(s.players[0].strategicIntel.empty());
+        s.fleets.front().position={40,0};
+        observe_strategic_objects(s,3); s.turn=3; deliver_strategic_intel(s);
+        assert(s.players[0].strategicIntel.empty()==(radar!=PlanetaryRadarLevel::Local));
+        if(radar==PlanetaryRadarLevel::Local)
+            assert(s.players[0].strategicIntel.front().type==StrategicObjectKind::Emission);
+        s.fleets.front().position={0,0};
+        assert(colony_detects_fleet(s,colony,s.fleets.front(),3)==(radar!=PlanetaryRadarLevel::None));
+    }
 }
 
 void field_science_is_finite_delayed_and_real()
@@ -208,5 +247,7 @@ void field_science_is_finite_delayed_and_real()
 int main()
 {
     bombardment_orders_and_targets(); mines_crossings_laying_sweeping(); stealth_jamming_and_signals();
-    silence_resumes_and_orders_wait(); field_science_is_finite_delayed_and_real();
+    silence_keeps_command_reception_and_resumes_transmissions(); field_science_is_finite_delayed_and_real();
+    silence_hides_transmissions_but_not_active_radar_reflections();
+    emission_interception_uses_the_built_planetary_receiver();
 }

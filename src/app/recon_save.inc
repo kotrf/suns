@@ -90,3 +90,55 @@ void readReconMessages(QDataStream& stream,SaveGameData& save)
     for(auto& e:save.strategicMessages) { quint64 id{}; s >> id; if(id!=e.id) { markCorrupt(stream); return; } readReconEvidence(s,e); }
     if(s.status()!=QDataStream::Ok || !s.atEnd()) markCorrupt(stream);
 }
+
+// Position evidence travels separately from the target fleet's radio packets.
+void writeFriendlyRadar(QDataStream& stream,const GameState& state)
+{
+    stream << quint32(0x46524144u) << quint32(state.players.size()); // "FRAD"
+    for(const auto& player:state.players) {
+        stream << quint32(player.id);
+        writeVector(stream,player.friendlyFleetContacts,writeReconContact);
+        writeVector(stream,player.pendingFriendlyFleetContacts,writeReconContact);
+    }
+}
+void readFriendlyRadar(QDataStream& stream,GameState& state)
+{
+    quint32 magic{},count{}; stream >> magic;
+    if(magic!=0x46524144u || !readCount(stream,count) || count!=state.players.size()) { markCorrupt(stream); return; }
+    for(auto& player:state.players) {
+        quint32 id{}; stream >> id;
+        if(id!=player.id || !readVector(stream,player.friendlyFleetContacts,readReconContact)
+            || !readVector(stream,player.pendingFriendlyFleetContacts,readReconContact)) { markCorrupt(stream); return; }
+        const auto valid=[&](const auto& contacts,bool pending) {
+            for(std::size_t n=0;n<contacts.size();++n) {
+                const auto& c=contacts[n];
+                if(c.lost || (c.owner && c.owner!=player.id) || c.observedTurn>state.turn
+                    || (!pending && c.deliveryTurn>state.turn)
+                    || std::any_of(contacts.begin(),contacts.begin()+n,[&](const auto& old){return old.fleet==c.fleet && (!pending || old.observedTurn==c.observedTurn);})) return false;
+            }
+            return true;
+        };
+        if(!valid(player.friendlyFleetContacts,false) || !valid(player.pendingFriendlyFleetContacts,true)) { markCorrupt(stream); return; }
+    }
+}
+
+void writeReportSources(QDataStream& stream,const GameState& state)
+{
+    quint32 count=0;
+    visit_fleet_report_outbox(state,[&](PlayerId,const auto&){++count;});
+    stream << quint32(0x54584F42u) << count; // "TXOB"
+    visit_fleet_report_outbox(state,[&](PlayerId owner,const auto& report) {
+        stream << quint32(owner) << quint32(report.transmissionFleet);
+    });
+}
+void readReportSources(QDataStream& stream,GameState& state)
+{
+    quint32 magic{},count{},seen{}; stream >> magic >> count;
+    if(magic!=0x54584F42u) { markCorrupt(stream); return; }
+    visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
+        quint32 id{},source{}; stream >> id >> source; ++seen;
+        if(id!=owner || seen>count || (source!=0)!=(report.deliveryTurn==kAwaitingTransmission)) markCorrupt(stream);
+        report.transmissionFleet=source;
+    });
+    if(seen!=count) markCorrupt(stream);
+}
