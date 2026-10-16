@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <iostream>
 
 namespace suns {
 struct MainWindowTestAccess {
@@ -136,7 +137,11 @@ int main(int argc, char** argv)
     assert(production && queue && production->isAncestorOf(queue));
     assert(!window.findChild<QScrollArea*>("productionScrollArea"));
     assert(fleet->isAncestorOf(add) && add->isVisible());
-    assert(scroll->viewport()->rect().contains(QRect(add->mapTo(scroll->viewport(), QPoint{}), add->size())));
+    const QRect addRect(add->mapTo(scroll->viewport(), QPoint{}),add->size());
+    if (!scroll->viewport()->rect().contains(addRect))
+        std::cerr << "Add rect " << addRect.x() << ',' << addRect.y() << ' ' << addRect.width() << 'x' << addRect.height()
+            << " viewport " << scroll->viewport()->width() << 'x' << scroll->viewport()->height() << std::endl;
+    assert(scroll->viewport()->rect().contains(addRect));
     // Refresh connections survive destroying the old dock, and the source
     // selector changes the same fleet that supplies the pinned gauges.
     source->setCurrentIndex(source->findData(quint32(2)));

@@ -165,7 +165,8 @@ int main(int argc,char** argv)
         const auto orders=dir.filePath("work.orders");
         assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,received,error));
         assert(std::get<MoveFleetOrder>(received.orders.orders.front()).queuedWaypoints.back().arrivalAction.kind==kind);
-        auto exported=make_player_turn(work,1);
+        auto host=work; host.mode=SessionMode::Host; host.playerTokens={{1,1}};
+        auto exported=make_player_turn(host,1);
         assert(write_save_game_file(save,exported,error) && read_save_game_file(save,roundtrip,error));
         assert(roundtrip.state.fleets.front().telemetry.waypointQueue.back().arrivalAction.kind==kind);
         // A persistent intermediate waypoint must not enter saves or PBEM orders.
@@ -286,7 +287,9 @@ int main(int argc,char** argv)
     for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
              FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage}) {
         MainWindowTestAccess::install(window,supported); settle();
-        assert(MainWindowTestAccess::selectSystem(window,supported.stars[0].id));
+        // The intermediate waypoint must differ from the source position;
+        // No action at the current position is deliberately the Stop intent.
+        assert(MainWindowTestAccess::selectSystem(window,supported.stars[2].id));
         assert(window.appendSelectedStarWaypoint(4,{}));
         assert(MainWindowTestAccess::selectSystem(window,supported.stars[1].id));
         assert(window.appendSelectedStarWaypoint(4,{kind})); settle();

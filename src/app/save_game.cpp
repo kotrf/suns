@@ -248,6 +248,19 @@ bool readOptionalPosition(QDataStream& stream, std::optional<Position>& value)
     return stream.status() == QDataStream::Ok;
 }
 
+// Validate persistent work without changing the readers for unrelated routes.
+bool invalidWaypointWork(const FleetRouteProgram& value)
+{
+    if (gReadSaveFormatVersion < 74) return false;
+    const auto work = [](const FleetArrivalAction& action) {
+        return arrival_work_task(action.kind).has_value();
+    };
+    const bool hasWork = work(value.arrivalAction) || std::any_of(
+        value.queuedWaypoints.begin(), value.queuedWaypoints.end(),
+        [&](const auto& waypoint) { return work(waypoint.arrivalAction); });
+    return hasWork && !fleet_route_tasks_valid(value);
+}
+
 void writeRouteProgram(QDataStream& stream, const FleetRouteProgram& value)
 {
     writePosition(stream, value.destination);
@@ -297,19 +310,19 @@ void readRouteProgram(QDataStream& stream, FleetRouteProgram& value)
         stream >> targetFleet;
         value.targetFleet = static_cast<FleetId>(targetFleet);
     }
-    if (gReadSaveFormatVersion >= 74 && !fleet_route_tasks_valid(value)) markCorrupt(stream);
+    if (invalidWaypointWork(value)) markCorrupt(stream);
 }
 
 template<class FleetState> void validateStoredRoute(QDataStream& stream, const FleetState& value)
 {
     if (gReadSaveFormatVersion < 74) return;
-    if (!fleet_route_tasks_valid({value.destination.value_or(value.position), value.warp,
+    if (invalidWaypointWork({value.destination.value_or(value.position), value.warp,
             value.arrivalAction.value_or(FleetArrivalAction{}), value.waypointQueue,
             false, false, value.targetFleet})) markCorrupt(stream);
     if (!value.routeTemplate.empty()) {
         const auto& first = value.routeTemplate.front();
         const std::vector<FleetWaypoint> rest(value.routeTemplate.begin() + 1, value.routeTemplate.end());
-        if (!fleet_route_tasks_valid({first.destination, first.warp, first.arrivalAction,
+        if (invalidWaypointWork({first.destination, first.warp, first.arrivalAction,
                 rest, false, value.repeatOrders, first.targetFleet})) markCorrupt(stream);
     }
 }
@@ -2526,7 +2539,7 @@ bool readOrder(QDataStream& stream, Order& order)
             if (clear > 1) { markCorrupt(stream); return false; }
             value.clearRoute = clear != 0;
         }
-        if (gReadSaveFormatVersion >= 74 && !fleet_route_tasks_valid({value.destination, value.warp,
+        if (invalidWaypointWork({value.destination, value.warp,
                 value.arrivalAction, value.queuedWaypoints, value.clearRoute, value.repeatOrders, value.targetFleet})) {
             markCorrupt(stream);
             return false;

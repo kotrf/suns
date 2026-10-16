@@ -363,6 +363,9 @@ void attachRouteProgramDock(MainWindow& window)
         "The selected system and all visible fleets currently orbiting it; enemy fleets are red");
     auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->setObjectName("routeArrivalActionCombo");
+    actionCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    actionCombo->setMinimumContentsLength(16);
+    actionCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
     actionCombo->addItem("Load all available", static_cast<int>(FleetArrivalActionKind::LoadAllAvailable));
     actionCombo->addItem("Unload all", static_cast<int>(FleetArrivalActionKind::UnloadAll));
@@ -420,13 +423,17 @@ void attachRouteProgramDock(MainWindow& window)
     pickedTargetLabel->hide();
     waypointLayout->addWidget(pickedTargetLabel);
 
-    auto* appendButton = new QPushButton("Add selected star to route", waypointGroup);
+    auto* appendButton = new QPushButton("Add waypoint", waypointGroup);
     appendButton->setObjectName("routeAddButton");
-    waypointLayout->addWidget(appendButton);
+    appendButton->setToolTip("Append the selected destination with its Warp and On arrival order.");
+    auto* waypointActions = new QHBoxLayout;
+    waypointActions->setSpacing(4);
+    waypointActions->addWidget(appendButton, 1);
     auto* workHereButton = new QPushButton("Start work here", waypointGroup);
     workHereButton->setObjectName("routeWorkHereButton");
     workHereButton->setToolTip("Use the selected On arrival work at this stationary fleet's reported position. Queues an ordinary route order with normal command delay; emissions stay unchanged.");
-    waypointLayout->addWidget(workHereButton);
+    waypointActions->addWidget(workHereButton, 1);
+    waypointLayout->addLayout(waypointActions);
     layout->addWidget(waypointGroup);
 
     auto* repeatCheck = new QCheckBox("Repeat Orders", panel);
@@ -469,8 +476,8 @@ void attachRouteProgramDock(MainWindow& window)
         const bool friendlyFleetTarget = targetType == 1;
         targetFleetCombo->setEnabled(fleetTarget);
         appendButton->setText(targetType == 2
-            ? "Add enemy position to route"
-            : fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+            ? "Add enemy position"
+            : fleetTarget ? "Add fleet target" : "Add waypoint");
         const auto currentAction = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
         if (friendlyFleetTarget) {
             actionCombo->setCurrentIndex(
@@ -651,8 +658,8 @@ void attachRouteProgramDock(MainWindow& window)
         const bool fleetTarget = currentTargetType != 0;
         targetFleetCombo->setEnabled(fleet != 0 && fleetTarget && targetFleetCombo->count() > 0);
         appendButton->setText(currentTargetType == 2
-            ? "Add enemy position to route"
-            : fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+            ? "Add enemy position"
+            : fleetTarget ? "Add fleet target" : "Add waypoint");
         updateCargoControls();
         clearButton->setEnabled(fleet != 0);
         repeatCheck->setEnabled(fleet != 0);
