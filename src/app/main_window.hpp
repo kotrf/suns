@@ -102,6 +102,7 @@ public:
     bool selectFleetForRouteProgram(FleetId fleet);
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction);
+    bool startSelectedFleetWorkHere(FleetArrivalAction arrivalAction);
     bool appendFleetTargetWaypoint(
         FleetId targetFleet, std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool beginRouteProgramMapTargetPick();

@@ -1,5 +1,36 @@
 # Project status and development handoff
 
+## Current checkpoint — 16 October 2026
+
+PR #203 is merged into main `1c5ec0494292f2c74b4804a3a6ebafdbb90af479`.
+Its branch CI and post-merge main CI passed 56/56 on Qt 6.12.0 / suns-vps.
+Silent/passive fleets receive commands independently of TX; friendly orbital
+colonies exchange full status locally and forward immutable packets. Radar
+positions remain separate from onboard telemetry away from friendly orbit.
+
+The next #204 branch implements terminal waypoint work: mine laying/sweeping,
+bombardment, field research and wreck recovery alongside Remote Mining. The
+single route editor replaces stationary Assign; Start work here uses that same
+arrival selector at an idle fleet's reported location. Stop/new travel does not
+change emissions. Computer bomber routes use ordinary bombardment-on-arrival.
+Save v74 / orders v24 retain actions in all route/command/telemetry/PBEM paths.
+Local focused core and UI/save CI evidence is recorded in its implementation PR;
+this branch is not merged merely because #203 was authorized.
+
+Founding with no chosen/default program already starts with no radar and an
+empty queue in main. This branch fixes the remaining #201 conquest exception:
+new-colony defaults are no longer applied to captured worlds. Conquest always
+starts with no radar and an empty queue, including when a settlement default
+is explicitly enabled. The dedicated template editor and per-Colonize frozen
+snapshots remain #201. #205 remains a
+design discussion, without new hardware or independent channel switches.
+
+Fair computer empires' initial three phases are complete in #188/#189/#190 and
+#184 is closed. The older snapshot below is history, including its historical
+format numbers and next-stage statements; do not restart completed AI work.
+
+## Historical checkpoint — 13 October 2026
+
 Snapshot: **13 October 2026, Dialog #08 Human/Computer**. This branch starts
 from main `14fa936d4e195a7904b47f71b9f29c3dc653c8a5`, after reconnaissance/EW
 PR #187. The user requested the next controller/ordinary-orders slice of #184.

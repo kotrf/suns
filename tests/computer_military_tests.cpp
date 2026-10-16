@@ -110,6 +110,7 @@ void assault_through_shared_rules()
         auto state = fixture(); state.galaxySeed = seed;
         const auto enemy = std::find_if(state.planets.begin(), state.planets.end(), [](const auto& p) { return p.owner == 1; })->id;
         bool merge = false, raid = false, bombard = false, invasion = false, battle = false;
+        bool programmedBombardment = false;
         bool neutralized = false; // Bombardment can empty a colony before a ground landing is needed.
         for (int year = 0; year < 160; ++year) {
             const auto view = make_player_view(state, 2);
@@ -118,6 +119,8 @@ void assault_through_shared_rules()
             const auto plannedDesigns = planned_ship_design_state(view.state, plan.orders);
             for (const auto& order : plan.orders.orders) {
                 merge |= std::holds_alternative<MergeFleetsOrder>(order);
+                if (const auto* route=std::get_if<MoveFleetOrder>(&order))
+                    programmedBombardment |= route->arrivalAction.kind==FleetArrivalActionKind::BombardColony;
                 if (const auto* design = std::get_if<CreateShipDesignOrder>(&order)) {
                     const auto found = std::find_if(plannedDesigns.shipDesigns.begin(), plannedDesigns.shipDesigns.end(), [&](const auto& d) { return d.owner == 2 && d.name == design->name; });
                     if (found == plannedDesigns.shipDesigns.end()) {
@@ -153,7 +156,7 @@ void assault_through_shared_rules()
         // A bombardment can eliminate a small colony, allowing legal subsequent
         // recolonization; it is not a ground invasion and must not be counted as one.
         // Ground invasion itself is covered by ground_invasion_tests.
-        assert(merge && raid && bombard && battle && planet->owner == 2);
+        assert(merge && raid && bombard && battle && programmedBombardment && planet->owner == 2);
         assert(invasion || neutralized);
     }
 }

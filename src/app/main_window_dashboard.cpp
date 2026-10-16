@@ -96,6 +96,11 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::UnloadAll: return QString("unload all %1").arg(cargo());
     case FleetArrivalActionKind::Refuel: return "refuel";
     case FleetArrivalActionKind::Colonize: return "colonize";
+    case FleetArrivalActionKind::LayMinefields: return "lay minefields";
+    case FleetArrivalActionKind::SweepMinefields: return "sweep hostile mines";
+    case FleetArrivalActionKind::BombardColony: return "bombard enemy colony";
+    case FleetArrivalActionKind::FieldResearch: return "field research";
+    case FleetArrivalActionKind::RecoverWreckage: return "recover wreckage";
     case FleetArrivalActionKind::RemoteMining: return "remote mining";
     case FleetArrivalActionKind::MergeWithFleet: return "merge with fleet";
     }

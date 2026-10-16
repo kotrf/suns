@@ -443,9 +443,8 @@ bool invade_colony(
         planet.homeworld = false;
         planet.population = survivors;
         planet.productionQueue.clear();
-        // Capture never forces infrastructure. An explicitly user-selected
-        // default production template is still honored when one exists.
-        apply_default_production_template(state, planet);
+        // A settlement default is not a conquest program. Captured worlds
+        // await explicit production orders even when that default is selected.
         planet.productionWaitingForMinerals = false;
         planet.productionWaitingForShipyard = false;
         set_survey_level(
@@ -711,6 +710,10 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     const auto action = *fleet.arrivalAction;
     fleet.arrivalAction.reset();
     if (action.kind == FleetArrivalActionKind::None) return false;
+    if (const auto task = arrival_work_task(action.kind); task && *task != FleetTask::RemoteMining) {
+        if (fleet_task_equipment_available(state, fleet, *task)) fleet.task = *task;
+        return false;
+    }
     // Keep a blocked colonization programme visible and retryable instead
     // of erasing its last waypoint and silently discarding the order.
     if (action.kind == FleetArrivalActionKind::Colonize) {
@@ -728,6 +731,12 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     switch (action.kind) {
     case FleetArrivalActionKind::EnterWormhole:
         return false; // Handled before ordinary arrival actions.
+    case FleetArrivalActionKind::LayMinefields:
+    case FleetArrivalActionKind::SweepMinefields:
+    case FleetArrivalActionKind::BombardColony:
+    case FleetArrivalActionKind::FieldResearch:
+    case FleetArrivalActionKind::RecoverWreckage:
+        return false; // Persistent work handled before this switch.
     case FleetArrivalActionKind::None:
         return false;
     case FleetArrivalActionKind::LoadAllAvailable: {

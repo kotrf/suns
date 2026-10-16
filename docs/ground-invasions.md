@@ -19,7 +19,9 @@ can differ.
 The losing force is destroyed. The winner loses a deterministic 65–100% of the
 opposing population, capped so at least one colonist survives. On a successful
 invasion the planet changes owner, the surviving attackers become its surface
-population and the former owner's production queue is cleared. Mines,
+population and the former owner's production queue is cleared. A new-colony
+default template is not a conquest program and is not applied; captured worlds
+start with an empty queue and no built or automatically scheduled radar. Mines,
 factories, surface minerals and planetary history survive capture. Ownership
 of an orbital station is unchanged: capturing or destroying orbital assets
 remains future station-combat work. The current

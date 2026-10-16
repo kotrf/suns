@@ -59,16 +59,10 @@ void MainWindow::installStrategicOperations()
     auto* root = findChild<QWidget*>("fleetOperationsPanel");
     auto* layout = root ? qobject_cast<QVBoxLayout*>(root->layout()) : nullptr;
     if (!layout || findChild<QGroupBox*>("strategicOperationsGroup")) return;
-    auto* group = new QGroupBox("Fleet mission / emissions", root);
+    auto* group = new QGroupBox("Fleet emissions", root);
     group->setObjectName("strategicOperationsGroup");
     auto* body = new QVBoxLayout(group); body->setContentsMargins(5,5,5,5); body->setSpacing(3);
     auto* row = new QHBoxLayout;
-    auto* task = new QComboBox(group); task->setObjectName("strategicTaskCombo");
-    for (int i = 0; i <= int(FleetTask::Salvage); ++i)
-        task->addItem(QString::fromStdString(fleet_task_name(FleetTask(i))), i);
-    auto* assign = new QPushButton("Assign", group); assign->setObjectName("assignStrategicTask");
-    row->addWidget(task,1); row->addWidget(assign); body->addLayout(row);
-    row = new QHBoxLayout;
     auto* mode = new QComboBox(group); mode->setObjectName("fleetEmissionModeCombo");
     mode->addItems({"Standard", "Passive", "Radio silence"});
     auto* years = new QSpinBox(group); years->setObjectName("radioSilenceYears");
@@ -90,14 +84,9 @@ void MainWindow::installStrategicOperations()
     deception->setToolTip("Requires a jammer and Standard mode. Creates an ambiguous false signal area. Tachyon receivers can reject it; broadcasting may also expose your real emission area.");
     auto* summary = new QLabel(group); summary->setObjectName("strategicMissionSummary");
     summary->setWordWrap(true); summary->setTextFormat(Qt::PlainText); body->addWidget(summary);
-    task->setToolTip("Stationary mission. Idle stops the mission; it does not change emissions or cancel radio silence. Bombing requires bombs and an enemy colony in orbit. Mine laying requires a mine layer; sweeping uses beams. Field research needs a scanner; salvage also needs a cargo hold. Travel replaces the mission.");
+
     mode->setToolTip("Choose a mode, then press Set to queue an emission order. Standard: active scans, jamming and transmissions. Passive: receive commands and listen, with no automatic long-range transmissions. Radio silence: the same listening posture with scheduled transmission/scan windows and wake-up. All modes receive commands with normal propagation delay and share full status locally with a friendly populated colony in orbit; the colony forwards it over its own link. Other radars can still detect silent hulls.");
     layout->insertWidget(1,group);
-    connect(assign,&QPushButton::clicked,this,[this,task] {
-        const auto* fleet = selectedFleet(); if (!fleet || fleet->owner != pendingOrders_.player) return;
-        const auto t = FleetTask(task->currentData().toInt());
-        appendPendingOrder(SetFleetTaskOrder{fleet->id,t},QString("%1: %2").arg(QString::fromStdString(fleet->name),QString::fromStdString(fleet_task_name(t))));
-    });
     connect(setMode,&QPushButton::clicked,this,[this,mode,years,deception,interval,scan,arrival] {
         const auto* fleet = selectedFleet(); if (!fleet || fleet->owner != pendingOrders_.player) return;
         ElectronicsProgram e{EmissionMode(mode->currentIndex()), mode->currentIndex() == 2 ? state_.turn + years->value() : 0};
@@ -111,16 +100,16 @@ void MainWindow::installStrategicOperations()
     });
     auto selected = std::make_shared<FleetId>(0);
     auto selectedTurn = std::make_shared<std::uint64_t>(0);
-    auto refresh = [this,task,assign,mode,years,setMode,summary,selected,selectedTurn,deception,interval,scan,arrival] {
+    auto refresh = [this,mode,years,setMode,summary,selected,selectedTurn,deception,interval,scan,arrival] {
         if (shuttingDown_) return;
         const auto* fleet = selectedFleet();
         const bool owned = fleet && fleet->owner == pendingOrders_.player;
-        task->setEnabled(owned); mode->setEnabled(owned); setMode->setEnabled(owned);
+        mode->setEnabled(owned); setMode->setEnabled(owned);
         years->setEnabled(owned && mode->currentIndex() == 2);
         interval->setEnabled(owned && mode->currentIndex()==2); arrival->setEnabled(owned && mode->currentIndex()==2);
         scan->setEnabled(owned && mode->currentIndex()==2 && interval->value()>0);
         if(owned && mode->currentIndex()==2 && interval->value()>years->value()) setMode->setEnabled(false);
-        if (!owned) { assign->setEnabled(false); deception->setEnabled(false); summary->setText("Select your fleet."); return; }
+        if (!owned) { deception->setEnabled(false); summary->setText("Select your fleet."); return; }
         const auto known = fleet_player_view(state_, *fleet);
         bool jammer = false;
         for (const auto& stack : fleet_ship_stacks(known)) if (const auto* design = find_ship_design(state_,stack.design))
@@ -129,17 +118,13 @@ void MainWindow::installStrategicOperations()
         if (*selected != fleet->id || *selectedTurn != state_.turn) {
             *selected = fleet->id;
             *selectedTurn = state_.turn;
-            task->setCurrentIndex(task->findData(int(known.task))); mode->setCurrentIndex(int(known.electronics.mode));
+            mode->setCurrentIndex(int(known.electronics.mode));
             deception->setChecked(known.electronics.deception);
             interval->setValue(known.electronics.burstInterval); scan->setChecked(known.electronics.activeBurst);
             arrival->setChecked(known.electronics.wakeOnArrival);
         }
-        const auto requested = FleetTask(task->currentData().toInt());
-        const bool available = requested == FleetTask::RemoteMining ? fleet_can_remote_mine(state_, known)
-            : strategic_task_available(state_,known,requested);
-        assign->setEnabled(available);
         const auto emissionName=[](EmissionMode m) { return m==EmissionMode::RadioSilence ? "Radio silence" : m==EmissionMode::Passive ? "Passive" : "Standard"; };
-        QString text = QString("Last onboard report, year %1: Mission: %2 • Emissions: %3 • Cloak %4% • %5")
+        QString text = QString("Last onboard report, year %1: Activity: %2 • Emissions: %3 • Cloak %4% • %5")
             .arg(qulonglong(confirmed_fleet_telemetry(state_,*fleet).observedTurn))
             .arg(QString::fromStdString(fleet_task_name(known.task)), emissionName(known.electronics.mode))
             .arg(fleet_cloak_fraction(state_,known)*100,0,'f',0)
@@ -155,7 +140,7 @@ void MainWindow::installStrategicOperations()
             .arg(emissionName(pendingEmission->program.mode));
         else if(mode->currentIndex()!=int(known.electronics.mode))
             text+="\nEmission selection is a draft. Press Set to queue it.";
-        text+="\nIdle changes only the mission. Emission changes use Set. Command reception stays on while silent; reports wait for transmission or friendly orbital exchange.";
+        text+="\nProgram work with Route → On arrival. Stop cancels work and travel; emissions use Set. Command reception stays on while silent; reports wait for transmission or friendly orbital exchange.";
         const auto statuses=known_sensor_status(state_,pendingOrders_.player);
         const auto status=std::find_if(statuses.begin(),statuses.end(),[&](const auto& s){return s.fleet==known.id;});
         if(status!=statuses.end()) text+=QString("\nReceived sensor status, year %1: interference %2%; active %3 / passive baseline %4 / emission reception %5 ly.")
@@ -163,16 +148,11 @@ void MainWindow::installStrategicOperations()
             .arg(status->passiveRange,0,'f',0).arg(status->emissionRange,0,'f',0);
         else text+="\nNo received sensor-quality measurement yet. Nominal fitted ranges remain estimates.";
 
-        if (requested == FleetTask::FieldResearch)
-            text += "\nOne study per empire and target: star → Energy 12; deep planet → Biology 12 (artifact site 32); WH within 10 ly → Propulsion 24. Rewards arrive with the report.";
-        if (requested == FleetTask::Salvage) text += "\nWithin 10 ly of known wreckage; only unfamiliar technology yields science. The specimen is consumed.";
-        if (!available) text += "\nRequires suitable equipment and an idle route. Stop travel first.";
         summary->setText(text);
     };
     auto* timer = new QTimer(this); timer->setSingleShot(true);
     connect(timer,&QTimer::timeout,this,refresh);
     connect(scene_,&QGraphicsScene::changed,this,[this,timer](const QList<QRectF>&) { if (!shuttingDown_) timer->start(0); });
-    connect(task,&QComboBox::currentIndexChanged,this,[timer] { timer->start(0); });
     connect(mode,&QComboBox::currentIndexChanged,this,[timer] { timer->start(0); });
     connect(interval,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});
     connect(years,qOverload<int>(&QSpinBox::valueChanged),this,[timer]{timer->start(0);});

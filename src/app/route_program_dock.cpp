@@ -221,7 +221,7 @@ void attachRouteProgramDock(MainWindow& window)
         "Select a route row to change that leg's Warp. New waypoint returns to adding route points. "
         "Fuel used and Fuel left are projected per leg; red marks the first leg with insufficient fuel at its ordered Warp. "
         "Each leg keeps its own Warp and arrival action. Friendly moving targets are resolved every turn. Merge absorbs the pursuing fleet into the target fleet. "
-        "Remote Mining is a persistent terminal task. Load and unload use the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
+        "Mining, mine laying/sweeping, bombardment, field research and wreck recovery are persistent final-waypoint tasks. They begin on arrival without another command. Stop/new travel cancels work without changing emissions. Load and unload use the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
         "Colonization dismantles the entire fleet and recovers 33% of its ship minerals. Dockside loading and refuelling are in Fleet Logistics.");
     auto* headingRow = new QHBoxLayout;
     auto* heading = new QLabel("Program orders for one fleet", panel);
@@ -363,12 +363,28 @@ void attachRouteProgramDock(MainWindow& window)
         "The selected system and all visible fleets currently orbiting it; enemy fleets are red");
     auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->setObjectName("routeArrivalActionCombo");
+    actionCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    actionCombo->setMinimumContentsLength(16);
+    actionCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
     actionCombo->addItem("Load all available", static_cast<int>(FleetArrivalActionKind::LoadAllAvailable));
     actionCombo->addItem("Unload all", static_cast<int>(FleetArrivalActionKind::UnloadAll));
     actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
     actionCombo->addItem("Remote Mining (persistent)", static_cast<int>(FleetArrivalActionKind::RemoteMining));
     actionCombo->addItem("Merge with fleet", static_cast<int>(FleetArrivalActionKind::MergeWithFleet));
+    actionCombo->addItem("Lay minefields (persistent)", static_cast<int>(FleetArrivalActionKind::LayMinefields));
+    actionCombo->addItem("Sweep hostile mines (persistent)", static_cast<int>(FleetArrivalActionKind::SweepMinefields));
+    actionCombo->addItem("Bombard enemy colony (persistent)", static_cast<int>(FleetArrivalActionKind::BombardColony));
+    actionCombo->addItem("Field research (persistent)", static_cast<int>(FleetArrivalActionKind::FieldResearch));
+    actionCombo->addItem("Recover wreckage (persistent)", static_cast<int>(FleetArrivalActionKind::RecoverWreckage));
+    const auto workTip = [&](FleetArrivalActionKind kind, const QString& text) {
+        actionCombo->setItemData(actionCombo->findData(int(kind)), text, Qt::ToolTipRole);
+    };
+    workTip(FleetArrivalActionKind::LayMinefields, "Requires a mine layer. Lays at the final waypoint every year until stopped; the new field affects later movement years.");
+    workTip(FleetArrivalActionKind::SweepMinefields, "Requires beams. Sweeps hostile fields within 10 ly of their boundary after movement; it does not protect the approach this year.");
+    workTip(FleetArrivalActionKind::BombardColony, "Requires bombs and a known enemy colony. Starts after arrival/combat, repeats until stopped; friendly or empty worlds are never bombed.");
+    workTip(FleetArrivalActionKind::FieldResearch, "Requires a scanner and active sensors when collecting data. One study per empire/objective: star Energy 12; deep planet Biology 12 (artifact site 32); wormhole Propulsion 24. Rewards wait for report delivery. The order does not change emissions.");
+    workTip(FleetArrivalActionKind::RecoverWreckage, "Requires a scanner, cargo space and reported wreckage within 10 ly. Recovers one nearest specimen per year; only unfamiliar technology yields science. Targets can expire before arrival.");
     auto* cargoCombo = new QComboBox(waypointGroup);
     cargoCombo->setObjectName("routeCargoCombo");
     cargoCombo->addItem("Colonists", static_cast<int>(FleetCargoKind::Colonists));
@@ -389,7 +405,7 @@ void attachRouteProgramDock(MainWindow& window)
     form->addRow("Destination", destinationCombo);
     form->addRow("Warp", warpRow);
     form->addRow("On arrival", actionCombo);
-    actionCombo->setToolTip("Select a route row to edit its arrival order, or New waypoint to choose an action before adding a destination.");
+    actionCombo->setToolTip("Select a route row to edit its arrival order, or New waypoint to choose an action before adding a destination. Persistent work must be on the final waypoint; Stop cancels work and travel without changing emissions.");
     form->addRow("Cargo", cargoCombo);
     form->addRow("Leave population", reserveSpin);
     waypointLayout->addLayout(form);
@@ -407,9 +423,17 @@ void attachRouteProgramDock(MainWindow& window)
     pickedTargetLabel->hide();
     waypointLayout->addWidget(pickedTargetLabel);
 
-    auto* appendButton = new QPushButton("Add selected star to route", waypointGroup);
+    auto* appendButton = new QPushButton("Add waypoint", waypointGroup);
     appendButton->setObjectName("routeAddButton");
-    waypointLayout->addWidget(appendButton);
+    appendButton->setToolTip("Append the selected destination with its Warp and On arrival order.");
+    auto* waypointActions = new QHBoxLayout;
+    waypointActions->setSpacing(4);
+    waypointActions->addWidget(appendButton, 1);
+    auto* workHereButton = new QPushButton("Start work here", waypointGroup);
+    workHereButton->setObjectName("routeWorkHereButton");
+    workHereButton->setToolTip("Use the selected On arrival work at this stationary fleet's reported position. Queues an ordinary route order with normal command delay; emissions stay unchanged.");
+    waypointActions->addWidget(workHereButton, 1);
+    waypointLayout->addLayout(waypointActions);
     layout->addWidget(waypointGroup);
 
     auto* repeatCheck = new QCheckBox("Repeat Orders", panel);
@@ -417,8 +441,9 @@ void attachRouteProgramDock(MainWindow& window)
     auto* programActions = new QHBoxLayout;
     programActions->addWidget(repeatCheck);
 
-    auto* clearButton = new QPushButton("Clear route", panel);
-    clearButton->setToolTip("Clear the fleet program and set No Task");
+    auto* clearButton = new QPushButton("Stop work / route", panel);
+    clearButton->setObjectName("routeStopButton");
+    clearButton->setToolTip("Stop travel and persistent work when this command arrives. Emission settings stay unchanged.");
     programActions->addWidget(clearButton);
     layout->addLayout(programActions);
 
@@ -427,7 +452,7 @@ void attachRouteProgramDock(MainWindow& window)
     dock->setWidget(panel);
     window.addDockWidget(Qt::RightDockWidgetArea, dock);
 
-    const auto updateCargoControls = [=] {
+    const auto updateCargoControls = [=, &window] {
         const auto action = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
         auto cargo = static_cast<FleetCargoKind>(cargoCombo->currentData().toInt());
         if (action == FleetArrivalActionKind::LoadAllAvailable && cargo == FleetCargoKind::All) {
@@ -438,6 +463,7 @@ void attachRouteProgramDock(MainWindow& window)
         }
         const auto transfersCargo = action == FleetArrivalActionKind::LoadAllAvailable
             || action == FleetArrivalActionKind::UnloadAll;
+        workHereButton->setEnabled(window.selectedFleetForRouteProgram() != 0 && arrival_work_task(action).has_value());
         cargoCombo->setEnabled(transfersCargo);
         reserveSpin->setEnabled(
             action == FleetArrivalActionKind::LoadAllAvailable && cargo == FleetCargoKind::Colonists);
@@ -450,8 +476,8 @@ void attachRouteProgramDock(MainWindow& window)
         const bool friendlyFleetTarget = targetType == 1;
         targetFleetCombo->setEnabled(fleetTarget);
         appendButton->setText(targetType == 2
-            ? "Add enemy position to route"
-            : fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+            ? "Add enemy position"
+            : fleetTarget ? "Add fleet target" : "Add waypoint");
         const auto currentAction = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
         if (friendlyFleetTarget) {
             actionCombo->setCurrentIndex(
@@ -632,8 +658,8 @@ void attachRouteProgramDock(MainWindow& window)
         const bool fleetTarget = currentTargetType != 0;
         targetFleetCombo->setEnabled(fleet != 0 && fleetTarget && targetFleetCombo->count() > 0);
         appendButton->setText(currentTargetType == 2
-            ? "Add enemy position to route"
-            : fleetTarget ? "Add fleet target to route" : "Add selected star to route");
+            ? "Add enemy position"
+            : fleetTarget ? "Add fleet target" : "Add waypoint");
         updateCargoControls();
         clearButton->setEnabled(fleet != 0);
         repeatCheck->setEnabled(fleet != 0);
@@ -891,6 +917,9 @@ void attachRouteProgramDock(MainWindow& window)
             routeTree->scrollToItem(added);
         };
     QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
+    QObject::connect(workHereButton, &QPushButton::clicked, panel, [=, &window] {
+        window.startSelectedFleetWorkHere(actionFromControls(actionCombo, cargoCombo, reserveSpin));
+    });
     QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
         [appendCurrentTarget, newWaypointButton](int, std::uint32_t) {
             newWaypointButton->click();

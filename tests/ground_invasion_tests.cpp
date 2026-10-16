@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/production.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -137,10 +138,36 @@ void unload_all_colonists_uses_the_same_ground_combat_rule()
     assert(result.planets[1].population > 0);
 }
 
+void conquest_does_not_apply_a_new_colony_default()
+{
+    bool captured=false;
+    for (std::uint64_t turn=1; turn<=256 && !captured; ++turn) {
+        auto state=invasion_fixture(turn);
+        ProductionTemplate plan{"Settlement bootstrap",{
+            {ProductionKind::LocalRadar,production_cost(ProductionKind::LocalRadar),0,ProductionAutomation::Annual,1},
+            {ProductionKind::Factory,kFactoryCost,0,ProductionAutomation::Annual,2}},true};
+        assert(production_template_valid(plan));
+        state.players[0].productionTemplates={plan};
+        const auto result=invade(state);
+        if (result.state.planets[1].owner!=1) continue;
+        captured=true;
+        assert(result.state.planets[1].productionQueue.empty());
+        assert(result.state.planets[1].radar==PlanetaryRadarLevel::None);
+        assert(result.state.players[0].productionTemplates[0].defaultForNewColonies);
+        auto& fleet=state.fleets.front(); fleet.destination=fleet.position;
+        fleet.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::UnloadAll,1,FleetCargoKind::Colonists};
+        const auto automated=TurnProcessor{}.process(state,{});
+        assert(automated.planets[1].owner==1 && automated.planets[1].productionQueue.empty());
+        assert(automated.planets[1].radar==PlanetaryRadarLevel::None);
+    }
+    assert(captured);
+}
+
 } // namespace
 
 int main()
 {
+    conquest_does_not_apply_a_new_colony_default();
     chance_is_symmetric_and_rewards_numerical_advantage();
     outcomes_are_probabilistic_but_replay_deterministic();
     invasion_consumes_only_the_landing_force_and_reports_both_sides();

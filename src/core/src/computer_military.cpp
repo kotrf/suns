@@ -219,6 +219,9 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         const auto warp = route_warp(state, fleet, route);
         if (!warp || goals.size() >= kMaximumComputerFleetGoals) return false;
         std::erase_if(goals, [&](const auto& g) { return g.fleet == fleet.id; });
+        if (kind == ComputerFleetGoalKind::Raid && fleet_bombs(state, fleet)
+            && fleet_work_order_error(state, fleet, star->position, FleetArrivalActionKind::BombardColony).empty())
+            action.kind = FleetArrivalActionKind::BombardColony;
         plan.orders.orders.push_back(MoveFleetOrder{fleet.id, star->position, *warp, action});
         goals.push_back({fleet.id, kind, starId, state.turn, review_turn(state, fleet)});
         explain(reason, std::string(kind == ComputerFleetGoalKind::Raid ? "Raid " : kind == ComputerFleetGoalKind::Defend ? "Defend "
@@ -258,7 +261,9 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
                 const auto* planet = find_planet_at_star(state, goal->target);
                 const auto owner = planet ? known_planet_owner(state, view.player, planet->id) : std::nullopt;
                 if (owner && *owner != 0 && *owner != view.player && strategic_task_available(state, fleet, FleetTask::Bombardment)) {
-                    plan.orders.orders.push_back(SetFleetTaskOrder{fleet.id, FleetTask::Bombardment});
+                    if (fleet.telemetry.task != FleetTask::Bombardment)
+                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, star->position, fleet.warp,
+                            {FleetArrivalActionKind::BombardColony}});
                     goal->kind = ComputerFleetGoalKind::Bombard; goal->issuedTurn = state.turn; goal->reviewTurn = review_turn(state, fleet);
                     explain(reason, "Bombard system " + std::to_string(goal->target)); continue;
                 }
