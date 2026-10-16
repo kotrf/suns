@@ -27,6 +27,7 @@ void advance_minefields(GameState&);
     std::span<const Minefield> navigationFields = {});
 [[nodiscard]] Position minefield_navigation_endpoint(const GameState&, const Fleet&, Position end);
 void run_strategic_tasks(GameState&, std::uint64_t);
+void observe_emission_pulses(GameState&, std::uint64_t);
 void observe_strategic_objects(GameState&, std::uint64_t);
 void deliver_strategic_intel(GameState&);
 void apply_scientific_data(GameState&, Player&, const PendingPlayerReport&, std::vector<GameEvent>&);

@@ -1,5 +1,17 @@
 # Project status and development handoff
 
+## In progress — 16 October 2026: physical interception and planetary reconstruction
+
+Main includes #207/#201 colony development plans; its CI is green (58/58 on the
+merged tree). The user approved the next two bounded slices: #205 actual fast/slow
+transmissions with separate signal/report propagation, and #106 persistent factory/
+mine destruction plus paid reconstruction through ordinary production. Contamination,
+biosphere damage, scorched-earth doctrines and new SIGINT equipment are later work.
+
+This branch implements [physical interception](emission-interception.md). Local
+core regressions pass; full Qt/save CI is required before auto-merge. Save v76,
+orders v25. Older checkpoints below are historical and may describe completed work.
+
 ## Current checkpoint — 16 October 2026
 
 PR #203 is merged into main `1c5ec0494292f2c74b4804a3a6ebafdbb90af479`.

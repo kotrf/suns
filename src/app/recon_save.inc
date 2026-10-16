@@ -34,10 +34,26 @@ void readSensorStatus(QDataStream& s,SensorStatus& x)
     x.observedTurn=observed; x.deliveryTurn=due;
     if(!sensor_status_valid(x)) markCorrupt(s);
 }
+void writeEmissionObservation(QDataStream& s,const std::optional<EmissionObservation>& value)
+{
+    s << quint8(value.has_value());
+    if(value) s << quint64(value->emittedTurn) << quint8(value->channel);
+}
+void readEmissionObservation(QDataStream& s,std::optional<EmissionObservation>& value,std::uint64_t observed)
+{
+    quint8 present{}; s >> present;
+    if(present>1) { markCorrupt(s); return; }
+    if(present) {
+        quint64 emitted{}; quint8 channel{}; s >> emitted >> channel;
+        if(!emitted || emitted>observed || channel>quint8(SignalChannel::Slow)) { markCorrupt(s); return; }
+        value=EmissionObservation{emitted,SignalChannel(channel)};
+    }
+}
 template<class T> void writeReconEvidence(QDataStream& s,const T& x)
 {
     s << quint8(x.contact.has_value()); if(x.contact) writeReconContact(s,*x.contact);
     s << quint8(x.sensorStatus.has_value()); if(x.sensorStatus) writeSensorStatus(s,*x.sensorStatus);
+    writeEmissionObservation(s,x.emission);
 }
 bool reconEvidenceMatches(const PendingPlayerReport& x)
 {
@@ -70,6 +86,10 @@ template<class T> void readReconEvidence(QDataStream& s,T& x)
     if(present) { ReconContact c; readReconContact(s,c); x.contact=c; }
     s >> present; if(present>1) { markCorrupt(s); return; }
     if(present) { SensorStatus status; readSensorStatus(s,status); x.sensorStatus=status; }
+    if(gReadSaveFormatVersion>=76) {
+        readEmissionObservation(s,x.emission,x.observedTurn);
+        if(x.emission && x.kind!=decltype(x.kind)::EmissionDetected) markCorrupt(s);
+    }
     if(!reconEvidenceMatches(x)) markCorrupt(s);
 }
 // An event-only trailing section keeps earlier record layouts intact.

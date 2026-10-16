@@ -126,7 +126,7 @@ void stealth_jamming_and_signals()
     assert(!detector_detects_fleet(s,s.fleets[0],s.fleets[1]));
     const auto hidden = make_player_view(s,1);
     assert(hidden.state.fleets.size() == 1);
-    observe_strategic_objects(s,2); s.turn = 2; deliver_strategic_intel(s);
+    publish_fleet_telemetry(s,2); observe_strategic_objects(s,2); observe_emission_pulses(s,2); s.turn = 2; deliver_strategic_intel(s);
     assert(s.players[0].strategicIntel.size() == 1);
     const auto& signal = s.players[0].strategicIntel[0];
     assert(signal.type == StrategicObjectKind::Emission && signal.owner == 0 && signal.radius == 15);
@@ -141,7 +141,7 @@ void stealth_jamming_and_signals()
     assert(strategic_sensor_range(s,s.fleets[0]) == 0);
     s.fleets[0].electronics = {}; s.fleets[1].electronics = {EmissionMode::Standard,0,true};
     s.players[0].strategicIntel.clear(); s.players[0].pendingStrategicIntel.clear();
-    observe_strategic_objects(s,4); s.turn = 4; deliver_strategic_intel(s);
+    publish_fleet_telemetry(s,4); observe_strategic_objects(s,4); observe_emission_pulses(s,4); s.turn = 4; deliver_strategic_intel(s);
     assert(s.players[0].strategicIntel.empty()); // Jammer delays the receiver's report.
     s.turn = 5; deliver_strategic_intel(s);
     assert(std::any_of(s.players[0].strategicIntel.begin(),s.players[0].strategicIntel.end(),[](const auto& i) {
@@ -180,7 +180,7 @@ void silence_hides_transmissions_but_not_active_radar_reflections()
         target.position={80,0}; target.electronics={mode,mode==EmissionMode::RadioSilence?20u:0u};
         s.fleets.push_back(target);
         assert(!detector_detects_fleet(s,s.fleets[0],s.fleets[1],2)); // R50 reflected-hull limit.
-        observe_strategic_objects(s,2); s.turn=2; deliver_strategic_intel(s);
+        publish_fleet_telemetry(s,2); observe_strategic_objects(s,2); observe_emission_pulses(s,2); s.turn=2; deliver_strategic_intel(s);
         const bool signal=std::any_of(s.players[0].strategicIntel.begin(),s.players[0].strategicIntel.end(),[](const auto& i){return i.type==StrategicObjectKind::Emission;});
         assert(signal==(mode==EmissionMode::Standard)); // Emission reception reaches R100.
         s.fleets[1].position={20,0};
@@ -196,12 +196,12 @@ void emission_interception_uses_the_built_planetary_receiver()
         Planet colony; colony.id=1; colony.star=1; colony.owner=1; colony.population=1000;
         colony.radar=radar; colony.homeworld=true; s.planets={colony};
         assert(colony_detects_fleet(s,colony,s.fleets.front(),2)==(radar==PlanetaryRadarLevel::Full));
-        observe_strategic_objects(s,2); s.turn=2; deliver_strategic_intel(s);
+        publish_fleet_telemetry(s,2); observe_strategic_objects(s,2); observe_emission_pulses(s,2); s.turn=2; deliver_strategic_intel(s);
         // Full radar sees the hull, so no redundant anonymous emission marker.
         // Local R30 cannot intercept a signal at 80 ly; None has no receiver.
         assert(s.players[0].strategicIntel.empty());
         s.fleets.front().position={40,0};
-        observe_strategic_objects(s,3); s.turn=3; deliver_strategic_intel(s);
+        publish_fleet_telemetry(s,3); observe_strategic_objects(s,3); observe_emission_pulses(s,3); s.turn=3; deliver_strategic_intel(s);
         assert(s.players[0].strategicIntel.empty()==(radar!=PlanetaryRadarLevel::Local));
         if(radar==PlanetaryRadarLevel::Local)
             assert(s.players[0].strategicIntel.front().type==StrategicObjectKind::Emission);

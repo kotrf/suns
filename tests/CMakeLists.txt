@@ -361,3 +361,7 @@ if(SUNS_BUILD_APP)
     set_tests_properties(suns_colony_template_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 endif()
+
+add_executable(suns_emission_interception_tests emission_interception_tests.cpp)
+target_link_libraries(suns_emission_interception_tests PRIVATE Suns::Core)
+add_test(NAME suns_emission_interception_tests COMMAND suns_emission_interception_tests)

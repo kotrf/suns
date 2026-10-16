@@ -359,8 +359,12 @@ QString event_text(const GameState& state, const GameEvent& event)
             .arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1);
         if (event.kind == GameEventKind::ScientificData)
             text += "\nThese research points have been delivered to your empire. Each field objective is finite; wreckage must contain unfamiliar technology.";
-        else if (event.kind == GameEventKind::EmissionDetected)
-            text += "\nThis is an uncertain signal area. The source, owner and fleet composition are unverified; it may be a decoy. The marker expires after this planning year.";
+        else if (event.kind == GameEventKind::EmissionDetected) {
+            if(event.emission) text+=QString("\n%1 channel. Emitted year %2; intercepted year %3; received year %4.")
+                .arg(event.emission->channel==SignalChannel::Slow?"Slow":"Fast")
+                .arg(qulonglong(event.emission->emittedTurn)).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn));
+            text += "\nThis is an uncertain emission-time signal area. The source, owner and fleet composition are unverified; it may be a decoy. It does not track a departed source or decode its messages. The marker expires after this planning year.";
+        }
         else if (event.kind == GameEventKind::MineStrike)
             text += "\nThe route was interrupted. A safe Warp or beam-equipped sweeping fleet can help with known fields.";
         else text += "\nReported population and installation losses are from this bombardment. Current colony conditions may have changed since the observation.";

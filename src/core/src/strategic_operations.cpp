@@ -62,6 +62,8 @@ void stage_intel(GameState& state, Player& player, StrategicIntel intel, Positio
     auto old = std::find_if(player.pendingStrategicIntel.begin(), player.pendingStrategicIntel.end(), similar);
     if (old == player.pendingStrategicIntel.end()) player.pendingStrategicIntel.push_back(intel);
     else if (intel.deliveryTurn < old->deliveryTurn) *old = intel;
+    else return;
+    if(intel.deliveryTurn!=kAwaitingTransmission) record_report_transmission(state,player.id,source,intel.observedTurn,observer);
 }
 
 bool science_once(GameState& state, Fleet& fleet, std::uint64_t key,
@@ -70,7 +72,7 @@ bool science_once(GameState& state, Fleet& fleet, std::uint64_t key,
     auto p = std::find_if(state.players.begin(), state.players.end(), [&](const auto& p) { return p.id == fleet.owner; });
     if (p == state.players.end() || std::any_of(p->fieldScience.begin(), p->fieldScience.end(),
         [&](const auto& r) { return r.key == key; })) return false;
-    const auto delivery = fleet_report_delivery_turn(state,p->id,fleet.position,turn,fleet.id);
+    const auto delivery = dispatch_report_delivery_turn(state,p->id,fleet.position,turn,fleet.id);
     p->fieldScience.push_back({key, delivery, held_report_source(state,p->id,fleet.position,turn,fleet.id)});
     queue_player_report(state, p->id, PlayerReportKind::ScientificData, fleet.position,
         turn, star, 0, fleet.id, 0, ProductionKind::Research, points, field, 0, {}, 0, target);
@@ -355,7 +357,7 @@ bool apply_minefield_crossing(GameState& state, Fleet& fleet, Position start, Po
     first->mines -= consumed;
     if (first->kind != 2) fleet.damagePercent = std::min(100.0,
         fleet.damagePercent + 100*consumed*(first->kind == 1 ? 12 : 4)/std::max(1.0, armor));
-    const auto delivery = fleet_report_delivery_turn(state,fleet.owner,source,state.turn+1,fleet.id);
+    const auto delivery = dispatch_report_delivery_turn(state,fleet.owner,source,state.turn+1,fleet.id);
     if (fleet.damagePercent >= 100 && delivery > state.turn + 1) {
         auto contact = fleet_player_view(state, fleet);
         contact.telemetryInTransit = fleet.telemetryInTransit;
@@ -505,6 +507,7 @@ bool submit_electronics_command(GameState& state, PlayerId player, FleetId id, E
     if (program.mode == EmissionMode::RadioSilence && (program.resumeTurn <= state.turn
         || program.resumeTurn > state.turn + 100)) return false;
     if(program.firstBurstTurn && (program.firstBurstTurn<=state.turn || program.firstBurstTurn>state.turn+100)) return false;
+    record_command_transmission(state,player,fleet->position,state.turn);
     auto delay = communication_delay_turns(state, player, fleet->position);
     if (!delay) { apply_electronics_program(*fleet, program); return true; }
     std::uint64_t delivery = state.turn + delay;
@@ -514,37 +517,8 @@ bool submit_electronics_command(GameState& state, PlayerId player, FleetId id, E
 
 void observe_strategic_objects(GameState& state, std::uint64_t turn)
 {
-    const auto record=[&](Player& player,Position area,std::uint32_t id,Position source,FleetId observer) {
-        stage_intel(state,player,{id,StrategicObjectKind::Emission,area,15,0,turn,0,0,0},source,observer);
-        PendingPlayerReport report; report.kind=PlayerReportKind::EmissionDetected; report.observedTurn=turn;
-        report.deliveryTurn=fleet_report_delivery_turn(state,player.id,source,turn,observer);
-        report.transmissionFleet=held_report_source(state,player.id,source,turn,observer);
-        report.position=source; report.quantity=15; report.contactPosition=area;
-        auto old=std::find_if(player.pendingPlayerReports.begin(),player.pendingPlayerReports.end(),[&](const auto& x){return x.kind==report.kind && x.observedTurn==turn && same_position(x.contactPosition,area);});
-        if(old==player.pendingPlayerReports.end()) player.pendingPlayerReports.push_back(report); else if(report.deliveryTurn<old->deliveryTurn) *old=report;
-    };
-    const auto signals=[&](Player& player,Position source,FleetId observer,const Planet* colony,double range,double tachyon) {
-        const auto detector=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f){return f.id==observer && f.owner==player.id;});
-        for(const auto& enemy:state.fleets) {
-            if(enemy.owner==player.id || !fleet_transmits(enemy,turn) || distance_between(enemy.position,source)>range*2) continue;
-            if(enemy.electronics.deception && tachyon<combined_rating(state,enemy,&ShipComponentSpec::jammingPercent)) {
-                const Position ghost{std::floor((enemy.position.x+40)/20)*20+10,std::floor((enemy.position.y+20)/20)*20+10};
-                const auto id=std::uint32_t((std::uint64_t(enemy.id)*2246822519ULL+turn*3266489917ULL+state.galaxySeed)&0xffffffff);
-                record(player,ghost,id,source,observer);
-            }
-            const bool detected=colony?colony_detects_fleet(state,*colony,enemy,turn)
-                : detector!=state.fleets.end() && detector_detects_fleet(state,*detector,enemy,turn);
-            if(detected) continue;
-            const Position area{std::floor(enemy.position.x/20)*20+10,std::floor(enemy.position.y/20)*20+10};
-            const auto id=std::uint32_t((std::uint64_t(enemy.id)*2654435761ULL+turn*40503+state.galaxySeed)&0xffffffff);
-            record(player,area,id,source,observer);
-        }
-    };
 
     for (auto& player : state.players) {
-        for(const auto& colony:state.planets) if(colony.owner==player.id && colony.population && colony.radar!=PlanetaryRadarLevel::None)
-            if(const auto* star=find_star(state,colony.star)) signals(player,star->position,0,&colony,
-                planetary_radar_range(colony.radar)*(1-sensor_interference(state,player.id,star->position,turn)),0);
         for (const auto& detector : state.fleets) {
             if (detector.owner != player.id || !fleet_has_scanner(state, detector)) continue;
             const double range = strategic_sensor_range(state, detector,turn);
@@ -562,8 +536,7 @@ void observe_strategic_objects(GameState& state, std::uint64_t turn)
             for (const auto& wreck : state.wrecks) if (distance_between(wreck.position, detector.position) <= range)
                 stage_intel(state, player, {wreck.id, StrategicObjectKind::Wreck, wreck.position, 10, 0, turn,
                     0, double(wreck.expiresTurn), 0}, detector.position,detector.id);
-            signals(player,detector.position,detector.id,nullptr,
-                fleet_sensor_range(state,detector)*(1-sensor_interference(state,player.id,detector.position,turn)),fleet_tachyon_fraction(state,detector));
+
         }
     }
 }

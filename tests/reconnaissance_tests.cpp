@@ -113,7 +113,7 @@ void periodic_scan_and_anonymous_emissions()
     assert(same_position(s.players[0].pendingEnemyContacts.front().position,replay.players[0].pendingEnemyContacts.front().position));
     assert(s.players[0].pendingEnemyContacts.front().deliveryTurn==replay.players[0].pendingEnemyContacts.front().deliveryTurn);
     // Colony passive reception sees emissions beyond reflected hull range, with no identity.
-    s=fixture({0,0},{200,0}); s.fleets.erase(s.fleets.begin()); observe_strategic_objects(s,2);
+    s=fixture({0,0},{200,0}); s.fleets.erase(s.fleets.begin()); publish_fleet_telemetry(s,2); observe_strategic_objects(s,2); observe_emission_pulses(s,2);
     assert(!s.players[0].pendingStrategicIntel.empty());
     const auto signal=s.players[0].pendingStrategicIntel.front();
     assert(signal.type==StrategicObjectKind::Emission && signal.owner==0 && signal.radius==15);

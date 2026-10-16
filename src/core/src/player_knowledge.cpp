@@ -134,6 +134,7 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         mix(std::bit_cast<std::uint64_t>(report.contactPosition.y));
         mix(report.deliveredColonists);
     }
+    if(report.emission) { mix(report.emission->emittedTurn); mix(std::uint64_t(report.emission->channel)); }
     if(report.sensorStatus) { mix(report.sensorStatus->fleet); mix(report.sensorStatus->colony); mix(report.sensorStatus->interferencePercent); }
     if(report.contact) { mix(std::uint64_t(report.contact->quality)); mix(report.contact->sourceFleet); mix(report.contact->sourceColony); mix(report.contact->jammed); }
     if (report.battle) {
@@ -197,6 +198,7 @@ void queue_survey_report(
         return report.star == star && report.level <= level && report.deliveryTurn >= deliveryTurn;
     });
     player->pendingSurveyReports.push_back(candidate);
+    if(deliveryTurn!=kAwaitingTransmission) record_report_transmission(state,playerId,sourcePosition,observationTurn,sourceFleet);
 }
 
 SurveyLevel best_observed_level(const GameState& state, PlayerId playerId, StarId star)
@@ -237,7 +239,7 @@ void queue_player_report(
     // The new colony reports its founding itself; a dismantled silent colony
     // ship is not a transmitter that can wake up and send a report later.
     const auto source = observer ? observer : kind==PlayerReportKind::ColonyFounded ? FleetId{0} : fleet;
-    const auto deliveryTurn = fleet_report_delivery_turn(state,recipient,sourcePosition,observationTurn,source);
+    const auto deliveryTurn = dispatch_report_delivery_turn(state,recipient,sourcePosition,observationTurn,source);
     player->pendingPlayerReports.push_back({
         kind,
         observationTurn,
@@ -486,6 +488,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.losses,
                 report.contact,
                 report.sensorStatus,
+                report.emission,
             });
         }
 

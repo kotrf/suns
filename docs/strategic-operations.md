@@ -126,10 +126,10 @@ diminishing returns; the strongest local hostile fleet determines the effect,
 capped at 75% sensor reduction. Jamming adds 1–2 years to communication at the
 source. It retains its separate torpedo-combat effect.
 
-An active/transmitting fleet can produce a passive emission contact at up to twice
+[Physical emission pulses](emission-interception.md) from dispatched packets or active scanning/jamming can produce an anonymous contact at up to twice
 the receiver's fitted scanner range, even when its hull is cloaked. The contact is
 a 20 ly grid cell center with 15 ly uncertainty, never a fleet ID, owner,
-composition or exact position. Received signal markers live for one planning year;
+composition or exact position. Fast/slow channel and emission/interception/receipt dates describe historical evidence. Slow signals first travel to the receiver at 150 ly/year, before its separate report journey. Received signal markers live for one planning year;
 the report remains in Turn Messages. Detached receivers report with delay.
 Silence suppresses this self-emission contact, but not reflected-hull detection
 by someone else's active radar. Local and Full planetary radars use their actual
@@ -202,4 +202,4 @@ and do not require retained Turn Messages. Orders remain v19.
 
 ## Reconnaissance follow-up (save v66/orders v21)
 
-[Reconnaissance](reconnaissance.md) adds delivered hull confidence/mass estimates, stale/lost tracks, sensor-interference reports, station jamming, colony emission reception, coalesced area reports and periodic silent communication/active-scan windows. Enemy route targets use reported positions. #58/#101 remain open for advanced traffic/decoy/doctrine work; the agreed next stage is fair computer players #184.
+[Reconnaissance](reconnaissance.md) adds delivered hull confidence/mass estimates, stale/lost tracks, sensor-interference reports, station jamming, colony emission reception, coalesced area reports and periodic silent communication/active-scan windows. Enemy route targets use reported positions. #58/#101 remain open for advanced traffic/decoy/doctrine work. Fair computer players #184 and colony plans #201 are complete; #205 now has physical dated interception.

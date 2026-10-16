@@ -278,7 +278,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
     // Broadcast result packets while the pre-casualty relay network still
     // exists. This does not require a destroyed ship to transmit later.
     for (const auto recipient : recipients) {
-        const auto delivery = fleet_report_delivery_turn(state,recipient,report.position,report.observedTurn);
+        const auto delivery = dispatch_report_delivery_turn(state,recipient,report.position,report.observedTurn);
         deliveries[recipient] = delivery;
         auto player = std::find_if(state.players.begin(), state.players.end(),
             [&](const auto& p) { return p.id == recipient; });

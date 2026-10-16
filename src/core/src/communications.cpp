@@ -9,6 +9,7 @@
 #include <limits>
 #include <utility>
 #include <type_traits>
+#include <tuple>
 
 namespace suns {
 
@@ -414,7 +415,7 @@ bool fleet_route_tasks_valid(const FleetRouteProgram& program)
     return route_tasks_valid(program);
 }
 
-std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
+CommunicationRoute communication_route(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
 {
     if (!atTurn) atTurn = state.turn;
     const auto fields = communication_fields(state, player, atTurn);
@@ -428,13 +429,16 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
         })) {
         const bool hasColony = std::any_of(state.planets.begin(), state.planets.end(),
             [&](const Planet& planet) { return planet.owner == player && planet.population > 0; });
-        return (hasColony ? 1U : 0U) + jamDelay;
+        Position capital=position;
+        for(const auto& p:state.planets) if(p.owner==player && p.population)
+            if(const auto* star=find_star(state,p.star)) { capital=star->position; if(p.homeworld) break; }
+        return {hasColony ? SignalChannel::Slow : SignalChannel::Fast, position, capital, hasColony ? 1U : 0U, jamDelay};
     }
 
     // A position inside any field connected to a colony root belongs to the
     // instantaneous empire mesh.
     for (const auto& field : fields) {
-        if (field.connected && inside_field(position, field)) return jamDelay;
+        if (field.connected && inside_field(position, field)) return {SignalChannel::Fast, position, field.position, 0, jamDelay};
     }
 
     // A detached scanner island still communicates instantaneously inside its
@@ -465,18 +469,86 @@ std::uint32_t communication_delay_turns(const GameState& state, PlayerId player,
         }
     }
 
+    Position transmitter=position, receiverPosition=position;
     double nearest = std::numeric_limits<double>::infinity();
     for (const auto source : sourceTransceivers) {
         for (const auto receiver : connectedTransceivers) {
-            nearest = std::min(nearest, distance_between(source, receiver));
+            const auto gap = distance_between(source, receiver);
+            if (gap < nearest - 1e-6 || (std::abs(gap-nearest)<=1e-6
+                && std::tuple{source.x,source.y,receiver.x,receiver.y}
+                    < std::tuple{transmitter.x,transmitter.y,receiverPosition.x,receiverPosition.y})) {
+                nearest=gap; transmitter=source; receiverPosition=receiver;
+            }
         }
     }
-    if (!std::isfinite(nearest)) return 1 + jamDelay;
-    if (nearest <= 0.000001) return jamDelay;
+    if (!std::isfinite(nearest)) return {SignalChannel::Slow, position, position, 1, jamDelay};
+    if (nearest <= 0.000001) return {SignalChannel::Fast, transmitter, receiverPosition, 0, jamDelay};
 
     // Any non-zero subspace hop lands at a later annual planning boundary;
     // priority can never alter this physical propagation time.
-    return static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed)) + jamDelay;
+    return {SignalChannel::Slow, transmitter, receiverPosition,
+        static_cast<std::uint32_t>(std::ceil(nearest / kCommunicationSignalSpeed)), jamDelay};
+}
+
+std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
+{
+    const auto route=communication_route(state,player,position,atTurn);
+    return route.propagationTurns+route.receiverDelay;
+}
+
+namespace {
+void record_pulse(GameState& state, PlayerId owner, Position position, std::uint64_t turn, SignalChannel channel)
+{
+    if (!find_player(state,owner)) return;
+    if (std::any_of(state.emissions.begin(),state.emissions.end(),[&](const auto& p) {
+        return p.owner==owner && p.emittedTurn==turn && p.channel==channel && same_position(p.position,position);
+    })) return; // One physical annual packet batch, not one marker per payload.
+    EmissionPulse pulse; pulse.id=state.nextEmissionId++; pulse.owner=owner;
+    pulse.position=position; pulse.emittedTurn=turn; pulse.channel=channel;
+    // Preserve a pulse through every currently fitted receiver's possible reach.
+    // This bounds host storage without querying a future target or its position.
+    pulse.maximumRange=2*kColonySensorRange;
+    for(const auto& f:state.fleets) {
+        pulse.maximumRange=std::max(pulse.maximumRange,2*fleet_sensor_range(state,f));
+        if(f.owner==owner && same_position(f.position,position) && fleet_transmits(f,turn)) {
+            if(!pulse.fleet || f.id<pulse.fleet) pulse.fleet=f.id;
+            if(f.electronics.deception) {
+                double strength=0;
+                for(const auto& stack:fleet_ship_stacks(f)) if(const auto* d=find_ship_design(state,stack.design)) {
+                    double remaining=1;
+                    for(auto c:d->components) remaining*=1-std::clamp(component_spec(c).jammingPercent/100,0.0,1.0);
+                    strength=std::max(strength,1-remaining);
+                }
+                pulse.deceptionStrength=std::max(pulse.deceptionStrength,std::min(0.95,strength));
+            }
+        }
+    }
+    for(const auto& p:state.planets) if(p.owner==owner && p.population)
+        if(const auto* star=find_star(state,p.star); star && same_position(star->position,position)) {
+            pulse.colony=p.id; pulse.fleet=0; pulse.deceptionStrength=0; break;
+        }
+    state.emissions.push_back(std::move(pulse));
+}
+}
+void record_report_transmission(GameState& state,PlayerId owner,Position position,std::uint64_t turn,FleetId observer)
+{
+    if(held_report_source(state,owner,position,turn,observer)) return;
+    const auto route=communication_route(state,owner,position,turn);
+    if(!same_position(route.transmitter,position)) record_pulse(state,owner,position,turn,SignalChannel::Fast);
+    record_pulse(state,owner,route.transmitter,turn,route.channel);
+}
+void record_command_transmission(GameState& state,PlayerId owner,Position target,std::uint64_t turn)
+{
+    const auto route=communication_route(state,owner,target,turn);
+    // Commands originate at the actual connected endpoint, never at their silent receiver.
+    if(std::any_of(state.planets.begin(),state.planets.end(),[&](const auto& p){return p.owner==owner && p.homeworld && p.population;}))
+        record_pulse(state,owner,route.receiver,turn,route.channel);
+}
+std::uint64_t dispatch_report_delivery_turn(GameState& state,PlayerId owner,Position source,std::uint64_t turn,FleetId observer)
+{
+    const auto due=fleet_report_delivery_turn(state,owner,source,turn,observer);
+    if(due!=kAwaitingTransmission) record_report_transmission(state,owner,source,turn,observer);
+    return due;
 }
 
 bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)
@@ -620,6 +692,7 @@ bool submit_fleet_route_command(
         return false;
     }
 
+    record_command_transmission(state,player,fleet->position,state.turn);
     const auto delivery = state.turn + communication_delay_turns(state, player, fleet->position);
     const auto delay = delivery - state.turn;
     if (delay == 0) {
@@ -646,6 +719,7 @@ bool submit_fleet_task_command(
     });
     if (fleet == state.fleets.end()) return false;
 
+    record_command_transmission(state,player,fleet->position,state.turn);
     const auto delivery = state.turn + communication_delay_turns(state, player, fleet->position);
     const auto delay = delivery - state.turn;
     if (delay == 0) return apply_task_program(state, *fleet, task);
@@ -715,6 +789,16 @@ void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
 {
     for (auto& fleet : state.fleets) {
         if (!fleet_can_share_reports(state, fleet, observationTurn)) continue;
+        // Active scan/jamming is a real fast-channel emission even when this
+        // year's data packet must take the slow route. Communication-only
+        // windows leave these emitters off.
+        if(fleet_active_sensors(fleet,observationTurn)) {
+            bool jammer=false;
+            for(const auto& stack:fleet_ship_stacks(fleet)) if(const auto* d=find_ship_design(state,stack.design))
+                for(auto c:d->components) jammer|=component_spec(c).jammingPercent>0;
+            if(fleet_has_scanner(state,fleet) || jammer) record_pulse(state,fleet.owner,fleet.position,observationTurn,SignalChannel::Fast);
+        }
+        record_report_transmission(state,fleet.owner,fleet.position,observationTurn,fleet.id);
         const auto snapshot = authoritative_snapshot(state, fleet, observationTurn);
         const auto delay = communication_delay_turns(state, fleet.owner, fleet.position, observationTurn);
         if (delay == 0) {
@@ -753,7 +837,7 @@ void dispatch_fleet_report_outbox(GameState& state)
             return f.id==report.transmissionFleet && f.owner==owner;
         });
         if(source==state.fleets.end() || !fleet_can_share_reports(state,*source,state.turn)) return;
-        report.deliveryTurn=state.turn+communication_delay_turns(state,owner,source->position);
+        report.deliveryTurn=dispatch_report_delivery_turn(state,owner,source->position,state.turn,source->id);
         report.transmissionFleet=0;
         if constexpr(std::is_same_v<std::remove_cvref_t<decltype(report)>,PendingPlayerReport>) {
             if(report.contact) { report.contact->deliveryTurn=report.deliveryTurn; report.contact->transmissionFleet=0; }

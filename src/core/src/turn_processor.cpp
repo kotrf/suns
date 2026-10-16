@@ -2140,7 +2140,6 @@ TurnResult TurnProcessor::process_with_events(
     advance_fleets(next, freight, movementFuel);
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
-    observe_strategic_objects(next, next.turn + 1);
     observe_current_wormholes(next, next.turn + 1);
     observe_current_sensor_coverage(next, next.turn + 1);
     observe_enemy_fleet_contacts(next, next.turn + 1);
@@ -2200,6 +2199,8 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
     publish_fleet_telemetry(next, next.turn);
     dispatch_fleet_report_outbox(next);
+    observe_strategic_objects(next, next.turn);
+    observe_emission_pulses(next,next.turn);
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
     deliver_strategic_intel(next);

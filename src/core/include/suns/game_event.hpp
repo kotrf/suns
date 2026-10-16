@@ -76,6 +76,7 @@ struct GameEvent {
     std::optional<OperationalLossReport> losses;
     std::optional<ReconContact> contact;
     std::optional<SensorStatus> sensorStatus;
+    std::optional<EmissionObservation> emission;
 };
 
 } // namespace suns
