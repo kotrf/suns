@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/interstellar_medium.hpp"
 #include "suns/computer_player.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
@@ -273,6 +274,7 @@ GameState movementPhasePreviewState(
     // The processor still applies turn-start onboard fuel generation, exactly
     // as it will before the real orders and movement phase.
     GameState preview = state;
+    project_interstellar_medium(preview,pending.player);
     for (auto& fleet : preview.fleets) fleet.destination.reset();
 
     PlayerOrders logistics{pending.player, {}};
@@ -905,6 +907,7 @@ void MainWindow::rebuildScene()
 
     renderKnownWormholes();
     renderKnownUnknownObjects();
+    renderKnownInterstellarMedium();
     renderStrategicObjects();
     // New markers must already use the active mode before selection/labels
     // see them; the scene-changed timer is too late after a redraw.
@@ -1018,8 +1021,8 @@ void MainWindow::updateControls()
         auto preview = *effectiveFleet;
         preview.warp = selectedWarp;
         const auto routeDistance = distance_between(fleet->position, star->position);
-        const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, routeDistance);
-        const auto fuelConsumed = fleet_fuel_consumption_for_distance(state_, preview, routeDistance);
+        const auto fuelChange = fleet_fuel_change_for_segment(movementPreview, preview, star->position);
+        const auto fuelConsumed = fleet_fuel_consumption_for_segment(movementPreview, preview, star->position);
         if (fuelChange > 0.000001) {
             routeFuelLine = QString("<br>Direct-route fuel: <b>%1</b>; fuel at movement phase: %2.")
                                 .arg(fuelValue(fuelChange)).arg(fuelValue(preview.fuel));
@@ -1030,6 +1033,11 @@ void MainWindow::updateControls()
         }
         if (fuelConsumed > preview.fuel + 0.000001)
             routeFuelLine += " <b>Insufficient for ordered Warp at movement phase.</b>";
+        if (state_.interstellarMediumEnabled) {
+            const auto bounds=fleet_segment_fuel_bounds(movementPreview,preview,routeDistance);
+            routeFuelLine+=QString("<br>Received-medium estimate: direct-leg consumption %1–%2 over density 0–1; ETA may change in unsurveyed space. Use Route forecast for annual billing/refuelling.")
+                .arg(bounds.consumedMinimum,0,'f',1).arg(bounds.consumedMaximum,0,'f',1);
+        }
     }
 
     const bool dynamicLoadTarget = surveyed && planet && fleet
@@ -1410,8 +1418,8 @@ void MainWindow::queueFleetMove()
     auto preview = plannedFleet ? *plannedFleet : *fleet;
     preview.warp = warp;
     const auto routeDistance = distance_between(fleet->position, star->position);
-    const auto fuelChange = fleet_fuel_change_for_distance(state_, preview, routeDistance);
-    const auto fuelConsumed = fleet_fuel_consumption_for_distance(state_, preview, routeDistance);
+    const auto fuelChange = fleet_fuel_change_for_segment(movementPreview, preview, star->position);
+    const auto fuelConsumed = fleet_fuel_consumption_for_segment(movementPreview, preview, star->position);
 
     QString fuelText;
     if (fuelChange > 0.000001) {

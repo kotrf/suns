@@ -1,6 +1,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/communications.hpp"
+#include "suns/interstellar_medium.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -20,12 +21,12 @@ std::vector<Receiver> receivers(const GameState& s,PlayerId owner,std::uint64_t 
     for(const auto& p:s.planets) if(p.owner==owner && p.population && p.radar!=PlanetaryRadarLevel::None)
         if(const auto* star=find_star(s,p.star)) {
             const double jam=sensor_interference(s,owner,star->position,turn);
-            result.push_back({star->position,0,p.id,planetary_radar_range(p.radar)*(1-jam),0,jam,false,planetary_radar_range(p.radar)});
+            result.push_back({star->position,0,p.id,planetary_radar_range(p.radar)*(1-jam)*medium_active_sensor_factor(s,star->position),0,jam,false,planetary_radar_range(p.radar)});
         }
     for(const auto& f:s.fleets) if(f.owner==owner && fleet_has_scanner(s,f)) {
         const bool passive=!fleet_active_sensors(f,turn);
         const double jam=sensor_interference(s,owner,f.position,turn);
-        result.push_back({f.position,f.id,0,fleet_sensor_range(s,f)*(1-jam),fleet_tachyon_fraction(s,f),jam,passive,fleet_sensor_range(s,f)});
+        result.push_back({f.position,f.id,0,fleet_sensor_range(s,f)*(1-jam)*(passive?1:medium_active_sensor_factor(s,f.position)),fleet_tachyon_fraction(s,f),jam,passive,fleet_sensor_range(s,f)});
     }
     std::sort(result.begin(),result.end(),[](const auto& a,const auto& b){return std::tuple{bool(a.fleet),a.colony,a.fleet}<std::tuple{bool(b.fleet),b.colony,b.fleet};});
     return result;
@@ -46,7 +47,8 @@ SensorStatus sensor_status(const GameState& s,PlayerId owner,const Receiver& r,s
     status.transmissionFleet=held_report_source(s,owner,r.position,turn,r.fleet);
     status.interferencePercent=std::uint8_t(std::lround(r.interference*100));
     status.nominalRange=r.nominal; status.activeRange=r.passive?0:r.range;
-    status.passiveRange=r.range*0.25; status.emissionRange=r.range*2;
+    const auto passiveBase=r.nominal*(1-r.interference);
+    status.passiveRange=passiveBase*0.25; status.emissionRange=passiveBase*2;
     return status;
 }
 std::optional<ReconContact> observe(const GameState& s,PlayerId owner,const Fleet& target,const Receiver& receiver,
@@ -54,7 +56,7 @@ std::optional<ReconContact> observe(const GameState& s,PlayerId owner,const Flee
 {
     // A player export's anonymous fleet placeholders are evidence, never truth to rescan.
     if(target.id==receiver.fleet || target.owner==0 || (!target.design && target.ships.empty())) return {};
-    const double range=fleet_detection_range(s,target,receiver.range,receiver.tachyon,receiver.passive);
+    const double range=fleet_detection_range(s,target,receiver.range*(receiver.passive?1:medium_active_path_factor(s,receiver.position,target.position)),receiver.tachyon,receiver.passive);
     const double distance=distance_between(receiver.position,target.position);
     if(range<=0 || distance>range*(tracked?1.10:1.0)+1e-6) return {};
     const auto* player=find_player(s,owner); if(!player) return {};

@@ -2,6 +2,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/interstellar_medium.hpp"
 
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -93,6 +94,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::SensorInterferenceChanged: return GameEventKind::SensorInterferenceChanged;
     case PlayerReportKind::PlanetaryAftermath: return GameEventKind::PlanetaryAftermath;
     case PlayerReportKind::UnknownObjectObserved: return GameEventKind::UnknownObjectObserved;
+    case PlayerReportKind::InterstellarMediumObserved: return GameEventKind::InterstellarMediumObserved;
     }
     return GameEventKind::FleetArrived;
 }
@@ -143,6 +145,11 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         const auto& x=*report.objectObservation; mix(x.id); mix(std::uint64_t(x.level));
         mix(x.kind ? std::uint64_t(*x.kind)+1 : 0);
         mix(std::bit_cast<std::uint64_t>(x.position.x)); mix(std::bit_cast<std::uint64_t>(x.position.y));
+    }
+    if (report.mediumObservation) {
+        const auto& x=*report.mediumObservation; mix(x.id); mix(std::uint64_t(x.level));
+        for (double value:{x.center.x,x.center.y,x.radiusX,x.radiusY,x.densityMinimum,x.densityMaximum})
+            mix(std::bit_cast<std::uint64_t>(value));
     }
     if(report.aftermath) {
         const auto& a=*report.aftermath;
@@ -292,8 +299,12 @@ void observe_fleet_sensor_sweep(
 
     for (const auto& star : state.stars) {
         const auto closest = distance_to_segment(star.position, start, end);
-        if (closest > range + 0.000001) continue;
-        const auto level = penetratingRange > 0.0 && closest <= penetratingRange + 0.000001
+        const auto dx=end.x-start.x,dy=end.y-start.y,length=dx*dx+dy*dy;
+        const auto t=length>0?std::clamp(((star.position.x-start.x)*dx+(star.position.y-start.y)*dy)/length,0.0,1.0):0;
+        const Position source{start.x+dx*t,start.y+dy*t};
+        const auto medium=medium_active_path_factor(state,source,star.position);
+        if (closest > range*medium + 0.000001) continue;
+        const auto level = penetratingRange > 0.0 && closest <= penetratingRange*medium_active_sensor_factor(state,source)*medium + 0.000001
             ? SurveyLevel::BasicScan
             : SurveyLevel::SystemScan;
         queue_survey_report(state, fleet.owner, star.id, fleet.id, end, observationTurn, level);
@@ -308,7 +319,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
             const auto* sourceStar = find_star(state, planet.star);
             const auto radar = planetary_radar_range(planet.radar);
             if (sourceStar && radar > 0
-                && within_range(sourceStar->position, star.position, radar)) {
+                && within_range(sourceStar->position, star.position, radar*medium_active_sensor_factor(state,sourceStar->position)
+                    *medium_active_path_factor(state,sourceStar->position,star.position))) {
                 queue_survey_report(
                     state,
                     planet.owner,
@@ -322,7 +334,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
 
         for (const auto& fleet : state.fleets) {
             const auto range = strategic_sensor_range(state, fleet,observationTurn);
-            if (fleet_active_sensors(fleet,observationTurn) && fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range)) {
+            const auto medium=medium_active_path_factor(state,fleet.position,star.position);
+            if (fleet_active_sensors(fleet,observationTurn) && fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range*medium)) {
                 auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
                     const auto known = best_observed_level(state, fleet.owner, star.id);
@@ -332,7 +345,7 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
                 } else if (within_range(
                                fleet.position,
                                star.position,
-                               fleet_penetrating_sensor_range(state, fleet))) {
+                               fleet_penetrating_sensor_range(state, fleet)*medium_active_sensor_factor(state,fleet.position)*medium)) {
                     level = SurveyLevel::BasicScan;
                 }
                 queue_survey_report(
@@ -448,6 +461,18 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            auto medium=report.mediumObservation;
+            if (medium) {
+                medium->receivedTurn=state.turn;
+                auto current=std::find_if(player.mediumKnowledge.begin(),player.mediumKnowledge.end(),
+                    [&](const auto& x) { return x.id==medium->id; });
+                const bool upgraded=current==player.mediumKnowledge.end() || medium->level>current->level;
+                if (upgraded || (medium->level==current->level && medium->observedTurn>current->observedTurn)) {
+                    if (current==player.mediumKnowledge.end()) player.mediumKnowledge.push_back(*medium);
+                    else *current=*medium;
+                }
+                if (!upgraded) continue; // Refresh routine measurements without annual briefings.
+            }
             auto object=report.objectObservation;
             if(object) {
                 object->receivedTurn=state.turn;
@@ -517,7 +542,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.fleet,
                 report.shipDesign,
                 report.productionKind,
-                object ? object->position : report.kind == PlayerReportKind::EnemyFleetDetected
+                medium ? medium->center : object ? object->position : report.kind == PlayerReportKind::EnemyFleetDetected
                         || report.kind == PlayerReportKind::EnemyFleetLost || report.kind == PlayerReportKind::EnemyFleetReclassified
                         || report.kind == PlayerReportKind::ScientificData || report.kind == PlayerReportKind::EmissionDetected
                     ? report.contactPosition : report.position,
@@ -537,6 +562,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.emission,
                 aftermath,
                 object,
+                medium,
             });
         }
 

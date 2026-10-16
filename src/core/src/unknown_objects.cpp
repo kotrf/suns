@@ -3,6 +3,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/interstellar_medium.hpp"
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -68,13 +69,13 @@ void observe_unknown_objects(GameState& s,std::uint64_t turn)
             receivers.push_back({f.position,std::max(1.0,strategic_sensor_range(s,f,turn)),f.id,0});
         for(const auto& p:s.planets) if(p.owner==player.id && p.population && p.radar!=PlanetaryRadarLevel::None)
             if(const auto* star=find_star(s,p.star)) receivers.push_back({star->position,
-                planetary_radar_range(p.radar)*(1-sensor_interference(s,player.id,star->position,turn)),0,p.id});
+                planetary_radar_range(p.radar)*(1-sensor_interference(s,player.id,star->position,turn))*medium_active_sensor_factor(s,star->position),0,p.id});
         for(const auto& object:s.unknownObjects) {
             const Receiver* best=nullptr; ObjectKnowledgeLevel level=ObjectKnowledgeLevel::Detected;
             std::uint64_t delivery=kAwaitingTransmission;
             for(const auto& r:receivers) {
                 const auto distance=distance_between(r.position,object.position);
-                if(distance>r.range+1e-6) continue;
+                if(distance>r.range*medium_active_path_factor(s,r.position,object.position)+1e-6) continue;
                 const auto candidate=distance<=std::min(40.0,r.range*0.5)+1e-6
                     ? ObjectKnowledgeLevel::Classified : ObjectKnowledgeLevel::Detected;
                 const auto due=fleet_report_delivery_turn(s,player.id,r.position,turn,r.fleet);

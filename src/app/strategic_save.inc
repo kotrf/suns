@@ -243,6 +243,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     writePlanetWarDamage(out,state);
     writePlanetaryRecovery(out,state);
     writeUnknownObjects(out,state);
+    writeInterstellarMedium(out,state);
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -415,5 +416,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
     if (gReadSaveFormatVersion >= 77) readPlanetWarDamage(in,state);
     if (gReadSaveFormatVersion >= 78) readPlanetaryRecovery(in,state);
     if (gReadSaveFormatVersion >= 79) readUnknownObjects(in,state);
+    if (gReadSaveFormatVersion >= 80) readInterstellarMedium(in,state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

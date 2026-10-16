@@ -1,0 +1,160 @@
+#include "suns/interstellar_medium.hpp"
+#include "suns/campaign.hpp"
+#include "suns/communications.hpp"
+#include "suns/player_knowledge.hpp"
+#include "suns/reconnaissance.hpp"
+#include "suns/strategic_operations.hpp"
+#include "suns/turn_processor.hpp"
+
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <iostream>
+using namespace suns;
+bool near(double a,double b,double epsilon=1e-8) { return std::abs(a-b)<epsilon; }
+GameState medium_fixture()
+{
+    auto s=make_demo_game(); s.turn=10; s.wormholeRules.spawnChancePerTurn=0;
+    s.interstellarMediumEnabled=true; s.interstellarClouds={{1,{411,7},60,40,0.8}};
+    s.fleets[0].position={411,7};
+    for (auto& p:s.planets) p.radar=PlanetaryRadarLevel::None;
+    for (auto& p:s.players) p.technology.researchActive=false;
+    return s;
+}
+void generation_and_projection()
+{
+    auto a=generate_game({501,120,1000,800,25}),b=generate_game({501,120,1000,800,25});
+    assert(a.interstellarMediumEnabled && a.interstellarClouds==b.interstellarClouds && a.interstellarClouds.size()==1);
+    const auto clouds=a.interstellarClouds; generate_interstellar_medium(a); assert(a.interstellarClouds==clouds);
+    a.interstellarClouds.clear(); a.interstellarMediumEnabled=false; generate_interstellar_medium(a);
+    assert(a.interstellarClouds==clouds && a.stars[0].position==b.stars[0].position);
+    auto view=make_player_view(a,1).state;
+    assert(view.interstellarClouds.empty() && view.mediumObserver==1 && view.interstellarMediumEnabled);
+    assert(interstellar_density(view,clouds[0].center)==0);
+    assert(!generate_game({1,8,400,400,15}).interstellarMediumEnabled);
+}
+void integration_is_bounded_and_resolves_cloud_crossings()
+{
+    auto s=medium_fixture(); s.interstellarClouds={{1,{0,0},50,20,0.8}};
+    assert(interstellar_density(s,{-100,0})==0 && interstellar_density(s,{100,0})==0);
+    assert(near(interstellar_density(s,{0,0}),0.8));
+    const auto total=medium_segment_density(s,{-100,0},{100,0});
+    assert(near(total,0.8*16*50/15/200));
+    assert(near(total,medium_segment_density(s,{100,0},{-100,0})));
+    assert(near(total,(medium_segment_density(s,{-100,0},{13,0})*113+medium_segment_density(s,{13,0},{100,0})*87)/200));
+    assert(near(medium_segment_density(s,{0,0},{0,0}),0.8));
+    s.interstellarClouds={{1,{0,0},50,20,1},{2,{10,2},40,25,0.9},{3,{-20,-3},30,60,0.8},{4,{5,4},70,40,0.7}};
+    const auto full=medium_segment_density(s,{-150,-12},{150,12});
+    const auto split=(medium_segment_density(s,{-150,-12},{0,0})+medium_segment_density(s,{0,0},{150,12}))*0.5;
+    assert(full>0 && full<=1 && near(full,split));
+    assert(interstellar_density(s,{0,0})<=1);
+}
+void fuel_and_movement_use_the_same_segment()
+{
+    auto s=generate_game({10,32,400,400,20}); auto& f=s.fleets[0];
+    f.position={1000,1000}; f.destination=Position{1064,1000}; f.warp=8; f.fuel=50;
+    s.interstellarClouds={{1,{1032,1000},20,20,1}};
+    auto clear=s; clear.interstellarClouds.clear();
+    const auto base=fleet_fuel_consumption_for_segment(clear,clear.fleets[0],*f.destination);
+    const auto cost=fleet_fuel_consumption_for_segment(s,f,*f.destination);
+    const auto change=fleet_fuel_change_for_segment(s,f,*f.destination);
+    const auto bounds=fleet_segment_fuel_bounds(s,f,64);
+    assert(cost>base && cost>=bounds.consumedMinimum && cost<=bounds.consumedMaximum && cost<=50);
+    const auto result=TurnProcessor{}.process_with_events(s,{});
+    const auto& moved=result.state.fleets[0];
+    assert(moved.position==Position(1064,1000) && near(moved.fuel,50-change));
+    const auto record=std::find_if(result.movementFuel.begin(),result.movementFuel.end(),[&](const auto& x) { return x.fleet==f.id; });
+    assert(record!=result.movementFuel.end() && near(record->consumed,cost));
+    assert(near(record->consumedMinimum,bounds.consumedMinimum) && near(record->consumedMaximum,bounds.consumedMaximum));
+    auto projected=s; project_interstellar_medium(projected,1);
+    assert(near(fleet_fuel_consumption_for_segment(projected,f,*f.destination),base));
+    projected.players[0].mediumKnowledge={{1,{1032,1000},20,20,1,1,MediumKnowledgeLevel::Characterized,9,10}};
+    assert(near(fleet_fuel_consumption_for_segment(projected,f,*f.destination),cost));
+    s.interstellarClouds[0].density=0.2;
+    assert(near(fleet_fuel_consumption_for_segment(projected,f,*f.destination),cost));
+}
+void fitted_engines_and_fuel_reserves()
+{
+    auto s=medium_fixture(); auto& f=s.fleets[0]; f.position={1000,0}; f.fuel=3;
+    s.interstellarClouds={{1,{1040,0},80,100,1}};
+    for (auto engine:{ShipComponentType::QuickJump5,ShipComponentType::FuelMizer,ShipComponentType::FusionDrive,ShipComponentType::RamScoopDrive}) {
+        s.shipDesigns[0].components[0]=engine;
+        for (auto warp:{4,8}) {
+            f.warp=warp; double previous=0;
+            for (int step=1;step<=200;++step) {
+                const Position end{1000+step*0.5,0};
+                const auto cost=fleet_fuel_consumption_for_segment(s,f,end);
+                const auto change=fleet_fuel_change_for_segment(s,f,end);
+                const auto bounds=fleet_segment_fuel_bounds(s,f,step*0.5);
+                assert(cost+1e-8>=previous && cost>=bounds.consumedMinimum-1e-8 && cost<=bounds.consumedMaximum+1e-8);
+                assert(change>=bounds.changeMinimum-1e-8 && change<=bounds.changeMaximum+1e-8); previous=cost;
+            }
+            const auto paid=fleet_fuel_affordable_segment_distance(s,f,{1100,0},100);
+            assert(fleet_fuel_consumption_for_segment(s,f,{1000+paid,0})<=f.fuel+1e-6);
+        }
+    }
+    s.shipDesigns[0].components[0]=ShipComponentType::RamScoopDrive; f.warp=4;
+    auto clear=s; clear.interstellarClouds.clear();
+    assert(fleet_fuel_change_for_segment(s,f,{1080,0})<fleet_fuel_change_for_segment(clear,f,{1080,0}));
+    s.shipDesigns.push_back({33,1,"Conventional escort",ShipHullType::Scout,{ShipComponentType::QuickJump5}});
+    f.ships={{f.design,1},{33,1}}; f.warp=8; f.fuel=0;
+    assert(fleet_fuel_consumption_for_segment(s,f,{1080,0})>0);
+    assert(fleet_fuel_affordable_segment_distance(s,f,{1080,0},80)<1e-6);
+}
+void active_sensors_are_attenuated_without_changing_passive_reception()
+{
+    auto s=medium_fixture(); auto detector=s.fleets[0]; detector.position={1000,0};
+    Fleet target=detector; target.id=99; target.owner=2;
+    const auto nominal=fleet_sensor_range(s,detector); target.position={1000+nominal*0.9,0};
+    s.interstellarClouds={{1,{1000,0},1000,1000,1}};
+    auto clear=s; clear.interstellarClouds.clear();
+    assert(strategic_sensor_range(s,detector)<strategic_sensor_range(clear,detector));
+    assert(detector_detects_fleet(clear,detector,target) && !detector_detects_fleet(s,detector,target));
+    detector.electronics.mode=EmissionMode::Passive; target.position={1000+nominal*0.05,0};
+    assert(detector_detects_fleet(s,detector,target)==detector_detects_fleet(clear,detector,target));
+    s.fleets[0]=detector; s.fleets[0].electronics.mode=EmissionMode::Standard;
+    observe_reconnaissance(s,s.turn);
+    const auto status=std::find_if(s.players[0].pendingSensorStatus.begin(),s.players[0].pendingSensorStatus.end(),
+        [&](const auto& x) { return x.fleet==detector.id; });
+    assert(status!=s.players[0].pendingSensorStatus.end());
+    assert(status->activeRange<nominal && near(status->passiveRange,nominal*0.25) && near(status->emissionRange,nominal*2));
+}
+void surveys_are_delayed_immutable_and_do_not_repeat_briefings()
+{
+    auto s=medium_fixture(); observe_interstellar_medium(s,10);
+    assert(s.players[0].mediumKnowledge.empty());
+    const auto found=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r) { return bool(r.mediumObservation); });
+    assert(found!=s.players[0].pendingPlayerReports.end()); const auto packet=*found;
+    assert(packet.deliveryTurn>10 && packet.mediumObservation->level==MediumKnowledgeLevel::Characterized);
+    assert(packet.mediumObservation->densityMinimum==0.8 && packet.mediumObservation->receivedTurn==0);
+    s.interstellarClouds[0].center={900,900}; s.interstellarClouds[0].density=0.2; s.fleets.clear();
+    s.turn=packet.deliveryTurn;
+    const auto delivered=deliver_due_player_reports(s);
+    const auto event=std::find_if(delivered.begin(),delivered.end(),[](const auto& e) { return bool(e.mediumObservation); });
+    assert(event!=delivered.end() && event->position==Position(411,7));
+    assert(s.players[0].mediumKnowledge[0].densityMaximum==0.8 && s.players[0].mediumKnowledge[0].receivedTurn==s.turn);
+    auto repeat=packet; repeat.observedTurn=repeat.mediumObservation->observedTurn=s.turn; repeat.deliveryTurn=s.turn+1;
+    s.players[0].pendingPlayerReports={repeat}; ++s.turn; assert(deliver_due_player_reports(s).empty());
+    assert(s.players[0].mediumKnowledge[0].observedTurn==s.turn-1);
+    auto old=repeat; old.mediumObservation->level=MediumKnowledgeLevel::Detected; old.mediumObservation->densityMinimum=0;
+    old.mediumObservation->densityMaximum=1; old.observedTurn=old.mediumObservation->observedTurn=10; old.deliveryTurn=++s.turn;
+    s.players[0].pendingPlayerReports={old}; assert(deliver_due_player_reports(s).empty());
+    assert(s.players[0].mediumKnowledge[0].level==MediumKnowledgeLevel::Characterized);
+}
+void distant_and_passive_observers()
+{
+    auto s=medium_fixture(); s.fleets[0].position={490,7}; observe_interstellar_medium(s,10);
+    assert(s.players[0].pendingPlayerReports.back().mediumObservation->level==MediumKnowledgeLevel::Detected);
+    const auto& x=*s.players[0].pendingPlayerReports.back().mediumObservation;
+    assert(x.densityMinimum==0 && x.densityMaximum==1 && x.center!=s.interstellarClouds[0].center);
+    s.players[0].pendingPlayerReports.clear(); s.fleets[0].electronics.mode=EmissionMode::Passive;
+    observe_interstellar_medium(s,10); assert(s.players[0].pendingPlayerReports.empty());
+}
+int main()
+{
+    generation_and_projection(); integration_is_bounded_and_resolves_cloud_crossings();
+    fuel_and_movement_use_the_same_segment(); fitted_engines_and_fuel_reserves();
+    active_sensors_are_attenuated_without_changing_passive_reception();
+    surveys_are_delayed_immutable_and_do_not_repeat_briefings(); distant_and_passive_observers();
+    std::cout<<"interstellar medium tests passed\n";
+}

@@ -205,6 +205,7 @@ struct FleetMovementFuel {
     double consumed{};
     double remaining{};
     bool fuelLimited{};
+    double consumedMinimum{}, consumedMaximum{}; // Same travelled path, density envelope 0..1.
 };
 
 struct TurnResult {

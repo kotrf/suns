@@ -398,6 +398,8 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     view.player = playerId;
     auto& state = view.state;
     state.turn = host.turn;
+    state.interstellarMediumEnabled=host.interstellarMediumEnabled;
+    state.mediumObserver=playerId;
     // Do not export the generation seed or global allocation counters.
     Player own = *player;
     own.pendingSurveyReports.clear();

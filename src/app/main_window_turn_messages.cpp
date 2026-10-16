@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/interstellar_medium.hpp"
 #include "suns/communications.hpp"
 
 #include <QAction>
@@ -108,6 +109,8 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::InterstellarMediumObserved: subject=QString("Cloud C%1: %2").arg(event.mediumObservation?event.mediumObservation->id:0)
+        .arg(event.mediumObservation && event.mediumObservation->level==MediumKnowledgeLevel::Characterized?"Characterized":"Detected"); break;
     case GameEventKind::UnknownObjectObserved: subject=QString("Object X%1: %2").arg(event.objectObservation?event.objectObservation->id:0)
         .arg(event.objectObservation?object_knowledge_name(event.objectObservation->level):"Unknown"); break;
     case GameEventKind::PlanetaryAftermath: subject=QString("Aftermath report: %1").arg(planetName); break;
@@ -194,6 +197,7 @@ QString event_subject(const GameState& state, const GameEvent& event)
 QString message_class(const GameEvent& event)
 {
     auto key = QString::number(static_cast<int>(event.kind));
+    if (event.mediumObservation) key+=QString(":cloud-%1").arg(event.mediumObservation->id);
     if (event.kind == GameEventKind::SystemSurveyed) {
         key += QString(":survey-%1").arg(static_cast<int>(event.surveyLevel));
     } else if (event.kind == GameEventKind::ProductionCompleted
@@ -210,7 +214,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     switch (filter) {
     case MessageTypeFilter::All: return true;
     case MessageTypeFilter::Exploration:
-        if(event.kind==GameEventKind::UnknownObjectObserved || event.objectObservation) return true;
+        if(event.kind==GameEventKind::UnknownObjectObserved || event.objectObservation || event.mediumObservation) return true;
         return event.kind == GameEventKind::SystemSurveyed
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered
             || event.kind == GameEventKind::AnomalyDetected
@@ -331,6 +335,15 @@ QString aftermath_text(const GameEvent& event)
 
 QString event_text(const GameState& state, const GameEvent& event)
 {
+    if (event.mediumObservation) {
+        const auto& x=*event.mediumObservation;
+        return QString("Cloud C%1 — %2\nObserved year %3; received year %4.\nReported centre %5, %6; radii %7 × %8 ly.\nPeak density %9–%10.\n"
+            "Active sensors characterize the profile inside its core. Received profiles adjust route estimates; unsurveyed density remains uncertain. "
+            "Conventional engines use more fuel, ram-scoops collect more, and active sensors are attenuated. See View → Interstellar medium.")
+            .arg(x.id).arg(x.level==MediumKnowledgeLevel::Characterized?"Characterized":"Detected")
+            .arg(qulonglong(x.observedTurn)).arg(qulonglong(x.receivedTurn)).arg(x.center.x,0,'f',1).arg(x.center.y,0,'f',1)
+            .arg(x.radiusX,0,'f',1).arg(x.radiusY,0,'f',1).arg(x.densityMinimum,0,'f',2).arg(x.densityMaximum,0,'f',2);
+    }
     if(event.objectObservation) {
         const auto& x=*event.objectObservation;
         QString text=QString("Object X%1 — %2\n%3\nObserved year %4; received year %5.\nPosition %6, %7 ±%8 ly.")
@@ -747,7 +760,7 @@ void MainWindow::installTurnMessages()
         const auto* event = selectedEvent();
         if (!event || (event->star == 0 && event->fleet == 0)) return;
         const bool battle = event->kind == GameEventKind::SpaceBattle;
-        if(event->contact || event->sensorStatus || event->objectObservation) { view_->centerOn(event->position.x,event->position.y); return; }
+        if(event->contact || event->sensorStatus || event->objectObservation || event->mediumObservation) { view_->centerOn(event->position.x,event->position.y); return; }
         const auto position = event->position;
         const auto starId = event->star;
         const auto* star = find_star(state_, starId);

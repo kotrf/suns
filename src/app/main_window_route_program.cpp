@@ -3,6 +3,7 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/production.hpp"
+#include "suns/interstellar_medium.hpp"
 
 #include "suns/communications.hpp"
 
@@ -201,6 +202,7 @@ QString routeForecast(
         "Entry, lifetime, exit and survival cannot be forecast with certainty.";
 
     GameState simulated = state;
+    project_interstellar_medium(simulated,pending.player);
     // Navigation previews must never resolve battles using hidden enemy fits,
     // routes or the authoritative seed. Combat outcomes are not forecasts.
     std::erase_if(simulated.fleets, [&](const auto& f) { return f.owner != pending.player; });
@@ -219,6 +221,8 @@ QString routeForecast(
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
     lines << "<i>Navigation only: hostile encounters can interrupt this route; combat is not forecast.</i>";
+    if (state.interstellarMediumEnabled) lines << "<i>Medium estimate: received cloud profiles only. Undiscovered or approximately detected density can change fuel, coasting and ETA. "
+        "Fuel ranges cover density 0–1 along the forecast flown segments; actual arrival/refuelling may change. Engine safe Warp is unchanged.</i>";
 
     bool firstTurn = true;
     bool dependsOnDynamicResult = false;
@@ -255,6 +259,8 @@ QString routeForecast(
                 auto& forecast = (*legForecasts)[legIndex];
                 forecast.fuelUsed = forecast.fuelUsed.value_or(0.0) + movement.consumed;
                 forecast.fuelRemaining = movement.remaining;
+                forecast.fuelMinimum=forecast.fuelMinimum.value_or(0.0)+movement.consumedMinimum;
+                forecast.fuelMaximum=forecast.fuelMaximum.value_or(0.0)+movement.consumedMaximum;
             }
             if (movement.fuelLimited && !fuelShortageSeen) {
                 fuelShortageSeen = true;
@@ -616,6 +622,10 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             ? routeLegForecasts_[index] : RouteProgramLegForecast{};
         QString tooltip = "Projected movement fuel for this leg, including turn-by-turn billing and cargo changes. "
             "Fuel left includes arrival refuelling. Preview horizon: 96 years; later orders and hostile encounters may change the result.";
+        const bool medium=state_.interstellarMediumEnabled;
+        if (medium) tooltip+="\nMedium estimate uses received profiles only. The fuel range covers density 0–1 for the forecast flown segments, with fitted engines and rounding. "
+            "Unsurveyed density can change fuel-limited coasting, arrival time and refuelling; ETA and fuel left are estimates.";
+        if (medium && forecast.fuelUsed) tooltip+=QString("\nReceived-profile consumption estimate: ≈%1 mg.").arg(*forecast.fuelUsed,0,'f',1);
         if (!forecast.arrivalTurn) tooltip += "\nArrival is not predicted: ≥ is consumption so far, not the complete leg's cost; — means no data.";
         if (forecast.fuelShortageTurn) tooltip += QString("\nFuel shortage at T+%1 on this leg: the ordered Warp cannot be maintained. "
             "Reduce Warp or add a refuelling stop; free-speed coasting may still allow a later arrival.").arg(*forecast.fuelShortageTurn);
@@ -624,10 +634,12 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             actionName(leg.arrivalAction),
             leg.warp,
             index == 0,
-            forecast.arrivalTurn ? QString::number(*forecast.arrivalTurn) : QString("—"),
+            forecast.arrivalTurn ? (medium?QString("≈%1").arg(*forecast.arrivalTurn):QString::number(*forecast.arrivalTurn)) : QString("—"),
+            medium && forecast.fuelMinimum && forecast.fuelMaximum ? QString("%1%2–%3").arg(forecast.arrivalTurn?"":"≥")
+                .arg(*forecast.fuelMinimum,0,'f',1).arg(*forecast.fuelMaximum,0,'f',1) :
             forecast.fuelUsed ? QString("%1%2").arg(forecast.arrivalTurn ? "" : "≥")
                 .arg(*forecast.fuelUsed, 0, 'f', 1) : QString("—"),
-            forecast.fuelRemaining ? QString::number(*forecast.fuelRemaining, 'f', 1) : QString("—"),
+            forecast.fuelRemaining ? (medium?QString("≈%1").arg(*forecast.fuelRemaining,0,'f',1):QString::number(*forecast.fuelRemaining, 'f', 1)) : QString("—"),
             tooltip,
             forecast.fuelShortageTurn.has_value(),
         });

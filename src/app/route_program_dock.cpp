@@ -264,9 +264,10 @@ void attachRouteProgramDock(MainWindow& window)
     routeTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     routeTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    routeTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(4, QHeaderView::Stretch);
+    routeTree->setTextElideMode(Qt::ElideMiddle);
     routeTree->header()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
-    routeTree->headerItem()->setToolTip(4, "Projected movement fuel consumed on this leg (mg); ≥ means an incomplete forecast");
+    routeTree->headerItem()->setToolTip(4, "Estimated movement fuel on this leg (mg). A range covers uncertain medium density; hover for the received-profile estimate. ≥ means an incomplete forecast.");
     routeTree->headerItem()->setToolTip(5, "Projected fuel remaining at arrival (mg), including any orbital refuelling");
     routeTree->setFixedHeight(100);
     routeLayout->addWidget(routeTree);

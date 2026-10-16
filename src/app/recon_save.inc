@@ -81,6 +81,19 @@ void readObjectObservation(QDataStream& s,ObjectObservation& x)
     s >> observed >> received; x.level=ObjectKnowledgeLevel(level); x.observedTurn=observed; x.receivedTurn=received;
     if(!object_observation_valid(x)) markCorrupt(s);
 }
+void writeMediumObservation(QDataStream& s,const MediumObservation& x)
+{
+    s << quint32(x.id); writePosition(s,x.center);
+    s << x.radiusX << x.radiusY << x.densityMinimum << x.densityMaximum << quint8(x.level)
+        << quint64(x.observedTurn) << quint64(x.receivedTurn);
+}
+void readMediumObservation(QDataStream& s,MediumObservation& x)
+{
+    quint8 level{}; quint64 observed{},received{}; s >> x.id; readPosition(s,x.center);
+    s >> x.radiusX >> x.radiusY >> x.densityMinimum >> x.densityMaximum >> level >> observed >> received;
+    x.level=MediumKnowledgeLevel(level); x.observedTurn=observed; x.receivedTurn=received;
+    if (!medium_observation_valid(x)) markCorrupt(s);
+}
 template<class T> void writeReconEvidence(QDataStream& s,const T& x)
 {
     s << quint8(x.contact.has_value()); if(x.contact) writeReconContact(s,*x.contact);
@@ -88,6 +101,7 @@ template<class T> void writeReconEvidence(QDataStream& s,const T& x)
     writeEmissionObservation(s,x.emission);
     s << quint8(x.aftermath.has_value()); if(x.aftermath) writeAftermathObservation(s,*x.aftermath);
     s << quint8(x.objectObservation.has_value()); if(x.objectObservation) writeObjectObservation(s,*x.objectObservation);
+    s << quint8(x.mediumObservation.has_value()); if(x.mediumObservation) writeMediumObservation(s,*x.mediumObservation);
 }
 bool reconEvidenceMatches(const PendingPlayerReport& x)
 {
@@ -151,6 +165,17 @@ template<class T> void readReconEvidence(QDataStream& s,T& x)
             else if(o.receivedTurn!=x.turn || !same_position(o.position,x.position)) markCorrupt(s);
         }
         if(x.kind==decltype(x.kind)::UnknownObjectObserved && !x.objectObservation) markCorrupt(s);
+    }
+    if (gReadSaveFormatVersion>=80) {
+        quint8 present{}; s >> present; if (present>1) { markCorrupt(s); return; }
+        if (present) {
+            MediumObservation medium; readMediumObservation(s,medium); x.mediumObservation=medium;
+            if (x.kind!=decltype(x.kind)::InterstellarMediumObserved || medium.observedTurn!=x.observedTurn
+                || x.contact || x.sensorStatus || x.emission || x.aftermath || x.objectObservation || x.battle || x.losses) markCorrupt(s);
+            if constexpr (std::is_same_v<T,PendingPlayerReport>) { if (medium.receivedTurn) markCorrupt(s); }
+            else if (medium.receivedTurn!=x.turn || !same_position(medium.center,x.position)) markCorrupt(s);
+        }
+        if (x.kind==decltype(x.kind)::InterstellarMediumObserved && !x.mediumObservation) markCorrupt(s);
     }
     if(!reconEvidenceMatches(x)) markCorrupt(s);
 }

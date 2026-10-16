@@ -44,6 +44,7 @@ enum class GameEventKind {
     SensorInterferenceChanged,
     PlanetaryAftermath,
     UnknownObjectObserved,
+    InterstellarMediumObserved,
 };
 
 enum class GameEventSeverity {
@@ -81,6 +82,7 @@ struct GameEvent {
     std::optional<EmissionObservation> emission;
     std::optional<PlanetAftermathObservation> aftermath;
     std::optional<ObjectObservation> objectObservation;
+    std::optional<MediumObservation> mediumObservation;
 };
 
 } // namespace suns
