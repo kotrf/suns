@@ -104,6 +104,28 @@ void readEmissionPulses(QDataStream& stream,GameState& state)
         state.emissions.push_back(std::move(pulse));
     }
 }
+void writePlanetWarDamage(QDataStream& stream,const GameState& state)
+{
+    stream << quint32(state.planets.size());
+    for(const auto& planet:state.planets) {
+        const auto& d=planet.warDamage;
+        stream << quint32(planet.id) << quint64(d.factoriesDestroyed) << quint64(d.minesDestroyed)
+            << quint64(d.factoriesReconstructed) << quint64(d.minesReconstructed)
+            << quint64(d.lastBombardmentTurn) << quint64(d.lastReconstructionTurn);
+    }
+}
+void readPlanetWarDamage(QDataStream& stream,GameState& state)
+{
+    quint32 count{};
+    if(!readCount(stream,count) || count!=state.planets.size()) { markCorrupt(stream); return; }
+    for(auto& planet:state.planets) {
+        quint32 id{}; quint64 factories{},mines{},rebuiltFactories{},rebuiltMines{},bombed{},rebuilt{};
+        stream >> id >> factories >> mines >> rebuiltFactories >> rebuiltMines >> bombed >> rebuilt;
+        if(id!=planet.id || rebuiltFactories>factories || rebuiltMines>mines || bombed>state.turn || rebuilt>state.turn
+            || ((factories || mines) && !bombed) || ((rebuiltFactories || rebuiltMines) && !rebuilt)) { markCorrupt(stream); return; }
+        planet.warDamage={factories,mines,rebuiltFactories,rebuiltMines,bombed,rebuilt};
+    }
+}
 void writeStrategicExtension(QDataStream& stream, const GameState& state)
 {
     QByteArray payload; QDataStream out(&payload, QIODevice::WriteOnly);
@@ -183,6 +205,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     }
     writeComputerControllers(out, state);
     writeEmissionPulses(out,state);
+    writePlanetWarDamage(out,state);
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -352,5 +375,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
     }
     if (gReadSaveFormatVersion >= 67) readComputerControllers(in, state);
     if (gReadSaveFormatVersion >= 76) readEmissionPulses(in,state);
+    if (gReadSaveFormatVersion >= 77) readPlanetWarDamage(in,state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

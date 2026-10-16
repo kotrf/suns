@@ -92,6 +92,14 @@ struct MainWindowTestAccess {
         w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
         w.selection_.star=w.state_.planets.front().star; w.rebuildScene(); w.refreshProductionQueue();
     }
+    static void recoveryFixture(MainWindow& w)
+    {
+        w.state_=make_demo_game(); w.state_.players.front().technology.researchActive=false;
+        auto& p=w.state_.planets.front(); p.productionQueue.clear(); p.industry=12;
+        p.warDamage={3,2,1,0,1,1};
+        w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
+        w.selection_.star=p.star; w.rebuildScene(); w.refreshProductionQueue();
+    }
     static void stationDesigner(MainWindow& w) { w.openStationDesigner(); }
     static const GameState& state(const MainWindow& w) { return w.state_; }
     static void saveTemplate(MainWindow& w) {
@@ -321,4 +329,22 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::colony(window).environment.temperature == 25);
     assert(suns::MainWindowTestAccess::colony(window).naturalEnvironment->temperature == 24);
+    suns::MainWindowTestAccess::recoveryFixture(window);
+    kind->setCurrentIndex(kind->findData(int(suns::ProductionKind::ReconstructFactory)));
+    assert(add->isEnabled() && quantity->maximum()==2);
+    quantity->setValue(2); add->click();
+    assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1).contains("Reconstruct factory"));
+    assert(tree->topLevelItem(0)->text(3).startsWith("Turn ") && !add->isEnabled());
+    assert(tree->topLevelItem(0)->toolTip(1).contains("4 production"));
+    const auto count=suns::MainWindowTestAccess::orders(window).orders.size(); add->click();
+    assert(suns::MainWindowTestAccess::orders(window).orders.size()==count);
+    kind->setCurrentIndex(kind->findData(int(suns::ProductionKind::ReconstructMine)));
+    assert(add->isEnabled() && quantity->maximum()==2); quantity->setValue(2); add->click();
+    assert(tree->topLevelItemCount()==2 && !add->isEnabled());
+    suns::MainWindowTestAccess::advance(window);
+    const auto& repaired=suns::MainWindowTestAccess::colony(window);
+    assert(repaired.industry==14 && repaired.mines==2 && repaired.productionQueue.empty());
+    assert(repaired.warDamage.factoriesReconstructed==3 && repaired.warDamage.minesReconstructed==2);
+    assert(!add->isEnabled());
+
 }

@@ -455,6 +455,8 @@ enum class ProductionKind {
     ColonyDefense,
     LocalRadar,
     PlanetaryRadar,
+    ReconstructFactory,
+    ReconstructMine,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -507,6 +509,15 @@ inline constexpr double planetary_radar_range(PlanetaryRadarLevel level)
         : level == PlanetaryRadarLevel::Local ? kLocalColonySensorRange : 0.0;
 }
 
+struct PlanetWarDamage {
+    std::uint64_t factoriesDestroyed{}, minesDestroyed{};
+    std::uint64_t factoriesReconstructed{}, minesReconstructed{};
+    std::uint64_t lastBombardmentTurn{}, lastReconstructionTurn{};
+    bool operator==(const PlanetWarDamage&) const = default;
+};
+[[nodiscard]] constexpr bool reconstruction_kind(ProductionKind kind)
+{ return kind==ProductionKind::ReconstructFactory || kind==ProductionKind::ReconstructMine; }
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -529,6 +540,7 @@ struct Planet {
     std::uint16_t defenses{};
     PlanetaryRadarLevel radar{PlanetaryRadarLevel::None};
     bool homeworld{}; // A capital relay roots the shared sensor/communications mesh.
+    PlanetWarDamage warDamage; // Physical history survives capture and abandonment.
 };
 
 struct OrbitalStation {
@@ -845,6 +857,7 @@ enum class HistoryMilestoneKind : std::uint8_t {
     MineStrike,
     EnemyFleetReclassified,
     SensorInterferenceChanged,
+    Reconstruction,
 };
 
 [[nodiscard]] inline std::optional<OperationalLossKind> milestone_loss_kind(HistoryMilestoneKind kind)
@@ -1496,6 +1509,8 @@ void refresh_sensor_intel(GameState& state);
     switch (kind) {
     case ProductionKind::ColonyShip: return kColonyShipCost;
     case ProductionKind::Factory: return kFactoryCost;
+    case ProductionKind::ReconstructFactory: return 4;
+    case ProductionKind::ReconstructMine: return 3;
     case ProductionKind::Mine: return kMineCost;
     case ProductionKind::Research: return 0;
     case ProductionKind::OrbitalStation: return kOrbitalDockCost;

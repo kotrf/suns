@@ -27,7 +27,7 @@ std::uint32_t production_item_cost(const GameState& state, const ProductionItem&
     if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
-    if (item.kind == ProductionKind::ColonyDefense) return production_cost(item.kind);
+    if (reconstruction_kind(item.kind) || item.kind == ProductionKind::LocalRadar || item.kind==ProductionKind::PlanetaryRadar || item.kind == ProductionKind::ColonyDefense) return production_cost(item.kind);
     if (item.kind == ProductionKind::OrbitalStation) return item.station ? station_build_cost(item.station->loadout) : kOrbitalDockCost;
     if (item.shipDesign != 0) {
         if (const auto* design = find_ship_design(state, item.shipDesign)) return ship_design_cost(*design);
@@ -260,7 +260,7 @@ std::optional<std::uint32_t> complete_production(
 {
     if (item.kind == ProductionKind::Research) return std::nullopt;
     // Local buildings and physical environment are resolved by the shared queue engine.
-    if (item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
+    if (reconstruction_kind(item.kind) || item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
         || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense
         || item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
@@ -317,7 +317,7 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
         if (!object || !star) continue;
         const auto design = completed.kind == ProductionKind::ColonyShip
             ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId) : ShipDesignId{0};
-        const auto quantity = completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine || completed.kind == ProductionKind::ColonyDefense
+        const auto quantity = reconstruction_kind(completed.kind) || completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine || completed.kind == ProductionKind::ColonyDefense
             ? completion.localQuantity : *object;
         queue_player_report(state, planet.owner, PlayerReportKind::ProductionCompleted,
             star->position, state.turn + 1, planet.star, planet.id,
@@ -652,13 +652,12 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     planet.minerals.ironium += fleet.minerals.ironium + salvage.ironium;
     planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
-    planet.industry = 1;
+    // Settlers inherit the physical surviving installations and war damage.
     planet.productionQueue.clear();
     // Founding does not imply a radar or an automatic build programme. Nearby
     // colonies may be controlled through the existing homeworld radar field;
     // remote colonies use only an explicitly assigned autonomous template.
     if (colonyPlan) planet.productionQueue = colonyPlan->items;
-    planet.mines = 0;
     planet.productionWaitingForMinerals = false;
     set_survey_level(
         state, fleet.owner, planet.star, SurveyLevel::GeologicalSurvey, state.turn + 1);
@@ -1984,7 +1983,7 @@ TurnResult TurnProcessor::process_with_events(
                                 planet->productionQueue.push_back({
                                     ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                             }
-                        } else if (concreteOrder.kind == ProductionKind::Terraforming || concreteOrder.kind == ProductionKind::ColonyDefense) {
+                        } else if (reconstruction_kind(concreteOrder.kind) || concreteOrder.kind == ProductionKind::Terraforming || concreteOrder.kind == ProductionKind::ColonyDefense) {
                             (void)apply_production_batch(next, *planet, {planet->id, concreteOrder.kind});
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
@@ -2234,6 +2233,9 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::GroundDefenseWon: kind = HistoryMilestoneKind::GroundDefenseWon; break;
         case GameEventKind::SpaceBattle: kind = HistoryMilestoneKind::SpaceBattle; break;
         case GameEventKind::Bombardment: kind = HistoryMilestoneKind::Bombardment; break;
+        case GameEventKind::ProductionCompleted:
+            if(reconstruction_kind(event.productionKind)) kind=HistoryMilestoneKind::Reconstruction;
+            break;
         case GameEventKind::MineStrike: kind = HistoryMilestoneKind::MineStrike; break;
         default: break;
         }
@@ -2249,7 +2251,7 @@ TurnResult TurnProcessor::process_with_events(
             : fleetEvent ? (event.fleet == 0 && (*kind != HistoryMilestoneKind::SpaceBattle || event.planet == 0)) : event.planet == 0) continue;
         auto snapshot = std::prev(player->history.end());
         const auto lossKind = milestone_loss_kind(*kind);
-        if (*kind == HistoryMilestoneKind::SpaceBattle || lossKind) {
+        if (*kind == HistoryMilestoneKind::SpaceBattle || *kind==HistoryMilestoneKind::Reconstruction || lossKind) {
             // Packets already due on load are received at the starting boundary,
             // not in the new year resolved by this call.
             snapshot = std::find_if(player->history.begin(), player->history.end(),

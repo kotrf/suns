@@ -61,6 +61,8 @@ QString production_item_name(const GameState& state, const GameEvent& event)
     if (event.productionKind == ProductionKind::Terraforming) return "Terraforming";
     if (event.productionKind == ProductionKind::Factory) return "Factory";
     if (event.productionKind == ProductionKind::Mine) return "Mine";
+    if (event.productionKind == ProductionKind::ReconstructFactory) return "Factory reconstruction";
+    if (event.productionKind == ProductionKind::ReconstructMine) return "Mine reconstruction";
     if (event.productionKind == ProductionKind::OrbitalStation) return "Orbital station";
     if (event.productionKind == ProductionKind::ColonyDefense) return "Colony defense";
     if (const auto* design = find_ship_design(state, event.shipDesign)) {
@@ -453,6 +455,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
         else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
+        else if (event.productionKind == ProductionKind::ReconstructFactory) itemName = "Factory reconstruction";
+        else if (event.productionKind == ProductionKind::ReconstructMine) itemName = "Mine reconstruction";
         else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital station";
         else if (event.productionKind == ProductionKind::ColonyDefense) itemName = "Colony defense";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
@@ -548,6 +552,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
         else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
+        else if (event.productionKind == ProductionKind::ReconstructFactory) itemName = "Factory reconstruction";
+        else if (event.productionKind == ProductionKind::ReconstructMine) itemName = "Mine reconstruction";
         else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital station";
         else if (event.productionKind == ProductionKind::ColonyDefense) itemName = "Colony defense";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {

@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/production.hpp"
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -234,6 +235,14 @@ void MainWindow::refreshColonyWorkspace()
                          planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
                     .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
                 lines << QString("Factories: %1 • Mines: %2").arg(planet->industry).arg(planet->mines);
+                const auto& damage=planet->warDamage;
+                if(damage.lastBombardmentTurn) {
+                    lines << QString("War ruins: %1 factories / %2 mines • last bombardment year %3")
+                        .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructFactory)))
+                        .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructMine))).arg(qulonglong(damage.lastBombardmentTurn));
+                    lines << QString("Reconstructed: %1 factories / %2 mines • use Reconstruct factories/mines in Production")
+                        .arg(qulonglong(damage.factoriesReconstructed)).arg(qulonglong(damage.minesReconstructed));
+                }
                 lines << QString("Resources: %1 / year • Orbit: %2").arg(colony_output(*planet))
                     .arg(find_orbital_station_at_planet(state_, planet->id) ? "station" : "no station");
             }
