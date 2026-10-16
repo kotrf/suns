@@ -412,7 +412,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         const auto build = [&](ProductionKind kind, std::uint32_t quantity = 1) {
             plan.orders.orders.push_back(QueueProductionBatchOrder{colony->id, kind, quantity});
             explain(reason, "Build " + std::to_string(quantity) + " "
-                + (kind == ProductionKind::Mine ? "mine" : kind == ProductionKind::Factory ? "factory" : "terraform")
+                + (kind == ProductionKind::ReconstructFactory ? "factory reconstruction" : kind == ProductionKind::ReconstructMine ? "mine reconstruction" : kind == ProductionKind::Mine ? "mine" : kind == ProductionKind::Factory ? "factory" : "terraform")
                 + " at colony " + std::to_string(colony->id));
         };
         // Fair frontier infrastructure: local receivers are constructed by
@@ -424,6 +424,12 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             build(ProductionKind::PlanetaryRadar);
             continue;
         }
+        bool reconstructing=false;
+        for(auto kind:{ProductionKind::ReconstructFactory,ProductionKind::ReconstructMine})
+            if(const auto remaining=reconstruction_available(*colony,kind); remaining && canAfford(kind)) {
+                build(kind,std::uint32_t(std::min<std::uint64_t>(remaining,3))); reconstructing=true; break;
+            }
+        if(reconstructing) continue;
         const auto minesWanted = std::max(2u, colony->industry / 2);
         const bool lowStock = std::min({colony->minerals.ironium, colony->minerals.boranium, colony->minerals.germanium}) < 15;
         if (colony->mines < minesWanted && (colony->mines < 2 || lowStock) && canAfford(ProductionKind::Mine)) {

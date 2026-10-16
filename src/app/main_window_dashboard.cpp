@@ -39,6 +39,10 @@ QString productionLine(const GameState& state, const Planet& planet)
         name = "Factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
+    } else if (item.kind == ProductionKind::ReconstructFactory) {
+        name = "Factory reconstruction";
+    } else if (item.kind == ProductionKind::ReconstructMine) {
+        name = "Mine reconstruction";
     } else if (item.kind == ProductionKind::ColonyDefense) {
         name = "Colony Defense";
     } else if (item.kind == ProductionKind::Terraforming) {

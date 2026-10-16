@@ -285,6 +285,9 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             factories += std::min(planet.industry-factories,removed-factories-mines);
             removed = factories + mines + defenses + (radarHit ? 1U : 0U);
             planet.industry -= factories; planet.mines -= mines;
+            planet.warDamage.factoriesDestroyed+=factories;
+            planet.warDamage.minesDestroyed+=mines;
+            if(killed || removed || reverting) planet.warDamage.lastBombardmentTurn=turn;
             if (reverting > 0 && planet.naturalEnvironment) {
                 auto restore = [&](std::uint8_t& current, std::uint8_t natural) {
                     const int step = int(std::min(reverting, 100.0));

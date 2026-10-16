@@ -203,3 +203,10 @@ and do not require retained Turn Messages. Orders remain v19.
 ## Reconnaissance follow-up (save v66/orders v21)
 
 [Reconnaissance](reconnaissance.md) adds delivered hull confidence/mass estimates, stale/lost tracks, sensor-interference reports, station jamming, colony emission reception, coalesced area reports and periodic silent communication/active-scan windows. Enemy route targets use reported positions. #58/#101 remain open for advanced traffic/decoy/doctrine work. Fair computer players #184 and colony plans #201 are complete; #205 now has physical dated interception.
+
+## Persistent infrastructure aftermath
+
+Bombardment records physical factory/mine ruins and cumulative reconstruction history.
+[Paid reconstruction](planetary-reconstruction.md) uses ordinary production batches
+and minerals, survives capture/recolonization, and reports completion through the
+colony connection. Contamination and biosphere damage remain later #106 stages.

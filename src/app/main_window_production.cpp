@@ -42,6 +42,8 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     switch (item.kind) {
     case ProductionKind::Factory: name = "Factory"; break;
     case ProductionKind::Mine: name = "Mine"; break;
+    case ProductionKind::ReconstructFactory: name = "Reconstruct factory"; break;
+    case ProductionKind::ReconstructMine: name = "Reconstruct mine"; break;
     case ProductionKind::ColonyDefense: name = "Colony defense"; break;
     case ProductionKind::LocalRadar: name = "Local planetary radar (30 ly)"; break;
     case ProductionKind::PlanetaryRadar: name = "Planetary radar (150 ly)"; break;
@@ -94,6 +96,8 @@ void MainWindow::installProductionQueue()
     };
     addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
     addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Reconstruct factories", ProductionKind::ReconstructFactory, ProductionAutomation::None);
+    addKind("Reconstruct mines", ProductionKind::ReconstructMine, ProductionAutomation::None);
     addKind("Colony defenses", ProductionKind::ColonyDefense, ProductionAutomation::None);
     addKind("Local radar (30 ly)", ProductionKind::LocalRadar, ProductionAutomation::None);
     addKind("Planetary radar (150 ly)", ProductionKind::PlanetaryRadar, ProductionAutomation::None);
@@ -121,12 +125,18 @@ void MainWindow::installProductionQueue()
         if (radar) amount->setValue(1);
         refreshProductionQueue();
     });
+    connect(amount, &QSpinBox::valueChanged, this, [this] { refreshProductionQueue(); });
     connect(add, &QPushButton::clicked, this, [this, kind, amount] {
         const auto* planet = selectedPlanet();
         if (!planet || planet->owner != pendingOrders_.player) return;
         const QueueProductionBatchOrder order{planet->id, ProductionKind(kind->currentData().toInt()),
             std::uint32_t(amount->value()), ProductionAutomation(kind->currentData(Qt::UserRole + 1).toInt())};
         if (!production_batch_valid(order)) return;
+        if(reconstruction_kind(order.kind)) {
+            auto planned=planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_);
+            const auto target=std::find_if(planned.planets.begin(),planned.planets.end(),[&](const auto& p){return p.id==planet->id;});
+            if(target==planned.planets.end() || !apply_production_batch(planned,*target,order)) return;
+        }
         appendPendingOrder(order, QString("Queue %1 ×%2 at %3").arg(kind->currentText()).arg(amount->value())
             .arg(QString::fromStdString(planet->name)));
         refreshProductionQueue();
@@ -279,6 +289,19 @@ void MainWindow::refreshProductionQueue()
         || next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value());
     if(batchKind->currentData().toInt()==int(ProductionKind::ColonyDefense))
         batchAdd->setEnabled(colony_defenses_available(forecastState,pendingOrders_.player) && planet->defenses<kMaximumColonyDefenses);
+    const auto selectedKind=ProductionKind(batchKind->currentData().toInt());
+    auto* amount=findChild<QSpinBox*>("productionBatchQuantity");
+    const auto available=reconstruction_available(*projectedPlanet,selectedKind);
+    {
+        const QSignalBlocker block(amount);
+        amount->setMaximum(reconstruction_kind(selectedKind) ? int(std::max<std::uint64_t>(1,std::min<std::uint64_t>(available,kMaximumProductionBatch)))
+            : selectedKind==ProductionKind::LocalRadar || selectedKind==ProductionKind::PlanetaryRadar ? 1 : int(kMaximumProductionBatch));
+    }
+    if(reconstruction_kind(selectedKind)) {
+        batchAdd->setEnabled(available>0);
+        batchAdd->setToolTip(available ? QString("Restore existing ruins through ordinary production and minerals. %1 unreserved units remain.").arg(qulonglong(available))
+            : "No unreserved ruins of this kind remain on this colony.");
+    } else batchAdd->setToolTip({});
     const auto forecast = forecast_production_queue(forecastState, *planet, queue);
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
         ? forecastPlayer->technology.researchAllocationPercent
@@ -309,6 +332,12 @@ void MainWindow::refreshProductionQueue()
     productionQueueSummary_->setText(productionQueueSummary_->text()
         + QString("<br>Stock: %1<br>Mining/turn: %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion.")
             .arg(mineralAmounts(planet->minerals), mineralAmounts(projected_mineral_mining(state_, *planet)), mineralAmounts(total)));
+    const auto ruinedFactories=reconstruction_remaining(*planet,ProductionKind::ReconstructFactory);
+    const auto ruinedMines=reconstruction_remaining(*planet,ProductionKind::ReconstructMine);
+    if(ruinedFactories || ruinedMines || planet->warDamage.factoriesReconstructed || planet->warDamage.minesReconstructed)
+        productionQueueSummary_->setText(productionQueueSummary_->text()
+            + QString("<br>War ruins: %1 factories / %2 mines. Natural repair: 0/year.<br>Reconstruct each factory: 4 resources; mine: 3 resources; ordinary unit minerals. Completion restores one working installation.")
+                .arg(qulonglong(ruinedFactories)).arg(qulonglong(ruinedMines)));
     const auto fullSummary = productionQueueSummary_->text();
     if (auto* details = findChild<QLabel*>("productionExtendedSummary")) details->setText(fullSummary);
     if (productionQueueSummary_->property("compactColonySummary").toBool()) {
@@ -362,6 +391,8 @@ void MainWindow::refreshProductionQueue()
             details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped. First-completion estimate assumes current technology; forecast horizon is 256 years.").arg(item.quantity);
             if (forecast[index].completionTurn) details += QString("\nFirst completion: Turn %1").arg(*forecast[index].completionTurn);
         }
+        if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority and forecast apply; obsolete surplus work retires without further charge.")
+            .arg(item.kind==ProductionKind::ReconstructFactory?"factory":"mine").arg(production_cost(item.kind));
         if (item.kind == ProductionKind::Terraforming) details += QString("\nEach unit costs %1 production and shifts one physical axis by 1 point. Hab improvement may differ.").arg(kTerraformingCost);
         row->setData(0, Qt::UserRole + 1, details);
         for (int column = 0; column < 4; ++column) row->setToolTip(column, details);

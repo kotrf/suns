@@ -70,3 +70,10 @@ and player turn exports, and their changes travel in turn-order packets.
 Save v59 adds the bounded production extension and physical natural baselines;
 turn-order v17 adds batch, template-edit and template-apply orders. Earlier
 supported formats remain readable.
+
+## Reconstruction
+
+[Factory/mine reconstruction](planetary-reconstruction.md) consumes existing war ruins
+through the same queue and forecast resolver. Once-only batches cost 4/3 resources
+and ordinary factory/mine minerals. Annual rules and colony templates cannot create
+planet-specific reconstruction. Queue reservations prevent overbooking ruins.

@@ -187,8 +187,8 @@ MineralCargo projected_remote_mining(const GameState& state, const Planet& plane
 MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item)
 {
     if (item.kind == ProductionKind::Research || item.kind == ProductionKind::Terraforming) return {};
-    if (item.kind == ProductionKind::Factory) return {2.0, 1.0, 2.0};
-    if (item.kind == ProductionKind::Mine) return {1.0, 2.0, 1.0};
+    if (item.kind == ProductionKind::Factory || item.kind==ProductionKind::ReconstructFactory) return {2.0, 1.0, 2.0};
+    if (item.kind == ProductionKind::Mine || item.kind==ProductionKind::ReconstructMine) return {1.0, 2.0, 1.0};
     if (item.kind == ProductionKind::ColonyDefense) return {2,1,1};
     if (item.kind == ProductionKind::LocalRadar) return {}; // Autonomously bootstrap even without stores.
     if (item.kind == ProductionKind::PlanetaryRadar) return {2, 3, 4};

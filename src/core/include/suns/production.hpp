@@ -18,6 +18,9 @@ struct ColonyProductionResolution {
     std::vector<std::size_t> queueOrigins;
 };
 
+[[nodiscard]] std::uint64_t reconstruction_remaining(const Planet&,ProductionKind);
+[[nodiscard]] std::uint64_t reconstruction_available(const Planet&,ProductionKind);
+
 // Common yearly queue resolver used by the host and the production forecast.
 // Mutates local buildings, minerals and environment; callers materialize ships
 // and orbital stations from the completion list.

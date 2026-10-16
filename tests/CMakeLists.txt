@@ -365,3 +365,7 @@ endif()
 add_executable(suns_emission_interception_tests emission_interception_tests.cpp)
 target_link_libraries(suns_emission_interception_tests PRIVATE Suns::Core)
 add_test(NAME suns_emission_interception_tests COMMAND suns_emission_interception_tests)
+
+add_executable(suns_planetary_recovery_tests planetary_recovery_tests.cpp)
+target_link_libraries(suns_planetary_recovery_tests PRIVATE Suns::Core)
+add_test(NAME suns_planetary_recovery_tests COMMAND suns_planetary_recovery_tests)

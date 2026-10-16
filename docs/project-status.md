@@ -8,9 +8,12 @@ transmissions with separate signal/report propagation, and #106 persistent facto
 mine destruction plus paid reconstruction through ordinary production. Contamination,
 biosphere damage, scorched-earth doctrines and new SIGINT equipment are later work.
 
-This branch implements [physical interception](emission-interception.md). Local
-core regressions pass; full Qt/save CI is required before auto-merge. Save v76,
-orders v25. Older checkpoints below are historical and may describe completed work.
+The [physical interception](emission-interception.md) slice is PR #208 (auto-merge
+enabled; branch CI required). This branch adds [paid reconstruction](planetary-reconstruction.md):
+persistent factory/mine ruins, normal one-time production batches, shared forecasts,
+ordinary computer orders, inherited surviving installations and receipt-year recovery
+history. Focused local core suites pass; full Qt/save/UI CI is required before
+its own auto-merge. Save v77, orders v26. Older checkpoints below are historical.
 
 ## Current checkpoint — 16 October 2026
 
