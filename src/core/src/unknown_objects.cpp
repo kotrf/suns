@@ -17,6 +17,8 @@ ResearchField unknown_object_research_field(UnknownObjectKind kind)
 { return kind==UnknownObjectKind::AncientProbe ? ResearchField::Electronics : ResearchField::Energy; }
 std::uint32_t unknown_object_research_points(UnknownObjectKind kind)
 { return kind==UnknownObjectKind::AncientProbe ? 24 : 32; }
+double object_study_radius(const GameState& s,const Fleet& fleet)
+{ return fleet_has_scanner(s,fleet) ? std::min(20.0,std::max(1.0,fleet_sensor_range(s,fleet))) : 0; }
 bool object_observation_valid(const ObjectObservation& x)
 {
     return x.id && x.id<=0x7fffffffU && x.level<=ObjectKnowledgeLevel::Studied
@@ -95,7 +97,7 @@ void observe_unknown_objects(GameState& s,std::uint64_t turn)
 void research_unknown_objects(GameState& s,Fleet& fleet,std::uint64_t turn)
 {
     if(fleet.task!=FleetTask::FieldResearch || fleet.destination || !fleet_has_scanner(s,fleet) || !fleet_active_sensors(fleet,turn)) return;
-    const auto range=std::min(20.0,std::max(1.0,strategic_sensor_range(s,fleet,turn)));
+    const auto range=std::min(object_study_radius(s,fleet),std::max(1.0,strategic_sensor_range(s,fleet,turn)));
     for(const auto& object:s.unknownObjects) if(distance_between(fleet.position,object.position)<=range+1e-6) {
         if(!collect_field_science_once(s,fleet,(5ULL<<32)|object.id,object.position,0,
             unknown_object_research_field(object.kind),unknown_object_research_points(object.kind),turn)) continue;

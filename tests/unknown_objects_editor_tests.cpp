@@ -14,6 +14,7 @@ struct MainWindowTestAccess {
         w.selection_.fleet=1; w.rebuildScene();
     }
     static const MoveFleetOrder& move(const MainWindow& w) { return std::get<MoveFleetOrder>(w.pendingOrders_.orders[0]); }
+    static void weakScanner(MainWindow& w) { w.state_.shipDesigns[0].components.back()=ShipComponentType::BatScanner; w.rebuildScene(); }
     static void classify(MainWindow& w,ObjectKnowledgeLevel level) {
         auto& x=w.state_.players[0].objectKnowledge[0]; x.level=level; x.kind=UnknownObjectKind::AncientProbe;
         x.position={111,7}; x.uncertainty=0; w.rebuildScene();
@@ -38,7 +39,9 @@ int main(int argc,char** argv)
     }
     assert(marker); fly->click(); assert(suns::MainWindowTestAccess::move(window).destination==suns::Position(110,10));
     study->click(); assert(suns::MainWindowTestAccess::move(window).arrivalAction.kind==suns::FleetArrivalActionKind::FieldResearch);
+    suns::MainWindowTestAccess::weakScanner(window); assert(!study->isEnabled() && !window.queueUnknownObjectApproach(7,true));
     suns::MainWindowTestAccess::classify(window,suns::ObjectKnowledgeLevel::Classified);
+    assert(study->isEnabled());
     assert(tree->topLevelItem(0)->text(0).contains("Ancient probe") && tree->topLevelItem(0)->text(4).contains("24"));
     suns::MainWindowTestAccess::classify(window,suns::ObjectKnowledgeLevel::Studied);
     assert(!study->isEnabled() && tree->topLevelItem(0)->text(4).contains("complete"));

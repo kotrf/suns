@@ -131,8 +131,22 @@ void computer_expeditions_use_received_positions_and_ordinary_orders()
     assert(std::none_of(next.players[0].computer.fleetGoals.begin(),next.players[0].computer.fleetGoals.end(),[](const auto& g){return g.kind==ComputerFleetGoalKind::InvestigateObject;}));
 }
 
+void uncertain_areas_require_appropriate_scanners()
+{
+    auto s=make_demo_game(); s.players[0].controller=PlayerController::Computer;
+    s.shipDesigns[0].components.back()=ShipComponentType::BatScanner;
+    s.players[0].objectKnowledge={{7,{10,0},15,ObjectKnowledgeLevel::Detected,{},1,1}};
+    const auto plan=plan_computer_turn(make_player_view(s,1));
+    assert(std::none_of(plan.nextState.fleetGoals.begin(),plan.nextState.fleetGoals.end(),[](const auto& g){return g.kind==ComputerFleetGoalKind::InvestigateObject;}));
+    assert(object_study_radius(s,s.fleets[0])==1);
+    assert(!fleet_work_order_error(s,s.fleets[0],{10,0},FleetArrivalActionKind::FieldResearch).empty());
+    auto& x=s.players[0].objectKnowledge[0]; x.uncertainty=0; x.level=ObjectKnowledgeLevel::Classified; x.kind=UnknownObjectKind::AncientProbe;
+    assert(fleet_work_order_error(s,s.fleets[0],{10,0},FleetArrivalActionKind::FieldResearch).empty());
+}
+
 int main()
 {
+    uncertain_areas_require_appropriate_scanners();
     computer_expeditions_use_received_positions_and_ordinary_orders();
     generation_is_rare_stable_and_separate_from_player_knowledge(); detection_is_an_uncertain_immutable_delayed_observation();
     classification_newer_evidence_and_routine_reports(); passive_or_insufficient_equipment_does_not_reveal_objects();

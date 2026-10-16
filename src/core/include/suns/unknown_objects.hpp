@@ -6,6 +6,8 @@ namespace suns {
 [[nodiscard]] ResearchField unknown_object_research_field(UnknownObjectKind);
 [[nodiscard]] std::uint32_t unknown_object_research_points(UnknownObjectKind);
 [[nodiscard]] bool object_observation_valid(const ObjectObservation&);
+// Planning uses fitted range; actual work additionally accounts for local jamming.
+[[nodiscard]] double object_study_radius(const GameState&,const Fleet&);
 [[nodiscard]] const ObjectObservation* known_unknown_object(const GameState&,PlayerId,UnknownObjectId);
 void generate_unknown_objects(GameState&);
 void observe_unknown_objects(GameState&,std::uint64_t);

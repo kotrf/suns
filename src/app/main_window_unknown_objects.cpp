@@ -53,7 +53,9 @@ void MainWindow::installUnknownObjects()
     const auto update=[this,tree,fly,study,locate] {
         const auto* row=tree->currentItem(); const auto* x=row?known_unknown_object(state_,pendingOrders_.player,row->data(0,Qt::UserRole).toUInt()):nullptr;
         const auto* f=selectedFleet(); locate->setEnabled(x); fly->setEnabled(x && f);
-        study->setEnabled(x && f && x->level!=ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,*f));
+        study->setEnabled(x && f && x->level!=ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,*f)
+            && x->uncertainty<=object_study_radius(state_,*f));
+        study->setToolTip("Needs active scanners when work runs. The fitted study radius must cover the reported uncertainty; classify the area first or use a stronger scanner. Maximum study radius: 20 ly.");
     };
     connect(tree,&QTreeWidget::itemSelectionChanged,this,update);
     connect(fly,&QPushButton::clicked,this,[this,tree] { if(auto* row=tree->currentItem()) queueUnknownObjectApproach(row->data(0,Qt::UserRole).toUInt(),false); });
@@ -87,7 +89,8 @@ void MainWindow::refreshUnknownObjects()
 bool MainWindow::queueUnknownObjectApproach(UnknownObjectId id,bool study)
 {
     const auto* fleet=selectedFleet(); const auto* x=known_unknown_object(state_,pendingOrders_.player,id);
-    if(!fleet || !x || (study && (x->level==ObjectKnowledgeLevel::Studied || !fleet_has_scanner(state_,*fleet)))) return false;
+    if(!fleet || !x || (study && (x->level==ObjectKnowledgeLevel::Studied || !fleet_has_scanner(state_,*fleet)
+        || x->uncertainty>object_study_radius(state_,*fleet)))) return false;
     FleetArrivalAction action; if(study) action.kind=FleetArrivalActionKind::FieldResearch;
     replacePendingFleetMove(fleet->id,x->position,selectedFleetSuggestedWarpForRouteProgram(),action,
         QString("%1 object X%2 at reported coordinates").arg(study?"Study":"Approach").arg(id));

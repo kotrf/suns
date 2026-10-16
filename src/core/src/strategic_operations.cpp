@@ -237,8 +237,8 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
         const bool wormhole = player && std::any_of(player->wormholeKnowledge.begin(), player->wormholeKnowledge.end(),
             [&](const auto& end) { return !end.collapsed && distance_between(end.lastPosition, destination) <= 10 + epsilon; });
         const bool object=player && std::any_of(player->objectKnowledge.begin(),player->objectKnowledge.end(),
-            [&](const auto& x){return distance_between(x.position,destination)<=20+1e-6;});
-        if (!wormhole && !object) return "Field research requires a system, reported wormhole within 10 ly, or unknown-object area within 20 ly.";
+            [&](const auto& x){return distance_between(x.position,destination)+x.uncertainty<=object_study_radius(state,fleet)+1e-6;});
+        if (!wormhole && !object) return "Field research needs a system, reported wormhole within 10 ly, or an object area within the fitted study radius (up to 20 ly). Classify uncertain areas or fit stronger scanners.";
     }
     if (*task == FleetTask::Salvage) {
         const bool wreck = player && std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(),

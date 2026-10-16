@@ -36,7 +36,9 @@ Use **View → Unknown objects / expeditions**. Select a fleet and a received ro
 **Show area**, **Fly to object**, or **Fly and study**. The last uses an ordinary
 coordinate route with **On arrival → Field research**; the same action is available
 in the shared route editor. An unclassified area can be targeted without knowing
-its contents. Existing command delay, fuel use, electronics and standing tasks apply.
+its contents when its scanner study radius covers the reported uncertainty;
+otherwise classify first or fit stronger scanners. Existing command delay, fuel
+use, electronics and standing tasks apply.
 
 A stationary fleet running Field research with active scanners studies an object
 within 20 ly, further limited by its effective sensor range (1 ly for an orbit-only

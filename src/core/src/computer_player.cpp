@@ -1,6 +1,7 @@
 #include "suns/computer_player.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/production.hpp"
@@ -359,10 +360,11 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             }
         }
         const ObjectObservation* expedition=nullptr;
-        if(!colonizer && fleet_has_scanner(state,fleet) && depot) {
+        if(!colonizer && fleet_has_scanner(state,fleet) && fleet_active_sensors(fleet,state.turn) && depot) {
             const auto* player=find_player(state,view.player); const auto* depotStar=find_star(state,depot->star);
             for(const auto& object:player->objectKnowledge) {
-                if(object.level==ObjectKnowledgeLevel::Studied || std::any_of(goals.begin(),goals.end(),[&](const auto& g) {
+                if(object.level==ObjectKnowledgeLevel::Studied || object.uncertainty>object_study_radius(state,fleet)
+                    || std::any_of(goals.begin(),goals.end(),[&](const auto& g) {
                     return g.kind==ComputerFleetGoalKind::InvestigateObject && g.target==object.id;
                 })) continue;
                 const auto candidate=route_warp(state,fleet,{object.position,depotStar->position}); if(!candidate) continue;
