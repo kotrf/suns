@@ -58,6 +58,7 @@ struct RouteProgramLegForecast {
     std::optional<double> fuelUsed;
     std::optional<double> fuelRemaining;
     std::optional<std::uint32_t> fuelShortageTurn;
+    std::optional<double> fuelMinimum, fuelMaximum;
 };
 
 struct RouteProgramTargetOption {
@@ -184,6 +185,7 @@ public:
     void installWormholes();
     bool queueWormholeApproach(WormholeEndpointId endpoint, bool enter);
     void installUnknownObjects();
+    void installInterstellarMedium();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 
     // Ordered colony build list with completion forecasts and move controls.
@@ -255,6 +257,8 @@ private:
     void renderKnownWormholes();
     void refreshUnknownObjects();
     void renderKnownUnknownObjects();
+    void refreshInterstellarMedium();
+    void renderKnownInterstellarMedium();
     void queueResearchPlan();
     void queueResearchAllocation(int percent);
     void addResearchPlanItem();

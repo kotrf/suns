@@ -12,6 +12,7 @@
 #include "suns/communications.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/interstellar_medium.hpp"
 #include "suns/strategic_operations.hpp"
 
 #include <QByteArray>
@@ -26,10 +27,22 @@
 namespace {
 using namespace suns;
 
-// Fixtures below have no pending/archive evidence. Remove the actual bounded
-// v79 payload before constructing an older strategic layout.
+// These old-layout fixtures have no pending/archive evidence.
+void strip_interstellar_medium_tail(QByteArray& bytes)
+{
+    QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x4d454449u};
+    const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
+    QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
+    const auto start=bytes.indexOf(marker); assert(start>=0 && bytes.indexOf(marker,start+1)<0);
+    QDataStream header(bytes.mid(start+4)); quint32 size{}; header>>size;
+    assert(tail>=start+8 && tail+8+tailSize==start+8+size);
+    bytes.remove(tail,8+tailSize);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(start+4)); patch<<quint32(size-8-tailSize);
+}
 void strip_unknown_objects_tail(QByteArray& bytes)
 {
+    strip_interstellar_medium_tail(bytes);
     QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x554e4b4fu};
     const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
     QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
@@ -2170,8 +2183,75 @@ void v78_hosts_seed_unknown_objects_once_and_player_turns_keep_them_hidden()
     assert(read_save_game_file(playerPath,loaded,error) && loaded.state.unknownObjects.empty());
 }
 
+void interstellar_medium_round_trip_and_player_isolation()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=301; save.turnToken=302; save.mode=SessionMode::Host; save.playerTokens={{1,302}};
+    save.state=make_demo_game(); save.state.turn=10; save.pendingOrders={1,{}};
+    save.state.interstellarMediumEnabled=true;
+    save.state.interstellarClouds={{1,{9000,9000},60,40,0.8}};
+    const MediumObservation known{1,{710,10},60,40,0,1,MediumKnowledgeLevel::Detected,7,8};
+    save.state.players[0].mediumKnowledge={known};
+    PendingPlayerReport report; report.kind=PlayerReportKind::InterstellarMediumObserved;
+    report.observedTurn=9; report.deliveryTurn=15; report.fleet=1;
+    report.mediumObservation=MediumObservation{1,{711,7},60,40,0.8,0.8,MediumKnowledgeLevel::Characterized,9,0};
+    save.state.players[0].pendingPlayerReports={report};
+    GameEvent event; event.id=9011; event.kind=GameEventKind::InterstellarMediumObserved; event.recipient=1;
+    event.observedTurn=7; event.turn=8; event.position=known.center; event.mediumObservation=known;
+    save.strategicMessages={event};
+    const auto path=dir.filePath("medium.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error)); const auto ok=read_save_game_file(path,loaded,error);
+    if (!ok) std::cerr<<error.toStdString()<<'\n'; assert(ok);
+    assert(loaded.state.interstellarClouds==save.state.interstellarClouds && loaded.state.mediumObserver==0);
+    assert(loaded.state.players[0].mediumKnowledge[0]==known && loaded.strategicMessages[0].mediumObservation==known);
+    assert(loaded.state.players[0].pendingPlayerReports[0].mediumObservation==report.mediumObservation);
+    const auto first=dir.filePath("medium-a.sunsturn"),second=dir.filePath("medium-b.sunsturn");
+    const auto player=make_player_turn(save,1);
+    assert(player.state.interstellarClouds.empty() && player.state.mediumObserver==1 && player.state.players[0].pendingPlayerReports.empty());
+    assert(write_save_game_file(first,player,error) && read_save_game_file(first,loaded,error));
+    save.state.interstellarClouds={{1,{-9000,-9000},100,200,0.2},{2,{8000,-8000},500,300,0.9}};
+    assert(write_save_game_file(second,make_player_turn(save,1),error));
+    QFile a(first),b(second); assert(a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly)); assert(a.readAll()==b.readAll());
+    assert(read_save_game_file(path,loaded,error)); loaded.state.turn=15;
+    const auto events=deliver_due_player_reports(loaded.state);
+    assert(!events.empty() && loaded.state.players[0].mediumKnowledge[0].densityMaximum==0.8);
+    for (int n=0;n<12;++n) {
+        auto bad=save;
+        if (n==0) bad.state.interstellarClouds[0].radiusX=0;
+        if (n==1) bad.state.interstellarClouds[0].density=1.1;
+        if (n==2) bad.state.interstellarClouds[1].id=1;
+        if (n==3) bad.state.players[0].mediumKnowledge[0].receivedTurn=11;
+        if (n==4) bad.state.players[0].mediumKnowledge[0].densityMinimum=1.1;
+        if (n==5) bad.state.players[0].pendingPlayerReports[0].mediumObservation->receivedTurn=9;
+        if (n==6) bad.state.players[0].pendingPlayerReports[0].kind=PlayerReportKind::UnknownObjectObserved;
+        if (n==7) bad.state.mediumObserver=1;
+        if (n==8) for (std::uint32_t id=3;id<=5;++id) bad.state.interstellarClouds.push_back({id,{5000,5000},20,20,0.5});
+        if (n==9) bad.state.players[0].mediumKnowledge[0].level=MediumKnowledgeLevel::Characterized;
+        if (n==10) bad.state.interstellarMediumEnabled=false;
+        if (n==11) bad.state.players[0].pendingPlayerReports[0].mediumObservation.reset();
+        const bool wrote=write_save_game_file(path,bad,error);
+        assert(!wrote || !read_save_game_file(path,loaded,error));
+    }
+}
+void v79_campaigns_retain_uniform_medium()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=401; save.turnToken=402; save.pendingOrders={1,{}};
+    save.state=generate_game({719,32,600,500,25});
+    const auto path=dir.filePath("v79.suns"); assert(write_save_game_file(path,save,error));
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll(); strip_interstellar_medium_tail(bytes);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch<<quint32{79};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes)==bytes.size()); file.close();
+    SaveGameData loaded; assert(read_save_game_file(path,loaded,error));
+    assert(!loaded.state.interstellarMediumEnabled && loaded.state.interstellarClouds.empty());
+    assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,loaded,error));
+    assert(!loaded.state.interstellarMediumEnabled && loaded.state.interstellarClouds.empty());
+}
+
 int main()
 {
+    interstellar_medium_round_trip_and_player_isolation();
+    v79_campaigns_retain_uniform_medium();
     unknown_objects_and_expeditions_round_trip();
     v78_hosts_seed_unknown_objects_once_and_player_turns_keep_them_hidden();
     contamination_and_dated_aftermath_round_trip();

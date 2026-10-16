@@ -1,6 +1,7 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/interstellar_medium.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
@@ -138,7 +139,8 @@ double strategic_sensor_range(const GameState& state,const Fleet& detector,std::
 {
     if(!turn) turn=state.turn;
     if(!fleet_active_sensors(detector,turn)) return 0;
-    return fleet_sensor_range(state,detector)*(1-sensor_interference(state,detector.owner,detector.position,turn));
+    return fleet_sensor_range(state,detector)*(1-sensor_interference(state,detector.owner,detector.position,turn))
+        *medium_active_sensor_factor(state,detector.position);
 }
 
 double fleet_detection_range(const GameState& state, const Fleet& target, double range, double tachyon, bool passive)
@@ -157,7 +159,8 @@ bool colony_detects_fleet(const GameState& state, const Planet& colony, const Fl
     if(!turn) turn=state.turn;
     const auto* star = find_star(state, colony.star);
     return colony.population && colony.radar!=PlanetaryRadarLevel::None && star && distance_between(star->position, target.position)
-        <= fleet_detection_range(state, target, planetary_radar_range(colony.radar)*(1-sensor_interference(state,colony.owner,star->position,turn))) + epsilon;
+        <= fleet_detection_range(state, target, planetary_radar_range(colony.radar)*(1-sensor_interference(state,colony.owner,star->position,turn))
+            *medium_active_sensor_factor(state,star->position)*medium_active_path_factor(state,star->position,target.position)) + epsilon;
 }
 bool detector_detects_fleet(const GameState& state, const Fleet& detector, const Fleet& target,std::uint64_t turn)
 {
@@ -165,7 +168,8 @@ bool detector_detects_fleet(const GameState& state, const Fleet& detector, const
     const bool passive = !fleet_active_sensors(detector,turn);
     const double range = passive ? fleet_sensor_range(state, detector)*(1-sensor_interference(state,detector.owner,detector.position,turn)) : strategic_sensor_range(state, detector,turn);
     return fleet_has_scanner(state, detector) && distance_between(detector.position, target.position)
-        <= fleet_detection_range(state, target, range, fleet_tachyon_fraction(state, detector), passive) + epsilon;
+        <= fleet_detection_range(state, target, range*(passive?1:medium_active_path_factor(state,detector.position,target.position)),
+            fleet_tachyon_fraction(state, detector), passive) + epsilon;
 }
 
 std::string fleet_task_name(FleetTask task)

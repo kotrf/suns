@@ -1,6 +1,7 @@
 #include "suns/computer_player.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/interstellar_medium.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
@@ -41,14 +42,17 @@ const Planet* colony_at(const GameState& state, PlayerId player, Position positi
     return nullptr;
 }
 
-double leg_fuel(const GameState& state, const Fleet& fleet, double distance)
+double leg_fuel(const GameState& state, const Fleet& fleet, Position destination)
 {
     // The host rounds fuel separately for each year's movement, including the
     // short final leg. Billing the whole route once would under-budget Stars engines.
     const auto step = warp_distance(fleet.warp);
-    const auto years = std::floor(distance / step);
-    return years * fleet_fuel_consumption_for_distance(state, fleet, step)
-        + fleet_fuel_consumption_for_distance(state, fleet, std::max(0.0, distance - years * step));
+    const auto distance=distance_between(fleet.position,destination);
+    const auto years=std::floor(distance/step);
+    // The conservative uniform-density envelope is identical in every full
+    // movement year. Sum it without simulating thousands of candidate years.
+    return years*fleet_segment_fuel_bounds(state,fleet,step).consumedMaximum
+        +fleet_segment_fuel_bounds(state,fleet,std::max(0.0,distance-years*step)).consumedMaximum;
 }
 
 std::optional<std::uint8_t> route_warp(
@@ -59,14 +63,16 @@ std::optional<std::uint8_t> route_warp(
     for (const auto& stack : fleet_ship_stacks(fleet))
         if (const auto* design = find_ship_design(state, stack.design))
             cruise = std::min(cruise, ship_design_cruise_warp(*design));
+    const auto startPosition=fleet.position;
     for (int warp = cruise; warp >= 1; --warp) {
         fleet.warp = static_cast<std::uint8_t>(warp);
         if (!fleet_warp_valid(state, fleet, fleet.warp)
             || fleet_overdrive_damage_rate(state, fleet, fleet.warp) > 0) continue;
         double needed = 0;
-        auto position = fleet.position;
+        auto position = startPosition;
         for (const auto destination : destinations) {
-            needed += leg_fuel(state, fleet, distance_between(position, destination));
+            fleet.position=position;
+            needed += leg_fuel(state, fleet, destination);
             position = destination;
         }
         // Conservative: collected/generated fuel is a reserve, not advance credit.

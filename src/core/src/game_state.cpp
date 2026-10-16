@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/interstellar_medium.hpp"
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -1197,23 +1198,45 @@ bool has_reference_engine(const GameState& state, const Fleet& fleet)
     return false;
 }
 
+bool scoop_engine(ShipComponentType type)
+{
+    if (const auto* reference=propulsion_technology(type)) return reference->ramScoop;
+    return type==ShipComponentType::RamScoopDrive || type==ShipComponentType::RadiatingRamScoopDrive
+        || type==ShipComponentType::EfficientRamScoopDrive;
+}
+std::pair<double,double> medium_fuel_multipliers(bool scoop,double density,int bound)
+{
+    if (bound<0) return {scoop?0.90:1.0,scoop?1.75:1.0};
+    if (bound>0) return {scoop?1.0:1.30,1.0};
+    return {scoop?1-0.10*density:1+0.30*density,scoop?1+0.75*density:1};
+}
 FleetFuelAmounts fleet_fuel_amounts(
-    const GameState& state, const Fleet& fleet, double distance, bool rounded)
+    const GameState& state, const Fleet& fleet, double distance, bool rounded,
+    double density=0, int bound=0, bool separateLegacy=false)
 {
     if (distance <= 0.0 || fleet.warp == 0 || fleet.warp > kMaxWarp) return {};
     // Keep the prototype's mass-weighted signed curve for legacy-only fleets.
     if (!has_reference_engine(state, fleet)) {
         double weightedRate = 0.0;
+        double positiveRate=0, negativeRate=0;
         double dryMass = 0.0;
         for (const auto& stack : fleet_ship_stacks(fleet)) {
             const auto* design = find_ship_design(state, stack.design);
             if (!design) continue;
             const auto mass = ship_design_mass(*design) * stack.count;
-            weightedRate += ship_design_fuel_rate(*design, fleet.warp) * mass;
+            ShipComponentSpec storage; const auto* engine=primary_engine(*design,storage);
+            const auto [consumption,collection]=medium_fuel_multipliers(engine && scoop_engine(engine->type),density,bound);
+            const auto base=ship_design_fuel_rate(*design, fleet.warp)*mass;
+            const auto rate=base*(base>=0?consumption:collection);
+            weightedRate += rate; positiveRate+=std::max(0.0,rate); negativeRate+=std::max(0.0,-rate);
             dryMass += mass;
         }
         const auto change = dryMass > 0.0
             ? weightedRate / dryMass * fleet_gross_mass(state, fleet) / 100.0 * distance : 0.0;
+        if (separateLegacy && dryMass>0) {
+            const auto scale=fleet_gross_mass(state,fleet)/dryMass/100.0*distance;
+            return {positiveRate*scale,negativeRate*scale};
+        }
         return {std::max(0.0, change), std::max(0.0, -change)};
     }
 
@@ -1223,7 +1246,6 @@ FleetFuelAmounts fleet_fuel_amounts(
     const auto dryMass = fleet_gross_mass(state, fleet) - cargo;
     const auto* player = find_player(state, fleet.owner);
     const bool ife = player && player->race.improvedFuelEfficiency;
-    const auto roundedDistance = std::ceil(std::max(0.0, distance - 1e-9));
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state, stack.design);
         if (!design) continue;
@@ -1236,21 +1258,23 @@ FleetFuelAmounts fleet_fuel_amounts(
         ShipComponentSpec storage;
         const auto* engine = primary_engine(*design, storage);
         if (!engine) continue;
+        const auto [consumption,collection]=medium_fuel_multipliers(scoop_engine(engine->type),density,bound);
         if (const auto* reference = propulsion_technology(engine->type)) {
             const auto baseEfficiency = reference->fuelEfficiency[fleet.warp];
             const auto efficiency = ife ? (baseEfficiency * 85 + 99) / 100 : baseEfficiency;
+            const auto roundedDistance=std::ceil(std::max(0.0,distance*consumption-1e-9));
             // Stars-compatible whole-mg billing per design stack and movement
             // leg: round distance up, retain one decimal, then round fuel up.
             const auto cost = rounded
                 ? std::ceil(std::floor(mass * efficiency * roundedDistance / 2000.0 + 1e-9) / 10.0 - 1e-9)
-                : mass * efficiency * distance / 20000.0;
+                : mass * efficiency * distance * consumption / 20000.0;
             result.consumed += std::max(0.0, cost);
             result.collected += engine->fuelCollectedPerEngineLy[fleet.warp]
-                * ship_design_engine_slots_used(*design) * stack.count * distance;
+                * ship_design_engine_slots_used(*design) * stack.count * distance * collection;
         } else {
             const auto change = engine->fuelPer100MassLy[fleet.warp] * mass / 100.0 * distance;
-            result.consumed += std::max(0.0, change);
-            result.collected += std::max(0.0, -change);
+            result.consumed += std::max(0.0, change)*consumption;
+            result.collected += std::max(0.0, -change)*collection;
         }
     }
     if (rounded) result.collected = std::floor(result.collected + 1e-9);
@@ -1295,6 +1319,38 @@ double fleet_fuel_affordable_distance(const GameState& state, const Fleet& fleet
         else hi = middle;
     }
     return lo < 1e-8 ? 0.0 : lo;
+}
+
+double fleet_fuel_change_for_segment(const GameState& state,const Fleet& fleet,Position end)
+{
+    const auto amounts=fleet_fuel_amounts(state,fleet,distance_between(fleet.position,end),true,
+        medium_segment_density(state,fleet.position,end),0,state.interstellarMediumEnabled);
+    return amounts.consumed-amounts.collected;
+}
+double fleet_fuel_consumption_for_segment(const GameState& state,const Fleet& fleet,Position end)
+{
+    return fleet_fuel_amounts(state,fleet,distance_between(fleet.position,end),true,
+        medium_segment_density(state,fleet.position,end),0,state.interstellarMediumEnabled).consumed;
+}
+double fleet_fuel_affordable_segment_distance(const GameState& state,const Fleet& fleet,Position end,double maximumDistance)
+{
+    if (!state.interstellarMediumEnabled) return fleet_fuel_affordable_distance(state,fleet,maximumDistance);
+    const auto full=distance_between(fleet.position,end);
+    const auto limit=std::min(full,std::max(0.0,maximumDistance));
+    if (full<=0 || limit<=0) return 0;
+    const auto position=[&](double d) { return Position{fleet.position.x+(end.x-fleet.position.x)*d/full,
+        fleet.position.y+(end.y-fleet.position.y)*d/full}; };
+    if (fleet_fuel_consumption_for_segment(state,fleet,position(limit))<=fleet.fuel+1e-9) return limit;
+    double lo=0,hi=limit;
+    for (int i=0;i<56;++i) { const auto mid=(lo+hi)*0.5;
+        if (fleet_fuel_consumption_for_segment(state,fleet,position(mid))<=fleet.fuel+1e-9) lo=mid; else hi=mid; }
+    return lo<1e-8?0:lo;
+}
+SegmentFuelBounds fleet_segment_fuel_bounds(const GameState& state,const Fleet& fleet,double distance)
+{
+    const auto low=fleet_fuel_amounts(state,fleet,distance,true,0,state.interstellarMediumEnabled?-1:0,state.interstellarMediumEnabled);
+    const auto high=fleet_fuel_amounts(state,fleet,distance,true,0,state.interstellarMediumEnabled?1:0,state.interstellarMediumEnabled);
+    return {low.consumed,high.consumed,low.consumed-low.collected,high.consumed-high.collected};
 }
 
 std::uint8_t fleet_free_warp(const GameState& state, const Fleet& fleet)
@@ -1933,6 +1989,7 @@ GameState generate_game(const GalaxyConfig& requestedConfig)
     initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;
     generate_unknown_objects(state);
+    generate_interstellar_medium(state);
     refresh_sensor_intel(state);
     record_empire_turn_statistics(state);
     return state;

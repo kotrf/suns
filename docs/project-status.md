@@ -1,6 +1,21 @@
 # Project status and development handoff
 
-## Current implementation — 16 October 2026: unknown objects and expeditions
+## Current implementation — 17 October 2026: interstellar medium
+
+Main baseline is PR #211 (`bdc0e11`), persistent unknown landmarks and science
+expeditions; branch and post-merge main CI passed 64/64. This change implements
+three linked first slices of #105: [broad persistent cloud profiles](interstellar-medium.md),
+segment-integrated fuel/active-sensor effects, and delivered surveys with an
+optional map layer and explicit navigation uncertainty. Forecasts and computer
+empires use received evidence; raw host clouds never enter player exports.
+Save v80 / orders v27. Existing v79 campaigns retain uniform space; new galaxies
+generate clouds independently of stellar/planetary generation.
+
+Density-dependent safe Warp, route alternatives/AI detours, ionization and radio
+propagation remain further #105 work. #55/#59 retain the moving-object, sample
+cargo and unique-find stages documented below. Validation belongs to this PR.
+
+## Historical checkpoint — 16 October 2026: unknown objects and expeditions
 
 Main baseline is PR #210 (`b80ee47`), contamination/cleanup and dated aftermath;
 its branch and post-merge main CI passed 62/62. Earlier interception #208,

@@ -547,6 +547,23 @@ struct ObjectObservation {
     bool operator==(const ObjectObservation&) const = default;
 };
 
+// Broad, stationary density profiles. Raw profiles belong to the host only.
+struct InterstellarCloud {
+    std::uint32_t id{};
+    Position center;
+    double radiusX{1}, radiusY{1}, density{};
+    bool operator==(const InterstellarCloud&) const = default;
+};
+enum class MediumKnowledgeLevel : std::uint8_t { Detected, Characterized };
+struct MediumObservation {
+    std::uint32_t id{};
+    Position center;
+    double radiusX{1}, radiusY{1}, densityMinimum{}, densityMaximum{1};
+    MediumKnowledgeLevel level{MediumKnowledgeLevel::Detected};
+    std::uint64_t observedTurn{}, receivedTurn{};
+    bool operator==(const MediumObservation&) const = default;
+};
+
 // Immutable evidence, not a copy of another empire's physical planet state.
 struct PlanetAftermathObservation {
     PlanetId planet{};
@@ -676,6 +693,7 @@ enum class PlayerReportKind {
     SensorInterferenceChanged,
     PlanetaryAftermath,
     UnknownObjectObserved,
+    InterstellarMediumObserved,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -793,6 +811,7 @@ struct PendingPlayerReport {
     std::optional<EmissionObservation> emission;
     std::optional<PlanetAftermathObservation> aftermath;
     std::optional<ObjectObservation> objectObservation;
+    std::optional<MediumObservation> mediumObservation;
 };
 
 struct TechnologyState {
@@ -1125,6 +1144,7 @@ struct Player {
     ComputerState computer;
     std::vector<PlanetAftermathObservation> planetaryAftermath;
     std::vector<ObjectObservation> objectKnowledge;
+    std::vector<MediumObservation> mediumKnowledge;
 };
 
 enum class FleetRole {
@@ -1365,6 +1385,11 @@ struct GameState {
     std::uint64_t galaxySeed{};
     UnknownObjectId nextUnknownObjectId{1};
     std::vector<UnknownObject> unknownObjects;
+    bool interstellarMediumEnabled{};
+    // Nonzero only for projections: density then uses that empire's received
+    // profiles, never hidden physical clouds. Player files retain this marker.
+    PlayerId mediumObserver{};
+    std::vector<InterstellarCloud> interstellarClouds;
     FleetId nextFleetId{1};
     ShipDesignId nextShipDesignId{kFirstCustomShipDesignId};
     OrbitalStationId nextOrbitalStationId{1};
