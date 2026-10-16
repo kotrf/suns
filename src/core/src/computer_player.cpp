@@ -1,4 +1,5 @@
 #include "suns/computer_player.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/production.hpp"
@@ -412,7 +413,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         const auto build = [&](ProductionKind kind, std::uint32_t quantity = 1) {
             plan.orders.orders.push_back(QueueProductionBatchOrder{colony->id, kind, quantity});
             explain(reason, "Build " + std::to_string(quantity) + " "
-                + (kind == ProductionKind::ReconstructFactory ? "factory reconstruction" : kind == ProductionKind::ReconstructMine ? "mine reconstruction" : kind == ProductionKind::Mine ? "mine" : kind == ProductionKind::Factory ? "factory" : "terraform")
+                + (kind == ProductionKind::CleanupContamination ? "contamination cleanup" : kind == ProductionKind::ReconstructFactory ? "factory reconstruction" : kind == ProductionKind::ReconstructMine ? "mine reconstruction" : kind == ProductionKind::Mine ? "mine" : kind == ProductionKind::Factory ? "factory" : "terraform")
                 + " at colony " + std::to_string(colony->id));
         };
         // Fair frontier infrastructure: local receivers are constructed by
@@ -422,6 +423,11 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         if (!colony->homeworld && colony->radar == PlanetaryRadarLevel::Local
             && colony->industry >= 8 && canAfford(ProductionKind::PlanetaryRadar)) {
             build(ProductionKind::PlanetaryRadar);
+            continue;
+        }
+        if(colony->warDamage.contamination>=10 && !find_player(state,view.player)->race.radiationImmune
+            && canAfford(ProductionKind::CleanupContamination)) {
+            build(ProductionKind::CleanupContamination,std::min(3U,cleanup_units_available(*colony)));
             continue;
         }
         bool reconstructing=false;

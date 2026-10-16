@@ -72,8 +72,8 @@ std::span<const EquipmentTechnology> equipment_technologies()
         make_equipment(C::HushABoom, "Hush-a-Boom", K::Bomb, 5, 5, {1, 5, 0}, {0, 0, 0, 12, 12, 12}, A::MysteryTrader, false, false, false, {.bombPopulationPercent = 3.0, .bombInstallations = 2}),
         make_equipment(C::RetroBomb, "Retro Bomb", K::Bomb, 45, 50, {15, 15, 10}, {0, 0, 0, 0, 12, 10}, A::ClaimAdjuster, false, false, false, {.unterraformingBomb = true}),
         make_equipment(C::SmartBomb, "Smart Bomb", K::Bomb, 50, 27, {1, 22, 0}, {0, 0, 0, 0, 7, 5}, A::Any, true, false, false, {.bombPopulationPercent = 1.3, .smartBomb = true}),
-        make_equipment(C::NeutronBomb, "Neutron Bomb", K::Bomb, 57, 30, {1, 30, 0}, {0, 0, 0, 0, 10, 10}, A::Any, true, false, false, {.bombPopulationPercent = 2.2, .smartBomb = true}),
-        make_equipment(C::EnrichedNeutronBomb, "Enriched Neutron Bomb", K::Bomb, 64, 25, {1, 36, 0}, {0, 0, 0, 0, 12, 15}, A::Any, true, false, false, {.bombPopulationPercent = 3.5, .smartBomb = true}),
+        make_equipment(C::NeutronBomb, "Neutron Bomb", K::Bomb, 57, 30, {1, 30, 0}, {0, 0, 0, 0, 10, 10}, A::Any, true, false, false, {.bombPopulationPercent = 2.2, .smartBomb = true, .bombContamination = 4}),
+        make_equipment(C::EnrichedNeutronBomb, "Enriched Neutron Bomb", K::Bomb, 64, 25, {1, 36, 0}, {0, 0, 0, 0, 12, 15}, A::Any, true, false, false, {.bombPopulationPercent = 3.5, .smartBomb = true, .bombContamination = 8}),
         make_equipment(C::PeerlessBomb, "Peerless Bomb", K::Bomb, 55, 32, {1, 33, 0}, {0, 0, 0, 0, 15, 22}, A::Any, true, false, false, {.bombPopulationPercent = 5.0, .smartBomb = true}),
         make_equipment(C::AnnihilatorBomb, "Annihilator Bomb", K::Bomb, 50, 28, {1, 30, 0}, {0, 0, 0, 0, 17, 26}, A::Any, true, false, false, {.bombPopulationPercent = 7.0, .smartBomb = true}),
         make_equipment(C::AlienMiner, "Alien Miner", K::Mining, 20, 20, {8, 0, 2}, {5, 0, 10, 5, 5, 0}, A::MysteryTrader, false, false, false, {.remoteMiningUnits = 10}),
@@ -253,6 +253,8 @@ std::string equipment_effect_description(const EquipmentTechnology& entry)
         if (s.unterraformingBomb) out << "Reverses terraforming.\n";
         else out << "Population kill " << s.bombPopulationPercent << "%; minimum " << s.bombMinimumKills
             << "; installations " << s.bombInstallations << ".\n";
+        if (s.bombContamination) out << "Suns! residual contamination: " << int(s.bombContamination)
+            << "/bomb/year before defenses, capped at 100. Natural decay 2/year; cleanup removes up to 10 for 6 resources and B/G 1/1 kt.\n";
         if (s.smartBomb) out << "Smart bomb; effectiveness depends on population coverage.\n";
         out << "Active with a stationary Bombard enemy colony mission.\n";
     }

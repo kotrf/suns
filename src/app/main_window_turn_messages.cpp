@@ -63,6 +63,7 @@ QString production_item_name(const GameState& state, const GameEvent& event)
     if (event.productionKind == ProductionKind::Mine) return "Mine";
     if (event.productionKind == ProductionKind::ReconstructFactory) return "Factory reconstruction";
     if (event.productionKind == ProductionKind::ReconstructMine) return "Mine reconstruction";
+    if (event.productionKind == ProductionKind::CleanupContamination) return "Contamination cleanup";
     if (event.productionKind == ProductionKind::OrbitalStation) return "Orbital station";
     if (event.productionKind == ProductionKind::ColonyDefense) return "Colony defense";
     if (const auto* design = find_ship_design(state, event.shipDesign)) {
@@ -106,6 +107,7 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::PlanetaryAftermath: subject=QString("Aftermath report: %1").arg(planetName); break;
     case GameEventKind::Bombardment: subject = QString("Bombardment of %1: %2 colonists, %3 installations lost").arg(planetName).arg(qulonglong(event.deliveredColonists)).arg(event.quantity); break;
     case GameEventKind::MineStrike: subject = QString("%1 hit a minefield — damage %2%, movement stopped").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
     case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
@@ -236,7 +238,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
             || event.kind == GameEventKind::EnemyFleetLost || event.kind == GameEventKind::EmissionDetected
             || event.kind == GameEventKind::EnemyFleetReclassified || event.kind == GameEventKind::SensorInterferenceChanged;
     case MessageTypeFilter::Combat:
-        return event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
+        return event.kind == GameEventKind::PlanetaryAftermath || event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
             || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
             || event.kind == GameEventKind::GroundDefenseWon
@@ -311,6 +313,18 @@ QString space_battle_text(const GameEvent& event)
     return text;
 }
 
+QString aftermath_text(const GameEvent& event)
+{
+    if(!event.aftermath) return {};
+    const auto& a=*event.aftermath;
+    return QString("\n%1 at observation year %2; received year %3.\nRuined factories %4–%5; mines %6–%7; contamination %8–%9/100.\nThis dated snapshot does not track later attacks, reconstruction or natural decay.")
+        .arg(a.exact ? "Owner aftermath snapshot" : "Orbital aftermath estimate")
+        .arg(qulonglong(a.observedTurn)).arg(qulonglong(a.receivedTurn))
+        .arg(qulonglong(a.factoriesMinimum)).arg(qulonglong(a.factoriesMaximum))
+        .arg(qulonglong(a.minesMinimum)).arg(qulonglong(a.minesMaximum))
+        .arg(a.contaminationMinimum).arg(a.contaminationMaximum);
+}
+
 QString event_text(const GameState& state, const GameEvent& event)
 {
     if (event.kind == GameEventKind::SpaceBattle) return space_battle_text(event);
@@ -355,7 +369,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         : QString("Fleet %1").arg(event.fleet);
 
     QString text;
-    if (event.kind >= GameEventKind::Bombardment && event.kind <= GameEventKind::EmissionDetected) {
+    if ((event.kind >= GameEventKind::Bombardment && event.kind <= GameEventKind::EmissionDetected)
+        || event.kind==GameEventKind::PlanetaryAftermath) {
         text = event_subject(state,event) + QString("\nObserved turn %1; received turn %2.\nPosition: %3, %4.")
             .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
             .arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1);
@@ -369,7 +384,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         }
         else if (event.kind == GameEventKind::MineStrike)
             text += "\nThe route was interrupted. A safe Warp or beam-equipped sweeping fleet can help with known fields.";
-        else text += "\nReported population and installation losses are from this bombardment. Current colony conditions may have changed since the observation.";
+        else if(event.kind==GameEventKind::Bombardment) text += "\nReported population and installation losses are from this bombardment. Current colony conditions may have changed since the observation.";
+        text+=aftermath_text(event);
         return text.toHtmlEscaped().replace("\n","<br>");
     }
     if (event.kind >= GameEventKind::AnomalyDetected && event.kind <= GameEventKind::WormholeCollapsed) {
@@ -457,6 +473,7 @@ QString event_text(const GameState& state, const GameEvent& event)
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
         else if (event.productionKind == ProductionKind::ReconstructFactory) itemName = "Factory reconstruction";
         else if (event.productionKind == ProductionKind::ReconstructMine) itemName = "Mine reconstruction";
+        else if (event.productionKind == ProductionKind::CleanupContamination) itemName = "Contamination cleanup";
         else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital station";
         else if (event.productionKind == ProductionKind::ColonyDefense) itemName = "Colony defense";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
@@ -554,6 +571,7 @@ QString event_text(const GameState& state, const GameEvent& event)
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
         else if (event.productionKind == ProductionKind::ReconstructFactory) itemName = "Factory reconstruction";
         else if (event.productionKind == ProductionKind::ReconstructMine) itemName = "Mine reconstruction";
+        else if (event.productionKind == ProductionKind::CleanupContamination) itemName = "Contamination cleanup";
         else if (event.productionKind == ProductionKind::OrbitalStation) itemName = "Orbital station";
         else if (event.productionKind == ProductionKind::ColonyDefense) itemName = "Colony defense";
         else if (const auto* design = find_ship_design(state, event.shipDesign)) {
@@ -569,6 +587,7 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(itemName, planetName, reason);
     }
 
+    text+=aftermath_text(event);
     const auto delay = event.turn > event.observedTurn ? event.turn - event.observedTurn : 0;
     if (delay > 0) {
         text += QString("\nObserved Turn %1 • received after %2 turn%3")

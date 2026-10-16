@@ -1,4 +1,5 @@
 #include "suns/turn_processor.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
 #include "suns/strategic_operations.hpp"
@@ -27,7 +28,7 @@ std::uint32_t production_item_cost(const GameState& state, const ProductionItem&
     if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
-    if (reconstruction_kind(item.kind) || item.kind == ProductionKind::LocalRadar || item.kind==ProductionKind::PlanetaryRadar || item.kind == ProductionKind::ColonyDefense) return production_cost(item.kind);
+    if (recovery_kind(item.kind) || item.kind == ProductionKind::LocalRadar || item.kind==ProductionKind::PlanetaryRadar || item.kind == ProductionKind::ColonyDefense) return production_cost(item.kind);
     if (item.kind == ProductionKind::OrbitalStation) return item.station ? station_build_cost(item.station->loadout) : kOrbitalDockCost;
     if (item.shipDesign != 0) {
         if (const auto* design = find_ship_design(state, item.shipDesign)) return ship_design_cost(*design);
@@ -260,7 +261,7 @@ std::optional<std::uint32_t> complete_production(
 {
     if (item.kind == ProductionKind::Research) return std::nullopt;
     // Local buildings and physical environment are resolved by the shared queue engine.
-    if (reconstruction_kind(item.kind) || item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
+    if (recovery_kind(item.kind) || item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
         || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense
         || item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
@@ -323,6 +324,9 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
             star->position, state.turn + 1, planet.star, planet.id,
             completed.kind == ProductionKind::ColonyShip ? *object : FleetId{0},
             design, completed.kind, quantity);
+        if(recovery_kind(completed.kind))
+            if(auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==planet.owner;}); player!=state.players.end())
+                player->pendingPlayerReports.back().aftermath=observe_planet_aftermath(planet,true,state.turn+1);
     }
     if (star && ((planet.productionWaitingForMinerals && !wasWaitingForMinerals)
         || (planet.productionWaitingForShipyard && !wasWaitingForShipyard))) {
@@ -1983,7 +1987,7 @@ TurnResult TurnProcessor::process_with_events(
                                 planet->productionQueue.push_back({
                                     ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                             }
-                        } else if (reconstruction_kind(concreteOrder.kind) || concreteOrder.kind == ProductionKind::Terraforming || concreteOrder.kind == ProductionKind::ColonyDefense) {
+                        } else if (recovery_kind(concreteOrder.kind) || concreteOrder.kind == ProductionKind::Terraforming || concreteOrder.kind == ProductionKind::ColonyDefense) {
                             (void)apply_production_batch(next, *planet, {planet->id, concreteOrder.kind});
                         } else if (concreteOrder.kind == ProductionKind::Research) {
                             return;
@@ -2133,6 +2137,7 @@ TurnResult TurnProcessor::process_with_events(
         }
     }
 
+    for(auto& planet:next.planets) decay_planet_contamination(planet);
     const auto remoteExtraction = mine_uncolonized_planets(next);
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
@@ -2199,6 +2204,7 @@ TurnResult TurnProcessor::process_with_events(
     publish_fleet_telemetry(next, next.turn);
     dispatch_fleet_report_outbox(next);
     observe_strategic_objects(next, next.turn);
+    observe_planetary_aftermath(next,next.turn);
     observe_emission_pulses(next,next.turn);
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
@@ -2233,8 +2239,10 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::GroundDefenseWon: kind = HistoryMilestoneKind::GroundDefenseWon; break;
         case GameEventKind::SpaceBattle: kind = HistoryMilestoneKind::SpaceBattle; break;
         case GameEventKind::Bombardment: kind = HistoryMilestoneKind::Bombardment; break;
+        case GameEventKind::PlanetaryAftermath: kind=HistoryMilestoneKind::PlanetaryAftermath; break;
         case GameEventKind::ProductionCompleted:
             if(reconstruction_kind(event.productionKind)) kind=HistoryMilestoneKind::Reconstruction;
+            if(event.productionKind==ProductionKind::CleanupContamination) kind=HistoryMilestoneKind::ContaminationCleanup;
             break;
         case GameEventKind::MineStrike: kind = HistoryMilestoneKind::MineStrike; break;
         default: break;
@@ -2251,7 +2259,8 @@ TurnResult TurnProcessor::process_with_events(
             : fleetEvent ? (event.fleet == 0 && (*kind != HistoryMilestoneKind::SpaceBattle || event.planet == 0)) : event.planet == 0) continue;
         auto snapshot = std::prev(player->history.end());
         const auto lossKind = milestone_loss_kind(*kind);
-        if (*kind == HistoryMilestoneKind::SpaceBattle || *kind==HistoryMilestoneKind::Reconstruction || lossKind) {
+        if (*kind == HistoryMilestoneKind::SpaceBattle || *kind==HistoryMilestoneKind::Reconstruction
+            || *kind==HistoryMilestoneKind::ContaminationCleanup || *kind==HistoryMilestoneKind::PlanetaryAftermath || lossKind) {
             // Packets already due on load are received at the starting boundary,
             // not in the new year resolved by this call.
             snapshot = std::find_if(player->history.begin(), player->history.end(),

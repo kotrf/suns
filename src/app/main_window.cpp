@@ -65,6 +65,7 @@ QString productionName(ProductionKind kind)
     case ProductionKind::Mine: return "Mine";
     case ProductionKind::ReconstructFactory: return "Factory reconstruction";
     case ProductionKind::ReconstructMine: return "Mine reconstruction";
+    case ProductionKind::CleanupContamination: return "Contamination cleanup";
     case ProductionKind::Research: return "Research";
     case ProductionKind::OrbitalStation: return "Orbital Dock";
     case ProductionKind::Terraforming: return "Terraforming";
@@ -99,6 +100,8 @@ QString productionSummary(const GameState& state, const Planet& planet)
         name = "Factory reconstruction";
     } else if (item.kind == ProductionKind::ReconstructMine) {
         name = "Mine reconstruction";
+    } else if (item.kind == ProductionKind::CleanupContamination) {
+        name = "Contamination cleanup";
     } else if (item.kind == ProductionKind::ColonyDefense) {
         name = "Colony Defense";
     } else if (item.kind == ProductionKind::LocalRadar) {

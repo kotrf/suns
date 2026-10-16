@@ -126,6 +126,41 @@ void readPlanetWarDamage(QDataStream& stream,GameState& state)
         planet.warDamage={factories,mines,rebuiltFactories,rebuiltMines,bombed,rebuilt};
     }
 }
+// v78: separate physical contamination and delivered observer knowledge.
+void writePlanetaryRecovery(QDataStream& stream,const GameState& state)
+{
+    stream << quint32(state.planets.size());
+    for(const auto& p:state.planets)
+        stream << quint32(p.id) << quint8(p.warDamage.contamination) << quint64(p.warDamage.lastCleanupTurn)
+            << quint8(p.aftermathKnownLocally);
+    stream << quint32(state.players.size());
+    for(const auto& p:state.players) {
+        stream << quint32(p.id); writeVector(stream,p.planetaryAftermath,writeAftermathObservation);
+    }
+}
+void readPlanetaryRecovery(QDataStream& stream,GameState& state)
+{
+    quint32 count{};
+    if(!readCount(stream,count) || count!=state.planets.size()) { markCorrupt(stream); return; }
+    for(auto& p:state.planets) {
+        quint32 id{}; quint64 cleanup{}; quint8 local{}; stream >> id >> p.warDamage.contamination >> cleanup >> local;
+        p.warDamage.lastCleanupTurn=cleanup;
+        p.aftermathKnownLocally=local;
+        if(id!=p.id || local>1 || p.warDamage.contamination>100 || cleanup>state.turn
+            || (p.warDamage.contamination && !p.warDamage.lastBombardmentTurn)) { markCorrupt(stream); return; }
+    }
+    if(!readCount(stream,count) || count!=state.players.size()) { markCorrupt(stream); return; }
+    for(auto& p:state.players) {
+        quint32 id{}; stream >> id;
+        if(id!=p.id || !readVector(stream,p.planetaryAftermath,readAftermathObservation)) { markCorrupt(stream); return; }
+        for(std::size_t n=0;n<p.planetaryAftermath.size();++n) {
+            const auto& x=p.planetaryAftermath[n];
+            if(!x.receivedTurn || x.receivedTurn>state.turn || x.observedTurn>state.turn
+                || std::any_of(p.planetaryAftermath.begin(),p.planetaryAftermath.begin()+n,
+                    [&](const auto& old){return old.planet==x.planet;})) { markCorrupt(stream); return; }
+        }
+    }
+}
 void writeStrategicExtension(QDataStream& stream, const GameState& state)
 {
     QByteArray payload; QDataStream out(&payload, QIODevice::WriteOnly);
@@ -206,6 +241,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     writeComputerControllers(out, state);
     writeEmissionPulses(out,state);
     writePlanetWarDamage(out,state);
+    writePlanetaryRecovery(out,state);
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -376,5 +412,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
     if (gReadSaveFormatVersion >= 67) readComputerControllers(in, state);
     if (gReadSaveFormatVersion >= 76) readEmissionPulses(in,state);
     if (gReadSaveFormatVersion >= 77) readPlanetWarDamage(in,state);
+    if (gReadSaveFormatVersion >= 78) readPlanetaryRecovery(in,state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }
