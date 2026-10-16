@@ -865,9 +865,20 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
     const auto* source = selectedFleet();
     if (!source || source->owner != pendingOrders_.player || !arrival_work_task(action.kind)) return false;
     const auto fleet = fleet_player_view(state_, *source);
-    if (const auto route = effectiveRoute(state_, pendingOrders_, fleet); route && !routeIsClearIntent(fleet, *route)) {
+    const auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (fleet.destination || fleet.targetFleet || !fleet.waypointQueue.empty()
+        || (route && !routeIsClearIntent(fleet, *route))) {
         statusBar()->showMessage("Assign work to the final waypoint, or stop travel before starting work here.", 5000);
         return false;
+    }
+    if (action.kind == FleetArrivalActionKind::RemoteMining) {
+        const auto* star = findStarAtPosition(state_, fleet.position);
+        const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
+        const auto owner = planet ? known_planet_owner(state_, fleet.owner, planet->id) : std::nullopt;
+        if (!owner || *owner != 0) {
+            statusBar()->showMessage("Remote Mining requires a reported unowned planet at the fleet's position.", 5000);
+            return false;
+        }
     }
     return appendRouteWaypoint(fleet.position, 0, std::max<std::uint8_t>(1, fleet.warp), action);
 }

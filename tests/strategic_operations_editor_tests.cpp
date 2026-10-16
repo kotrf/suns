@@ -314,5 +314,12 @@ int main(int argc,char** argv)
     assert(same_position(localWork.destination,idle.fleets.front().position)
         && localWork.arrivalAction.kind==FleetArrivalActionKind::LayMinefields);
     assert(!window.startSelectedFleetWorkHere({FleetArrivalActionKind::LayMinefields}));
+    // A queued stop is not evidence that the moving fleet has stopped already.
+    idle.fleets.front().destination=Position{250,100};
+    idle.fleets.front().telemetry.destination=idle.fleets.front().destination;
+    MainWindowTestAccess::install(window,idle); settle();
+    assert(window.clearSelectedFleetRouteProgram());
+    assert(!window.startSelectedFleetWorkHere({FleetArrivalActionKind::LayMinefields}));
+    assert(std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front()).clearRoute);
     window.close(); settle();
 }
