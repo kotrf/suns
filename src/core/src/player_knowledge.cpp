@@ -1,6 +1,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
 
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -91,6 +92,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::EnemyFleetReclassified: return GameEventKind::EnemyFleetReclassified;
     case PlayerReportKind::SensorInterferenceChanged: return GameEventKind::SensorInterferenceChanged;
     case PlayerReportKind::PlanetaryAftermath: return GameEventKind::PlanetaryAftermath;
+    case PlayerReportKind::UnknownObjectObserved: return GameEventKind::UnknownObjectObserved;
     }
     return GameEventKind::FleetArrived;
 }
@@ -137,6 +139,11 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         mix(report.deliveredColonists);
     }
     if(report.emission) { mix(report.emission->emittedTurn); mix(std::uint64_t(report.emission->channel)); }
+    if(report.objectObservation) {
+        const auto& x=*report.objectObservation; mix(x.id); mix(std::uint64_t(x.level));
+        mix(x.kind ? std::uint64_t(*x.kind)+1 : 0);
+        mix(std::bit_cast<std::uint64_t>(x.position.x)); mix(std::bit_cast<std::uint64_t>(x.position.y));
+    }
     if(report.aftermath) {
         const auto& a=*report.aftermath;
         mix(a.planet); mix(a.factoriesMinimum); mix(a.factoriesMaximum); mix(a.minesMinimum); mix(a.minesMaximum);
@@ -441,6 +448,22 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            auto object=report.objectObservation;
+            if(object) {
+                object->receivedTurn=state.turn;
+                auto current=std::find_if(player.objectKnowledge.begin(),player.objectKnowledge.end(),
+                    [&](const auto& x){return x.id==object->id;});
+                // A study is a finite discovery per empire, including when an
+                // already delivered packet is replayed or copied in an outbox.
+                if(report.kind==PlayerReportKind::ScientificData && current!=player.objectKnowledge.end()
+                    && current->level==ObjectKnowledgeLevel::Studied) continue;
+                const bool upgraded=current==player.objectKnowledge.end() || object->level>current->level;
+                if(upgraded || (object->level==current->level && object->observedTurn>current->observedTurn)) {
+                    if(current==player.objectKnowledge.end()) player.objectKnowledge.push_back(*object);
+                    else *current=*object;
+                }
+                if(report.kind==PlayerReportKind::UnknownObjectObserved && !upgraded) continue;
+            }
             auto aftermath=report.aftermath;
             if(aftermath) {
                 aftermath->receivedTurn=state.turn;
@@ -494,7 +517,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.fleet,
                 report.shipDesign,
                 report.productionKind,
-                report.kind == PlayerReportKind::EnemyFleetDetected
+                object ? object->position : report.kind == PlayerReportKind::EnemyFleetDetected
                         || report.kind == PlayerReportKind::EnemyFleetLost || report.kind == PlayerReportKind::EnemyFleetReclassified
                         || report.kind == PlayerReportKind::ScientificData || report.kind == PlayerReportKind::EmissionDetected
                     ? report.contactPosition : report.position,
@@ -513,6 +536,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.sensorStatus,
                 report.emission,
                 aftermath,
+                object,
             });
         }
 

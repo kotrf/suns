@@ -279,9 +279,10 @@ void MainWindow::openComputerDecisions()
                 case ComputerFleetGoalKind::Raid: kind = "Raid colony"; break;
                 case ComputerFleetGoalKind::Bombard: kind = "Bombard colony"; break;
                 case ComputerFleetGoalKind::Invade: kind = "Land assault troops"; break;
+                case ComputerFleetGoalKind::InvestigateObject: kind = "Study unknown object"; break;
                 }
                 new QTreeWidgetItem(goals, {QString::fromStdString(player.name), QString::number(goal.fleet),
-                    kind, star ? QString::fromStdString(star->name) : QString::number(goal.target),
+                    kind, goal.kind==ComputerFleetGoalKind::InvestigateObject ? QString("Object X%1").arg(goal.target) : star ? QString::fromStdString(star->name) : QString::number(goal.target),
                     QString::number(qulonglong(goal.issuedTurn))});
             }
         }

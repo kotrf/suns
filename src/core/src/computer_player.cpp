@@ -1,5 +1,7 @@
 #include "suns/computer_player.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
+#include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/production.hpp"
@@ -235,6 +237,8 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     std::sort(fleets.begin(), fleets.end(), [](auto a, auto b) { return a->id < b->id; });
 
     std::erase_if(goals, [&](const auto& goal) {
+        if(goal.kind==ComputerFleetGoalKind::InvestigateObject)
+            return std::none_of(fleets.begin(),fleets.end(),[&](const auto* f){return f->id==goal.fleet;});
         if (goal.kind > ComputerFleetGoalKind::Resupply) return false;
         const auto fleet = std::find_if(fleets.begin(), fleets.end(), [&](auto f) { return f->id == goal.fleet; });
         if (fleet != fleets.end() && military_fleet(state, **fleet)) return false;
@@ -250,6 +254,15 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         if (military_fleet(state, *original)) continue;
         auto fleet = *original;
         const auto existing = std::find_if(goals.begin(), goals.end(), [&](const auto& g) { return g.fleet == fleet.id; });
+        if(existing!=goals.end() && existing->kind==ComputerFleetGoalKind::InvestigateObject) {
+            const auto* object=known_unknown_object(state,view.player,existing->target);
+            if(object && object->level==ObjectKnowledgeLevel::Studied && !fleet.telemetry.destination
+                && fleet.telemetry.task==FleetTask::FieldResearch && fleet.telemetry.observedTurn>existing->issuedTurn) {
+                plan.orders.orders.push_back(SetFleetTaskOrder{fleet.id,FleetTask::None});
+                goals.erase(existing); explain(reason,"Finish received object study by fleet "+std::to_string(fleet.id));
+                continue;
+            }
+        }
         if (existing != goals.end()) {
             if (state.turn < existing->reviewTurn || fleet.telemetry.observedTurn <= existing->issuedTurn) continue;
             // Fresh telemetry may show a failed route (changed ownership,
@@ -346,7 +359,26 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 if (score < best) { best = score; target = star; warp = candidateWarp; }
             }
         }
-        if (target) {
+        const ObjectObservation* expedition=nullptr;
+        if(!colonizer && fleet_has_scanner(state,fleet) && fleet_active_sensors(fleet,state.turn) && depot) {
+            const auto* player=find_player(state,view.player); const auto* depotStar=find_star(state,depot->star);
+            for(const auto& object:player->objectKnowledge) {
+                if(object.level==ObjectKnowledgeLevel::Studied || object.uncertainty>object_study_radius(state,fleet)
+                    || std::any_of(goals.begin(),goals.end(),[&](const auto& g) {
+                    return g.kind==ComputerFleetGoalKind::InvestigateObject && g.target==object.id;
+                })) continue;
+                const auto candidate=route_warp(state,fleet,{object.position,depotStar->position}); if(!candidate) continue;
+                const auto score=(distance_between(fleet.position,object.position)+distance_between(object.position,depotStar->position))/warp_distance(*candidate);
+                if(score<best || (expedition && score==best && object.id<expedition->id)) {
+                    best=score; expedition=&object; warp=candidate;
+                }
+            }
+        }
+        if(expedition) {
+            plan.orders.orders.push_back(MoveFleetOrder{fleet.id,expedition->position,*warp,{FleetArrivalActionKind::FieldResearch}});
+            goals.push_back({fleet.id,ComputerFleetGoalKind::InvestigateObject,expedition->id,state.turn,review_turn(state,fleet)});
+            explain(reason,"Study received object X"+std::to_string(expedition->id)+" by fleet "+std::to_string(fleet.id));
+        } else if (target) {
             MoveFleetOrder move{fleet.id, target->position, *warp};
             if (colonizer) {
                 move.arrivalAction.kind = FleetArrivalActionKind::Colonize;
@@ -490,7 +522,7 @@ bool computer_state_valid(const Player& player, std::uint64_t boundaryTurn)
     }
     FleetId previousFleet = 0;
     for (const auto& goal : player.computer.fleetGoals) {
-        if (goal.fleet <= previousFleet || goal.kind > ComputerFleetGoalKind::Invade
+        if (goal.fleet <= previousFleet || goal.kind > ComputerFleetGoalKind::InvestigateObject
             || goal.target == 0 || goal.issuedTurn == 0 || goal.issuedTurn >= boundaryTurn
             || goal.reviewTurn < goal.issuedTurn) return false;
         previousFleet = goal.fleet;

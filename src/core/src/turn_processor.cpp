@@ -1,5 +1,6 @@
 #include "suns/turn_processor.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
 #include "suns/strategic_operations.hpp"
@@ -2205,6 +2206,7 @@ TurnResult TurnProcessor::process_with_events(
     dispatch_fleet_report_outbox(next);
     observe_strategic_objects(next, next.turn);
     observe_planetary_aftermath(next,next.turn);
+    observe_unknown_objects(next,next.turn);
     observe_emission_pulses(next,next.turn);
     deliver_due_fleet_telemetry(next);
     std::erase_if(next.pendingStationContacts,[&](const auto& c) { return c.deliveryTurn <= next.turn; });
@@ -2240,6 +2242,10 @@ TurnResult TurnProcessor::process_with_events(
         case GameEventKind::SpaceBattle: kind = HistoryMilestoneKind::SpaceBattle; break;
         case GameEventKind::Bombardment: kind = HistoryMilestoneKind::Bombardment; break;
         case GameEventKind::PlanetaryAftermath: kind=HistoryMilestoneKind::PlanetaryAftermath; break;
+        case GameEventKind::UnknownObjectObserved: kind=HistoryMilestoneKind::UnknownObjectReported; break;
+        case GameEventKind::ScientificData:
+            if(event.objectObservation) kind=HistoryMilestoneKind::UnknownObjectStudied;
+            break;
         case GameEventKind::ProductionCompleted:
             if(reconstruction_kind(event.productionKind)) kind=HistoryMilestoneKind::Reconstruction;
             if(event.productionKind==ProductionKind::CleanupContamination) kind=HistoryMilestoneKind::ContaminationCleanup;
@@ -2255,12 +2261,13 @@ TurnResult TurnProcessor::process_with_events(
             || (*kind == HistoryMilestoneKind::SensorInterferenceChanged && event.fleet!=0)
             || *kind == HistoryMilestoneKind::SpaceBattle
             || *kind == HistoryMilestoneKind::MineStrike;
-        if (*kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0
+        const bool objectEvent=*kind==HistoryMilestoneKind::UnknownObjectReported || *kind==HistoryMilestoneKind::UnknownObjectStudied;
+        if (objectEvent ? !event.objectObservation : *kind == HistoryMilestoneKind::ResearchCompleted ? event.technologyLevel == 0
             : fleetEvent ? (event.fleet == 0 && (*kind != HistoryMilestoneKind::SpaceBattle || event.planet == 0)) : event.planet == 0) continue;
         auto snapshot = std::prev(player->history.end());
         const auto lossKind = milestone_loss_kind(*kind);
         if (*kind == HistoryMilestoneKind::SpaceBattle || *kind==HistoryMilestoneKind::Reconstruction
-            || *kind==HistoryMilestoneKind::ContaminationCleanup || *kind==HistoryMilestoneKind::PlanetaryAftermath || lossKind) {
+            || *kind==HistoryMilestoneKind::ContaminationCleanup || *kind==HistoryMilestoneKind::PlanetaryAftermath || objectEvent || lossKind) {
             // Packets already due on load are received at the starting boundary,
             // not in the new year resolved by this call.
             snapshot = std::find_if(player->history.begin(), player->history.end(),
@@ -2313,7 +2320,8 @@ TurnResult TurnProcessor::process_with_events(
             }
         }
         milestones.push_back({event.id, event.observedTurn, *kind,
-            event.planet, event.researchField, event.technologyLevel, event.fleet});
+            event.planet, event.researchField, event.technologyLevel, event.fleet,
+            event.objectObservation ? event.objectObservation->id : UnknownObjectId{0}});
     }
     return {std::move(next), std::move(events), std::move(movementFuel)};
 }

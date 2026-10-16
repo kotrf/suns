@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/unknown_objects.hpp"
 #include "suns/communications.hpp"
 
 #include <QAction>
@@ -107,6 +108,8 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::UnknownObjectObserved: subject=QString("Object X%1: %2").arg(event.objectObservation?event.objectObservation->id:0)
+        .arg(event.objectObservation?object_knowledge_name(event.objectObservation->level):"Unknown"); break;
     case GameEventKind::PlanetaryAftermath: subject=QString("Aftermath report: %1").arg(planetName); break;
     case GameEventKind::Bombardment: subject = QString("Bombardment of %1: %2 colonists, %3 installations lost").arg(planetName).arg(qulonglong(event.deliveredColonists)).arg(event.quantity); break;
     case GameEventKind::MineStrike: subject = QString("%1 hit a minefield — damage %2%, movement stopped").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
@@ -207,6 +210,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     switch (filter) {
     case MessageTypeFilter::All: return true;
     case MessageTypeFilter::Exploration:
+        if(event.kind==GameEventKind::UnknownObjectObserved || event.objectObservation) return true;
         return event.kind == GameEventKind::SystemSurveyed
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered
             || event.kind == GameEventKind::AnomalyDetected
@@ -327,6 +331,17 @@ QString aftermath_text(const GameEvent& event)
 
 QString event_text(const GameState& state, const GameEvent& event)
 {
+    if(event.objectObservation) {
+        const auto& x=*event.objectObservation;
+        QString text=QString("Object X%1 — %2\n%3\nObserved year %4; received year %5.\nPosition %6, %7 ±%8 ly.")
+            .arg(x.id).arg(x.kind?unknown_object_name(*x.kind):"Unclassified physical contact")
+            .arg(object_knowledge_name(x.level)).arg(qulonglong(x.observedTurn)).arg(qulonglong(x.receivedTurn))
+            .arg(x.position.x,0,'f',1).arg(x.position.y,0,'f',1).arg(x.uncertainty);
+        if(event.kind==GameEventKind::ScientificData) text+=QString("\nExpedition complete: %1 %2 research points delivered. Each empire can study this landmark once; it remains in the world.")
+            .arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField)));
+        else text+="\nApproach and use Field research with active scanners within 20 ly (limited by sensor range). This is received evidence, not a view of current hidden objects.";
+        return text;
+    }
     if (event.kind == GameEventKind::SpaceBattle) return space_battle_text(event);
     if(event.contact) {
         const auto& c=*event.contact;
@@ -732,7 +747,7 @@ void MainWindow::installTurnMessages()
         const auto* event = selectedEvent();
         if (!event || (event->star == 0 && event->fleet == 0)) return;
         const bool battle = event->kind == GameEventKind::SpaceBattle;
-        if(event->contact || event->sensorStatus) { view_->centerOn(event->position.x,event->position.y); return; }
+        if(event->contact || event->sensorStatus || event->objectObservation) { view_->centerOn(event->position.x,event->position.y); return; }
         const auto position = event->position;
         const auto starId = event->star;
         const auto* star = find_star(state_, starId);

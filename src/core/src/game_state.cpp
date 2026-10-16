@@ -1,5 +1,6 @@
 #include "suns/game_state.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -1931,6 +1932,7 @@ GameState generate_game(const GalaxyConfig& requestedConfig)
     });
     initialize_initial_fleet_telemetry(state.fleets.back(), state.turn);
     state.nextFleetId = 2;
+    generate_unknown_objects(state);
     refresh_sensor_intel(state);
     record_empire_turn_statistics(state);
     return state;

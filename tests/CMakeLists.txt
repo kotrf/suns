@@ -277,6 +277,10 @@ if(SUNS_BUILD_APP)
     set_tests_properties(suns_propulsion_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 20)
+    add_executable(suns_unknown_objects_editor_tests unknown_objects_editor_tests.cpp)
+    target_link_libraries(suns_unknown_objects_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_unknown_objects_editor_tests COMMAND suns_unknown_objects_editor_tests)
+    set_tests_properties(suns_unknown_objects_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 20)
     add_executable(suns_wormhole_editor_tests wormhole_editor_tests.cpp)
     target_link_libraries(suns_wormhole_editor_tests PRIVATE suns_app_ui)
     add_test(NAME suns_wormhole_editor_tests COMMAND suns_wormhole_editor_tests)
@@ -375,3 +379,6 @@ add_test(NAME suns_planetary_contamination_tests COMMAND suns_planetary_contamin
 add_executable(suns_planetary_aftermath_tests planetary_aftermath_tests.cpp)
 target_link_libraries(suns_planetary_aftermath_tests PRIVATE Suns::Core)
 add_test(NAME suns_planetary_aftermath_tests COMMAND suns_planetary_aftermath_tests)
+add_executable(suns_unknown_objects_tests unknown_objects_tests.cpp)
+target_link_libraries(suns_unknown_objects_tests PRIVATE Suns::Core)
+add_test(NAME suns_unknown_objects_tests COMMAND suns_unknown_objects_tests)

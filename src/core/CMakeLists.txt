@@ -17,6 +17,7 @@ add_library(suns_core
     src/production_forecast.cpp
     src/production.cpp
     src/planetary_recovery.cpp
+    src/unknown_objects.cpp
     src/terraforming.cpp
     src/propulsion.cpp
     src/scanners.cpp

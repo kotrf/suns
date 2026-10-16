@@ -34,6 +34,7 @@ int main(int argc, char* argv[])
     window.installResearch();
     window.installEmpireHistory();
     window.installWormholes();
+    window.installUnknownObjects();
     window.installPanelLayoutFixes();
     window.installStrategicOperations();
 
