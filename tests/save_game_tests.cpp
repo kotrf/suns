@@ -1945,7 +1945,11 @@ void emission_pulses_and_dated_reports_round_trip()
     loaded.state.fleets.pop_back(); loaded.state.turn=12; observe_emission_pulses(loaded.state,12);
     assert(loaded.state.players[0].pendingStrategicIntel.front().emission->emittedTurn==10);
     assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,save,error));
-    assert(save.state.emissions.back().receipts.size()==1);
+    const auto sourcePulse=std::find_if(save.state.emissions.begin(),save.state.emissions.end(),[](const auto& pulse) {
+        return pulse.owner==2 && pulse.emittedTurn==10 && pulse.channel==SignalChannel::Slow;
+    });
+    assert(sourcePulse!=save.state.emissions.end() && sourcePulse->receipts.size()==1);
+    assert(sourcePulse->receipts.front().player==1 && sourcePulse->receipts.front().fleet==1);
     assert(save.state.players[0].pendingStrategicIntel.front().observedTurn==12);
     const auto packet=make_player_turn(save,1);
     assert(packet.state.emissions.empty() && packet.state.players[0].pendingStrategicIntel.empty());
