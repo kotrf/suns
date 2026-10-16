@@ -2112,7 +2112,6 @@ void unknown_objects_and_expeditions_round_trip()
     save.state.nextUnknownObjectId=9;
     const ObjectObservation known{7,{410,10},15,ObjectKnowledgeLevel::Detected,{},8,9};
     save.state.players[0].objectKnowledge={known};
-    save.state.players[0].computer={true,{{1,1,"Study object X7"}},{{1,ComputerFleetGoalKind::InvestigateObject,7,1,10}},{}};
     PendingPlayerReport report; report.kind=PlayerReportKind::ScientificData; report.observedTurn=10; report.deliveryTurn=14;
     report.fleet=1; report.quantity=24; report.researchField=ResearchField::Electronics; report.productionKind=ProductionKind::Research;
     report.contactPosition={411,7}; report.objectObservation=ObjectObservation{7,{411,7},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::AncientProbe,10,0};
@@ -2127,7 +2126,6 @@ void unknown_objects_and_expeditions_round_trip()
     assert(loaded.state.players[0].objectKnowledge[0]==known && loaded.strategicMessages[0].objectObservation==known);
     assert(loaded.state.players[0].pendingPlayerReports[0].objectObservation==report.objectObservation);
     assert(loaded.state.players[0].history[0].milestones.back().object==7);
-    assert(loaded.state.players[0].computer.fleetGoals[0].kind==ComputerFleetGoalKind::InvestigateObject);
     const auto first=dir.filePath("first.sunsturn"), second=dir.filePath("second.sunsturn");
     auto player=make_player_turn(save,1); assert(player.state.unknownObjects.empty() && player.state.nextUnknownObjectId==1);
     assert(player.state.players[0].pendingPlayerReports.empty() && player.state.players[0].fieldScience.empty());

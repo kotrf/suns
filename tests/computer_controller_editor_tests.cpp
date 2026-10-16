@@ -89,7 +89,7 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     assert(loaded.state.players[1].computer == save.state.players[1].computer);
     assert(loaded.playerTokens.size() == 2 && !loaded.playerTokens.contains(2));
     for (const auto kind : {ComputerFleetGoalKind::Gather, ComputerFleetGoalKind::Defend,
-        ComputerFleetGoalKind::Raid, ComputerFleetGoalKind::Bombard, ComputerFleetGoalKind::Invade}) {
+        ComputerFleetGoalKind::Raid, ComputerFleetGoalKind::Bombard, ComputerFleetGoalKind::Invade, ComputerFleetGoalKind::InvestigateObject}) {
         auto military = save;
         military.state.players[1].computer.fleetGoals.front().kind = kind;
         assert(write_save_game_file(directory.filePath("military-goals.suns"), military, error));
@@ -127,7 +127,7 @@ void persist_and_reject_corrupt_controllers(const SaveGameData& save, const QTem
     const auto goalsOffset = fields.device()->pos();
     assert(!save.state.players[1].computer.fleetGoals.empty());
     corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset); out << quint32{129}; });
-    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 4); out << quint8{8}; });
+    corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 4); out << quint8{255}; });
     corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 5); out << quint32{0}; });
     corrupt([&](QDataStream& out, qint64) { out.device()->seek(goalsOffset + 4 + 9); out << quint64(save.state.turn); });
     const auto researchOffset = goalsOffset + 4 + 25 * save.state.players[1].computer.fleetGoals.size();
