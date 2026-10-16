@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "colony_plan_combo.hpp"
+#include "route_program_dock.hpp"
 #include "suns/communications.hpp"
 #include "suns/production.hpp"
 
@@ -65,7 +66,10 @@ int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
     suns::MainWindow window;
+    window.installDeferredMapSelectionHandler();
+    suns::attachRouteProgramDock(window);
     window.installUiPolish();
+    window.installProductionQueue();
     suns::MainWindowTestAccess::install(window);
     window.show(); settle();
     assert(window.colonyTemplatesForOrders().empty());
