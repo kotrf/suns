@@ -400,6 +400,7 @@ struct ShipComponentSpec {
     std::uint16_t bombInstallations{};
     bool smartBomb{};
     bool unterraformingBomb{};
+    std::uint8_t bombContamination{}; // Suns! residual hazard per fitted bomb/year.
     double minesPerYear{};
     std::uint8_t mineFieldKind{}; // 0 standard, 1 heavy, 2 speed trap.
     double cloakPercent{};
@@ -457,6 +458,7 @@ enum class ProductionKind {
     PlanetaryRadar,
     ReconstructFactory,
     ReconstructMine,
+    CleanupContamination,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -483,6 +485,7 @@ struct ProductionTemplate {
 struct ProductionCompletionEstimate {
     std::optional<std::uint64_t> completionTurn;
     bool beyondForecastHorizon{};
+    std::optional<std::uint64_t> retiredTurn; // Recovery work made unnecessary by decay/earlier projects.
 };
 
 struct PlanetEnvironment {
@@ -513,10 +516,24 @@ struct PlanetWarDamage {
     std::uint64_t factoriesDestroyed{}, minesDestroyed{};
     std::uint64_t factoriesReconstructed{}, minesReconstructed{};
     std::uint64_t lastBombardmentTurn{}, lastReconstructionTurn{};
+    std::uint8_t contamination{}; // Independent of natural/terraformed environment, 0..100.
+    std::uint64_t lastCleanupTurn{};
     bool operator==(const PlanetWarDamage&) const = default;
 };
 [[nodiscard]] constexpr bool reconstruction_kind(ProductionKind kind)
 { return kind==ProductionKind::ReconstructFactory || kind==ProductionKind::ReconstructMine; }
+[[nodiscard]] constexpr bool recovery_kind(ProductionKind kind)
+{ return reconstruction_kind(kind) || kind==ProductionKind::CleanupContamination; }
+
+// Immutable evidence, not a copy of another empire's physical planet state.
+struct PlanetAftermathObservation {
+    PlanetId planet{};
+    std::uint64_t observedTurn{}, receivedTurn{}; // receivedTurn is zero while in transit.
+    std::uint64_t factoriesMinimum{}, factoriesMaximum{}, minesMinimum{}, minesMaximum{};
+    std::uint8_t contaminationMinimum{}, contaminationMaximum{};
+    bool exact{};
+    bool operator==(const PlanetAftermathObservation&) const = default;
+};
 
 struct Planet {
     PlanetId id{};
@@ -541,6 +558,7 @@ struct Planet {
     PlanetaryRadarLevel radar{PlanetaryRadarLevel::None};
     bool homeworld{}; // A capital relay roots the shared sensor/communications mesh.
     PlanetWarDamage warDamage; // Physical history survives capture and abandonment.
+    bool aftermathKnownLocally{true}; // False on foreign projections, even if ownership intel is stale.
 };
 
 struct OrbitalStation {
@@ -634,6 +652,7 @@ enum class PlayerReportKind {
     EmissionDetected,
     EnemyFleetReclassified,
     SensorInterferenceChanged,
+    PlanetaryAftermath,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -749,6 +768,7 @@ struct PendingPlayerReport {
     std::optional<SensorStatus> sensorStatus;
     FleetId transmissionFleet{};
     std::optional<EmissionObservation> emission;
+    std::optional<PlanetAftermathObservation> aftermath;
 };
 
 struct TechnologyState {
@@ -858,6 +878,8 @@ enum class HistoryMilestoneKind : std::uint8_t {
     EnemyFleetReclassified,
     SensorInterferenceChanged,
     Reconstruction,
+    PlanetaryAftermath,
+    ContaminationCleanup,
 };
 
 [[nodiscard]] inline std::optional<OperationalLossKind> milestone_loss_kind(HistoryMilestoneKind kind)
@@ -1074,6 +1096,7 @@ struct Player {
     std::vector<FieldScienceRecord> fieldScience;
     PlayerController controller{PlayerController::Human};
     ComputerState computer;
+    std::vector<PlanetAftermathObservation> planetaryAftermath;
 };
 
 enum class FleetRole {
@@ -1511,6 +1534,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::Factory: return kFactoryCost;
     case ProductionKind::ReconstructFactory: return 4;
     case ProductionKind::ReconstructMine: return 3;
+    case ProductionKind::CleanupContamination: return 6;
     case ProductionKind::Mine: return kMineCost;
     case ProductionKind::Research: return 0;
     case ProductionKind::OrbitalStation: return kOrbitalDockCost;

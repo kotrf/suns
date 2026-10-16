@@ -49,11 +49,28 @@ void readEmissionObservation(QDataStream& s,std::optional<EmissionObservation>& 
         value=EmissionObservation{emitted,SignalChannel(channel)};
     }
 }
+void writeAftermathObservation(QDataStream& s,const PlanetAftermathObservation& x)
+{
+    s << quint32(x.planet) << quint64(x.observedTurn) << quint64(x.receivedTurn)
+        << quint64(x.factoriesMinimum) << quint64(x.factoriesMaximum)
+        << quint64(x.minesMinimum) << quint64(x.minesMaximum)
+        << quint8(x.contaminationMinimum) << quint8(x.contaminationMaximum) << quint8(x.exact);
+}
+void readAftermathObservation(QDataStream& s,PlanetAftermathObservation& x)
+{
+    quint64 observed{},received{},fmin{},fmax{},mmin{},mmax{}; quint8 exact{};
+    s >> x.planet >> observed >> received >> fmin >> fmax >> mmin >> mmax
+        >> x.contaminationMinimum >> x.contaminationMaximum >> exact;
+    x.observedTurn=observed; x.receivedTurn=received; x.factoriesMinimum=fmin; x.factoriesMaximum=fmax;
+    x.minesMinimum=mmin; x.minesMaximum=mmax; x.exact=exact;
+    if(exact>1 || !aftermath_observation_valid(x)) markCorrupt(s);
+}
 template<class T> void writeReconEvidence(QDataStream& s,const T& x)
 {
     s << quint8(x.contact.has_value()); if(x.contact) writeReconContact(s,*x.contact);
     s << quint8(x.sensorStatus.has_value()); if(x.sensorStatus) writeSensorStatus(s,*x.sensorStatus);
     writeEmissionObservation(s,x.emission);
+    s << quint8(x.aftermath.has_value()); if(x.aftermath) writeAftermathObservation(s,*x.aftermath);
 }
 bool reconEvidenceMatches(const PendingPlayerReport& x)
 {
@@ -89,6 +106,19 @@ template<class T> void readReconEvidence(QDataStream& s,T& x)
     if(gReadSaveFormatVersion>=76) {
         readEmissionObservation(s,x.emission,x.observedTurn);
         if(x.emission && x.kind!=decltype(x.kind)::EmissionDetected) markCorrupt(s);
+    }
+    if(gReadSaveFormatVersion>=78) {
+        quint8 present{}; s >> present;
+        if(present>1) { markCorrupt(s); return; }
+        if(present) {
+            PlanetAftermathObservation a; readAftermathObservation(s,a); x.aftermath=a;
+            if(a.planet!=x.planet || a.observedTurn!=x.observedTurn
+                || (x.kind!=decltype(x.kind)::PlanetaryAftermath && x.kind!=decltype(x.kind)::Bombardment
+                    && x.kind!=decltype(x.kind)::ProductionCompleted)) markCorrupt(s);
+            if constexpr(std::is_same_v<T,PendingPlayerReport>) { if(a.receivedTurn) markCorrupt(s); }
+            else if(a.receivedTurn!=x.turn) markCorrupt(s);
+        }
+        if(x.kind==decltype(x.kind)::PlanetaryAftermath && !x.aftermath) markCorrupt(s);
     }
     if(!reconEvidenceMatches(x)) markCorrupt(s);
 }

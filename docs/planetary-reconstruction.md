@@ -1,6 +1,8 @@
 # Planetary war damage and paid reconstruction
 
-This is the infrastructure stage of #106. Bombardment records actual factories
+This is the infrastructure stage of #106, delivered in #209. The following
+[contamination and dated-intel stage](planetary-contamination.md) adds a separate
+hazard/cleanup axis without changing these reconstruction rules. Bombardment records actual factories
 and mines destroyed, cumulative reconstructions and the last bombardment/recovery
 years on the physical planet. Unreconstructed ruins are destroyed minus rebuilt.
 Repeated bombardment cannot destroy absent installations. Surviving factories,
@@ -38,5 +40,6 @@ knowledge, without overriding existing work or bypassing costs.
 Save v77 and orders v26 preserve counters, partial/batched repair, received
 messages and history milestones. Older saves start with zero reconstruction
 history; past losses are not invented. The remainder of #106 is still open:
-contamination and cleanup, biosphere damage, special weapons/scorched earth,
-observer-specific historical damage estimates and later balance work.
+biosphere damage, special weapons/scorched earth, technology-dependent recovery
+and later balance work. Contamination/cleanup and dated observer estimates are
+covered by the subsequent stage linked above.

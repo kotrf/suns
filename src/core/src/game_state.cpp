@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -1444,8 +1445,15 @@ std::optional<std::int32_t> known_planet_habitability(
         if (knowledge != knownPlayer->surveyKnowledge.end()) observationTurn = knowledge->observedTurn;
     }
     const bool canForecast = planet->owner == player || level >= SurveyLevel::GeologicalSurvey;
+    auto knownPlanet=*planet;
+    if(planet->owner!=player) {
+        // No current host contamination leaks through an old survey's Hab value.
+        const auto aftermath=known_planet_aftermath(state,player,planetId);
+        knownPlanet.warDamage.contamination=aftermath
+            ? (unsigned(aftermath->contaminationMinimum)+aftermath->contaminationMaximum)/2 : 0;
+    }
     const auto observedHabitability = player_planet_habitability(
-        state, player, *planet, canForecast ? state.turn : observationTurn);
+        state, player, knownPlanet, canForecast ? state.turn : observationTurn);
     if (level >= SurveyLevel::OrbitalSurvey || planet->owner == player) return observedHabitability;
 
     std::uint64_t mixed = state.galaxySeed

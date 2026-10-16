@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/production.hpp"
+#include "suns/planetary_recovery.hpp"
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -236,15 +237,28 @@ void MainWindow::refreshColonyWorkspace()
                     .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
                 lines << QString("Factories: %1 • Mines: %2").arg(planet->industry).arg(planet->mines);
                 const auto& damage=planet->warDamage;
-                if(damage.lastBombardmentTurn) {
+                if(planet->aftermathKnownLocally && damage.lastBombardmentTurn) {
                     lines << QString("War ruins: %1 factories / %2 mines • last bombardment year %3")
                         .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructFactory)))
                         .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructMine))).arg(qulonglong(damage.lastBombardmentTurn));
                     lines << QString("Reconstructed: %1 factories / %2 mines • use Reconstruct factories/mines in Production")
                         .arg(qulonglong(damage.factoriesReconstructed)).arg(qulonglong(damage.minesReconstructed));
                 }
+                if(planet->aftermathKnownLocally && (damage.contamination || damage.lastCleanupTurn))
+                    lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
+                        .arg(damage.contamination).arg(contamination_habitability_penalty(state_,pendingOrders_.player,*planet))
+                        .arg((damage.contamination+1)/2);
                 lines << QString("Resources: %1 / year • Orbit: %2").arg(colony_output(*planet))
                     .arg(find_orbital_station_at_planet(state_, planet->id) ? "station" : "no station");
+            }
+            if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(state_,pendingOrders_.player,planet->id)) {
+                lines << QString("Last-known aftermath — observed year %1, received %2; age %3 years%4")
+                    .arg(qulonglong(a->observedTurn)).arg(qulonglong(a->receivedTurn))
+                    .arg(qulonglong(state_.turn-a->observedTurn)).arg(a->exact ? " (former owner snapshot)" : " (orbital estimate)");
+                lines << QString("Ruined factories %1–%2 • mines %3–%4 • contamination %5–%6/100")
+                    .arg(qulonglong(a->factoriesMinimum)).arg(qulonglong(a->factoriesMaximum))
+                    .arg(qulonglong(a->minesMinimum)).arg(qulonglong(a->minesMaximum))
+                    .arg(a->contaminationMinimum).arg(a->contaminationMaximum);
             }
         }
     }

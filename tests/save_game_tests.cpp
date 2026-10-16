@@ -10,6 +10,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/communications.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/strategic_operations.hpp"
 
 #include <QByteArray>
@@ -2005,8 +2006,91 @@ void planetary_war_damage_and_reconstruction_round_trip()
     assert(write_turn_order_file(orders,packet,error) && !read_turn_order_file(orders,imported,error));
 }
 
+void contamination_and_dated_aftermath_round_trip()
+{
+    QTemporaryDir dir; QString error;
+    SaveGameData save; save.campaignId=81; save.turnToken=82; save.mode=SessionMode::Host;
+    save.playerTokens={{1,82},{2,83}}; save.state=make_demo_game(); save.state.turn=10;
+    save.state.players.push_back({2,"Foreign"});
+    save.pendingOrders={1,{QueueProductionBatchOrder{1,ProductionKind::CleanupContamination,2}}};
+    save.pendingDescriptions={"Clean contamination"};
+    auto& p=save.state.planets[0]; p.warDamage={8,4,1,0,5,6,35,7};
+    p.productionQueue={{ProductionKind::CleanupContamination,3,0,ProductionAutomation::None,2}};
+    auto& foreign=save.state.planets[1]; foreign.owner=2; foreign.population=500000; foreign.warDamage={14,9,0,0,5,0,87,0};
+    set_survey_level(save.state,1,foreign.star,SurveyLevel::GeologicalSurvey,8);
+    auto evidence=observe_planet_aftermath(foreign,false,8); evidence.receivedTurn=9;
+    save.state.players[0].planetaryAftermath={evidence};
+    auto pending=evidence; pending.observedTurn=9; pending.receivedTurn=0;
+    PendingPlayerReport report; report.kind=PlayerReportKind::PlanetaryAftermath;
+    report.planet=foreign.id; report.star=foreign.star; report.observedTurn=9; report.deliveryTurn=12; report.aftermath=pending;
+    save.state.players[0].pendingPlayerReports={report};
+    GameEvent event; event.id=9871; event.kind=GameEventKind::PlanetaryAftermath; event.recipient=1;
+    event.planet=foreign.id; event.star=foreign.star; event.observedTurn=8; event.turn=9; event.aftermath=evidence;
+    save.strategicMessages={event};
+    save.state.players[0].history.back().milestones.push_back({9872,1,HistoryMilestoneKind::ContaminationCleanup,p.id});
+    const auto path=dir.filePath("contamination.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error));
+    const auto ok=read_save_game_file(path,loaded,error); if(!ok) std::cerr<<error.toStdString()<<'\n'; assert(ok);
+    assert(loaded.state.planets[0].warDamage==p.warDamage);
+    assert(loaded.state.planets[0].productionQueue[0].remainingCost==3);
+    assert(loaded.state.planets[0].productionQueue[0].kind==ProductionKind::CleanupContamination);
+    assert(loaded.state.players[0].planetaryAftermath[0]==evidence);
+    assert(loaded.state.players[0].pendingPlayerReports[0].aftermath==pending);
+    assert(loaded.strategicMessages[0].aftermath==evidence);
+    const auto player=make_player_turn(save,1);
+    assert(player.state.planets[0].warDamage.contamination==35 && player.state.planets[1].warDamage.contamination==0);
+    assert(player.state.players[0].pendingPlayerReports.empty());
+    const auto a=dir.filePath("before.sunsturn"), b=dir.filePath("after.sunsturn");
+    assert(write_save_game_file(a,player,error) && read_save_game_file(a,loaded,error));
+    save.state.planets[1].warDamage.contamination=99;
+    assert(write_save_game_file(b,make_player_turn(save,1),error));
+    QFile first(a), second(b); assert(first.open(QIODevice::ReadOnly) && second.open(QIODevice::ReadOnly));
+    assert(first.readAll()==second.readAll());
+    TurnOrderFileData packet{81,10,82,save.pendingOrders,save.pendingDescriptions}, imported;
+    const auto orders=dir.filePath("cleanup.orders");
+    assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,imported,error));
+    assert(std::get<QueueProductionBatchOrder>(imported.orders.orders[0]).kind==ProductionKind::CleanupContamination);
+    for(int invalidCase=0;invalidCase<5;++invalidCase) {
+        auto invalid=save;
+        if(invalidCase==0) invalid.state.planets[0].warDamage.contamination=101;
+        if(invalidCase==1) invalid.state.planets[0].warDamage.lastCleanupTurn=11;
+        if(invalidCase==2) invalid.state.players[0].planetaryAftermath[0].contaminationMaximum=101;
+        if(invalidCase==3) invalid.state.players[0].planetaryAftermath[0].receivedTurn=11;
+        if(invalidCase==4) invalid.state.players[0].pendingPlayerReports[0].aftermath->receivedTurn=10;
+        assert(write_save_game_file(path,invalid,error) && !read_save_game_file(path,loaded,error));
+    }
+    std::get<QueueProductionBatchOrder>(packet.orders.orders[0]).automation=ProductionAutomation::Annual;
+    assert(write_turn_order_file(orders,packet,error) && !read_turn_order_file(orders,imported,error));
+}
+
+void v77_reconstruction_saves_default_to_no_contamination()
+{
+    QTemporaryDir dir; QString error; SaveGameData save; save.state=make_demo_game();
+    save.campaignId=91; save.turnToken=92; save.pendingOrders={1,{}};
+    save.state.planets[0].warDamage={3,2,0,0,1,0};
+    save.state.planets[0].productionQueue={{ProductionKind::ReconstructFactory,2}};
+    const auto path=dir.filePath("v77.suns"); assert(write_save_game_file(path,save,error));
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll();
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
+    const auto offset=bytes.indexOf(marker); assert(offset>=0 && bytes.indexOf(marker,offset+1)<0);
+    QDataStream header(bytes.mid(offset+4)); quint32 size{}; header>>size;
+    const auto tail=8+14*save.state.planets.size()+8*save.state.players.size();
+    // No pending/archive evidence in this fixture: only the bounded v78 tail
+    // differs. Remove the actual new payload and repair its length, not just the header.
+    bytes.remove(offset+8+size-tail,tail);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(offset+4)); patch<<quint32(size-tail);
+    assert(patch.device()->seek(4)); patch<<quint32{77};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes)==bytes.size()); file.close();
+    SaveGameData loaded; assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.planets[0].warDamage.factoriesDestroyed==3 && loaded.state.planets[0].warDamage.contamination==0);
+    assert(loaded.state.planets[0].productionQueue[0].kind==ProductionKind::ReconstructFactory);
+    assert(loaded.state.players[0].planetaryAftermath.empty());
+}
+
 int main()
 {
+    contamination_and_dated_aftermath_round_trip();
+    v77_reconstruction_saves_default_to_no_contamination();
     planetary_war_damage_and_reconstruction_round_trip();
     emission_pulses_and_dated_reports_round_trip();
     reconnaissance_and_programs_round_trip();

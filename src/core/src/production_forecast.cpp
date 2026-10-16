@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "suns/planetary_recovery.hpp"
 
 #include <algorithm>
 #include <numeric>
@@ -14,6 +15,7 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     if (std::any_of(queue.begin(), queue.end(), [](const auto& item) { return item.automation != ProductionAutomation::None; }))
         maximumTurns = std::min(maximumTurns, 256U);
     Planet simulated = planet;
+    simulated.observedHabitability.reset();
     simulated.productionQueue = queue;
     std::vector<std::size_t> origins(queue.size());
     std::iota(origins.begin(), origins.end(), 0);
@@ -21,6 +23,7 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     auto simulationState = state;
     for (std::uint32_t offset = 1; offset <= maximumTurns && !simulated.productionQueue.empty(); ++offset) {
         simulationState.turn = state.turn + offset - 1;
+        decay_planet_contamination(simulated);
         const auto mined = projected_mineral_mining(simulationState, simulated);
         simulated.minerals.ironium += mined.ironium;
         simulated.minerals.boranium += mined.boranium;
@@ -36,6 +39,10 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
         auto previous = std::move(origins);
         origins.clear();
         for (const auto index : resolved.queueOrigins) origins.push_back(previous[index]);
+        for(const auto original:previous) if(recovery_kind(queue[original].kind)
+            && !result[original].completionTurn && !result[original].retiredTurn
+            && std::find(origins.begin(),origins.end(),original)==origins.end())
+                result[original].retiredTurn=state.turn+offset;
         const auto populationChange = projected_population_growth(simulationState, simulated, simulationState.turn);
         if (populationChange >= 0) simulated.population += static_cast<std::uint64_t>(populationChange);
         else simulated.population -= std::min(simulated.population, static_cast<std::uint64_t>(-populationChange));

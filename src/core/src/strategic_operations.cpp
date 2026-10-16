@@ -1,4 +1,5 @@
 #include "suns/strategic_operations.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
@@ -253,7 +254,7 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             if(station && station->owner!=f->owner && station_has_weapons(*station)) continue;
             const auto defender = planet.owner;
             const auto population = planet.population;
-            double survival = 1, minimum = 0, installations = 0, reverting = 0;
+            double survival = 1, minimum = 0, installations = 0, reverting = 0, contamination = 0;
             components(state, *f, [&](const auto& s, auto count) {
                 if (s.kind != ShipComponentKind::Bomb) return;
                 if (s.unterraformingBomb) { reverting += count; return; }
@@ -261,10 +262,15 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
                 survival *= std::pow(1 - std::clamp(s.bombPopulationPercent*coverage/100, 0.0, 1.0), count);
                 minimum += double(s.bombMinimumKills)*count;
                 installations += double(s.bombInstallations)*count;
+                contamination += double(s.bombContamination)*count;
             });
             const auto coverage=colony_defense_coverage(planet);
             const auto killed = std::uint64_t(std::min(double(population), std::floor(std::max(minimum, std::floor(population*(1-survival)))*(1-coverage))));
             installations=std::floor(installations*(1-coverage/2));
+            const auto previousContamination=planet.warDamage.contamination;
+            planet.warDamage.contamination=std::uint8_t(std::min(100.0,previousContamination+std::ceil(contamination*(1-coverage))));
+            const bool contaminated=planet.warDamage.contamination!=previousContamination;
+            planet.observedHabitability.reset();
             planet.population -= killed;
             auto removed = std::uint32_t(std::min({installations,
                 double(planet.industry) + planet.mines + planet.defenses
@@ -287,7 +293,7 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             planet.industry -= factories; planet.mines -= mines;
             planet.warDamage.factoriesDestroyed+=factories;
             planet.warDamage.minesDestroyed+=mines;
-            if(killed || removed || reverting) planet.warDamage.lastBombardmentTurn=turn;
+            if(killed || removed || reverting || contaminated) planet.warDamage.lastBombardmentTurn=turn;
             if (reverting > 0 && planet.naturalEnvironment) {
                 auto restore = [&](std::uint8_t& current, std::uint8_t natural) {
                     const int step = int(std::min(reverting, 100.0));
@@ -298,14 +304,17 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
                 restore(planet.environment.gravity, planet.naturalEnvironment->gravity);
                 restore(planet.environment.radiation, planet.naturalEnvironment->radiation);
             }
-            if (!killed && !removed && !reverting) continue;
-            for (auto recipient : {f->owner, defender})
+            if (!killed && !removed && !reverting && !contaminated) continue;
+            for (auto recipient : {f->owner, defender}) {
                 queue_player_report(state, recipient, PlayerReportKind::Bombardment, star->position,
                     turn, star->id, planet.id, f->id, 0,
                     ProductionKind::ColonyShip, removed, ResearchField::Weapons, 0, {}, killed, {}, 0,
                     OperationalLossReport{OperationalLossKind::Bombardment,
                         recipient == defender ? killed : 0, recipient == defender ? 0 : killed,
                         recipient == defender ? removed : 0, recipient == defender ? 0 : removed});
+                if(auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==recipient;}); player!=state.players.end())
+                    player->pendingPlayerReports.back().aftermath=observe_planet_aftermath(planet,recipient==defender,turn);
+            }
             if (!planet.population) {
                 queue_player_report(state, defender, PlayerReportKind::ColonyLost, star->position, turn, star->id, planet.id);
                 planet.owner = 0;

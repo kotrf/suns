@@ -885,6 +885,10 @@ void MainWindow::refreshEmpireHistory()
                 label = QString("Bombardment of planet %1").arg(event.planet);
                 color = QColor("#e2bb70");
                 break;
+            case HistoryMilestoneKind::PlanetaryAftermath:
+                label=QString("Aftermath report at planet %1").arg(event.planet); color=QColor("#d5b785"); break;
+            case HistoryMilestoneKind::ContaminationCleanup:
+                label=QString("Contamination cleanup at planet %1").arg(event.planet); color=QColor("#8dcc9e"); break;
             case HistoryMilestoneKind::Reconstruction:
                 label=QString("Reconstruction at planet %1").arg(event.planet); color=QColor("#8dcc9e"); break;
             case HistoryMilestoneKind::MineStrike:

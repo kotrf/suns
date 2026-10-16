@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/stations.hpp"
 #include "suns/communications.hpp"
@@ -284,7 +285,8 @@ std::int32_t player_planet_habitability(
         : planet.habitability;
     const auto* star = find_star(state, planet.star);
     const int shift = star ? int(std::lround((stellar_luminosity(*star, turn) - 1.0) * 100.0)) : 0;
-    return static_cast<std::int32_t>(std::clamp(int(baseline) + shift, -100, 100));
+    return static_cast<std::int32_t>(std::clamp(int(baseline) + shift
+        - contamination_habitability_penalty(state,player,planet), -100, 100));
 }
 
 GameState generate_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
@@ -428,6 +430,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         Planet known;
         if (owned) known = planet;
         else {
+            known.aftermathKnownLocally=false;
             known.id = planet.id;
             known.star = planet.star;
             known.name = level >= SurveyLevel::OrbitalSurvey ? planet.name : "Unsurveyed planet";

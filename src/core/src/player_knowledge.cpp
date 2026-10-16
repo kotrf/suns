@@ -1,5 +1,6 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/planetary_recovery.hpp"
 
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
@@ -89,6 +90,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::EmissionDetected: return GameEventKind::EmissionDetected;
     case PlayerReportKind::EnemyFleetReclassified: return GameEventKind::EnemyFleetReclassified;
     case PlayerReportKind::SensorInterferenceChanged: return GameEventKind::SensorInterferenceChanged;
+    case PlayerReportKind::PlanetaryAftermath: return GameEventKind::PlanetaryAftermath;
     }
     return GameEventKind::FleetArrived;
 }
@@ -135,6 +137,11 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         mix(report.deliveredColonists);
     }
     if(report.emission) { mix(report.emission->emittedTurn); mix(std::uint64_t(report.emission->channel)); }
+    if(report.aftermath) {
+        const auto& a=*report.aftermath;
+        mix(a.planet); mix(a.factoriesMinimum); mix(a.factoriesMaximum); mix(a.minesMinimum); mix(a.minesMaximum);
+        mix(a.contaminationMinimum); mix(a.contaminationMaximum); mix(a.exact);
+    }
     if(report.sensorStatus) { mix(report.sensorStatus->fleet); mix(report.sensorStatus->colony); mix(report.sensorStatus->interferencePercent); }
     if(report.contact) { mix(std::uint64_t(report.contact->quality)); mix(report.contact->sourceFleet); mix(report.contact->sourceColony); mix(report.contact->jammed); }
     if (report.battle) {
@@ -434,6 +441,22 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            auto aftermath=report.aftermath;
+            if(aftermath) {
+                aftermath->receivedTurn=state.turn;
+                auto current=std::find_if(player.planetaryAftermath.begin(),player.planetaryAftermath.end(),
+                    [&](const auto& a){return a.planet==report.planet;});
+                const bool newer=current==player.planetaryAftermath.end() || aftermath->observedTurn>current->observedTurn
+                    || (aftermath->observedTurn==current->observedTurn && aftermath->exact && !current->exact);
+                const bool changed=current==player.planetaryAftermath.end() || !same_aftermath_estimate(*current,*aftermath);
+                if(newer) {
+                    if(current==player.planetaryAftermath.end()) player.planetaryAftermath.push_back(*aftermath);
+                    else *current=*aftermath;
+                }
+                // Routine unchanged measurements refresh the date without a
+                // new briefing every year. Old packets never roll knowledge back.
+                if(report.kind==PlayerReportKind::PlanetaryAftermath && (!newer || !changed)) continue;
+            }
             if(report.sensorStatus) {
                 const auto current=std::find_if(player.sensorStatus.begin(),player.sensorStatus.end(),[&](const auto& x){return x.fleet==report.fleet && x.colony==report.planet;});
                 if(current!=player.sensorStatus.end() && current->observedTurn>report.observedTurn) continue;
@@ -489,6 +512,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 report.contact,
                 report.sensorStatus,
                 report.emission,
+                aftermath,
             });
         }
 

@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/production.hpp"
+#include "suns/planetary_recovery.hpp"
 #include "suns/stations.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/campaign.hpp"
@@ -44,6 +45,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::Mine: name = "Mine"; break;
     case ProductionKind::ReconstructFactory: name = "Reconstruct factory"; break;
     case ProductionKind::ReconstructMine: name = "Reconstruct mine"; break;
+    case ProductionKind::CleanupContamination: name = "Contamination cleanup"; break;
     case ProductionKind::ColonyDefense: name = "Colony defense"; break;
     case ProductionKind::LocalRadar: name = "Local planetary radar (30 ly)"; break;
     case ProductionKind::PlanetaryRadar: name = "Planetary radar (150 ly)"; break;
@@ -98,6 +100,7 @@ void MainWindow::installProductionQueue()
     addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
     addKind("Reconstruct factories", ProductionKind::ReconstructFactory, ProductionAutomation::None);
     addKind("Reconstruct mines", ProductionKind::ReconstructMine, ProductionAutomation::None);
+    addKind("Clean contamination", ProductionKind::CleanupContamination, ProductionAutomation::None);
     addKind("Colony defenses", ProductionKind::ColonyDefense, ProductionAutomation::None);
     addKind("Local radar (30 ly)", ProductionKind::LocalRadar, ProductionAutomation::None);
     addKind("Planetary radar (150 ly)", ProductionKind::PlanetaryRadar, ProductionAutomation::None);
@@ -132,7 +135,7 @@ void MainWindow::installProductionQueue()
         const QueueProductionBatchOrder order{planet->id, ProductionKind(kind->currentData().toInt()),
             std::uint32_t(amount->value()), ProductionAutomation(kind->currentData(Qt::UserRole + 1).toInt())};
         if (!production_batch_valid(order)) return;
-        if(reconstruction_kind(order.kind)) {
+        if(recovery_kind(order.kind)) {
             auto planned=planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_);
             const auto target=std::find_if(planned.planets.begin(),planned.planets.end(),[&](const auto& p){return p.id==planet->id;});
             if(target==planned.planets.end() || !apply_production_batch(planned,*target,order)) return;
@@ -291,16 +294,21 @@ void MainWindow::refreshProductionQueue()
         batchAdd->setEnabled(colony_defenses_available(forecastState,pendingOrders_.player) && planet->defenses<kMaximumColonyDefenses);
     const auto selectedKind=ProductionKind(batchKind->currentData().toInt());
     auto* amount=findChild<QSpinBox*>("productionBatchQuantity");
-    const auto available=reconstruction_available(*projectedPlanet,selectedKind);
+    const auto available=selectedKind==ProductionKind::CleanupContamination ? cleanup_units_available(*projectedPlanet)
+        : reconstruction_available(*projectedPlanet,selectedKind);
     {
         const QSignalBlocker block(amount);
-        amount->setMaximum(reconstruction_kind(selectedKind) ? int(std::max<std::uint64_t>(1,std::min<std::uint64_t>(available,kMaximumProductionBatch)))
+        amount->setMaximum(recovery_kind(selectedKind) ? int(std::max<std::uint64_t>(1,std::min<std::uint64_t>(available,kMaximumProductionBatch)))
             : selectedKind==ProductionKind::LocalRadar || selectedKind==ProductionKind::PlanetaryRadar ? 1 : int(kMaximumProductionBatch));
     }
     if(reconstruction_kind(selectedKind)) {
         batchAdd->setEnabled(available>0);
         batchAdd->setToolTip(available ? QString("Restore existing ruins through ordinary production and minerals. %1 unreserved units remain.").arg(qulonglong(available))
             : "No unreserved ruins of this kind remain on this colony.");
+    } else if(selectedKind==ProductionKind::CleanupContamination) {
+        batchAdd->setEnabled(available>0);
+        batchAdd->setToolTip(available ? "Remove up to 10 contamination for 6 resources and B/G 1/1 kt per unit. Natural decay: 2/year; surplus work retires without further charge."
+            : "No unreserved contamination remains on this colony.");
     } else batchAdd->setToolTip({});
     const auto forecast = forecast_production_queue(forecastState, *planet, queue);
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
@@ -338,6 +346,11 @@ void MainWindow::refreshProductionQueue()
         productionQueueSummary_->setText(productionQueueSummary_->text()
             + QString("<br>War ruins: %1 factories / %2 mines. Natural repair: 0/year.<br>Reconstruct each factory: 4 resources; mine: 3 resources; ordinary unit minerals. Completion restores one working installation.")
                 .arg(qulonglong(ruinedFactories)).arg(qulonglong(ruinedMines)));
+    if(planet->warDamage.contamination || planet->warDamage.lastCleanupTurn)
+        productionQueueSummary_->setText(productionQueueSummary_->text()
+            + QString("<br>Contamination: %1/100; Hab penalty: %2 points. Natural decay: 2/year (%3 years to clear without new attacks).<br>Cleanup unit: up to 10 points for 6 resources and B/G 1/1 kt. Competes with ordinary construction.")
+                .arg(planet->warDamage.contamination).arg(contamination_habitability_penalty(state_,pendingOrders_.player,*planet))
+                .arg((planet->warDamage.contamination+1)/2));
     const auto fullSummary = productionQueueSummary_->text();
     if (auto* details = findChild<QLabel*>("productionExtendedSummary")) details->setText(fullSummary);
     if (productionQueueSummary_->property("compactColonySummary").toBool()) {
@@ -368,7 +381,8 @@ void MainWindow::refreshProductionQueue()
             completion = QString("Turn %1 (+%2)")
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn))
                 .arg(static_cast<qulonglong>(*forecast[index].completionTurn - state_.turn));
-        } else completion = waitingForShipyard ? "waiting for dock" : "beyond forecast";
+        } else if(forecast[index].retiredTurn) completion=QString("Unneeded · T%1").arg(*forecast[index].retiredTurn);
+        else completion = waitingForShipyard ? "waiting for dock" : "beyond forecast";
         if (automatic) completion = forecast[index].completionTurn
             ? QString("First +%1 yr").arg(*forecast[index].completionTurn - state_.turn)
             : "Idle / beyond forecast";
@@ -391,6 +405,7 @@ void MainWindow::refreshProductionQueue()
             details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped. First-completion estimate assumes current technology; forecast horizon is 256 years.").arg(item.quantity);
             if (forecast[index].completionTurn) details += QString("\nFirst completion: Turn %1").arg(*forecast[index].completionTurn);
         }
+        if(item.kind==ProductionKind::CleanupContamination) details+="\nRemoves up to 10 contamination for 6 resources and B/G 1/1 kt. Decay of 2/year is included in the forecast; no assumed future bombardments. Unneeded work retires without further charge.";
         if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority and forecast apply; obsolete surplus work retires without further charge.")
             .arg(item.kind==ProductionKind::ReconstructFactory?"factory":"mine").arg(production_cost(item.kind));
         if (item.kind == ProductionKind::Terraforming) details += QString("\nEach unit costs %1 production and shifts one physical axis by 1 point. Hab improvement may differ.").arg(kTerraformingCost);

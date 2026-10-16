@@ -1,21 +1,25 @@
 # Project status and development handoff
 
-## In progress — 16 October 2026: physical interception and planetary reconstruction
+## Current implementation — 16 October 2026: contamination and dated aftermath
 
-Main includes #207/#201 colony development plans; its CI is green (58/58 on the
-merged tree). The user approved the next two bounded slices: #205 actual fast/slow
-transmissions with separate signal/report propagation, and #106 persistent factory/
-mine destruction plus paid reconstruction through ordinary production. Contamination,
-biosphere damage, scorched-earth doctrines and new SIGINT equipment are later work.
+Main baseline is #208 physical fast/slow interception and #209 persistent ruins /
+paid reconstruction, both automatically merged. Their merged main `f7848b0`
+passed full CI 60/60. Colony-development plans #207/#201 are also complete.
 
-The [physical interception](emission-interception.md) slice is PR #208 (auto-merge
-enabled; branch CI required). This branch adds [paid reconstruction](planetary-reconstruction.md):
-persistent factory/mine ruins, normal one-time production batches, shared forecasts,
-ordinary computer orders, inherited surviving installations and receipt-year recovery
-history. Focused local core suites pass; full Qt/save/UI CI is required before
-its own auto-merge. Save v77, orders v26. Older checkpoints below are historical.
+This change continues #106 with two bounded stages: [residual contamination and
+paid cleanup](planetary-contamination.md), plus immutable observer-specific
+aftermath estimates with normal report latency. Neutron weapons add a capped,
+separate hazard; natural decay and ordinary paid cleanup remove it. Owners see
+costs/forecasts, foreign observers see delivered dated ranges, and History records
+receipt-year recovery/discovery milestones. Save v78 / orders v27 preserve the
+new state while reading previous formats. Validation evidence belongs to the
+implementation PR, not an inferred roadmap status.
 
-## Current checkpoint — 16 October 2026
+Biosphere damage, scorched-earth choices, technology/project balance and advanced
+SIGINT remain later work. The older checkpoints below are historical; do not
+restart completed AI, stargate or colony-template work.
+
+## Historical checkpoint — 16 October 2026 (before #204/#207)
 
 PR #203 is merged into main `1c5ec0494292f2c74b4804a3a6ebafdbb90af479`.
 Its branch CI and post-merge main CI passed 56/56 on Qt 6.12.0 / suns-vps.

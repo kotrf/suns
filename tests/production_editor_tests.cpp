@@ -100,6 +100,11 @@ struct MainWindowTestAccess {
         w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
         w.selection_.star=p.star; w.rebuildScene(); w.refreshProductionQueue();
     }
+    static void contaminationFixture(MainWindow& w)
+    {
+        recoveryFixture(w); auto& p=w.state_.planets.front(); p.warDamage.contamination=22;
+        w.refreshProductionQueue();
+    }
     static void stationDesigner(MainWindow& w) { w.openStationDesigner(); }
     static const GameState& state(const MainWindow& w) { return w.state_; }
     static void saveTemplate(MainWindow& w) {
@@ -346,5 +351,16 @@ int main(int argc, char** argv)
     assert(repaired.industry==14 && repaired.mines==2 && repaired.productionQueue.empty());
     assert(repaired.warDamage.factoriesReconstructed==3 && repaired.warDamage.minesReconstructed==2);
     assert(!add->isEnabled());
+
+    suns::MainWindowTestAccess::contaminationFixture(window);
+    kind->setCurrentIndex(kind->findData(int(suns::ProductionKind::CleanupContamination)));
+    assert(add->isEnabled() && quantity->maximum()==3);
+    quantity->setValue(2); add->click();
+    assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1).contains("Contamination cleanup"));
+    assert(tree->topLevelItem(0)->toolTip(1).contains("Natural") || tree->topLevelItem(0)->toolTip(1).contains("Decay"));
+    assert(quantity->maximum()==1); add->click(); assert(!add->isEnabled());
+    suns::MainWindowTestAccess::advance(window);
+    assert(suns::MainWindowTestAccess::colony(window).warDamage.contamination==0);
+    assert(suns::MainWindowTestAccess::colony(window).productionQueue.empty() && !add->isEnabled());
 
 }
