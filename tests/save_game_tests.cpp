@@ -760,7 +760,7 @@ void population_migration_and_clear_orders()
         const auto actionMarker = QByteArray::fromHex("0100000000000000640000000000");
         const auto actionPosition = bytes.indexOf(actionMarker);
         assert(actionPosition >= 0 && bytes.indexOf(actionMarker, actionPosition + 1) < 0);
-        bytes.remove(actionPosition + 10, 4);
+        bytes.remove(actionPosition + 10, 5); // WH endpoint and v75 optional-plan presence.
         QByteArray whMarker;
         QDataStream whStream(&whMarker, QIODevice::WriteOnly);
         whStream << quint32{1} << legacy.state.wormholeRules.width << legacy.state.wormholeRules.height;
@@ -791,7 +791,9 @@ void population_migration_and_clear_orders()
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
     assert(migrated.state.fleets[0].arrivalAction->reservePopulation == 100'000);
     assert(std::get<SetFleetColonistsOrder>(migrated.pendingOrders.orders[0]).colonists == 40'000);
-    assert(write_pre_terraforming_fixture(path, migrated, error));
+    // Resaving migrated data uses the real current layout, including the
+    // optional colony-program field; population must not migrate a second time.
+    assert(write_save_game_file(path, migrated, error));
     assert(read_save_game_file(path, migrated, error));
     assert(!migrated.migratedPopulation && migrated.state.planets[0].population == 1'000'000);
 
@@ -992,7 +994,7 @@ void pre_wormhole_formats_remain_readable()
         shape << quint8{0} << quint64{1094} << quint8{0} << quint32{0};
         const auto offset = bytes.indexOf(marker);
         assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
-        bytes.remove(offset + 10, 4);
+        bytes.remove(offset + 10, 5); // WH endpoint and v75 optional-plan presence.
         assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream header(&file);
         header << quint32{11};
@@ -1846,6 +1848,74 @@ void planetary_radars_round_trip_and_keep_queued_bootstrap()
     assert(loaded.state.planets[1].productionQueue.back().kind == ProductionKind::PlanetaryRadar);
 }
 
+void colony_programs_round_trip_without_mutable_template_lookups()
+{
+    QTemporaryDir dir;
+    assert(dir.isValid());
+    QString error;
+    SaveGameData save;
+    save.state = make_demo_game();
+    save.campaignId = 701; save.turnToken = 702; save.mode = SessionMode::Host;
+    save.playerTokens = {{1, 702}};
+    const auto plan = colony_development_presets()[1];
+    FleetArrivalAction action{FleetArrivalActionKind::Colonize};
+    action.colonyPlan = plan;
+    auto& fleet = save.state.fleets.front();
+    fleet.design = kColonyShipDesignId; fleet.ships = {{kColonyShipDesignId, 1}};
+    fleet.destination = Position{10, 10};
+    fleet.arrivalAction.reset();
+    fleet.waypointQueue = {{save.state.stars[1].position, 5, action}};
+    fleet.routeTemplate = {{*fleet.destination, 5, {}}, fleet.waypointQueue.front()};
+    fleet.telemetry.destination = fleet.destination;
+    fleet.telemetry.waypointQueue = fleet.waypointQueue;
+    fleet.telemetry.routeTemplate = fleet.routeTemplate;
+    fleet.telemetry.ships = fleet.ships;
+    FleetRouteProgram program{*fleet.destination, 5, {}, fleet.waypointQueue};
+    fleet.pendingCommands.push_back({save.state.turn, save.state.turn + 4, program});
+    fleet.telemetryInTransit.push_back({save.state.turn + 4, fleet.telemetry});
+    MoveFleetOrder move{fleet.id, *fleet.destination, 5, {}, fleet.waypointQueue};
+    save.pendingOrders = {1, {move, ColonizePlanetOrder{fleet.id, save.state.planets[1].id, plan}, SetProductionTemplateOrder{plan}}};
+    save.pendingDescriptions = {"Carry industry program", "Found with industry program", "Save program"};
+    const auto path = dir.filePath("colony-programs.suns");
+    SaveGameData loaded;
+    assert(write_save_game_file(path, save, error));
+    assert(read_save_game_file(path, loaded, error));
+    const auto& restored = loaded.state.fleets.front();
+    assert(restored.waypointQueue.back().arrivalAction.colonyPlan == plan);
+    assert(restored.routeTemplate.back().arrivalAction.colonyPlan == plan);
+    assert(restored.pendingCommands.back().program.queuedWaypoints.back().arrivalAction.colonyPlan == plan);
+    assert(restored.telemetry.waypointQueue.back().arrivalAction.colonyPlan == plan);
+    assert(restored.telemetryInTransit.back().telemetry.routeTemplate.back().arrivalAction.colonyPlan == plan);
+    assert(std::get<ColonizePlanetOrder>(loaded.pendingOrders.orders[1]).colonyPlan == plan);
+    const auto player = make_player_turn(save, 1);
+    assert(write_save_game_file(path, player, error));
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.fleets.front().waypointQueue.back().arrivalAction.colonyPlan == plan);
+    TurnOrderFileData packet{save.campaignId, save.state.turn, save.turnToken, save.pendingOrders, save.pendingDescriptions};
+    const auto packetPath = dir.filePath("colony-programs.sunsorders");
+    TurnOrderFileData imported;
+    assert(write_turn_order_file(packetPath, packet, error));
+    assert(read_turn_order_file(packetPath, imported, error));
+    assert(std::get<MoveFleetOrder>(imported.orders.orders[0]).queuedWaypoints.back().arrivalAction.colonyPlan == plan);
+    assert(std::get<ColonizePlanetOrder>(imported.orders.orders[1]).colonyPlan == plan);
+    assert(std::get<SetProductionTemplateOrder>(imported.orders.orders[2]).value == plan);
+    for (int corruption = 0; corruption < 4; ++corruption) {
+        auto broken = plan;
+        if (corruption == 0) broken.items.front().quantity = 1001;
+        if (corruption == 1) broken.items.resize(65, broken.items.front());
+        if (corruption == 2) broken.items.front().station = StationConstruction{};
+        if (corruption == 3) broken.items.clear();
+        packet.orders.orders = {ColonizePlanetOrder{fleet.id, save.state.planets[1].id, broken}};
+        packet.descriptions = {"Invalid program"};
+        assert(!write_turn_order_file(packetPath, packet, error));
+    }
+    auto invalid = move;
+    invalid.arrivalAction = action; // Colonize is no longer terminal.
+    packet.orders.orders = {invalid}; packet.descriptions = {"Invalid waypoint"};
+    assert(write_turn_order_file(packetPath, packet, error));
+    assert(!read_turn_order_file(packetPath, imported, error));
+}
+
 int main()
 {
     reconnaissance_and_programs_round_trip();
@@ -1870,6 +1940,7 @@ int main()
     population_migration_and_clear_orders();
     cancellation_round_trips_in_save_and_turn_packet();
     planetary_radars_round_trip_and_keep_queued_bootstrap();
+    colony_programs_round_trip_without_mutable_template_lookups();
     std::cout << "save game tests passed\n";
     return 0;
 }

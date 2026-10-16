@@ -615,8 +615,10 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
     return it == state.planets.end() ? nullptr : &*it;
 }
 
-bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
+bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
+    const std::optional<ProductionTemplate>& colonyPlan)
 {
+    if (colonyPlan && !production_template_valid(*colonyPlan)) return false;
     // A manual founding order cannot dismantle a fleet to evade an armed
     // hostile encounter already present at the planning boundary.
     if (std::any_of(state.fleets.begin(), state.fleets.end(), [&](const auto& other) {
@@ -655,7 +657,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet)
     // Founding does not imply a radar or an automatic build programme. Nearby
     // colonies may be controlled through the existing homeworld radar field;
     // remote colonies use only an explicitly assigned autonomous template.
-    apply_default_production_template(state, planet);
+    if (colonyPlan) planet.productionQueue = colonyPlan->items;
     planet.mines = 0;
     planet.productionWaitingForMinerals = false;
     set_survey_level(
@@ -720,7 +722,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
             return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
         });
-        if (planet == state.planets.end() || !establish_colony(state, fleet, *planet)) {
+        if (planet == state.planets.end() || !establish_colony(state, fleet, *planet, action.colonyPlan)) {
             fleet.arrivalAction = action;
             fleet.destination = fleet.position;
             return false;
@@ -2100,7 +2102,7 @@ TurnResult TurnProcessor::process_with_events(
                             return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
                         });
                         if (planet == next.planets.end() || fleet == next.fleets.end()) return;
-                        if (establish_colony(next, *fleet, *planet)) next.fleets.erase(fleet);
+                        if (establish_colony(next, *fleet, *planet, concreteOrder.colonyPlan)) next.fleets.erase(fleet);
                     } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
                         (void)submit_fleet_task_command(
                             next,

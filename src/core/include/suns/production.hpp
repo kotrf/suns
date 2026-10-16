@@ -26,6 +26,8 @@ struct ColonyProductionResolution {
 [[nodiscard]] bool production_batch_valid(const QueueProductionBatchOrder& order);
 bool apply_production_batch(const GameState& state, Planet& planet, const QueueProductionBatchOrder& order);
 [[nodiscard]] bool production_template_valid(const ProductionTemplate& value);
+// Suggestions only: never installed or selected implicitly in a new campaign.
+[[nodiscard]] std::vector<ProductionTemplate> colony_development_presets();
 bool set_production_template(Player& player, const SetProductionTemplateOrder& order);
 bool apply_production_template(Planet& planet, const Player& player, const std::string& name);
 void apply_default_production_template(const GameState& state, Planet& planet);

@@ -659,6 +659,9 @@ void MainWindow::installUiPolish()
     auto* designerAction = fleetMenu->addAction("Ship designer…");
     designerAction->setObjectName("openShipDesignerAction");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
+    auto* templatesAction = fleetMenu->addAction("Colony development templates…");
+    templatesAction->setObjectName("openColonyTemplatesAction");
+    connect(templatesAction, &QAction::triggered, this, [this] { openColonyTemplates(); });
 
     auto* dialogToolbar = addToolBar("Main");
     dialogToolbar->setObjectName("dialogToolbar");
@@ -680,6 +683,9 @@ void MainWindow::installUiPolish()
     researchToolAction->setObjectName("openResearchToolAction");
     researchToolAction->setToolTip("Open research allocation and the ordered technology plan in a separate window");
     connect(researchToolAction, &QAction::triggered, this, [this] { openResearchDialog(); });
+    auto* templatesToolAction = dialogToolbar->addAction("Colony plans");
+    templatesToolAction->setObjectName("openColonyTemplatesToolAction");
+    connect(templatesToolAction, &QAction::triggered, this, [this] { openColonyTemplates(); });
 
     auto* historyToolAction = dialogToolbar->addAction("History");
     historyToolAction->setObjectName("openEmpireHistoryToolAction");

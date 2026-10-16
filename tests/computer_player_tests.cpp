@@ -379,7 +379,9 @@ void autonomous_fixed_seed_campaigns()
             std::size_t colonies = 0, surveys = 0; std::uint32_t factories = 0, mines = 0, science = 0;
             for (const auto& planet : state.planets) if (planet.owner == id) {
                 ++colonies; factories += planet.industry; mines += planet.mines;
-                assert(planet.productionQueue.size() <= 1);
+                // New settlements can still be executing their three-step
+                // onboard bootstrap. The controller preserves that paid work.
+                assert(planet.productionQueue.size() <= 3);
             }
             for (const auto& known : player->surveyKnowledge) if (known.level >= SurveyLevel::OrbitalSurvey) ++surveys;
             for (const auto level : player->technology.levels) science += level;

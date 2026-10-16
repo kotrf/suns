@@ -1,6 +1,7 @@
 #include "suns/computer_player.hpp"
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
+#include "suns/production.hpp"
 #include "computer_policy.hpp"
 
 #include <algorithm>
@@ -346,7 +347,10 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         }
         if (target) {
             MoveFleetOrder move{fleet.id, target->position, *warp};
-            if (colonizer) move.arrivalAction.kind = FleetArrivalActionKind::Colonize;
+            if (colonizer) {
+                move.arrivalAction.kind = FleetArrivalActionKind::Colonize;
+                move.arrivalAction.colonyPlan = colony_development_presets().front();
+            }
             else move.queuedWaypoints.push_back({find_star(state, depot->star)->position,
                 *warp, {FleetArrivalActionKind::Refuel}});
             plan.orders.orders.push_back(std::move(move));
