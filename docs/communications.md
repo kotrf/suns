@@ -86,6 +86,9 @@ Inside the capital mesh it is current immediately, so a silent fleet at Sol can
 use Cargo Transfer. At an isolated colony, the surface has the data locally while
 headquarters receives it only after ordinary slow-link/jamming delay. Departure
 does not cancel an already sent snapshot or update its contents retroactively.
+If the ship is subsequently destroyed in combat or a minefield, already sent
+telemetry still updates its last known contact until the loss itself is reported.
+This does not generate a posthumous transmission or reveal the unreported loss.
 An enemy, uninhabited or uncolonized system cannot provide this friendly exchange.
 
 The UI can therefore distinguish:

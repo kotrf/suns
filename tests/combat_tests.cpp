@@ -242,11 +242,15 @@ void delayed_reports_and_knowledge()
         f.position = {600, 0};
         f.telemetry.position = f.position;
     }
+    auto alreadySent=state.fleets[1].telemetry;
+    alreadySent.fuel=123; alreadySent.damagePercent=7;
+    state.fleets[1].telemetryInTransit.push_back({2,alreadySent});
     const auto result = TurnProcessor{}.process_with_events(state, {});
     assert(!fleet(result.state, 2) && !result.state.pendingFleetLossContacts.empty());
     assert(std::none_of(result.events.begin(), result.events.end(), [](const auto& e) { return e.kind == GameEventKind::SpaceBattle; }));
     const auto contacts = missing_fleet_contacts(result.state, 2);
     assert(contacts.size() == 1 && contacts.front().id == 2 && fleet_ship_count(contacts.front()) == 1);
+    assert(contacts.front().fuel==123 && contacts.front().damagePercent==7);
     assert(result.state.players[1].history.back().ships == 1);
     for (const auto& player : result.state.players) {
         assert(player.history.back().battleStatisticsRecorded);

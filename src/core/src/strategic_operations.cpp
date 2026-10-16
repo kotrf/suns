@@ -9,6 +9,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <utility>
 
 namespace suns {
 namespace {
@@ -309,8 +310,11 @@ bool apply_minefield_crossing(GameState& state, Fleet& fleet, Position start, Po
     if (first->kind != 2) fleet.damagePercent = std::min(100.0,
         fleet.damagePercent + 100*consumed*(first->kind == 1 ? 12 : 4)/std::max(1.0, armor));
     const auto delivery = fleet_report_delivery_turn(state,fleet.owner,source,state.turn+1,fleet.id);
-    if (fleet.damagePercent >= 100 && delivery > state.turn + 1)
-        state.pendingFleetLossContacts.push_back({fleet_player_view(state, fleet), delivery});
+    if (fleet.damagePercent >= 100 && delivery > state.turn + 1) {
+        auto contact = fleet_player_view(state, fleet);
+        contact.telemetryInTransit = fleet.telemetryInTransit;
+        state.pendingFleetLossContacts.push_back({std::move(contact), delivery});
+    }
     queue_player_report(state, fleet.owner, PlayerReportKind::MineStrike, source, state.turn+1,
         0, 0, fleet.id, 0, ProductionKind::ColonyShip, std::uint32_t(first->kind), ResearchField::Weapons,
         0, {}, std::uint64_t(std::round(fleet.damagePercent)), {}, 0,

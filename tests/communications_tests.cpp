@@ -482,6 +482,32 @@ void local_status_exchange_requires_an_owned_populated_colony()
     }
 }
 
+void colony_snapshot_reaches_the_last_contact_after_a_silent_mine_loss()
+{
+    auto s=make_demo_game(); s.turn=10;
+    s.stars[1].position={420,0};
+    auto& colony=s.planets[1]; colony.owner=1; colony.population=1000; colony.radar=PlanetaryRadarLevel::None;
+    auto& f=s.fleets.front(); f.position={420,0}; f.electronics={EmissionMode::Passive,0};
+    f.telemetry.colonists=100; f.colonists=200;
+    publish_fleet_telemetry(s,s.turn);
+    assert(f.telemetryInTransit.front().deliveryTurn==13);
+    // The packet is already on the colony's connection when the silent ship
+    // leaves and is destroyed. Its unreported loss must not cancel that packet.
+    s.turn=11; f.position={600,0}; f.warp=6;
+    s.minefields={{1,2,{630,0},100,0}};
+    Position end{650,0};
+    assert(apply_minefield_crossing(s,f,f.position,end) && f.damagePercent>=100);
+    assert(s.pendingFleetLossContacts.size()==1 && s.pendingFleetLossContacts.front().deliveryTurn==kAwaitingTransmission);
+    s.fleets.clear();
+    s.turn=12; deliver_due_fleet_telemetry(s);
+    assert(missing_fleet_contacts(s,1).front().colonists==100);
+    s.turn=13; deliver_due_fleet_telemetry(s);
+    const auto known=missing_fleet_contacts(s,1);
+    assert(known.size()==1 && known.front().telemetry.observedTurn==10 && known.front().colonists==200);
+    assert(make_player_view(s,1).state.fleets.front().colonists==200);
+    assert(s.pendingFleetLossContacts.front().lastContact.telemetryInTransit.empty());
+}
+
 void merged_fleet_keeps_unsent_observations()
 {
     auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0;
@@ -515,6 +541,7 @@ int main()
     friendly_orbit_shares_full_status_over_the_colony_link();
     orbital_snapshot_survives_silent_departure_without_following_hidden_changes();
     local_status_exchange_requires_an_owned_populated_colony();
+    colony_snapshot_reaches_the_last_contact_after_a_silent_mine_loss();
     merged_fleet_keeps_unsent_observations();
     std::cout << "communications tests passed\n";
     return 0;

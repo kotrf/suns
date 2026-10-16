@@ -682,7 +682,7 @@ void deliver_due_fleet_commands(GameState& state)
 
 void deliver_due_fleet_telemetry(GameState& state)
 {
-    for (auto& fleet : state.fleets) {
+    const auto deliver = [&](Fleet& fleet) {
         for (const auto& packet : fleet.telemetryInTransit) {
             if (packet.deliveryTurn > state.turn) continue;
             if (packet.telemetry.observedTurn >= fleet.telemetry.observedTurn) {
@@ -692,7 +692,11 @@ void deliver_due_fleet_telemetry(GameState& state)
         std::erase_if(fleet.telemetryInTransit, [&](const PendingFleetTelemetry& packet) {
             return packet.deliveryTurn <= state.turn;
         });
-    }
+    };
+    for (auto& fleet : state.fleets) deliver(fleet);
+    // A lost physical source cannot recall packets that were already sent.
+    // Keep updating its last known contact until the loss report itself arrives.
+    for (auto& loss : state.pendingFleetLossContacts) deliver(loss.lastContact);
 }
 
 void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)

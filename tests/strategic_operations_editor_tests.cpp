@@ -86,6 +86,10 @@ int main(int argc,char** argv)
     unsent.deliveryTurn=kAwaitingTransmission; unsent.transmissionFleet=fleet.id;
     state.players[0].pendingPlayerReports.push_back(unsent);
     state.players[0].fieldScience.push_back({(1ULL<<32)|2,kAwaitingTransmission,fleet.id});
+    auto lost=fleet_player_view(state,fleet); lost.id=state.nextFleetId++;
+    auto sent=fleet.telemetry; sent.fuel=123; sent.damagePercent=7;
+    lost.telemetryInTransit.push_back({state.turn+2,sent});
+    state.pendingFleetLossContacts.push_back({lost,state.turn+4});
     value.pendingOrders.orders = {SetFleetTaskOrder{fleet.id,FleetTask::LayMines},SetFleetElectronicsOrder{fleet.id,{EmissionMode::RadioSilence,6}}};
     value.pendingDescriptions = {"Lay mines","Radio silence"};
     QString error; const auto path = dir.filePath("strategy.suns");
@@ -102,6 +106,10 @@ int main(int argc,char** argv)
         && loaded.players[0].pendingFriendlyFleetContacts.front().sourceFleet==99);
     assert(loaded.players[0].pendingPlayerReports.back().transmissionFleet==fleet.id
         && loaded.players[0].pendingPlayerReports.back().deliveryTurn==kAwaitingTransmission);
+    assert(loaded.pendingFleetLossContacts.size()==1);
+    const auto& sentAfterLoss=loaded.pendingFleetLossContacts.front().lastContact.telemetryInTransit;
+    assert(sentAfterLoss.size()==1 && sentAfterLoss.front().deliveryTurn==3
+        && sentAfterLoss.front().telemetry.fuel==123 && sentAfterLoss.front().telemetry.damagePercent==7);
     auto transmitting=loaded; apply_electronics_program(transmitting.fleets.front(),{});
     dispatch_fleet_report_outbox(transmitting);
     assert(transmitting.players[0].pendingPlayerReports.back().deliveryTurn==transmitting.turn

@@ -341,7 +341,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
             if (deliveries[fleet.owner] > report.observedTurn) {
                 auto contact = fleet_player_view(state, fleet);
                 contact.pendingCommands.clear();
-                contact.telemetryInTransit.clear();
+                contact.telemetryInTransit = fleet.telemetryInTransit;
                 state.pendingFleetLossContacts.push_back({std::move(contact), deliveries[fleet.owner]});
             }
             continue;
