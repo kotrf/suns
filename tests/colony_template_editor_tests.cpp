@@ -6,10 +6,12 @@
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QEventLoop>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTimer>
@@ -35,6 +37,20 @@ struct MainWindowTestAccess {
         for (const auto& order : w.pendingOrders_.orders) if (const auto* move = std::get_if<MoveFleetOrder>(&order)) return move;
         return nullptr;
     }
+    static void manualFixture(MainWindow& w) {
+        w.state_ = make_demo_game();
+        w.state_.players.front().productionTemplates = {colony_development_presets().front()};
+        auto& ship = w.state_.fleets.front();
+        ship.design = kColonyShipDesignId; ship.ships = {{kColonyShipDesignId, 1}};
+        ship.role = FleetRole::ColonyShip; ship.colonists = 100;
+        ship.position = w.state_.stars[1].position;
+        w.selection_.star = w.state_.stars[1].id; w.selection_.fleet = ship.id;
+        set_survey_level(w.state_, 1, w.state_.stars[1].id, SurveyLevel::GeologicalSurvey, w.state_.turn);
+        publish_fleet_telemetry(w.state_, w.state_.turn);
+        w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear(); w.rebuildScene();
+    }
+    static void colonize(MainWindow& w) { w.queueColonize(); }
+    static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
 };
 }
 
@@ -107,4 +123,22 @@ int main(int argc, char** argv)
         settle(); assert(dialog->grab().save(path));
     }
     dialog->close();
+    suns::MainWindowTestAccess::manualFixture(window);
+    QTimer answer;
+    QObject::connect(&answer, &QTimer::timeout, &window, [&] {
+        if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            warning->button(QMessageBox::Yes)->click();
+        } else if (auto* choice = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            choice && choice->objectName() == "colonizePlanDialog") {
+            auto* plans = choice->findChild<QComboBox*>("colonizePlanCombo");
+            assert(plans && plans->currentIndex() == 0);
+            plans->setCurrentIndex(plans->findText("Fast Link"));
+            choice->accept();
+        }
+    });
+    answer.start(1);
+    suns::MainWindowTestAccess::colonize(window);
+    answer.stop();
+    const auto& direct = std::get<suns::ColonizePlanetOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
+    assert(direct.colonyPlan == suns::colony_development_presets().front());
 }

@@ -3,6 +3,7 @@
 #include "suns/game_state.hpp"
 #include <QComboBox>
 #include <QSignalBlocker>
+#include <utility>
 
 namespace suns {
 

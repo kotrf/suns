@@ -227,7 +227,10 @@ void MainWindow::openColonyTemplates()
         down->setEnabled(selected >= 0 && selected + 1 < steps->topLevelItemCount());
         removeStep->setEnabled(selected >= 0);
         update->setEnabled(selected >= 0);
-        status->setText(conflict ? "That name is already used. Choose another name."
+        status->setText(draft->value.name.empty() ? "Name the template and add production steps before saving."
+            : draft->value.name.size() > 80 ? "Choose a shorter template name."
+            : draft->value.items.empty() ? "Add at least one production step."
+            : conflict ? "That name is already used. Choose another name."
             : full ? "The library contains 16 templates. Delete one before saving a new template."
             : radar < 0 ? "No radar in this program. The colony may remain offline until radar or a ship relay connects it."
             : radar > 0 ? "Radar follows earlier production steps. The colony may remain offline while those steps are built."
@@ -289,7 +292,7 @@ void MainWindow::openColonyTemplates()
     connect(fresh, &QPushButton::clicked, dialog, [=] { loadDraft({}, {}); name->setFocus(); });
     connect(duplicate, &QPushButton::clicked, dialog, [=] {
         auto copy = draft->value;
-        copy.name = uniqueName(copy.name.substr(0, 65) + " copy");
+        copy.name = uniqueName((QString::fromStdString(copy.name).left(30) + " copy").toStdString());
         copy.defaultForNewColonies = false;
         loadDraft(copy, {});
     });
