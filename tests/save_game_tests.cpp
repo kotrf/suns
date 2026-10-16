@@ -791,7 +791,9 @@ void population_migration_and_clear_orders()
     assert(migrated.state.fleets[0].telemetry.colonists == 20'000);
     assert(migrated.state.fleets[0].arrivalAction->reservePopulation == 100'000);
     assert(std::get<SetFleetColonistsOrder>(migrated.pendingOrders.orders[0]).colonists == 40'000);
-    assert(write_pre_terraforming_fixture(path, migrated, error));
+    // Resaving migrated data uses the real current layout, including the
+    // optional colony-program field; population must not migrate a second time.
+    assert(write_save_game_file(path, migrated, error));
     assert(read_save_game_file(path, migrated, error));
     assert(!migrated.migratedPopulation && migrated.state.planets[0].population == 1'000'000);
 
