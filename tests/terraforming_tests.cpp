@@ -202,7 +202,7 @@ void templates_and_orders_obey_ownership_and_validation()
     assert(view.state.players.front().productionTemplates.size() == 1);
 }
 
-void founding_a_colony_applies_the_default_template()
+void founding_a_colony_applies_an_explicit_snapshot()
 {
     auto state = fixture();
     ProductionTemplate value{"Expansion", {{ProductionKind::Factory, kFactoryCost, 0, ProductionAutomation::Annual, 10}}, true};
@@ -217,7 +217,7 @@ void founding_a_colony_applies_the_default_template()
     fleet.colonists = 200;
     assert(fleet_cargo_used(state, fleet) <= fleet_cargo_capacity(state, fleet));
     set_survey_level(state, 1, starId, SurveyLevel::OrbitalSurvey, state.turn);
-    const auto next = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{value}, ColonizePlanetOrder{fleet.id, targetId}}}});
+    const auto next = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{value}, ColonizePlanetOrder{fleet.id, targetId, value}}}});
     const auto* founded = find_planet_at_star(next, starId);
     assert(founded && founded->owner == 1);
     assert(std::any_of(founded->productionQueue.begin(), founded->productionQueue.end(),
@@ -232,5 +232,5 @@ int main()
     annual_limits_priority_and_partial_work();
     automatic_terraforming_stops_and_forecast_matches_host();
     templates_and_orders_obey_ownership_and_validation();
-    founding_a_colony_applies_the_default_template();
+    founding_a_colony_applies_an_explicit_snapshot();
 }

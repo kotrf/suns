@@ -118,6 +118,7 @@ struct RefuelFleetOrder {
 struct ColonizePlanetOrder {
     FleetId fleet{};
     PlanetId planet{};
+    std::optional<ProductionTemplate> colonyPlan;
 };
 
 struct SetRemoteMiningOrder {

@@ -10,12 +10,15 @@
 #include "ship_designer_dialog.hpp"
 #include "star_item.hpp"
 #include "map_marker_items.hpp"
+#include "colony_plan_combo.hpp"
 
 #include <QBrush>
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
 #include <QCursor>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QFont>
 #include <QFontMetricsF>
@@ -1517,7 +1520,24 @@ void MainWindow::queueColonize()
         || !ship || ship->colonists == 0) return;
     if (!confirmFleetColonization(*ship, *planet, false)) return;
 
-    appendPendingOrder(ColonizePlanetOrder{ship->id, planet->id},
+    QDialog program(this);
+    program.setObjectName("colonizePlanDialog");
+    program.setWindowTitle("Colony development program");
+    auto* layout = new QVBoxLayout(&program);
+    auto* explanation = new QLabel("Choose the program carried by this Colonize order. None leaves an empty queue; no radar will be scheduled automatically.", &program);
+    explanation->setWordWrap(true);
+    layout->addWidget(explanation);
+    auto* plan = new ColonyPlanCombo(&program);
+    plan->setObjectName("colonizePlanCombo");
+    plan->setTemplates(colonyTemplatesForOrders());
+    layout->addWidget(plan);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &program);
+    buttons->button(QDialogButtonBox::Ok)->setText("Queue Colonize");
+    connect(buttons, &QDialogButtonBox::accepted, &program, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &program, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (program.exec() != QDialog::Accepted) return;
+    appendPendingOrder(ColonizePlanetOrder{ship->id, planet->id, plan->plan()},
         QString("Colonize %1 with %2 (%3 colonists; entire fleet dismantled)")
             .arg(QString::fromStdString(planet->name)).arg(QString::fromStdString(ship->name))
             .arg(static_cast<qulonglong>(ship->colonists)));

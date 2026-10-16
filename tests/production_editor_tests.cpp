@@ -94,6 +94,11 @@ struct MainWindowTestAccess {
     }
     static void stationDesigner(MainWindow& w) { w.openStationDesigner(); }
     static const GameState& state(const MainWindow& w) { return w.state_; }
+    static void saveTemplate(MainWindow& w) {
+        w.appendPendingOrder(SetProductionTemplateOrder{{"Development",
+            {{ProductionKind::Factory, kFactoryCost, 0, ProductionAutomation::Annual, 3}}}}, "Save development template");
+        w.refreshProductionQueue();
+    }
     static bool canQueueDock(const MainWindow& w) { return w.buildOrbitalDockButton_->isEnabled(); }
 };
 }
@@ -286,24 +291,23 @@ int main(int argc, char** argv)
     auto* quantity = window.findChild<QSpinBox*>("productionBatchQuantity");
     auto* add = window.findChild<QPushButton*>("productionBatchAdd");
     auto* templateName = window.findChild<QComboBox*>("productionTemplateName");
-    auto* saveTemplate = window.findChild<QPushButton*>("productionTemplateSave");
     auto* applyTemplate = window.findChild<QPushButton*>("productionTemplateApply");
-    auto* newColonies = window.findChild<QCheckBox*>("productionTemplateDefault");
-    assert(kind && quantity && add && templateName && saveTemplate && applyTemplate && newColonies);
+    auto* editTemplates = window.findChild<QPushButton*>("productionTemplateEdit");
+    assert(kind && quantity && add && templateName && applyTemplate && editTemplates);
     kind->setCurrentIndex(kind->findText("Auto factories ↻")); quantity->setValue(3); add->click();
     assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
     assert(tree->topLevelItem(0)->font(1).italic());
     kind->setCurrentIndex(kind->findText("Mines")); quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1).contains("×2"));
-    templateName->setEditText("Development"); newColonies->setChecked(true);
-    assert(saveTemplate->isEnabled()); saveTemplate->click();
+    suns::MainWindowTestAccess::saveTemplate(window);
+    templateName->setCurrentIndex(templateName->findText("Development"));
     assert(applyTemplate->isEnabled()); applyTemplate->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(0)->text(1).contains("Mine"));
     suns::MainWindowTestAccess::advance(window);
     const auto& developed = suns::MainWindowTestAccess::colony(window);
     assert(developed.mines == 2 && developed.industry == 39);
     assert(developed.productionQueue.size() == 1);
-    assert(suns::MainWindowTestAccess::state(window).players.front().productionTemplates.front().defaultForNewColonies);
+    assert(!suns::MainWindowTestAccess::state(window).players.front().productionTemplates.front().defaultForNewColonies);
     kind->setCurrentIndex(kind->findText("Terraform")); quantity->setValue(1);
     assert(add->isEnabled()); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1) == "Terraforming");

@@ -125,6 +125,8 @@ public:
     void openSplitFleetDialog();
     void openRenameFleetDialog();
     void openFleetSummaryDialog();
+    void openColonyTemplates();
+    [[nodiscard]] std::vector<ProductionTemplate> colonyTemplatesForOrders() const;
 
     // Replace the constructor's legacy synchronous scene-selection callback
     // with a deferred rebuild. Rebuilding QGraphicsScene while Qt is still
@@ -340,6 +342,7 @@ private:
     std::set<QString> hiddenTurnMessageClasses_;
     std::size_t hiddenTurnMessagesCount_{};
     QPointer<ShipDesignerDialog> shipDesigner_;
+    QPointer<QDialog> colonyTemplatesDialog_;
 
     QGraphicsScene* scene_{};
     QGraphicsView* view_{};

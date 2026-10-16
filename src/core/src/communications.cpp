@@ -2,6 +2,7 @@
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/production.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -146,6 +147,8 @@ std::optional<FleetArrivalAction> active_arrival_action(FleetArrivalAction actio
 bool route_tasks_valid(const FleetRouteProgram& program)
 {
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
+        if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
+            || !production_template_valid(*action.colonyPlan))) return false;
         if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::RecoverWreckage) return false;
         if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
         if (target != 0) {

@@ -24,11 +24,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 74;
+constexpr quint32 kSaveFormatVersion = 75;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 24;
+constexpr quint32 kTurnOrderFormatVersion = 25;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -176,12 +176,39 @@ void readShipStacks(QDataStream& stream, std::vector<FleetShipStack>& values)
     }
 }
 
+void writeProductionTemplate(QDataStream& stream, const ProductionTemplate& value);
+void readProductionTemplate(QDataStream& stream, ProductionTemplate& value);
+
+void writeColonyPlan(QDataStream& stream, const std::optional<ProductionTemplate>& value)
+{
+    if (value && !production_template_valid(*value)) { stream.setStatus(QDataStream::WriteFailed); return; }
+    stream << quint8(value.has_value());
+    if (value) writeProductionTemplate(stream, *value);
+}
+
+void readColonyPlan(QDataStream& stream, std::optional<ProductionTemplate>& value)
+{
+    value.reset();
+    if (gReadSaveFormatVersion < 75) return;
+    quint8 present{};
+    stream >> present;
+    if (present > 1) { markCorrupt(stream); return; }
+    if (present) {
+        ProductionTemplate plan;
+        readProductionTemplate(stream, plan);
+        if (!production_template_valid(plan)) { markCorrupt(stream); return; }
+        value = std::move(plan);
+    }
+}
+
 void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 {
+    if (value.colonyPlan && value.kind != FleetArrivalActionKind::Colonize) { stream.setStatus(QDataStream::WriteFailed); return; }
     writeEnum(stream, value.kind);
     stream << static_cast<quint64>(value.reservePopulation);
     writeEnum(stream, value.cargo);
     stream << static_cast<quint32>(value.wormholeEndpoint);
+    writeColonyPlan(stream, value.colonyPlan);
 }
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
@@ -199,6 +226,8 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
         value.wormholeEndpoint = endpoint;
         if ((value.kind == FleetArrivalActionKind::EnterWormhole) != (endpoint != 0)) markCorrupt(stream);
     }
+    readColonyPlan(stream, value.colonyPlan);
+    if (value.colonyPlan && value.kind != FleetArrivalActionKind::Colonize) markCorrupt(stream);
 }
 
 void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)
@@ -253,7 +282,7 @@ bool invalidWaypointWork(const FleetRouteProgram& value)
 {
     if (gReadSaveFormatVersion < 74) return false;
     const auto work = [](const FleetArrivalAction& action) {
-        return arrival_work_task(action.kind).has_value();
+        return arrival_work_task(action.kind).has_value() || action.colonyPlan.has_value();
     };
     const bool hasWork = work(value.arrivalAction) || std::any_of(
         value.queuedWaypoints.begin(), value.queuedWaypoints.end(),
@@ -2431,6 +2460,7 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
             stream << quint8{7} << static_cast<quint32>(concrete.fleet)
                    << static_cast<quint32>(concrete.planet);
+            writeColonyPlan(stream, concrete.colonyPlan);
         } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
             stream << quint8{8} << static_cast<quint32>(concrete.colony)
                    << static_cast<quint8>(concrete.enabled ? 1 : 0);
@@ -2649,6 +2679,7 @@ bool readOrder(QDataStream& stream, Order& order)
         stream >> fleet >> planet;
         value.fleet = static_cast<FleetId>(fleet);
         value.planet = static_cast<PlanetId>(planet);
+        readColonyPlan(stream, value.colonyPlan);
         order = value;
         return stream.status() == QDataStream::Ok;
     }
@@ -3297,7 +3328,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

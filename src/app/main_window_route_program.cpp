@@ -2,6 +2,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
+#include "suns/production.hpp"
 
 #include "suns/communications.hpp"
 
@@ -87,7 +88,8 @@ QString actionName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::Refuel:
         return "Refuel on arrival";
     case FleetArrivalActionKind::Colonize:
-        return "Colonize world — dismantles entire fleet";
+        return QString("Colonize world — %1; dismantles entire fleet")
+            .arg(action.colonyPlan ? QString::fromStdString(action.colonyPlan->name) : "no colony plan");
     case FleetArrivalActionKind::RemoteMining:
         return "Remote Mining — persistent";
     case FleetArrivalActionKind::MergeWithFleet:
@@ -1143,9 +1145,9 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
     auto legs = routeLegs(*route);
     if (index >= legs.size()) return false;
     auto& leg = legs[index];
-    if (leg.arrivalAction.kind == action.kind
-        && leg.arrivalAction.cargo == action.cargo
-        && leg.arrivalAction.reservePopulation == action.reservePopulation) return true;
+    if (leg.arrivalAction == action) return true;
+    if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
+        || !production_template_valid(*action.colonyPlan))) return false;
 
     const bool terminal = terminal_arrival_action(action.kind);
     if (terminal && (index + 1 != legs.size() || route->repeatOrders)) {
@@ -1178,7 +1180,7 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         Planet unknown;
         unknown.star = star->id;
         unknown.name = "world at " + star->name;
-        if (!confirmFleetColonization(fleet,
+        if (leg.arrivalAction.kind != FleetArrivalActionKind::Colonize && !confirmFleetColonization(fleet,
                 planet && survey_level(state_, fleet.owner, star->id) >= SurveyLevel::BasicScan
                     ? *planet : unknown, true)) return false;
     }

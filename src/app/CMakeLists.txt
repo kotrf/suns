@@ -24,6 +24,8 @@ add_library(suns_app_ui STATIC
     main_window_strategic_operations.cpp
     main_window_planet.cpp
     main_window_production.cpp
+    main_window_colony_templates.cpp
+    colony_plan_combo.hpp
     main_window_readability.cpp
     main_window_research.cpp
     main_window_save.cpp

@@ -349,3 +349,15 @@ add_test(NAME suns_station_defense_tests COMMAND suns_station_defense_tests)
 add_executable(suns_reconnaissance_tests reconnaissance_tests.cpp)
 target_link_libraries(suns_reconnaissance_tests PRIVATE Suns::Core)
 add_test(NAME suns_reconnaissance_tests COMMAND suns_reconnaissance_tests)
+
+add_executable(suns_colony_development_tests colony_development_tests.cpp)
+target_link_libraries(suns_colony_development_tests PRIVATE Suns::Core)
+add_test(NAME suns_colony_development_tests COMMAND suns_colony_development_tests)
+
+if(SUNS_BUILD_APP)
+    add_executable(suns_colony_template_editor_tests colony_template_editor_tests.cpp)
+    target_link_libraries(suns_colony_template_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_colony_template_editor_tests COMMAND suns_colony_template_editor_tests)
+    set_tests_properties(suns_colony_template_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
