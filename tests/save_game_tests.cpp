@@ -11,6 +11,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/communications.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
 #include "suns/strategic_operations.hpp"
 
 #include <QByteArray>
@@ -24,6 +25,21 @@
 
 namespace {
 using namespace suns;
+
+// Fixtures below have no pending/archive evidence. Remove the actual bounded
+// v79 payload before constructing an older strategic layout.
+void strip_unknown_objects_tail(QByteArray& bytes)
+{
+    QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x554e4b4fu};
+    const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
+    QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
+    const auto start=bytes.indexOf(marker); assert(start>=0 && bytes.indexOf(marker,start+1)<0);
+    QDataStream header(bytes.mid(start+4)); quint32 size{}; header>>size;
+    assert(tail>=start+8 && tail+8+tailSize==start+8+size);
+    bytes.remove(tail,8+tailSize);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(start+4)); patch<<quint32(size-8-tailSize);
+}
 
 // Pre-v60 campaigns used the prototype colonizer even on reference hulls.
 GameState pre_equipment_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
@@ -2070,7 +2086,7 @@ void v77_reconstruction_saves_default_to_no_contamination()
     save.state.planets[0].warDamage={3,2,0,0,1,0};
     save.state.planets[0].productionQueue={{ProductionKind::ReconstructFactory,2}};
     const auto path=dir.filePath("v77.suns"); assert(write_save_game_file(path,save,error));
-    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll();
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll(); strip_unknown_objects_tail(bytes);
     QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
     const auto offset=bytes.indexOf(marker); assert(offset>=0 && bytes.indexOf(marker,offset+1)<0);
     QDataStream header(bytes.mid(offset+4)); quint32 size{}; header>>size;
@@ -2087,8 +2103,79 @@ void v77_reconstruction_saves_default_to_no_contamination()
     assert(loaded.state.players[0].planetaryAftermath.empty());
 }
 
+void unknown_objects_and_expeditions_round_trip()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=101; save.turnToken=102; save.mode=SessionMode::Host; save.playerTokens={{1,102}};
+    save.state=make_demo_game(); save.state.turn=10; save.pendingOrders={1,{}};
+    save.state.unknownObjects={{7,{411,7},UnknownObjectKind::AncientProbe},{8,{-300,20},UnknownObjectKind::CompactRemnant}};
+    save.state.nextUnknownObjectId=9;
+    const ObjectObservation known{7,{410,10},15,ObjectKnowledgeLevel::Detected,{},8,9};
+    save.state.players[0].objectKnowledge={known};
+    save.state.players[0].computer={true,{{1,1,"Study object X7"}},{{1,ComputerFleetGoalKind::InvestigateObject,7,1,10}},{}};
+    PendingPlayerReport report; report.kind=PlayerReportKind::ScientificData; report.observedTurn=10; report.deliveryTurn=14;
+    report.fleet=1; report.quantity=24; report.researchField=ResearchField::Electronics; report.productionKind=ProductionKind::Research;
+    report.contactPosition={411,7}; report.objectObservation=ObjectObservation{7,{411,7},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::AncientProbe,10,0};
+    save.state.players[0].pendingPlayerReports={report}; save.state.players[0].fieldScience={{(5ULL<<32)|7,14}};
+    GameEvent event; event.id=8123; event.kind=GameEventKind::UnknownObjectObserved; event.recipient=1;
+    event.observedTurn=8; event.turn=9; event.position=known.position; event.objectObservation=known; save.strategicMessages={event};
+    save.state.players[0].history.back().milestones.push_back({8124,1,HistoryMilestoneKind::UnknownObjectReported,0,ResearchField::Electronics,0,0,7});
+    const auto path=dir.filePath("unknown.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error)); const auto ok=read_save_game_file(path,loaded,error);
+    if(!ok) std::cerr<<error.toStdString()<<'\n'; assert(ok);
+    assert(loaded.state.unknownObjects.size()==2 && loaded.state.unknownObjects[0].position==Position(411,7));
+    assert(loaded.state.players[0].objectKnowledge[0]==known && loaded.strategicMessages[0].objectObservation==known);
+    assert(loaded.state.players[0].pendingPlayerReports[0].objectObservation==report.objectObservation);
+    assert(loaded.state.players[0].history[0].milestones.back().object==7);
+    assert(loaded.state.players[0].computer.fleetGoals[0].kind==ComputerFleetGoalKind::InvestigateObject);
+    const auto first=dir.filePath("first.sunsturn"), second=dir.filePath("second.sunsturn");
+    auto player=make_player_turn(save,1); assert(player.state.unknownObjects.empty() && player.state.nextUnknownObjectId==1);
+    assert(player.state.players[0].pendingPlayerReports.empty() && player.state.players[0].fieldScience.empty());
+    assert(write_save_game_file(first,player,error) && read_save_game_file(first,loaded,error));
+    save.state.unknownObjects[0].position={900,900}; save.state.unknownObjects[0].kind=UnknownObjectKind::CompactRemnant;
+    save.state.unknownObjects.pop_back(); save.state.nextUnknownObjectId=99;
+    assert(write_save_game_file(second,make_player_turn(save,1),error));
+    QFile a(first),b(second); assert(a.open(QIODevice::ReadOnly) && b.open(QIODevice::ReadOnly)); assert(a.readAll()==b.readAll());
+    loaded.state.turn=14; const auto events=deliver_due_player_reports(loaded.state); assert(events.empty()); // Export had no pending science.
+    assert(read_save_game_file(path,loaded,error)); loaded.state.turn=14;
+    const auto delivered=deliver_due_player_reports(loaded.state);
+    assert(known_unknown_object(loaded.state,1,7)->level==ObjectKnowledgeLevel::Studied && !delivered.empty());
+    for(int n=0;n<5;++n) {
+        auto bad=save;
+        if(n==0) bad.state.unknownObjects[0].id=0;
+        if(n==1) bad.state.players[0].objectKnowledge[0].kind=UnknownObjectKind::AncientProbe;
+        if(n==2) bad.state.players[0].pendingPlayerReports[0].objectObservation->receivedTurn=10;
+        if(n==3) bad.state.players[0].pendingPlayerReports[0].quantity=999;
+        if(n==4) bad.state.players[0].history[0].milestones.back().object=0;
+        assert(write_save_game_file(path,bad,error) && !read_save_game_file(path,loaded,error));
+    }
+}
+void v78_hosts_seed_unknown_objects_once_and_player_turns_keep_them_hidden()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=201; save.turnToken=202; save.mode=SessionMode::Host; save.playerTokens={{1,202}};
+    save.state=generate_game({619,32,600,500,30}); save.pendingOrders={1,{}};
+    const auto expected=save.state.unknownObjects; assert(!expected.empty());
+    const auto path=dir.filePath("v78.suns"); assert(write_save_game_file(path,save,error));
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll(); strip_unknown_objects_tail(bytes);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch<<quint32{78};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes)==bytes.size()); file.close();
+    SaveGameData loaded; assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.unknownObjects.size()==expected.size() && loaded.state.unknownObjects[0].position==expected[0].position);
+    assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.unknownObjects.size()==expected.size());
+    const auto playerPath=dir.filePath("v78.sunsturn"); const auto player=make_player_turn(save,1);
+    assert(write_save_game_file(playerPath,player,error)); QFile turn(playerPath); assert(turn.open(QIODevice::ReadWrite));
+    bytes=turn.readAll(); strip_unknown_objects_tail(bytes); QDataStream turnPatch(&bytes,QIODevice::ReadWrite);
+    assert(turnPatch.device()->seek(4)); turnPatch<<quint32{78};
+    assert(turn.resize(0) && turn.seek(0) && turn.write(bytes)==bytes.size()); turn.close();
+    assert(read_save_game_file(playerPath,loaded,error) && loaded.state.unknownObjects.empty());
+}
+
 int main()
 {
+    unknown_objects_and_expeditions_round_trip();
+    v78_hosts_seed_unknown_objects_once_and_player_turns_keep_them_hidden();
     contamination_and_dated_aftermath_round_trip();
     v77_reconstruction_saves_default_to_no_contamination();
     planetary_war_damage_and_reconstruction_round_trip();

@@ -1,5 +1,6 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
@@ -93,6 +94,10 @@ Fleet* fleet_by_id(GameState& state, FleetId id)
     return f == state.fleets.end() ? nullptr : &*f;
 }
 }
+
+bool collect_field_science_once(GameState& state,Fleet& fleet,std::uint64_t key,Position target,StarId star,
+    ResearchField field,std::uint32_t points,std::uint64_t turn)
+{ return science_once(state,fleet,key,target,star,field,points,turn); }
 
 double minefield_radius(const Minefield& field) { return std::sqrt(std::max(0.0, field.mines)); }
 std::uint8_t minefield_safe_warp(std::uint8_t kind) { return kind == 1 ? 6 : kind == 2 ? 5 : 4; }
@@ -231,7 +236,9 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
     if (*task == FleetTask::FieldResearch && star == state.stars.end()) {
         const bool wormhole = player && std::any_of(player->wormholeKnowledge.begin(), player->wormholeKnowledge.end(),
             [&](const auto& end) { return !end.collapsed && distance_between(end.lastPosition, destination) <= 10 + epsilon; });
-        if (!wormhole) return "Field research requires a system or a reported wormhole within 10 ly.";
+        const bool object=player && std::any_of(player->objectKnowledge.begin(),player->objectKnowledge.end(),
+            [&](const auto& x){return distance_between(x.position,destination)<=20+1e-6;});
+        if (!wormhole && !object) return "Field research requires a system, reported wormhole within 10 ly, or unknown-object area within 20 ly.";
     }
     if (*task == FleetTask::Salvage) {
         const bool wreck = player && std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(),
@@ -435,6 +442,7 @@ void run_strategic_tasks(GameState& state, std::uint64_t turn)
             for (const auto& wh : state.wormholes) for (const auto& end : wh.endpoints)
                 if (distance_between(end.position, fleet->position) <= 10)
                     science_once(state, *fleet, (3ULL<<32)|end.id, end.position, 0, ResearchField::Propulsion, 24, turn);
+            research_unknown_objects(state,*fleet,turn);
         } else if (fleet->task == FleetTask::Salvage) {
             const auto wreck = std::min_element(state.wrecks.begin(), state.wrecks.end(), [&](const auto& a, const auto& b) {
                 const double da = distance_between(a.position, fleet->position), db = distance_between(b.position, fleet->position);

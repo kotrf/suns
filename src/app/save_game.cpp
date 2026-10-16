@@ -7,6 +7,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/unknown_objects.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -25,7 +26,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 78;
+constexpr quint32 kSaveFormatVersion = 79;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -1001,7 +1002,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1275,7 +1276,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
             quint32 planet{};
             stream >> id >> observedTurn;
             if (!readEnum(stream, marker.kind,
-                    static_cast<quint8>(gReadSaveFormatVersion >= 78 ? HistoryMilestoneKind::ContaminationCleanup : gReadSaveFormatVersion >= 77 ? HistoryMilestoneKind::Reconstruction : gReadSaveFormatVersion >= 66 ? HistoryMilestoneKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 64 ? HistoryMilestoneKind::MineStrike : gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
+                    static_cast<quint8>(gReadSaveFormatVersion >= 79 ? HistoryMilestoneKind::UnknownObjectStudied : gReadSaveFormatVersion >= 78 ? HistoryMilestoneKind::ContaminationCleanup : gReadSaveFormatVersion >= 77 ? HistoryMilestoneKind::Reconstruction : gReadSaveFormatVersion >= 66 ? HistoryMilestoneKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 64 ? HistoryMilestoneKind::MineStrike : gReadSaveFormatVersion >= 61 ? HistoryMilestoneKind::SpaceBattle : gReadSaveFormatVersion >= 44
                         ? gReadSaveFormatVersion >= 51
                             ? HistoryMilestoneKind::GroundDefenseWon
                             : HistoryMilestoneKind::FleetStalledForFuel
@@ -1300,7 +1301,7 @@ void readEmpireTurnStatistics(QDataStream& stream, EmpireTurnStatistics& value)
                 || marker.kind == HistoryMilestoneKind::SpaceBattle
                 || marker.kind == HistoryMilestoneKind::MineStrike;
             if (marker.eventId == 0 || marker.observedTurn > value.turn
-                || (marker.kind == HistoryMilestoneKind::ResearchCompleted
+                || (marker.kind==HistoryMilestoneKind::UnknownObjectReported || marker.kind==HistoryMilestoneKind::UnknownObjectStudied ? false : marker.kind == HistoryMilestoneKind::ResearchCompleted
                     ? marker.technologyLevel == 0
                     : fleetEvent ? (marker.fleet == 0 && (marker.kind != HistoryMilestoneKind::SpaceBattle || marker.planet == 0)) : marker.planet == 0)
                 || std::any_of(value.milestones.begin(), value.milestones.end(), [&](const auto& other) {
@@ -1597,7 +1598,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -2270,6 +2271,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 
 #include "recon_save.inc"
 #include "computer_save.inc"
+#include "unknown_objects_save.inc"
 #include "strategic_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
@@ -3146,6 +3148,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
     }
+    if(version<79 && loaded.mode!=SessionMode::PlayerTurn) generate_unknown_objects(loaded.state);
     if (loaded.pendingDescriptions.size() != static_cast<qsizetype>(loaded.pendingOrders.orders.size())) {
         errorMessage = "The Suns! save file has an inconsistent planning-order section.";
         return false;

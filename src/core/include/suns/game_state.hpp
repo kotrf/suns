@@ -16,6 +16,10 @@ using FleetId = std::uint32_t;
 using ShipDesignId = std::uint32_t;
 using OrbitalStationId = std::uint32_t;
 using WormholeEndpointId = std::uint32_t;
+using UnknownObjectId = std::uint32_t;
+
+enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant };
+enum class ObjectKnowledgeLevel : std::uint8_t { Detected, Classified, Studied };
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
 inline constexpr std::uint32_t kFactoryCost = 6;
@@ -58,6 +62,7 @@ inline constexpr double kFleetEncounterRadius = 0.01;
 struct Position {
     double x{};
     double y{};
+    bool operator==(const Position&) const = default;
 };
 
 struct FleetEncounterGeometry {
@@ -525,6 +530,23 @@ struct PlanetWarDamage {
 [[nodiscard]] constexpr bool recovery_kind(ProductionKind kind)
 { return reconstruction_kind(kind) || kind==ProductionKind::CleanupContamination; }
 
+// Physical landmarks; withheld entirely from player exports.
+struct UnknownObject {
+    UnknownObjectId id{};
+    Position position;
+    UnknownObjectKind kind{UnknownObjectKind::AncientProbe};
+};
+
+struct ObjectObservation {
+    UnknownObjectId id{};
+    Position position;
+    double uncertainty{};
+    ObjectKnowledgeLevel level{ObjectKnowledgeLevel::Detected};
+    std::optional<UnknownObjectKind> kind;
+    std::uint64_t observedTurn{}, receivedTurn{};
+    bool operator==(const ObjectObservation&) const = default;
+};
+
 // Immutable evidence, not a copy of another empire's physical planet state.
 struct PlanetAftermathObservation {
     PlanetId planet{};
@@ -653,6 +675,7 @@ enum class PlayerReportKind {
     EnemyFleetReclassified,
     SensorInterferenceChanged,
     PlanetaryAftermath,
+    UnknownObjectObserved,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -769,6 +792,7 @@ struct PendingPlayerReport {
     FleetId transmissionFleet{};
     std::optional<EmissionObservation> emission;
     std::optional<PlanetAftermathObservation> aftermath;
+    std::optional<ObjectObservation> objectObservation;
 };
 
 struct TechnologyState {
@@ -880,6 +904,8 @@ enum class HistoryMilestoneKind : std::uint8_t {
     Reconstruction,
     PlanetaryAftermath,
     ContaminationCleanup,
+    UnknownObjectReported,
+    UnknownObjectStudied,
 };
 
 [[nodiscard]] inline std::optional<OperationalLossKind> milestone_loss_kind(HistoryMilestoneKind kind)
@@ -903,6 +929,7 @@ struct HistoryMilestone {
     ResearchField researchField{ResearchField::Electronics};
     std::uint8_t technologyLevel{};
     FleetId fleet{};
+    UnknownObjectId object{};
 };
 
 // Totals from immutable space-battle reports received at this boundary.
@@ -1026,13 +1053,13 @@ inline constexpr std::size_t kMaximumComputerDecisionReasonBytes = 240;
 inline constexpr std::size_t kMaximumComputerFleetGoals = 128;
 
 enum class ComputerFleetGoalKind : std::uint8_t {
-    Survey, Colonize, Resupply, Gather, Defend, Raid, Bombard, Invade
+    Survey, Colonize, Resupply, Gather, Defend, Raid, Bombard, Invade, InvestigateObject
 };
 
 struct ComputerFleetGoal {
     FleetId fleet{};
     ComputerFleetGoalKind kind{ComputerFleetGoalKind::Survey};
-    StarId target{};
+    StarId target{}; // An UnknownObjectId for InvestigateObject; otherwise a StarId.
     std::uint64_t issuedTurn{};
     // Earliest retry after a command and its acknowledgement can make the trip.
     // This is an estimate from received knowledge, never a host packet deadline.
@@ -1097,6 +1124,7 @@ struct Player {
     PlayerController controller{PlayerController::Human};
     ComputerState computer;
     std::vector<PlanetAftermathObservation> planetaryAftermath;
+    std::vector<ObjectObservation> objectKnowledge;
 };
 
 enum class FleetRole {
@@ -1335,6 +1363,8 @@ struct WormholeTransit {
 struct GameState {
     std::uint64_t turn{1};
     std::uint64_t galaxySeed{};
+    UnknownObjectId nextUnknownObjectId{1};
+    std::vector<UnknownObject> unknownObjects;
     FleetId nextFleetId{1};
     ShipDesignId nextShipDesignId{kFirstCustomShipDesignId};
     OrbitalStationId nextOrbitalStationId{1};

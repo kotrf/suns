@@ -183,6 +183,8 @@ public:
     void installEmpireHistory();
     void installWormholes();
     bool queueWormholeApproach(WormholeEndpointId endpoint, bool enter);
+    void installUnknownObjects();
+    bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 
     // Ordered colony build list with completion forecasts and move controls.
     void installProductionQueue();
@@ -251,6 +253,8 @@ private:
     void refreshEmpireHistory();
     void refreshWormholes();
     void renderKnownWormholes();
+    void refreshUnknownObjects();
+    void renderKnownUnknownObjects();
     void queueResearchPlan();
     void queueResearchAllocation(int percent);
     void addResearchPlanItem();

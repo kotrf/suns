@@ -65,12 +65,29 @@ void readAftermathObservation(QDataStream& s,PlanetAftermathObservation& x)
     x.minesMinimum=mmin; x.minesMaximum=mmax; x.exact=exact;
     if(exact>1 || !aftermath_observation_valid(x)) markCorrupt(s);
 }
+void writeObjectObservation(QDataStream& s,const ObjectObservation& x)
+{
+    s << quint32(x.id); writePosition(s,x.position);
+    s << x.uncertainty << quint8(x.level) << quint8(x.kind.has_value());
+    if(x.kind) s << quint8(*x.kind);
+    s << quint64(x.observedTurn) << quint64(x.receivedTurn);
+}
+void readObjectObservation(QDataStream& s,ObjectObservation& x)
+{
+    quint8 level{},present{},kind{}; quint64 observed{},received{};
+    s >> x.id; readPosition(s,x.position); s >> x.uncertainty >> level >> present;
+    if(present>1) { markCorrupt(s); return; }
+    if(present) { s >> kind; x.kind=UnknownObjectKind(kind); }
+    s >> observed >> received; x.level=ObjectKnowledgeLevel(level); x.observedTurn=observed; x.receivedTurn=received;
+    if(!object_observation_valid(x)) markCorrupt(s);
+}
 template<class T> void writeReconEvidence(QDataStream& s,const T& x)
 {
     s << quint8(x.contact.has_value()); if(x.contact) writeReconContact(s,*x.contact);
     s << quint8(x.sensorStatus.has_value()); if(x.sensorStatus) writeSensorStatus(s,*x.sensorStatus);
     writeEmissionObservation(s,x.emission);
     s << quint8(x.aftermath.has_value()); if(x.aftermath) writeAftermathObservation(s,*x.aftermath);
+    s << quint8(x.objectObservation.has_value()); if(x.objectObservation) writeObjectObservation(s,*x.objectObservation);
 }
 bool reconEvidenceMatches(const PendingPlayerReport& x)
 {
@@ -119,6 +136,21 @@ template<class T> void readReconEvidence(QDataStream& s,T& x)
             else if(a.receivedTurn!=x.turn) markCorrupt(s);
         }
         if(x.kind==decltype(x.kind)::PlanetaryAftermath && !x.aftermath) markCorrupt(s);
+    }
+    if(gReadSaveFormatVersion>=79) {
+        quint8 present{}; s >> present;
+        if(present>1) { markCorrupt(s); return; }
+        if(present) {
+            ObjectObservation o; readObjectObservation(s,o); x.objectObservation=o;
+            if(o.observedTurn!=x.observedTurn || x.aftermath || x.contact || x.sensorStatus || x.emission
+                || (x.kind!=decltype(x.kind)::UnknownObjectObserved && x.kind!=decltype(x.kind)::ScientificData)
+                || ((o.level==ObjectKnowledgeLevel::Studied)!=(x.kind==decltype(x.kind)::ScientificData))) markCorrupt(s);
+            if(x.kind==decltype(x.kind)::ScientificData && (!o.kind || x.quantity!=unknown_object_research_points(*o.kind)
+                || x.researchField!=unknown_object_research_field(*o.kind))) markCorrupt(s);
+            if constexpr(std::is_same_v<T,PendingPlayerReport>) { if(o.receivedTurn) markCorrupt(s); }
+            else if(o.receivedTurn!=x.turn || !same_position(o.position,x.position)) markCorrupt(s);
+        }
+        if(x.kind==decltype(x.kind)::UnknownObjectObserved && !x.objectObservation) markCorrupt(s);
     }
     if(!reconEvidenceMatches(x)) markCorrupt(s);
 }

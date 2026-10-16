@@ -1,6 +1,24 @@
 # Project status and development handoff
 
-## Current implementation — 16 October 2026: contamination and dated aftermath
+## Current implementation — 16 October 2026: unknown objects and expeditions
+
+Main baseline is PR #210 (`b80ee47`), contamination/cleanup and dated aftermath;
+its branch and post-merge main CI passed 62/62. Earlier interception #208,
+reconstruction #209 and colony plans #207/#201 are also complete.
+
+This change adds two linked slices: [persistent unknown objects](unknown-objects.md)
+with uncertain detection and delayed classification (#55), and explicit finite
+Field research expeditions (#59). A received-object journal offers ordinary
+Fly / Fly and study routes; computer empires use the same received targets,
+fuel/command constraints and research rewards. Discovery and study History follow
+the receipt year. Raw hidden objects and pending evidence never reach player files.
+Save v79 / orders v27. Validation evidence belongs to the implementation PR.
+
+Moving anomalies, physical sample cargo, unique artifacts, observation prerequisites,
+biosphere/scorched-earth systems and advanced SIGINT remain later work. Older
+checkpoints below are historical; do not restart completed functionality.
+
+## Historical checkpoint — 16 October 2026: contamination and dated aftermath
 
 Main baseline is #208 physical fast/slow interception and #209 persistent ruins /
 paid reconstruction, both automatically merged. Their merged main `f7848b0`

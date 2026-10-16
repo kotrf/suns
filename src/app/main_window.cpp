@@ -904,6 +904,7 @@ void MainWindow::rebuildScene()
     }
 
     renderKnownWormholes();
+    renderKnownUnknownObjects();
     renderStrategicObjects();
     // New markers must already use the active mode before selection/labels
     // see them; the scene-changed timer is too late after a redraw.

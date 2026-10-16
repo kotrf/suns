@@ -242,6 +242,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     writeEmissionPulses(out,state);
     writePlanetWarDamage(out,state);
     writePlanetaryRecovery(out,state);
+    writeUnknownObjects(out,state);
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
 }
@@ -280,7 +281,7 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
             || !readCount(in, count)) { markCorrupt(stream); return; }
         for (quint32 n = 0; n < count; ++n) {
             quint64 key{}, delivery{}; in >> key >> delivery;
-            if ((key >> 32) < 1 || (key >> 32) > 4 || std::any_of(p.fieldScience.begin(), p.fieldScience.end(),
+            if ((key >> 32) < 1 || (key >> 32) > (gReadSaveFormatVersion>=79 ? 5U : 4U) || std::any_of(p.fieldScience.begin(), p.fieldScience.end(),
                 [&](const auto& r) { return r.key == key; })) { markCorrupt(stream); return; }
             p.fieldScience.push_back({key, delivery});
         }
@@ -413,5 +414,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
     if (gReadSaveFormatVersion >= 76) readEmissionPulses(in,state);
     if (gReadSaveFormatVersion >= 77) readPlanetWarDamage(in,state);
     if (gReadSaveFormatVersion >= 78) readPlanetaryRecovery(in,state);
+    if (gReadSaveFormatVersion >= 79) readUnknownObjects(in,state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }
