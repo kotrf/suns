@@ -760,7 +760,7 @@ void population_migration_and_clear_orders()
         const auto actionMarker = QByteArray::fromHex("0100000000000000640000000000");
         const auto actionPosition = bytes.indexOf(actionMarker);
         assert(actionPosition >= 0 && bytes.indexOf(actionMarker, actionPosition + 1) < 0);
-        bytes.remove(actionPosition + 10, 4);
+        bytes.remove(actionPosition + 10, 5); // WH endpoint and v75 optional-plan presence.
         QByteArray whMarker;
         QDataStream whStream(&whMarker, QIODevice::WriteOnly);
         whStream << quint32{1} << legacy.state.wormholeRules.width << legacy.state.wormholeRules.height;
@@ -992,7 +992,7 @@ void pre_wormhole_formats_remain_readable()
         shape << quint8{0} << quint64{1094} << quint8{0} << quint32{0};
         const auto offset = bytes.indexOf(marker);
         assert(offset >= 0 && bytes.indexOf(marker, offset + 1) < 0);
-        bytes.remove(offset + 10, 4);
+        bytes.remove(offset + 10, 5); // WH endpoint and v75 optional-plan presence.
         assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size() && file.seek(4));
         QDataStream header(&file);
         header << quint32{11};

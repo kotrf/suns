@@ -65,6 +65,7 @@ int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
     suns::MainWindow window;
+    window.installUiPolish();
     suns::MainWindowTestAccess::install(window);
     window.show(); settle();
     assert(window.colonyTemplatesForOrders().empty());
