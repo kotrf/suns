@@ -1922,6 +1922,7 @@ void emission_pulses_and_dated_reports_round_trip()
 {
     QTemporaryDir dir; QString error;
     SaveGameData save; save.campaignId=81; save.turnToken=82; save.pendingOrders={1,{}};
+    save.mode=SessionMode::Host; save.playerTokens={{1,82},{2,83}};
     auto& state=save.state; state.turn=10; state.players={{1,"Receiver"},{2,"Sender"}};
     state.stars={{1,"Home",{0,0}},{2,"Far",{1000,0}}};
     for(auto id:{1U,2U}) {
