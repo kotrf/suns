@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
 
@@ -201,7 +202,7 @@ void MainWindow::refreshFleetSummary()
             route += QString(" • W%1").arg(fleet.warp);
             if (fleet.targetFleet == 0) route += QString(" • ETA %1").arg(fleet_eta(fleet));
             if (!fleet.waypointQueue.empty()) route += QString(" • +%1 legs").arg(fleet.waypointQueue.size());
-        } else route = fleet.task == FleetTask::RemoteMining ? "Remote mining" : "Idle";
+        } else route = QString::fromStdString(fleet_task_name(fleet.task));
         if (queuedRoute) route.prepend("Queued: ");
         const auto age = fleet_telemetry_age(state_, fleet);
         const auto comms = awaitingWormholeReport ? QString("Last contact • %1 yr old").arg(age)

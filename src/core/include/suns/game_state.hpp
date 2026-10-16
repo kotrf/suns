@@ -1072,7 +1072,32 @@ enum class FleetArrivalActionKind {
     RemoteMining,
     MergeWithFleet,
     EnterWormhole,
+    LayMinefields,
+    SweepMinefields,
+    BombardColony,
+    FieldResearch,
+    RecoverWreckage,
 };
+
+// Persistent work belongs to the final waypoint and starts autonomously there.
+[[nodiscard]] constexpr std::optional<FleetTask> arrival_work_task(FleetArrivalActionKind kind)
+{
+    switch (kind) {
+    case FleetArrivalActionKind::RemoteMining: return FleetTask::RemoteMining;
+    case FleetArrivalActionKind::LayMinefields: return FleetTask::LayMines;
+    case FleetArrivalActionKind::SweepMinefields: return FleetTask::SweepMines;
+    case FleetArrivalActionKind::BombardColony: return FleetTask::Bombardment;
+    case FleetArrivalActionKind::FieldResearch: return FleetTask::FieldResearch;
+    case FleetArrivalActionKind::RecoverWreckage: return FleetTask::Salvage;
+    default: return std::nullopt;
+    }
+}
+
+[[nodiscard]] constexpr bool terminal_arrival_action(FleetArrivalActionKind kind)
+{
+    return arrival_work_task(kind).has_value() || kind == FleetArrivalActionKind::Colonize
+        || kind == FleetArrivalActionKind::MergeWithFleet || kind == FleetArrivalActionKind::EnterWormhole;
+}
 
 enum class FleetCargoKind {
     Colonists,

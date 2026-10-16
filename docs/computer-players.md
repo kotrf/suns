@@ -1,5 +1,13 @@
 # Computer empires: controller integration
 
+Current implementation includes all three initial phases of #184, delivered in
+PR #188/#189/#190: controller integration, civilian expansion and military
+behavior. The detailed controller foundation below is the original step-1
+checkpoint. Computer bombers now program **Bombard enemy colony** on their raid
+waypoint using ordinary MoveFleetOrder, so arrival can begin work without a
+second command from headquarters. Received ownership, equipment, combat and
+emission rules are shared with humans; the arrival order grants no hidden data.
+
 This is step 1 of [#184](https://github.com/kotrf/suns/issues/184). It connects
 computer empires to the ordinary campaign turn. Independent scouting,
 colonization, production planning and military behavior are subsequent steps.

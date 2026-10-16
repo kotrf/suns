@@ -32,9 +32,9 @@ unload or colonize, and surviving combatants interrupt their route. See
 [combat turn order](space-combat.md). Loading, unloading, refuelling and
 colony-side effects complete before the next leg consumes fuel.
 
-Most current tasks are one-shot. `Remote Mining` is persistent and terminal: it can appear only on the final waypoint, becomes active on arrival, starts extraction on the following turn and remains active until a replacement route or `No Task` command is delivered. `Merge with fleet` is also terminal because the pursuing FleetId is consumed when the rendezvous succeeds. Clearing a stationary fleet's route is the current `No Task` operation.
+Logistics tasks are one-shot. Remote Mining, Lay minefields, Sweep hostile mines, Bombard enemy colony, Field research and Recover wreckage are persistent and terminal: they can appear only on the final waypoint, become active locally on arrival and remain assigned until a replacement route or Stop command is delivered. Remote Mining extracts from the following turn; the other jobs use their normal post-movement/combat phase in the arrival year. Work never changes emission settings. A stationary fleet can use Start work here with the same selector and ordinary route order, without a selected system. `Merge with fleet` is also terminal because the pursuing FleetId is consumed when the rendezvous succeeds. Clearing a stationary fleet's route is the current `No Task` operation.
 
-`Repeat Orders` is a flag on the complete program. After its final arrival, the fleet restores the original waypoint list and promotes its first leg; movement still waits until the following turn. A repeating program requires at least two distinct destinations. `Colonize`, `Remote Mining` and `Merge with fleet` are rejected in repeating programs because colonization or merging dismantles the fleet while remote mining intentionally remains active until cancelled.
+`Repeat Orders` is a flag on the complete program. After its final arrival, the fleet restores the original waypoint list and promotes its first leg; movement still waits until the following turn. A repeating program requires at least two distinct destinations. `Colonize`, all persistent work, `Merge with fleet` and wormhole entry are rejected in repeating programs. Persistent work intentionally remains assigned until cancelled; consumptive actions cannot cycle.
 
 Moving-target turn resolution and rendezvous semantics are specified in [Moving fleet targets](moving-fleet-targets.md).
 
@@ -60,7 +60,7 @@ Plotting a new direct course replaces both the active leg and all queued future 
 
 ## Route editor
 
-The route dock presents the active leg and future waypoints in a single queue with destination, Warp and arrival-action columns. Move up, Move down and Remove replace the selected fleet's complete pending program. The first leg can be moved or removed. Colonization, remote mining and merge must remain terminal. Removing points disables repetition if fewer than two distinct destinations remain. Remote edits still obey command-delivery delay. A separate Route forecast dialog contains detailed fuel, damage and arrival predictions.
+The route dock presents the active leg and future waypoints in a single queue with destination, Warp and arrival-action columns. Move up, Move down and Remove replace the selected fleet's complete pending program. The first leg can be moved or removed. Colonization, all persistent work, merge and wormhole entry must remain terminal. Removing points disables repetition if fewer than two distinct destinations remain. Remote edits still obey command-delivery delay. A separate Route forecast dialog contains detailed fuel, damage and arrival predictions.
 
 ## Future work
 
@@ -106,3 +106,12 @@ current Warp, cargo and arrival-action settings. A fleet target defaults to
 Merge; an enemy fleet uses No action and its observed position. Use the
 Destination combo and choose No action before Add when the intent is a friendly
 rendezvous/pursuit without merging.
+
+## Waypoint work persistence
+
+Save v74 / orders v24 retain each leg's work in delayed route programs and
+immutable telemetry. Equipment is checked at planning/delivery; work starts
+autonomously on arrival. Target ownership/remaining objectives are checked
+locally at execution. Planning errors use received enemy/world/wreck evidence,
+not unreached physical objects. Route forecasts describe work installation,
+without predicting hidden bombing, science or salvage outcomes.

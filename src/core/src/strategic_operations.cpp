@@ -173,10 +173,11 @@ std::string fleet_task_name(FleetTask task)
     }
     return "Unknown task";
 }
-bool strategic_task_available(const GameState& state, const Fleet& fleet, FleetTask task)
+bool fleet_task_equipment_available(const GameState& state, const Fleet& fleet, FleetTask task)
 {
     if (task == FleetTask::None) return true;
-    if (fleet.destination || fleet.targetFleet || !fleet.waypointQueue.empty() || fleet.damagePercent >= 100) return false;
+    if (fleet.damagePercent >= 100) return false;
+    if (task == FleetTask::RemoteMining) return fleet_can_remote_mine(state, fleet);
     bool bombs = false, miners = false, beams = false;
     components(state, fleet, [&](const auto& s, auto) {
         bombs |= s.kind == ShipComponentKind::Bomb;
@@ -191,6 +192,51 @@ bool strategic_task_available(const GameState& state, const Fleet& fleet, FleetT
     case FleetTask::Salvage: return fleet_has_scanner(state, fleet) && fleet_cargo_capacity(state, fleet) > 0;
     default: return false;
     }
+}
+
+bool strategic_task_available(const GameState& state, const Fleet& fleet, FleetTask task)
+{
+    return task == FleetTask::None || (!fleet.destination && !fleet.targetFleet
+        && fleet.waypointQueue.empty() && fleet_task_equipment_available(state, fleet, task));
+}
+
+std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, Position destination,
+    FleetArrivalActionKind action)
+{
+    const auto task = arrival_work_task(action);
+    if (!task) return {};
+    if (!fleet_task_equipment_available(state, fleet, *task)) {
+        switch (*task) {
+        case FleetTask::LayMines: return "Lay minefields requires fitted mine-laying equipment.";
+        case FleetTask::SweepMines: return "Sweeping requires fitted beam weapons.";
+        case FleetTask::Bombardment: return "Bombardment requires fitted bombs.";
+        case FleetTask::FieldResearch: return "Field research requires a scanner.";
+        case FleetTask::Salvage: return "Wreck recovery requires a scanner and cargo capacity.";
+        case FleetTask::RemoteMining: return "Remote Mining requires a mining fleet.";
+        default: return "The fleet cannot perform this work.";
+        }
+    }
+    const auto star = std::find_if(state.stars.begin(), state.stars.end(),
+        [&](const auto& s) { return same_position(s.position, destination); });
+    const auto* player = find_player(state, fleet.owner);
+    if (*task == FleetTask::Bombardment) {
+        const auto* planet = star != state.stars.end() ? find_planet_at_star(state, star->id) : nullptr;
+        const auto owner = planet ? known_planet_owner(state, fleet.owner, planet->id) : std::nullopt;
+        if (!owner || *owner == 0 || *owner == fleet.owner)
+            return "Bombardment requires a known enemy colony at the waypoint.";
+    }
+    if (*task == FleetTask::FieldResearch && star == state.stars.end()) {
+        const bool wormhole = player && std::any_of(player->wormholeKnowledge.begin(), player->wormholeKnowledge.end(),
+            [&](const auto& end) { return !end.collapsed && distance_between(end.lastPosition, destination) <= 10 + epsilon; });
+        if (!wormhole) return "Field research requires a system or a reported wormhole within 10 ly.";
+    }
+    if (*task == FleetTask::Salvage) {
+        const bool wreck = player && std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(),
+            [&](const auto& object) { return object.type == StrategicObjectKind::Wreck && object.deliveryTurn <= state.turn
+                && distance_between(object.position, destination) <= 10 + epsilon; });
+        if (!wreck) return "Wreck recovery requires reported wreckage within 10 ly of the waypoint.";
+    }
+    return {};
 }
 
 void resolve_bombardments(GameState& state, std::uint64_t turn)

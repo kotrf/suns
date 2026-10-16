@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QTableWidget>
+#include <QTreeWidget>
 #include <QDialog>
 #include <QComboBox>
 #include <QLabel>
@@ -140,20 +141,65 @@ int main(int argc,char** argv)
     assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size()); file.close();
     assert(!read_save_game_file(path,rejected,error));
 
+    for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
+             FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage}) {
+        SaveGameData work; work.campaignId=1; work.turnToken=1; work.state=make_demo_game();
+        auto& carrier=work.state.fleets.front(); carrier.destination=Position{32,0};
+        carrier.waypointQueue={{{64,0},4,{kind}}};
+        carrier.telemetry.destination=carrier.destination; carrier.telemetry.waypointQueue=carrier.waypointQueue;
+        carrier.telemetryInTransit.push_back({work.state.turn+2,carrier.telemetry});
+        carrier.pendingCommands.push_back({work.state.turn,work.state.turn+2,{{16,0},4,{},{{{64,0},4,{kind}}}}});
+        MoveFleetOrder route{carrier.id,{16,0},4,{},{{{64,0},4,{kind}}}};
+        work.pendingOrders={1,{route}}; work.pendingDescriptions={"Waypoint work"};
+        const auto save=dir.filePath("work.suns");
+        assert(write_save_game_file(save,work,error)); SaveGameData roundtrip;
+        assert(read_save_game_file(save,roundtrip,error));
+        const auto& restored=roundtrip.state.fleets.front();
+        assert(restored.waypointQueue.back().arrivalAction.kind==kind);
+        assert(restored.telemetry.waypointQueue.back().arrivalAction.kind==kind);
+        assert(restored.telemetryInTransit.back().telemetry.waypointQueue.back().arrivalAction.kind==kind);
+        assert(restored.pendingCommands.back().program.queuedWaypoints.back().arrivalAction.kind==kind);
+        assert(std::get<MoveFleetOrder>(roundtrip.pendingOrders.orders.front()).queuedWaypoints.back().arrivalAction.kind==kind);
+        TurnOrderFileData packet{1,work.state.turn,1,work.pendingOrders,work.pendingDescriptions}, received;
+        const auto orders=dir.filePath("work.orders");
+        assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,received,error));
+        assert(std::get<MoveFleetOrder>(received.orders.orders.front()).queuedWaypoints.back().arrivalAction.kind==kind);
+        auto exported=make_player_turn(work,1);
+        assert(write_save_game_file(save,exported,error) && read_save_game_file(save,roundtrip,error));
+        assert(roundtrip.state.fleets.front().telemetry.waypointQueue.back().arrivalAction.kind==kind);
+        // A persistent intermediate waypoint must not enter saves or PBEM orders.
+        carrier.arrivalAction=FleetArrivalAction{kind};
+        assert(write_save_game_file(save,work,error) && !read_save_game_file(save,roundtrip,error));
+        auto& invalidRoute=std::get<MoveFleetOrder>(packet.orders.orders.front()); invalidRoute.arrivalAction={kind};
+        assert(write_turn_order_file(orders,packet,error) && !read_turn_order_file(orders,received,error));
+    }
+
     MainWindow window; window.installDeferredMapSelectionHandler(); attachRouteProgramDock(window);
     window.installUiPolish(); window.installFleetReadabilityPolish(); window.installPanelLayoutFixes();
     MainWindowTestAccess::install(window,make_demo_game()); window.installStrategicOperations(); window.show(); settle();
-    auto* task = window.findChild<QComboBox*>("strategicTaskCombo");
-    auto* assign = window.findChild<QPushButton*>("assignStrategicTask");
+    assert(!window.findChild<QComboBox*>("strategicTaskCombo"));
+    assert(!window.findChild<QPushButton*>("assignStrategicTask"));
+    auto* action = window.findChild<QComboBox*>("routeArrivalActionCombo");
+    auto* add = window.findChild<QPushButton*>("routeAddButton");
     auto* mode = window.findChild<QComboBox*>("fleetEmissionModeCombo");
     auto* setMode = window.findChild<QPushButton*>("setFleetEmissionMode");
-    assert(task && assign && mode && setMode);
-    task->setCurrentIndex(task->findData(int(FleetTask::FieldResearch))); settle(); assert(assign->isEnabled()); assign->click();
+    auto* stop = window.findChild<QPushButton*>("routeStopButton");
+    assert(action && add && mode && setMode && stop);
+    for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
+             FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage})
+        assert(action->findData(int(kind))>=0);
+    assert(window.selectWorkspaceObject(1,1)); settle();
+    action->setCurrentIndex(action->findData(int(FleetArrivalActionKind::FieldResearch))); settle();
+    assert(add->isEnabled()); add->click(); settle();
     mode->setCurrentIndex(2); settle(); setMode->click();
     const auto& pending = MainWindowTestAccess::orders(window);
-    assert(std::any_of(pending.orders.begin(),pending.orders.end(),[](const auto& o) { return std::holds_alternative<SetFleetTaskOrder>(o); }));
+    assert(std::any_of(pending.orders.begin(),pending.orders.end(),[](const auto& o) {
+        const auto* route=std::get_if<MoveFleetOrder>(&o);
+        return route && route->arrivalAction.kind==FleetArrivalActionKind::FieldResearch;
+    }));
     assert(std::any_of(pending.orders.begin(),pending.orders.end(),[](const auto& o) { return std::holds_alternative<SetFleetElectronicsOrder>(o); }));
-    task->setCurrentIndex(task->findData(int(FleetTask::Bombardment))); settle(); assert(!assign->isEnabled());
+    assert(!window.setSelectedFleetRouteProgramLegAction(0,{FleetArrivalActionKind::BombardColony}));
+    assert(window.selectedFleetRouteProgramLegAction(0)->kind==FleetArrivalActionKind::FieldResearch);
     window.installTurnMessages();
     auto* messages = window.findChild<QListWidget*>("turnMessagesList");
     auto* messageBody = window.findChild<QTextBrowser*>("turnMessageBody");
@@ -208,7 +254,7 @@ int main(int argc,char** argv)
     MainWindowTestAccess::messages(window,{contact}); messages->setCurrentRow(0); settle();
     assert(messageBody->toPlainText().contains("Mass estimate: 150–250 kt") && messageBody->toPlainText().contains("Last position seen in year 3"));
     dialog->hide();
-    // A selected Standard draft and an Idle mission cannot masquerade as a
+    // A selected Standard draft and a stop order cannot masquerade as a
     // received command cancelling a silent radio.
     auto silent=make_demo_game(); silent.turn=5;
     silent.fleets.front().position={100,0};
@@ -218,14 +264,55 @@ int main(int argc,char** argv)
     MainWindowTestAccess::install(window,silent); settle();
     auto* missionSummary=window.findChild<QLabel*>("strategicMissionSummary"); assert(missionSummary);
     assert(mode->currentIndex()==2 && missionSummary->text().contains("Emissions: Radio silence"));
-    mode->setCurrentIndex(0); task->setCurrentIndex(task->findData(int(FleetTask::None))); settle();
+    mode->setCurrentIndex(0); settle();
     assert(missionSummary->text().contains("selection is a draft"));
-    assert(missionSummary->text().contains("Idle changes only the mission"));
-    assign->click(); settle();
+    assert(missionSummary->text().contains("Stop cancels work and travel"));
+    stop->click(); settle();
     assert(MainWindowTestAccess::orders(window).orders.size()==1
-        && std::holds_alternative<SetFleetTaskOrder>(MainWindowTestAccess::orders(window).orders.front()));
+        && std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front()).clearRoute);
     setMode->click(); settle();
     assert(missionSummary->text().contains("Queued emission order: Standard"));
     assert(missionSummary->text().contains("Emissions: Radio silence"));
+    // Every work type edits only its selected terminal leg, with emissions separate.
+    auto supported=make_demo_game();
+    auto& design=supported.shipDesigns.front();
+    design.components.insert(design.components.end(),{ShipComponentType::MineDispenser50,
+        ShipComponentType::Laser,ShipComponentType::LadyFingerBomb,ShipComponentType::CargoPod});
+    supported.players.push_back({2,"Other"}); supported.planets[1].owner=2; supported.planets[1].population=10000;
+    set_survey_level(supported,1,supported.stars[1].id,SurveyLevel::OrbitalSurvey,supported.turn);
+    supported.players[0].strategicIntel={{1,StrategicObjectKind::Wreck,supported.stars[1].position,10,0,
+        supported.turn,supported.turn,20,0}};
+    for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
+             FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage}) {
+        MainWindowTestAccess::install(window,supported); settle();
+        assert(window.selectWorkspaceObject(1,supported.stars[0].id));
+        assert(window.appendSelectedStarWaypoint(4,{}));
+        assert(window.selectWorkspaceObject(1,supported.stars[1].id));
+        assert(window.appendSelectedStarWaypoint(4,{kind})); settle();
+        assert(window.selectedFleetRouteProgramLegAction(0)->kind==FleetArrivalActionKind::None);
+        assert(window.selectedFleetRouteProgramLegAction(1)->kind==kind);
+        assert(!window.setSelectedFleetRouteProgramLegAction(0,{kind}));
+        assert(window.selectedFleetRouteProgramLegAction(0)->kind==FleetArrivalActionKind::None);
+        assert(!window.appendSelectedStarWaypoint(4,{}));
+        assert(!window.setSelectedFleetRepeatOrdersForRouteProgram(true));
+        auto* routeTree=window.findChild<QTreeWidget*>("routeProgramQueue"); assert(routeTree);
+        routeTree->setCurrentItem(routeTree->topLevelItem(1)); settle();
+        assert(action->currentData().toInt()==int(kind));
+        assert(window.setSelectedFleetRouteProgramLegAction(1,{}));
+        assert(window.selectedFleetRouteProgramLegAction(0)->kind==FleetArrivalActionKind::None);
+    }
+    auto idle=make_demo_game(); idle.fleets.front().position={200,100};
+    idle.fleets.front().telemetry.position=idle.fleets.front().position;
+    idle.shipDesigns.front().components.push_back(ShipComponentType::MineDispenser50);
+    idle.fleets.front().electronics={EmissionMode::Passive};
+    idle.fleets.front().telemetry.electronics=idle.fleets.front().electronics;
+    MainWindowTestAccess::install(window,idle); settle();
+    auto* here=window.findChild<QPushButton*>("routeWorkHereButton"); assert(here);
+    action->setCurrentIndex(action->findData(int(FleetArrivalActionKind::LayMinefields))); settle();
+    assert(here->isEnabled()); here->click(); settle();
+    const auto& localWork=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front());
+    assert(same_position(localWork.destination,idle.fleets.front().position)
+        && localWork.arrivalAction.kind==FleetArrivalActionKind::LayMinefields);
+    assert(!window.startSelectedFleetWorkHere({FleetArrivalActionKind::LayMinefields}));
     window.close(); settle();
 }

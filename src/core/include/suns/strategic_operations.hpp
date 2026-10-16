@@ -14,6 +14,10 @@ namespace suns {
 [[nodiscard]] bool colony_detects_fleet(const GameState&, const Planet&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] bool detector_detects_fleet(const GameState&, const Fleet&, const Fleet&, std::uint64_t atTurn = 0);
 [[nodiscard]] bool strategic_task_available(const GameState&, const Fleet&, FleetTask);
+// Equipment-only check: a travelling fleet may program work for a later arrival.
+[[nodiscard]] bool fleet_task_equipment_available(const GameState&, const Fleet&, FleetTask);
+// Planning validation uses received target knowledge, never hidden physical objects.
+[[nodiscard]] std::string fleet_work_order_error(const GameState&, const Fleet&, Position, FleetArrivalActionKind);
 [[nodiscard]] std::string fleet_task_name(FleetTask);
 void resolve_bombardments(GameState&, std::uint64_t);
 void advance_minefields(GameState&);

@@ -244,8 +244,116 @@ void field_science_is_finite_delayed_and_real()
     assert(r.state.wrecks.empty() && !event(r,GameEventKind::ScientificData));
 }
 
+void waypoint_work_starts_autonomously_and_persists()
+{
+    auto s = arena({C::MineDispenser50});
+    s.stars = {{1,"Home",{0,0}}, {2,"Far",{600,0}}};
+    Planet home; home.id=1; home.star=1; home.owner=1; home.population=1000;
+    home.homeworld=true; home.radar=PlanetaryRadarLevel::Full; s.planets={home};
+    s.fleets[0].electronics={EmissionMode::RadioSilence,100};
+    MoveFleetOrder route{1,{256,0},8,{},{{{600,0},8,{FleetArrivalActionKind::LayMinefields}}}};
+    s=TurnProcessor{}.process(s,{{1,{route}}});
+    assert(s.fleets[0].task==FleetTask::None && s.minefields.empty());
+    while(s.fleets[0].destination) {
+        assert(s.fleets[0].task==FleetTask::None);
+        s=TurnProcessor{}.process(s,{});
+        assert(s.turn<30);
+    }
+    assert(same_position(s.fleets[0].position,{600,0}));
+    assert(s.fleets[0].task==FleetTask::LayMines && s.minefields.size()==1 && s.minefields[0].mines==50);
+    assert(s.fleets[0].electronics.mode==EmissionMode::RadioSilence);
+    assert(!fleet_has_instant_link(s,s.fleets[0]));
+    s=TurnProcessor{}.process(s,{});
+    assert(s.minefields[0].mines==97.5);
+    // A replacement must first reach the receiver. Work continues meanwhile.
+    const auto requested=s.turn;
+    assert(submit_fleet_route_command(s,1,1,{620,0},4,{},{}));
+    assert(!s.fleets[0].pendingCommands.empty() && s.fleets[0].task==FleetTask::LayMines);
+    const auto delivery=s.fleets[0].pendingCommands.back().deliveryTurn;
+    assert(delivery>requested);
+    while(s.turn<delivery) {
+        s=TurnProcessor{}.process(s,{});
+        assert(s.fleets[0].electronics.mode==EmissionMode::RadioSilence);
+    }
+    assert(s.fleets[0].task==FleetTask::None && s.fleets[0].destination);
+    s=TurnProcessor{}.process(s,{});
+    assert(same_position(s.fleets[0].position,{616,0}));
+    // Stop clears a current task without waking its transmitter.
+    s.fleets[0].position={0,0}; s.fleets[0].destination.reset(); s.fleets[0].task=FleetTask::LayMines;
+    assert(submit_fleet_route_command(s,1,1,{999,0},4,{}, {},false,0,true));
+    assert(s.fleets[0].task==FleetTask::None && !s.fleets[0].destination);
+    assert(s.fleets[0].electronics.mode==EmissionMode::RadioSilence);
+}
+
+void all_waypoint_work_uses_ordinary_task_rules()
+{
+    auto s=arena({C::Laser});
+    s.minefields={{1,2,{16,0},100,0},{2,1,{16,0},100,0}}; s.nextMinefieldId=3;
+    auto r=TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{16,0},4,{FleetArrivalActionKind::SweepMinefields}}}}});
+    assert(r.state.fleets[0].task==FleetTask::SweepMines && r.state.minefields[0].mines<95);
+    assert(r.state.minefields[1].mines==95);
+
+    s=arena({C::LadyFingerBomb}); s.stars={{1,"Enemy",{16,0}}};
+    Planet enemy; enemy.id=1; enemy.star=1; enemy.owner=2; enemy.population=100000; s.planets={enemy};
+    set_survey_level(s,1,1,SurveyLevel::OrbitalSurvey,s.turn);
+    r=TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{16,0},4,{FleetArrivalActionKind::BombardColony}}}}});
+    assert(r.state.fleets[0].task==FleetTask::Bombardment && r.state.planets[0].population<enemy.population);
+    assert(event(r,GameEventKind::Bombardment));
+    // Ownership changed after dispatch: the installed program never bombs a friendly world.
+    s.fleets[0].destination=Position{16,0}; s.fleets[0].warp=4;
+    s.fleets[0].arrivalAction=FleetArrivalAction{FleetArrivalActionKind::BombardColony}; s.planets[0].owner=1;
+    r=TurnProcessor{}.process_with_events(s,{}); assert(!event(r,GameEventKind::Bombardment));
+
+    s=arena(); s.stars={{1,"Study",{16,0}}};
+    r=TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{16,0},4,{FleetArrivalActionKind::FieldResearch}}}}});
+    assert(r.state.fleets[0].task==FleetTask::FieldResearch && event(r,GameEventKind::ScientificData));
+    auto again=TurnProcessor{}.process_with_events(r.state,{}); assert(!event(again,GameEventKind::ScientificData));
+    s.fleets[0].electronics={EmissionMode::Passive};
+    r=TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{16,0},4,{FleetArrivalActionKind::FieldResearch}}}}});
+    assert(r.state.fleets[0].task==FleetTask::FieldResearch && !event(r,GameEventKind::ScientificData));
+    assert(r.state.fleets[0].electronics.mode==EmissionMode::Passive);
+
+    s=arena({C::RhinoScanner},ShipHullType::MediumTransport);
+    s.wrecks={{1,{16,0},20,{0,0,0,0,0,5}}}; s.nextWreckId=2;
+    s.players[0].strategicIntel={{1,StrategicObjectKind::Wreck,{16,0},10,0,s.turn,s.turn,20,0}};
+    r=TurnProcessor{}.process_with_events(s,{{1,{MoveFleetOrder{1,{16,0},4,{FleetArrivalActionKind::RecoverWreckage}}}}});
+    assert(r.state.fleets[0].task==FleetTask::Salvage && r.state.wrecks.empty() && event(r,GameEventKind::ScientificData));
+}
+
+void work_program_validation_is_atomic_and_knowledge_based()
+{
+    for(const auto action:{FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
+            FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage}) {
+        auto s=arena({C::MineDispenser50,C::Laser,C::LadyFingerBomb,C::RhinoScanner,C::CargoPod});
+        s.stars={{1,"Target",{16,0}}}; Planet p; p.id=1; p.star=1; p.owner=2; p.population=10000; s.planets={p};
+        set_survey_level(s,1,1,SurveyLevel::OrbitalSurvey,s.turn);
+        s.players[0].strategicIntel={{1,StrategicObjectKind::Wreck,{16,0},10,0,s.turn,s.turn,20,0}};
+        FleetRouteProgram invalid{{16,0},4,{action},{{{32,0},4,{}}}};
+        assert(!fleet_route_tasks_valid(invalid));
+        assert(!submit_fleet_route_command(s,1,1,invalid.destination,4,invalid.arrivalAction,invalid.queuedWaypoints));
+        invalid.queuedWaypoints={{{32,0},4,{action}}}; invalid.arrivalAction={}; invalid.repeatOrders=true;
+        assert(!fleet_route_tasks_valid(invalid));
+        assert(!s.fleets[0].destination && s.fleets[0].task==FleetTask::None);
+        auto noEquipment=arena({},ShipHullType::SmallFreighter);
+        assert(!submit_fleet_route_command(noEquipment,1,1,{16,0},4,{action},{}));
+        assert(!noEquipment.fleets[0].destination);
+    }
+    auto s=arena({C::LadyFingerBomb}); s.stars={{1,"Unknown",{16,0}}};
+    Planet p; p.id=1; p.star=1; p.owner=2; p.population=10000; s.planets={p};
+    const auto hidden=fleet_work_order_error(s,s.fleets[0],{16,0},FleetArrivalActionKind::BombardColony);
+    assert(!hidden.empty()); s.planets[0].owner=3;
+    assert(hidden==fleet_work_order_error(s,s.fleets[0],{16,0},FleetArrivalActionKind::BombardColony));
+    assert(!submit_fleet_route_command(s,1,1,{16,0},4,{FleetArrivalActionKind::BombardColony},{}));
+    set_survey_level(s,1,1,SurveyLevel::OrbitalSurvey,s.turn);
+    assert(fleet_work_order_error(s,s.fleets[0],{16,0},FleetArrivalActionKind::BombardColony).empty());
+    assert(submit_fleet_route_command(s,1,1,{16,0},4,{FleetArrivalActionKind::BombardColony},{}));
+}
+
 int main()
 {
+    waypoint_work_starts_autonomously_and_persists();
+    all_waypoint_work_uses_ordinary_task_rules();
+    work_program_validation_is_atomic_and_knowledge_based();
     bombardment_orders_and_targets(); mines_crossings_laying_sweeping(); stealth_jamming_and_signals();
     silence_keeps_command_reception_and_resumes_transmissions(); field_science_is_finite_delayed_and_real();
     silence_hides_transmissions_but_not_active_radar_reflections();

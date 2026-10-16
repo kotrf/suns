@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/reconnaissance.hpp"
+#include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
 
 #include "suns/communications.hpp"
@@ -60,6 +61,8 @@ QString waypointName(const GameState& state, Position position, FleetId targetFl
 
 QString actionName(const FleetArrivalAction& action)
 {
+    if (const auto task = arrival_work_task(action.kind))
+        return QString::fromStdString(fleet_task_name(*task)) + " — persistent";
     const auto cargoName = [&] {
         switch (action.cargo) {
         case FleetCargoKind::Colonists: return QString("colonists");
@@ -385,6 +388,16 @@ QString routeForecast(
                     ? "; Remote Mining assigned; extraction begins next turn"
                     : "; Remote Mining could not be assigned";
                 break;
+            case FleetArrivalActionKind::LayMinefields:
+            case FleetArrivalActionKind::SweepMinefields:
+            case FleetArrivalActionKind::BombardColony:
+            case FleetArrivalActionKind::FieldResearch:
+            case FleetArrivalActionKind::RecoverWreckage:
+                outcome = "; work begins locally on arrival if equipment and target still permit; future results are unknown";
+                break;
+            case FleetArrivalActionKind::EnterWormhole:
+                outcome = "; wormhole outcome remains unknown";
+                break;
             case FleetArrivalActionKind::MergeWithFleet:
                 outcome = "; rendezvous still pending";
                 break;
@@ -499,7 +512,7 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
 
     const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
     if (!route || routeIsClearIntent(*fleet, *route)) {
-        const auto task = fleet->task == FleetTask::RemoteMining ? "Remote Mining" : "No Task";
+        const auto task = QString::fromStdString(fleet_task_name(fleet->task));
         auto summary = QString("<b>%1 route:</b> none<br><b>Current task:</b> %2")
                            .arg(QString::fromStdString(fleet->name))
                            .arg(task);
@@ -847,6 +860,18 @@ bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
     return true;
 }
 
+bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
+{
+    const auto* source = selectedFleet();
+    if (!source || source->owner != pendingOrders_.player || !arrival_work_task(action.kind)) return false;
+    const auto fleet = fleet_player_view(state_, *source);
+    if (const auto route = effectiveRoute(state_, pendingOrders_, fleet); route && !routeIsClearIntent(fleet, *route)) {
+        statusBar()->showMessage("Assign work to the final waypoint, or stop travel before starting work here.", 5000);
+        return false;
+    }
+    return appendRouteWaypoint(fleet.position, 0, std::max<std::uint8_t>(1, fleet.warp), action);
+}
+
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)
 {
     const auto* authoritativeFleet = selectedFleet();
@@ -967,23 +992,21 @@ bool MainWindow::appendRouteWaypoint(
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet || !fleet_warp_valid(state_, *fleet, warp)) return false;
+    if (const auto error = fleet_work_order_error(state_, *fleet, destination, arrivalAction.kind); !error.empty()) {
+        statusBar()->showMessage(QString::fromStdString(error), 5000);
+        return false;
+    }
 
     if (const auto existing = effectiveRoute(state_, pendingOrders_, *fleet)) {
         const auto& finalAction = existing->queuedWaypoints.empty()
             ? existing->arrivalAction
             : existing->queuedWaypoints.back().arrivalAction;
-        if (finalAction.kind == FleetArrivalActionKind::Colonize
-            || finalAction.kind == FleetArrivalActionKind::RemoteMining
-            || finalAction.kind == FleetArrivalActionKind::MergeWithFleet
-            || finalAction.kind == FleetArrivalActionKind::EnterWormhole) {
+        if (terminal_arrival_action(finalAction.kind)) {
             statusBar()->showMessage("The current terminal action must be cleared before adding another waypoint", 3000);
             return false;
         }
         if (existing->repeatOrders
-            && (arrivalAction.kind == FleetArrivalActionKind::Colonize
-                || arrivalAction.kind == FleetArrivalActionKind::RemoteMining
-                || arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
-                || arrivalAction.kind == FleetArrivalActionKind::EnterWormhole)) {
+            && (terminal_arrival_action(arrivalAction.kind))) {
             statusBar()->showMessage("Disable Repeat Orders before adding a terminal action", 3000);
             return false;
         }
@@ -1070,15 +1093,12 @@ bool MainWindow::moveSelectedFleetRouteProgramLeg(std::size_t index, int directi
 
     std::swap(legs[index], legs[static_cast<std::size_t>(target)]);
     const auto terminal = [](const FleetArrivalAction& action) {
-        return action.kind == FleetArrivalActionKind::Colonize
-            || action.kind == FleetArrivalActionKind::RemoteMining
-            || action.kind == FleetArrivalActionKind::MergeWithFleet
-                || action.kind == FleetArrivalActionKind::EnterWormhole;
+        return terminal_arrival_action(action.kind);
     };
     if (std::any_of(legs.begin(), std::prev(legs.end()), [&](const FleetWaypoint& leg) {
             return terminal(leg.arrivalAction);
         })) {
-        statusBar()->showMessage("Colonize, Remote Mining and Merge must remain the final route point", 3000);
+        statusBar()->showMessage("Persistent work and other terminal actions must remain the final route point", 3000);
         return false;
     }
 
@@ -1116,10 +1136,7 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         && leg.arrivalAction.cargo == action.cargo
         && leg.arrivalAction.reservePopulation == action.reservePopulation) return true;
 
-    const bool terminal = action.kind == FleetArrivalActionKind::Colonize
-        || action.kind == FleetArrivalActionKind::RemoteMining
-        || action.kind == FleetArrivalActionKind::MergeWithFleet
-        || action.kind == FleetArrivalActionKind::EnterWormhole;
+    const bool terminal = terminal_arrival_action(action.kind);
     if (terminal && (index + 1 != legs.size() || route->repeatOrders)) {
         statusBar()->showMessage("Colonize and other terminal actions require a final, non-repeating waypoint", 5000);
         return false;
@@ -1134,6 +1151,10 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         return false;
     }
 
+    if (const auto error = fleet_work_order_error(state_, fleet, leg.destination, action.kind); !error.empty()) {
+        statusBar()->showMessage(QString::fromStdString(error), 5000);
+        return false;
+    }
     const auto* star = leg.targetFleet == 0 ? findStarAtPosition(state_, leg.destination) : nullptr;
     const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
     if (action.kind == FleetArrivalActionKind::Colonize) {
@@ -1251,15 +1272,12 @@ bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
             return false;
         }
         const auto incompatible = [](const FleetArrivalAction& action) {
-            return action.kind == FleetArrivalActionKind::Colonize
-                || action.kind == FleetArrivalActionKind::RemoteMining
-                || action.kind == FleetArrivalActionKind::MergeWithFleet
-                || action.kind == FleetArrivalActionKind::EnterWormhole;
+            return terminal_arrival_action(action.kind);
         };
         if (incompatible(route->arrivalAction)
             || std::any_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),
                 [&](const FleetWaypoint& waypoint) { return incompatible(waypoint.arrivalAction); })) {
-            statusBar()->showMessage("Colonize, Remote Mining and fleet merging cannot be repeated", 3000);
+            statusBar()->showMessage("Persistent work and other terminal actions cannot be repeated", 3000);
             return false;
         }
         if (std::none_of(route->queuedWaypoints.begin(), route->queuedWaypoints.end(),

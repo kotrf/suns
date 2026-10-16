@@ -1,16 +1,30 @@
 # Strategic warfare and field science
 
-Fleet missions and emission controls live in the Fleet operations panel. Assign
-an idle fleet a task, or issue a new emission program. These are core orders;
-commands travel through the same delayed channel as routes. Travel cancels
-stationary work. Different empires remain hostile in the current combat rules.
+Fleet work is programmed in **Fleet Route Program → On arrival**. Mining,
+mine laying, sweeping, bombardment, field research and wreck recovery are
+persistent terminal actions: choose a destination and its work, then the ship
+starts locally on arrival without another command from headquarters. They
+cannot precede another waypoint or belong to a repeating route. A stationary
+fleet uses the same action selector and **Start work here**, including in deep
+space; this still queues an ordinary route order. Planning uses received target
+knowledge and fitted equipment, with requirements explained in the selector.
 
-The current Assign control starts stationary work at the fleet's present
-position; it does not attach that work to the selected route waypoint. Remote
-Mining already has a persistent arrival action. Lay minefields, sweeping,
-bombardment and field science still need equivalent waypoint orders. The intended
-route interaction is destination → work on arrival → continue until replaced or
-cancelled, without requiring a later manual Assign command.
+**Stop work / route** clears travel and work when delivered. A replacement route
+also stops stationary work on delivery. Neither operation changes the fleet's
+radio settings. **Fleet emissions** is a separate policy panel with the last
+reported activity; the former competing stationary Assign editor is removed.
+All commands retain normal propagation/jamming delay. Current targets and
+surviving equipment are evaluated locally: a friendly/empty world is never
+bombed, spent science cannot be farmed again, and expired debris gives no reward.
+Computer bombers carry the same ordinary arrival order on their raid route.
+
+Mine laying/sweeping, bombing and field work run in their existing phase after
+movement/combat in the arrival year. Newly laid mines affect later movement;
+sweeping does not protect this year's approach. Remote Mining retains its
+existing extraction phase and starts extraction the following year. Science
+collection still requires active sensors when appropriate; scheduling work does
+not wake a passive fleet. Persistent work stays assigned until cancelled or
+replaced, even when no remaining objective is currently available.
 
 ## Bombardment
 
@@ -132,7 +146,7 @@ traffic analysis or autonomous fleet doctrine (#58/#101 remain partial).
 ## Science from the world
 
 `Field research` requires a scanner and a stationary fleet in Standard mode.
-Objectives and rewards are explicit in the mission panel:
+Objectives and rewards are explained in the arrival-action tooltips:
 
 | Observation | Requirement | Reward |
 | --- | --- | --- |
@@ -159,11 +173,12 @@ observation prerequisites on particular technologies remain future #59 slices.
 
 ## Persistence, evidence and forecasts
 
-Save **v62** reads v12–62; orders **v19** read v1–19. Emission programs, task
-commands, fields, wrecks, observations and pending intel persist. A bounded
-trailing extension preserves all earlier record layouts and migrations. Old
-campaigns begin with empty fields/wrecks, no field-science reservations and
-Standard fleet emissions.
+This waypoint-work slice uses save **v74** / orders **v24**. Arrival actions
+persist in active/queued legs, delayed commands, telemetry, player exports and
+order files; invalid/nonterminal/repeating work programs and unknown action
+values are rejected by readers. Existing earlier readers remain. Fleet task
+orders remain readable for older saves and the core API, while new UI and AI
+work uses the route program.
 
 Player exports contain delivered object evidence and their own confirmed fleet
 state, never physical hidden fields/wrecks or undelivered scientific data. The map
