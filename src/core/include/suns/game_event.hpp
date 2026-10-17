@@ -47,6 +47,9 @@ enum class GameEventKind {
     InterstellarMediumObserved,
     StargateTransit,
     StargateTransitFailed,
+    OutpostDeployed,
+    OutpostDeploymentFailed,
+    OutpostFuelExhausted,
 };
 
 enum class GameEventSeverity {

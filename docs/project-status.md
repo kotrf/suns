@@ -1,6 +1,25 @@
 # Project status and development handoff
 
-## Current implementation — 17 October 2026: Stargate Specialist
+## Current implementation — 17 October 2026: deep-space infrastructure
+
+Main baseline is PR #213 (`4cb245c`), the first playable primary trait. The
+next ordered item #54 now has a first playable slice:
+[paid constructors, fixed fuel depots and communications relays](deep-space-infrastructure.md).
+Constructors physically travel to arbitrary coordinates and retain their paid
+hull, fitted equipment and stable FleetId after permanent deployment. Finite
+fuel deliveries, 1 mg/year upkeep and relay loss affect actual services; ordinary
+combat and delayed telemetry apply. View → Deep-space infrastructure provides
+construction coordinates, received site stocks, route refueling/supply and a map
+layer. Save v82 / orders v29 add bounded deployment metadata and supply reserves.
+Validation evidence belongs to this PR.
+
+#54 remains partial for additional site types, capture, expanded construction,
+maintenance/traffic statistics and autonomous infrastructure planning. The next
+major ordered item is mobile bases #61, followed by planetary engineering #56,
+field science/materials #59/#63, autonomous probes #60 and moving/transient
+phenomena #55 / late visitors #46. #53 remains deferred; #108 requires discussion.
+
+## Historical checkpoint — 17 October 2026: Stargate Specialist
 
 Main baseline is PR #212 (`2b118d3`), surveyed interstellar clouds; branch and
 post-merge main CI passed 66/66. The next ordered roadmap starts with #50:

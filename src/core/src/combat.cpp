@@ -147,6 +147,7 @@ SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& flee
             unit.shields = unit.count * unit.shieldsPerShip;
             int initiative = hull_spec(design->hull).initiative;
             configure_unit(unit,design->components,initiative,dampener);
+            if (found->outpost != OutpostKind::None) unit.movement = 0;
             units.push_back(unit);
             report.units.push_back({unit.owner, id, stack.design, found->name, design->name,
                 stack.count, stack.count, unit.armor, unit.shields});

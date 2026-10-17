@@ -287,7 +287,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     for (const auto& planet : state.planets) if (planet.owner == view.player) colonies.push_back(&planet);
     for (const auto* colony : colonies) availablePopulation.emplace_back(colony->id, colony->population);
     for (const auto& star : state.stars) stars.push_back(&star);
-    for (const auto& fleet : state.fleets) if (fleet.owner == view.player) fleets.push_back(&fleet);
+    for (const auto& fleet : state.fleets) if (fleet.owner == view.player && fleet.outpost == OutpostKind::None) fleets.push_back(&fleet);
     std::sort(colonies.begin(), colonies.end(), [](auto a, auto b) { return a->id < b->id; });
     std::sort(stars.begin(), stars.end(), [](auto a, auto b) { return a->id < b->id; });
     std::sort(fleets.begin(), fleets.end(), [](auto a, auto b) { return a->id < b->id; });

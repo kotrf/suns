@@ -36,6 +36,7 @@ int main(int argc, char* argv[])
     window.installWormholes();
     window.installUnknownObjects();
     window.installInterstellarMedium();
+    window.installOutposts();
     window.installPanelLayoutFixes();
     window.installStrategicOperations();
 

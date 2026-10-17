@@ -186,6 +186,7 @@ public:
     bool queueWormholeApproach(WormholeEndpointId endpoint, bool enter);
     void installUnknownObjects();
     void installInterstellarMedium();
+    void installOutposts();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 
     // Ordered colony build list with completion forecasts and move controls.
@@ -258,6 +259,7 @@ private:
     void refreshUnknownObjects();
     void renderKnownUnknownObjects();
     void refreshInterstellarMedium();
+    void refreshOutposts();
     void renderKnownInterstellarMedium();
     void queueResearchPlan();
     void queueResearchAllocation(int percent);

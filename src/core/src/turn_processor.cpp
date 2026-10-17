@@ -1,4 +1,5 @@
 #include "suns/turn_processor.hpp"
+#include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
@@ -743,6 +744,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::BombardColony:
     case FleetArrivalActionKind::FieldResearch:
     case FleetArrivalActionKind::RecoverWreckage:
+    case FleetArrivalActionKind::DeployOutpost:
         return false; // Persistent work handled before this switch.
     case FleetArrivalActionKind::None:
         return false;
@@ -840,6 +842,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         auto* colony = friendly_colony_at_fleet(state, fleet);
         if (!colony || !colony_has_orbital_service(
                 state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot)) {
+            refuel_from_outpost(state, fleet);
             return false;
         }
         fleet.fuel = fleet_fuel_capacity(state, fleet);
@@ -860,6 +863,9 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::MergeWithFleet:
         // Moving-target rendezvous resolves this action after both fleets have
         // completed their deterministic movement for the turn.
+        return false;
+    case FleetArrivalActionKind::SupplyOutpost:
+        supply_outpost(state, fleet, action.reserveFuel);
         return false;
     }
     return false;
@@ -976,6 +982,7 @@ void repair_fleet_damage(GameState& state, const GameState& previous)
 
 bool fleet_ready_for_reorganization(const Fleet& fleet)
 {
+    if (fleet.outpost != OutpostKind::None) return false;
     return !fleet.destination
         && fleet.targetFleet == 0
         && fleet.waypointQueue.empty()
@@ -1945,6 +1952,7 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
 
     generate_fleet_fuel(next);
+    maintain_outposts(next, next.turn + 1);
     // Friendly orbital refueling services top up every docked fleet before
     // orders and movement are resolved. A basic dock without the module does
     // not refuel, leaving room for cheaper station hulls later.
@@ -2168,6 +2176,7 @@ TurnResult TurnProcessor::process_with_events(
     advance_fleets(next, freight, movementFuel);
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
+    deploy_outposts(next, next.turn + 1);
     observe_current_wormholes(next, next.turn + 1);
     observe_current_sensor_coverage(next, next.turn + 1);
     observe_enemy_fleet_contacts(next, next.turn + 1);

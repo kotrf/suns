@@ -59,6 +59,8 @@ MineralCargo componentMineralCost(ShipComponentType type)
     if (const auto* miner = mining_technology(type)) return miner->minerals;
     if (const auto* equipment = equipment_technology(type)) return equipment->minerals;
     switch (type) {
+    case ShipComponentType::FuelDepotKit:            return {40, 20, 30};
+    case ShipComponentType::DeepSpaceRelayKit:       return {25, 10, 50};
     case ShipComponentType::FusionDrive:             return {2.0, 2.0, 1.0};
     case ShipComponentType::RamScoopDrive:           return {2.0, 3.0, 2.0};
     case ShipComponentType::RadiatingRamScoopDrive:  return {2.0, 2.0, 2.0};

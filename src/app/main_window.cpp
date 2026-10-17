@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 #include "suns/interstellar_medium.hpp"
+#include "suns/deep_space.hpp"
+#include <QAction>
 #include "suns/computer_player.hpp"
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
@@ -252,6 +254,8 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
     case FleetArrivalActionKind::BombardColony: return "bombard enemy colony";
     case FleetArrivalActionKind::FieldResearch: return "field research";
     case FleetArrivalActionKind::RecoverWreckage: return "recover wreckage";
+    case FleetArrivalActionKind::DeployOutpost: return "deploy permanent outpost";
+    case FleetArrivalActionKind::SupplyOutpost: return QString("supply outpost fuel; keep %1 mg").arg(action.reserveFuel);
     case FleetArrivalActionKind::RemoteMining:
         return "begin remote mining";
     case FleetArrivalActionKind::EnterWormhole:
@@ -847,6 +851,8 @@ void MainWindow::rebuildScene()
     for (const auto& fleet : displayFleets) {
         const auto visible = fleet_player_view(state_, fleet);
         if (findStarAtPosition(state_, visible.position)) continue;
+        if (visible.outpost != OutpostKind::None)
+            if (const auto* overlay=findChild<QAction*>("outpostsOverlay"); overlay && !overlay->isChecked()) continue;
         const auto group = std::find_if(groups.begin(), groups.end(), [&](const auto& candidates) {
             return same_position(candidates.front().position, visible.position);
         });
@@ -862,7 +868,9 @@ void MainWindow::rebuildScene()
         bool selected = false;
         for (const auto& contact : group) {
             fleetIds.push_back(static_cast<unsigned int>(contact.id));
-            fleetNames.push_back(QString::fromStdString(contact.name));
+            fleetNames.push_back(QString::fromStdString(contact.name) + (contact.outpost == OutpostKind::None ? QString{}
+                : QString(" — %1; received fuel %2 mg, observed %3").arg(QString::fromStdString(outpost_kind_name(contact.outpost)))
+                    .arg(contact.fuel,0,'f',1).arg(qulonglong(contact.telemetry.observedTurn))));
             own |= contact.owner == pendingOrders_.player;
             other |= contact.owner != pendingOrders_.player;
             selected |= selection_.fleet && *selection_.fleet == contact.id;
@@ -877,10 +885,13 @@ void MainWindow::rebuildScene()
         auto* marker = new FleetMarkerItem(fleet.id, color, selected, label, [this] { queueMapLabelRefresh(); });
         marker->setPos(fleet.position.x, fleet.position.y);
         marker->setData(2, fleetIds);
+        marker->setData(9,std::any_of(group.begin(),group.end(),[](const auto& f){return f.outpost!=OutpostKind::None;}));
         QString tooltip = fleetNames.join("\n");
         if (group.size() == 1 && own) {
+            if (fleet.outpost != OutpostKind::None) tooltip += "\nPermanently anchored; 1 mg/year upkeep. Stock is last received telemetry.";
             tooltip += QString("\nWarp %1 (%2 ly/turn)\nFuel %3 / %4 — gross mass %5")
-                .arg(fleet.warp).arg(warp_distance(fleet.warp), 0, 'f', 0)
+                .arg(fleet.outpost == OutpostKind::None ? fleet.warp : 0)
+                .arg(fleet.outpost == OutpostKind::None ? warp_distance(fleet.warp) : 0, 0, 'f', 0)
                 .arg(fuelValue(fleet.fuel)).arg(fuelValue(fleet_fuel_capacity(state_, fleet)))
                 .arg(fleet_gross_mass(state_, fleet), 0, 'f', 1);
             if (fleet.destination) tooltip += QString("\nIn transit — %1 remaining").arg(turnCount(fleet_eta(fleet)));

@@ -237,6 +237,7 @@ void resolve_wormhole_approaches(GameState& state)
 
 bool enter_wormhole(GameState& state, Fleet& fleet, WormholeEndpointId endpoint)
 {
+    if (fleet.outpost != OutpostKind::None) return false;
     const auto turn = state.turn + 1;
     const Wormhole* selected{};
     std::size_t side{};

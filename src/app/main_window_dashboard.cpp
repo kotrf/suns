@@ -107,6 +107,8 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::BombardColony: return "bombard enemy colony";
     case FleetArrivalActionKind::FieldResearch: return "field research";
     case FleetArrivalActionKind::RecoverWreckage: return "recover wreckage";
+    case FleetArrivalActionKind::DeployOutpost: return "deploy permanent outpost";
+    case FleetArrivalActionKind::SupplyOutpost: return QString("supply outpost fuel; keep %1 mg").arg(action.reserveFuel);
     case FleetArrivalActionKind::RemoteMining: return "remote mining";
     case FleetArrivalActionKind::MergeWithFleet: return "merge with fleet";
     }

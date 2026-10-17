@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
@@ -339,6 +340,15 @@ ShipHullSpec hull_spec(ShipHullType type)
 
 ShipComponentSpec component_spec(ShipComponentType type)
 {
+    if (const auto kind = construction_kit_kind(type); kind != OutpostKind::None) {
+        ShipComponentSpec spec;
+        spec.type = type; spec.name = kind == OutpostKind::FuelDepot ? "Fuel Depot Kit" : "Deep-space Relay Kit";
+        spec.kind = ShipComponentKind::Mechanical;
+        spec.mass = kind == OutpostKind::FuelDepot ? 80 : 50;
+        spec.buildCost = kind == OutpostKind::FuelDepot ? 80 : 60;
+        spec.fuelCapacity = kind == OutpostKind::FuelDepot ? 2500 : 0;
+        return spec;
+    }
     if (const auto* gate = stargate_spec(type); gate && gate->specialistOnly) {
         ShipComponentSpec spec;
         spec.type = type; spec.name = gate->name; spec.kind = ShipComponentKind::Mechanical;
@@ -592,6 +602,9 @@ std::string ship_design_validation_error(const ShipDesign& design)
     if (design.name.size() > 48) return "A ship design name may contain at most 48 characters.";
     const auto hull = hull_spec(design.hull);
     if (hull.name == "Unknown Hull") return "Unknown ship hull.";
+    if (std::count_if(design.components.begin(), design.components.end(), [](auto c) {
+            return construction_kit_kind(c) != OutpostKind::None;
+        }) > 1) return "A constructor may carry only one deep-space construction kit.";
     for (const auto component : design.components) {
         if (static_cast<int>(component) < 0 || component > kLastShipComponent)
             return "Unknown ship component.";
@@ -1063,6 +1076,7 @@ double fleet_sensor_range(const GameState& state, const Fleet& fleet)
 
 double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost != OutpostKind::None && !outpost_online(fleet)) return 0;
     double range = 0.0;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         if (const auto* design = find_ship_design(state, stack.design)) {
@@ -1074,7 +1088,8 @@ double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet)
 
 double fleet_communication_range(const GameState& state, const Fleet& fleet)
 {
-    double range = 0.0;
+    if (fleet.outpost != OutpostKind::None && !outpost_online(fleet)) return 0;
+    double range = fleet.outpost == OutpostKind::CommunicationsRelay ? kOutpostRelayRangeLy : 0.0;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         if (const auto* design = find_ship_design(state, stack.design))
             range = std::max(range, ship_design_communication_range(*design));
@@ -1084,6 +1099,7 @@ double fleet_communication_range(const GameState& state, const Fleet& fleet)
 
 double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost != OutpostKind::None && !outpost_online(fleet)) return 0;
     double range = 0.0;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         if (const auto* design = find_ship_design(state, stack.design)) {
@@ -1095,6 +1111,7 @@ double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet
 
 bool fleet_can_colonize(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost != OutpostKind::None) return false;
     const auto stacks = fleet_ship_stacks(fleet);
     return std::any_of(stacks.begin(), stacks.end(), [&](const FleetShipStack& stack) {
         const auto* design = find_ship_design(state, stack.design);
@@ -1104,6 +1121,7 @@ bool fleet_can_colonize(const GameState& state, const Fleet& fleet)
 
 bool fleet_can_remote_mine(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost != OutpostKind::None) return false;
     const auto stacks = fleet_ship_stacks(fleet);
     return std::any_of(stacks.begin(), stacks.end(), [&](const FleetShipStack& stack) {
         const auto* design = find_ship_design(state, stack.design);
@@ -1115,6 +1133,7 @@ bool fleet_can_remote_mine(const GameState& state, const Fleet& fleet)
 
 std::uint8_t fleet_max_warp(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost != OutpostKind::None) return 0;
     std::uint8_t result = kMaxWarp;
     bool found = false;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
@@ -1910,6 +1929,7 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.warp = fleet.warp;
     fleet.telemetry.fuel = fleet.fuel;
     fleet.telemetry.damagePercent = fleet.damagePercent;
+    fleet.telemetry.outpost = fleet.outpost;
     fleet.telemetry.colonists = fleet.colonists;
     fleet.telemetry.arrivalAction = fleet.arrivalAction;
     fleet.telemetry.waypointQueue = fleet.waypointQueue;

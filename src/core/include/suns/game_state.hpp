@@ -350,9 +350,11 @@ enum class ShipComponentType {
     // Append-only wire IDs. These fittings belong to orbital stations only.
     NetworkStargate,
     InfinityStargate,
+    FuelDepotKit,
+    DeepSpaceRelayKit,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::InfinityStargate;
+inline constexpr auto kLastShipComponent = ShipComponentType::DeepSpaceRelayKit;
 
 enum class ShipComponentKind {
     Engine,
@@ -701,6 +703,9 @@ enum class PlayerReportKind {
     InterstellarMediumObserved,
     StargateTransit,
     StargateTransitFailed,
+    OutpostDeployed,
+    OutpostDeploymentFailed,
+    OutpostFuelExhausted,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1166,7 +1171,12 @@ enum class FleetTask {
     SweepMines,
     FieldResearch,
     Salvage,
+    DeployOutpost,
 };
+
+// A paid constructor hull becomes a permanent, fixed installation. It keeps
+// its stable FleetId, fitted hull, cargo and the normal combat/contact model.
+enum class OutpostKind : std::uint8_t { None, FuelDepot, CommunicationsRelay };
 
 enum class EmissionMode : std::uint8_t { Standard, Passive, RadioSilence };
 struct ElectronicsProgram {
@@ -1193,9 +1203,12 @@ enum class FleetArrivalActionKind {
     BombardColony,
     FieldResearch,
     RecoverWreckage,
+    DeployOutpost,
+    SupplyOutpost,
 };
 
-// Persistent work belongs to the final waypoint and starts autonomously there.
+// Work belongs to the final waypoint and starts autonomously there. Deployment
+// is a one-time conversion; other work tasks persist until interrupted.
 [[nodiscard]] constexpr std::optional<FleetTask> arrival_work_task(FleetArrivalActionKind kind)
 {
     switch (kind) {
@@ -1205,6 +1218,7 @@ enum class FleetArrivalActionKind {
     case FleetArrivalActionKind::BombardColony: return FleetTask::Bombardment;
     case FleetArrivalActionKind::FieldResearch: return FleetTask::FieldResearch;
     case FleetArrivalActionKind::RecoverWreckage: return FleetTask::Salvage;
+    case FleetArrivalActionKind::DeployOutpost: return FleetTask::DeployOutpost;
     default: return std::nullopt;
     }
 }
@@ -1230,6 +1244,7 @@ struct FleetArrivalAction {
     WormholeEndpointId wormholeEndpoint{};
     // Frozen at order creation; later template edits never change a voyage.
     std::optional<ProductionTemplate> colonyPlan;
+    double reserveFuel{}; // SupplyOutpost only, in mg. Older action payloads stay unchanged.
     bool operator==(const FleetArrivalAction&) const = default;
 };
 
@@ -1272,6 +1287,7 @@ struct FleetTelemetry {
     FleetId targetFleet{};
     double damagePercent{};
     ElectronicsProgram electronics;
+    OutpostKind outpost{OutpostKind::None};
 };
 
 struct PendingFleetCommand {
@@ -1321,6 +1337,7 @@ struct Fleet {
     FleetId targetFleet{};
     double damagePercent{};
     ElectronicsProgram electronics;
+    OutpostKind outpost{OutpostKind::None};
 };
 
 struct Minefield {
