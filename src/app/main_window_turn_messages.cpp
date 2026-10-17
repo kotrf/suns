@@ -139,6 +139,8 @@ QString event_subject(const GameState& state, const GameEvent& event)
     }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
+    case GameEventKind::StargateTransit: subject = QString("%1 transited to %2").arg(fleetName, planetName); break;
+    case GameEventKind::StargateTransitFailed: subject = QString("%1: stargate transit rejected").arg(fleetName); break;
     case GameEventKind::RouteCompleted: subject = QString("%1 completed its route").arg(fleetName); break;
     case GameEventKind::FleetStalledForFuel: subject = QString("%1 stalled: insufficient fuel").arg(fleetName); break;
     case GameEventKind::ProductionCompleted:
@@ -224,6 +226,8 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::FleetMovement:
         return event.kind == GameEventKind::FleetArrived
+            || event.kind == GameEventKind::StargateTransit
+            || event.kind == GameEventKind::StargateTransitFailed
             || event.kind == GameEventKind::RouteCompleted
             || event.kind == GameEventKind::FleetTargetLost
             || event.kind == GameEventKind::FleetsMerged
@@ -464,6 +468,18 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(surveyName, starName);
         if (!detail.isEmpty()) text += QString("\n%1").arg(detail);
+    } else if (event.kind == GameEventKind::StargateTransit) {
+        text = QString("Turn %1  •  %2 transited to the gate at %3 without burning fuel.\n"
+                       "Cargo aboard at transit: I %4 / B %5 / G %6 kt; %7 colonists. "
+                       "Cargo remains aboard until explicitly unloaded.")
+            .arg(qulonglong(event.observedTurn)).arg(fleetName, event_planet_name(state, event))
+            .arg(event.deliveredMinerals.ironium).arg(event.deliveredMinerals.boranium)
+            .arg(event.deliveredMinerals.germanium).arg(qulonglong(event.deliveredColonists));
+    } else if (event.kind == GameEventKind::StargateTransitFailed) {
+        text = QString("Turn %1  •  %2 could not transit. The transit caused no movement or fuel charge. "
+                       "The resolver rechecked gate ownership, fittings, distance, loaded mass, "
+                       "fleet route/task and command link; at least one requirement was unavailable.")
+            .arg(qulonglong(event.observedTurn)).arg(fleetName);
     } else if (event.kind == GameEventKind::FleetArrived) {
         text = QString("Turn %1  •  %2 arrived at %3 and continues its route")
                    .arg(static_cast<qulonglong>(event.turn))

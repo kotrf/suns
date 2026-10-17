@@ -347,7 +347,12 @@ enum class ShipComponentType {
     MegaPolyShell,
     Valanium,
     Superlatanium,
+    // Append-only wire IDs. These fittings belong to orbital stations only.
+    NetworkStargate,
+    InfinityStargate,
 };
+
+inline constexpr auto kLastShipComponent = ShipComponentType::InfinityStargate;
 
 enum class ShipComponentKind {
     Engine,
@@ -694,6 +699,8 @@ enum class PlayerReportKind {
     PlanetaryAftermath,
     UnknownObjectObserved,
     InterstellarMediumObserved,
+    StargateTransit,
+    StargateTransitFailed,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -823,9 +830,8 @@ struct TechnologyState {
     std::uint8_t researchAllocationPercent{};
 };
 
-// Stable core identity for future race creation. Traits are intentionally
-// structural choices rather than percentage modifiers; only Generalist has
-// gameplay-neutral semantics in the current slice.
+// Stable core identity. Generalist and StargateSpecialist are playable;
+// the remaining IDs are reserved for later structural rules.
 enum class PrimaryRaceTrait : std::uint8_t {
     Generalist,
     StargateSpecialist,

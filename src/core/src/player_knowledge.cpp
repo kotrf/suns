@@ -95,6 +95,8 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::PlanetaryAftermath: return GameEventKind::PlanetaryAftermath;
     case PlayerReportKind::UnknownObjectObserved: return GameEventKind::UnknownObjectObserved;
     case PlayerReportKind::InterstellarMediumObserved: return GameEventKind::InterstellarMediumObserved;
+    case PlayerReportKind::StargateTransit: return GameEventKind::StargateTransit;
+    case PlayerReportKind::StargateTransitFailed: return GameEventKind::StargateTransitFailed;
     }
     return GameEventKind::FleetArrived;
 }
@@ -104,7 +106,7 @@ GameEventSeverity event_severity(PlayerReportKind kind)
     if (kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
         || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
-    return kind == PlayerReportKind::EnemyFleetDetected
+    return kind == PlayerReportKind::StargateTransitFailed || kind == PlayerReportKind::EnemyFleetDetected
             || kind == PlayerReportKind::FleetStalledForFuel
             || kind == PlayerReportKind::FleetTargetLost
             || kind == PlayerReportKind::ProductionWaitingForMinerals
@@ -173,7 +175,7 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     }
     // A receiving colony gets one aggregated freight report per year.
     // The manifest is part of the stable identity even when replaying a turn.
-    if (report.kind == PlayerReportKind::FreightDelivered) {
+    if (report.kind == PlayerReportKind::FreightDelivered || report.kind == PlayerReportKind::StargateTransit) {
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.ironium));
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.boranium));
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.germanium));

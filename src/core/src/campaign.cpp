@@ -57,11 +57,18 @@ const std::vector<ResearchUnlock>& research_unlocks()
             {ResearchField::Electronics, 4, "Deep Penetrating Scanner", "Estimate habitability up to 145 ly away; substantially heavier than a standard scanner.", ShipComponentType::DeepPenetratingScanner},
             {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
             {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
-            {ResearchField::Energy, kStargateEnergyLevel, "Orbital Jump Gate",
-                "Requires Electronics 8 and a Starbase or Fortress. Paid orbital fitting connects two owned gates "
-                "within 160 ly; stationary unloaded fleets up to 450 kt transfer without burning fuel.", {}},
-
         };
+        for (const auto& gate : stargate_technologies()) {
+            ResearchUnlock unlock{ResearchField::Energy, gate.energy, gate.name,
+                std::string("Paid orbital fitting; requires two owned, surviving gates and a live command link. ")
+                    + (gate.rangeLy == 0 ? "Unlimited range and loaded fleet mass; both endpoints must be Infinity gates. "
+                        : "Each endpoint limits range and total loaded fleet mass. ")
+                    + "Stargate Specialists may transport minerals and colonists. Engines remain necessary beyond the network.", {}};
+            unlock.extraLevels[std::size_t(ResearchField::Electronics)] = gate.electronics;
+            unlock.extraLevels[std::size_t(ResearchField::Construction)] = gate.construction;
+            if (gate.specialistOnly) unlock.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
+            entries.push_back(std::move(unlock));
+        }
         constexpr std::array<std::uint8_t, 4> limits{3, 7, 11, 15};
         constexpr std::array<std::uint8_t, 4> extra{1, 5, 10, 16};
         for (std::size_t tier = 0; tier < limits.size(); ++tier) {
@@ -170,7 +177,8 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
     const auto* owner = find_player(state, player);
     const auto* miner = unlock.component ? mining_technology(*unlock.component) : nullptr;
     const auto* equipment = unlock.component ? equipment_technology(*unlock.component) : nullptr;
-    return owner && (!unlock.terraforming || (owner->race.environmentBased
+    return owner && (!unlock.primaryTrait || owner->race.primaryTrait == *unlock.primaryTrait)
+        && (!unlock.terraforming || (owner->race.environmentBased
             && !(owner->race.radiationImmune && unlock.extraLevels[static_cast<std::size_t>(ResearchField::Weapons)] != 0)))
         && engine_access_available(owner->race, unlock.engineAccess)
         && (!miner || ((!miner->advancedRemoteMining || owner->race.advancedRemoteMining)
@@ -204,6 +212,7 @@ std::string research_unlock_requirement(const ResearchUnlock& unlock)
     case EngineAccess::Settler: text += "; Settler engine access"; break;
     }
     if (unlock.requiresSuperStealth) text += "; Super Stealth";
+    if (unlock.primaryTrait == PrimaryRaceTrait::StargateSpecialist) text += "; Stargate Specialist";
     if (unlock.component) if (const auto* equipment = equipment_technology(*unlock.component)) {
         const auto access = equipment_access_requirement(*equipment);
         if (!access.empty()) text += "; " + access;
@@ -318,6 +327,9 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
             throw std::invalid_argument("Invalid hull access or mutually exclusive remote-mining settings");
         if (empires[i].controller > PlayerController::Computer)
             throw std::invalid_argument("Invalid empire controller");
+        if (empires[i].primaryTrait != PrimaryRaceTrait::Generalist
+            && empires[i].primaryTrait != PrimaryRaceTrait::StargateSpecialist)
+            throw std::invalid_argument("This primary race trait is not playable yet");
         const PlayerId id = static_cast<PlayerId>(i + 1);
         const StarSystem* home = &state.stars.front();
         double best = -1;
@@ -332,6 +344,7 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         Player player{id, empires[i].name, {home->id}};
         player.controller = empires[i].controller;
         player.race = race_preset(empires[i].race);
+        player.race.primaryTrait = empires[i].primaryTrait;
         player.race.improvedFuelEfficiency = empires[i].improvedFuelEfficiency;
         player.race.noRamScoopEngines = empires[i].noRamScoopEngines;
         player.race.settlerEngineAccess = empires[i].settlerEngineAccess || empires[i].hullAccess == HullAccess::HyperExpansion;

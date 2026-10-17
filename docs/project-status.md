@@ -1,6 +1,28 @@
 # Project status and development handoff
 
-## Current implementation — 17 October 2026: interstellar medium
+## Current implementation — 17 October 2026: Stargate Specialist
+
+Main baseline is PR #212 (`2b118d3`), surveyed interstellar clouds; branch and
+post-merge main CI passed 66/66. The next ordered roadmap starts with #50:
+[Stargate Specialist](stargate-specialist.md) is selectable in campaign setup,
+carries cargo/colonists through owned gates and unlocks paid Network and
+Infinity/Infinity station fittings. Both endpoints retain their individual
+limits; an ungated frontier still needs conventional travel. Computer empires
+research and construct networks through ordinary costs, stage civilian/military
+fleets through received gates and wait for arrival telemetry.
+
+Save v81 / orders v28 append component/report IDs with the v80 body layout
+unchanged. Existing generalists retain ordinary finite unloaded gates. Validation
+evidence belongs to this PR. #50 remains partial for additional primary traits,
+mobile habitats and comparative balance.
+
+The approved sequence continues with deep-space infrastructure #54, mobile bases
+#61, planetary engineering #56, field science/materials #59/#63, autonomous probes
+#60 and moving/transient phenomena #55 / late visitors #46. Habitat civilization
+depends on infrastructure and mobile services; transport #53 remains late and
+#108 still requires a separate discussion.
+
+## Historical checkpoint — 17 October 2026: interstellar medium
 
 Main baseline is PR #211 (`bdc0e11`), persistent unknown landmarks and science
 expeditions; branch and post-merge main CI passed 64/64. This change implements

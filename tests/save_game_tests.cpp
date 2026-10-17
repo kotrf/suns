@@ -1847,6 +1847,72 @@ void stargate_orders_round_trip()
     assert(!read_turn_order_file(ordersPath, imported, error));
 }
 
+void specialist_gate_fits_and_manifests_round_trip()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId = 981; save.turnToken = 982; save.mode = SessionMode::Host;
+    save.state = make_demo_game(); save.state.turn = 2; save.playerTokens = {{1, 982}};
+    save.state.players[0].race.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
+    save.state.players[0].technology.levels.fill(26);
+    save.state.orbitalStations[0].hull = OrbitalStationHullType::Fortress;
+    save.state.orbitalStations[0].components = {ShipComponentType::InfinityStargate};
+    const StationConstruction work{{OrbitalStationHullType::Starbase,
+        {ShipComponentType::NetworkStargate}, true, true}, 1};
+    save.pendingOrders = {1, {QueueStationOrder{1, work}, GateFleetOrder{1, 1, 2}}};
+    save.pendingDescriptions = {"Refit network gate", "Transit"};
+    PendingPlayerReport report; report.kind = PlayerReportKind::StargateTransit;
+    report.observedTurn = 1; report.deliveryTurn = 4; report.fleet = 1; report.planet = 1;
+    report.position = {700, 0}; report.deliveredMinerals = {2, 3, 4}; report.deliveredColonists = 1000;
+    save.state.players[0].pendingPlayerReports.push_back(report);
+    GameEvent event; event.id = 123; event.turn = 1; event.observedTurn = 1; event.recipient = 1;
+    event.kind = GameEventKind::StargateTransit; event.fleet = 1; event.position = report.position;
+    event.deliveredMinerals = report.deliveredMinerals; event.deliveredColonists = report.deliveredColonists;
+    save.strategicMessages = {event};
+    const auto path = dir.filePath("specialist.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players[0].race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
+    assert(station_stargate(loaded.state.orbitalStations[0])->component == ShipComponentType::InfinityStargate);
+    assert(loaded.state.players[0].pendingPlayerReports.back().deliveredColonists == 1000);
+    assert(loaded.strategicMessages[0].kind == GameEventKind::StargateTransit
+        && loaded.strategicMessages[0].deliveredMinerals.germanium == 4);
+    const auto player = make_player_turn(save, 1);
+    assert(player.state.players[0].pendingPlayerReports.empty());
+    assert(write_save_game_file(path, player, error) && read_save_game_file(path, loaded, error));
+    assert(station_stargate(loaded.state.orbitalStations[0])->component == ShipComponentType::InfinityStargate);
+    const auto orders = dir.filePath("specialist.sunsorders");
+    TurnOrderFileData packet{save.campaignId, save.state.turn, save.turnToken, save.pendingOrders, save.pendingDescriptions}, imported;
+    assert(write_turn_order_file(orders, packet, error) && read_turn_order_file(orders, imported, error));
+    assert(std::get<QueueStationOrder>(imported.orders.orders[0]).construction.loadout.components[0] == ShipComponentType::NetworkStargate);
+    QFile file(orders); assert(file.open(QIODevice::ReadWrite)); auto bytes = file.readAll();
+    QDataStream patch(&bytes, QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch << quint32{27};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size()); file.close();
+    assert(!read_turn_order_file(orders, imported, error));
+    auto invalid = save;
+    invalid.state.orbitalStations[0].components.push_back(ShipComponentType::JumpGate);
+    assert(write_save_game_file(path, invalid, error) && !read_save_game_file(path, loaded, error));
+    invalid = save; invalid.state.orbitalStations[0].hull = OrbitalStationHullType::Starbase;
+    assert(write_save_game_file(path, invalid, error) && !read_save_game_file(path, loaded, error));
+}
+
+void v80_generalist_campaigns_keep_finite_gates()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId = 881; save.turnToken = 882; save.pendingOrders = {1, {}};
+    save.state = make_demo_game(); save.state.orbitalStations[0].hull = OrbitalStationHullType::Starbase;
+    save.state.orbitalStations[0].components = {ShipComponentType::JumpGate};
+    const auto path = dir.filePath("v80.suns"); assert(write_save_game_file(path, save, error));
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes = file.readAll();
+    // No layout extension in v81: this is the actual v80 body, with old IDs.
+    QDataStream patch(&bytes, QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch << quint32{80};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size()); file.close();
+    SaveGameData loaded; assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.players[0].race.primaryTrait == PrimaryRaceTrait::Generalist);
+    const auto* gate = station_stargate(loaded.state.orbitalStations[0]);
+    assert(gate && gate->rangeLy == 160 && gate->maximumMassKt == 450);
+    assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, save, error));
+    assert(save.state.players[0].race.primaryTrait == PrimaryRaceTrait::Generalist);
+}
+
 void planetary_radars_round_trip_and_keep_queued_bootstrap()
 {
     QTemporaryDir directory;
@@ -2250,6 +2316,8 @@ void v79_campaigns_retain_uniform_medium()
 
 int main()
 {
+    specialist_gate_fits_and_manifests_round_trip();
+    v80_generalist_campaigns_keep_finite_gates();
     interstellar_medium_round_trip_and_player_isolation();
     v79_campaigns_retain_uniform_medium();
     unknown_objects_and_expeditions_round_trip();
