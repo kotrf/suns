@@ -21,7 +21,7 @@ namespace {
 
 bool readyForReorganization(const Fleet& fleet)
 {
-    return !fleet.destination
+    return fleet.outpost == OutpostKind::None && !fleet.destination
         && fleet.waypointQueue.empty()
         && fleet.pendingCommands.empty()
         && fleet.task == FleetTask::None

@@ -40,6 +40,7 @@ struct Unit {
     double beamFactor{1};
     double deflectorFactor{1};
     double movement{1};
+    bool anchored{};
     Position position;
     std::vector<Weapon> weapons;
 };
@@ -147,6 +148,7 @@ SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& flee
             unit.shields = unit.count * unit.shieldsPerShip;
             int initiative = hull_spec(design->hull).initiative;
             configure_unit(unit,design->components,initiative,dampener);
+            unit.anchored = found->outpost != OutpostKind::None;
             units.push_back(unit);
             report.units.push_back({unit.owner, id, stack.design, found->name, design->name,
                 stack.count, stack.count, unit.armor, unit.shields});
@@ -169,7 +171,7 @@ SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& flee
         const double angle = 2 * std::numbers::pi * owner / ownerList.size();
         const double radius=stations.empty() ? 4 : 1;
         unit.position = unit.station ? Position{} : Position{radius*std::cos(angle),radius*std::sin(angle)};
-        unit.movement = unit.station ? 0 : std::clamp(unit.movement-dampener,0.25,2.5);
+        unit.movement = unit.station || unit.anchored ? 0 : std::clamp(unit.movement-dampener,0.25,2.5);
     }
     struct Action { std::size_t unit; std::size_t weapon; int initiative; };
     std::vector<Action> actions;

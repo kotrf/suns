@@ -76,7 +76,12 @@ void FleetMarkerItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, 
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setPen(QPen(color_.lighter(130), 0.8));
     painter->setBrush(color_);
-    painter->drawPolygon(QPolygonF{{0, -4}, {3.5, 3}, {0, 1.5}, {-3.5, 3}});
+    if (data(9).toBool()) {
+        painter->drawRect(QRectF(-4,-4,8,8));
+        painter->setPen(QPen(color_.darker(180),1));
+        painter->drawLine(QPointF(-3,0),QPointF(3,0));
+        painter->drawLine(QPointF(0,-3),QPointF(0,3));
+    } else painter->drawPolygon(QPolygonF{{0, -4}, {3.5, 3}, {0, 1.5}, {-3.5, 3}});
     if (data(2).toList().size() > 1) {
         painter->drawLine(QPointF(-3, 5), QPointF(3, 5));
     }

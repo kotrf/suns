@@ -22,6 +22,7 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QSignalBlocker>
 #include <QShortcut>
 #include <QStyle>
@@ -191,13 +192,14 @@ void drawRouteOverlay(MainWindow& window)
 }
 
 FleetArrivalAction actionFromControls(
-    QComboBox* actionCombo, QComboBox* cargoCombo, QSpinBox* reserveSpin, ColonyPlanCombo* colonyPlan)
+    QComboBox* actionCombo, QComboBox* cargoCombo, QSpinBox* reserveSpin, QDoubleSpinBox* fuelReserveSpin, ColonyPlanCombo* colonyPlan)
 {
     FleetArrivalAction action;
     action.kind = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
     action.reservePopulation = static_cast<std::uint64_t>(std::max(0, reserveSpin->value()));
     action.cargo = static_cast<FleetCargoKind>(cargoCombo->currentData().toInt());
     if (action.kind == FleetArrivalActionKind::Colonize) action.colonyPlan = colonyPlan->plan();
+    if (action.kind == FleetArrivalActionKind::SupplyOutpost) action.reserveFuel = fuelReserveSpin->value();
     return action;
 }
 
@@ -380,6 +382,9 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Bombard enemy colony (persistent)", static_cast<int>(FleetArrivalActionKind::BombardColony));
     actionCombo->addItem("Field research (persistent)", static_cast<int>(FleetArrivalActionKind::FieldResearch));
     actionCombo->addItem("Recover wreckage (persistent)", static_cast<int>(FleetArrivalActionKind::RecoverWreckage));
+    actionCombo->addItem("Refuel at depot", int(FleetArrivalActionKind::Refuel));
+    actionCombo->addItem("Deploy outpost (permanent)", int(FleetArrivalActionKind::DeployOutpost));
+    actionCombo->addItem("Supply fuel to outpost", int(FleetArrivalActionKind::SupplyOutpost));
     const auto workTip = [&](FleetArrivalActionKind kind, const QString& text) {
         actionCombo->setItemData(actionCombo->findData(int(kind)), text, Qt::ToolTipRole);
     };
@@ -388,6 +393,8 @@ void attachRouteProgramDock(MainWindow& window)
     workTip(FleetArrivalActionKind::BombardColony, "Requires bombs and a known enemy colony. Starts after arrival/combat, repeats until stopped; friendly or empty worlds are never bombed.");
     workTip(FleetArrivalActionKind::FieldResearch, "Requires a scanner and active sensors when collecting data. One study per empire/objective: star Energy 12; deep planet Biology 12 (artifact site 32); wormhole Propulsion 24. Rewards wait for report delivery. The order does not change emissions.");
     workTip(FleetArrivalActionKind::RecoverWreckage, "Requires a scanner, cargo space and reported wreckage within 10 ly. Recovers one nearest specimen per year; only unfamiliar technology yields science. Targets can expire before arrival.");
+    workTip(FleetArrivalActionKind::DeployOutpost, "One ship with one paid kit, no colonists, at least 5 ly from stars and 1 ly from another installation. Permanent; last waypoint only, no repeat.");
+    workTip(FleetArrivalActionKind::SupplyOutpost, "Transfer actual fuel to an owned outpost at these coordinates, retaining the specified reserve. Receiver capacity and stock can change before arrival.");
     auto* cargoCombo = new QComboBox(waypointGroup);
     cargoCombo->setObjectName("routeCargoCombo");
     cargoCombo->addItem("Colonists", static_cast<int>(FleetCargoKind::Colonists));
@@ -402,6 +409,10 @@ void attachRouteProgramDock(MainWindow& window)
     reserveSpin->setValue(1000);
     reserveSpin->setEnabled(false);
 
+    auto* fuelReserveSpin = new QDoubleSpinBox(waypointGroup);
+    fuelReserveSpin->setObjectName("routeFuelReserveSpin");
+    fuelReserveSpin->setRange(0, 1e12); fuelReserveSpin->setDecimals(2); fuelReserveSpin->setSuffix(" mg");
+    fuelReserveSpin->setValue(100); fuelReserveSpin->setEnabled(false);
     auto* form = new QFormLayout;
     form->setVerticalSpacing(3);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
@@ -425,6 +436,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->setToolTip("Select a route row to edit its arrival order, or New waypoint to choose an action before adding a destination. Persistent work must be on the final waypoint; Stop cancels work and travel without changing emissions.");
     form->addRow("Cargo", cargoCombo);
     form->addRow("Leave population", reserveSpin);
+    form->addRow("Keep tanker fuel", fuelReserveSpin);
     waypointLayout->addLayout(form);
 
     auto* pickTargetButton = new QPushButton("Pick target on map…", waypointGroup);
@@ -471,6 +483,9 @@ void attachRouteProgramDock(MainWindow& window)
 
     const auto updateCargoControls = [=, &window] {
         const auto action = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
+        fuelReserveSpin->setEnabled(window.selectedFleetForRouteProgram() != 0 && action == FleetArrivalActionKind::SupplyOutpost);
+        fuelReserveSpin->setVisible(action == FleetArrivalActionKind::SupplyOutpost);
+        form->labelForField(fuelReserveSpin)->setVisible(action == FleetArrivalActionKind::SupplyOutpost);
         planRow->setVisible(action == FleetArrivalActionKind::Colonize);
         form->labelForField(planRow)->setVisible(action == FleetArrivalActionKind::Colonize);
         colonyPlan->setEnabled(window.selectedFleetForRouteProgram() != 0 && action == FleetArrivalActionKind::Colonize);
@@ -595,7 +610,7 @@ void attachRouteProgramDock(MainWindow& window)
         } else if (editor->fleet != 0 && !editor->editingLeg) {
             editor->drafts[editor->fleet] = {
                 editor->editingLeg ? editor->draftWarp : warpSelector->value(),
-                actionFromControls(actionCombo, cargoCombo, reserveSpin, colonyPlan),
+                actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan),
                 targetTypeCombo->currentData().toInt(),
                 static_cast<FleetId>(targetFleetCombo->currentData().toUInt())};
         }
@@ -645,12 +660,14 @@ void attachRouteProgramDock(MainWindow& window)
             const QSignalBlocker actionBlocker(actionCombo);
             const QSignalBlocker cargoBlocker(cargoCombo);
             const QSignalBlocker reserveBlocker(reserveSpin);
+            const QSignalBlocker fuelBlocker(fuelReserveSpin);
             const QSignalBlocker targetTypeBlocker(targetTypeCombo);
             const QSignalBlocker targetBlocker(targetFleetCombo);
             const QSignalBlocker warpBlocker(warpSelector);
             actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(draft.action.kind)));
             cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(draft.action.cargo)));
             reserveSpin->setValue(static_cast<int>(draft.action.reservePopulation));
+            fuelReserveSpin->setValue(draft.action.reserveFuel);
             colonyPlan->setPlan(draft.action.colonyPlan);
             targetTypeCombo->setCurrentIndex(targetTypeCombo->findData(draft.targetType));
             targetFleetCombo->clear();
@@ -736,12 +753,13 @@ void attachRouteProgramDock(MainWindow& window)
         warpSelector->setFuelWarning(window.selectedFleetWaypointFuelWarning(
             static_cast<std::uint8_t>(warpSelector->value()),
             fleetTarget ? static_cast<FleetId>(targetFleetCombo->currentData().toUInt()) : 0,
-            actionFromControls(actionCombo, cargoCombo, reserveSpin, colonyPlan)));
+            actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan)));
     };
     QObject::connect(warpSelector, &QProgressBar::valueChanged, panel, refreshFuelWarning);
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
     QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
     QObject::connect(reserveSpin, &QSpinBox::valueChanged, panel, refreshFuelWarning);
+    QObject::connect(fuelReserveSpin, &QDoubleSpinBox::valueChanged, panel, refreshFuelWarning);
     QObject::connect(destinationCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
     QObject::connect(targetFleetCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, refreshFuelWarning);
@@ -815,7 +833,7 @@ void attachRouteProgramDock(MainWindow& window)
         if (row && *row < rows.size()) {
             if (!editor->editingLeg) {
                 editor->draftWarp = warpSelector->value();
-                editor->draftAction = actionFromControls(actionCombo, cargoCombo, reserveSpin, colonyPlan);
+                editor->draftAction = actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan);
             }
             editor->editingLeg = true;
             warpSelector->setValue(rows[*row].warp);
@@ -823,9 +841,11 @@ void attachRouteProgramDock(MainWindow& window)
                 const QSignalBlocker actionBlocker(actionCombo);
                 const QSignalBlocker cargoBlocker(cargoCombo);
                 const QSignalBlocker reserveBlocker(reserveSpin);
+                const QSignalBlocker fuelBlocker(fuelReserveSpin);
                 actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(selected->kind)));
                 cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(selected->cargo)));
                 reserveSpin->setValue(static_cast<int>(selected->reservePopulation));
+                fuelReserveSpin->setValue(selected->reserveFuel);
                 colonyPlan->setPlan(selected->colonyPlan);
             }
         } else if (editor->editingLeg) {
@@ -834,9 +854,11 @@ void attachRouteProgramDock(MainWindow& window)
             const QSignalBlocker actionBlocker(actionCombo);
             const QSignalBlocker cargoBlocker(cargoCombo);
             const QSignalBlocker reserveBlocker(reserveSpin);
+            const QSignalBlocker fuelBlocker(fuelReserveSpin);
             actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(editor->draftAction.kind)));
             cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(editor->draftAction.cargo)));
             reserveSpin->setValue(static_cast<int>(editor->draftAction.reservePopulation));
+            fuelReserveSpin->setValue(editor->draftAction.reserveFuel);
             colonyPlan->setPlan(editor->draftAction.colonyPlan);
         }
         syncEditor(false);
@@ -848,7 +870,7 @@ void attachRouteProgramDock(MainWindow& window)
             const auto row = selectedRouteIndex();
             if (!row) return;
             if (!window.setSelectedFleetRouteProgramLegAction(*row,
-                    actionFromControls(actionCombo, cargoCombo, reserveSpin, colonyPlan))) {
+                    actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan))) {
                 if (const auto original = window.selectedFleetRouteProgramLegAction(*row)) {
                     const QSignalBlocker blocked(actionCombo);
                     actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(original->kind)));
@@ -857,6 +879,7 @@ void attachRouteProgramDock(MainWindow& window)
             }
         };
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, editLegAction);
+    QObject::connect(fuelReserveSpin, &QDoubleSpinBox::valueChanged, panel, editLegAction);
     QObject::connect(colonyPlan, &QComboBox::currentIndexChanged, panel, editLegAction);
     QObject::connect(newWaypointButton, &QPushButton::clicked, panel, [=] {
         routeTree->clearSelection();
@@ -926,7 +949,7 @@ void attachRouteProgramDock(MainWindow& window)
             const auto source = static_cast<FleetId>(sourceFleetCombo->currentData().toUInt());
             if (source == 0 || source != window.selectedFleetForRouteProgram()) return;
             const auto warp = static_cast<std::uint8_t>(warpSelector->value());
-            const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin, colonyPlan);
+            const auto action = actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan);
             const bool appended = targetTypeCombo->currentData().toInt() != 0
                 ? window.appendFleetTargetWaypoint(
                     static_cast<FleetId>(targetFleetCombo->currentData().toUInt()), warp, action)
@@ -944,7 +967,7 @@ void attachRouteProgramDock(MainWindow& window)
         };
     QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
     QObject::connect(workHereButton, &QPushButton::clicked, panel, [=, &window] {
-        window.startSelectedFleetWorkHere(actionFromControls(actionCombo, cargoCombo, reserveSpin, colonyPlan));
+        window.startSelectedFleetWorkHere(actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan));
     });
     QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
         [appendCurrentTarget, newWaypointButton](int, std::uint32_t) {

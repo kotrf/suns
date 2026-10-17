@@ -126,6 +126,7 @@ std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId 
     const auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(),
         [=](const Fleet& f) { return f.id == fleetId && f.owner == owner; });
     if (!start || !finish || fleet == s.fleets.end()) return "Fleet or gate system is unavailable.";
+    if (fleet->outpost != OutpostKind::None) return "Deployed outposts are permanently anchored.";
     if (!same_position(fleet->position, start->position)
         || fleet->destination || fleet->targetFleet || !fleet->waypointQueue.empty()
         || fleet->repeatOrders || fleet->task != FleetTask::None)

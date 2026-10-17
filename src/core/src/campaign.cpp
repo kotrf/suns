@@ -58,6 +58,14 @@ const std::vector<ResearchUnlock>& research_unlocks()
             {ResearchField::Electronics, 5, "Relay Array", "Extend the live communications mesh by 180 ly without revealing ships or planets.", ShipComponentType::RelayArray},
             {ResearchField::Electronics, 6, "Anomaly Detector", "Detect weak spatial anomalies, classify wormholes and reduce transit risk; natural wormholes always remain dangerous.", ShipComponentType::AnomalyDetector},
         };
+        for (const auto component : {ShipComponentType::FuelDepotKit, ShipComponentType::DeepSpaceRelayKit}) {
+            const bool depot = component == ShipComponentType::FuelDepotKit;
+            ResearchUnlock unlock{ResearchField::Construction, 4, depot ? "Fuel Depot Kit" : "Deep-space Relay Kit",
+                depot ? "Paid constructor fitting: fly to deep space, then permanently deploy a finite 2500 mg reservoir. Upkeep 1 mg/year; tankers replenish it."
+                      : "Paid constructor fitting: permanently deploy a 300 ly communications relay. Upkeep 1 mg/year; no extra relay range while mobile.", component};
+            unlock.extraLevels[std::size_t(depot ? ResearchField::Energy : ResearchField::Electronics)] = depot ? 3 : 5;
+            entries.push_back(std::move(unlock));
+        }
         for (const auto& gate : stargate_technologies()) {
             ResearchUnlock unlock{ResearchField::Energy, gate.energy, gate.name,
                 std::string("Paid orbital fitting; requires two owned, surviving gates and a live command link. ")

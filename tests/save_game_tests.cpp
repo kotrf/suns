@@ -14,6 +14,7 @@
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/deep_space.hpp"
 
 #include <QByteArray>
 #include <QDataStream>
@@ -28,8 +29,21 @@ namespace {
 using namespace suns;
 
 // These old-layout fixtures have no pending/archive evidence.
+void strip_outpost_tail(QByteArray& bytes)
+{
+    QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x4f555450u};
+    const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
+    QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
+    const auto start=bytes.indexOf(marker); assert(start>=0 && bytes.indexOf(marker,start+1)<0);
+    QDataStream header(bytes.mid(start+4)); quint32 size{}; header>>size;
+    assert(tail>=start+8 && tail+8+tailSize==start+8+size);
+    bytes.remove(tail,8+tailSize);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(start+4)); patch<<quint32(size-8-tailSize);
+}
 void strip_interstellar_medium_tail(QByteArray& bytes)
 {
+    strip_outpost_tail(bytes);
     QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x4d454449u};
     const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
     QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
@@ -1902,7 +1916,8 @@ void v80_generalist_campaigns_keep_finite_gates()
     save.state.orbitalStations[0].components = {ShipComponentType::JumpGate};
     const auto path = dir.filePath("v80.suns"); assert(write_save_game_file(path, save, error));
     QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes = file.readAll();
-    // No layout extension in v81: this is the actual v80 body, with old IDs.
+    strip_outpost_tail(bytes);
+    // v81 retained the v80 layout; v82 adds a bounded deployment tail.
     QDataStream patch(&bytes, QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch << quint32{80};
     assert(file.resize(0) && file.seek(0) && file.write(bytes) == bytes.size()); file.close();
     SaveGameData loaded; assert(read_save_game_file(path, loaded, error));
@@ -2314,8 +2329,82 @@ void v79_campaigns_retain_uniform_medium()
     assert(!loaded.state.interstellarMediumEnabled && loaded.state.interstellarClouds.empty());
 }
 
+void deep_space_outposts_round_trip_and_hide_unreceived_state()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=541; save.turnToken=542; save.mode=SessionMode::Host;
+    save.state=make_demo_game(); save.playerTokens={{1,542}}; save.pendingOrders={1,{}};
+    save.state.players[0].technology.levels.fill(26);
+    save.state.shipDesigns.push_back({100,1,"Depot constructor",ShipHullType::Scout,
+        {ShipComponentType::FusionDrive,ShipComponentType::FuelDepotKit,ShipComponentType::LongRangeScanner}});
+    save.state.shipDesigns.push_back({101,1,"Relay constructor",ShipHullType::Scout,
+        {ShipComponentType::FusionDrive,ShipComponentType::DeepSpaceRelayKit,ShipComponentType::LongRangeScanner}});
+    save.state.nextShipDesignId=102; save.state.fleets.resize(1); save.state.nextFleetId=3;
+    auto& f=save.state.fleets[0]; f.position={1000,1000}; f.design=100; f.ships={{100,1}};
+    f.destination.reset(); f.arrivalAction.reset(); f.waypointQueue.clear(); f.routeTemplate.clear(); f.repeatOrders=false;
+    f.task=FleetTask::DeployOutpost; f.colonists=0; f.fuel=120;
+    f.telemetry={}; f.telemetry.observedTurn=save.state.turn; f.telemetry.position=f.position;
+    f.telemetry.ships=f.ships; f.telemetry.fuel=120;
+    deploy_outposts(save.state,save.state.turn); publish_fleet_telemetry(save.state,save.state.turn);
+    assert(f.outpost==OutpostKind::FuelDepot && f.telemetry.outpost==OutpostKind::None && !f.telemetryInTransit.empty());
+    auto lost=f; lost.id=2; lost.design=101; lost.ships={{101,1}}; lost.outpost=OutpostKind::CommunicationsRelay;
+    lost.telemetry.ships=lost.ships; lost.telemetry.outpost=lost.outpost; lost.telemetryInTransit.clear();
+    save.state.pendingFleetLossContacts.push_back({lost,save.state.turn+4});
+    GameEvent event; event.id=5411; event.recipient=1; event.turn=1; event.observedTurn=1;
+    event.kind=GameEventKind::OutpostDeployed; event.fleet=2; event.quantity=2; event.position=lost.position;
+    save.strategicMessages.push_back(event);
+    FleetArrivalAction supply{FleetArrivalActionKind::SupplyOutpost}; supply.reserveFuel=75.25;
+    save.pendingOrders.orders={MoveFleetOrder{1,{700,700},3,supply},SetFleetTaskOrder{1,FleetTask::DeployOutpost}};
+    save.pendingDescriptions={"Deliver physical fuel","Deploy permanently"};
+    const auto path=dir.filePath("outposts.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets[0].outpost==OutpostKind::FuelDepot && loaded.state.fleets[0].telemetry.outpost==OutpostKind::None);
+    assert(loaded.state.fleets[0].telemetryInTransit[0].telemetry.outpost==OutpostKind::FuelDepot);
+    assert(loaded.state.pendingFleetLossContacts[0].lastContact.outpost==OutpostKind::CommunicationsRelay);
+    assert(loaded.strategicMessages[0].kind==GameEventKind::OutpostDeployed);
+    assert(std::get<MoveFleetOrder>(loaded.pendingOrders.orders[0]).arrivalAction.reserveFuel==75.25);
+    const auto orders=dir.filePath("outposts.sunsorders"); TurnOrderFileData packet{541,save.state.turn,542,save.pendingOrders,save.pendingDescriptions},received;
+    assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,received,error));
+    assert(std::get<MoveFleetOrder>(received.orders.orders[0]).arrivalAction==supply);
+    assert(std::get<SetFleetTaskOrder>(received.orders.orders[1]).task==FleetTask::DeployOutpost);
+    QFile ordersFile(orders); assert(ordersFile.open(QIODevice::ReadWrite)); auto oldPacket=ordersFile.readAll();
+    QDataStream ordersPatch(&oldPacket,QIODevice::ReadWrite); assert(ordersPatch.device()->seek(4)); ordersPatch<<quint32{28};
+    assert(ordersFile.resize(0) && ordersFile.seek(0) && ordersFile.write(oldPacket)==oldPacket.size()); ordersFile.close();
+    assert(!read_turn_order_file(orders,received,error));
+    // Mutating physical flags, stocks and condition cannot alter a player's export.
+    auto first=make_player_turn(save,1); first.pendingOrders={1,{}}; first.pendingDescriptions.clear();
+    const auto a=dir.filePath("a.sunsturn"),b=dir.filePath("b.sunsturn");
+    assert(write_save_game_file(a,first,error));
+    f.fuel=9; f.damagePercent=80; f.outpost=OutpostKind::None;
+    auto second=make_player_turn(save,1); second.pendingOrders={1,{}}; second.pendingDescriptions.clear();
+    assert(write_save_game_file(b,second,error)); QFile fa(a),fb(b); assert(fa.open(QIODevice::ReadOnly) && fb.open(QIODevice::ReadOnly));
+    assert(fa.readAll()==fb.readAll());
+    // The bounded extension rejects unknown kinds and structurally mobile installations.
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); const auto valid=file.readAll(); auto corrupt=valid;
+    QByteArray tag; QDataStream marker(&tag,QIODevice::WriteOnly); marker<<quint32{0x4f555450u};
+    const auto tail=corrupt.indexOf(tag); assert(tail>=0); corrupt[tail+16]=char(3);
+    assert(file.resize(0) && file.seek(0) && file.write(corrupt)==corrupt.size()); file.close();
+    assert(!read_save_game_file(path,loaded,error));
+    f.outpost=OutpostKind::FuelDepot; f.destination=Position{800,800};
+    assert(!write_save_game_file(path,save,error)); f.destination.reset(); f.colonists=1;
+    assert(!write_save_game_file(path,save,error));
+}
+void v81_campaigns_migrate_without_deployed_outposts()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=811; save.turnToken=812; save.pendingOrders={1,{}}; save.state=make_demo_game();
+    const auto path=dir.filePath("v81.suns"); assert(write_save_game_file(path,save,error));
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll(); strip_outpost_tail(bytes);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch<<quint32{81};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes)==bytes.size()); file.close();
+    SaveGameData loaded; assert(read_save_game_file(path,loaded,error));
+    for (const auto& f:loaded.state.fleets) assert(f.outpost==OutpostKind::None && f.telemetry.outpost==OutpostKind::None);
+    assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,loaded,error));
+}
 int main()
 {
+    deep_space_outposts_round_trip_and_hide_unreceived_state();
+    v81_campaigns_migrate_without_deployed_outposts();
     specialist_gate_fits_and_manifests_round_trip();
     v80_generalist_campaigns_keep_finite_gates();
     interstellar_medium_round_trip_and_player_isolation();

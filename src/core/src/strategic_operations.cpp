@@ -1,4 +1,5 @@
 #include "suns/strategic_operations.hpp"
+#include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
@@ -182,13 +183,16 @@ std::string fleet_task_name(FleetTask task)
     case FleetTask::SweepMines: return "Sweep hostile mines";
     case FleetTask::FieldResearch: return "Field research";
     case FleetTask::Salvage: return "Recover wreckage";
+    case FleetTask::DeployOutpost: return "Deploy deep-space outpost";
     }
     return "Unknown task";
 }
 bool fleet_task_equipment_available(const GameState& state, const Fleet& fleet, FleetTask task)
 {
     if (task == FleetTask::None) return true;
-    if (fleet.damagePercent >= 100) return false;
+    if (fleet.damagePercent >= 100 || fleet.outpost != OutpostKind::None) return false;
+    if (task == FleetTask::DeployOutpost) return fleet.colonists == 0
+        && fleet_construction_kit(state, fleet) != OutpostKind::None;
     if (task == FleetTask::RemoteMining) return fleet_can_remote_mine(state, fleet);
     bool bombs = false, miners = false, beams = false;
     components(state, fleet, [&](const auto& s, auto) {
@@ -209,13 +213,15 @@ bool fleet_task_equipment_available(const GameState& state, const Fleet& fleet, 
 bool strategic_task_available(const GameState& state, const Fleet& fleet, FleetTask task)
 {
     return task == FleetTask::None || (!fleet.destination && !fleet.targetFleet
-        && fleet.waypointQueue.empty() && fleet_task_equipment_available(state, fleet, task));
+        && fleet.waypointQueue.empty() && fleet_task_equipment_available(state, fleet, task)
+        && (task != FleetTask::DeployOutpost || outpost_deployment_error(state, fleet, fleet.position).empty()));
 }
 
 std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, Position destination,
     FleetArrivalActionKind action)
 {
     const auto task = arrival_work_task(action);
+    if (action == FleetArrivalActionKind::DeployOutpost) return outpost_deployment_error(state, fleet, destination);
     if (!task) return {};
     if (!fleet_task_equipment_available(state, fleet, *task)) {
         switch (*task) {

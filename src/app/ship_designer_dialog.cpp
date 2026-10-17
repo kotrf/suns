@@ -310,6 +310,8 @@ QString componentTooltip(ShipComponentType component)
     if (spec.fieldRepairPerTurn > 0.0)
         facts << "Field repair: 8 hull-damage points per year per equipped ship; mixed fleets scale by equipped ship fraction. A friendly shipyard repairs 20 instead.";
     if (spec.radiationHazard > 0.0) facts << "Radiation hazard: 10% colonist losses per travel turn unless the race is immune or has radiation tolerance ≥ 85%.";
+    if (component == ShipComponentType::FuelDepotKit || component == ShipComponentType::DeepSpaceRelayKit)
+        facts << "One paid kit per constructor. Fly to deep space, then deploy permanently (one ship, no colonists, 5 ly from stars, 1 ly from another outpost). Upkeep 1 mg/year; tanker deliveries replenish fuel. Depot stock is finite; the relay adds 300 ly only after deployment.";
     if (spec.enablesColonization) facts << "Enables colonization";
     return facts.join("\n");
 }
@@ -335,7 +337,7 @@ std::optional<ComponentDrag> decodeComponentDrag(const QMimeData* mime)
     const auto slot = parts[1].toUInt(&slotOk);
     if (!componentOk || !slotOk
         || component < static_cast<int>(ShipComponentType::FusionDrive)
-        || component > static_cast<int>(ShipComponentType::Superlatanium)
+        || component > static_cast<int>(kLastShipComponent)
         || slot > std::numeric_limits<ShipSlotId>::max()) {
         return std::nullopt;
     }
@@ -661,6 +663,8 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::DeepPenetratingScanner,
         ShipComponentType::RelayArray,
         ShipComponentType::FieldRepairBay,
+        ShipComponentType::FuelDepotKit,
+        ShipComponentType::DeepSpaceRelayKit,
         ShipComponentType::AnomalyDetector,
         ShipComponentType::SettlersDelight,
         ShipComponentType::QuickJump5,

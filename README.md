@@ -99,6 +99,8 @@ Battle reports arrive through communications and remain readable after fleet
 destruction. Different empires are hostile in this first slice. [Bombardment, minefields, stealth/EW and field science](docs/strategic-operations.md)
 use terminal waypoint work orders and separate emission controls. Work begins locally on arrival; Stop cancels it without changing radio mode. Station combat is implemented.
 
+[Deep-space infrastructure](docs/deep-space-infrastructure.md) starts with paid constructor kits: permanently deploy finite fuel depots and 300 ly relays away from planets. **View → Deep-space infrastructure** offers construction coordinates, received stock/condition, fuel-delivery and refueling routes, and an optional map overlay. Each site consumes 1 mg/year; disruption and destruction follow ordinary combat and delayed reports.
+
 Owned colonies offer **Station…** for fitted docks, starbases and fortresses. Stations defend orbit, retain battle damage and lose their services when destroyed. **Energy 1** unlocks paid **Colony defense / Auto defenses** in Production to protect against bombardment. See [stations and colony defense](docs/orbital-stations.md).
 
 **Fleet → Intelligence…** shows dated enemy contact snapshots, quality, mass estimates and hull evidence. Radio silence can carry periodic communication/active-scan windows and wake on arrival. Sensor interference/clearance is reported with communication delay. See [reconnaissance](docs/reconnaissance.md).

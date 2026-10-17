@@ -34,6 +34,7 @@ add_library(suns_app_ui STATIC
     main_window_wormholes.cpp
     main_window_unknown_objects.cpp
     main_window_interstellar_medium.cpp
+    main_window_outposts.cpp
     main_window_ui.cpp
     main_window_route_program.cpp
     route_program_dock.cpp

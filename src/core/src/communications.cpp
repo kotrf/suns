@@ -150,7 +150,9 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::RecoverWreckage) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::SupplyOutpost) return false;
+        if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
+            || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
         if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
         if (target != 0) {
             return action.kind == FleetArrivalActionKind::None
@@ -251,7 +253,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         fleet.targetFleet = 0;
         return true;
     }
-    if (!route_tasks_valid(program) || !route_work_equipment_valid(state, fleet, program)) return false;
+    if (fleet.outpost != OutpostKind::None || !route_tasks_valid(program) || !route_work_equipment_valid(state, fleet, program)) return false;
     const auto requestedWarp = program.warp == 0 ? fleet.warp : program.warp;
     if (!fleet_warp_valid(state, fleet, requestedWarp)) return false;
     if (std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(),
@@ -336,6 +338,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.fuel = fleet.fuel;
     result.damagePercent = fleet.damagePercent;
     result.electronics = fleet.electronics;
+    result.outpost = fleet.outpost;
     result.colonists = fleet.colonists;
     result.arrivalAction = fleet.arrivalAction;
     result.waypointQueue = fleet.waypointQueue;
@@ -370,6 +373,7 @@ void activate_next_predicted_waypoint(
 
 Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t age)
 {
+    if (telemetry.outpost != OutpostKind::None) return telemetry.position;
     constexpr double epsilon = 0.000001;
     Position position = telemetry.position;
     auto destination = telemetry.destination;
@@ -622,6 +626,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.fuel = telemetry.fuel;
     view.damagePercent = telemetry.damagePercent;
     view.electronics = telemetry.electronics;
+    view.outpost = telemetry.outpost;
     view.colonists = telemetry.colonists;
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;

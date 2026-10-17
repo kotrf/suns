@@ -3,6 +3,7 @@
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/communications.hpp"
+#include "suns/deep_space.hpp"
 
 #include <QAction>
 #include <QColor>
@@ -139,6 +140,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
+    case GameEventKind::OutpostDeployed: subject = QString("%1: outpost deployed").arg(fleetName); break;
+    case GameEventKind::OutpostDeploymentFailed: subject = QString("%1: deployment rejected").arg(fleetName); break;
+    case GameEventKind::OutpostFuelExhausted: subject = QString("%1: outpost fuel exhausted").arg(fleetName); break;
     case GameEventKind::StargateTransit: subject = QString("%1 transited to %2").arg(fleetName, planetName); break;
     case GameEventKind::StargateTransitFailed: subject = QString("%1: stargate transit rejected").arg(fleetName); break;
     case GameEventKind::RouteCompleted: subject = QString("%1 completed its route").arg(fleetName); break;
@@ -226,6 +230,9 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::FleetMovement:
         return event.kind == GameEventKind::FleetArrived
+            || event.kind == GameEventKind::OutpostDeployed
+            || event.kind == GameEventKind::OutpostDeploymentFailed
+            || event.kind == GameEventKind::OutpostFuelExhausted
             || event.kind == GameEventKind::StargateTransit
             || event.kind == GameEventKind::StargateTransitFailed
             || event.kind == GameEventKind::RouteCompleted
@@ -241,8 +248,9 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind == ProductionKind::ColonyShip;
     case MessageTypeFilter::Infrastructure:
-        return event.kind == GameEventKind::ProductionCompleted
-            && event.productionKind != ProductionKind::ColonyShip;
+        return event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
+            || event.kind == GameEventKind::OutpostFuelExhausted || (event.kind == GameEventKind::ProductionCompleted
+            && event.productionKind != ProductionKind::ColonyShip);
     case MessageTypeFilter::Colonization: return event.kind == GameEventKind::ColonyFounded;
     case MessageTypeFilter::Freight: return event.kind == GameEventKind::FreightDelivered;
     case MessageTypeFilter::EnemyContacts:
@@ -468,6 +476,16 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(surveyName, starName);
         if (!detail.isEmpty()) text += QString("\n%1").arg(detail);
+    } else if (event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
+        || event.kind == GameEventKind::OutpostFuelExhausted) {
+        const auto kind=QString::fromStdString(outpost_kind_name(OutpostKind(event.quantity)));
+        text=QString("Year %1 • %2 at %3, %4.\n%5")
+            .arg(qulonglong(event.observedTurn)).arg(fleetName).arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1)
+            .arg(event.kind==GameEventKind::OutpostDeployed
+                ? kind + " permanently deployed. Upkeep: 1 mg/year. Depots dispense finite fuel; relays extend communications by 300 ly while powered."
+                : event.kind==GameEventKind::OutpostFuelExhausted
+                ? QString("Operating fuel exhausted: depot/relay services are offline. Send a tanker with Supply outpost; the installation remains in place.")
+                : QString("Deployment failed physical validation. Check one ship with one kit, no colonists, hull condition, an idle final waypoint, 5 ly stellar clearance and 1 ly separation from other installations."));
     } else if (event.kind == GameEventKind::StargateTransit) {
         text = QString("Turn %1  •  %2 transited to the gate at %3 without burning fuel.\n"
                        "Cargo aboard at transit: I %4 / B %5 / G %6 kt; %7 colonists. "

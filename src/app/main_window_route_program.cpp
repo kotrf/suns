@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/deep_space.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
@@ -63,6 +64,8 @@ QString waypointName(const GameState& state, Position position, FleetId targetFl
 
 QString actionName(const FleetArrivalAction& action)
 {
+    if (action.kind == FleetArrivalActionKind::DeployOutpost) return "Deploy outpost — permanent";
+    if (action.kind == FleetArrivalActionKind::SupplyOutpost) return QString("Supply fuel; keep %1 mg").arg(action.reserveFuel);
     if (const auto task = arrival_work_task(action.kind))
         return QString::fromStdString(fleet_task_name(*task)) + " — persistent";
     const auto cargoName = [&] {
@@ -210,14 +213,13 @@ QString routeForecast(
     if (const auto* p = find_player(state,pending.player)) for (const auto& i : p->strategicIntel)
         if (i.type == StrategicObjectKind::Minefield && i.quantity > 0)
             simulated.minefields.push_back({i.id,i.owner,i.position,i.quantity,i.kind});
-    for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining) f.task = FleetTask::None;
+
     simulated.wormholes.clear();
     simulated.wormholeRules.spawnChancePerTurn = 0.0;
     const auto missing = missing_fleet_contacts(state, pending.player);
     simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
-    if (auto* simulatedFleet = findFleet(simulated, fleetId)) {
-        *simulatedFleet = fleet_player_view(state, *simulatedFleet);
-    }
+    for (auto& f : simulated.fleets) f = fleet_player_view(state, f);
+    for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining && f.task != FleetTask::DeployOutpost) f.task = FleetTask::None;
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
     lines << "<i>Navigation only: hostile encounters can interrupt this route; combat is not forecast.</i>";
@@ -381,12 +383,15 @@ QString routeForecast(
                 }
                 break;
             case FleetArrivalActionKind::Refuel:
-                outcome = arrivalPlanet
-                        && colony_has_orbital_service(
-                            next, arrivalPlanet->id, fleetOwner,
-                            OrbitalStationModule::RefuelingDepot)
-                    ? QString("; projected fuel after refuel: %1").arg(after->fuel, 0, 'f', 1)
-                    : "; refueling unavailable — no friendly orbital depot";
+                outcome = QString("; projected fuel after arrival: %1 mg; refuel requires a working friendly depot. Deep-space stock is finite and may change before arrival")
+                    .arg(after->fuel, 0, 'f', 1);
+                break;
+            case FleetArrivalActionKind::DeployOutpost:
+                outcome = after->outpost != OutpostKind::None ? "; permanently deployed; upkeep begins next year"
+                    : "; deployment could not be completed at these coordinates";
+                break;
+            case FleetArrivalActionKind::SupplyOutpost:
+                outcome = QString("; projected tanker fuel after delivery: %1 mg; transfer is limited by actual receiver capacity and tanker stock").arg(after->fuel,0,'f',1);
                 break;
             case FleetArrivalActionKind::Colonize:
                 outcome = "; colonization could not be completed; fleet remains";
@@ -422,7 +427,9 @@ QString routeForecast(
                          .arg(navigationCertainty)
                          .arg(outcome);
 
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable) {
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
+                || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
+                || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {
                 dependsOnDynamicResult = true;
             }
             ++legIndex;
