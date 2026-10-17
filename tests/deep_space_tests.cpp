@@ -151,6 +151,21 @@ void deployment_and_stock_wait_for_received_telemetry()
     const auto sites=known_outposts(s,1); assert(sites.size()==1 && sites[0].fuel==100 && sites[0].damagePercent==0);
     assert(same_position(sites[0].position,Position{1000,0}));
 }
+void simultaneous_upkeep_uses_one_network_snapshot()
+{
+    auto s=world(); add(s,101,{400,0}).task=FleetTask::DeployOutpost;
+    add(s,101,{950,0}).task=FleetTask::DeployOutpost; deploy_outposts(s,s.turn);
+    for (auto& f:s.fleets) f.fuel=1;
+    s.players[0].pendingPlayerReports.clear(); s.emissions.clear();
+    auto reversed=s; std::reverse(reversed.fleets.begin(),reversed.fleets.end());
+    maintain_outposts(s,s.turn+1); maintain_outposts(reversed,reversed.turn+1);
+    const auto& a=s.players[0].pendingPlayerReports; const auto& b=reversed.players[0].pendingPlayerReports;
+    assert(a.size()==2 && b.size()==2);
+    for (std::size_t n=0;n<a.size();++n) {
+        assert(a[n].kind==PlayerReportKind::OutpostFuelExhausted && a[n].fleet==b[n].fleet);
+        assert(a[n].deliveryTurn==b[n].deliveryTurn && same_position(a[n].position,b[n].position));
+    }
+}
 void destruction_is_an_ordinary_delayed_battle_loss()
 {
     auto s=world(); s.players.push_back({2,"Enemy"});
@@ -194,5 +209,6 @@ int main()
     relay_upkeep_and_loss_cut_the_live_mesh(); deployment_and_stock_wait_for_received_telemetry();
     destruction_is_an_ordinary_delayed_battle_loss();
     armed_platforms_have_no_tactical_movement();
+    simultaneous_upkeep_uses_one_network_snapshot();
     std::cout << "deep-space infrastructure tests passed\n";
 }
