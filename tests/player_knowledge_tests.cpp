@@ -1,6 +1,7 @@
 #include "suns/game_state.hpp"
 #include "suns/campaign.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/player_knowledge.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -420,6 +421,22 @@ void enemy_contacts_follow_sensor_transitions_and_remote_delivery()
 
 int main()
 {
+    // An older exact survey arriving after a newer rough scan has its own
+    // observation date. It must not retain the rough snapshot under a deep level.
+    {
+        auto state = survey_fixture({450,0}, {450,0}, 4);
+        observe_current_sensor_coverage(state, 4);
+        auto exact = state.players[0].pendingSurveyReports.back();
+        exact.level = SurveyLevel::DeepSurvey;
+        exact.deliveryTurn = 7;
+        set_survey_level(state, 1, 2, SurveyLevel::BasicScan, 6);
+        state.players[0].pendingSurveyReports = {exact};
+        state.turn = 7;
+        (void)deliver_due_survey_reports(state);
+        const auto& intel = state.players[0].surveyKnowledge.back();
+        assert(intel.level == SurveyLevel::DeepSurvey && intel.planetSnapshot->environment);
+        assert(intel.observedTurn == 4 && known_planet_habitability(state, 1, 2) == 82);
+    }
     ordinary_scanner_reports_system_contact_without_planet_data();
     penetrating_scanner_estimates_planet_during_a_connected_flyby();
     remote_report_remains_in_flight_until_delivery();

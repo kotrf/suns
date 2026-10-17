@@ -28,7 +28,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 82;
+constexpr quint32 kSaveFormatVersion = 83;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2285,6 +2285,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "unknown_objects_save.inc"
 #include "interstellar_medium_save.inc"
 #include "deep_space_save.inc"
+#include "survey_save.inc"
 #include "strategic_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)

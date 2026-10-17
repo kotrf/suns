@@ -1,5 +1,21 @@
 # Project status and development handoff
 
+## Audit corrections — 17 October 2026
+
+Baseline: verified main `1165dce` after deep-space infrastructure #214/#215.
+The [17 October audit](audits/2026-10-17-code-review.md) was imported from
+`codex/audit-findings` / `5db0b49`. All six findings have fixes and regression
+coverage in this branch: frozen foreign environment and fresh survey merging;
+gate-hop inheritance across merge/split; shared movement effects with annual
+radiation exposure tracking; usable-weapon combat distance; and name validation
+before the nonmodal ship editor accepts its draft.
+
+Save v83 adds a bounded survey-snapshot extension while keeping the v82 body
+and orders v29. Older host evidence requires resurvey rather than reconstruction
+from hidden physical state. Tests retain assertions in Release/RelWithDebInfo.
+Validation and implementation commit IDs are recorded in the audit follow-up
+and implementation PR. This section does not imply the branch has been merged.
+
 ## Current implementation — 17 October 2026: deep-space infrastructure
 
 Main baseline is PR #213 (`4cb245c`), the first playable primary trait. The

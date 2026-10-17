@@ -1392,16 +1392,18 @@ void MainWindow::openShipDesigner()
     shipDesigner_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModal(false);
-    connect(dialog, &QDialog::accepted, this, [this, dialog] {
-        const auto draft = dialog->draft();
+    dialog->setSaveValidator([this](const ShipDesignDraft& draft) -> QString {
         const auto duplicateInState = std::any_of(
             state_.shipDesigns.begin(), state_.shipDesigns.end(), [&](const ShipDesign& design) {
                 return design.owner == pendingOrders_.player && design.name == draft.name;
             });
         if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
-            statusBar()->showMessage("A ship design with that name already exists or is pending");
-            return;
+            return "A ship design with that name already exists or is pending";
         }
+        return {};
+    });
+    connect(dialog, &QDialog::accepted, this, [this, dialog] {
+        const auto draft = dialog->draft();
         appendPendingOrder(
             CreateShipDesignOrder{draft.name, draft.hull, draft.components, draft.placements},
             QString("Save ship design %1")

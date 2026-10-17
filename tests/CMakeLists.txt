@@ -403,3 +403,18 @@ target_link_libraries(suns_interstellar_medium_tests PRIVATE Suns::Core)
 add_test(NAME suns_interstellar_medium_tests COMMAND suns_interstellar_medium_tests)
 target_link_libraries(suns_unknown_objects_tests PRIVATE Suns::Core)
 add_test(NAME suns_unknown_objects_tests COMMAND suns_unknown_objects_tests)
+
+add_executable(suns_audit_regression_tests audit_regression_tests.cpp)
+target_link_libraries(suns_audit_regression_tests PRIVATE Suns::Core)
+add_test(NAME suns_audit_regression_tests COMMAND suns_audit_regression_tests)
+
+# These suites use assert, including some operations inside its expressions.
+# Keep checks active for Release/RelWithDebInfo as well as Debug.
+get_property(suns_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(suns_test_target IN LISTS suns_test_targets)
+    if(MSVC)
+        target_compile_options(${suns_test_target} PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(${suns_test_target} PRIVATE -UNDEBUG)
+    endif()
+endforeach()

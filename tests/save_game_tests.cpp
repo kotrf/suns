@@ -29,8 +29,21 @@ namespace {
 using namespace suns;
 
 // These old-layout fixtures have no pending/archive evidence.
+void strip_survey_tail(QByteArray& bytes)
+{
+    QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream << quint32{0x53555256u};
+    const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
+    QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader >> tailSize;
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream << quint32{0x53545241u};
+    const auto start=bytes.indexOf(marker); assert(start>=0 && bytes.indexOf(marker,start+1)<0);
+    QDataStream header(bytes.mid(start+4)); quint32 size{}; header >> size;
+    assert(tail>=start+8 && tail+8+tailSize==start+8+size);
+    bytes.remove(tail,8+tailSize);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(start+4)); patch << quint32(size-8-tailSize);
+}
 void strip_outpost_tail(QByteArray& bytes)
 {
+    strip_survey_tail(bytes);
     QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x4f555450u};
     const auto tail=bytes.indexOf(tag); assert(tail>=0 && bytes.indexOf(tag,tail+1)<0);
     QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
@@ -2401,8 +2414,69 @@ void v81_campaigns_migrate_without_deployed_outposts()
     for (const auto& f:loaded.state.fleets) assert(f.outpost==OutpostKind::None && f.telemetry.outpost==OutpostKind::None);
     assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,loaded,error));
 }
+void survey_snapshots_round_trip_and_keep_hidden_terraforming_private()
+{
+    QTemporaryDir dir; QString error; SaveGameData save;
+    save.campaignId=831; save.turnToken=832; save.mode=SessionMode::Host;
+    save.playerTokens={{1,832},{2,833}}; save.pendingOrders={1,{}};
+    save.state=make_demo_game(); save.state.turn=10;
+    save.state.players.push_back({2,"Foreign"});
+    auto& state=save.state; state.players[0].race.environmentBased=true;
+    state.players[0].surveyKnowledge.clear(); state.players[0].surveyedStars.clear();
+    auto& planet=state.planets[1]; planet.owner=2; planet.environment={24,50,50};
+    planet.naturalEnvironment=PlanetEnvironment{20,50,50};
+    state.stars[1].position={1000,0}; state.stars[1].variability={};
+    set_survey_level(state,1,planet.star,SurveyLevel::GeologicalSurvey,6);
+    const auto receivedHab=known_planet_habitability(state,1,planet.id);
+    assert(receivedHab);
+    planet.environment.temperature=67;
+    state.fleets[0].position={1000,0};
+    observe_current_sensor_coverage(state,9);
+    state.fleets.clear();
+    const auto path=dir.filePath("survey.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
+    assert(known_planet_habitability(loaded.state,1,planet.id)==receivedHab);
+    assert(loaded.state.players[0].surveyKnowledge[0].planetSnapshot->environment->temperature==24);
+    const auto pending=std::find_if(loaded.state.players[0].pendingSurveyReports.begin(),
+        loaded.state.players[0].pendingSurveyReports.end(),[&](const auto& r){return r.star==planet.star;});
+    assert(pending!=loaded.state.players[0].pendingSurveyReports.end());
+    assert(pending->planetSnapshot->environment->temperature==67);
+    loaded.state.planets[1].environment.temperature=99;
+    loaded.state.turn=pending->deliveryTurn;
+    (void)deliver_due_survey_reports(loaded.state);
+    assert(make_player_view(loaded.state,1).state.planets.back().environment.temperature==67);
+
+    const auto a=dir.filePath("survey-a.sunsturn"),b=dir.filePath("survey-b.sunsturn");
+    assert(write_save_game_file(a,make_player_turn(save,1),error));
+    planet.environment={90,90,90}; planet.naturalEnvironment=PlanetEnvironment{80,80,80};
+    for(auto& report:state.players[0].pendingSurveyReports) report.planetSnapshot.reset();
+    assert(write_save_game_file(b,make_player_turn(save,1),error));
+    QFile fa(a),fb(b); assert(fa.open(QIODevice::ReadOnly) && fb.open(QIODevice::ReadOnly));
+    assert(fa.readAll()==fb.readAll());
+
+    // This is the actual v82 layout, with only the v83 bounded tail removed.
+    QFile file(path); assert(file.open(QIODevice::ReadWrite)); auto bytes=file.readAll();
+    strip_survey_tail(bytes);
+    QDataStream version(&bytes,QIODevice::ReadWrite); assert(version.device()->seek(4)); version<<quint32{82};
+    assert(file.resize(0) && file.seek(0) && file.write(bytes)==bytes.size()); file.close();
+    assert(read_save_game_file(path,loaded,error));
+    assert(!known_planet_habitability(loaded.state,1,planet.id));
+    assert(!loaded.state.players[0].surveyKnowledge[0].planetSnapshot);
+    assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,loaded,error));
+    // Unknown/invalid presence flags and axes fail closed.
+    assert(write_save_game_file(path,save,error));
+    assert(file.open(QIODevice::ReadWrite)); bytes=file.readAll();
+    QByteArray tag; QDataStream marker(&tag,QIODevice::WriteOnly); marker<<quint32{0x53555256u};
+    const auto tail=bytes.indexOf(tag); assert(tail>=0); bytes[tail+24]=char(2);
+    assert(file.resize(0) && file.seek(0) && file.write(bytes)==bytes.size()); file.close();
+    assert(!read_save_game_file(path,loaded,error));
+    state.players[0].surveyKnowledge[0].planetSnapshot->environment->temperature=255;
+    assert(!write_save_game_file(path,save,error));
+}
+
 int main()
 {
+    survey_snapshots_round_trip_and_keep_hidden_terraforming_private();
     deep_space_outposts_round_trip_and_hide_unreceived_state();
     v81_campaigns_migrate_without_deployed_outposts();
     specialist_gate_fits_and_manifests_round_trip();

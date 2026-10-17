@@ -17,6 +17,7 @@
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <iterator>
 #include <set>
 #include <string>
@@ -1404,6 +1405,25 @@ void apply_overdrive_damage(Fleet& fleet, double damage)
     fleet.targetFleet = 0;
 }
 
+// Surviving colonists already exposed this year travel with their cargo cohort
+// through rendezvous merges. New passengers entering an unsafe moving formation
+// pay the annual loss once, regardless of how many segments it traverses.
+using RadiationExposure = std::map<FleetId, std::uint64_t>;
+
+void apply_movement_effects(GameState& state, Fleet& fleet, Position start,
+    double overdriveDamage, RadiationExposure& exposure)
+{
+    observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
+    if (!fleet_radiation_safe(state, fleet)) {
+        const auto alreadyExposed = std::min(fleet.colonists, exposure[fleet.id]);
+        auto unexposed = fleet;
+        unexposed.colonists -= alreadyExposed;
+        fleet.colonists -= projected_fleet_radiation_losses(state, unexposed);
+        exposure[fleet.id] = fleet.colonists;
+    }
+    apply_overdrive_damage(fleet, overdriveDamage);
+}
+
 void continue_merged_fleet_route(
     GameState& state,
     Fleet& fleet,
@@ -1411,7 +1431,8 @@ void continue_merged_fleet_route(
     double remainingTurnFraction,
     std::vector<FleetId>& consumedFleets,
     std::vector<ColonyFreightDelivery>& freight,
-    std::vector<FleetMovementFuel>& movementFuel)
+    std::vector<FleetMovementFuel>& movementFuel,
+    RadiationExposure& exposure)
 {
     constexpr double epsilon = 0.000001;
     if (remainingTurnFraction <= epsilon) return;
@@ -1453,8 +1474,7 @@ void continue_merged_fleet_route(
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuelConsumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
     fleet.fuelStalled = false;
-    observe_fleet_sensor_sweep(state, fleet, start, endpoint, state.turn + 1);
-    apply_overdrive_damage(fleet, budget.damage);
+    apply_movement_effects(state, fleet, start, budget.damage, exposure);
 
     if (fleet.damagePercent < 100.0 && fleet.targetFleet == 0
         && same_position(endpoint, destination)) {
@@ -1469,6 +1489,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     constexpr double epsilon = 0.000001;
     std::vector<FleetId> consumedFleets;
     std::vector<FleetId> skipMovement;
+    RadiationExposure exposure;
 
     // A rendezvous already true at the planning boundary resolves before either
     // fleet starts another leg. This mirrors fixed-coordinate arrival behavior.
@@ -1751,9 +1772,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         fleet.position = endpoint;
         recordFuel(budget.fuelConsumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
-        observe_fleet_sensor_sweep(state, fleet, start, fleet.position, state.turn + 1);
-        apply_fleet_radiation_attrition(state, fleet);
-        apply_overdrive_damage(fleet, budget.damage);
+        apply_movement_effects(state, fleet, start, budget.damage, exposure);
 
         if (!mineStrike && fleet.damagePercent < 100.0 && plan->routed && !plan->intercepted
             && fleet.targetFleet == 0
@@ -1788,7 +1807,12 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 
         const auto targetId = fleet->targetFleet;
         const auto action = fleet->arrivalAction.value_or(FleetArrivalAction{});
+        const auto* beforeMerge = fleet_by_id(state, targetId);
+        const auto exposed = std::min(exposure[id], fleet->colonists)
+            + (beforeMerge ? std::min(exposure[targetId], beforeMerge->colonists) : 0);
         const auto resolved = resolve_fleet_target_arrival(state, *fleet, consumedFleets, freight);
+        if (action.kind == FleetArrivalActionKind::MergeWithFleet
+            && fleet_id_list_contains(consumedFleets, id)) exposure[targetId] = exposed;
         if (!resolved || encounter == resolvedEncounters.end()
             || action.kind != FleetArrivalActionKind::MergeWithFleet
             || !encounter->targetRouted) {
@@ -1809,7 +1833,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             *merged,
             encounter->targetDestination,
             1.0 - encounter->timeFraction,
-            consumedFleets, freight, movementFuel);
+            consumedFleets, freight, movementFuel, exposure);
     }
 
     if (!consumedFleets.empty()) {
@@ -2149,9 +2173,15 @@ TurnResult TurnProcessor::process_with_events(
                     } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
                         (void)submit_electronics_command(next, submission.player, concreteOrder.fleet, concreteOrder.program);
                     } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
-                        (void)merge_fleets(next, submission.player, concreteOrder);
+                        const bool usedGate = gatedThisTurn.contains(concreteOrder.source)
+                            || gatedThisTurn.contains(concreteOrder.destination);
+                        if (merge_fleets(next, submission.player, concreteOrder) && usedGate)
+                            gatedThisTurn.insert(concreteOrder.destination);
                     } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
-                        (void)split_fleet(next, submission.player, concreteOrder);
+                        const auto detached = next.nextFleetId;
+                        if (split_fleet(next, submission.player, concreteOrder)
+                            && gatedThisTurn.contains(concreteOrder.source))
+                            gatedThisTurn.insert(detached);
                     } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
                         const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
                             [&](const Fleet& candidate) {

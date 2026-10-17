@@ -777,7 +777,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     placements_ = autoplace_ship_components(initialHull_,
         {initialEngine_, initialScanner_});
 
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::accepted, this, &ShipDesignerDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(nameEdit_, &QLineEdit::textChanged, this, [this] { updatePreview(); });
     connect(templateCombo_, &QComboBox::currentIndexChanged, this, [this] {
@@ -1255,7 +1255,27 @@ void ShipDesignerDialog::updatePreview()
                     .arg(ship_design_armor(design)).arg(hull.armor).arg(ship_design_shields(design)).arg(hull.initiative)
                     .arg(armament.isEmpty() ? QString{} : "<br>Loadout: " + armament.join(" • "))
                 : QString{}));
-    saveButton_->setEnabled(valid);
+    const auto duplicate = std::any_of(templates_.begin(), templates_.end(),
+        [&](const auto& entry) { return entry.name == design.name; });
+    if (duplicate) fitMessage_->setText("Cannot save: a ship design with that name already exists or is pending");
+    saveButton_->setEnabled(valid && !duplicate);
+    saveButton_->setToolTip(duplicate ? "A ship design with that name already exists or is pending" : QString{});
+}
+
+void ShipDesignerDialog::setSaveValidator(std::function<QString(const ShipDesignDraft&)> validator)
+{
+    saveValidator_ = std::move(validator);
+}
+
+void ShipDesignerDialog::accept()
+{
+    updatePreview();
+    if (!saveButton_->isEnabled()) return;
+    if (saveValidator_) {
+        const auto error = saveValidator_(draft());
+        if (!error.isEmpty()) { fitMessage_->setText(error); return; }
+    }
+    QDialog::accept();
 }
 
 } // namespace suns

@@ -193,7 +193,10 @@ SpaceBattleReport fight(const GameState& state, const std::vector<FleetId>& flee
             const auto target = target_for(units, i);
             if (!target) continue;
             double range = 0;
-            for (const auto& w : units[i].weapons) range = std::max(range, double(w.spec.weaponRange));
+            for (const auto& w : units[i].weapons)
+                if (!w.spec.shieldOnly || units[*target].shields > epsilon)
+                    range = std::max(range, double(w.spec.weaponRange));
+            if (range <= 0) continue;
             const auto distance = distance_between(units[i].position, units[*target].position);
             if (distance <= range + epsilon) continue;
             const auto step = std::min(units[i].movement, distance - range);

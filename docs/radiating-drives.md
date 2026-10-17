@@ -16,6 +16,13 @@ When a fleet carrying colonists actually moves during a turn with a radiating dr
 
 A stationary fleet does not take propulsion-radiation losses: the drive is considered inactive while parked.
 
+Normal movement and movement after a rendezvous merge share the same segment
+effects. Surviving passengers already exposed during the year retain that status
+through a merge. Previously safe passengers joining an unsafe formation take
+the annual 10% loss only if that formation actually continues moving. A second
+segment does not charge already exposed passengers again. This transient ledger
+is reset at the next annual boundary and is independent of fleet storage order.
+
 The current constants are intentionally explicit:
 
 - safe tolerance: 0.85;

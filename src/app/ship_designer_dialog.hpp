@@ -5,6 +5,7 @@
 #include <QDialog>
 
 #include <optional>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,9 @@ public:
     ~ShipDesignerDialog() override;
 
     [[nodiscard]] ShipDesignDraft draft() const;
+    // Recheck against live planning state before accepting a nonmodal draft.
+    void setSaveValidator(std::function<QString(const ShipDesignDraft&)> validator);
+    void accept() override;
 
 private:
     void rebuildSlotGrid();
@@ -65,6 +69,7 @@ private:
     QPushButton* saveButton_{};
     std::vector<ShipComponentPlacement> placements_;
     ShipSlotId selectedSlot_{};
+    std::function<QString(const ShipDesignDraft&)> saveValidator_;
 };
 
 } // namespace suns

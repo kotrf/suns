@@ -1,5 +1,25 @@
 # Player knowledge and Turn Messages
 
+## Frozen planetary evidence (save v83)
+
+Basic scans retain only their observed rough Hab estimate. Orbital-quality
+observations freeze the planetary axes, natural baseline and scalar legacy Hab
+in both in-flight reports and received knowledge. Foreign terraforming never
+changes a player's view, AI inputs or exported turn before another report arrives.
+Characterized stellar cycles can still forecast Hab from those received axes;
+contamination continues to use separately received aftermath estimates.
+
+Survey depth is cumulative, while dynamic ownership/environment use the newest
+orbital-quality observation. Coalescing requires dominance in observation date
+as well as depth and delivery time. Old deep surveys cannot erase newer orbital
+facts; a newly delivered exact survey keeps its own date even after a newer rough
+scan. Observation order and fleet storage order do not change the result.
+
+v82 and earlier saves remain readable. They contain no reconstructible foreign
+environment evidence, so a fresh scan is required for missing Hab/axes; loading
+never fills that gap from the current host planet. Existing received player-file
+Hab projections remain readable. The order format remains v29.
+
 Suns! keeps simulation truth separate from what an empire has actually learned. The player-knowledge layer currently carries system surveys and operational reports from fleets and colonies.
 
 ## Survey reports
