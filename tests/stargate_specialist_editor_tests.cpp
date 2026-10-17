@@ -29,6 +29,8 @@ struct MainWindowTestAccess {
         w.selection_.fleet = 1; w.selection_.star = 1; w.rebuildScene();
     }
     static const std::vector<Order>& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
+    static void transit(MainWindow& w) { w.openGateTransit(); }
+    static void fitting(MainWindow& w) { w.openStationDesigner(); }
 };
 }
 int main(int argc, char** argv)
@@ -45,7 +47,7 @@ int main(int argc, char** argv)
         assert(destinations && destinations->count() == 1 && destinations->currentData().toUInt() == 2);
         d->accept();
     });
-    window.openGateTransit();
+    MainWindowTestAccess::transit(window);
     assert(std::holds_alternative<GateFleetOrder>(MainWindowTestAccess::orders(window).front()));
     QTimer::singleShot(0, [&] {
         auto* d = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -62,7 +64,7 @@ int main(int argc, char** argv)
         assert(d->findChild<QPushButton*>("queueStationFit")->isEnabled());
         d->accept();
     });
-    window.openStationDesigner();
+    MainWindowTestAccess::fitting(window);
     const auto& refit = std::get<QueueStationOrder>(MainWindowTestAccess::orders(window).back());
     assert(refit.construction.refitStation == 1);
     assert(refit.construction.loadout.components.front() == ShipComponentType::NetworkStargate);
@@ -73,6 +75,6 @@ int main(int argc, char** argv)
         assert(!d->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->isEnabled());
         d->reject();
     });
-    window.openGateTransit();
+    MainWindowTestAccess::transit(window);
     assert(MainWindowTestAccess::orders(window).empty());
 }
