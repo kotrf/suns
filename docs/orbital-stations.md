@@ -74,8 +74,10 @@ Protection for each bombing fleet is calculated before that fleet's casualties,
 so successive attackers face depleted defenses. The ordinary immutable
 bombardment summary includes defenses among lost installations.
 
-These are initial balance rules for playtesting. Planetary scars/restoration,
-stargates, diplomacy and retreat doctrines remain separate work.
+These are initial balance rules for playtesting. Planetary scars/restoration
+have their own production stages; diplomacy and retreat doctrines remain later
+work. Paid finite gates and trait-exclusive Network/Infinity fittings are
+described in [Stargate Specialist](stargate-specialist.md).
 
 ## Persistence
 

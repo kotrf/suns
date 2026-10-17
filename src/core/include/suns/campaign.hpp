@@ -16,6 +16,7 @@ struct EmpireSetup {
     bool advancedRemoteMining{};
     bool basicRemoteMining{};
     PlayerController controller{PlayerController::Human};
+    PrimaryRaceTrait primaryTrait{PrimaryRaceTrait::Generalist};
 };
 struct ResearchUnlock {
     ResearchField field;
@@ -34,6 +35,7 @@ struct ResearchUnlock {
     bool legacyMining{};
     bool terraforming{};
     bool legacyEquipment{};
+    std::optional<PrimaryRaceTrait> primaryTrait;
 };
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);

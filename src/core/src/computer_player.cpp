@@ -6,6 +6,7 @@
 #include "suns/communications.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/production.hpp"
+#include "suns/stations.hpp"
 #include "computer_policy.hpp"
 
 #include <algorithm>
@@ -40,6 +41,36 @@ const Planet* colony_at(const GameState& state, PlayerId player, Position positi
         if (planet.owner == player && star && same_position(position, star->position)) return &planet;
     }
     return nullptr;
+}
+
+std::optional<GateFleetOrder> gate_staging_order(
+    const GameState& state, const Fleet& fleet, Position target, bool requireRefueling)
+{
+    const auto* player = find_player(state, fleet.owner);
+    if (!player || player->race.primaryTrait != PrimaryRaceTrait::StargateSpecialist) return {};
+    const auto* source = colony_at(state, fleet.owner, fleet.position);
+    if (!source || !stargate_station_available(state, fleet.owner, source->id)) return {};
+    const auto* from = station_stargate(*find_orbital_station_at_planet(state, source->id));
+    const auto mass = fleet_gross_mass(state, fleet); // Includes settlers loaded earlier in this plan.
+    if (from->maximumMassKt && mass > from->maximumMassKt) return {};
+    const Planet* best = nullptr;
+    auto bestDistance = distance_between(fleet.position, target);
+    const auto minimumGain = std::max(1.0, warp_distance(fleet.warp));
+    for (const auto& planet : state.planets) {
+        if (requireRefueling && !colony_has_orbital_service(state, planet.id,
+                fleet.owner, OrbitalStationModule::RefuelingDepot)) continue;
+        const auto* star = find_star(state, planet.star);
+        if (!star || !stargate_transfer_valid(state, fleet.owner, fleet.id, source->id, planet.id)) continue;
+        const auto* gate = station_stargate(*find_orbital_station_at_planet(state, planet.id));
+        if (gate->maximumMassKt && mass > gate->maximumMassKt) continue;
+        const auto remaining = distance_between(star->position, target);
+        if (remaining + minimumGain < distance_between(fleet.position, target)
+            && (!best || remaining < bestDistance || (remaining == bestDistance && planet.id < best->id))) {
+            best = &planet; bestDistance = remaining;
+        }
+    }
+    if (!best) return {};
+    return GateFleetOrder{fleet.id, source->id, best->id};
 }
 
 double leg_fuel(const GameState& state, const Fleet& fleet, Position destination)
@@ -213,6 +244,25 @@ void plan_research(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
     for (const auto field : fields)
         if (technology.levels[static_cast<std::size_t>(field)]
             < technology.levels[static_cast<std::size_t>(next)]) next = field;
+    if (player.race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
+        && std::count_if(view.state.planets.begin(), view.state.planets.end(),
+            [&](const auto& p) { return p.owner == view.player; }) >= 2) {
+        // Reach a viable frontier drive first. A functioning network then
+        // favours gate sciences instead of racing to top conventional engines.
+        const auto level = [&](ResearchField f) { return technology.levels[std::size_t(f)]; };
+        if (level(ResearchField::Propulsion) < 3) next = ResearchField::Propulsion;
+        else if (level(ResearchField::Biology) < 1) next = ResearchField::Biology;
+        else {
+            const auto hubs = std::count_if(view.state.planets.begin(), view.state.planets.end(),
+                [&](const auto& p) { return stargate_station_available(view.state, view.player, p.id); });
+            for (const auto& gate : stargate_technologies()) {
+                if (gate.specialistOnly && hubs < 2) break;
+                if (level(ResearchField::Construction) < gate.construction) { next = ResearchField::Construction; break; }
+                if (level(ResearchField::Energy) < gate.energy) { next = ResearchField::Energy; break; }
+                if (level(ResearchField::Electronics) < gate.electronics) { next = ResearchField::Electronics; break; }
+            }
+        }
+    }
     if (hostile_intel(view)) {
         if (technology.levels[static_cast<std::size_t>(ResearchField::Construction)] < 3) next = ResearchField::Construction;
         else if (technology.levels[static_cast<std::size_t>(ResearchField::Weapons)] < 2) next = ResearchField::Weapons;
@@ -315,6 +365,27 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 fleet.colonists = settlers;
                 explain(reason, "Load settlers into fleet " + std::to_string(fleet.id));
             }
+        }
+
+        // Stage through the received network, then wait for arrival telemetry
+        // before issuing the frontier route. Never combine a speculative gate
+        // arrival with a same-year movement or cargo operation.
+        const StarSystem* frontier = nullptr;
+        for (const auto* star : stars) {
+            const auto* planet = find_planet_at_star(state, star->id);
+            if (colonizer ? !planet || !suitable(state, view.player, *planet)
+                : survey_level(state, view.player, star->id) >= SurveyLevel::OrbitalSurvey) continue;
+            if (!frontier || distance_between(fleet.position, star->position) < distance_between(fleet.position, frontier->position))
+                frontier = star;
+        }
+        if (frontier) if (const auto gate = gate_staging_order(state, fleet, frontier->position, true)) {
+            const auto colony = std::find_if(colonies.begin(), colonies.end(),
+                [&](const auto* p) { return p->id == gate->destination; });
+            plan.orders.orders.push_back(*gate);
+            goals.push_back({fleet.id, ComputerFleetGoalKind::Resupply, (*colony)->star,
+                state.turn, review_turn(state, fleet)});
+            explain(reason, "Gate fleet " + std::to_string(fleet.id) + " toward frontier; await telemetry");
+            continue;
         }
 
         const Planet* depot = nullptr;
@@ -554,6 +625,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
     std::string reason;
     plan_research(view, plan, reason);
     plan_military(view, plan, reason);
+    plan_gate_construction(view, plan, reason);
     plan_expansion(view, plan, reason);
     plan.nextState.initialized = true;
     if (reason.empty()) reason = plan.nextState.fleetGoals.empty()

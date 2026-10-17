@@ -45,6 +45,8 @@ enum class GameEventKind {
     PlanetaryAftermath,
     UnknownObjectObserved,
     InterstellarMediumObserved,
+    StargateTransit,
+    StargateTransitFailed,
 };
 
 enum class GameEventSeverity {

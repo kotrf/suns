@@ -6,6 +6,44 @@
 #include <stdexcept>
 
 namespace suns {
+std::span<const StargateSpec> stargate_technologies()
+{
+    // Initial Suns! balance. The specialist pays for both endpoints; research
+    // alone neither creates nor upgrades a physical gate.
+    static const std::array<StargateSpec, 3> gates{{
+        {ShipComponentType::JumpGate, "Jump Gate 160 / 450", 160, 450, 8, 8, 9,
+            40, {0, 0, 50}, false, OrbitalStationHullType::Starbase},
+        {ShipComponentType::NetworkStargate, "Network Gate 750 / 1200", 750, 1200, 14, 14, 9,
+            160, {40, 20, 160}, true, OrbitalStationHullType::Starbase},
+        {ShipComponentType::InfinityStargate, "Infinity / Infinity Gate", 0, 0, 24, 24, 16,
+            600, {150, 100, 400}, true, OrbitalStationHullType::Fortress},
+    }};
+    return gates;
+}
+const StargateSpec* stargate_spec(ShipComponentType component)
+{
+    for (const auto& gate : stargate_technologies()) if (gate.component == component) return &gate;
+    return nullptr;
+}
+const StargateSpec* station_stargate(const OrbitalStation& station)
+{
+    const StargateSpec* result = nullptr;
+    for (auto component : station.components) if (const auto* gate = stargate_spec(component)) {
+        if (result || station.hull < gate->minimumHull) return nullptr;
+        result = gate;
+    }
+    return result;
+}
+bool stargate_component_available(const GameState& s, PlayerId owner, ShipComponentType component)
+{
+    const auto* player = find_player(s, owner);
+    const auto* gate = stargate_spec(component);
+    return player && gate && (!gate->specialistOnly
+        || player->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist)
+        && technology_level(s, owner, ResearchField::Energy) >= gate->energy
+        && technology_level(s, owner, ResearchField::Electronics) >= gate->electronics
+        && technology_level(s, owner, ResearchField::Construction) >= gate->construction;
+}
 const StationHullSpec& station_hull_spec(OrbitalStationHullType hull)
 {
     // Initial Suns! station balance, separate from the reference ship hulls.
@@ -21,7 +59,7 @@ const StationHullSpec& station_hull_spec(OrbitalStationHullType hull)
 bool station_component_supported(ShipComponentType component)
 {
     const auto s = component_spec(component);
-    return component == ShipComponentType::JumpGate
+    return stargate_spec(component)
         || s.kind == ShipComponentKind::BeamWeapon || s.kind == ShipComponentKind::Torpedo
         || s.kind == ShipComponentKind::Armor || s.kind == ShipComponentKind::Shield
         || (s.kind == ShipComponentKind::Electrical && (s.initiativeBonus || s.accuracyBonusPercent
@@ -34,14 +72,16 @@ bool station_loadout_valid(const StationLoadout& fit)
     if (fit.components.size() > std::size_t(h.weapons+h.defenses+h.electronics)) return false;
     unsigned weapons=0, defenses=0, electronics=0;
     for (auto c : fit.components) {
-        if (static_cast<unsigned>(c) > static_cast<unsigned>(ShipComponentType::Superlatanium)
+        if (static_cast<unsigned>(c) > static_cast<unsigned>(kLastShipComponent)
             || !station_component_supported(c)) return false;
+        if (const auto* gate = stargate_spec(c); gate && fit.hull < gate->minimumHull) return false;
         const auto kind = component_spec(c).kind;
         if (kind == ShipComponentKind::BeamWeapon || kind == ShipComponentKind::Torpedo) ++weapons;
         else if (kind == ShipComponentKind::Armor || kind == ShipComponentKind::Shield) ++defenses;
         else ++electronics;
     }
-    const auto gates = std::count(fit.components.begin(), fit.components.end(), ShipComponentType::JumpGate);
+    const auto gates = std::count_if(fit.components.begin(), fit.components.end(),
+        [](auto c) { return stargate_spec(c) != nullptr; });
     return weapons <= h.weapons && defenses <= h.defenses && electronics <= h.electronics
         && gates <= 1 && (!gates || fit.hull != OrbitalStationHullType::OrbitalDock);
 }
@@ -51,9 +91,7 @@ bool station_loadout_available(const GameState& s, PlayerId owner, const Station
     return p && station_loadout_valid(fit)
         && p->technology.levels[std::size_t(ResearchField::Construction)] >= station_hull_spec(fit.hull).construction
         && std::all_of(fit.components.begin(),fit.components.end(),[&](auto c) {
-            if (c == ShipComponentType::JumpGate)
-                return p->technology.levels[std::size_t(ResearchField::Energy)] >= kStargateEnergyLevel
-                    && p->technology.levels[std::size_t(ResearchField::Electronics)] >= kStargateElectronicsLevel;
+            if (stargate_spec(c)) return stargate_component_available(s, owner, c);
             return component_available_to_player(s,owner,c);
         });
 }
@@ -62,17 +100,20 @@ bool stargate_station_available(const GameState& s, PlayerId owner, PlanetId id)
     const auto planet = std::find_if(s.planets.begin(), s.planets.end(),
         [=](const Planet& p) { return p.id == id && p.owner == owner; });
     const auto station = find_orbital_station_at_planet(s, id);
+    const auto* player = find_player(s, owner);
+    const auto* gate = station ? station_stargate(*station) : nullptr;
     return planet != s.planets.end() && station && station->owner == owner
-        && station->damagePercent < 100.0
-        && std::count(station->components.begin(), station->components.end(),
-            ShipComponentType::JumpGate) == 1;
+        && std::isfinite(station->damagePercent) && station->damagePercent < 100.0
+        && gate && player && (!gate->specialistOnly
+            || player->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
 }
-bool stargate_transfer_valid(const GameState& s, PlayerId owner, FleetId fleetId,
+std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId fleetId,
     PlanetId source, PlanetId destination)
 {
     if (!source || !destination || source == destination
         || !stargate_station_available(s, owner, source)
-        || !stargate_station_available(s, owner, destination)) return false;
+        || !stargate_station_available(s, owner, destination))
+        return "Two distinct, surviving, owned gates are required.";
     const auto atPlanet = [&](PlanetId id) -> const Planet* {
         const auto p = std::find_if(s.planets.begin(), s.planets.end(),
             [id](const Planet& candidate) { return candidate.id == id; });
@@ -84,14 +125,33 @@ bool stargate_transfer_valid(const GameState& s, PlayerId owner, FleetId fleetId
     const auto* finish = b ? find_star(s, b->star) : nullptr;
     const auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(),
         [=](const Fleet& f) { return f.id == fleetId && f.owner == owner; });
-    if (!start || !finish || fleet == s.fleets.end()
-        || !same_position(fleet->position, start->position)
+    if (!start || !finish || fleet == s.fleets.end()) return "Fleet or gate system is unavailable.";
+    if (!same_position(fleet->position, start->position)
         || fleet->destination || fleet->targetFleet || !fleet->waypointQueue.empty()
-        || !fleet->pendingCommands.empty() || !fleet_has_instant_link(s, *fleet)
-        || fleet->colonists || mineral_cargo_mass(fleet->minerals) > 0.000001
-        || fleet_gross_mass(s, *fleet) > kStargateMaximumMassKt) return false;
-    return std::hypot(start->position.x - finish->position.x,
-        start->position.y - finish->position.y) <= kStargateRangeLy;
+        || fleet->repeatOrders || fleet->task != FleetTask::None)
+        return "Fleet must be idle at the source gate with no route or work task.";
+    if (!fleet->pendingCommands.empty() || !fleet_has_instant_link(s, *fleet))
+        return "A live command link and no commands in transit are required.";
+    const auto* player = find_player(s, owner);
+    if (player->race.primaryTrait != PrimaryRaceTrait::StargateSpecialist
+        && (fleet->colonists || mineral_cargo_mass(fleet->minerals) > 0.000001))
+        return "Generalist gates cannot transport cargo or colonists.";
+    const auto* from = station_stargate(*find_orbital_station_at_planet(s, source));
+    const auto* to = station_stargate(*find_orbital_station_at_planet(s, destination));
+    const auto mass = fleet_gross_mass(s, *fleet);
+    const auto distance = distance_between(start->position, finish->position);
+    for (const auto* gate : {from, to}) {
+        if (!std::isfinite(mass) || (gate->maximumMassKt > 0 && mass > gate->maximumMassKt))
+            return "Loaded gross fleet mass exceeds an endpoint's limit.";
+        if (!std::isfinite(distance) || (gate->rangeLy > 0 && distance > gate->rangeLy))
+            return "Distance exceeds an endpoint's range.";
+    }
+    return {};
+}
+bool stargate_transfer_valid(const GameState& s, PlayerId owner, FleetId fleetId,
+    PlanetId source, PlanetId destination)
+{
+    return stargate_transfer_error(s, owner, fleetId, source, destination).empty();
 }
 bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleetId,
     PlanetId source, PlanetId destination)

@@ -56,7 +56,10 @@ void create_campaign(MainWindow& window, bool remoteHuman)
         assert(dialog && dialog->objectName() == "newCampaignDialog");
         auto* count = dialog->findChild<QSpinBox*>("campaignEmpireCount");
         auto* table = dialog->findChild<QTableWidget*>("campaignEmpiresTable");
-        assert(count && table && table->columnCount() == 8);
+        assert(count && table && table->columnCount() == 9);
+        auto* trait = qobject_cast<QComboBox*>(table->cellWidget(1, 8));
+        assert(trait && trait->count() == 2);
+        trait->setCurrentIndex(trait->findData(int(PrimaryRaceTrait::StargateSpecialist)));
         count->setValue(3);
         auto* local = qobject_cast<QComboBox*>(table->cellWidget(0, 7));
         auto* computer = qobject_cast<QComboBox*>(table->cellWidget(1, 7));
@@ -188,6 +191,7 @@ int main(int argc, char** argv)
     assert(host.state.players.size() == 3 && host.mode == SessionMode::Host);
     assert(host.state.players[0].controller == PlayerController::Human);
     assert(host.state.players[1].controller == PlayerController::Computer);
+    assert(host.state.players[1].race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
     assert(host.state.players[2].controller == PlayerController::Human);
     assert(host.playerTokens.size() == 2 && host.playerTokens.contains(3) && !host.playerTokens.contains(2));
     assert(MainWindowTestAccess::turnButton(window)->text().contains("0/1 human orders"));
@@ -285,6 +289,7 @@ int main(int argc, char** argv)
     MainWindowTestAccess::restart(window);
     host = MainWindowTestAccess::snapshot(window);
     assert(host.state.turn == 1 && host.state.players[1].controller == PlayerController::Computer);
+    assert(host.state.players[1].race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
     assert(host.state.players[2].controller == PlayerController::Human && !host.state.players[1].computer.initialized);
 
     create_campaign(window, false);

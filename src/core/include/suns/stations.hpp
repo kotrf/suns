@@ -1,5 +1,6 @@
 #pragma once
 #include "suns/turn_processor.hpp"
+#include <span>
 
 namespace suns {
 struct StationHullSpec {
@@ -12,12 +13,27 @@ struct StationHullSpec {
     MineralCargo minerals;
 };
 inline constexpr std::uint16_t kMaximumColonyDefenses = 100;
-// Initial finite-range fleet gates; these are paid station fittings, not
-// universal movement shortcuts. Full race-specific networks come later.
+// Existing finite gate rules are unchanged for generalist empires.
 inline constexpr double kStargateRangeLy = 160.0;
 inline constexpr double kStargateMaximumMassKt = 450.0;
 inline constexpr std::uint8_t kStargateEnergyLevel = 8;
 inline constexpr std::uint8_t kStargateElectronicsLevel = 8;
+struct StargateSpec {
+    ShipComponentType component;
+    const char* name;
+    double rangeLy, maximumMassKt; // Zero means unlimited, never a huge finite substitute.
+    std::uint8_t energy, electronics, construction;
+    std::uint32_t cost;
+    MineralCargo minerals;
+    bool specialistOnly;
+    OrbitalStationHullType minimumHull;
+};
+[[nodiscard]] std::span<const StargateSpec> stargate_technologies();
+[[nodiscard]] const StargateSpec* stargate_spec(ShipComponentType);
+[[nodiscard]] const StargateSpec* station_stargate(const OrbitalStation&);
+[[nodiscard]] bool stargate_component_available(const GameState&, PlayerId, ShipComponentType);
+[[nodiscard]] std::string stargate_transfer_error(
+    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination);
 [[nodiscard]] const StationHullSpec& station_hull_spec(OrbitalStationHullType);
 [[nodiscard]] bool station_component_supported(ShipComponentType);
 [[nodiscard]] bool stargate_station_available(const GameState&, PlayerId, PlanetId);

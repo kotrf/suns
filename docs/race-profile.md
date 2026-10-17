@@ -52,9 +52,12 @@ The profile also stores one stable `PrimaryRaceTrait`:
 - Habitat Civilization;
 - Remote Logistics Specialist.
 
-All three environmental presets currently use Generalist. The other identifiers reserve deterministic save/PBEM semantics;
-they do not yet grant placeholder percentage bonuses. Their actual rule changes,
-costs and exclusions must be designed before the race-creation UI enables them.
+Environmental presets default to Generalist. Campaign creation can independently
+select **Stargate Specialist**, whose rules allow physical cargo/colonist gate
+transit and unlock paid Network and Infinity/Infinity orbital fittings. See
+[Stargate Specialist](stargate-specialist.md) for prerequisites, prices, endpoint
+constraints and Computer strategy. Habitat Civilization and Remote Logistics
+Specialist remain reserved, unavailable choices rather than placeholder bonuses.
 
 The Qt setup dialog calls `generate_campaign`; race mechanics and research
 validation live in the core and apply identically to every player.

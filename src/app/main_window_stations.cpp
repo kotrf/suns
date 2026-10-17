@@ -19,6 +19,14 @@
 #include <functional>
 
 namespace suns {
+namespace {
+QString gateLimits(const StargateSpec& gate)
+{
+    return QString("%1 ly / %2 kt")
+        .arg(gate.rangeLy == 0 ? QString("Unlimited") : QString::number(gate.rangeLy, 'f', 0))
+        .arg(gate.maximumMassKt == 0 ? QString("Unlimited") : QString::number(gate.maximumMassKt, 'f', 0));
+}
+}
 void MainWindow::openStationDesigner()
 {
     const auto* selected=selectedPlanet();
@@ -87,6 +95,11 @@ void MainWindow::openStationDesigner()
             .arg(existingQueued ? "A station project is already in the production queue; cancel it before replacing it."
                 : available ? "Minerals are charged on completion. Existing fitted ships/stations keep their equipment."
                             : "This hull or equipment is not available at the empire's current technology."));
+        if (const auto* gate = station_stargate(draft))
+            preview->setText(preview->text() + QString("\nGate: %1. Both endpoints impose their own limits. %2")
+                .arg(gateLimits(*gate), find_player(known,pendingOrders_.player)->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
+                    ? "Minerals and colonists are allowed; loaded mass counts."
+                    : "Generalist: no minerals or colonists aboard."));
         queue->setEnabled(available && !existingQueued);
     };
     std::function<void(const StationLoadout&)> populate;
@@ -105,17 +118,22 @@ void MainWindow::openStationDesigner()
                 const int index=table->rowCount(); table->insertRow(index);
                 table->setItem(index,0,new QTableWidgetItem(QString("%1 %2").arg(names[group]).arg(slot+1)));
                 auto* choice=new QComboBox(table); choice->addItem("Empty",-1);
-                for(unsigned i=0;i<=unsigned(ShipComponentType::Superlatanium);++i) {
+                for(unsigned i=0;i<=unsigned(kLastShipComponent);++i) {
                     const auto c=ShipComponentType(i);
-                    const bool gateAvailable = c == ShipComponentType::JumpGate
-                        && technology_level(known,pendingOrders_.player,ResearchField::Energy) >= kStargateEnergyLevel
-                        && technology_level(known,pendingOrders_.player,ResearchField::Electronics) >= kStargateElectronicsLevel;
+                    const auto* gate = stargate_spec(c);
+                    const bool available = gate ? stargate_component_available(known,pendingOrders_.player,c)
+                            && fit.hull >= gate->minimumHull
+                        : component_available_to_player(known,pendingOrders_.player,c);
                     if(station_component_supported(c) && category(c)==group
-                        && (gateAvailable || component_available_to_player(known,pendingOrders_.player,c)
-                            || (slot<int(fitted.size()) && fitted[slot]==c))) {
-                        const auto info=component_spec(c); choice->addItem(QString::fromStdString(info.name),int(c));
+                        && (available || (slot<int(fitted.size()) && fitted[slot]==c))) {
+                        const auto info=component_spec(c);
+                        choice->addItem(gate ? QString::fromUtf8(gate->name) : QString::fromStdString(info.name),int(c));
                         choice->setItemData(choice->count()-1,QString("Armor %1 • Shields %2 • Weapon power %3, range %4 • Production %5")
                             .arg(info.armor).arg(info.shields).arg(info.weaponPower).arg(info.weaponRange).arg(info.buildCost),Qt::ToolTipRole);
+                        if (gate) choice->setItemData(choice->count()-1,
+                            QString("%1 • Energy %2 / Electronics %3 / Construction %4. %5\nBoth owned endpoints must support the distance and loaded gross fleet mass.")
+                                .arg(gateLimits(*gate)).arg(gate->energy).arg(gate->electronics).arg(gate->construction)
+                                .arg(gate->specialistOnly ? "Stargate Specialist only." : "All empires."), Qt::ToolTipRole);
                     }
                 }
                 if(slot<int(fitted.size())) choice->setCurrentIndex(choice->findData(int(fitted[slot])));
@@ -171,22 +189,33 @@ void MainWindow::openGateTransit()
     dialog.setObjectName("stargateTransitDialog");
     dialog.setWindowTitle("Stargate transit");
     auto* layout = new QVBoxLayout(&dialog);
+    const auto* sourceStation = find_orbital_station_at_planet(known, source);
+    const auto* sourceGate = sourceStation ? station_stargate(*sourceStation) : nullptr;
+    const bool specialist = find_player(known, pendingOrders_.player)->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist;
     auto* summary = new QLabel(
-        QString("%1 — gross mass %2 kt. Transit requires two paid Jump Gates, a live command link, "
-                "no cargo or pending route, and a maximum of %3 ly / %4 kt.")
+        QString("%1 — loaded gross mass %2 kt. Source: %3. Transit requires two surviving, owned gates, "
+                "an idle fleet, a live command link and no pending commands. One hop per fleet per year. "
+                "Both endpoints must accept the distance and mass. %4")
             .arg(QString::fromStdString(fleet->name))
             .arg(fleet_gross_mass(known, *knownFleet), 0, 'f', 1)
-            .arg(kStargateRangeLy, 0, 'f', 0)
-            .arg(kStargateMaximumMassKt, 0, 'f', 0), &dialog);
+            .arg(sourceGate ? gateLimits(*sourceGate) : "No confirmed gate at this position")
+            .arg(specialist ? "Stargate Specialist: minerals and colonists may travel aboard; fuel stays onboard."
+                : "Generalist: unload minerals and colonists first; fuel stays onboard."), &dialog);
+    summary->setObjectName("stargateTransitSummary");
     summary->setWordWrap(true);
     layout->addWidget(summary);
     auto* destinations = new QComboBox(&dialog);
     destinations->setObjectName("stargateDestinations");
     for (const auto& planet : known.planets) {
         if (stargate_transfer_valid(known, pendingOrders_.player,
-                fleet->id, source, planet.id))
+                fleet->id, source, planet.id)) {
             destinations->addItem(QString::fromStdString(planet.name), uint(planet.id));
+            const auto* gate = station_stargate(*find_orbital_station_at_planet(known, planet.id));
+            destinations->setItemData(destinations->count()-1, gateLimits(*gate), Qt::ToolTipRole);
+        }
     }
+    if (destinations->count() == 0) summary->setText(summary->text()
+        + "\nNo confirmed destination satisfies these rules. Check endpoint fittings, range, cargo mass, fleet task and communications.");
     auto* form = new QFormLayout;
     form->addRow("Destination gate", destinations);
     layout->addLayout(form);

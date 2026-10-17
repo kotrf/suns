@@ -266,7 +266,9 @@ bool MainWindow::loadGameFromPath(const QString& path)
             empireSetups_.push_back({player.name, preset,
                 player.race.improvedFuelEfficiency, player.race.noRamScoopEngines,
                 player.race.settlerEngineAccess, player.race.hullAccess,
-                player.race.advancedRemoteMining, player.race.basicRemoteMining, player.controller});
+                player.race.advancedRemoteMining, player.race.basicRemoteMining, player.controller,
+                player.race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
+                    ? PrimaryRaceTrait::StargateSpecialist : PrimaryRaceTrait::Generalist});
         }
     }
     campaignId_ = loaded.campaignId;

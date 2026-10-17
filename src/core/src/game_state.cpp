@@ -8,6 +8,7 @@
 #include "suns/equipment.hpp"
 #include "suns/hulls.hpp"
 #include "suns/campaign.hpp"
+#include "suns/stations.hpp"
 #include "suns/communications.hpp"
 #include "suns/wormholes.hpp"
 #include "star_name_pool.hpp"
@@ -338,6 +339,12 @@ ShipHullSpec hull_spec(ShipHullType type)
 
 ShipComponentSpec component_spec(ShipComponentType type)
 {
+    if (const auto* gate = stargate_spec(type); gate && gate->specialistOnly) {
+        ShipComponentSpec spec;
+        spec.type = type; spec.name = gate->name; spec.kind = ShipComponentKind::Mechanical;
+        spec.mass = 0; spec.buildCost = gate->cost;
+        return spec;
+    }
     if (const auto* engine = propulsion_technology(type)) return propulsion_component_spec(*engine);
     if (const auto* scanner = scanner_technology(type)) return scanner_component_spec(*scanner);
     if (const auto* miner = mining_technology(type)) return mining_component_spec(*miner);
@@ -586,8 +593,10 @@ std::string ship_design_validation_error(const ShipDesign& design)
     const auto hull = hull_spec(design.hull);
     if (hull.name == "Unknown Hull") return "Unknown ship hull.";
     for (const auto component : design.components) {
-        if (static_cast<int>(component) < 0 || component > ShipComponentType::Superlatanium)
+        if (static_cast<int>(component) < 0 || component > kLastShipComponent)
             return "Unknown ship component.";
+        if (const auto* gate = stargate_spec(component); gate && gate->specialistOnly)
+            return "Specialist stargates fit orbital stations only.";
         if (const auto* equipment = equipment_technology(component); equipment && equipment->unarmedTransportOnly) {
             if (design.hull != ShipHullType::SmallFreighter && design.hull != ShipHullType::MediumFreighter
                 && design.hull != ShipHullType::LargeFreighter && design.hull != ShipHullType::SuperFreighter)
@@ -740,7 +749,8 @@ bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component)
 {
     if (!find_player(state, player)) return false;
-    if (static_cast<int>(component) < 0 || component > ShipComponentType::Superlatanium) return false;
+    if (static_cast<int>(component) < 0 || component > kLastShipComponent) return false;
+    if (const auto* gate = stargate_spec(component); gate && gate->specialistOnly) return false;
     if (legacy_equipment_component(component) && !player_uses_legacy_equipment(state, player)) return false;
     if (legacy_propulsion_component(component) && !player_uses_legacy_propulsion(state, player)) return false;
     if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) return false;

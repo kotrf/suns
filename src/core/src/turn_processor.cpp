@@ -1973,10 +1973,22 @@ TurnResult TurnProcessor::process_with_events(
                             concreteOrder.targetFleet,
                             concreteOrder.clearRoute);
                     } else if constexpr (std::is_same_v<T, GateFleetOrder>) {
-                        if (!gatedThisTurn.contains(concreteOrder.fleet)
-                            && transfer_fleet_through_stargate(next, submission.player,
-                                concreteOrder.fleet, concreteOrder.source, concreteOrder.destination))
-                            gatedThisTurn.insert(concreteOrder.fleet);
+                        if (gatedThisTurn.contains(concreteOrder.fleet)) return;
+                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
+                            [&](const auto& f) { return f.id == concreteOrder.fleet && f.owner == submission.player; });
+                        if (fleet == next.fleets.end()) return;
+                        const bool transferred = transfer_fleet_through_stargate(next, submission.player,
+                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination);
+                        const auto target = transferred ? concreteOrder.destination : concreteOrder.source;
+                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
+                            [&](const auto& p) { return p.id == target && p.owner == submission.player; });
+                        queue_player_report(next, submission.player, transferred ? PlayerReportKind::StargateTransit
+                                : PlayerReportKind::StargateTransitFailed,
+                            fleet->position, next.turn + 1, planet == next.planets.end() ? 0 : planet->star,
+                            planet == next.planets.end() ? 0 : planet->id, fleet->id, 0,
+                            ProductionKind::ColonyShip, 0, ResearchField::Electronics, 0,
+                            fleet->minerals, fleet->colonists);
+                        if (transferred) gatedThisTurn.insert(concreteOrder.fleet);
                     } else if constexpr (std::is_same_v<T, QueueStationOrder>) {
                         (void)queue_station_construction(next,submission.player,concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {

@@ -53,6 +53,7 @@ MineralCargo classBias(StarClass stellarClass)
 
 MineralCargo componentMineralCost(ShipComponentType type)
 {
+    if (const auto* gate = stargate_spec(type); gate && gate->specialistOnly) return gate->minerals;
     if (const auto* engine = propulsion_technology(type)) return engine->minerals;
     if (const auto* scanner = scanner_technology(type)) return scanner->minerals;
     if (const auto* miner = mining_technology(type)) return miner->minerals;
