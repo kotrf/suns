@@ -73,9 +73,17 @@ std::vector<Fleet> known_outposts(const GameState& state, PlayerId owner)
 }
 void maintain_outposts(GameState& state, std::uint64_t turn)
 {
+    std::vector<FleetId> exhausted;
     for (auto& fleet : state.fleets) if (fleet.outpost != OutpostKind::None && fleet.fuel > 0) {
         fleet.fuel = std::max(0.0, fleet.fuel - kOutpostUpkeepMg);
-        if (fleet.fuel == 0) queue_player_report(state, fleet.owner, PlayerReportKind::OutpostFuelExhausted,
+        if (fleet.fuel == 0) exhausted.push_back(fleet.id);
+    }
+    // Every service observes the same post-upkeep network. Queueing during
+    // deduction could route an earlier warning through a later exhausted node.
+    std::sort(exhausted.begin(), exhausted.end());
+    for (const auto id : exhausted) {
+        const auto& fleet = *std::find_if(state.fleets.begin(), state.fleets.end(), [=](const auto& f) { return f.id == id; });
+        queue_player_report(state, fleet.owner, PlayerReportKind::OutpostFuelExhausted,
             fleet.position, turn, 0, 0, fleet.id, 0, ProductionKind::ColonyShip, std::uint32_t(fleet.outpost));
     }
 }
