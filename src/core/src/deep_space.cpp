@@ -120,8 +120,11 @@ double refuel_from_outpost(GameState& state, Fleet& visitor)
     if (visitor.outpost != OutpostKind::None) return 0;
     auto* depot = depot_at(state, visitor);
     if (!depot || !outpost_online(*depot)) return 0;
-    return transfer(*depot, visitor, std::min(depot->fuel,
+    const auto amount = transfer(*depot, visitor, std::min(depot->fuel,
         std::max(0.0, fleet_fuel_capacity(state, visitor) - visitor.fuel)));
+    if (amount > 0 && depot->fuel == 0) queue_player_report(state, depot->owner, PlayerReportKind::OutpostFuelExhausted,
+        depot->position, state.turn + 1, 0, 0, depot->id, 0, ProductionKind::ColonyShip, std::uint32_t(depot->outpost));
+    return amount;
 }
 double supply_outpost(GameState& state, Fleet& tanker, double reserve)
 {

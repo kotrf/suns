@@ -484,6 +484,8 @@ void attachRouteProgramDock(MainWindow& window)
     const auto updateCargoControls = [=, &window] {
         const auto action = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
         fuelReserveSpin->setEnabled(window.selectedFleetForRouteProgram() != 0 && action == FleetArrivalActionKind::SupplyOutpost);
+        fuelReserveSpin->setVisible(action == FleetArrivalActionKind::SupplyOutpost);
+        form->labelForField(fuelReserveSpin)->setVisible(action == FleetArrivalActionKind::SupplyOutpost);
         planRow->setVisible(action == FleetArrivalActionKind::Colonize);
         form->labelForField(planRow)->setVisible(action == FleetArrivalActionKind::Colonize);
         colonyPlan->setEnabled(window.selectedFleetForRouteProgram() != 0 && action == FleetArrivalActionKind::Colonize);
@@ -839,7 +841,7 @@ void attachRouteProgramDock(MainWindow& window)
                 const QSignalBlocker actionBlocker(actionCombo);
                 const QSignalBlocker cargoBlocker(cargoCombo);
                 const QSignalBlocker reserveBlocker(reserveSpin);
-            const QSignalBlocker fuelBlocker(fuelReserveSpin);
+                const QSignalBlocker fuelBlocker(fuelReserveSpin);
                 actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(selected->kind)));
                 cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(selected->cargo)));
                 reserveSpin->setValue(static_cast<int>(selected->reservePopulation));

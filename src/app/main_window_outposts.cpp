@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/communications.hpp"
+#include "suns/strategic_operations.hpp"
 #include <QAction>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -123,7 +124,8 @@ void MainWindow::refreshOutposts()
         row->setText(3,QString("%1 / %2").arg(f.fuel,0,'f',1).arg(fleet_fuel_capacity(state_,f),0,'f',1));
         row->setText(4,QString("%1%").arg(f.damagePercent,0,'f',0));
         row->setText(5,QString("Year %1; age %2").arg(qulonglong(f.telemetry.observedTurn)).arg(qulonglong(fleet_telemetry_age(state_,f))));
-        row->setText(6,outpost_online(f)?"Powered at observation":"Offline at observation");
+        row->setText(6,!outpost_online(f)?"Offline at observation":f.outpost==OutpostKind::CommunicationsRelay
+            && !fleet_transmits(f,f.telemetry.observedTurn)?"Powered; radio silent at observation":"Powered at observation");
         for (int c=0;c<7;++c) row->setToolTip(c,"Last received snapshot. Fuel changes, destruction and network interruptions require a delivered report. Powered sites consume 1 mg per year; tanks can be replenished by a Supply outpost arrival order.");
         if (f.id==selected) tree->setCurrentItem(row);
     }

@@ -95,6 +95,8 @@ void fuel_is_finite_owned_and_conserved()
     s.fleets[0].fuel=25; add(s,kScoutDesignId); auto& visitor=s.fleets[1]; visitor.fuel=0;
     assert(near(refuel_from_outpost(s,visitor),25)); assert(near(visitor.fuel,25) && near(s.fleets[0].fuel,0));
     assert(!outpost_online(s.fleets[0]) && refuel_from_outpost(s,visitor)==0);
+    assert(std::count_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),
+        [](const auto& r){return r.kind==PlayerReportKind::OutpostFuelExhausted;})==1);
     visitor.fuel=200; assert(near(supply_outpost(s,visitor,75),125));
     assert(near(visitor.fuel,75) && near(s.fleets[0].fuel,125));
     visitor.owner=2; assert(refuel_from_outpost(s,visitor)==0 && supply_outpost(s,visitor,0)==0);
@@ -167,6 +169,23 @@ void destruction_is_an_ordinary_delayed_battle_loss()
     assert(std::any_of(events.begin(),events.end(),[](const auto& e){return e.kind==GameEventKind::SpaceBattle;}));
     assert(known_outposts(s,1).empty());
 }
+void armed_platforms_have_no_tactical_movement()
+{
+    auto s=world(); s.players.push_back({2,"Visitor"});
+    auto design=std::find_if(s.shipDesigns.begin(),s.shipDesigns.end(),[](const auto& d){return d.id==100;});
+    design->components.back()=C::Laser;
+    add(s).task=FleetTask::DeployOutpost; deploy_outposts(s,s.turn);
+    auto visitor=*find_ship_design(s,kScoutDesignId); visitor.id=200; visitor.owner=2;
+    s.shipDesigns.push_back(visitor); s.nextShipDesignId=201;
+    auto& other=add(s,200); other.owner=2; // unarmed, so it never approaches
+    resolve_space_battles(s,s.turn);
+    const auto report=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),
+        [](const auto& r){return r.kind==PlayerReportKind::SpaceBattle;});
+    assert(report!=s.players[0].pendingPlayerReports.end() && report->battle);
+    // Both remain outside the platform's beam range for every combat round.
+    assert(report->battle->stalemate && report->battle->shots.empty());
+    assert(s.fleets.size()==2 && s.fleets[0].outpost==OutpostKind::FuelDepot);
+}
 }
 int main()
 {
@@ -174,5 +193,6 @@ int main()
     fuel_is_finite_owned_and_conserved(); route_stops_replenish_and_draw_from_the_reservoir();
     relay_upkeep_and_loss_cut_the_live_mesh(); deployment_and_stock_wait_for_received_telemetry();
     destruction_is_an_ordinary_delayed_battle_loss();
+    armed_platforms_have_no_tactical_movement();
     std::cout << "deep-space infrastructure tests passed\n";
 }

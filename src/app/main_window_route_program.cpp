@@ -427,7 +427,9 @@ QString routeForecast(
                          .arg(navigationCertainty)
                          .arg(outcome);
 
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable) {
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
+                || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
+                || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {
                 dependsOnDynamicResult = true;
             }
             ++legIndex;

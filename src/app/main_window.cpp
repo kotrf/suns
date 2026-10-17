@@ -279,7 +279,16 @@ GameState movementPhasePreviewState(
     // as it will before the real orders and movement phase.
     GameState preview = state;
     project_interstellar_medium(preview,pending.player);
-    for (auto& fleet : preview.fleets) fleet.destination.reset();
+    // A local cargo preview must not turn a remote site's physical stock or
+    // undelivered deployment into planning knowledge, or run its work orders.
+    for (auto& fleet : preview.fleets) {
+        if (fleet.owner==pending.player) {
+            const auto known=fleet_player_view(state,fleet);
+            if (fleet.outpost!=OutpostKind::None || known.outpost!=OutpostKind::None) fleet=known;
+        }
+        fleet.destination.reset();
+        if (fleet.task==FleetTask::DeployOutpost) fleet.task=FleetTask::None;
+    }
 
     PlayerOrders logistics{pending.player, {}};
     for (const auto& order : pending.orders) {
