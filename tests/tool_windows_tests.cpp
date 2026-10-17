@@ -30,6 +30,10 @@ namespace suns {
 struct MainWindowTestAccess {
     static ShipDesignerDialog* designer(const MainWindow& w) { return w.shipDesigner_; }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void addDesign(MainWindow& w, const ShipDesignDraft& draft)
+    {
+        w.pendingOrders_.orders.push_back(CreateShipDesignOrder{draft.name, draft.hull, draft.components, draft.placements});
+    }
     static void nextTurn(MainWindow& w) { w.endTurn(); }
     static void deliverReports(MainWindow& w, const std::vector<GameEvent>& reports)
     {
@@ -152,8 +156,27 @@ int main(int argc, char** argv)
     designerMenu->trigger();
     assert(MainWindowTestAccess::designer(window) == second);
     assert(window.findChildren<QDialog*>("shipDesignerDialog").size() == 1);
-    second->findChild<QLineEdit*>("shipDesignName")->setText("Separate window scout");
     auto* save = second->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Save);
+    // AUD-006: name collisions never accept/delete the live nonmodal draft.
+    auto* name = second->findChild<QLineEdit*>("shipDesignName");
+    const auto beforeOrders = MainWindowTestAccess::orders(window).orders.size();
+    name->setText("Scout");
+    assert(!save->isEnabled());
+    second->accept();
+    settle();
+    assert(MainWindowTestAccess::designer(window) == second && second->isVisible());
+    assert(MainWindowTestAccess::orders(window).orders.size() == beforeOrders);
+    // Also validate live pending orders that appeared after opening the window.
+    name->setText("Late collision");
+    const auto draft = second->draft();
+    const auto originalHull = draft.hull;
+    const auto originalComponents = draft.components;
+    MainWindowTestAccess::addDesign(window, draft);
+    save->click();
+    settle();
+    assert(MainWindowTestAccess::designer(window) == second && second->isVisible());
+    assert(second->draft().hull == originalHull && second->draft().components == originalComponents);
+    name->setText("Separate window scout");
     assert(save->isEnabled());
     if (app.arguments().contains("--capture")) second->grab().save("/tmp/suns-designer-window.png");
     save->click();

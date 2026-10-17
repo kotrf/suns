@@ -212,17 +212,21 @@ void queue_survey_report(
     if (level >= SurveyLevel::OrbitalSurvey) {
         if (const auto* planet = find_planet_at_star(state, star)) observedOwner = planet->owner;
     }
-    const PendingSurveyReport candidate{
+    PendingSurveyReport candidate{
         star, sourceFleet, observationTurn, deliveryTurn, level, observedOwner,
         held_report_source(state,playerId,sourcePosition,observationTurn,sourceFleet)};
+    candidate.planetSnapshot = capture_planet_survey(state, playerId, star, level, observationTurn);
     const auto dominated = std::any_of(player->pendingSurveyReports.begin(), player->pendingSurveyReports.end(),
         [&](const PendingSurveyReport& report) {
-            return report.star == star && report.level >= level && report.deliveryTurn <= deliveryTurn;
+            return report.star == star && report.level >= level && report.deliveryTurn <= deliveryTurn
+                && (level < SurveyLevel::BasicScan || report.observedTurn >= observationTurn)
+                && (report.planetSnapshot || !candidate.planetSnapshot);
         });
     if (dominated) return;
 
     std::erase_if(player->pendingSurveyReports, [&](const PendingSurveyReport& report) {
-        return report.star == star && report.level <= level && report.deliveryTurn >= deliveryTurn;
+        return report.star == star && report.level <= level && report.deliveryTurn >= deliveryTurn
+            && (report.level < SurveyLevel::BasicScan || report.observedTurn <= observationTurn);
     });
     player->pendingSurveyReports.push_back(candidate);
     if(deliveryTurn!=kAwaitingTransmission) record_report_transmission(state,playerId,sourcePosition,observationTurn,sourceFleet);
@@ -379,18 +383,14 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
         std::vector<PendingSurveyReport> due;
         for (const auto& report : player.pendingSurveyReports) {
             if (report.deliveryTurn > state.turn) break;
-            const auto best = std::find_if(due.begin(), due.end(), [&](const PendingSurveyReport& candidate) {
-                return candidate.star == report.star;
-            });
-            if (best == due.end()) due.push_back(report);
-            else if (report.level > best->level
-                || (report.level == best->level && report.sourceFleet < best->sourceFleet)) {
-                *best = report;
-            }
+            due.push_back(report);
         }
 
         std::stable_sort(due.begin(), due.end(), [](const PendingSurveyReport& lhs, const PendingSurveyReport& rhs) {
-            return lhs.star < rhs.star;
+            if (lhs.star != rhs.star) return lhs.star < rhs.star;
+            if (lhs.observedTurn != rhs.observedTurn) return lhs.observedTurn < rhs.observedTurn;
+            if (lhs.level != rhs.level) return lhs.level > rhs.level;
+            return lhs.sourceFleet < rhs.sourceFleet;
         });
         for (const auto& report : due) {
             const auto previousLevel = survey_level(state, player.id, report.star);
@@ -401,8 +401,18 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                 [&](const SystemSurveyKnowledge& entry) { return entry.star == report.star; });
             if (existing != player.surveyKnowledge.end()
                 && existing->level == report.level
-                && existing->observedTurn >= report.observedTurn) continue;
-            set_survey_level(state, player.id, report.star, report.level, report.observedTurn);
+                && (existing->observedTurn > report.observedTurn
+                    || (existing->observedTurn == report.observedTurn
+                        && (existing->planetSnapshot || !report.planetSnapshot)))) continue;
+            const auto previousObservedTurn = existing == player.surveyKnowledge.end() ? 0 : existing->observedTurn;
+            set_survey_level(state, player.id, report.star, report.level, report.observedTurn, false);
+            const auto updated = std::find_if(player.surveyKnowledge.begin(), player.surveyKnowledge.end(),
+                [&](const auto& entry) { return entry.star == report.star; });
+            if (updated != player.surveyKnowledge.end()
+                && (report.observedTurn >= previousObservedTurn
+                    || (previousLevel < SurveyLevel::OrbitalSurvey && report.level >= SurveyLevel::OrbitalSurvey))
+                && (report.level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey))
+                updated->planetSnapshot = report.planetSnapshot;
             if (report.level >= SurveyLevel::OrbitalSurvey) {
                 const auto knowledge = std::find_if(
                     player.surveyKnowledge.begin(), player.surveyKnowledge.end(),

@@ -1511,6 +1511,26 @@ bool is_surveyed(const GameState& state, PlayerId player, StarId star)
     return survey_level(state, player, star) >= SurveyLevel::BasicScan;
 }
 
+std::optional<PlanetSurveySnapshot> capture_planet_survey(
+    const GameState& state, PlayerId player, StarId star, SurveyLevel level,
+    std::uint64_t observedTurn)
+{
+    const auto* planet = find_planet_at_star(state, star);
+    if (!planet || level < SurveyLevel::BasicScan) return std::nullopt;
+    if (level >= SurveyLevel::OrbitalSurvey)
+        return PlanetSurveySnapshot{planet->habitability, planet->environment, planet->naturalEnvironment};
+    const auto habitability = player_planet_habitability(state, player, *planet, observedTurn);
+    std::uint64_t mixed = state.galaxySeed
+        ^ (static_cast<std::uint64_t>(player) << 32U)
+        ^ (static_cast<std::uint64_t>(planet->id) * 0x9E3779B97F4A7C15ULL);
+    mixed ^= mixed >> 30U;
+    mixed *= 0xBF58476D1CE4E5B9ULL;
+    mixed ^= mixed >> 27U;
+    const auto error = static_cast<int>((mixed % 7ULL) * 5ULL) - 15;
+    const auto rough = std::clamp(static_cast<int>(habitability) + error, -100, 100);
+    return PlanetSurveySnapshot{static_cast<std::int32_t>((rough >= 0 ? rough + 5 : rough - 5) / 10 * 10)};
+}
+
 std::optional<std::int32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planetId)
 {
@@ -1523,34 +1543,32 @@ std::optional<std::int32_t> known_planet_habitability(
     if (level < SurveyLevel::BasicScan && planet->owner != player) return std::nullopt;
     if (planet->observedHabitability) return planet->observedHabitability;
 
+    if (planet->owner == player) return player_planet_habitability(state, player, *planet, state.turn);
     auto observationTurn = state.turn;
+    const PlanetSurveySnapshot* snapshot = nullptr;
     if (const auto* knownPlayer = find_player(state, player)) {
         const auto knowledge = std::find_if(
             knownPlayer->surveyKnowledge.begin(), knownPlayer->surveyKnowledge.end(),
             [&](const SystemSurveyKnowledge& entry) { return entry.star == planet->star; });
-        if (knowledge != knownPlayer->surveyKnowledge.end()) observationTurn = knowledge->observedTurn;
+        if (knowledge != knownPlayer->surveyKnowledge.end()) {
+            observationTurn = knowledge->observedTurn;
+            if (knowledge->planetSnapshot) snapshot = &*knowledge->planetSnapshot;
+        }
     }
-    const bool canForecast = planet->owner == player || level >= SurveyLevel::GeologicalSurvey;
-    auto knownPlanet=*planet;
-    if(planet->owner!=player) {
-        // No current host contamination leaks through an old survey's Hab value.
-        const auto aftermath=known_planet_aftermath(state,player,planetId);
-        knownPlanet.warDamage.contamination=aftermath
-            ? (unsigned(aftermath->contaminationMinimum)+aftermath->contaminationMaximum)/2 : 0;
-    }
-    const auto observedHabitability = player_planet_habitability(
-        state, player, knownPlanet, canForecast ? state.turn : observationTurn);
-    if (level >= SurveyLevel::OrbitalSurvey || planet->owner == player) return observedHabitability;
-
-    std::uint64_t mixed = state.galaxySeed
-        ^ (static_cast<std::uint64_t>(player) << 32U)
-        ^ (static_cast<std::uint64_t>(planet->id) * 0x9E3779B97F4A7C15ULL);
-    mixed ^= mixed >> 30U;
-    mixed *= 0xBF58476D1CE4E5B9ULL;
-    mixed ^= mixed >> 27U;
-    const auto error = static_cast<int>((mixed % 7ULL) * 5ULL) - 15;
-    const auto rough = std::clamp(static_cast<int>(observedHabitability) + error, -100, 100);
-    return static_cast<std::int32_t>((rough >= 0 ? rough + 5 : rough - 5) / 10 * 10);
+    // Older saves did not retain this evidence. A new scan must supply it;
+    // reconstructing it from the physical planet would disclose hidden changes.
+    if (!snapshot) return std::nullopt;
+    if (!snapshot->environment) return snapshot->habitability;
+    Planet knownPlanet;
+    knownPlanet.id = planet->id;
+    knownPlanet.star = planet->star;
+    knownPlanet.habitability = snapshot->habitability;
+    knownPlanet.environment = *snapshot->environment;
+    const auto aftermath=known_planet_aftermath(state,player,planetId);
+    knownPlanet.warDamage.contamination=aftermath
+        ? (unsigned(aftermath->contaminationMinimum)+aftermath->contaminationMaximum)/2 : 0;
+    return player_planet_habitability(state, player, knownPlanet,
+        level >= SurveyLevel::GeologicalSurvey ? state.turn : observationTurn);
 }
 
 bool planet_geology_known(const GameState& state, PlayerId player, PlanetId planetId)
@@ -1581,7 +1599,8 @@ void set_survey_level(
     PlayerId player,
     StarId star,
     SurveyLevel level,
-    std::uint64_t observedTurn)
+    std::uint64_t observedTurn,
+    bool captureObservation)
 {
     const auto it = std::find_if(state.players.begin(), state.players.end(), [player](const Player& candidate) {
         return candidate.id == player;
@@ -1593,8 +1612,11 @@ void set_survey_level(
     if (knowledge == it->surveyKnowledge.end()) {
         it->surveyKnowledge.push_back({star, level, observedTurn, std::nullopt});
     } else if (level > knowledge->level) {
+        const bool firstOrbital = knowledge->level < SurveyLevel::OrbitalSurvey
+            && level >= SurveyLevel::OrbitalSurvey;
         knowledge->level = level;
-        knowledge->observedTurn = std::max(knowledge->observedTurn, observedTurn);
+        // A newer rough scan cannot date an older, newly received exact survey.
+        knowledge->observedTurn = firstOrbital ? observedTurn : std::max(knowledge->observedTurn, observedTurn);
     } else if (level == knowledge->level) {
         knowledge->observedTurn = std::max(knowledge->observedTurn, observedTurn);
     } else if (level >= SurveyLevel::OrbitalSurvey) {
@@ -1603,9 +1625,12 @@ void set_survey_level(
 
     const auto updated = std::find_if(it->surveyKnowledge.begin(), it->surveyKnowledge.end(),
         [star](const SystemSurveyKnowledge& entry) { return entry.star == star; });
-    if (updated != it->surveyKnowledge.end() && level >= SurveyLevel::OrbitalSurvey
-        && observedTurn >= updated->observedTurn) {
-        if (const auto* planet = find_planet_at_star(state, star)) updated->observedOwner = planet->owner;
+    if (captureObservation && level >= SurveyLevel::BasicScan && updated != it->surveyKnowledge.end()
+        && observedTurn >= updated->observedTurn
+        && (level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey)) {
+        updated->planetSnapshot = capture_planet_survey(state, player, star, level, observedTurn);
+        if (level >= SurveyLevel::OrbitalSurvey)
+            if (const auto* planet = find_planet_at_star(state, star)) updated->observedOwner = planet->owner;
     }
 
     if (level >= SurveyLevel::BasicScan

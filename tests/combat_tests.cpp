@@ -82,6 +82,19 @@ void simultaneous_and_initiative()
 
 void defenses_torpedoes_and_modifiers()
 {
+    // AUD-005: a long-range sapper cannot hold the armor weapon outside range
+    // when the selected target has no shields, including after stripping them.
+    for (const auto shields : {std::vector<C>{}, std::vector<C>{C::MoleSkinShield}}) {
+        const auto result = TurnProcessor{}.process_with_events(arena({C::PulsedSapper, C::Laser}, shields), {});
+        const auto& battle = *battle_event(result).battle;
+        assert(std::any_of(battle.shots.begin(), battle.shots.end(), [](const auto& shot) {
+            return shot.weapon == C::Laser && shot.armorDamage > 0;
+        }));
+        assert(battle.units[1].remainingArmor < 200);
+        if (!shields.empty()) assert(std::any_of(battle.shots.begin(), battle.shots.end(), [](const auto& shot) {
+            return shot.weapon == C::PulsedSapper && shot.shieldDamage > 0;
+        }));
+    }
     const auto sappers = TurnProcessor{}.process_with_events(arena({C::PulsedSapper}, {C::MoleSkinShield}), {});
     const auto& sap = *battle_event(sappers).battle;
     assert(sap.stalemate && sap.units[1].remainingShields == 0);

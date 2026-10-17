@@ -245,6 +245,7 @@ void writeStrategicExtension(QDataStream& stream, const GameState& state)
     writeUnknownObjects(out,state);
     writeInterstellarMedium(out,state);
     writeOutposts(out,state);
+    writeSurveySnapshots(out,state);
     if (out.status()!=QDataStream::Ok) { stream.setStatus(QDataStream::WriteFailed); return; }
     stream << kStrategicExtensionMagic << quint32(payload.size());
     stream.writeRawData(payload.constData(), payload.size());
@@ -420,5 +421,6 @@ void readStrategicExtension(QDataStream& stream, GameState& state)
     if (gReadSaveFormatVersion >= 79) readUnknownObjects(in,state);
     if (gReadSaveFormatVersion >= 80) readInterstellarMedium(in,state);
     if (gReadSaveFormatVersion >= 82) readOutposts(in,state);
+    if (gReadSaveFormatVersion >= 83) readSurveySnapshots(in,state);
     if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

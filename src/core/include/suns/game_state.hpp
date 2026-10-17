@@ -633,6 +633,14 @@ enum class SurveyLevel : std::uint8_t {
     DeepSurvey,
 };
 
+struct PlanetSurveySnapshot {
+    // Basic scans contain only a frozen rough Hab estimate. Orbital scans
+    // retain the scalar baseline and environmental axes for known-cycle forecasts.
+    std::int32_t habitability{};
+    std::optional<PlanetEnvironment> environment;
+    std::optional<PlanetEnvironment> naturalEnvironment;
+};
+
 struct SystemSurveyKnowledge {
     StarId star{};
     SurveyLevel level{SurveyLevel::Detected};
@@ -640,6 +648,7 @@ struct SystemSurveyKnowledge {
     // Ownership is a snapshot from the last orbital-quality observation, not
     // a live view into the authoritative simulation.
     std::optional<PlayerId> observedOwner;
+    std::optional<PlanetSurveySnapshot> planetSnapshot;
 };
 
 struct StellarVariabilityIntel {
@@ -658,6 +667,7 @@ struct PendingSurveyReport {
     SurveyLevel level{SurveyLevel::SystemScan};
     std::optional<PlayerId> observedOwner;
     FleetId transmissionFleet{}; // Nonzero only while awaiting an onboard transmission.
+    std::optional<PlanetSurveySnapshot> planetSnapshot;
 };
 
 enum class ResearchField : std::uint8_t {
@@ -1601,6 +1611,10 @@ void set_survey_level(
     PlayerId player,
     StarId star,
     SurveyLevel level,
+    std::uint64_t observedTurn,
+    bool captureObservation = true);
+[[nodiscard]] std::optional<PlanetSurveySnapshot> capture_planet_survey(
+    const GameState& state, PlayerId player, StarId star, SurveyLevel level,
     std::uint64_t observedTurn);
 void mark_surveyed(GameState& state, PlayerId player, StarId star);
 void refresh_sensor_intel(GameState& state);

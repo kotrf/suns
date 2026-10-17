@@ -460,8 +460,12 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             known.industry = 0;
             if (level >= SurveyLevel::OrbitalSurvey) {
                 known.owner = known_planet_owner(host, playerId, planet.id).value_or(0);
-                known.environment = planet.environment;
-                known.naturalEnvironment = planet.naturalEnvironment;
+                const auto intel = std::find_if(player->surveyKnowledge.begin(), player->surveyKnowledge.end(),
+                    [&](const auto& entry) { return entry.star == planet.star; });
+                if (intel != player->surveyKnowledge.end() && intel->planetSnapshot) {
+                    known.environment = intel->planetSnapshot->environment.value_or(PlanetEnvironment{});
+                    known.naturalEnvironment = intel->planetSnapshot->naturalEnvironment;
+                }
             } else known.environment = {};
             // Surface stocks change through other empires' mining/cargo orders.
             // Only an immediately connected fleet on site knows today's stock.
