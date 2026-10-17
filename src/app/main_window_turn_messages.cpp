@@ -472,7 +472,7 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = QString("Turn %1  •  %2 transited to the gate at %3 without burning fuel.\n"
                        "Cargo aboard at transit: I %4 / B %5 / G %6 kt; %7 colonists. "
                        "Cargo remains aboard until explicitly unloaded.")
-            .arg(qulonglong(event.observedTurn)).arg(fleetName, planetName)
+            .arg(qulonglong(event.observedTurn)).arg(fleetName, event_planet_name(state, event))
             .arg(event.deliveredMinerals.ironium).arg(event.deliveredMinerals.boranium)
             .arg(event.deliveredMinerals.germanium).arg(qulonglong(event.deliveredColonists));
     } else if (event.kind == GameEventKind::StargateTransitFailed) {
