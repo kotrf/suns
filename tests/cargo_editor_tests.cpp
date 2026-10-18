@@ -297,6 +297,9 @@ int main(int argc, char** argv)
         people->setValue(people->maximum());
         assert(people->value() == 100);
         assert(buttons->button(QDialogButtonBox::Ok)->text() == "Queue invasion");
+        const auto* warning = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
+        assert(warning && warning->text().contains("Any hostile station blocks landing"));
+        assert(warning->text().contains("colonists remain aboard"));
         assert(buttons->button(QDialogButtonBox::Ok)->isEnabled());
         buttons->button(QDialogButtonBox::Ok)->click();
     });

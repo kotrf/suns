@@ -36,13 +36,17 @@ station itself. Refueling service supports dockside and arrival refueling.
 Destroying a station immediately removes both physical services. Surface cargo
 transfer remains a colony operation.
 
-Surface conquest does not transfer a surviving station. An unarmed station can
-remain above a newly hostile colony, with its owner and ID intact; it provides
-no shipyard, refueling, gate or engineering support to the captor. One station
-still occupies the orbit, so ordinary combat must clear it before the new colony
-owner builds a replacement. Host/player-turn persistence accepts separate
-surface and station owners; station identities and owner/planet references must
-remain valid. Capturing orbital assets is not implemented.
+Any hostile station blocks colonist landing and colony founding, even without
+weapons. It must be destroyed before a ground invasion; station ownership is
+not transferred by surface conquest. This Stars!-style orbital-control rule
+was explicitly accepted on 18 October 2026. [Ground invasions](ground-invasions.md)
+describes manual versus arrival timing and delayed blocked-landing warnings.
+
+Older saves may contain a station above another player's colony. Its owner and
+ID remain intact; it provides no shipyard, refueling, gate or engineering support
+to the colony owner, and ordinary combat must clear the orbit before replacement.
+Persistence accepts those legacy states with valid station identities and
+owner/planet references. Capturing orbital assets is not implemented.
 
 ## Station combat and knowledge
 
@@ -54,7 +58,7 @@ retain their previous four-square starting radius. Weapons, shields, initiative,
 computers, jammers and dampeners use the shared deterministic combat resolver.
 Armor damage persists until refit; shields recharge at the next battle.
 
-Manual founding/landing cannot bypass an armed station encounter. An armed hostile station must be neutralized before bombardment. Surviving
+Manual founding/landing cannot bypass any hostile station, including an unarmed dock. An armed hostile station must be neutralized before bombardment. Surviving
 bombers retain their mission and can bomb after the station is destroyed. Surface defenses do not shoot
 at ships and do not substitute for an armed station.
 

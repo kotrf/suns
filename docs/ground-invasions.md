@@ -22,13 +22,31 @@ invasion the planet changes owner, the surviving attackers become its surface
 population and the former owner's production queue is cleared. A new-colony
 default template is not a conquest program and is not applied; captured worlds
 start with an empty queue and no built or automatically scheduled radar. Mines,
-factories, surface minerals and planetary history survive capture. Ownership
-of a surviving orbital station is unchanged. An armed hostile station must be
-neutralized before landing; an unarmed station may outlast a surface invasion.
-It gives the captor no friendly orbital services. Station capture remains
-future work; the current [combat layer](orbital-stations.md) can destroy stations.
-Host and player-turn saves preserve separate surface and station owners while
-validating the station's owner, planet and identity.
+factories, surface minerals and planetary history survive capture.
+
+## Orbital control before landing
+
+Following the Stars! rule accepted on 18 October 2026, **any hostile orbital
+station blocks colonist landing**, including an unarmed dock. A blocked landing
+transfers no colonists or minerals and does not start ground combat. The fleet
+owner receives a delayed **Landing blocked** warning explaining that the station
+must be destroyed first. Other players receive no landing-warning packet, and
+radio silence holds it until the fleet can transmit. The Cargo dialog states
+this condition without inspecting hidden foreign station fits.
+
+The rule covers manual Transfer cargo, waypoint UnloadAll (Colonists or All)
+and founding a colony on an empty world. Space battles precede arrival actions
+and clear the routes of participating fleets. After the station is destroyed,
+a surviving transport therefore needs a new landing order. Manual cargo orders
+run at the planning boundary, so a blocked manual invasion must likewise be
+resubmitted after the orbit has been cleared. This change preserves that combat
+and order timing; it adds the station prerequisite without rescheduling cargo.
+
+Surface conquest does not capture a station. New invasions cannot create the
+old unarmed-station ownership split. Host and player-turn readers still accept
+existing saves with different surface/station owners, validating the station's
+owner, planet and identity. Such a foreign station supplies no friendly orbital
+services and also blocks further colonist landing above that colony.
 
 An invasion order cannot smuggle minerals onto an enemy surface. A waypoint
 using `UnloadAll` for all cargo commits the colonists first; minerals unload

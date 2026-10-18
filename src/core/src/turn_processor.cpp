@@ -420,6 +420,25 @@ std::uint32_t report_population(std::uint64_t population)
         population, static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max())));
 }
 
+bool hostile_station_blocks_landing(GameState& state, const Fleet& fleet, const Planet& planet)
+{
+    const auto* station = find_orbital_station_at_planet(state, planet.id);
+    if (!station || station->owner == fleet.owner) return false;
+    // Orbital control is required even against an unarmed dock. A failed
+    // landing commits neither colonists nor minerals to the surface.
+    const auto* player = find_player(state, fleet.owner);
+    const bool alreadyReported = player && std::any_of(player->pendingPlayerReports.begin(),
+        player->pendingPlayerReports.end(), [&](const auto& report) {
+            return report.kind == PlayerReportKind::LandingBlocked && report.fleet == fleet.id
+                && report.planet == planet.id && report.observedTurn == state.turn + 1;
+        });
+    if (!alreadyReported) {
+        queue_player_report(state, fleet.owner, PlayerReportKind::LandingBlocked,
+            fleet.position, state.turn + 1, planet.star, planet.id, fleet.id, fleet.design);
+    }
+    return true;
+}
+
 bool invade_colony(
     GameState& state, Fleet& fleet, Planet& planet, std::uint64_t attackingPopulation)
 {
@@ -429,9 +448,7 @@ bool invade_colony(
         return false;
     }
 
-    const auto* defendingStation=find_orbital_station_at_planet(state,planet.id);
-    if(defendingStation && defendingStation->owner!=fleet.owner
-        && (station_has_weapons(*defendingStation) || fleet_has_space_weapons(state,fleet))) return false;
+    if (hostile_station_blocks_landing(state, fleet, planet)) return false;
     const auto defender = planet.owner;
     const auto defendingPopulation = planet.population;
     const auto chance = ground_invasion_success_chance(attackingPopulation, defendingPopulation);
@@ -560,6 +577,8 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
         if (source->planet ? order.colonists >= available : order.colonists > available) return false;
         const auto destinationPopulation = endpoint_colonists(*destination);
         if (order.colonists > std::numeric_limits<std::uint64_t>::max() - destinationPopulation) return false;
+        if (source->fleet && destination->planet
+            && hostile_station_blocks_landing(state, *source->fleet, *destination->planet)) return false;
     }
 
     auto& sourceMinerals = endpoint_minerals(*source);
@@ -637,14 +656,12 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
                 && distance_between(fleet.position, other.position) <= kFleetEncounterRadius
                 && (fleet_has_space_weapons(state, fleet) || fleet_has_space_weapons(state, other));
         })) return false;
-    if (const auto* station = find_orbital_station_at_planet(state, planet.id);
-        station && station->owner != fleet.owner
-        && (station_has_weapons(*station) || fleet_has_space_weapons(state, fleet))) return false;
     if (planet.owner != 0 || fleet.colonists == 0 || !fleet_can_colonize(state, fleet)) return false;
     // A fleet physically in orbit can survey and settle locally without
     // waiting for the observation to reach the empire's communication mesh.
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
+    if (hostile_station_blocks_landing(state, fleet, planet)) return false;
 
     const auto stacks = fleet_ship_stacks(fleet);
     const auto colonizer = std::find_if(stacks.begin(), stacks.end(),
@@ -792,6 +809,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         if (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All) {
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (colony) {
+                if (fleet.colonists > 0 && hostile_station_blocks_landing(state, fleet, *colony)) return false;
                 record_freight_delivery(freight, *colony, {}, fleet.colonists);
                 colony->population += fleet.colonists;
                 fleet.colonists = 0;

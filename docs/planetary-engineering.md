@@ -48,10 +48,11 @@ installation only needs local support to operate. Dismantle removes the project
 and its effect with **no production or mineral refund**; the UI confirms that
 loss of investment. Changing between mirrors and shades requires dismantling.
 
-An unarmed station may survive surface conquest under its former owner. Such a
-station gives the captor no engineering support. Its orbit remains occupied
-until ordinary combat destroys it; the new owner can then build a supporting
-station and resume the preserved project.
+Any hostile station must be destroyed before ground invasion, including an
+unarmed dock. The captor must build its own supporting station before resuming
+the preserved project. Older saves may retain a foreign station above a captured
+colony; it gives no engineering support and must also be destroyed before the
+new owner can build a replacement. See [orbital control](ground-invasions.md).
 
 The natural and conventionally terraformed axes remain unchanged by orbital
 output. [Ordinary terraforming](terraforming.md) keeps its own technology limits

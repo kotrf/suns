@@ -176,6 +176,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::GroundInvasionWon:
         subject = QString("Ground invasion captured %1").arg(planetName);
         break;
+    case GameEventKind::LandingBlocked:
+        subject = QString("%1: landing blocked at %2").arg(fleetName, planetName);
+        break;
     case GameEventKind::GroundInvasionLost:
         subject = QString("Ground invasion repelled on %1").arg(planetName);
         break;
@@ -267,6 +270,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::PlanetaryAftermath || event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
             || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
+            || event.kind == GameEventKind::LandingBlocked
             || event.kind == GameEventKind::GroundDefenseWon
             || event.kind == GameEventKind::ColonyLost;
     case MessageTypeFilter::ObservedHostileActivity:
@@ -589,6 +593,13 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(event.contactOwner)
                    .arg(location)
                    .arg(static_cast<qulonglong>(event.observedTurn));
+    } else if (event.kind == GameEventKind::LandingBlocked) {
+        text = QString("Turn %1  •  Landing blocked at %2\n"
+                       "A hostile orbital station prevented landing, even if unarmed. "
+                       "Destroy it before landing colonists or founding a colony. "
+                       "The landing transferred no colonists or cargo; they remained aboard at the time of the report.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(battlePlanetName);
     } else if (event.kind == GameEventKind::GroundInvasionWon) {
         text = QString("Turn %1  •  Ground invasion succeeded on %2\n"
                        "The colony was captured; %3 attacking colonists survived.")

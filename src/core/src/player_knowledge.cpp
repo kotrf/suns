@@ -79,6 +79,7 @@ GameEventKind event_kind(PlayerReportKind kind)
         return GameEventKind::ResearchLevelCompleted;
     case PlayerReportKind::GroundInvasionWon: return GameEventKind::GroundInvasionWon;
     case PlayerReportKind::GroundInvasionLost: return GameEventKind::GroundInvasionLost;
+    case PlayerReportKind::LandingBlocked: return GameEventKind::LandingBlocked;
     case PlayerReportKind::GroundDefenseWon: return GameEventKind::GroundDefenseWon;
     case PlayerReportKind::ColonyLost: return GameEventKind::ColonyLost;
     case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
@@ -121,6 +122,7 @@ GameEventSeverity event_severity(PlayerReportKind kind)
             || kind == PlayerReportKind::ProductionWaitingForMinerals
             || kind == PlayerReportKind::ProductionWaitingForShipyard
             || kind == PlayerReportKind::GroundInvasionLost
+            || kind == PlayerReportKind::LandingBlocked
         ? GameEventSeverity::Warning
         : GameEventSeverity::Information;
 }

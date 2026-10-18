@@ -55,6 +55,7 @@ enum class GameEventKind {
     EngineeringResumed,
     EngineeringCaptured,
     EngineeringDismantled,
+    LandingBlocked,
 };
 
 enum class GameEventSeverity {

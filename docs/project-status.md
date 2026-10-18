@@ -15,8 +15,12 @@ physical projects and received/in-flight evidence in a bounded extension.
 [Review follow-up](audits/2026-10-18-orbital-engineering-review.md) addresses two
 forecast regressions through a shared planning projection and separately tracks
 the pre-existing loader rejection of a conquered planet with a surviving enemy
-station. The documented separate ownership rule is preserved; formats remain
-save v85 / orders v31. Validation results belong to PR #219.
+station. Legacy saves with separate owners remain readable. In a subsequent
+explicit user decision, any hostile station (including an unarmed dock) now
+blocks landing/founding until destroyed, with a delayed fleet-owner warning.
+Space combat clears participant routes; landing requires a new order after
+orbital clearance. Stations are not captured automatically.
+Formats remain save v85 / orders v31. Validation results belong to PR #219.
 
 This branch is prepared for PR review, not an assertion of merge or manual
 acceptance. Broader atmospheric/magnetic engineering, habitats, system projects,

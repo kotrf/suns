@@ -195,4 +195,15 @@ int main(int argc, char** argv)
     loaded.strategicMessages.front().battle->shots.front().target = 100000;
     assert(write_save_game_file(path, loaded, error));
     assert(!read_save_game_file(path, save, error));
+
+    GameEvent blocked;
+    blocked.id=9001; blocked.turn=7; blocked.observedTurn=3; blocked.recipient=1;
+    blocked.kind=GameEventKind::LandingBlocked; blocked.severity=GameEventSeverity::Warning;
+    blocked.star=1; blocked.planet=1; blocked.fleet=1;
+    MainWindowTestAccess::install(window, {result.state,{blocked}});
+    filter->setCurrentIndex(filter->findText("Combat"));
+    assert(list->count()==1 && list->item(0)->text().contains("landing blocked"));
+    list->setCurrentRow(0); app.processEvents();
+    assert(body->toPlainText().contains("hostile orbital station prevented landing"));
+    assert(body->toPlainText().contains("remained aboard at the time of the report"));
 }

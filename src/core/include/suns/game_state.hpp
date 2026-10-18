@@ -741,6 +741,7 @@ enum class PlayerReportKind {
     EngineeringResumed,
     EngineeringCaptured,
     EngineeringDismantled,
+    LandingBlocked,
 };
 
 // A report is an immutable observation, independent of surviving objects and
