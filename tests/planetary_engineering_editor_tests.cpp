@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
+#include <QDebug>
 #include <QFile>
 #include <QLabel>
 #include <QPushButton>
@@ -52,14 +53,15 @@ void persistence(GameState s)
     PendingSurveyReport survey; survey.star=1; survey.observedTurn=s.turn; survey.deliveryTurn=s.turn+5;
     survey.level=SurveyLevel::OrbitalSurvey; survey.observedOwner=1;
     survey.planetSnapshot=capture_planet_survey(s,2,1,survey.level,s.turn); s.players[1].pendingSurveyReports.push_back(survey);
-    SaveGameData host; host.state=s; host.mode=SessionMode::Host; host.campaignId=9; host.playerTokens={{1,77},{2,88}};
+    SaveGameData host; host.state=s; host.mode=SessionMode::Host; host.campaignId=9; host.turnToken=8; host.playerTokens={{1,77},{2,88}};
     host.pendingOrders={1,{SetPlanetaryEngineeringOrder{1,E::OrbitalMirrors,A::Pause,7},SetPlanetaryEngineeringOrder{1,E::OrbitalMirrors,A::SetOutput,5}}};
     host.pendingDescriptions={"Pause","Output"};
     GameEvent event; event.kind=GameEventKind::EngineeringPaused; event.recipient=1; event.turn=s.turn;
     event.observedTurn=s.turn; event.star=1; event.planet=1; event.productionKind=ProductionKind::OrbitalMirrors;
     event.quantity=std::uint32_t(EngineeringBlock::MissingStation); host.strategicMessages.push_back(event);
     const auto path=dir.filePath("engineering.suns"); SaveGameData loaded;
-    assert(write_save_game_file(path,host,error) && read_save_game_file(path,loaded,error));
+    if(!write_save_game_file(path,host,error)) {qCritical()<<error;assert(false);}
+    if(!read_save_game_file(path,loaded,error)) {qCritical()<<error;assert(false);}
     const auto& p=loaded.state.planets[0]; assert(p.engineering.work==80 && p.engineering.strength==7 && p.engineering.invested.ironium==8);
     assert(p.productionQueue[0].remainingCost==2320 && p.engineering.builder==1 && p.engineering.startedTurn==1);
     assert(loaded.strategicMessages.back().kind==GameEventKind::EngineeringPaused);
@@ -82,7 +84,7 @@ void persistence(GameState s)
     corrupt=bytes(path); {QDataStream patch(&corrupt,QIODevice::ReadWrite);assert(patch.device()->seek(offset+4));patch<<quint32{0x7fffffff};}
     write(bad,corrupt); assert(!read_save_game_file(bad,loaded,error));
     // v84 files have no ENGI tail and migrate to empty project state.
-    SaveGameData old; old.state=make_demo_game(); old.pendingOrders={1,{}};
+    SaveGameData old; old.state=make_demo_game(); old.pendingOrders={1,{}}; old.campaignId=9; old.turnToken=8;
     assert(write_save_game_file(path,old,error)); auto legacy=bytes(path);
     const auto tail=legacy.indexOf(tag(0x454e4749)), strategic=legacy.indexOf(tag(0x53545241)); assert(tail>=0 && strategic>=0);
     quint32 tailSize{},size{}; QDataStream th(legacy.mid(tail+4));th>>tailSize;QDataStream sh(legacy.mid(strategic+4));sh>>size;
