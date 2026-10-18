@@ -4,8 +4,12 @@
 
 The design goal is a relatively small set of deep, interacting systems rather than complexity through sheer feature count.
 
-For the maintained development handoff, implemented slices, current formats and
-remaining work, see [project status](docs/project-status.md).
+Start a new conversation or development session with the compact
+[project context](docs/PROJECT_CONTEXT.md).
+For the current implementation, formats and remaining work, see
+[project status](docs/project-status.md).
+Historical reasons and conversation coverage live in the
+[decision archive](docs/project-memory/README.md).
 
 ## Architecture
 
@@ -47,9 +51,9 @@ The desktop app now links exploration, planet quality, economy and expansion:
 
 Campaign setup supports human and [computer empires](docs/computer-players.md).
 Computer orders are generated automatically on the host through the ordinary
-turn processor; PBEM waits only for humans. The initial controller starts
-research and retains standing orders. Independent expansion and military
-decisions are the next implementation stages.
+turn processor; PBEM waits only for humans. The initial controller, civilian
+expansion and military phases are implemented. Planning uses each empire's
+received knowledge, ordinary resources and communication constraints.
 
 1. star positions are visible, but non-home planetary data starts unknown;
 2. an ordinary scanner fly-by records a system contact but leaves planetary data unknown;
@@ -84,7 +88,7 @@ Successful colonization dismantles the entire fleet, deposits all carried minera
 
 The numerical values are still placeholders. The current purpose is to grow a coherent playable loop while keeping the simulation deterministic and independent of the GUI.
 
-Colony production supports one-off batches, annual factory/mine rules and saved empire templates, including a default for new colonies. Biology and physical sciences unlock paid [terraforming](docs/terraforming.md); the environment panel previews attainable habitability and fully surveyed hostile worlds become yellow in Habitability mode when current technology can make them habitable.
+Colony production supports one-off batches, annual factory/mine rules and saved empire templates, including an explicitly chosen default for new colonies. Biology and physical sciences unlock paid [terraforming](docs/terraforming.md); the environment panel previews attainable habitability and fully surveyed hostile worlds become yellow in Habitability mode when current technology can make them habitable.
 
 The engine technology catalog follows the 15 normal Stars! models, with their field levels, mass, costs and speed bands. See [Stars! propulsion](docs/stars-propulsion.md) for access rules, legacy compatibility and Suns! fuel/damage adaptations.
 
