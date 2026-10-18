@@ -408,6 +408,17 @@ add_executable(suns_audit_regression_tests audit_regression_tests.cpp)
 target_link_libraries(suns_audit_regression_tests PRIVATE Suns::Core)
 add_test(NAME suns_audit_regression_tests COMMAND suns_audit_regression_tests)
 
+add_executable(suns_mobile_base_tests mobile_base_tests.cpp)
+target_link_libraries(suns_mobile_base_tests PRIVATE Suns::Core)
+add_test(NAME suns_mobile_base_tests COMMAND suns_mobile_base_tests)
+
+if(SUNS_BUILD_APP)
+    add_executable(suns_mobile_base_editor_tests mobile_base_editor_tests.cpp)
+    target_link_libraries(suns_mobile_base_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_mobile_base_editor_tests COMMAND suns_mobile_base_editor_tests)
+    set_tests_properties(suns_mobile_base_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
 # These suites use assert, including some operations inside its expressions.
 # Keep checks active for Release/RelWithDebInfo as well as Debug.
 get_property(suns_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)

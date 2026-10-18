@@ -1,3 +1,4 @@
+#include "suns/mobile_base.hpp"
 #include "main_window.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/deep_space.hpp"
@@ -278,13 +279,16 @@ GameState movementPhasePreviewState(
     // The processor still applies turn-start onboard fuel generation, exactly
     // as it will before the real orders and movement phase.
     GameState preview = state;
+    preview.pendingMobileBaseTransfers.clear();
     project_interstellar_medium(preview,pending.player);
     // A local cargo preview must not turn a remote site's physical stock or
     // undelivered deployment into planning knowledge, or run its work orders.
     for (auto& fleet : preview.fleets) {
         if (fleet.owner==pending.player) {
             const auto known=fleet_player_view(state,fleet);
-            if (fleet.outpost!=OutpostKind::None || known.outpost!=OutpostKind::None) fleet=known;
+            if (fleet.outpost!=OutpostKind::None || known.outpost!=OutpostKind::None
+                || mobile_base_hulls(preview,fleet)>0 || mobile_base_hulls(preview,known)>0) fleet=known;
+            fleet.mobileBase.enabled=false;
         }
         fleet.destination.reset();
         if (fleet.task==FleetTask::DeployOutpost) fleet.task=FleetTask::None;

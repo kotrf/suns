@@ -163,6 +163,7 @@ bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleet
     const auto* star = find_star(s, p->star);
     auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(),
         [=](const Fleet& candidate) { return candidate.id == fleetId && candidate.owner == owner; });
+    fleet->lastMovedTurn = s.turn + 1;
     fleet->position = star->position;
     // All fuel stays onboard. Physical movement precedes the normal telemetry
     // stage; no instant report of a remote destination is manufactured here.

@@ -275,6 +275,7 @@ bool enter_wormhole(GameState& state, Fleet& fleet, WormholeEndpointId endpoint)
         * (fleet_has_anomaly_detector(state, fleet) ? rules.detectorRiskMultiplier : 1.0), rules.minimumLossChance, 1.0);
     if (unit(seed(state, fleet.id, turn, 6) ^ mix(endpoint)) < risk) return true;
     const auto& exit = selected->endpoints[1-side];
+    fleet.lastMovedTurn = state.turn + 1;
     fleet.position = exit.position;
     WormholeKnowledge emergence{exit.id, exit.position, turn, stability_band(selected->stability), endpoint};
     queue(state, fleet.owner, WormholeReportKind::Emerged, emergence, fleet.id, fleet.position, turn);

@@ -10,6 +10,7 @@
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/deep_space.hpp"
+#include "suns/mobile_base.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -28,19 +29,20 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 83;
+constexpr quint32 kSaveFormatVersion = 84;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 29;
+constexpr quint32 kTurnOrderFormatVersion = 30;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
 
 quint8 newestShipComponent()
 {
-    return static_cast<quint8>(gReadSaveFormatVersion >= 82
-        ? kLastShipComponent : gReadSaveFormatVersion >= 81
+    return static_cast<quint8>(gReadSaveFormatVersion >= 84
+        ? kLastShipComponent : gReadSaveFormatVersion >= 82
+        ? ShipComponentType::DeepSpaceRelayKit : gReadSaveFormatVersion >= 81
         ? ShipComponentType::InfinityStargate : gReadSaveFormatVersion >= 60
         ? ShipComponentType::Superlatanium : gReadSaveFormatVersion >= 58
         ? ShipComponentType::RoboUltraMiner : gReadSaveFormatVersion >= 57
@@ -369,6 +371,34 @@ template<class FleetState> void validateStoredRoute(QDataStream& stream, const F
     }
 }
 
+void writeMobileBaseProgram(QDataStream& stream, const MobileBaseProgram& value)
+{
+    if (!mobile_base_program_valid(value)) { stream.setStatus(QDataStream::WriteFailed); return; }
+    stream << quint8(value.enabled) << value.fuelReserve << quint32(value.clients.size());
+    for (auto id : value.clients) stream << quint32(id);
+}
+void readMobileBaseProgram(QDataStream& stream, MobileBaseProgram& value)
+{
+    quint8 enabled{}; quint32 count{};
+    stream >> enabled >> value.fuelReserve;
+    if (enabled > 1 || !readCount(stream, count) || count > 128) { markCorrupt(stream); return; }
+    value.enabled = enabled; value.clients.clear();
+    for (quint32 i=0; i<count; ++i) { quint32 id{}; stream >> id; value.clients.push_back(id); }
+    if (!mobile_base_program_valid(value)) markCorrupt(stream);
+}
+template<class T> void writeMobileBaseState(QDataStream& stream, const T& value)
+{
+    writeMobileBaseProgram(stream, value.mobileBase);
+    stream << quint64(value.lastMovedTurn) << quint64(value.lastServiceTurn);
+}
+template<class T> void readMobileBaseState(QDataStream& stream, T& value)
+{
+    if (gReadSaveFormatVersion < 84) return;
+    readMobileBaseProgram(stream, value.mobileBase);
+    quint64 moved{}, serviced{}; stream >> moved >> serviced;
+    value.lastMovedTurn=moved; value.lastServiceTurn=serviced;
+}
+
 void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
 {
     stream << static_cast<quint64>(value.observedTurn);
@@ -575,7 +605,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.id = static_cast<ShipDesignId>(id);
     value.owner = static_cast<PlayerId>(owner);
     readString(stream, value.name);
-    const auto newestHull = gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+    const auto newestHull = gReadSaveFormatVersion >= 84 ? ShipHullType::ExpeditionBase : gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
         : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
     if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return;
 
@@ -2285,6 +2315,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "unknown_objects_save.inc"
 #include "interstellar_medium_save.inc"
 #include "deep_space_save.inc"
+#include "mobile_base_save.inc"
 #include "survey_save.inc"
 #include "strategic_save.inc"
 
@@ -2528,6 +2559,10 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, ApplyProductionTemplateOrder>) {
             stream << quint8{20} << quint32(concrete.colony);
             writeString(stream, concrete.name);
+        } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
+            stream << quint8{26} << quint32(concrete.source) << quint32(concrete.destination) << concrete.amount << concrete.sourceReserve;
+        } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
+            stream << quint8{25} << quint32(concrete.fleet); writeMobileBaseProgram(stream, concrete.program);
         } else if constexpr (std::is_same_v<T, GateFleetOrder>) {
             stream << quint8{24} << quint32(concrete.fleet)
                    << quint32(concrete.source) << quint32(concrete.destination);
@@ -2611,7 +2646,7 @@ bool readOrder(QDataStream& stream, Order& order)
     case 2: {
         CreateShipDesignOrder value;
         readString(stream, value.name);
-        const auto newestHull = gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+        const auto newestHull = gReadSaveFormatVersion >= 84 ? ShipHullType::ExpeditionBase : gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
             : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
         if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return false;
         quint32 count{};
@@ -2909,6 +2944,19 @@ bool readOrder(QDataStream& stream, Order& order)
             || value.source == value.destination) { markCorrupt(stream); return false; }
         order = value;
         return stream.status() == QDataStream::Ok;
+    }
+    case 25: {
+        if (gReadSaveFormatVersion < 84) { markCorrupt(stream); return false; }
+        SetMobileBaseOrder value; stream >> value.fleet; readMobileBaseProgram(stream, value.program);
+        if (!value.fleet) markCorrupt(stream);
+        order=value; return stream.status()==QDataStream::Ok;
+    }
+    case 26: {
+        if (gReadSaveFormatVersion < 84) { markCorrupt(stream); return false; }
+        TransferFleetFuelOrder value; stream >> value.source >> value.destination >> value.amount >> value.sourceReserve;
+        if (!value.source || !value.destination || value.source == value.destination || !std::isfinite(value.amount)
+            || value.amount <= 0 || !std::isfinite(value.sourceReserve) || value.sourceReserve < 0) markCorrupt(stream);
+        order=value; return stream.status()==QDataStream::Ok;
     }
     default:
         markCorrupt(stream);
@@ -3351,7 +3399,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

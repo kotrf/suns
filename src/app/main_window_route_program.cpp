@@ -205,6 +205,7 @@ QString routeForecast(
         "Entry, lifetime, exit and survival cannot be forecast with certainty.";
 
     GameState simulated = state;
+    simulated.pendingMobileBaseTransfers.clear(); // Host-only undelivered logistics are not planning evidence.
     project_interstellar_medium(simulated,pending.player);
     // Navigation previews must never resolve battles using hidden enemy fits,
     // routes or the authoritative seed. Combat outcomes are not forecasts.
