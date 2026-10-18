@@ -419,6 +419,20 @@ if(SUNS_BUILD_APP)
     set_tests_properties(suns_mobile_base_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 endif()
 
+add_executable(suns_planetary_engineering_tests planetary_engineering_tests.cpp)
+target_link_libraries(suns_planetary_engineering_tests PRIVATE Suns::Core)
+add_test(NAME suns_planetary_engineering_tests COMMAND suns_planetary_engineering_tests)
+
+if(SUNS_BUILD_APP)
+    add_executable(suns_planetary_engineering_editor_tests planetary_engineering_editor_tests.cpp)
+    target_link_libraries(suns_planetary_engineering_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_planetary_engineering_editor_tests COMMAND suns_planetary_engineering_editor_tests)
+    add_test(NAME suns_engineering_start_forecast_tests COMMAND suns_planetary_engineering_editor_tests --start-forecast)
+    add_test(NAME suns_engineering_research_forecast_tests COMMAND suns_planetary_engineering_editor_tests --research-forecast)
+    set_tests_properties(suns_planetary_engineering_editor_tests suns_engineering_start_forecast_tests
+        suns_engineering_research_forecast_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
 # These suites use assert, including some operations inside its expressions.
 # Keep checks active for Release/RelWithDebInfo as well as Debug.
 get_property(suns_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)

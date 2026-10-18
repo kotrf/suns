@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
@@ -140,6 +141,11 @@ QString event_subject(const GameState& state, const GameEvent& event)
     }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
+    case GameEventKind::EngineeringProgress: subject=QString("%1: climate project %2").arg(event_planet_name(state,event),event.quantity==0?"started":event.quantity==100?"completed":QString("%1% milestone").arg(event.quantity)); break;
+    case GameEventKind::EngineeringPaused: subject=QString("%1: climate project interrupted").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringResumed: subject=QString("%1: climate project resumed").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringCaptured: subject=QString("%1: climate project captured").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringDismantled: subject=QString("%1: climate project dismantled").arg(event_planet_name(state,event)); break;
     case GameEventKind::OutpostDeployed: subject = QString("%1: outpost deployed").arg(fleetName); break;
     case GameEventKind::OutpostDeploymentFailed: subject = QString("%1: deployment rejected").arg(fleetName); break;
     case GameEventKind::OutpostFuelExhausted: subject = QString("%1: outpost fuel exhausted").arg(fleetName); break;
@@ -169,6 +175,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
         break;
     case GameEventKind::GroundInvasionWon:
         subject = QString("Ground invasion captured %1").arg(planetName);
+        break;
+    case GameEventKind::LandingBlocked:
+        subject = QString("%1: landing blocked at %2").arg(fleetName, planetName);
         break;
     case GameEventKind::GroundInvasionLost:
         subject = QString("Ground invasion repelled on %1").arg(planetName);
@@ -248,7 +257,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::ProductionCompleted
             && event.productionKind == ProductionKind::ColonyShip;
     case MessageTypeFilter::Infrastructure:
-        return event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
+        return (event.kind>=GameEventKind::EngineeringProgress && event.kind<=GameEventKind::EngineeringDismantled) || event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
             || event.kind == GameEventKind::OutpostFuelExhausted || (event.kind == GameEventKind::ProductionCompleted
             && event.productionKind != ProductionKind::ColonyShip);
     case MessageTypeFilter::Colonization: return event.kind == GameEventKind::ColonyFounded;
@@ -261,6 +270,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::PlanetaryAftermath || event.kind == GameEventKind::Bombardment || event.kind == GameEventKind::MineStrike
             || event.kind == GameEventKind::SpaceBattle || event.kind == GameEventKind::GroundInvasionWon
             || event.kind == GameEventKind::GroundInvasionLost
+            || event.kind == GameEventKind::LandingBlocked
             || event.kind == GameEventKind::GroundDefenseWon
             || event.kind == GameEventKind::ColonyLost;
     case MessageTypeFilter::ObservedHostileActivity:
@@ -476,6 +486,15 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(surveyName, starName);
         if (!detail.isEmpty()) text += QString("\n%1").arg(detail);
+    } else if(event.kind>=GameEventKind::EngineeringProgress && event.kind<=GameEventKind::EngineeringDismantled) {
+        const auto project=QString::fromStdString(engineering_name(engineering_project_kind(event.productionKind)));
+        QString detail;
+        if(event.kind==GameEventKind::EngineeringPaused) detail=QString::fromStdString(engineering_block_name(EngineeringBlock(event.quantity)))+". Progress and paid materials remain on the planet.";
+        else if(event.kind==GameEventKind::EngineeringCaptured) detail=QString("Captured at %1% progress. Resume through ordinary production with the new owner's technology and supporting station.").arg(event.quantity);
+        else if(event.kind==GameEventKind::EngineeringDismantled) detail="Owner dismantled the project. Investment is not refunded; its temperature effect is removed.";
+        else if(event.kind==GameEventKind::EngineeringResumed) detail=QString("Work or operation resumed at %1% progress.").arg(event.quantity);
+        else detail=event.quantity==0?"Construction started; at least 30 years at maximum assembly capacity.":event.quantity==100?"Construction completed. Supported operation changes effective temperature; output can be set from 0 to 10.":QString("Construction milestone: %1% complete.").arg(event.quantity);
+        text=QString("Year %1 • %2 at %3.\n%4").arg(qulonglong(event.observedTurn)).arg(project,event_planet_name(state,event),detail);
     } else if (event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
         || event.kind == GameEventKind::OutpostFuelExhausted) {
         const auto kind=QString::fromStdString(outpost_kind_name(OutpostKind(event.quantity)));
@@ -574,6 +593,13 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(event.contactOwner)
                    .arg(location)
                    .arg(static_cast<qulonglong>(event.observedTurn));
+    } else if (event.kind == GameEventKind::LandingBlocked) {
+        text = QString("Turn %1  •  Landing blocked at %2\n"
+                       "A hostile orbital station prevented landing, even if unarmed. "
+                       "Destroy it before landing colonists or founding a colony. "
+                       "The landing transferred no colonists or cargo; they remained aboard at the time of the report.")
+                   .arg(static_cast<qulonglong>(event.turn))
+                   .arg(battlePlanetName);
     } else if (event.kind == GameEventKind::GroundInvasionWon) {
         text = QString("Turn %1  •  Ground invasion succeeded on %2\n"
                        "The colony was captured; %3 attacking colonists survived.")

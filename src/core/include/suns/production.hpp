@@ -15,6 +15,7 @@ struct ColonyProductionResolution {
     std::vector<ProductionCompletion> completions;
     std::uint32_t researchPoints{};
     bool hasShipyard{};
+    bool engineeringSupport{};
     std::vector<std::size_t> queueOrigins;
 };
 
@@ -25,7 +26,7 @@ struct ColonyProductionResolution {
 // Mutates local buildings, minerals and environment; callers materialize ships
 // and orbital stations from the completion list.
 [[nodiscard]] ColonyProductionResolution resolve_colony_production(
-    const GameState& state, Planet& planet, bool hasShipyard);
+    const GameState& state, Planet& planet, bool hasShipyard, std::optional<bool> engineeringSupport = std::nullopt);
 [[nodiscard]] bool production_batch_valid(const QueueProductionBatchOrder& order);
 bool apply_production_batch(const GameState& state, Planet& planet, const QueueProductionBatchOrder& order);
 [[nodiscard]] bool production_template_valid(const ProductionTemplate& value);

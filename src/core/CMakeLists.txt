@@ -23,6 +23,7 @@ add_library(suns_core
     src/unknown_objects.cpp
     src/interstellar_medium.cpp
     src/terraforming.cpp
+    src/planetary_engineering.cpp
     src/propulsion.cpp
     src/scanners.cpp
     src/radiation.cpp

@@ -445,7 +445,8 @@ void MainWindow::openCargoManifestDialog()
                 colonists, destinationCurrentColonists) * 100.0;
             destinationAfter->setText(QString(
                 "<b>Ground invasion:</b> %1 attackers vs %2 defenders — estimated success chance %3%. "
-                "The selected landing force is committed; the winner keeps its survivors.")
+                "If orbit is clear, the selected landing force is committed and the winner keeps its survivors. "
+                "Any hostile station blocks landing, even without weapons; colonists remain aboard.")
                 .arg(static_cast<qulonglong>(colonists))
                 .arg(static_cast<qulonglong>(destinationCurrentColonists))
                 .arg(chance, 0, 'f', 1));

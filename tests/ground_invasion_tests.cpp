@@ -1,6 +1,9 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/production.hpp"
+#include "suns/stations.hpp"
+#include "suns/player_knowledge.hpp"
+#include "suns/communications.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -163,10 +166,172 @@ void conquest_does_not_apply_a_new_colony_default()
     assert(captured);
 }
 
+GameState station_blockade_fixture()
+{
+    auto state = invasion_fixture();
+    state.wormholeRules.spawnChancePerTurn = 0;
+    for (auto& player : state.players) player.technology.researchActive = false;
+    state.planets[1].population = 1;
+    auto station = state.orbitalStations.front();
+    station.id = state.nextOrbitalStationId++;
+    station.planet = state.planets[1].id;
+    station.owner = 2;
+    station.components.clear();
+    state.orbitalStations.push_back(station);
+    return state;
+}
+
+void assert_blocked_report(const TurnResult& result)
+{
+    const auto& pending = result.state.players[0].pendingPlayerReports;
+    const auto pendingCount = std::count_if(pending.begin(), pending.end(), [](const auto& report) {
+        return report.kind == PlayerReportKind::LandingBlocked && report.fleet == 1;
+    });
+    const auto deliveredCount = std::count_if(result.events.begin(), result.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::LandingBlocked && event.fleet == 1 && event.recipient == 1;
+    });
+    assert(pendingCount + deliveredCount == 1);
+    assert(std::none_of(result.events.begin(), result.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::GroundInvasionWon || event.kind == GameEventKind::GroundInvasionLost
+            || (event.kind == GameEventKind::LandingBlocked && event.recipient != 1);
+    }));
+    for (const auto& player : result.state.players) {
+        assert(std::none_of(player.pendingPlayerReports.begin(), player.pendingPlayerReports.end(), [&](const auto& report) {
+            return report.kind == PlayerReportKind::GroundInvasionWon || report.kind == PlayerReportKind::GroundInvasionLost
+                || (report.kind == PlayerReportKind::LandingBlocked && player.id != 1);
+        }));
+    }
+}
+
+void unarmed_station_blocks_manual_and_waypoint_landings()
+{
+    for (const auto cargo : {FleetCargoKind::Colonists, FleetCargoKind::All}) {
+        auto state = station_blockade_fixture();
+        const auto initialCargo = state.fleets.front().colonists;
+        auto result = invade(state);
+        assert(result.state.planets[1].owner == 2);
+        assert(find_fleet(result.state, 1)->colonists == initialCargo);
+        assert(find_orbital_station_at_planet(result.state, state.planets[1].id)->owner == 2);
+        assert_blocked_report(result);
+
+        auto& fleet = state.fleets.front();
+        fleet.destination = fleet.position;
+        fleet.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::UnloadAll, 1, cargo};
+        result = TurnProcessor{}.process_with_events(state, {});
+        assert(result.state.planets[1].owner == 2);
+        const auto* after = find_fleet(result.state, 1);
+        assert(after && after->colonists == initialCargo);
+        assert(after->minerals.ironium == fleet.minerals.ironium);
+        assert(after->minerals.boranium == fleet.minerals.boranium);
+        assert(after->minerals.germanium == fleet.minerals.germanium);
+        assert_blocked_report(result);
+    }
+}
+
+void blocked_landing_reports_wait_for_transmission_and_replay_stably()
+{
+    auto state = station_blockade_fixture();
+    state.fleets[0].electronics = {EmissionMode::RadioSilence, state.turn + 20};
+    const auto blocked = invade(state);
+    assert_blocked_report(blocked);
+    assert(std::none_of(blocked.events.begin(), blocked.events.end(), [](const auto& event) {
+        return event.kind == GameEventKind::LandingBlocked;
+    }));
+    const auto& pending = blocked.state.players[0].pendingPlayerReports;
+    const auto report = std::find_if(pending.begin(), pending.end(), [](const auto& report) {
+        return report.kind == PlayerReportKind::LandingBlocked;
+    });
+    assert(report != pending.end() && report->deliveryTurn == kAwaitingTransmission);
+    assert(report->transmissionFleet == 1 && report->observedTurn == state.turn + 1);
+    auto due = blocked.state;
+    // Advance the immutable packet to its receipt boundary without changing
+    // the report's observation, even if the station has since disappeared.
+    due.orbitalStations.clear();
+    auto& packets = due.players[0].pendingPlayerReports;
+    for (auto& packet : packets) packet.deliveryTurn = due.turn + 3;
+    assert(deliver_due_player_reports(due).empty());
+    due.turn += 3;
+    auto replay = due;
+    const auto delivered = deliver_due_player_reports(due);
+    const auto repeated = deliver_due_player_reports(replay);
+    const auto first = std::find_if(delivered.begin(), delivered.end(), [](const auto& event) {
+        return event.kind == GameEventKind::LandingBlocked;
+    });
+    const auto second = std::find_if(repeated.begin(), repeated.end(), [](const auto& event) {
+        return event.kind == GameEventKind::LandingBlocked;
+    });
+    assert(first != delivered.end() && second != repeated.end());
+    assert(first->id == second->id && first->observedTurn == state.turn + 1);
+    assert(first->turn == due.turn && first->severity == GameEventSeverity::Warning);
+}
+
+void station_must_be_destroyed_before_landing()
+{
+    auto state = station_blockade_fixture();
+    auto& transport = state.fleets.front();
+    transport.destination = transport.position;
+    transport.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::Colonists};
+    state.shipDesigns.push_back({99, 1, "Orbital assault", ShipHullType::Destroyer,
+        {ShipComponentType::FuelMizer, ShipComponentType::AntiMatterPulverizer}});
+    Fleet escort;
+    escort.id = state.nextFleetId++;
+    escort.owner = 1;
+    escort.design = 99;
+    escort.ships = {{99, 100}};
+    escort.position = transport.position;
+    escort.fuel = fleet_fuel_capacity(state, escort);
+    state.fleets.push_back(escort);
+    const auto result = TurnProcessor{}.process_with_events(state, {});
+    assert(!find_orbital_station_at_planet(result.state, state.planets[1].id));
+    // Combat intentionally clears participant routes. The surviving transport
+    // commits its landing force only after a new order against the cleared orbit.
+    assert(result.state.planets[1].owner == 2);
+    assert(find_fleet(result.state, 1)->colonists == 1'250);
+    const auto captured = invade(result.state);
+    assert(captured.state.planets[1].owner == 1);
+    assert(find_fleet(captured.state, 1)->colonists == 0);
+    assert(std::any_of(captured.state.players[0].pendingPlayerReports.begin(),
+        captured.state.players[0].pendingPlayerReports.end(), [](const auto& report) {
+            return report.kind == PlayerReportKind::GroundInvasionWon;
+        }) || std::any_of(captured.events.begin(), captured.events.end(), [](const auto& event) {
+            return event.kind == GameEventKind::GroundInvasionWon && event.recipient == 1;
+        }));
+}
+
+void hostile_station_also_blocks_founding_on_an_empty_world()
+{
+    for (const bool waypoint : {false, true}) {
+        auto state = station_blockade_fixture();
+        state.planets[1].owner = 0;
+        state.planets[1].population = 0;
+        auto& fleet = state.fleets.front();
+        fleet.colonists = 100;
+        fleet.minerals = {};
+        if (waypoint) {
+            fleet.destination = fleet.position;
+            fleet.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::Colonize};
+        }
+        const auto orders = waypoint ? std::vector<PlayerOrders>{}
+            : std::vector<PlayerOrders>{{1, {ColonizePlanetOrder{fleet.id, state.planets[1].id}}}};
+        const auto result = TurnProcessor{}.process_with_events(state, orders);
+        assert(result.state.planets[1].owner == 0);
+        assert(find_fleet(result.state, 1) && find_fleet(result.state, 1)->colonists == fleet.colonists);
+        assert(find_orbital_station_at_planet(result.state, state.planets[1].id)->owner == 2);
+        assert_blocked_report(result);
+        state.orbitalStations.pop_back();
+        const auto cleared = TurnProcessor{}.process(state, orders);
+        assert(cleared.planets[1].owner == 1);
+    }
+}
+
 } // namespace
 
 int main()
 {
+    unarmed_station_blocks_manual_and_waypoint_landings();
+    station_must_be_destroyed_before_landing();
+    hostile_station_also_blocks_founding_on_an_empty_world();
+    blocked_landing_reports_wait_for_transmission_and_replay_stably();
     conquest_does_not_apply_a_new_colony_default();
     chance_is_symmetric_and_rewards_numerical_advantage();
     outcomes_are_probabilistic_but_replay_deterministic();

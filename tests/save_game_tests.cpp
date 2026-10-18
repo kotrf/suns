@@ -29,8 +29,20 @@ namespace {
 using namespace suns;
 
 // These old-layout fixtures have no pending/archive evidence.
+void strip_engineering_tail(QByteArray& bytes)
+{
+    QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x454e4749u};
+    const auto tail=bytes.indexOf(tag); if(tail<0)return;
+    QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
+    const auto start=bytes.indexOf(marker); assert(start>=0);
+    QDataStream header(bytes.mid(start+4)); quint32 size{}; header>>size;
+    assert(tail+8+tailSize==start+8+size); bytes.remove(tail,8+tailSize);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(start+4)); patch<<quint32(size-8-tailSize);
+}
 void strip_mobile_base_tail(QByteArray& bytes)
 {
+    strip_engineering_tail(bytes);
     QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream << quint32{0x4d4f4249u};
     const auto tail=bytes.indexOf(tag); if (tail < 0) return;
     QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader >> tailSize;
@@ -2489,8 +2501,93 @@ void survey_snapshots_round_trip_and_keep_hidden_terraforming_private()
     assert(!write_save_game_file(path,save,error));
 }
 
+void legacy_conquest_with_surviving_station_round_trips()
+{
+    QTemporaryDir dir; assert(dir.isValid()); QString error;
+    // Recreate a state written before hostile unarmed stations blocked
+    // landing. New turns cannot produce this ownership split by invasion.
+    auto captured=make_demo_game(); captured.wormholeRules.spawnChancePerTurn=0;
+    captured.players.push_back({2,"Defenders"});
+    for(auto& player:captured.players)player.technology.researchActive=false;
+    auto& planet=captured.planets[0]; planet.owner=1; planet.population=999;
+    planet.productionQueue.clear();
+    auto& station=captured.orbitalStations[0]; station.owner=2; station.hull=OrbitalStationHullType::Starbase;
+    set_survey_level(captured,2,planet.star,SurveyLevel::GeologicalSurvey,captured.turn);
+    auto& fleet=captured.fleets[0]; fleet.design=kColonyShipDesignId; fleet.ships={{kColonyShipDesignId,1}};
+    fleet.position=captured.stars[0].position; fleet.colonists=0;
+    assert(captured.orbitalStations.size()==1 && captured.orbitalStations[0].owner==2);
+    assert(!colony_has_orbital_service(captured,planet.id,1,OrbitalStationModule::Shipyard));
+    SaveGameData save; save.state=captured; save.campaignId=9; save.turnToken=8; save.mode=SessionMode::Host;
+    save.pendingOrders={1,{}}; save.playerTokens={{1,77},{2,88}};
+    const auto path=dir.filePath("legacy-conquest.suns");
+    SaveGameData loaded;
+    assert(write_save_game_file(path,save,error));
+    if(!read_save_game_file(path,loaded,error)) {std::cerr<<error.toStdString()<<'\n';assert(false);}
+    assert(loaded.state.planets[0].owner==1 && loaded.state.orbitalStations[0].owner==2);
+    // Existing v84 conquest saves also recover without changing their binary layout.
+    QFile legacyFile(path); assert(legacyFile.open(QIODevice::ReadOnly)); auto legacy=legacyFile.readAll(); legacyFile.close();
+    strip_engineering_tail(legacy);
+    {QDataStream version(&legacy,QIODevice::ReadWrite);assert(version.device()->seek(4));version<<quint32{84};}
+    assert(legacyFile.open(QIODevice::WriteOnly) && legacyFile.write(legacy)==legacy.size()); legacyFile.close();
+    assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.planets[0].owner==1 && loaded.state.orbitalStations[0].owner==2);
+    for(const auto player:{PlayerId{1},PlayerId{2}}) {
+        const auto turn=make_player_turn(save,player);
+        assert(write_save_game_file(path,turn,error) && read_save_game_file(path,loaded,error));
+        assert(loaded.state.orbitalStations.size()==(player==2?1U:0U));
+        if(player==2)assert(loaded.state.orbitalStations[0].owner==2);
+    }
+    // Relaxing the surface/station ownership relation must not accept broken identities.
+    for(const auto defect:{0,1,2,3}) {
+        auto bad=save;
+        if(defect==0)bad.state.orbitalStations[0].owner=99;
+        if(defect==1)bad.state.orbitalStations[0].planet=99999;
+        if(defect==2)bad.state.orbitalStations[0].id=0;
+        if(defect==3)bad.state.orbitalStations.push_back(bad.state.orbitalStations[0]);
+        assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+    }
+
+}
+
+void blocked_landing_packets_and_messages_round_trip()
+{
+    auto state=make_demo_game(); state.players.push_back({2,"Defenders"});
+    state.planets[0].owner=2; state.orbitalStations[0].owner=2;
+    auto& fleet=state.fleets[0]; fleet.design=kColonyShipDesignId; fleet.ships={{kColonyShipDesignId,1}};
+    fleet.colonists=100; fleet.electronics={EmissionMode::RadioSilence,state.turn+20};
+    const auto result=TurnProcessor{}.process_with_events(state,{{1,{TransferCargoOrder{{0,fleet.id},{1,0},100,{}}}}});
+    assert(result.state.planets[0].owner==2 && result.state.fleets[0].colonists==100);
+    const auto hasBlocked=[](const auto& reports) {
+        return std::any_of(reports.begin(),reports.end(),[](const auto& report) {
+            return report.kind==PlayerReportKind::LandingBlocked;
+        });
+    };
+    assert(hasBlocked(result.state.players[0].pendingPlayerReports));
+    SaveGameData save; save.state=result.state; save.campaignId=9; save.turnToken=8;
+    save.mode=SessionMode::Host; save.pendingOrders={1,{}}; save.playerTokens={{1,77},{2,88}};
+    QTemporaryDir dir; assert(dir.isValid()); QString error; const auto path=dir.filePath("blocked-landing.suns");
+    SaveGameData loaded;
+    assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
+    assert(hasBlocked(loaded.state.players[0].pendingPlayerReports));
+    for(auto& report:loaded.state.players[0].pendingPlayerReports)report.deliveryTurn=loaded.state.turn;
+    loaded.strategicMessages=deliver_due_player_reports(loaded.state);
+    assert(std::any_of(loaded.strategicMessages.begin(),loaded.strategicMessages.end(),[](const auto& event) {
+        return event.kind==GameEventKind::LandingBlocked && event.recipient==1;
+    }));
+    for(const auto player:{PlayerId{1},PlayerId{2}}) {
+        const auto turn=make_player_turn(loaded,player);
+        assert(write_save_game_file(path,turn,error) && read_save_game_file(path,save,error));
+        const auto count=std::count_if(save.strategicMessages.begin(),save.strategicMessages.end(),[](const auto& event) {
+            return event.kind==GameEventKind::LandingBlocked;
+        });
+        assert(count==(player==1?1:0));
+    }
+}
+
 int main()
 {
+    legacy_conquest_with_surviving_station_round_trips();
+    blocked_landing_packets_and_messages_round_trip();
     survey_snapshots_round_trip_and_keep_hidden_terraforming_private();
     deep_space_outposts_round_trip_and_hide_unreceived_state();
     v81_campaigns_migrate_without_deployed_outposts();

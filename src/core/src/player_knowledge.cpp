@@ -79,6 +79,7 @@ GameEventKind event_kind(PlayerReportKind kind)
         return GameEventKind::ResearchLevelCompleted;
     case PlayerReportKind::GroundInvasionWon: return GameEventKind::GroundInvasionWon;
     case PlayerReportKind::GroundInvasionLost: return GameEventKind::GroundInvasionLost;
+    case PlayerReportKind::LandingBlocked: return GameEventKind::LandingBlocked;
     case PlayerReportKind::GroundDefenseWon: return GameEventKind::GroundDefenseWon;
     case PlayerReportKind::ColonyLost: return GameEventKind::ColonyLost;
     case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
@@ -99,6 +100,11 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::StargateTransitFailed: return GameEventKind::StargateTransitFailed;
     case PlayerReportKind::OutpostDeployed: return GameEventKind::OutpostDeployed;
     case PlayerReportKind::OutpostDeploymentFailed: return GameEventKind::OutpostDeploymentFailed;
+    case PlayerReportKind::EngineeringProgress: return GameEventKind::EngineeringProgress;
+    case PlayerReportKind::EngineeringPaused: return GameEventKind::EngineeringPaused;
+    case PlayerReportKind::EngineeringResumed: return GameEventKind::EngineeringResumed;
+    case PlayerReportKind::EngineeringCaptured: return GameEventKind::EngineeringCaptured;
+    case PlayerReportKind::EngineeringDismantled: return GameEventKind::EngineeringDismantled;
     case PlayerReportKind::OutpostFuelExhausted: return GameEventKind::OutpostFuelExhausted;
     }
     return GameEventKind::FleetArrived;
@@ -109,13 +115,14 @@ GameEventSeverity event_severity(PlayerReportKind kind)
     if (kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
         || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
-    return kind == PlayerReportKind::OutpostDeploymentFailed || kind == PlayerReportKind::OutpostFuelExhausted
+    return kind == PlayerReportKind::EngineeringPaused || kind == PlayerReportKind::OutpostDeploymentFailed || kind == PlayerReportKind::OutpostFuelExhausted
             || kind == PlayerReportKind::StargateTransitFailed || kind == PlayerReportKind::EnemyFleetDetected
             || kind == PlayerReportKind::FleetStalledForFuel
             || kind == PlayerReportKind::FleetTargetLost
             || kind == PlayerReportKind::ProductionWaitingForMinerals
             || kind == PlayerReportKind::ProductionWaitingForShipyard
             || kind == PlayerReportKind::GroundInvasionLost
+            || kind == PlayerReportKind::LandingBlocked
         ? GameEventSeverity::Warning
         : GameEventSeverity::Information;
 }

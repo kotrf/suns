@@ -1,42 +1,51 @@
 # Project status and development handoff
 
-## Implementation branch — 18 October 2026: expedition support bases
+## Implementation branch — 18 October 2026: orbital climate projects
 
-`codex/mobile-expedition-base` is based on main
-[e2db5ed](https://github.com/kotrf/suns/commit/e2db5ed1767927a5d7a933c15f10190436aeabe5)
-(project-memory inventory #217). The first [#61 slice](mobile-expedition-bases.md)
-adds a specialized, modular Expedition Base hull, finite-stock refueling,
-mineral-funded external repair with one annual priority budget, physical cargo
-and fuel deliveries, and the ordinary optional relay equipment. Movement blocks
-docking for that year; arriving clients can use a stationary base. Received
-stocks/policies drive the UI and forecast; policies use delayed fleet commands.
-Save v84 / orders v30 preserve physical, confirmed and in-flight data separately.
+`codex/orbital-climate-engineering` is based on main
+[5049da0](https://github.com/kotrf/suns/commit/5049da0c39cc14bc0d454892e5ccda673f705383).
+The first [orbital #56 slice](planetary-engineering.md) adds mirrors and shades,
+2,400 paid work capped at 80/year, minerals paid per completed work, and a
+supported 0–10-point temperature offset. Physical progress survives queue
+cancellation, station loss and capture. The panel uses ordinary pending orders;
+foreign observations freeze public progress separately from private investment.
+Dated milestones use delayed reports and History. Save v85 / orders v31 preserve
+physical projects and received/in-flight evidence in a bounded extension.
+
+[Review follow-up](audits/2026-10-18-orbital-engineering-review.md) addresses two
+forecast regressions through a shared planning projection and separately tracks
+the pre-existing loader rejection of a conquered planet with a surviving enemy
+station. Legacy saves with separate owners remain readable. In a subsequent
+explicit user decision, any hostile station (including an unarmed dock) now
+blocks landing/founding until destroyed, with a delayed fleet-owner warning.
+Space combat clears participant routes; landing requires a new order after
+orbital clearance. Stations are not captured automatically.
+Formats remain save v85 / orders v31. Validation results belong to PR #219.
 
 This branch is prepared for PR review, not an assertion of merge or manual
-acceptance. Mobile shipyards, science and other infrastructure roles remain
-later #61 work. Validation is recorded in the implementation PR.
+acceptance. Broader atmospheric/magnetic engineering, habitats, system projects,
+balance and autonomous AI selection remain later #56 work. Validation belongs
+to the implementation PR.
 
 ## Verified checkpoint — 18 October 2026
 
-Main is [e2db5ed](https://github.com/kotrf/suns/commit/e2db5ed1767927a5d7a933c15f10190436aeabe5) after the context inventory #217:
-audit fixes [#216](https://github.com/kotrf/suns/pull/216) are merged after
-deep-space infrastructure #214/#215. Current formats are **save v83 / orders v29**.
-The implementation PR records full local Debug 71/71 and four focused Release
-suites; this documentation edit does not rerun or extend those claims.
+Main is [5049da0](https://github.com/kotrf/suns/commit/5049da0c39cc14bc0d454892e5ccda673f705383)
+after expedition support bases [#218](https://github.com/kotrf/suns/pull/218).
+The implementation head passed local Debug **73/73** and GitHub CI before the
+squash merge. Main formats are **save v84 / orders v30**. This records code and
+validation evidence, not manual gameplay acceptance.
 
 The first three computer-player phases #188/#189/#190 and colony plans
-#207/#201 are complete. Stargate Specialist #213 and the first paid depot/relay
-slice of #54 are implemented. Do not restart them from older "next step" notes.
+#207/#201 are complete. Stargate Specialist #213, the first paid depot/relay
+slice of #54, audit fixes #216, context inventory #217 and the first
+[mobile-base slice](mobile-expedition-bases.md) of #61 are merged. Do not restart
+them from older next-step notes. Mobile shipyards and science modules remain
+later #61 work; neither infrastructure issue is complete.
 
-Further #54 work remains partial. The next ordered major direction is mobile
-bases #61, then #56, #59/#63, #60 and #55/#46. Transport #53 remains later;
-#108 needs discussion. Current limits are described in the thematic documents.
-
-For a short continuation briefing and decision rationale, start with
-[PROJECT_CONTEXT](PROJECT_CONTEXT.md). The dated checkpoints below preserve
-what each branch knew at the time; their pending merges, old format numbers,
-"not yet implemented" and next-stage statements do not override this checkpoint.
-Verify main and relevant PRs again when beginning new work.
+The next ordered major direction is #56, then #59/#63, #60 and #55/#46.
+Transport #53 remains later; #108 needs discussion. For continuation and rationale
+start with [PROJECT_CONTEXT](PROJECT_CONTEXT.md). Dated checkpoints below preserve
+what each branch knew at the time; verify main and PRs again before new work.
 
 ## Historical checkpoint — 17 October 2026: audit branch before merge
 
