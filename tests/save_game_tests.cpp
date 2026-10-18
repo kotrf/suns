@@ -2501,8 +2501,64 @@ void survey_snapshots_round_trip_and_keep_hidden_terraforming_private()
     assert(!write_save_game_file(path,save,error));
 }
 
+void conquest_with_surviving_station_round_trips()
+{
+    QTemporaryDir dir; assert(dir.isValid()); QString error;
+    for(const bool waypoint:{false,true}) {
+        auto state=make_demo_game(); state.wormholeRules.spawnChancePerTurn=0;
+        state.players.push_back({2,"Defenders"});
+        for(auto& player:state.players)player.technology.researchActive=false;
+        auto& planet=state.planets[0]; planet.owner=2; planet.population=1;
+        planet.productionQueue={{ProductionKind::Factory,3}};
+        auto& station=state.orbitalStations[0]; station.owner=2; station.hull=OrbitalStationHullType::Starbase;
+        set_survey_level(state,2,planet.star,SurveyLevel::GeologicalSurvey,state.turn);
+        auto& fleet=state.fleets[0]; fleet.design=kColonyShipDesignId; fleet.ships={{kColonyShipDesignId,1}};
+        fleet.position=state.stars[0].position; fleet.colonists=1000;
+        if(waypoint) {
+            fleet.destination=fleet.position;
+            fleet.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::UnloadAll,1,FleetCargoKind::Colonists};
+        }
+        const auto captured=TurnProcessor{}.process(state,waypoint?std::vector<PlayerOrders>{}
+            :std::vector<PlayerOrders>{{1,{TransferCargoOrder{{0,fleet.id},{planet.id,0},1000,{}}}}});
+        assert(captured.planets[0].owner==1 && captured.planets[0].productionQueue.empty());
+        assert(captured.orbitalStations.size()==1 && captured.orbitalStations[0].owner==2);
+        assert(captured.orbitalStations[0].id==station.id);
+        assert(!colony_has_orbital_service(captured,planet.id,1,OrbitalStationModule::Shipyard));
+        SaveGameData save; save.state=captured; save.campaignId=9; save.turnToken=8; save.mode=SessionMode::Host;
+        save.pendingOrders={1,{}}; save.playerTokens={{1,77},{2,88}};
+        const auto path=dir.filePath(waypoint?"waypoint-conquest.suns":"manual-conquest.suns");
+        SaveGameData loaded;
+        assert(write_save_game_file(path,save,error));
+        if(!read_save_game_file(path,loaded,error)) {std::cerr<<error.toStdString()<<'\n';assert(false);}
+        assert(loaded.state.planets[0].owner==1 && loaded.state.orbitalStations[0].owner==2);
+        // Existing v84 conquest saves also recover without changing their binary layout.
+        QFile legacyFile(path); assert(legacyFile.open(QIODevice::ReadOnly)); auto legacy=legacyFile.readAll(); legacyFile.close();
+        strip_engineering_tail(legacy);
+        {QDataStream version(&legacy,QIODevice::ReadWrite);assert(version.device()->seek(4));version<<quint32{84};}
+        assert(legacyFile.open(QIODevice::WriteOnly) && legacyFile.write(legacy)==legacy.size()); legacyFile.close();
+        assert(read_save_game_file(path,loaded,error));
+        assert(loaded.state.planets[0].owner==1 && loaded.state.orbitalStations[0].owner==2);
+        for(const auto player:{PlayerId{1},PlayerId{2}}) {
+            const auto turn=make_player_turn(save,player);
+            assert(write_save_game_file(path,turn,error) && read_save_game_file(path,loaded,error));
+            assert(loaded.state.orbitalStations.size()==(player==2?1U:0U));
+            if(player==2)assert(loaded.state.orbitalStations[0].owner==2);
+        }
+        // Relaxing the surface/station ownership relation must not accept broken identities.
+        for(const auto defect:{0,1,2,3}) {
+            auto bad=save;
+            if(defect==0)bad.state.orbitalStations[0].owner=99;
+            if(defect==1)bad.state.orbitalStations[0].planet=99999;
+            if(defect==2)bad.state.orbitalStations[0].id=0;
+            if(defect==3)bad.state.orbitalStations.push_back(bad.state.orbitalStations[0]);
+            assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+        }
+    }
+}
+
 int main()
 {
+    conquest_with_surviving_station_round_trips();
     survey_snapshots_round_trip_and_keep_hidden_terraforming_private();
     deep_space_outposts_round_trip_and_hide_unreceived_state();
     v81_campaigns_migrate_without_deployed_outposts();

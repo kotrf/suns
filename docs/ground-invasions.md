@@ -23,9 +23,12 @@ population and the former owner's production queue is cleared. A new-colony
 default template is not a conquest program and is not applied; captured worlds
 start with an empty queue and no built or automatically scheduled radar. Mines,
 factories, surface minerals and planetary history survive capture. Ownership
-of an orbital station is unchanged: capturing or destroying orbital assets
-remains future station-combat work. The current
-[fleet-combat layer](space-combat.md) does not attack or capture stations.
+of a surviving orbital station is unchanged. An armed hostile station must be
+neutralized before landing; an unarmed station may outlast a surface invasion.
+It gives the captor no friendly orbital services. Station capture remains
+future work; the current [combat layer](orbital-stations.md) can destroy stations.
+Host and player-turn saves preserve separate surface and station owners while
+validating the station's owner, planet and identity.
 
 An invasion order cannot smuggle minerals onto an enemy surface. A waypoint
 using `UnloadAll` for all cargo commits the colonists first; minerals unload

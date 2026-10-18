@@ -36,6 +36,14 @@ station itself. Refueling service supports dockside and arrival refueling.
 Destroying a station immediately removes both physical services. Surface cargo
 transfer remains a colony operation.
 
+Surface conquest does not transfer a surviving station. An unarmed station can
+remain above a newly hostile colony, with its owner and ID intact; it provides
+no shipyard, refueling, gate or engineering support to the captor. One station
+still occupies the orbit, so ordinary combat must clear it before the new colony
+owner builds a replacement. Host/player-turn persistence accepts separate
+surface and station owners; station identities and owner/planet references must
+remain valid. Capturing orbital assets is not implemented.
+
 ## Station combat and knowledge
 
 Hostile armed encounters along fleet movement include stationary stations.

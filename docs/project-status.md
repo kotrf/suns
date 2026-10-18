@@ -12,6 +12,12 @@ foreign observations freeze public progress separately from private investment.
 Dated milestones use delayed reports and History. Save v85 / orders v31 preserve
 physical projects and received/in-flight evidence in a bounded extension.
 
+[Review follow-up](audits/2026-10-18-orbital-engineering-review.md) addresses two
+forecast regressions through a shared planning projection and separately tracks
+the pre-existing loader rejection of a conquered planet with a surviving enemy
+station. The documented separate ownership rule is preserved; formats remain
+save v85 / orders v31. Validation results belong to PR #219.
+
 This branch is prepared for PR review, not an assertion of merge or manual
 acceptance. Broader atmospheric/magnetic engineering, habitats, system projects,
 balance and autonomous AI selection remain later #56 work. Validation belongs

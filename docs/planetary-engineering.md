@@ -48,6 +48,11 @@ installation only needs local support to operate. Dismantle removes the project
 and its effect with **no production or mineral refund**; the UI confirms that
 loss of investment. Changing between mirrors and shades requires dismantling.
 
+An unarmed station may survive surface conquest under its former owner. Such a
+station gives the captor no engineering support. Its orbit remains occupied
+until ordinary combat destroys it; the new owner can then build a supporting
+station and resume the preserved project.
+
 The natural and conventionally terraformed axes remain unchanged by orbital
 output. [Ordinary terraforming](terraforming.md) keeps its own technology limits
 relative to the natural baseline, while judging improvements against the current
@@ -61,7 +66,9 @@ materials and stocks, blocking conditions, output, queue completion estimate and
 the expected temperature/Hab effect. Its production estimate assumes current
 technology, support, production allocation and supplies. Environmental forecasts
 assume current stellar conditions. Planning creates ordinary pending orders and
-does not mutate the authoritative world.
+does not mutate the authoritative world. Production and engineering use the
+same projected planet, queue and accepted pending research settings, including
+allocation and activation changes, for their completion estimates.
 
 Started, 25/50/75%, completed, interrupted, resumed, captured and dismantled
 reports travel through ordinary delayed communications and appear in turn

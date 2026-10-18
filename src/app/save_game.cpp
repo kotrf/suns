@@ -3276,8 +3276,9 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
             loaded.state.orbitalStations.begin(),
             loaded.state.orbitalStations.begin() + static_cast<std::ptrdiff_t>(index),
             [&](const OrbitalStation& candidate) { return candidate.planet == station.planet; });
+        // Surface conquest can leave a surviving station under its former owner.
         if (station.id == 0 || station.owner == 0 || station.planet == 0 || station.name.empty()
-            || planet == loaded.state.planets.end() || planet->owner != station.owner
+            || planet == loaded.state.planets.end() || !find_player(loaded.state,station.owner)
             || duplicateId || duplicateOrbit) {
             errorMessage = "The Suns! save file contains an invalid orbital station.";
             return false;
