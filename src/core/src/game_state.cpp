@@ -1,3 +1,4 @@
+#include "suns/science_samples.hpp"
 #include "suns/game_state.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/deep_space.hpp"
@@ -1208,7 +1209,7 @@ double fleet_cargo_capacity(const GameState& state, const Fleet& fleet)
 
 double fleet_cargo_used(const GameState&, const Fleet& fleet)
 {
-    return colonist_cargo_mass(fleet.colonists) + mineral_cargo_mass(fleet.minerals);
+    return colonist_cargo_mass(fleet.colonists) + mineral_cargo_mass(fleet.minerals) + science_sample_mass(fleet.scienceSamples);
 }
 
 double fleet_gross_mass(const GameState& state, const Fleet& fleet)
@@ -1977,6 +1978,7 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.arrivalAction = fleet.arrivalAction;
     fleet.telemetry.waypointQueue = fleet.waypointQueue;
     fleet.telemetry.minerals = fleet.minerals;
+    fleet.telemetry.scienceSamples = fleet.scienceSamples;
     fleet.telemetry.ships = fleet.ships;
 }
 

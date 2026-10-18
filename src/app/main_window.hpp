@@ -185,6 +185,8 @@ public:
     void installWormholes();
     bool queueWormholeApproach(WormholeEndpointId endpoint, bool enter);
     void installUnknownObjects();
+    void installScienceSamples();
+    bool queueUnknownObjectRecovery(UnknownObjectId);
     void installInterstellarMedium();
     void installOutposts();
     void installMobileBases();
@@ -259,6 +261,7 @@ private:
     void refreshWormholes();
     void renderKnownWormholes();
     void refreshUnknownObjects();
+    void refreshScienceSamples();
     void renderKnownUnknownObjects();
     void refreshInterstellarMedium();
     void refreshOutposts();

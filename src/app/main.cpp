@@ -35,6 +35,7 @@ int main(int argc, char* argv[])
     window.installEmpireHistory();
     window.installWormholes();
     window.installUnknownObjects();
+    window.installScienceSamples();
     window.installInterstellarMedium();
     window.installOutposts();
     window.installMobileBases();

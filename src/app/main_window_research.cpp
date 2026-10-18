@@ -1,4 +1,7 @@
 #include "main_window.hpp"
+#include "suns/campaign.hpp"
+#include "suns/production.hpp"
+#include "suns/science_samples.hpp"
 #include "suns/equipment.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
@@ -212,35 +215,32 @@ void MainWindow::openResearchDialog()
 void MainWindow::refreshResearchPanel()
 {
     if (!researchDialog_) return;
-    const auto* player = find_player(state_, pendingOrders_.player);
+    if (!find_player(state_, pendingOrders_.player)) return;
+    const auto planned = planned_production_state(
+        projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_), pendingOrders_);
+    const auto* player = find_player(planned, pendingOrders_.player);
     if (!player) return;
 
     auto planActive = player->technology.researchActive;
     auto focus = player->technology.focus;
     auto queuedFocuses = player->technology.queuedFocuses;
     auto allocationPercent = player->technology.researchAllocationPercent;
-    for (const auto& order : pendingOrders_.orders) {
-        if (const auto* plan = std::get_if<SetResearchPlanOrder>(&order)) {
-            planActive = plan->active;
-            focus = plan->focus;
-            queuedFocuses = plan->queuedFocuses;
-        } else if (const auto* allocation = std::get_if<SetResearchAllocationOrder>(&order)) {
-            allocationPercent = allocation->percent;
-        }
-    }
 
     {
         const QSignalBlocker blocker(researchAllocationSpin_);
         researchAllocationSpin_->setValue(allocationPercent);
     }
     std::uint32_t guaranteedRp = 0;
+    std::uint32_t artifactRp = 0;
     if (planActive) {
-        for (const auto& planet : state_.planets) {
+        for (const auto& planet : planned.planets) {
             if (planet.owner != player->id) continue;
             guaranteedRp += static_cast<std::uint32_t>(
                 static_cast<std::uint64_t>(colony_output(planet)) * allocationPercent / 100U);
+            artifactRp += retained_sample_research(planned, planet);
         }
     }
+    guaranteedRp += artifactRp;
 
     QStringList levels;
     for (const auto field : kResearchFields) {
@@ -248,7 +248,8 @@ void MainWindow::refreshResearchPanel()
         levels << QString("%1 %2").arg(fieldName(field)).arg(player->technology.levels[index]);
     }
     const auto allocationSummary = planActive
-        ? QString("Guaranteed RP next turn: %1, plus unused colony output").arg(guaranteedRp)
+        ? QString("Guaranteed RP next turn: %1, plus unused colony output%2").arg(guaranteedRp)
+            .arg(artifactRp ? QString(" (includes %1 from retained artifacts)").arg(artifactRp) : QString{})
         : QString("Research is paused; the allocation is not deducted from colony output");
     researchSummary_->setText(QString("<b>Empire technology</b><br>%1<br>%2")
         .arg(levels.join(" • "), allocationSummary));

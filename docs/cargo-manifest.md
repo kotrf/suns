@@ -10,10 +10,11 @@ The current manifest contains:
 - Ironium: 1 unit = 1 cargo unit;
 - Boranium: 1 unit = 1 cargo unit;
 - Germanium: 1 unit = 1 cargo unit.
+- scientific specimens: each indivisible sample occupies 5 kt.
 
 A fleet's used cargo is therefore:
 
-`colonist cargo + ironium + boranium + germanium`
+`colonist cargo + ironium + boranium + germanium + scientific samples`
 
 This total may not exceed the fitted design's cargo capacity.
 
@@ -47,5 +48,10 @@ Colonist loading uses the same hold. In particular, the dynamic `Load All` arriv
 When a colony-capable fleet founds a new colony, its transported colonists become the colony population and all transported Ironium, Boranium and Germanium are deposited into the new colony's mineral stores. The complete heterogeneous fleet is dismantled, removing its FleetId, and 33% of every ship's construction minerals is also recovered, rounded down separately for I/B/G.
 
 ## Current scope
+
+[Science samples / artifacts](science-samples.md) lists received specimens and
+authors local specimen transfers separately from bulk cargo sliders. Ordinary
+cargo accounts for their occupied hold space. On-arrival **Unload all cargo**
+deposits specimens at a friendly colony; colonization also preserves them.
 
 Earth begins with a small placeholder stock of all three minerals so the logistics model can be exercised immediately. The important foundation is shared: population and minerals compete for one hold and one gross-mass/fuel calculation, while mined minerals remain on the planetary surface until a transport explicitly loads them.

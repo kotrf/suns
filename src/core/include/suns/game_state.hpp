@@ -547,6 +547,14 @@ struct UnknownObject {
     UnknownObjectId id{};
     Position position;
     UnknownObjectKind kind{UnknownObjectKind::AncientProbe};
+    bool sampleRecovered{}; // Host-only finite physical stock, including lost/consumed samples.
+};
+
+struct ScienceSample {
+    UnknownObjectId source{}; // One indivisible specimen per physical landmark, galaxy-wide.
+    UnknownObjectKind kind{UnknownObjectKind::AncientProbe};
+    bool retained{}; // Operates only at a populated colony with the required received observation.
+    bool operator==(const ScienceSample&) const = default;
 };
 
 struct ObjectObservation {
@@ -624,6 +632,7 @@ struct Planet {
     PlanetWarDamage warDamage; // Physical history survives capture and abandonment.
     bool aftermathKnownLocally{true}; // False on foreign projections, even if ownership intel is stale.
     PlanetaryEngineering engineering;
+    std::vector<ScienceSample> scienceSamples;
 };
 
 struct OrbitalStation {
@@ -742,6 +751,11 @@ enum class PlayerReportKind {
     EngineeringCaptured,
     EngineeringDismantled,
     LandingBlocked,
+    SampleRecovered,
+    SampleRetained,
+    SampleDelivered,
+    SampleDepleted,
+    SampleHoldFull,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1215,6 +1229,7 @@ enum class FleetTask {
     FieldResearch,
     Salvage,
     DeployOutpost,
+    RecoverSample,
 };
 
 // A paid constructor hull becomes a permanent, fixed installation. It keeps
@@ -1248,10 +1263,11 @@ enum class FleetArrivalActionKind {
     RecoverWreckage,
     DeployOutpost,
     SupplyOutpost,
+    RecoverSample,
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
-// is a one-time conversion; other work tasks persist until interrupted.
+// is a one-time conversion; specimen recovery makes one attempt. Other work persists.
 [[nodiscard]] constexpr std::optional<FleetTask> arrival_work_task(FleetArrivalActionKind kind)
 {
     switch (kind) {
@@ -1262,6 +1278,7 @@ enum class FleetArrivalActionKind {
     case FleetArrivalActionKind::FieldResearch: return FleetTask::FieldResearch;
     case FleetArrivalActionKind::RecoverWreckage: return FleetTask::Salvage;
     case FleetArrivalActionKind::DeployOutpost: return FleetTask::DeployOutpost;
+    case FleetArrivalActionKind::RecoverSample: return FleetTask::RecoverSample;
     default: return std::nullopt;
     }
 }
@@ -1342,6 +1359,7 @@ struct FleetTelemetry {
     MobileBaseProgram mobileBase;
     std::uint64_t lastMovedTurn{};
     std::uint64_t lastServiceTurn{};
+    std::vector<ScienceSample> scienceSamples;
 };
 
 struct PendingFleetCommand {
@@ -1396,6 +1414,7 @@ struct Fleet {
     MobileBaseProgram mobileBase;
     std::uint64_t lastMovedTurn{};
     std::uint64_t lastServiceTurn{};
+    std::vector<ScienceSample> scienceSamples;
 };
 
 struct Minefield {

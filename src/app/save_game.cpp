@@ -12,6 +12,7 @@
 #include "suns/deep_space.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/science_samples.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -30,11 +31,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 85;
+constexpr quint32 kSaveFormatVersion = 86;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 31;
+constexpr quint32 kTurnOrderFormatVersion = 32;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -225,7 +226,7 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 82
+    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
         ? FleetArrivalActionKind::SupplyOutpost : gReadSaveFormatVersion >= 74
         ? FleetArrivalActionKind::RecoverWreckage : gReadSaveFormatVersion >= 54
         ? FleetArrivalActionKind::EnterWormhole : FleetArrivalActionKind::MergeWithFleet))) return;
@@ -469,7 +470,7 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
         value.waypointQueue.push_back(waypoint);
     }
     readMinerals(stream, value.minerals);
-    if (!readEnum(stream, value.task, static_cast<quint8>(gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
+    if (!readEnum(stream, value.task, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
     quint8 repeatOrders{};
     stream >> repeatOrders;
     if (repeatOrders > 1) {
@@ -523,7 +524,7 @@ void readPendingCommand(QDataStream& stream, PendingFleetCommand& value)
     value.task.reset();
     if (hasTask) {
         FleetTask task{};
-        if (!readEnum(stream, task, static_cast<quint8>(gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
+        if (!readEnum(stream, task, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
         value.task = task;
     }
 }
@@ -1044,7 +1045,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1640,7 +1641,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -2000,7 +2001,7 @@ void readFleet(QDataStream& stream, Fleet& value)
         return;
     }
     value.fuelStalled = fuelStalled != 0;
-    if (!readEnum(stream, value.task, static_cast<quint8>(gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
+    if (!readEnum(stream, value.task, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
     quint8 repeatOrders{};
     stream >> repeatOrders;
     if (repeatOrders > 1) {
@@ -2320,6 +2321,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "survey_save.inc"
 #include "planetary_engineering_save.inc"
 #include "strategic_save.inc"
+#include "science_samples_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -2563,6 +2565,11 @@ void writeOrder(QDataStream& stream, const Order& order)
             writeString(stream, concrete.name);
         } else if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>) {
             stream << quint8{27} << quint32(concrete.colony); writeEnum(stream,concrete.kind); writeEnum(stream,concrete.action); stream << quint8(concrete.strength);
+        } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
+            stream << quint8{28} << quint32(concrete.source.planet) << quint32(concrete.source.fleet)
+                << quint32(concrete.destination.planet) << quint32(concrete.destination.fleet) << quint32(concrete.sample);
+        } else if constexpr (std::is_same_v<T, ProcessScienceSampleOrder>) {
+            stream << quint8{29} << quint32(concrete.colony) << quint32(concrete.sample) << quint8(concrete.retain);
         } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
             stream << quint8{26} << quint32(concrete.source) << quint32(concrete.destination) << concrete.amount << concrete.sourceReserve;
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
@@ -2927,7 +2934,7 @@ bool readOrder(QDataStream& stream, Order& order)
     case 21: {
         if (gReadSaveFormatVersion < 62) { markCorrupt(stream); return false; }
         SetFleetTaskOrder value; stream >> value.fleet;
-        if (!readEnum(stream, value.task, quint8(gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : FleetTask::Salvage))) return false;
+        if (!readEnum(stream, value.task, quint8(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : FleetTask::Salvage))) return false;
         order = value; return stream.status() == QDataStream::Ok;
     }
     case 22: {
@@ -2954,6 +2961,21 @@ bool readOrder(QDataStream& stream, Order& order)
         SetMobileBaseOrder value; stream >> value.fleet; readMobileBaseProgram(stream, value.program);
         if (!value.fleet) markCorrupt(stream);
         order=value; return stream.status()==QDataStream::Ok;
+    }
+    case 28: {
+        if (gReadSaveFormatVersion < 86) { markCorrupt(stream); return false; }
+        TransferScienceSampleOrder value;
+        stream >> value.source.planet >> value.source.fleet >> value.destination.planet >> value.destination.fleet >> value.sample;
+        if (!value.sample || bool(value.source.planet) == bool(value.source.fleet)
+            || bool(value.destination.planet) == bool(value.destination.fleet)
+            || (value.source.planet == value.destination.planet && value.source.fleet == value.destination.fleet)) markCorrupt(stream);
+        order = value; return stream.status() == QDataStream::Ok;
+    }
+    case 29: {
+        if (gReadSaveFormatVersion < 86) { markCorrupt(stream); return false; }
+        ProcessScienceSampleOrder value; quint8 retain{}; stream >> value.colony >> value.sample >> retain;
+        if (!value.colony || !value.sample || retain > 1) markCorrupt(stream);
+        value.retain = retain != 0; order = value; return stream.status() == QDataStream::Ok;
     }
     case 26: {
         if (gReadSaveFormatVersion < 84) { markCorrupt(stream); return false; }
@@ -3105,6 +3127,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
         stream << quint32(planet.id) << quint8(planet.radar) << quint8(planet.homeworld);
     writeFriendlyRadar(stream, data.state);
     writeReportSources(stream, data.state);
+    writeScienceSamples(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3219,6 +3242,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     }
     if (version >= 72) readFriendlyRadar(stream, loaded.state);
     if (version >= 73) readReportSources(stream, loaded.state);
+    if (version >= 86) readScienceSamples(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);
@@ -3413,7 +3437,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

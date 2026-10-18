@@ -70,8 +70,12 @@ order type or payload is needed. v78 host and player-turn migrations, earlier v7
 reconstruction fixtures, invalid states and byte-identical exports after hidden
 object changes are covered by persistence tests.
 
-#55 remains open for moving/transient/rogue objects, hazards, unusual resources,
-unique usable finds and richer discovery outcomes/reference integration. #59 still
-includes physical sample cargo, research requirements based on observations, and
-salvage-versus-retained-artifact decisions. Current wreck novelty and other finite
-stellar/planetary/wormhole science rules are unchanged.
+#59 now also has [physical samples and working artifacts](science-samples.md):
+after a delivered completed study, a scanner fleet can recover a finite 5 kt
+specimen, return it to a colony and analyze it or retain its observation-gated
+scientific capability. Landmarks remain available for other empires' data studies.
+
+#55 remains open for moving/transient/rogue objects, hazards, unusual resources and
+richer discovery outcomes/reference integration. Current wreck novelty and other
+finite science objectives are unchanged. Further artifact varieties and
+observation-gated technology families can extend this path.

@@ -1,6 +1,27 @@
 # Project status and development handoff
 
-## Implementation branch — 18 October 2026: orbital climate projects
+## Implementation branch — 19 October 2026: physical science samples
+
+`codex/field-science-samples` is based on main
+[2aaca80](https://github.com/kotrf/suns/commit/2aaca809f3829a7a43631d12825fda942a7ee0cd)
+after orbital engineering / landing control #219. The [#59 sample path](science-samples.md)
+adds finite indivisible specimens, shared cargo/mass, recovery after a delivered
+study, physical return and a destructive-analysis versus retained-instrument
+choice. Instruments require the owner's delivered observation and matching active
+research. Computer empires use the same received knowledge and ordinary orders.
+Save v86 / orders v32 preserve separate physical/confirmed/in-flight manifests.
+Validation results belong to the implementation PR; #63 is separate work.
+
+## Verified checkpoint — 19 October 2026
+
+Main is `2aaca80` after [#219](https://github.com/kotrf/suns/pull/219), with orbital
+mirrors/shades, projected research settings, legacy conquest-save recovery and
+hostile-station landing/founding blockade. Main formats are save v85 / orders v31.
+Further #56 engineering, #54/#61 infrastructure extensions and additional racial
+traits remain open. Next: #59/#63, then #60 and #55/#46. #53 stays later;
+#108 requires a separate discussion.
+
+## Historical implementation — 18 October 2026: orbital climate projects
 
 `codex/orbital-climate-engineering` is based on main
 [5049da0](https://github.com/kotrf/suns/commit/5049da0c39cc14bc0d454892e5ccda673f705383).

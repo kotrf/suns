@@ -166,6 +166,16 @@ struct SetPlanetaryEngineeringOrder {
     std::uint8_t strength{10};
 };
 
+struct TransferScienceSampleOrder {
+    CargoTransferEndpoint source, destination;
+    UnknownObjectId sample{};
+};
+struct ProcessScienceSampleOrder {
+    PlanetId colony{};
+    UnknownObjectId sample{};
+    bool retain{}; // false consumes the specimen for a one-time scientific-data report.
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -194,7 +204,9 @@ using Order = std::variant<
     GateFleetOrder,
     SetMobileBaseOrder,
     TransferFleetFuelOrder,
-    SetPlanetaryEngineeringOrder>;
+    SetPlanetaryEngineeringOrder,
+    TransferScienceSampleOrder,
+    ProcessScienceSampleOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

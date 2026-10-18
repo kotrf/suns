@@ -118,6 +118,11 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::PlanetaryAftermath: subject=QString("Aftermath report: %1").arg(planetName); break;
     case GameEventKind::Bombardment: subject = QString("Bombardment of %1: %2 colonists, %3 installations lost").arg(planetName).arg(qulonglong(event.deliveredColonists)).arg(event.quantity); break;
     case GameEventKind::MineStrike: subject = QString("%1 hit a minefield — damage %2%, movement stopped").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
+    case GameEventKind::SampleRecovered: subject = QString("Specimen X%1 recovered aboard %2 (5 kt)").arg(event.quantity).arg(fleetName); break;
+    case GameEventKind::SampleDepleted: subject = QString("Object X%1: no physical specimen remains").arg(event.quantity); break;
+    case GameEventKind::SampleHoldFull: subject = QString("%1: specimen X%2 needs 5 kt of free hold").arg(fleetName).arg(event.quantity); break;
+    case GameEventKind::SampleDelivered: subject = QString("Specimen X%1 delivered to %2").arg(event.quantity).arg(planetName); break;
+    case GameEventKind::SampleRetained: subject = QString("Specimen X%1 retained as a working research artifact").arg(event.quantity); break;
     case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
     case GameEventKind::EmissionDetected: subject = QString("Unidentified emission — uncertainty %1 ly").arg(event.quantity); break;
     case GameEventKind::AnomalyDetected: subject = QString("Spatial anomaly %1 detected").arg(event.wormholeEndpoint); break;
@@ -279,7 +284,9 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return matches_type(event, MessageTypeFilter::EnemyContacts)
             || matches_type(event, MessageTypeFilter::Combat);
     case MessageTypeFilter::Research:
-        return event.kind == GameEventKind::ScientificData || event.kind == GameEventKind::ResearchLevelCompleted
+        return event.kind == GameEventKind::ScientificData || event.kind == GameEventKind::SampleRecovered
+            || event.kind == GameEventKind::SampleRetained || event.kind == GameEventKind::SampleDelivered || event.kind == GameEventKind::SampleDepleted
+            || event.kind == GameEventKind::SampleHoldFull || event.kind == GameEventKind::ResearchLevelCompleted
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::ProductionDelays:
         return event.kind == GameEventKind::ProductionWaitingForMinerals

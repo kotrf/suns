@@ -1,3 +1,4 @@
+#include "suns/science_samples.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/mobile_base.hpp"
@@ -467,6 +468,7 @@ bool invade_colony(
                 static_cast<long double>(defendingPopulation) * casualtyFactor)));
         survivors = attackingPopulation - losses;
         planet.owner = fleet.owner;
+        for (auto& sample : planet.scienceSamples) sample.retained = false;
         planet.radar = PlanetaryRadarLevel::None;
         planet.homeworld = false;
         planet.population = survivors;
@@ -660,6 +662,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     // A fleet physically in orbit can survey and settle locally without
     // waiting for the observation to reach the empire's communication mesh.
     if (fleet_cargo_used(state, fleet) > fleet_cargo_capacity(state, fleet) + 0.000001) return false;
+    if (planet.scienceSamples.size() + fleet.scienceSamples.size() > kMaximumScienceSamples) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
     if (hostile_station_blocks_landing(state, fleet, planet)) return false;
 
@@ -680,6 +683,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     planet.minerals.ironium += fleet.minerals.ironium + salvage.ironium;
     planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
+    (void)unload_science_samples(state, planet, fleet, state.turn + 1);
     // Settlers inherit the physical surviving installations and war damage.
     planet.productionQueue.clear();
     // Founding does not imply a radar or an automatic build programme. Nearby
@@ -765,6 +769,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::BombardColony:
     case FleetArrivalActionKind::FieldResearch:
     case FleetArrivalActionKind::RecoverWreckage:
+    case FleetArrivalActionKind::RecoverSample:
     case FleetArrivalActionKind::DeployOutpost:
         return false; // Persistent work handled before this switch.
     case FleetArrivalActionKind::None:
@@ -854,6 +859,9 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
             surface->minerals.boranium += fleet.minerals.boranium;
             surface->minerals.germanium += fleet.minerals.germanium;
             fleet.minerals = {};
+            if (surface->owner == fleet.owner) {
+                (void)unload_science_samples(state, *surface, fleet, state.turn + 1);
+            }
             break;
         }
         if (surface->owner == fleet.owner)
@@ -1042,6 +1050,11 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
         || !same_position(destination->position, source->position)
         || !fleet_ready_for_reorganization(*destination)
         || !fleet_ready_for_reorganization(*source)) return false;
+    if (destination->scienceSamples.size() + source->scienceSamples.size() > kMaximumScienceSamples) return false;
+    auto knownSamples = confirmed_fleet_telemetry(state, *destination).scienceSamples;
+    for (const auto& sample : confirmed_fleet_telemetry(state, *source).scienceSamples)
+        if (std::none_of(knownSamples.begin(), knownSamples.end(), [&](const auto& s) { return s.source == sample.source; }))
+            knownSamples.push_back(sample);
 
     destination->lastMovedTurn = std::max(destination->lastMovedTurn, source->lastMovedTurn);
     destination->lastServiceTurn = std::max(destination->lastServiceTurn, source->lastServiceTurn);
@@ -1056,6 +1069,7 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     destination->minerals.ironium += source->minerals.ironium;
     destination->minerals.boranium += source->minerals.boranium;
     destination->minerals.germanium += source->minerals.germanium;
+    destination->scienceSamples.insert(destination->scienceSamples.end(), source->scienceSamples.begin(), source->scienceSamples.end());
     if (destinationShips + sourceShipCount > 0) {
         destination->damagePercent =
             (destination->damagePercent * destinationShips
@@ -1066,6 +1080,8 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
     destination->warp = std::min(destination->warp, fleet_max_warp(state, *destination));
     destination->fuel = std::min(destination->fuel, fleet_fuel_capacity(state, *destination));
     refresh_merged_fleet_manifest(*destination);
+    // Reorganization cannot turn undelivered cargo into headquarters knowledge.
+    destination->telemetry.scienceSamples = std::move(knownSamples);
     visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
         if(owner==player && report.transmissionFleet==sourceId) report.transmissionFleet=order.destination;
     });
@@ -1115,9 +1131,19 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     const auto totalCargoCapacity = fleet_cargo_capacity(state, *source);
     const auto movedCargoCapacity = stack_capacity(state, requested.ships, ship_design_cargo_capacity);
     const auto fuelShare = totalFuelCapacity > 0.0 ? movedFuelCapacity / totalFuelCapacity : 0.0;
-    const auto cargoShare = totalCargoCapacity > 0.0 ? movedCargoCapacity / totalCargoCapacity : 0.0;
+    // Specimens are indivisible. Keep as many as fit in the surviving source
+    // hold, then move whole specimens; share ordinary cargo across the free holds.
+    const auto keptSamples = std::min(source->scienceSamples.size(), std::size_t(std::max(0.0,
+        std::floor((totalCargoCapacity - movedCargoCapacity + 1e-6) / kScienceSampleMass))));
+    const auto movedSamples = source->scienceSamples.size() - keptSamples;
+    if (movedSamples * kScienceSampleMass > movedCargoCapacity + 1e-6) return false;
+    const auto ordinaryCapacity = totalCargoCapacity - science_sample_mass(source->scienceSamples);
+    const auto cargoShare = ordinaryCapacity > 1e-6
+        ? std::clamp((movedCargoCapacity - movedSamples * kScienceSampleMass) / ordinaryCapacity, 0.0, 1.0) : 0.0;
 
     Fleet detached = *source;
+    detached.scienceSamples.assign(source->scienceSamples.begin() + keptSamples, source->scienceSamples.end());
+    source->scienceSamples.resize(keptSamples);
     detached.id = state.nextFleetId++;
     detached.name = source->name + " Detachment " + std::to_string(detached.id);
     detached.ships = requested.ships;
@@ -1153,6 +1179,14 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     }
     sync_fleet_presentation(state, *source);
     source->warp = std::min(source->warp, fleet_max_warp(state, *source));
+    // Rounding indivisible colonists down in the detachment can put a tiny
+    // excess in a completely full source hold. Rebalance divisible minerals
+    // into the matching free space rather than lose cargo or overfill a hold.
+    auto overflow = std::max(0.0, fleet_cargo_used(state, *source) - fleet_cargo_capacity(state, *source));
+    for (auto member : {&MineralCargo::ironium, &MineralCargo::boranium, &MineralCargo::germanium}) {
+        const auto moved = std::min(source->minerals.*member, overflow);
+        source->minerals.*member -= moved; detached.minerals.*member += moved; overflow -= moved;
+    }
     source->telemetry = {};
     source->telemetryInTransit.clear();
     state.fleets.push_back(std::move(detached));
@@ -1900,7 +1934,7 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
                         if (!fleet_at_planet(next, *fleet, *planet)) return;
 
                         const auto requestedLoad = colonist_cargo_mass(concreteOrder.colonists)
-                            + mineral_cargo_mass(fleet->minerals);
+                            + mineral_cargo_mass(fleet->minerals) + science_sample_mass(fleet->scienceSamples);
                         if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
 
                         if (concreteOrder.colonists > fleet->colonists) {
@@ -1925,7 +1959,7 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
                         if (!fleet_at_planet(next, *fleet, *planet) || !valid_mineral_cargo(concreteOrder.minerals)) return;
 
                         const auto requestedLoad = colonist_cargo_mass(fleet->colonists)
-                            + mineral_cargo_mass(concreteOrder.minerals);
+                            + mineral_cargo_mass(concreteOrder.minerals) + science_sample_mass(fleet->scienceSamples);
                         if (requestedLoad > fleet_cargo_capacity(next, *fleet) + 0.000001) return;
                         if (!minerals_available(planet->minerals, fleet->minerals, concreteOrder.minerals)) return;
 
@@ -1949,7 +1983,11 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
     GameState projected = current;
     std::vector<ColonyFreightDelivery> unusedFreight;
     for (const auto& order : pending.orders) {
-        if (std::holds_alternative<SetFleetColonistsOrder>(order)
+        if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
+            (void)transfer_science_sample(projected, pending.player, *sample);
+        } else if (const auto* process = std::get_if<ProcessScienceSampleOrder>(&order)) {
+            (void)process_science_sample(projected, pending.player, *process);
+        } else if (std::holds_alternative<SetFleetColonistsOrder>(order)
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)) {
             apply_cargo_order(projected, pending.player, order, unusedFreight);
@@ -2070,6 +2108,10 @@ TurnResult TurnProcessor::process_with_events(
                         if(p!=next.planets.end()) (void)apply_planetary_engineering_order(next,*p,concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueStationOrder>) {
                         (void)queue_station_construction(next,submission.player,concreteOrder);
+                    } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
+                        (void)transfer_science_sample(next, submission.player, concreteOrder);
+                    } else if constexpr (std::is_same_v<T, ProcessScienceSampleOrder>) {
+                        (void)process_science_sample(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -2276,7 +2318,7 @@ TurnResult TurnProcessor::process_with_events(
     observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
     for (auto& planet : next.planets) {
-        const auto contribution = run_colony_production(next, planet);
+        const auto contribution = run_colony_production(next, planet) + retained_sample_research(next, planet);
         if (contribution == 0) continue;
         const auto total = std::find_if(researchByPlayer.begin(), researchByPlayer.end(), [&](const auto& entry) {
             return entry.first == planet.owner;

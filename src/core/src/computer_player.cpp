@@ -2,6 +2,7 @@
 #include "suns/mobile_base.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/science_samples.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/communications.hpp"
@@ -293,6 +294,11 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     std::sort(colonies.begin(), colonies.end(), [](auto a, auto b) { return a->id < b->id; });
     std::sort(stars.begin(), stars.end(), [](auto a, auto b) { return a->id < b->id; });
     std::sort(fleets.begin(), fleets.end(), [](auto a, auto b) { return a->id < b->id; });
+    for (const auto* colony : colonies) for (const auto& sample : colony->scienceSamples)
+        if (!sample.retained) {
+            plan.orders.orders.push_back(ProcessScienceSampleOrder{colony->id, sample.source, false});
+            explain(reason, "Analyze delivered specimen X" + std::to_string(sample.source));
+        }
 
     std::erase_if(goals, [&](const auto& goal) {
         if(goal.kind==ComputerFleetGoalKind::InvestigateObject)
@@ -314,8 +320,46 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         const auto existing = std::find_if(goals.begin(), goals.end(), [&](const auto& g) { return g.fleet == fleet.id; });
         if(existing!=goals.end() && existing->kind==ComputerFleetGoalKind::InvestigateObject) {
             const auto* object=known_unknown_object(state,view.player,existing->target);
-            if(object && object->level==ObjectKnowledgeLevel::Studied && !fleet.telemetry.destination
+            if (fleet.telemetry.observedTurn > existing->issuedTurn && !fleet.telemetry.destination
+                && (fleet.telemetry.task == FleetTask::RecoverSample || fleet.telemetry.task == FleetTask::None)) {
+                if (!fleet.scienceSamples.empty()) {
+                    const Planet* home = nullptr; std::optional<std::uint8_t> warp;
+                    double best = std::numeric_limits<double>::infinity();
+                    for (const auto* colony : colonies) if (const auto* star = find_star(state, colony->star)) {
+                        const auto candidate = route_warp(state, fleet, {star->position});
+                        const auto distance = distance_between(fleet.telemetry.position, star->position);
+                        if (candidate && distance < best) { home = colony; warp = candidate; best = distance; }
+                    }
+                    if (home) {
+                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, find_star(state, home->star)->position, *warp,
+                            {FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::All}});
+                        *existing = {fleet.id, ComputerFleetGoalKind::Resupply, home->star, state.turn, review_turn(state, fleet)};
+                        explain(reason, "Return physical specimen aboard fleet " + std::to_string(fleet.id));
+                        continue;
+                    }
+                } else if (state.turn >= existing->reviewTurn) {
+                    plan.orders.orders.push_back(SetFleetTaskOrder{fleet.id, FleetTask::None});
+                    goals.erase(existing); explain(reason, "No specimen recovered by fleet " + std::to_string(fleet.id));
+                    continue;
+                }
+            }
+            if(object && object->kind && object->level==ObjectKnowledgeLevel::Studied && !fleet.telemetry.destination
                 && fleet.telemetry.task==FleetTask::FieldResearch && fleet.telemetry.observedTurn>existing->issuedTurn) {
+                auto loaded = fleet; loaded.scienceSamples.push_back({object->id, object->kind.value(), false});
+                const bool canReturn = fleet_cargo_used(state, loaded) <= fleet_cargo_capacity(state, loaded) + 1e-6
+                    && std::any_of(colonies.begin(), colonies.end(), [&](const auto* colony) {
+                        const auto* star = find_star(state, colony->star);
+                        return star && route_warp(state, loaded, {object->position, star->position}).has_value();
+                    });
+                if (canReturn) {
+                    const auto warp = route_warp(state, loaded, {object->position});
+                    if (warp) {
+                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, object->position, *warp, {FleetArrivalActionKind::RecoverSample}});
+                        existing->issuedTurn = state.turn; existing->reviewTurn = review_turn(state, fleet);
+                        explain(reason, "Recover specimen from received study X" + std::to_string(object->id));
+                        continue;
+                    }
+                }
                 plan.orders.orders.push_back(SetFleetTaskOrder{fleet.id,FleetTask::None});
                 goals.erase(existing); explain(reason,"Finish received object study by fleet "+std::to_string(fleet.id));
                 continue;
@@ -359,7 +403,8 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             auto& population = std::find_if(availablePopulation.begin(), availablePopulation.end(),
                 [&](const auto& entry) { return entry.first == local->id; })->second;
             const auto capacity = static_cast<std::uint64_t>(std::floor(std::max(0.0,
-                fleet_cargo_capacity(state, fleet) - mineral_cargo_mass(fleet.minerals)) * kColonistsPerCargoUnit));
+                fleet_cargo_capacity(state, fleet) - mineral_cargo_mass(fleet.minerals)
+                    - science_sample_mass(fleet.scienceSamples)) * kColonistsPerCargoUnit));
             const auto settlers = std::min({capacity, population / 4, std::uint64_t{2'500}});
             if (settlers >= kMinimumSettlers && settlers > fleet.colonists) {
                 plan.orders.orders.push_back(SetFleetColonistsOrder{local->id, fleet.id, settlers});

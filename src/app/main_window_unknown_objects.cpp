@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 #include "suns/unknown_objects.hpp"
+#include "suns/science_samples.hpp"
+#include "suns/communications.hpp"
 #include "suns/strategic_operations.hpp"
 #include <QAction>
 #include <QDockWidget>
@@ -37,7 +39,7 @@ void MainWindow::installUnknownObjects()
     if(findChild<QDockWidget*>("unknownObjectsDock")) return;
     auto* dock=new QDockWidget("Unknown objects / expeditions",this); dock->setObjectName("unknownObjectsDock");
     auto* body=new QWidget(dock); auto* layout=new QVBoxLayout(body);
-    auto* hint=new QLabel("Received physical contacts only. Select a fleet and a row. Fly to the reported area, or arrive with Field research. Active scanners classify nearby objects; study within 20 ly (limited by sensor range) yields finite data, usable after delivery. Objects remain as landmarks.",body);
+    auto* hint=new QLabel("Received physical contacts only. Select a fleet and a row. Fly to the reported area, or arrive with Field research. Active scanners classify nearby objects; study within 20 ly (limited by sensor range) yields finite data, usable after delivery. Objects remain as landmarks. After the study report arrives, a scanner fleet with 5 kt of free hold can recover one finite physical specimen and bring it home.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* tree=new QTreeWidget(body); tree->setObjectName("unknownObjectContacts");
     tree->setHeaderLabels({"Object","Knowledge","Observed / received","Position ± ly","Science objective"});
@@ -46,13 +48,17 @@ void MainWindow::installUnknownObjects()
     locate->setObjectName("locateUnknownObject");
     auto* fly=new QPushButton("Fly to object",body); fly->setObjectName("approachUnknownObject");
     auto* study=new QPushButton("Fly and study",body); study->setObjectName("studyUnknownObject");
-    buttons->addWidget(locate); buttons->addWidget(fly); buttons->addWidget(study); layout->addLayout(buttons);
+    auto* recover = new QPushButton("Fly and recover specimen", body); recover->setObjectName("recoverScienceSample");
+    buttons->addWidget(locate); buttons->addWidget(fly); buttons->addWidget(study); buttons->addWidget(recover); layout->addLayout(buttons);
     dock->setWidget(body); addDockWidget(Qt::BottomDockWidgetArea,dock); dock->hide();
     if(auto* menu=menuBar()->findChild<QMenu*>("sunsViewMenu")) menu->addAction(dock->toggleViewAction());
     else menuBar()->addAction(dock->toggleViewAction());
-    const auto update=[this,tree,fly,study,locate] {
+    const auto update=[this,tree,fly,study,locate,recover] {
         const auto* row=tree->currentItem(); const auto* x=row?known_unknown_object(state_,pendingOrders_.player,row->data(0,Qt::UserRole).toUInt()):nullptr;
         const auto* f=selectedFleet(); locate->setEnabled(x); fly->setEnabled(x && f);
+        const auto received = f ? fleet_player_view(state_, *f) : Fleet{};
+        recover->setEnabled(x && f && x->level==ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,received) && fleet_cargo_capacity(state_,received)>=kScienceSampleMass);
+        recover->setToolTip("Requires a delivered completed study, active scanners at the landmark and 5 kt of free hold. One finite physical specimen exists per landmark for all empires; its current availability is unknown until arrival.");
         study->setEnabled(x && f && x->level!=ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,*f)
             && x->uncertainty<=object_study_radius(state_,*f));
         study->setToolTip("Needs active scanners when work runs. The fitted study radius must cover the reported uncertainty; classify the area first or use a stronger scanner. Maximum study radius: 20 ly.");
@@ -60,6 +66,7 @@ void MainWindow::installUnknownObjects()
     connect(tree,&QTreeWidget::itemSelectionChanged,this,update);
     connect(fly,&QPushButton::clicked,this,[this,tree] { if(auto* row=tree->currentItem()) queueUnknownObjectApproach(row->data(0,Qt::UserRole).toUInt(),false); });
     connect(study,&QPushButton::clicked,this,[this,tree] { if(auto* row=tree->currentItem()) queueUnknownObjectApproach(row->data(0,Qt::UserRole).toUInt(),true); });
+    connect(recover,&QPushButton::clicked,this,[this,tree] { if(auto* row=tree->currentItem()) queueUnknownObjectRecovery(row->data(0,Qt::UserRole).toUInt()); });
     connect(locate,&QPushButton::clicked,this,[this,tree] {
         if(auto* row=tree->currentItem()) if(const auto* x=known_unknown_object(state_,pendingOrders_.player,row->data(0,Qt::UserRole).toUInt()))
             view_->centerOn(x->position.x,x->position.y);

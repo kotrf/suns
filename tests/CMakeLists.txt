@@ -434,6 +434,16 @@ if(SUNS_BUILD_APP)
 endif()
 
 # These suites use assert, including some operations inside its expressions.
+add_executable(suns_science_samples_tests science_samples_tests.cpp)
+target_link_libraries(suns_science_samples_tests PRIVATE Suns::Core)
+add_test(NAME suns_science_samples_tests COMMAND suns_science_samples_tests)
+if(SUNS_BUILD_APP)
+    add_executable(suns_science_samples_editor_tests science_samples_editor_tests.cpp)
+    target_link_libraries(suns_science_samples_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_science_samples_editor_tests COMMAND suns_science_samples_editor_tests)
+    set_tests_properties(suns_science_samples_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
 # Keep checks active for Release/RelWithDebInfo as well as Debug.
 get_property(suns_test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(suns_test_target IN LISTS suns_test_targets)
