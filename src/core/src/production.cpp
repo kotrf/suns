@@ -298,7 +298,22 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
     auto result = planned_ship_design_state(state, pending);
     for (const auto& order : pending.orders) std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>) {
+        if constexpr (std::is_same_v<T, SetResearchAllocationOrder> || std::is_same_v<T, SetResearchPlanOrder>) {
+            // Forecast settings must follow the research orders accepted by End Turn.
+            const auto player=std::find_if(result.players.begin(),result.players.end(),
+                [&](const auto& p){return p.id==pending.player;});
+            if(player==result.players.end())return;
+            if constexpr (std::is_same_v<T, SetResearchAllocationOrder>) {
+                if(value.percent<=100)player->technology.researchAllocationPercent=value.percent;
+            } else {
+                const auto validField=[](ResearchField field){return std::size_t(field)<kResearchFieldCount;};
+                if((value.active && !validField(value.focus)) || (!value.active && !value.queuedFocuses.empty())
+                    || !std::all_of(value.queuedFocuses.begin(),value.queuedFocuses.end(),validField))return;
+                player->technology.researchActive=value.active;
+                if(value.active)player->technology.focus=value.focus;
+                player->technology.queuedFocuses=value.queuedFocuses;
+            }
+        } else if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>) {
             const auto p=std::find_if(result.planets.begin(),result.planets.end(),[&](const auto& p){return p.id==value.colony && p.owner==pending.player;});
             if(p!=result.planets.end()) (void)apply_planetary_engineering_order(result,*p,value);
         } else if constexpr (std::is_same_v<T, QueueStationOrder>) {

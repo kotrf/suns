@@ -12,20 +12,27 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTemporaryDir>
+#include <QTreeWidget>
 #include <cassert>
 using namespace suns;
 using E=PlanetaryEngineeringKind;
 using A=EngineeringAction;
 namespace suns {
 struct MainWindowTestAccess {
-    static void setup(MainWindow& w) {
+    static void setup(MainWindow& w,std::uint64_t turn=1,bool research=false,std::uint8_t allocation=0) {
         w.state_=make_demo_game(); w.state_.players[0].race=race_preset(RacePreset::Terran);
-        w.state_.players[0].technology.levels.fill(14); w.state_.players[0].technology.researchActive=false;
+        w.state_.turn=turn;
+        w.state_.players[0].technology.levels.fill(14); w.state_.players[0].technology.researchActive=research;
+        w.state_.players[0].technology.researchAllocationPercent=allocation;
+        w.state_.planets[0].population=100000;
         w.state_.planets[0].environment={40,50,20}; w.state_.planets[0].industry=1000;
         w.state_.planets[0].minerals={1000,1000,1000};
         w.state_.orbitalStations[0].hull=OrbitalStationHullType::Starbase;
         w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear(); w.selection_.star=1; w.rebuildScene();
+        w.refreshProductionQueue();
     }
+    static void append(MainWindow& w,Order order) {w.appendPendingOrder(std::move(order),"Research plan");w.refreshProductionQueue();}
+    static void refresh(MainWindow& w) {w.refreshProductionQueue();}
     static const auto& orders(const MainWindow& w) {return w.pendingOrders_;}
     static GameState state(const MainWindow& w) {return w.state_;}
     static void foreign(MainWindow& w) {
@@ -43,6 +50,52 @@ struct MainWindowTestAccess {
 QByteArray bytes(const QString& p) {QFile f(p);assert(f.open(QIODevice::ReadOnly));return f.readAll();}
 void write(const QString& p,const QByteArray& b) {QFile f(p);assert(f.open(QIODevice::WriteOnly));assert(f.write(b)==b.size());}
 QByteArray tag(quint32 value) {QByteArray b;QDataStream out(&b,QIODevice::WriteOnly);out<<value;return b;}
+void check_estimate(MainWindow& w,bool progressing)
+{
+    MainWindowTestAccess::refresh(w); // The application's production pane normally refreshes on its timer.
+    const auto* tree=w.findChild<QTreeWidget*>("productionQueueTree");
+    if(!tree || tree->topLevelItemCount()!=1)qCritical()<<"Queue rows"<<(tree?tree->topLevelItemCount():-1)
+        <<"orders"<<MainWindowTestAccess::orders(w).orders.size()<<w.findChild<QLabel*>("engineeringStatus")->text();
+    assert(tree && tree->topLevelItemCount()==1);
+    const auto text=w.findChild<QLabel*>("engineeringStatus")->text();
+    if(progressing) {
+        assert(text.contains("Estimated completion: year 40"));
+        assert(tree->topLevelItem(0)->text(3)=="Turn 40 (+30)");
+    } else {
+        assert(text.contains("No completion within the 128-year forecast"));
+        assert(tree->topLevelItem(0)->text(3)=="beyond forecast");
+    }
+    const auto s=MainWindowTestAccess::state(w); const auto orders=MainWindowTestAccess::orders(w);
+    const auto resolved=TurnProcessor{}.process(s,{orders});
+    assert(s.planets[0].engineering.kind==E::None); // Planning did not spend a year or mutate physical work.
+    assert(resolved.planets[0].engineering.work==(progressing?80U:0U));
+}
+void newly_planned_project_uses_projected_planet(MainWindow& w)
+{
+    MainWindowTestAccess::setup(w,10);
+    w.findChild<QPushButton*>("engineeringStart")->click(); check_estimate(w,true);
+}
+void research_orders_reach_both_forecasts(MainWindow& w)
+{
+    for(const bool initiallyBlocked:{false,true}) {
+        MainWindowTestAccess::setup(w,10,true,initiallyBlocked?100:0);
+        w.findChild<QPushButton*>("engineeringStart")->click();
+        MainWindowTestAccess::append(w,SetResearchAllocationOrder{std::uint8_t(initiallyBlocked?0:100)});
+        check_estimate(w,initiallyBlocked);
+        assert(MainWindowTestAccess::state(w).players[0].technology.researchAllocationPercent==(initiallyBlocked?100:0));
+    }
+    MainWindowTestAccess::setup(w,10,false,100);
+    w.findChild<QPushButton*>("engineeringStart")->click();
+    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{},true}); check_estimate(w,false);
+    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{},false}); check_estimate(w,true);
+    // Invalid research orders must be rejected just as they are by End Turn.
+    MainWindowTestAccess::append(w,SetResearchAllocationOrder{101});
+    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{ResearchField::Energy},false});
+    check_estimate(w,true);
+    const auto projected=planned_production_state(MainWindowTestAccess::state(w),MainWindowTestAccess::orders(w));
+    assert(projected.players[0].technology.researchAllocationPercent==100);
+    assert(!projected.players[0].technology.researchActive && projected.players[0].technology.queuedFocuses.empty());
+}
 void persistence(GameState s)
 {
     QTemporaryDir dir; assert(dir.isValid()); QString error;
@@ -94,7 +147,16 @@ void persistence(GameState s)
 }
 int main(int argc,char** argv)
 {
-    QApplication app(argc,argv); MainWindow w; w.installPlanetaryEngineering(); MainWindowTestAccess::setup(w);
+    QApplication app(argc,argv); MainWindow w;
+    if(argc>1) {
+        w.installUiPolish(); w.installProductionQueue(); w.installPlanetaryEngineering();
+        if(QString::fromLocal8Bit(argv[1])=="--start-forecast")newly_planned_project_uses_projected_planet(w);
+        else if(QString::fromLocal8Bit(argv[1])=="--research-forecast")research_orders_reach_both_forecasts(w);
+        else assert(false);
+        return 0;
+    }
+    w.installPlanetaryEngineering();
+    MainWindowTestAccess::setup(w);
     const auto state=MainWindowTestAccess::state(w);
     auto* start=w.findChild<QPushButton*>("engineeringStart"); auto* pause=w.findChild<QPushButton*>("engineeringPause");
     auto* status=w.findChild<QLabel*>("engineeringStatus"); auto* output=w.findChild<QSpinBox*>("engineeringOutput");
