@@ -1,6 +1,28 @@
 # Project status and development handoff
 
-## Audit corrections — 17 October 2026
+## Verified checkpoint — 18 October 2026
+
+Main is [9f1eed8](https://github.com/kotrf/suns/commit/9f1eed858a5b109f38047d4c76fb53677daa0d23):
+audit fixes [#216](https://github.com/kotrf/suns/pull/216) are merged after
+deep-space infrastructure #214/#215. Current formats are **save v83 / orders v29**.
+The implementation PR records full local Debug 71/71 and four focused Release
+suites; this documentation edit does not rerun or extend those claims.
+
+The first three computer-player phases #188/#189/#190 and colony plans
+#207/#201 are complete. Stargate Specialist #213 and the first paid depot/relay
+slice of #54 are implemented. Do not restart them from older "next step" notes.
+
+Further #54 work remains partial. The next ordered major direction is mobile
+bases #61, then #56, #59/#63, #60 and #55/#46. Transport #53 remains later;
+#108 needs discussion. Current limits are described in the thematic documents.
+
+For a short continuation briefing and decision rationale, start with
+[PROJECT_CONTEXT](PROJECT_CONTEXT.md). The dated checkpoints below preserve
+what each branch knew at the time; their pending merges, old format numbers,
+"not yet implemented" and next-stage statements do not override this checkpoint.
+Verify main and relevant PRs again when beginning new work.
+
+## Historical checkpoint — 17 October 2026: audit branch before merge
 
 Baseline: verified main `1165dce` after deep-space infrastructure #214/#215.
 The [17 October audit](audits/2026-10-17-code-review.md) was imported from
@@ -16,7 +38,7 @@ from hidden physical state. Tests retain assertions in Release/RelWithDebInfo.
 Validation and implementation commit IDs are recorded in the audit follow-up
 and implementation PR. This section does not imply the branch has been merged.
 
-## Current implementation — 17 October 2026: deep-space infrastructure
+## Historical checkpoint — 17 October 2026: deep-space infrastructure
 
 Main baseline is PR #213 (`4cb245c`), the first playable primary trait. The
 next ordered item #54 now has a first playable slice:
@@ -144,7 +166,7 @@ Snapshot: **13 October 2026, Dialog #08 Human/Computer**. This branch starts
 from main `14fa936d4e195a7904b47f71b9f29c3dc653c8a5`, after reconnaissance/EW
 PR #187. The user requested the next controller/ordinary-orders slice of #184.
 
-## Current implementation
+### Original controller integration — 13 October 2026
 
 [#184](https://github.com/kotrf/suns/issues/184), step 1: campaign setup offers
 Human/Computer control; controller choices and a bounded 32-decision journal
@@ -226,7 +248,7 @@ Reference equipment follows Stars! progression and ratings. Suns! remains its ow
 simulation: tactical combat rules and terraforming production price are documented
 adaptations, not claims of an exact Stars! implementation.
 
-## Current boundaries
+### Historical boundaries — 13 October 2026
 
 - Combat treats all different owners as hostile; unarmed fleets do not fight
   each other. Planetary scars, retreat
@@ -249,12 +271,12 @@ adaptations, not claims of an exact Stars! implementation.
 
 ## Formats and CI
 
-This slice uses save **v67** (existing readers v12–67) and orders **v21**
-(readers v1–21). Earlier casualty history remains unknown; old pending reports
-without exact summaries never invent measurements. Host and players must use
+The verified main checkpoint above uses save **v83** and orders **v29**.
+Reader compatibility depends on the current code. Host and players must use
 the same build. Version numbers in older thematic documents describe when a
-feature was introduced unless explicitly identified as current. Legacy designs
-and campaigns retain documented old rules.
+feature was introduced unless explicitly identified as current. Earlier casualty
+history remains unknown; old reports must not invent measurements. Existing
+legacy designs and campaigns retain their documented rules.
 
 **Prototype save policy (11 October 2026):** backward compatibility of save files
 is no longer a requirement. Future save-format changes may reject old campaigns
@@ -269,9 +291,11 @@ including merges to main. Each merge can therefore create a new main build.
 Public fork PRs do not execute through this push-only workflow. Do not switch to
 GitHub-hosted runners without the user's decision.
 
-## Remaining work and continuation
+## Historical remaining work — 13 October 2026
 
-These are open directions, not authorization to start every item:
+The list below is the original controller-stage handoff, not today's backlog.
+For current priorities use the verified checkpoint above. It is not authorization
+to start every item:
 
 - [#44](https://github.com/kotrf/suns/issues/44): the research system and equipment
   catalogs are implemented, including initial bombardment/minefield/stealth;
