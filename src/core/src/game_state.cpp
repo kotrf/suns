@@ -606,6 +606,11 @@ std::string ship_design_validation_error(const ShipDesign& design)
             return construction_kit_kind(c) != OutpostKind::None;
         }) > 1) return "A constructor may carry only one deep-space construction kit.";
     for (const auto component : design.components) {
+        if ((component == ShipComponentType::ExpeditionDock || component == ShipComponentType::ExpeditionWorkshop)
+            && design.hull != ShipHullType::ExpeditionBase)
+            return "Expedition service modules require an Expedition Base hull.";
+        if (design.hull == ShipHullType::ExpeditionBase && construction_kit_kind(component) != OutpostKind::None)
+            return "Mobile bases cannot deploy permanent outposts.";
         if (static_cast<int>(component) < 0 || component > kLastShipComponent)
             return "Unknown ship component.";
         if (const auto* gate = stargate_spec(component); gate && gate->specialistOnly)
@@ -864,7 +869,7 @@ std::uint8_t ship_design_max_warp(const ShipDesign& design)
 {
     std::uint8_t maxWarp = 0;
     for (const auto component : design.components) maxWarp = std::max(maxWarp, component_spec(component).maxWarp);
-    return maxWarp;
+    return design.hull == ShipHullType::ExpeditionBase ? std::min<std::uint8_t>(5, maxWarp) : maxWarp;
 }
 
 std::uint8_t ship_design_cruise_warp(const ShipDesign& design)
@@ -874,7 +879,7 @@ std::uint8_t ship_design_cruise_warp(const ShipDesign& design)
     if (!spec || spec->maxWarp == 0) return 1;
     const auto preferred = spec->optimalWarp != 0 ? spec->optimalWarp
         : (ship_design_can_colonize(design) ? kColonyShipCruiseWarp : kScoutCruiseWarp);
-    return std::min(spec->maxWarp, preferred);
+    return std::min(ship_design_max_warp(design), preferred);
 }
 
 double ship_design_fuel_rate(const ShipDesign& design, std::uint8_t warp)
@@ -1414,6 +1419,8 @@ double fleet_overdrive_damage_rate(
 
 bool fleet_warp_valid(const GameState& state, const Fleet& fleet, std::uint8_t warp)
 {
+    if (warp > 5) for (const auto& stack : fleet_ship_stacks(fleet))
+        if (const auto* d=find_ship_design(state,stack.design); d && d->hull==ShipHullType::ExpeditionBase) return false;
     return warp >= 1 && warp <= kMaxWarp
         && fleet_max_warp(state, fleet) > 0
         && fleet.damagePercent < 100.0;
@@ -1955,6 +1962,9 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.fuel = fleet.fuel;
     fleet.telemetry.damagePercent = fleet.damagePercent;
     fleet.telemetry.outpost = fleet.outpost;
+    fleet.telemetry.mobileBase = fleet.mobileBase;
+    fleet.telemetry.lastMovedTurn = fleet.lastMovedTurn;
+    fleet.telemetry.lastServiceTurn = fleet.lastServiceTurn;
     fleet.telemetry.colonists = fleet.colonists;
     fleet.telemetry.arrivalAction = fleet.arrivalAction;
     fleet.telemetry.waypointQueue = fleet.waypointQueue;

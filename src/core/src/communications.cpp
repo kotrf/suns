@@ -1,4 +1,5 @@
 #include "suns/communications.hpp"
+#include "suns/mobile_base.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/reconnaissance.hpp"
@@ -339,6 +340,9 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.damagePercent = fleet.damagePercent;
     result.electronics = fleet.electronics;
     result.outpost = fleet.outpost;
+    result.mobileBase = fleet.mobileBase;
+    result.lastMovedTurn = fleet.lastMovedTurn;
+    result.lastServiceTurn = fleet.lastServiceTurn;
     result.colonists = fleet.colonists;
     result.arrivalAction = fleet.arrivalAction;
     result.waypointQueue = fleet.waypointQueue;
@@ -627,6 +631,9 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.damagePercent = telemetry.damagePercent;
     view.electronics = telemetry.electronics;
     view.outpost = telemetry.outpost;
+    view.mobileBase = telemetry.mobileBase;
+    view.lastMovedTurn = telemetry.lastMovedTurn;
+    view.lastServiceTurn = telemetry.lastServiceTurn;
     view.colonists = telemetry.colonists;
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;
@@ -754,7 +761,10 @@ void deliver_due_fleet_commands(GameState& state)
             if (pending.deliveryTurn > state.turn) break;
             ++processed;
             if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
-            if (pending.electronics) {
+            if (pending.mobileBase) {
+                if (mobile_base_dock(state, fleet)) fleet.mobileBase = *pending.mobileBase;
+            }
+            else if (pending.electronics) {
                 const auto& e = *pending.electronics;
                 apply_electronics_program(fleet,e.resumeTurn && e.resumeTurn <= state.turn ? ElectronicsProgram{} : e);
             }

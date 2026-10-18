@@ -133,7 +133,7 @@ int main(int argc, char** argv)
     }
     assert(engines == 15 && scanners == 16 && robots == 6);
     auto* initialHulls = designer.findChild<QComboBox*>("shipHullCatalog");
-    assert(initialHulls && initialHulls->count() == 32);
+    assert(initialHulls && initialHulls->count() == 33);
     auto* hullModel = qobject_cast<QStandardItemModel*>(initialHulls->model());
     assert(hullModel && !hullModel->item(initialHulls->findData(int(ShipHullType::Battleship)))->isEnabled());
     assert(initialHulls->findData(int(ShipHullType::Scout)) < 0);

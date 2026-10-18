@@ -1,5 +1,7 @@
 # Deep-space infrastructure
 
+Mobile support ships are described in [mobile expedition bases](mobile-expedition-bases.md); they do not change the permanent anchoring below.
+
 First playable slice of [#54](https://github.com/kotrf/suns/issues/54): paid
 constructors become permanent fuel depots and communications relays away from
 planets. Orbital stations remain a separate system. There is no remote placement

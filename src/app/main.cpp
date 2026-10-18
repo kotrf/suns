@@ -37,6 +37,7 @@ int main(int argc, char* argv[])
     window.installUnknownObjects();
     window.installInterstellarMedium();
     window.installOutposts();
+    window.installMobileBases();
     window.installPanelLayoutFixes();
     window.installStrategicOperations();
 

@@ -1,8 +1,24 @@
 # Project status and development handoff
 
+## Implementation branch — 18 October 2026: expedition support bases
+
+`codex/mobile-expedition-base` is based on main
+[e2db5ed](https://github.com/kotrf/suns/commit/e2db5ed1767927a5d7a933c15f10190436aeabe5)
+(project-memory inventory #217). The first [#61 slice](mobile-expedition-bases.md)
+adds a specialized, modular Expedition Base hull, finite-stock refueling,
+mineral-funded external repair with one annual priority budget, physical cargo
+and fuel deliveries, and the ordinary optional relay equipment. Movement blocks
+docking for that year; arriving clients can use a stationary base. Received
+stocks/policies drive the UI and forecast; policies use delayed fleet commands.
+Save v84 / orders v30 preserve physical, confirmed and in-flight data separately.
+
+This branch is prepared for PR review, not an assertion of merge or manual
+acceptance. Mobile shipyards, science and other infrastructure roles remain
+later #61 work. Validation is recorded in the implementation PR.
+
 ## Verified checkpoint — 18 October 2026
 
-Main is [9f1eed8](https://github.com/kotrf/suns/commit/9f1eed858a5b109f38047d4c76fb53677daa0d23):
+Main is [e2db5ed](https://github.com/kotrf/suns/commit/e2db5ed1767927a5d7a933c15f10190436aeabe5) after the context inventory #217:
 audit fixes [#216](https://github.com/kotrf/suns/pull/216) are merged after
 deep-space infrastructure #214/#215. Current formats are **save v83 / orders v29**.
 The implementation PR records full local Debug 71/71 and four focused Release

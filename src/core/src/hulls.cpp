@@ -89,6 +89,9 @@ const std::vector<ShipHullSpec>& reference_hulls()
     // Guide pp.16-23. Preserve bank masks and capacities; presentation is ours.
     using H = ShipHullType;
     static const std::vector<ShipHullSpec> hulls{
+        // Suns! strategic infrastructure: expensive dry mass, no weapon banks.
+        make_hull(H::ExpeditionBase, "Expedition Base", 12, 1200, 900, {400, 180, 220}, 1000, 6000, 2400, 0,
+            {{1, 4}, {4096, 1}, {4096, 1}, {4096, 1}, {4096, 1}, {4096, 1}, {4096, 1}, {2048, 1}, {2048, 1}, {12, 2}, {2, 1}}, HullAccess::Standard, false, false, false, 0, 0, false),
         make_hull(H::SmallFreighter, "Small Freighter", 0, 25, 20, {12, 0, 17}, 70, 130, 25, 0, {{1, 1}, {6146, 1}, {12, 1}}, HullAccess::Standard, false, false, false, 0, 0, false),
         make_hull(H::MediumFreighter, "Medium Freighter", 3, 60, 40, {20, 0, 19}, 210, 450, 50, 0, {{1, 1}, {6146, 1}, {12, 1}}, HullAccess::Standard, false, false, false, 0, 0, false),
         make_hull(H::LargeFreighter, "Large Freighter", 8, 125, 100, {35, 0, 21}, 1200, 2600, 150, 0, {{1, 2}, {6146, 2}, {12, 2}}, HullAccess::Standard, false, false, false, 0, 0, false),

@@ -153,6 +153,11 @@ struct GateFleetOrder {
 
 struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; };
 struct SetFleetElectronicsOrder { FleetId fleet{}; ElectronicsProgram program; };
+struct SetMobileBaseOrder { FleetId fleet{}; MobileBaseProgram program; };
+struct TransferFleetFuelOrder {
+    FleetId source{}, destination{};
+    double amount{}, sourceReserve{};
+};
 
 using Order = std::variant<
     MoveFleetOrder,
@@ -179,7 +184,9 @@ using Order = std::variant<
     SetFleetTaskOrder,
     SetFleetElectronicsOrder,
     QueueStationOrder,
-    GateFleetOrder>;
+    GateFleetOrder,
+    SetMobileBaseOrder,
+    TransferFleetFuelOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

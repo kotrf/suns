@@ -1,4 +1,5 @@
 #include "suns/turn_processor.hpp"
+#include "suns/mobile_base.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -1022,9 +1023,11 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
         || !fleet_ready_for_reorganization(*destination)
         || !fleet_ready_for_reorganization(*source)) return false;
 
+    destination->lastMovedTurn = std::max(destination->lastMovedTurn, source->lastMovedTurn);
+    destination->lastServiceTurn = std::max(destination->lastServiceTurn, source->lastServiceTurn);
     const auto sourceId = source->id;
-    const auto destinationShips = fleet_ship_count(*destination);
-    const auto sourceShipCount = fleet_ship_count(*source);
+    const auto destinationShips = fleet_dry_mass(state, *destination);
+    const auto sourceShipCount = fleet_dry_mass(state, *source);
     auto sourceShips = fleet_ship_stacks(*source);
     sync_fleet_presentation(state, *destination);
     destination->ships.insert(destination->ships.end(), sourceShips.begin(), sourceShips.end());
@@ -1104,6 +1107,7 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     detached.arrivalAction.reset();
     detached.waypointQueue.clear();
     detached.pendingCommands.clear();
+    detached.mobileBase.clients.clear();
     detached.telemetry = {};
     detached.telemetryInTransit.clear();
     detached.fuelStalled = false;
@@ -1470,6 +1474,7 @@ void continue_merged_fleet_route(
         fleet.fuel - budget.fuelChange,
         0.0,
         fleet_fuel_capacity(state, fleet));
+    if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
     fleet.position = endpoint;
     movementFuel.push_back({fleet.id, destination, fleet.targetFleet, budget.fuelConsumed, fleet.fuel,
         affordable + epsilon < requested && travelled + epsilon >= affordable,budget.fuelMinimum,budget.fuelMaximum});
@@ -1736,10 +1741,12 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             if (plan->mineRestricted && !plan->intercepted) {
                 if (apply_minefield_crossing(state,fleet,start,endpoint,navigationMinefields)
                     && fleet.damagePercent >= 100) mineDestroyedFleets.push_back(fleet.id);
+                if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
                 fleet.position = endpoint;
                 recordFuel(0.0, true);
                 continue;
             }
+            if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
             fleet.position = endpoint;
             recordFuel(0.0);
             const auto routeDistance = plan->routed
@@ -1769,6 +1776,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         const auto budget = fleet_movement_budget(state, beforeStrike, endpoint, distance_between(start, endpoint), 1.0);
         const auto capacity = fleet_fuel_capacity(state, fleet);
         fleet.fuel = std::clamp(fleet.fuel - budget.fuelChange, 0.0, capacity);
+        if (!same_position(fleet.position, endpoint)) fleet.lastMovedTurn = state.turn + 1;
         fleet.position = endpoint;
         recordFuel(budget.fuelConsumed, mineStrike,budget.fuelMinimum,budget.fuelMaximum);
 
@@ -1985,6 +1993,21 @@ TurnResult TurnProcessor::process_with_events(
     const auto extraction = mine_colonies(next);
     std::vector<ColonyFreightDelivery> freight;
 
+    std::vector<std::pair<PlayerId, TransferCargoOrder>> baseCargo;
+    std::vector<std::pair<PlayerId, TransferFleetFuelOrder>> baseFuel;
+    const auto acceptTransfer = [&](PlayerId owner, FleetId source, FleetId destination,
+                                    std::uint64_t colonists, MineralCargo minerals, double fuel, double reserve, bool fuelOnly) {
+        if (fuelOnly ? (!std::isfinite(fuel) || fuel<=0 || !std::isfinite(reserve) || reserve<0)
+                     : !valid_mineral_cargo(minerals)) return;
+        const auto* from=find_service_fleet(next,source); const auto* to=find_service_fleet(next,destination);
+        if (!from || !to || from->owner!=owner || to->owner!=owner || from==to) return;
+        const auto* base=mobile_base_hulls(next,*from)>0?from:mobile_base_hulls(next,*to)>0?to:nullptr;
+        if (!base) return;
+        record_command_transmission(next,owner,base->position,next.turn);
+        next.pendingMobileBaseTransfers.push_back({owner,base->id,source,destination,next.turn,
+            next.turn+communication_delay_turns(next,owner,base->position),colonists,minerals,fuel,reserve,fuelOnly});
+    };
+
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
@@ -2137,7 +2160,19 @@ TurnResult TurnProcessor::process_with_events(
                     } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>
                         || std::is_same_v<T, SetFleetMineralCargoOrder>
                         || std::is_same_v<T, TransferCargoOrder>) {
-                        apply_cargo_order(next, submission.player, order, freight);
+                        if constexpr (std::is_same_v<T, TransferCargoOrder>) {
+                            const auto involvesBase = [&](FleetId id) {
+                                const auto* f = find_service_fleet(next, id);
+                                return f && mobile_base_hulls(next, *f) > 0;
+                            };
+                            if (involvesBase(concreteOrder.source.fleet) || involvesBase(concreteOrder.destination.fleet)) {
+                                if (concreteOrder.source.fleet && concreteOrder.destination.fleet
+                                    && !concreteOrder.source.planet && !concreteOrder.destination.planet)
+                                    acceptTransfer(submission.player,concreteOrder.source.fleet,concreteOrder.destination.fleet,
+                                        concreteOrder.colonists,concreteOrder.minerals,0,0,false);
+                                else baseCargo.emplace_back(submission.player, concreteOrder);
+                            } else apply_cargo_order(next, submission.player, order, freight);
+                        } else apply_cargo_order(next, submission.player, order, freight);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -2168,6 +2203,10 @@ TurnResult TurnProcessor::process_with_events(
                             submission.player,
                             concreteOrder.fleet,
                             concreteOrder.enabled ? FleetTask::RemoteMining : FleetTask::None);
+                    } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
+                        acceptTransfer(submission.player,concreteOrder.source,concreteOrder.destination,0,{},concreteOrder.amount,concreteOrder.sourceReserve,true);
+                    } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
+                        (void)submit_mobile_base_command(next, submission.player, concreteOrder.fleet, concreteOrder.program);
                     } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
                         (void)submit_fleet_task_command(next, submission.player, concreteOrder.fleet, concreteOrder.task);
                     } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
@@ -2229,7 +2268,25 @@ TurnResult TurnProcessor::process_with_events(
     refuel_fleets_at_orbital_services(next);
     // Repair once at the end of the year, after movement and construction.
     // Shipyards supersede onboard repair; fleets recover only once per year.
+    for (const auto& packet : next.pendingMobileBaseTransfers) if (packet.deliveryTurn<=next.turn) {
+        const auto* base=find_service_fleet(next,packet.base);
+        if (!base || base->owner!=packet.owner || !mobile_base_dock(next,*base)) continue;
+        if (packet.fuelOnly) baseFuel.emplace_back(packet.owner,TransferFleetFuelOrder{packet.source,packet.destination,packet.fuelAmount,packet.sourceReserve});
+        else baseCargo.emplace_back(packet.owner,TransferCargoOrder{{0,packet.source},{0,packet.destination},packet.colonists,packet.minerals});
+    }
+    std::erase_if(next.pendingMobileBaseTransfers,[&](const auto& packet){return packet.deliveryTurn<=next.turn;});
+    for (const auto& [player, cargo] : baseCargo) {
+        const auto dockingAllowed = [&](FleetId id) {
+            const auto* f = find_service_fleet(next, id);
+            return !f || mobile_base_hulls(next, *f) == 0
+                || mobile_base_service_error(next, *f, next.turn + 1).empty();
+        };
+        if (dockingAllowed(cargo.source.fleet) && dockingAllowed(cargo.destination.fleet))
+            apply_cargo_order(next, player, cargo, freight);
+    }
     repair_fleet_damage(next, current);
+    for (const auto& [player, fuel] : baseFuel) (void)transfer_mobile_base_fuel(next, player, fuel, next.turn + 1);
+    service_mobile_bases(next, next.turn + 1);
     grow_colonies(next);
 
     // The ledger counts physical deliveries; publish one manifest per receiving

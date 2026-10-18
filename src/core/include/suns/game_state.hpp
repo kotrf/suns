@@ -143,6 +143,7 @@ enum class ShipHullType {
     Nubian,
     MiniMorph,
     MetaMorph,
+    ExpeditionBase,
 };
 
 // Hull access families only; population, combat and economy traits are separate.
@@ -347,14 +348,16 @@ enum class ShipComponentType {
     MegaPolyShell,
     Valanium,
     Superlatanium,
-    // Append-only wire IDs. These fittings belong to orbital stations only.
+    // Append-only wire IDs. The following two gates fit orbital stations only.
     NetworkStargate,
     InfinityStargate,
     FuelDepotKit,
     DeepSpaceRelayKit,
+    ExpeditionDock,
+    ExpeditionWorkshop,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::DeepSpaceRelayKit;
+inline constexpr auto kLastShipComponent = ShipComponentType::ExpeditionWorkshop;
 
 enum class ShipComponentKind {
     Engine,
@@ -1280,6 +1283,14 @@ struct FleetShipStack {
     std::uint32_t count{};
 };
 
+// Persistent service policy; stable IDs deliberately survive missing clients.
+struct MobileBaseProgram {
+    bool enabled{true};
+    double fuelReserve{100.0};
+    std::vector<FleetId> clients;
+    bool operator==(const MobileBaseProgram&) const = default;
+};
+
 struct FleetTelemetry {
     std::uint64_t observedTurn{};
     Position position;
@@ -1298,6 +1309,9 @@ struct FleetTelemetry {
     double damagePercent{};
     ElectronicsProgram electronics;
     OutpostKind outpost{OutpostKind::None};
+    MobileBaseProgram mobileBase;
+    std::uint64_t lastMovedTurn{};
+    std::uint64_t lastServiceTurn{};
 };
 
 struct PendingFleetCommand {
@@ -1306,6 +1320,7 @@ struct PendingFleetCommand {
     FleetRouteProgram program;
     std::optional<FleetTask> task;
     std::optional<ElectronicsProgram> electronics;
+    std::optional<MobileBaseProgram> mobileBase;
 };
 
 struct PendingFleetTelemetry {
@@ -1348,6 +1363,9 @@ struct Fleet {
     double damagePercent{};
     ElectronicsProgram electronics;
     OutpostKind outpost{OutpostKind::None};
+    MobileBaseProgram mobileBase;
+    std::uint64_t lastMovedTurn{};
+    std::uint64_t lastServiceTurn{};
 };
 
 struct Minefield {
@@ -1413,6 +1431,17 @@ struct WormholeTransit {
     WormholeTransitStatus status{WormholeTransitStatus::AwaitingEntryReport};
 };
 
+// Host-only logistics command in physical transit to a mobile base. No stocks
+// are reserved or transferred until the command reaches a service phase.
+struct PendingMobileBaseTransfer {
+    PlayerId owner{};
+    FleetId base{}, source{}, destination{};
+    std::uint64_t issuedTurn{}, deliveryTurn{}, colonists{};
+    MineralCargo minerals;
+    double fuelAmount{}, sourceReserve{};
+    bool fuelOnly{};
+};
+
 struct GameState {
     std::uint64_t turn{1};
     std::uint64_t galaxySeed{};
@@ -1423,6 +1452,7 @@ struct GameState {
     // profiles, never hidden physical clouds. Player files retain this marker.
     PlayerId mediumObserver{};
     std::vector<InterstellarCloud> interstellarClouds;
+    std::vector<PendingMobileBaseTransfer> pendingMobileBaseTransfers;
     FleetId nextFleetId{1};
     ShipDesignId nextShipDesignId{kFirstCustomShipDesignId};
     OrbitalStationId nextOrbitalStationId{1};

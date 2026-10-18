@@ -187,6 +187,7 @@ public:
     void installUnknownObjects();
     void installInterstellarMedium();
     void installOutposts();
+    void installMobileBases();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 
     // Ordered colony build list with completion forecasts and move controls.

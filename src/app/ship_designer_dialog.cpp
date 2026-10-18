@@ -312,6 +312,10 @@ QString componentTooltip(ShipComponentType component)
     if (spec.radiationHazard > 0.0) facts << "Radiation hazard: 10% colonist losses per travel turn unless the race is immune or has radiation tolerance ≥ 85%.";
     if (component == ShipComponentType::FuelDepotKit || component == ShipComponentType::DeepSpaceRelayKit)
         facts << "One paid kit per constructor. Fly to deep space, then deploy permanently (one ship, no colonists, 5 ly from stars, 1 ly from another outpost). Upkeep 1 mg/year; tanker deliveries replenish fuel. Depot stock is finite; the relay adds 300 ly only after deployment.";
+    if (spec.type == ShipComponentType::ExpeditionDock)
+        facts << "Expedition Base only. Enables finite-stock refueling and cargo docking for separate friendly fleets; no external services in a year the base moves.";
+    if (spec.type == ShipComponentType::ExpeditionWorkshop)
+        facts << "Expedition Base + Expedition Dock required. Shared priority queue; restores 100 kt dry structure/year per module at 0.10 I / 0.05 B / 0.05 G per kt. Does not replace onboard Field Repair Bays.";
     if (spec.enablesColonization) facts << "Enables colonization";
     return facts.join("\n");
 }

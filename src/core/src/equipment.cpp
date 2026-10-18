@@ -90,6 +90,8 @@ std::span<const EquipmentTechnology> equipment_technologies()
         make_equipment(C::SpeedTrap50, "Speed Trap 50", K::MineLayer, 140, 80, {40, 0, 15}, {0, 5, 0, 0, 11, 0}, A::SpaceDemolition, false, true, false, {.minesPerYear = 50, .mineFieldKind = 2}),
         make_equipment(C::StarsColonizationModule, "Colonization Module", K::Mechanical, 32, 10, {12, 10, 10}, {0, 0, 0, 0, 0, 0}, A::Any, false, false, false, {.enablesColonization = true}),
         make_equipment(C::OrbitalConstructionModule, "Orbital Construction Module", K::Mechanical, 50, 20, {20, 15, 15}, {0, 0, 0, 0, 0, 0}, A::AlternateReality, false, false, false, {}),
+        make_equipment(C::ExpeditionDock, "Expedition Dock", K::Mechanical, 120, 200, {80, 30, 40}, {6, 0, 12, 0, 0, 0}, A::Any, false, false, false, {}),
+        make_equipment(C::ExpeditionWorkshop, "Expedition Workshop", K::Mechanical, 200, 300, {100, 60, 50}, {6, 0, 12, 0, 0, 0}, A::Any, false, false, false, {}),
         make_equipment(C::StarsCargoPod, "Cargo Pod", K::Mechanical, 5, 10, {5, 0, 2}, {0, 0, 3, 0, 0, 0}, A::Any, false, false, false, {.cargoCapacity = 50}),
         make_equipment(C::SuperCargoPod, "Super Cargo Pod", K::Mechanical, 7, 15, {8, 0, 2}, {3, 0, 9, 0, 0, 0}, A::Any, false, false, false, {.cargoCapacity = 100}),
         make_equipment(C::MultiCargoPod, "Multi Cargo Pod", K::Mechanical, 9, 25, {12, 0, 3}, {5, 0, 11, 5, 0, 0}, A::MysteryTrader, false, false, false, {.cargoCapacity = 250, .armor = 50}),

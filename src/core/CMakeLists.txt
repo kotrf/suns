@@ -8,6 +8,7 @@ add_library(suns_core
     src/equipment.cpp
     src/stations.cpp
     src/deep_space.cpp
+    src/mobile_base.cpp
     src/combat.cpp
     src/strategic_operations.cpp
     src/communications.cpp
