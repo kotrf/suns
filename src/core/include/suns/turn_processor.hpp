@@ -159,6 +159,13 @@ struct TransferFleetFuelOrder {
     double amount{}, sourceReserve{};
 };
 
+struct SetPlanetaryEngineeringOrder {
+    PlanetId colony{};
+    PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
+    EngineeringAction action{EngineeringAction::StartOrResume};
+    std::uint8_t strength{10};
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -186,7 +193,8 @@ using Order = std::variant<
     QueueStationOrder,
     GateFleetOrder,
     SetMobileBaseOrder,
-    TransferFleetFuelOrder>;
+    TransferFleetFuelOrder,
+    SetPlanetaryEngineeringOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

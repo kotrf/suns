@@ -34,6 +34,7 @@ struct ResearchUnlock {
     bool requiresSuperStealth{};
     bool legacyMining{};
     bool terraforming{};
+    bool planetaryEngineering{};
     bool legacyEquipment{};
     std::optional<PrimaryRaceTrait> primaryTrait;
 };

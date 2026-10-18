@@ -1,4 +1,5 @@
 #include "suns/terraforming.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/campaign.hpp"
 
 #include <algorithm>
@@ -34,10 +35,14 @@ std::optional<PlanetEnvironment> next_terraforming_environment(
     const auto natural = planet.naturalEnvironment.value_or(planet.environment);
     const std::array<int, 3> original{natural.temperature, natural.gravity, natural.radiation};
     const std::array<int, 3> current{planet.environment.temperature, planet.environment.gravity, planet.environment.radiation};
+    const auto effective=engineered_environment(planet);
+    const std::array<int,3> operating{effective.temperature,effective.gravity,effective.radiation};
     const std::array<int, 3> maximum{limits.temperature, limits.gravity, limits.radiation};
     const std::array<RaceEnvironmentRange, 3> ranges{
         empire->race.habitableTemperature, empire->race.habitableGravity, empire->race.habitableRadiation};
-    const auto score = [&](PlanetEnvironment environment) {
+    const auto score = [&](PlanetEnvironment rawEnvironment) {
+        auto candidate=planet; candidate.environment=rawEnvironment;
+        const auto environment=engineered_environment(candidate);
         const std::array<int, 3> values{environment.temperature, environment.gravity, environment.radiation};
         int outside = 0, displacement = 0;
         for (int axis = 0; axis < 3; ++axis) {
@@ -53,7 +58,7 @@ std::optional<PlanetEnvironment> next_terraforming_environment(
     for (int axis = 0; axis < 3; ++axis) {
         if (maximum[axis] == 0) continue;
         const int center = (int(ranges[axis].minimum) + int(ranges[axis].maximum)) / 2;
-        const int value = current[axis] + (current[axis] < center ? 1 : current[axis] > center ? -1 : 0);
+        const int value = current[axis] + (operating[axis] < center ? 1 : operating[axis] > center ? -1 : 0);
         // A captured planet may already lie outside the new owner's limit:
         // allow undoing old terraforming towards the natural baseline.
         if (value == current[axis] || value < 0 || value > 100

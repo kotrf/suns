@@ -893,6 +893,20 @@ void MainWindow::refreshEmpireHistory()
                 label=QString("Aftermath report at planet %1").arg(event.planet); color=QColor("#d5b785"); break;
             case HistoryMilestoneKind::ContaminationCleanup:
                 label=QString("Contamination cleanup at planet %1").arg(event.planet); color=QColor("#8dcc9e"); break;
+            case HistoryMilestoneKind::EngineeringStarted:
+                label=QString("Climate engineering started at planet %1").arg(event.planet); color=QColor("#b9a2e6"); break;
+            case HistoryMilestoneKind::EngineeringProgress:
+                label=QString("Climate engineering milestone at planet %1").arg(event.planet); color=QColor("#b9a2e6"); break;
+            case HistoryMilestoneKind::EngineeringCompleted:
+                label=QString("Climate engineering completed at planet %1").arg(event.planet); color=QColor("#8dcc9e"); break;
+            case HistoryMilestoneKind::EngineeringPaused:
+                label=QString("Climate engineering interrupted at planet %1").arg(event.planet); color=QColor("#e2bb70"); break;
+            case HistoryMilestoneKind::EngineeringResumed:
+                label=QString("Climate engineering resumed at planet %1").arg(event.planet); color=QColor("#8dcc9e"); break;
+            case HistoryMilestoneKind::EngineeringCaptured:
+                label=QString("Climate engineering captured at planet %1").arg(event.planet); color=QColor("#e2bb70"); break;
+            case HistoryMilestoneKind::EngineeringDismantled:
+                label=QString("Climate engineering dismantled at planet %1").arg(event.planet); color=QColor("#e2bb70"); break;
             case HistoryMilestoneKind::Reconstruction:
                 label=QString("Reconstruction at planet %1").arg(event.planet); color=QColor("#8dcc9e"); break;
             case HistoryMilestoneKind::MineStrike:

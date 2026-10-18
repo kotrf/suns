@@ -38,6 +38,7 @@ int main(int argc, char* argv[])
     window.installInterstellarMedium();
     window.installOutposts();
     window.installMobileBases();
+    window.installPlanetaryEngineering();
     window.installPanelLayoutFixes();
     window.installStrategicOperations();
 

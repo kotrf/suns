@@ -474,6 +474,8 @@ enum class ProductionKind {
     ReconstructFactory,
     ReconstructMine,
     CleanupContamination,
+    OrbitalMirrors,
+    OrbitalShades,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -584,6 +586,19 @@ struct PlanetAftermathObservation {
     bool operator==(const PlanetAftermathObservation&) const = default;
 };
 
+enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades };
+enum class EngineeringAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetOutput };
+enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals };
+struct PlanetaryEngineering {
+    PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
+    std::uint32_t work{};
+    MineralCargo invested;
+    std::uint8_t strength{10};
+    bool operational{};
+    PlayerId builder{};
+    std::uint64_t startedTurn{}, completedTurn{};
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -608,6 +623,7 @@ struct Planet {
     bool homeworld{}; // A capital relay roots the shared sensor/communications mesh.
     PlanetWarDamage warDamage; // Physical history survives capture and abandonment.
     bool aftermathKnownLocally{true}; // False on foreign projections, even if ownership intel is stale.
+    PlanetaryEngineering engineering;
 };
 
 struct OrbitalStation {
@@ -642,6 +658,7 @@ struct PlanetSurveySnapshot {
     std::int32_t habitability{};
     std::optional<PlanetEnvironment> environment;
     std::optional<PlanetEnvironment> naturalEnvironment;
+    PlanetaryEngineering engineering; // Dated visible work; private investment is redacted.
 };
 
 struct SystemSurveyKnowledge {
@@ -719,6 +736,11 @@ enum class PlayerReportKind {
     OutpostDeployed,
     OutpostDeploymentFailed,
     OutpostFuelExhausted,
+    EngineeringProgress,
+    EngineeringPaused,
+    EngineeringResumed,
+    EngineeringCaptured,
+    EngineeringDismantled,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -949,6 +971,13 @@ enum class HistoryMilestoneKind : std::uint8_t {
     ContaminationCleanup,
     UnknownObjectReported,
     UnknownObjectStudied,
+    EngineeringStarted,
+    EngineeringProgress,
+    EngineeringCompleted,
+    EngineeringPaused,
+    EngineeringResumed,
+    EngineeringCaptured,
+    EngineeringDismantled,
 };
 
 [[nodiscard]] inline std::optional<OperationalLossKind> milestone_loss_kind(HistoryMilestoneKind kind)
@@ -1492,6 +1521,7 @@ inline constexpr std::size_t kMaximumGalaxySystems = 1000;
 [[nodiscard]] GalaxyConfig normalized_galaxy_config(GalaxyConfig config);
 
 [[nodiscard]] const StarSystem* find_star(const GameState& state, StarId id);
+[[nodiscard]] const Planet* find_planet(const GameState& state, PlanetId id);
 [[nodiscard]] const Planet* find_planet_at_star(const GameState& state, StarId star);
 [[nodiscard]] const Player* find_player(const GameState& state, PlayerId id);
 [[nodiscard]] const ShipDesign* find_ship_design(const GameState& state, ShipDesignId id);
@@ -1664,6 +1694,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::LocalRadar: return 2;
     case ProductionKind::PlanetaryRadar: return 16;
     case ProductionKind::Terraforming: return kTerraformingCost;
+    case ProductionKind::OrbitalMirrors: case ProductionKind::OrbitalShades: return 2400;
     }
     return kColonyShipCost;
 }

@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/campaign.hpp"
 #include "galaxy_setup_widget.hpp"
@@ -751,14 +752,17 @@ void MainWindow::installUiPolish()
         if (fleetInfo) fleetInfo->setText(selectedFleetPanelSummary());
         refreshFleetCompositionTable();
 
-        const auto* environmentPlanet = selectedPlanet();
+        const auto environmentState=find_player(state_,pendingOrders_.player)
+            ? make_player_view(state_,pendingOrders_.player).state : GameState{};
+        const auto* environmentSource=selectedPlanet();
+        const auto* environmentPlanet=environmentSource?find_planet(environmentState,environmentSource->id):nullptr;
         const auto* environmentStar = selectedStar();
         const bool environmentKnown = environmentPlanet && environmentStar
             && (environmentPlanet->owner == pendingOrders_.player
-                || survey_level(state_, pendingOrders_.player, environmentStar->id) >= SurveyLevel::OrbitalSurvey);
+                || survey_level(environmentState, pendingOrders_.player, environmentStar->id) >= SurveyLevel::OrbitalSurvey);
         if (planetEnvironmentPanel_) planetEnvironmentPanel_->setVisible(environmentKnown);
         if (environmentKnown) {
-            const auto* player = find_player(state_, pendingOrders_.player);
+            const auto* player = find_player(environmentState, pendingOrders_.player);
             const auto race = player ? player->race : RaceProfile{};
             const auto raceName = player
                 ? QString::fromStdString(player->name)
@@ -783,7 +787,7 @@ void MainWindow::installUiPolish()
                         .arg(static_cast<int>(habitable.maximum))
                         .arg(inside ? "inside" : "outside"));
             };
-            setEnvironmentBar(planetTemperatureBar_, environmentPlanet->environment.temperature,
+            setEnvironmentBar(planetTemperatureBar_, engineered_environment(*environmentPlanet).temperature,
                 race.habitableTemperature,
                 "Temperature (50 is temperate)");
             setEnvironmentBar(planetGravityBar_, environmentPlanet->environment.gravity,
@@ -794,17 +798,21 @@ void MainWindow::installUiPolish()
                 "Radiation (higher is more severe)");
             if (auto* label = findChild<QLabel*>("planetTerraformingPotential")) {
                 if (player && player->race.environmentBased) {
-                    const auto limits = terraforming_limits(state_, pendingOrders_.player);
-                    const auto potential = terraforming_potential(state_, pendingOrders_.player, *environmentPlanet);
-                    const auto current = player_planet_habitability(state_, pendingOrders_.player, *environmentPlanet, state_.turn);
-                    const auto maximum = player_planet_habitability(state_, pendingOrders_.player, potential, state_.turn);
+                    const auto limits = terraforming_limits(environmentState, pendingOrders_.player);
+                    const auto potential = terraforming_potential(environmentState, pendingOrders_.player, *environmentPlanet);
+                    const auto current = player_planet_habitability(environmentState, pendingOrders_.player, *environmentPlanet, state_.turn);
+                    const auto maximum = player_planet_habitability(environmentState, pendingOrders_.player, potential, state_.turn);
                     label->setText(QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum));
+                    if(environmentPlanet->engineering.kind!=PlanetaryEngineeringKind::None) label->setText(label->text()
+                        + QString(" • %1: %2%, %3").arg(QString::fromStdString(engineering_name(environmentPlanet->engineering.kind)))
+                            .arg(environmentPlanet->engineering.work*100/kEngineeringWork)
+                            .arg(environmentPlanet->engineering.operational?"operating":"inactive / under construction"));
                     label->setToolTip(QString("Current technology: T ±%1 / G ±%2 / R ±%3 from natural values.\nEach change costs %4 production. Potential assumes current technology and stellar conditions.")
                         .arg(limits.temperature).arg(limits.gravity).arg(limits.radiation).arg(kTerraformingCost));
                     const auto natural = environmentPlanet->naturalEnvironment.value_or(environmentPlanet->environment);
                     const std::array<QProgressBar*, 3> bars{planetTemperatureBar_, planetGravityBar_, planetRadiationBar_};
                     const std::array<int, 3> original{natural.temperature, natural.gravity, natural.radiation};
-                    const std::array<int, 3> target{potential.environment.temperature, potential.environment.gravity, potential.environment.radiation};
+                    const std::array<int, 3> target{engineered_environment(potential).temperature, potential.environment.gravity, potential.environment.radiation};
                     for (std::size_t axis = 0; axis < bars.size(); ++axis)
                         if (bars[axis]) bars[axis]->setToolTip(bars[axis]->toolTip()
                             + QString("\nNatural value: %1 / 100\nPotential value: %2 / 100").arg(original[axis]).arg(target[axis]));

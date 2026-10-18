@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -192,6 +193,12 @@ const StarSystem* find_star(const GameState& state, StarId id)
         return star.id == id;
     });
     return it == state.stars.end() ? nullptr : &*it;
+}
+
+const Planet* find_planet(const GameState& state, PlanetId id)
+{
+    const auto it=std::find_if(state.planets.begin(),state.planets.end(),[id](const Planet& planet){return planet.id==id;});
+    return it==state.planets.end()?nullptr:&*it;
 }
 
 const Planet* find_planet_at_star(const GameState& state, StarId star)
@@ -1525,7 +1532,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
     const auto* planet = find_planet_at_star(state, star);
     if (!planet || level < SurveyLevel::BasicScan) return std::nullopt;
     if (level >= SurveyLevel::OrbitalSurvey)
-        return PlanetSurveySnapshot{planet->habitability, planet->environment, planet->naturalEnvironment};
+        return PlanetSurveySnapshot{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
     const auto habitability = player_planet_habitability(state, player, *planet, observedTurn);
     std::uint64_t mixed = state.galaxySeed
         ^ (static_cast<std::uint64_t>(player) << 32U)
@@ -1571,6 +1578,7 @@ std::optional<std::int32_t> known_planet_habitability(
     knownPlanet.star = planet->star;
     knownPlanet.habitability = snapshot->habitability;
     knownPlanet.environment = *snapshot->environment;
+    knownPlanet.engineering = snapshot->engineering;
     const auto aftermath=known_planet_aftermath(state,player,planetId);
     knownPlanet.warDamage.contamination=aftermath
         ? (unsigned(aftermath->contaminationMinimum)+aftermath->contaminationMaximum)/2 : 0;

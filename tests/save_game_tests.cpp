@@ -29,8 +29,20 @@ namespace {
 using namespace suns;
 
 // These old-layout fixtures have no pending/archive evidence.
+void strip_engineering_tail(QByteArray& bytes)
+{
+    QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream<<quint32{0x454e4749u};
+    const auto tail=bytes.indexOf(tag); if(tail<0)return;
+    QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader>>tailSize;
+    QByteArray marker; QDataStream markerStream(&marker,QIODevice::WriteOnly); markerStream<<quint32{0x53545241u};
+    const auto start=bytes.indexOf(marker); assert(start>=0);
+    QDataStream header(bytes.mid(start+4)); quint32 size{}; header>>size;
+    assert(tail+8+tailSize==start+8+size); bytes.remove(tail,8+tailSize);
+    QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(start+4)); patch<<quint32(size-8-tailSize);
+}
 void strip_mobile_base_tail(QByteArray& bytes)
 {
+    strip_engineering_tail(bytes);
     QByteArray tag; QDataStream tagStream(&tag,QIODevice::WriteOnly); tagStream << quint32{0x4d4f4249u};
     const auto tail=bytes.indexOf(tag); if (tail < 0) return;
     QDataStream tailHeader(bytes.mid(tail+4)); quint32 tailSize{}; tailHeader >> tailSize;

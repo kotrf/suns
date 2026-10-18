@@ -49,6 +49,8 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::ColonyDefense: name = "Colony defense"; break;
     case ProductionKind::LocalRadar: name = "Local planetary radar (30 ly)"; break;
     case ProductionKind::PlanetaryRadar: name = "Planetary radar (150 ly)"; break;
+    case ProductionKind::OrbitalMirrors: name = "Orbital mirrors"; break;
+    case ProductionKind::OrbitalShades: name = "Orbital shades"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;
     case ProductionKind::Research: return "Legacy Research item";
     case ProductionKind::OrbitalStation: name = item.station
@@ -408,6 +410,8 @@ void MainWindow::refreshProductionQueue()
         if(item.kind==ProductionKind::CleanupContamination) details+="\nRemoves up to 10 contamination for 6 resources and B/G 1/1 kt. Decay of 2/year is included in the forecast; no assumed future bombardments. Unneeded work retires without further charge.";
         if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority and forecast apply; obsolete surplus work retires without further charge.")
             .arg(item.kind==ProductionKind::ReconstructFactory?"factory":"mine").arg(production_cost(item.kind));
+        if (item.kind == ProductionKind::OrbitalMirrors || item.kind == ProductionKind::OrbitalShades)
+            details+="\nLong climate project: at most 80 work/year; I/B/G 0.10/0.05/0.10 kt per actual work. Remaining minerals exclude already paid work. Removing this queue item pauses construction and retains investment; manage output and dismantling in Planetary engineering.";
         if (item.kind == ProductionKind::Terraforming) details += QString("\nEach unit costs %1 production and shifts one physical axis by 1 point. Hab improvement may differ.").arg(kTerraformingCost);
         row->setData(0, Qt::UserRole + 1, details);
         for (int column = 0; column < 4; ++column) row->setToolTip(column, details);

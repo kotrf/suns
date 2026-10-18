@@ -44,8 +44,11 @@ and stellar conditions. Potential and yellow Habitability map markers require an
 owned planet or a confirmed orbital survey; basic scan estimates do not reveal
 hidden physical parameters or terraforming feasibility.
 
-This is the colony-scale first step related to #56. Orbital adjusters, Total
-Terraforming race traits, mirrors, magnetic shields and system-scale engineering
+This is the colony-scale first step related to #56. The separate
+[orbital climate projects](planetary-engineering.md) add mirrors and shades;
+their supported output affects the effective environment used to choose
+terraforming improvements, while these natural-baseline limits remain intact.
+Total Terraforming race traits, magnetic shields and system-scale engineering
 remain future work.
 
 Sources: original [Stars! Player's Guide](https://www.bestoldgames.net/download/games/stars/stars-win-manual.pdf),

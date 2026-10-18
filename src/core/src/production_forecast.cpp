@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
 
 #include <algorithm>
@@ -20,6 +21,7 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     std::vector<std::size_t> origins(queue.size());
     std::iota(origins.begin(), origins.end(), 0);
     bool hasShipyard = colony_has_orbital_service(state, planet.id, planet.owner, OrbitalStationModule::Shipyard);
+    bool engineeringSupport=engineering_station_available(state,planet);
     auto simulationState = state;
     for (std::uint32_t offset = 1; offset <= maximumTurns && !simulated.productionQueue.empty(); ++offset) {
         simulationState.turn = state.turn + offset - 1;
@@ -28,8 +30,9 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
         simulated.minerals.ironium += mined.ironium;
         simulated.minerals.boranium += mined.boranium;
         simulated.minerals.germanium += mined.germanium;
-        const auto resolved = resolve_colony_production(simulationState, simulated, hasShipyard);
+        const auto resolved = resolve_colony_production(simulationState, simulated, hasShipyard, engineeringSupport);
         hasShipyard = resolved.hasShipyard;
+        engineeringSupport=resolved.engineeringSupport;
         for (const auto& completion : resolved.completions) {
             const auto original = origins[completion.originalIndex];
             const bool automatic = queue[original].automation != ProductionAutomation::None;

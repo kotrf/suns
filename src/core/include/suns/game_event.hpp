@@ -50,6 +50,11 @@ enum class GameEventKind {
     OutpostDeployed,
     OutpostDeploymentFailed,
     OutpostFuelExhausted,
+    EngineeringProgress,
+    EngineeringPaused,
+    EngineeringResumed,
+    EngineeringCaptured,
+    EngineeringDismantled,
 };
 
 enum class GameEventSeverity {

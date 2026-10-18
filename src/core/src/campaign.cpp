@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/stations.hpp"
@@ -65,6 +66,11 @@ const std::vector<ResearchUnlock>& research_unlocks()
                       : "Paid constructor fitting: permanently deploy a 300 ly communications relay. Upkeep 1 mg/year; no extra relay range while mobile.", component};
             unlock.extraLevels[std::size_t(depot ? ResearchField::Energy : ResearchField::Electronics)] = depot ? 3 : 5;
             entries.push_back(std::move(unlock));
+        }
+        for(const auto name:{"Orbital mirrors","Orbital shades"}) {
+            ResearchUnlock unlock{ResearchField::Construction,14,name,
+                "Long climate project: 2400 production, I/B/G 240/120/240 kt, at most 80 work/year. Needs a friendly Starbase or Fortress with a shipyard; changes effective temperature by up to 10 points while supported.", {}};
+            unlock.extraLevels[std::size_t(ResearchField::Energy)]=14; unlock.planetaryEngineering=true; entries.push_back(std::move(unlock));
         }
         for (const auto& gate : stargate_technologies()) {
             ResearchUnlock unlock{ResearchField::Energy, gate.energy, gate.name,
@@ -186,6 +192,7 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
     const auto* miner = unlock.component ? mining_technology(*unlock.component) : nullptr;
     const auto* equipment = unlock.component ? equipment_technology(*unlock.component) : nullptr;
     return owner && (!unlock.primaryTrait || owner->race.primaryTrait == *unlock.primaryTrait)
+        && (!unlock.planetaryEngineering || owner->race.environmentBased)
         && (!unlock.terraforming || (owner->race.environmentBased
             && !(owner->race.radiationImmune && unlock.extraLevels[static_cast<std::size_t>(ResearchField::Weapons)] != 0)))
         && engine_access_available(owner->race, unlock.engineAccess)
@@ -297,7 +304,7 @@ std::int32_t player_planet_habitability(
     if (planet.observedHabitability) return *planet.observedHabitability;
     const auto* empire = find_player(state, player);
     const auto baseline = empire && empire->race.environmentBased
-        ? race_habitability(empire->race, planet.environment,
+        ? race_habitability(empire->race, engineered_environment(planet),
             technology_level(state, player, ResearchField::Biology))
         : planet.habitability;
     const auto* star = find_star(state, planet.star);
@@ -465,6 +472,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 if (intel != player->surveyKnowledge.end() && intel->planetSnapshot) {
                     known.environment = intel->planetSnapshot->environment.value_or(PlanetEnvironment{});
                     known.naturalEnvironment = intel->planetSnapshot->naturalEnvironment;
+                    known.engineering = intel->planetSnapshot->engineering;
                 }
             } else known.environment = {};
             // Surface stocks change through other empires' mining/cargo orders.
