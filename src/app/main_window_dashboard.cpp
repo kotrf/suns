@@ -93,6 +93,7 @@ QString arrivalName(const FleetArrivalAction& action)
         case FleetCargoKind::Boranium: return QString("Boranium");
         case FleetCargoKind::Germanium: return QString("Germanium");
         case FleetCargoKind::All: return QString("cargo");
+        case FleetCargoKind::Xenocrystal: return QString("xenocrystals");
         }
         return QString("cargo");
     };

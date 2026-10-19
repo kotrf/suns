@@ -17,7 +17,11 @@ void readReconContact(QDataStream& s,ReconContact& c)
     s >> observed >> seen >> due >> c.sourceFleet >> c.sourceColony >> c.star >> c.massMinimum >> c.massMaximum >> c.shipCount;
     c.observedTurn=observed; c.lastSeenTurn=seen; c.deliveryTurn=due;
     if(!readCount(s,count) || count>40) { markCorrupt(s); return; }
-    for(quint32 i=0;i<count;++i) { ShipHullType h; if(!readEnum(s,h,quint8(ShipHullType::MetaMorph))) return; c.hulls.push_back(h); }
+    for(quint32 i=0;i<count;++i) {
+        ShipHullType h;
+        if(!readEnum(s,h,quint8(gReadSaveFormatVersion>=84 ? ShipHullType::ExpeditionBase : ShipHullType::MetaMorph))) return;
+        c.hulls.push_back(h);
+    }
     s >> lost >> jammed; c.lost=lost; c.jammed=jammed;
     if(lost>1 || jammed>1 || !recon_contact_valid(c)) markCorrupt(s);
 }

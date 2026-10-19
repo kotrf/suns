@@ -2,6 +2,7 @@
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/science_samples.hpp"
+#include "suns/exotic_materials.hpp"
 #include "suns/equipment.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
@@ -232,12 +233,15 @@ void MainWindow::refreshResearchPanel()
     }
     std::uint32_t guaranteedRp = 0;
     std::uint32_t artifactRp = 0;
+    std::array<std::uint32_t, kResearchFieldCount> parallelRp{};
     if (planActive) {
         for (const auto& planet : planned.planets) {
             if (planet.owner != player->id) continue;
             guaranteedRp += static_cast<std::uint32_t>(
                 static_cast<std::uint64_t>(colony_output(planet)) * allocationPercent / 100U);
             artifactRp += retained_sample_research(planned, planet);
+            const auto parallel = resonance_research(planned, planet);
+            for (std::size_t field = 0; field < parallel.size(); ++field) parallelRp[field] += parallel[field];
         }
     }
     guaranteedRp += artifactRp;
@@ -253,6 +257,11 @@ void MainWindow::refreshResearchPanel()
         : QString("Research is paused; the allocation is not deducted from colony output");
     researchSummary_->setText(QString("<b>Empire technology</b><br>%1<br>%2")
         .arg(levels.join(" • "), allocationSummary));
+    QStringList parallelFields;
+    for (std::size_t field = 0; field < parallelRp.size(); ++field) if (parallelRp[field])
+        parallelFields << QString("%1 %2 RP/year").arg(QString::fromStdString(research_field_name(ResearchField(field)))).arg(parallelRp[field]);
+    if (!parallelFields.empty()) researchSummary_->setText(researchSummary_->text()
+        + "<br>Parallel artifact reports: " + parallelFields.join(" • ") + " (credited after communication delivery)");
 
     const auto index = static_cast<std::size_t>(focus);
     const auto level = player->technology.levels[index];

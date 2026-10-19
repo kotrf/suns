@@ -1,4 +1,5 @@
 #include "suns/player_knowledge.hpp"
+#include "suns/exotic_materials.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -111,6 +112,10 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::SampleDelivered: return GameEventKind::SampleDelivered;
     case PlayerReportKind::SampleDepleted: return GameEventKind::SampleDepleted;
     case PlayerReportKind::SampleHoldFull: return GameEventKind::SampleHoldFull;
+    case PlayerReportKind::XenocrystalDiscovered: return GameEventKind::XenocrystalDiscovered;
+    case PlayerReportKind::XenocrystalAcquired: return GameEventKind::XenocrystalAcquired;
+    case PlayerReportKind::XenocrystalDepleted: return GameEventKind::XenocrystalDepleted;
+    case PlayerReportKind::ResonanceProjectStatus: return GameEventKind::ResonanceProjectStatus;
     }
     return GameEventKind::FleetArrived;
 }
@@ -206,14 +211,14 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     return hash;
 }
 
-void queue_survey_report(
+void queue_survey_report_impl(
     GameState& state,
     PlayerId playerId,
     StarId star,
     FleetId sourceFleet,
     Position sourcePosition,
     std::uint64_t observationTurn,
-    SurveyLevel level)
+    SurveyLevel level, bool finalSurfaceObservation)
 {
     if (survey_level(state, playerId, star) > level && level < SurveyLevel::OrbitalSurvey) return;
     auto* player = mutable_player(state, playerId);
@@ -228,9 +233,19 @@ void queue_survey_report(
         star, sourceFleet, observationTurn, deliveryTurn, level, observedOwner,
         held_report_source(state,playerId,sourcePosition,observationTurn,sourceFleet)};
     candidate.planetSnapshot = capture_planet_survey(state, playerId, star, level, observationTurn);
+    if (finalSurfaceObservation && candidate.planetSnapshot) {
+        if (!candidate.planetSnapshot->xenocrystal) {
+            if (const auto* p = find_planet_at_star(state, star))
+                candidate.planetSnapshot->xenocrystal = XenocrystalObservation{{0, 0,
+                    (!p->owner || p->owner == playerId) ? p->xenocrystal.surface : 0, 0}, observationTurn, false, 0, 1};
+        } else candidate.planetSnapshot->xenocrystal->stockPhase = 1;
+    }
+    const auto phase = [](const auto& r) { return r.planetSnapshot && r.planetSnapshot->xenocrystal
+        ? r.planetSnapshot->xenocrystal->stockPhase : 0; };
     const auto dominated = std::any_of(player->pendingSurveyReports.begin(), player->pendingSurveyReports.end(),
         [&](const PendingSurveyReport& report) {
             return report.star == star && report.level >= level && report.deliveryTurn <= deliveryTurn
+                && !(report.observedTurn == observationTurn && phase(candidate) > phase(report))
                 && (level < SurveyLevel::BasicScan || report.observedTurn >= observationTurn)
                 && (report.planetSnapshot || !candidate.planetSnapshot);
         });
@@ -238,6 +253,7 @@ void queue_survey_report(
 
     std::erase_if(player->pendingSurveyReports, [&](const PendingSurveyReport& report) {
         return report.star == star && report.level <= level && report.deliveryTurn >= deliveryTurn
+            && !(report.observedTurn == observationTurn && phase(report) != phase(candidate))
             && (report.level < SurveyLevel::BasicScan || report.observedTurn <= observationTurn);
     });
     player->pendingSurveyReports.push_back(candidate);
@@ -256,6 +272,10 @@ SurveyLevel best_observed_level(const GameState& state, PlayerId playerId, StarI
 }
 
 } // namespace
+
+void queue_survey_report(GameState& state, PlayerId owner, StarId star, FleetId fleet,
+    Position position, std::uint64_t turn, SurveyLevel level, bool finalSurfaceObservation)
+{ queue_survey_report_impl(state, owner, star, fleet, position, turn, level, finalSurfaceObservation); }
 
 void queue_player_report(
     GameState& state,
@@ -405,13 +425,20 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             return lhs.sourceFleet < rhs.sourceFleet;
         });
         for (const auto& report : due) {
+            const auto* observedPlanet = find_planet_at_star(state, report.star);
+            const auto oldExotic = observedPlanet ? known_xenocrystal(state, player.id, observedPlanet->id) : std::nullopt;
+            const auto incomingExotic = report.planetSnapshot ? report.planetSnapshot->xenocrystal : std::nullopt;
+            const bool newerExotic = incomingExotic && (!oldExotic || incomingExotic->observedTurn > oldExotic->observedTurn
+                || (incomingExotic->observedTurn == oldExotic->observedTurn && incomingExotic->stockPhase > oldExotic->stockPhase)
+                || (incomingExotic->depositSurveyed && (!oldExotic->depositSurveyed
+                    || incomingExotic->depositObservedTurn > oldExotic->depositObservedTurn)));
             const auto previousLevel = survey_level(state, player.id, report.star);
             if (previousLevel > report.level
                 && report.level < SurveyLevel::OrbitalSurvey) continue;
             const auto existing = std::find_if(
                 player.surveyKnowledge.begin(), player.surveyKnowledge.end(),
                 [&](const SystemSurveyKnowledge& entry) { return entry.star == report.star; });
-            if (existing != player.surveyKnowledge.end()
+            if (!newerExotic && existing != player.surveyKnowledge.end()
                 && existing->level == report.level
                 && (existing->observedTurn > report.observedTurn
                     || (existing->observedTurn == report.observedTurn
@@ -423,8 +450,39 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             if (updated != player.surveyKnowledge.end()
                 && (report.observedTurn >= previousObservedTurn
                     || (previousLevel < SurveyLevel::OrbitalSurvey && report.level >= SurveyLevel::OrbitalSurvey))
+                && !(oldExotic && incomingExotic && oldExotic->observedTurn == incomingExotic->observedTurn
+                    && oldExotic->stockPhase > incomingExotic->stockPhase)
                 && (report.level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey))
                 updated->planetSnapshot = report.planetSnapshot;
+            if (updated != player.surveyKnowledge.end() && updated->planetSnapshot) {
+                if (newerExotic) {
+                    auto merged = oldExotic.value_or(*incomingExotic);
+                    if (!oldExotic || incomingExotic->observedTurn > oldExotic->observedTurn
+                        || (incomingExotic->observedTurn == oldExotic->observedTurn && incomingExotic->stockPhase >= oldExotic->stockPhase)) {
+                        merged.site.surface = incomingExotic->site.surface;
+                        merged.site.extractedLastYear = incomingExotic->site.extractedLastYear;
+                        merged.observedTurn = incomingExotic->observedTurn;
+                        merged.stockPhase = incomingExotic->stockPhase;
+                    }
+                    if (incomingExotic->depositSurveyed && (!oldExotic || !oldExotic->depositSurveyed
+                        || incomingExotic->depositObservedTurn >= oldExotic->depositObservedTurn)) {
+                        merged.depositSurveyed = true; merged.depositObservedTurn = incomingExotic->depositObservedTurn;
+                        merged.site.original = incomingExotic->site.original; merged.site.remaining = incomingExotic->site.remaining;
+                    }
+                    updated->planetSnapshot->xenocrystal = merged;
+                }
+                else if (oldExotic) updated->planetSnapshot->xenocrystal = oldExotic;
+            }
+            if (newerExotic && incomingExotic->site.original && (!oldExotic || !oldExotic->site.original)) {
+                GameEvent discovery;
+                discovery.id = stable_event_id(report, player.id) ^ 0x58454e4f43525953ULL;
+                discovery.turn = state.turn; discovery.observedTurn = incomingExotic->observedTurn;
+                discovery.recipient = player.id; discovery.kind = GameEventKind::XenocrystalDiscovered;
+                discovery.star = report.star; discovery.planet = observedPlanet->id; discovery.fleet = report.sourceFleet;
+                if (const auto* star = find_star(state, report.star)) discovery.position = star->position;
+                discovery.quantity = incomingExotic->site.remaining;
+                events.push_back(discovery);
+            }
             if (report.level >= SurveyLevel::OrbitalSurvey) {
                 const auto knowledge = std::find_if(
                     player.surveyKnowledge.begin(), player.surveyKnowledge.end(),
@@ -548,6 +606,8 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
             }
             if (report.kind == PlayerReportKind::ScientificData) apply_scientific_data(state, player, report, events);
             auto severity = event_severity(report.kind);
+            if (report.kind == PlayerReportKind::XenocrystalDepleted
+                || (report.kind == PlayerReportKind::ResonanceProjectStatus && report.quantity > kResonanceWork)) severity = GameEventSeverity::Warning;
             if(report.sensorStatus) severity=report.quantity?GameEventSeverity::Warning:GameEventSeverity::Information;
             if (report.battle) {
                 bool survivors = false, losses = false;

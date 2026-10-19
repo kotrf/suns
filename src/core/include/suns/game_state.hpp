@@ -476,6 +476,7 @@ enum class ProductionKind {
     CleanupContamination,
     OrbitalMirrors,
     OrbitalShades,
+    ResonanceLaboratory,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -607,6 +608,27 @@ struct PlanetaryEngineering {
     std::uint64_t startedTurn{}, completedTurn{};
 };
 
+// Whole 1 kt units. Deposit and surface cache are physical and independent.
+struct XenocrystalSite {
+    std::uint32_t original{}, remaining{}, surface{}, extractedLastYear{};
+    bool operator==(const XenocrystalSite&) const = default;
+};
+struct XenocrystalObservation {
+    XenocrystalSite site;
+    std::uint64_t observedTurn{};
+    bool depositSurveyed{};
+    std::uint64_t depositObservedTurn{};
+    std::uint8_t stockPhase{}; // 0: observation during the year; 1: completed planning boundary.
+};
+struct ResonanceLaboratory {
+    bool started{}, active{true}, operational{};
+    std::uint32_t work{}, crystalsPaid{};
+    MineralCargo invested;
+    PlayerId builder{};
+    std::uint64_t startedTurn{}, completedTurn{};
+};
+enum class ResonanceAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetActive };
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -633,6 +655,8 @@ struct Planet {
     bool aftermathKnownLocally{true}; // False on foreign projections, even if ownership intel is stale.
     PlanetaryEngineering engineering;
     std::vector<ScienceSample> scienceSamples;
+    XenocrystalSite xenocrystal;
+    ResonanceLaboratory resonanceLab;
 };
 
 struct OrbitalStation {
@@ -668,6 +692,9 @@ struct PlanetSurveySnapshot {
     std::optional<PlanetEnvironment> environment;
     std::optional<PlanetEnvironment> naturalEnvironment;
     PlanetaryEngineering engineering; // Dated visible work; private investment is redacted.
+    std::optional<XenocrystalObservation> xenocrystal; // DeepSurvey only, frozen at observation.
+    ResonanceLaboratory resonanceLab; // Private project evidence captured for its owner only.
+    std::optional<std::uint32_t> resonanceQueueIndex; // Frozen scheduling, including completion/removal.
 };
 
 struct SystemSurveyKnowledge {
@@ -756,6 +783,10 @@ enum class PlayerReportKind {
     SampleDelivered,
     SampleDepleted,
     SampleHoldFull,
+    XenocrystalDiscovered,
+    XenocrystalAcquired,
+    XenocrystalDepleted,
+    ResonanceProjectStatus,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1140,7 +1171,8 @@ inline constexpr std::size_t kMaximumComputerDecisionReasonBytes = 240;
 inline constexpr std::size_t kMaximumComputerFleetGoals = 128;
 
 enum class ComputerFleetGoalKind : std::uint8_t {
-    Survey, Colonize, Resupply, Gather, Defend, Raid, Bombard, Invade, InvestigateObject
+    Survey, Colonize, Resupply, Gather, Defend, Raid, Bombard, Invade, InvestigateObject,
+    ExoticMining, ExoticHauling
 };
 
 struct ComputerFleetGoal {
@@ -1295,6 +1327,7 @@ enum class FleetCargoKind {
     Boranium,
     Germanium,
     All,
+    Xenocrystal,
 };
 
 struct FleetArrivalAction {
@@ -1360,6 +1393,7 @@ struct FleetTelemetry {
     std::uint64_t lastMovedTurn{};
     std::uint64_t lastServiceTurn{};
     std::vector<ScienceSample> scienceSamples;
+    std::uint32_t xenocrystal{};
 };
 
 struct PendingFleetCommand {
@@ -1415,6 +1449,7 @@ struct Fleet {
     std::uint64_t lastMovedTurn{};
     std::uint64_t lastServiceTurn{};
     std::vector<ScienceSample> scienceSamples;
+    std::uint32_t xenocrystal{};
 };
 
 struct Minefield {
@@ -1489,6 +1524,7 @@ struct PendingMobileBaseTransfer {
     MineralCargo minerals;
     double fuelAmount{}, sourceReserve{};
     bool fuelOnly{};
+    std::uint32_t xenocrystal{};
 };
 
 struct GameState {
@@ -1715,6 +1751,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::PlanetaryRadar: return 16;
     case ProductionKind::Terraforming: return kTerraformingCost;
     case ProductionKind::OrbitalMirrors: case ProductionKind::OrbitalShades: return 2400;
+    case ProductionKind::ResonanceLaboratory: return 600;
     }
     return kColonyShipCost;
 }

@@ -76,6 +76,7 @@ QString actionName(const FleetArrivalAction& action)
         case FleetCargoKind::Boranium: return QString("Boranium");
         case FleetCargoKind::Germanium: return QString("Germanium");
         case FleetCargoKind::All: return QString("cargo");
+        case FleetCargoKind::Xenocrystal: return QString("xenocrystals");
         }
         return QString("cargo");
     };
@@ -359,7 +360,9 @@ QString routeForecast(
                 if (leg.targetFleet != 0) outcome = "; moving-target rendezvous completed";
                 break;
             case FleetArrivalActionKind::LoadAllAvailable:
-                if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
+                if (leg.arrivalAction.cargo == FleetCargoKind::Xenocrystal) {
+                    outcome = QString("; projected xenocrystals aboard: %1 (received surface-stock estimate)").arg(after->xenocrystal);
+                } else if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
                     outcome = QString("; projected colonists aboard: %1")
                                   .arg(static_cast<qulonglong>(after->colonists));
                 } else if (leg.arrivalAction.cargo != FleetCargoKind::All) {

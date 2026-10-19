@@ -13,6 +13,7 @@
 #include "suns/mobile_base.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/science_samples.hpp"
+#include "suns/exotic_materials.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -31,11 +32,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 86;
+constexpr quint32 kSaveFormatVersion = 87;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 32;
+constexpr quint32 kTurnOrderFormatVersion = 33;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -233,7 +234,7 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
     quint64 reserve{};
     stream >> reserve;
     value.reservePopulation = migratedPopulation(stream, reserve, 1000);
-    readEnum(stream, value.cargo, static_cast<quint8>(FleetCargoKind::All));
+    readEnum(stream, value.cargo, static_cast<quint8>(gReadSaveFormatVersion >= 87 ? FleetCargoKind::Xenocrystal : FleetCargoKind::All));
     if (gReadSaveFormatVersion >= 54) {
         quint32 endpoint{};
         stream >> endpoint;
@@ -689,7 +690,7 @@ void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 
 void readProductionItem(QDataStream& stream, ProductionItem& value)
 {
-    const auto newestKind = gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming
+    const auto newestKind = gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming
         : gReadSaveFormatVersion >= 24 ? ProductionKind::OrbitalStation : ProductionKind::Research;
     if (!readEnum(stream, value.kind, quint8(newestKind))) return;
     quint32 cost{}, design{};
@@ -1045,7 +1046,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1057,7 +1058,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     if (!readEnum(stream, value.kind, static_cast<quint8>(newestEventKind))) return;
     if (!readEnum(stream, value.severity, static_cast<quint8>(GameEventSeverity::Critical))) return;
     stream >> star >> planet >> fleet >> shipDesign;
-    if (!readEnum(stream, value.productionKind, static_cast<quint8>(gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : ProductionKind::OrbitalStation))) return;
+    if (!readEnum(stream, value.productionKind, static_cast<quint8>(gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : ProductionKind::OrbitalStation))) return;
     stream >> value.position.x >> value.position.y >> quantity;
     const auto newestSurveyLevel = gReadSaveFormatVersion >= 28
         ? SurveyLevel::DeepSurvey
@@ -1641,7 +1642,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -1659,7 +1660,7 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 fleet{};
         quint32 shipDesign{};
         stream >> observedTurn >> deliveryTurn >> star >> planet >> fleet >> shipDesign;
-        const auto newestProductionKind = gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
+        const auto newestProductionKind = gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
             ? ProductionKind::OrbitalStation
             : ProductionKind::Research;
         if (!readEnum(
@@ -2322,6 +2323,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "planetary_engineering_save.inc"
 #include "strategic_save.inc"
 #include "science_samples_save.inc"
+#include "exotic_materials_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -2570,6 +2572,11 @@ void writeOrder(QDataStream& stream, const Order& order)
                 << quint32(concrete.destination.planet) << quint32(concrete.destination.fleet) << quint32(concrete.sample);
         } else if constexpr (std::is_same_v<T, ProcessScienceSampleOrder>) {
             stream << quint8{29} << quint32(concrete.colony) << quint32(concrete.sample) << quint8(concrete.retain);
+        } else if constexpr (std::is_same_v<T, TransferXenocrystalOrder>) {
+            stream << quint8{30} << quint32(concrete.source.planet) << quint32(concrete.source.fleet)
+                << quint32(concrete.destination.planet) << quint32(concrete.destination.fleet) << quint32(concrete.amount);
+        } else if constexpr (std::is_same_v<T, SetResonanceLaboratoryOrder>) {
+            stream << quint8{31} << quint32(concrete.colony); writeEnum(stream, concrete.action); stream << quint8(concrete.active);
         } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
             stream << quint8{26} << quint32(concrete.source) << quint32(concrete.destination) << concrete.amount << concrete.sourceReserve;
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
@@ -2647,7 +2654,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         stream >> colony;
         value.colony = static_cast<PlanetId>(colony);
-        const auto newestKind = gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
+        const auto newestKind = gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
             ? ProductionKind::OrbitalStation
             : ProductionKind::Research;
         if (!readEnum(stream, value.kind, static_cast<quint8>(newestKind))) return false;
@@ -2900,7 +2907,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{}, quantity{};
         stream >> colony;
         value.colony = colony;
-        if (!readEnum(stream, value.kind, quint8(gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : ProductionKind::Terraforming))) return false;
+        if (!readEnum(stream, value.kind, quint8(gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : ProductionKind::Terraforming))) return false;
         stream >> quantity;
         value.quantity = quantity;
         if (!readEnum(stream, value.automation, quint8(ProductionAutomation::MaxTerraform))) return false;
@@ -2983,6 +2990,22 @@ bool readOrder(QDataStream& stream, Order& order)
         if (!value.source || !value.destination || value.source == value.destination || !std::isfinite(value.amount)
             || value.amount <= 0 || !std::isfinite(value.sourceReserve) || value.sourceReserve < 0) markCorrupt(stream);
         order=value; return stream.status()==QDataStream::Ok;
+    }
+    case 30: {
+        if (gReadSaveFormatVersion < 87) { markCorrupt(stream); return false; }
+        TransferXenocrystalOrder value;
+        stream >> value.source.planet >> value.source.fleet >> value.destination.planet >> value.destination.fleet >> value.amount;
+        if (bool(value.source.planet) == bool(value.source.fleet) || bool(value.destination.planet) == bool(value.destination.fleet)
+            || !value.amount || value.amount > kMaximumXenocrystal) markCorrupt(stream);
+        order = value; return stream.status() == QDataStream::Ok;
+    }
+    case 31: {
+        if (gReadSaveFormatVersion < 87) { markCorrupt(stream); return false; }
+        SetResonanceLaboratoryOrder value; quint8 active{}; stream >> value.colony;
+        if (!readEnum(stream, value.action, quint8(ResonanceAction::SetActive))) return false;
+        stream >> active; value.active = active != 0;
+        if (!value.colony || active > 1) markCorrupt(stream);
+        order = value; return stream.status() == QDataStream::Ok;
     }
     case 27: {
         if(gReadSaveFormatVersion<85) { markCorrupt(stream); return false; }
@@ -3128,6 +3151,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeFriendlyRadar(stream, data.state);
     writeReportSources(stream, data.state);
     writeScienceSamples(stream, data.state);
+    writeExoticMaterials(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3243,6 +3267,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (version >= 72) readFriendlyRadar(stream, loaded.state);
     if (version >= 73) readReportSources(stream, loaded.state);
     if (version >= 86) readScienceSamples(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
+    if (version >= 87) readExoticMaterials(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);
@@ -3437,7 +3462,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

@@ -1,4 +1,5 @@
 #include "suns/science_samples.hpp"
+#include "suns/exotic_materials.hpp"
 #include "suns/game_state.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/deep_space.hpp"
@@ -1209,7 +1210,7 @@ double fleet_cargo_capacity(const GameState& state, const Fleet& fleet)
 
 double fleet_cargo_used(const GameState&, const Fleet& fleet)
 {
-    return colonist_cargo_mass(fleet.colonists) + mineral_cargo_mass(fleet.minerals) + science_sample_mass(fleet.scienceSamples);
+    return colonist_cargo_mass(fleet.colonists) + mineral_cargo_mass(fleet.minerals) + science_sample_mass(fleet.scienceSamples) + fleet.xenocrystal;
 }
 
 double fleet_gross_mass(const GameState& state, const Fleet& fleet)
@@ -1532,8 +1533,19 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
 {
     const auto* planet = find_planet_at_star(state, star);
     if (!planet || level < SurveyLevel::BasicScan) return std::nullopt;
-    if (level >= SurveyLevel::OrbitalSurvey)
-        return PlanetSurveySnapshot{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
+    if (level >= SurveyLevel::OrbitalSurvey) {
+        PlanetSurveySnapshot result{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
+        if (planet->owner == player) {
+            result.resonanceLab = planet->resonanceLab;
+            const auto item = std::find_if(planet->productionQueue.begin(), planet->productionQueue.end(),
+                [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
+            if (item != planet->productionQueue.end()) result.resonanceQueueIndex = std::uint32_t(item - planet->productionQueue.begin());
+        }
+        if (level >= SurveyLevel::DeepSurvey) result.xenocrystal = XenocrystalObservation{planet->xenocrystal, observedTurn, true, observedTurn,
+            std::uint8_t(observedTurn <= state.turn)};
+        if (result.xenocrystal && planet->owner && planet->owner != player) result.xenocrystal->site.surface = 0;
+        return result;
+    }
     const auto habitability = player_planet_habitability(state, player, *planet, observedTurn);
     std::uint64_t mixed = state.galaxySeed
         ^ (static_cast<std::uint64_t>(player) << 32U)
@@ -1644,7 +1656,10 @@ void set_survey_level(
     if (captureObservation && level >= SurveyLevel::BasicScan && updated != it->surveyKnowledge.end()
         && observedTurn >= updated->observedTurn
         && (level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey)) {
+        const auto oldExotic = updated->planetSnapshot ? updated->planetSnapshot->xenocrystal : std::nullopt;
         updated->planetSnapshot = capture_planet_survey(state, player, star, level, observedTurn);
+        if (oldExotic && updated->planetSnapshot && !updated->planetSnapshot->xenocrystal)
+            updated->planetSnapshot->xenocrystal = oldExotic;
         if (level >= SurveyLevel::OrbitalSurvey)
             if (const auto* planet = find_planet_at_star(state, star)) updated->observedOwner = planet->owner;
     }
@@ -1979,6 +1994,7 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.waypointQueue = fleet.waypointQueue;
     fleet.telemetry.minerals = fleet.minerals;
     fleet.telemetry.scienceSamples = fleet.scienceSamples;
+    fleet.telemetry.xenocrystal = fleet.xenocrystal;
     fleet.telemetry.ships = fleet.ships;
 }
 
@@ -2065,6 +2081,7 @@ GameState generate_game(const GalaxyConfig& requestedConfig)
     state.nextFleetId = 2;
     generate_unknown_objects(state);
     generate_interstellar_medium(state);
+    generate_xenocrystal_deposits(state);
     refresh_sensor_intel(state);
     record_empire_turn_statistics(state);
     return state;

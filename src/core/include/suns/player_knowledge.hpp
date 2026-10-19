@@ -7,6 +7,9 @@
 
 namespace suns {
 
+// Queue a frozen on-site observation through the normal delayed survey channel.
+void queue_survey_report(GameState&, PlayerId, StarId, FleetId, Position, std::uint64_t, SurveyLevel, bool finalSurfaceObservation = false);
+
 // Record a system contact, or a basic planetary scan when the footprint comes
 // from a penetrating scanner, for every system crossed during movement.
 // Physical observation is authoritative, but owner knowledge changes only

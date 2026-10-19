@@ -135,7 +135,7 @@ std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId 
         return "A live command link and no commands in transit are required.";
     const auto* player = find_player(s, owner);
     if (player->race.primaryTrait != PrimaryRaceTrait::StargateSpecialist
-        && (fleet->colonists || mineral_cargo_mass(fleet->minerals) > 0.000001))
+        && (fleet->colonists || mineral_cargo_mass(fleet->minerals) > 0.000001 || fleet->xenocrystal))
         return "Generalist gates cannot transport cargo or colonists.";
     const auto* from = station_stargate(*find_orbital_station_at_planet(s, source));
     const auto* to = station_stargate(*find_orbital_station_at_planet(s, destination));

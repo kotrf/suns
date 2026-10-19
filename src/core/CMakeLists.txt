@@ -22,6 +22,7 @@ add_library(suns_core
     src/planetary_recovery.cpp
     src/unknown_objects.cpp
     src/science_samples.cpp
+    src/exotic_materials.cpp
     src/interstellar_medium.cpp
     src/terraforming.cpp
     src/planetary_engineering.cpp

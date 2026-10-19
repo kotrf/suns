@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/reconnaissance.hpp"
@@ -71,6 +72,15 @@ const std::vector<ResearchUnlock>& research_unlocks()
             ResearchUnlock unlock{ResearchField::Construction,14,name,
                 "Long climate project: 2400 production, I/B/G 240/120/240 kt, at most 80 work/year. Needs a friendly Starbase or Fortress with a shipyard; changes effective temperature by up to 10 points while supported.", {}};
             unlock.extraLevels[std::size_t(ResearchField::Energy)]=14; unlock.planetaryEngineering=true; entries.push_back(std::move(unlock));
+        }
+        {
+            ResearchUnlock mining{ResearchField::Construction, 8, "Xenocrystal extraction",
+                "Remote mining robots extract whole 1 kt crystals from a received DeepSurvey deposit: one per mining ship/year, up to four per planet/year. Transport the surface cache physically.", {}};
+            mining.extraLevels[std::size_t(ResearchField::Electronics)] = 8; entries.push_back(std::move(mining));
+            ResearchUnlock lab{ResearchField::Energy, 16, "Resonance laboratory",
+                "Optional colony laboratory: 32 native-field RP/year per retained, studied artifact outside the empire focus. Deliver eight xenocrystals; 600 work (60/year) and I/B/G 120/60/120. Friendly Starbase/Fortress with shipyard required.", {}};
+            lab.extraLevels[std::size_t(ResearchField::Electronics)] = 16;
+            lab.extraLevels[std::size_t(ResearchField::Construction)] = 14; entries.push_back(std::move(lab));
         }
         for (const auto& gate : stargate_technologies()) {
             ResearchUnlock unlock{ResearchField::Energy, gate.energy, gate.name,
@@ -413,6 +423,7 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
             empires[i].name + " Orbital Dock", OrbitalStationHullType::OrbitalDock,
             {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}});
     }
+    generate_xenocrystal_deposits(state);
     refresh_sensor_intel(state);
     record_empire_turn_statistics(state);
     return state;
@@ -498,6 +509,24 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             known.precursorArtifacts.present = known_precursor_artifact_hint(
                 host, playerId, planet.id).value_or(false);
         }
+        // Ownership does not deliver remote construction telemetry. Both the
+        // installation and its remaining queue work come from the same packet.
+        known.resonanceLab = {};
+        std::erase_if(known.productionQueue, [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
+        if (known.owner == playerId) {
+            const auto intel = std::find_if(player->surveyKnowledge.begin(), player->surveyKnowledge.end(),
+                [&](const auto& entry) { return entry.star == planet.star; });
+            if (intel != player->surveyKnowledge.end() && intel->planetSnapshot) {
+                const auto& snapshot = *intel->planetSnapshot;
+                known.resonanceLab = snapshot.resonanceLab;
+                if (snapshot.resonanceQueueIndex) {
+                    const auto index = std::min<std::size_t>(*snapshot.resonanceQueueIndex, known.productionQueue.size());
+                    known.productionQueue.insert(known.productionQueue.begin() + index,
+                        {ProductionKind::ResonanceLaboratory, kResonanceWork - known.resonanceLab.work});
+                }
+            }
+        }
+        known.xenocrystal = known_xenocrystal(host, playerId, planet.id).value_or(XenocrystalObservation{}).site;
         state.planets.push_back(known);
     }
     for (const auto& design : host.shipDesigns) if (design.owner == playerId) {

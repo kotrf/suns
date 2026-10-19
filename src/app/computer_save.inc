@@ -58,7 +58,7 @@ void readComputerControllers(QDataStream& stream, GameState& state)
                 ComputerFleetGoal goal;
                 quint64 issued{}, review{};
                 stream >> goal.fleet;
-                const auto maximumKind = gReadSaveFormatVersion >= 79 ? ComputerFleetGoalKind::InvestigateObject : gReadSaveFormatVersion >= 69
+                const auto maximumKind = gReadSaveFormatVersion >= 87 ? ComputerFleetGoalKind::ExoticHauling : gReadSaveFormatVersion >= 79 ? ComputerFleetGoalKind::InvestigateObject : gReadSaveFormatVersion >= 69
                     ? ComputerFleetGoalKind::Invade : ComputerFleetGoalKind::Resupply;
                 if (!readEnum(stream, goal.kind, quint8(maximumKind))) return;
                 stream >> goal.target >> issued >> review;

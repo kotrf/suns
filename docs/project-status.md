@@ -1,6 +1,42 @@
 # Project status and development handoff
 
-## Implementation branch — 19 October 2026: physical science samples
+## Verified checkpoint — 19 October 2026: main after #220
+
+Main is [1155f53](https://github.com/kotrf/suns/commit/1155f531d62e9e57d6cb4faf4d3baffdf32b6965)
+after [#220](https://github.com/kotrf/suns/pull/220): physical science samples and
+observation-gated artifacts, including the review fixes for cargo conservation
+and stale telemetry. Main formats are **save v86 / orders v32**. The rare-material
+implementation below is a separate review branch; #63 remains open.
+
+## Implementation branch — 19 October 2026: rare exotic materials
+
+`codex/rare-exotic-materials` starts from verified main
+[1155f53](https://github.com/kotrf/suns/commit/1155f531d62e9e57d6cb4faf4d3baffdf32b6965),
+the merge of [#220](https://github.com/kotrf/suns/pull/220). That main has physical
+science samples, the review fixes, and save v86 / orders v32.
+
+The first [#63 slice](rare-exotic-materials.md) adds clustered finite xenocrystal
+deposits revealed by delivered DeepSurvey, remote extraction into physical surface
+caches, whole-unit cargo and an optional resonance laboratory. The laboratory
+consumes eight delivered units once and enables retained artifacts to research
+outside the main focus. It preserves paid work through pause/cancel/capture;
+ordinary ships, gates and climate projects keep their existing recipes.
+The branch adds a dedicated UI, fair basic computer use and save v87 / orders v33.
+Validation belongs to the implementation PR. #63 stays open for further materials
+and applications. Merge is left for review; next major direction remains #60,
+then #55/#46, with broader #54/#61/#56 work still open.
+
+PR #221 review follow-up prevents laboratory completion from creating a ship,
+uses received owner snapshots for laboratory state and queue work, and routes
+crystal exchanges through mobile-base docking and delayed service commands.
+Service deliveries occur after production and cannot fund that year's forecast.
+The save/load regression also corrected the pre-existing radar-contact hull
+bound that rejected Expedition Base observations.
+The repeat review also puts immediate fleet and surface exchanges in one stable
+service order; previously due commands retain their saved order ahead of new
+submissions. Remote commands still in transit reserve no capacity or material.
+
+## Historical implementation — 19 October 2026: physical science samples
 
 `codex/field-science-samples` is based on main
 [2aaca80](https://github.com/kotrf/suns/commit/2aaca809f3829a7a43631d12825fda942a7ee0cd)
@@ -12,7 +48,7 @@ research. Computer empires use the same received knowledge and ordinary orders.
 Save v86 / orders v32 preserve separate physical/confirmed/in-flight manifests.
 Validation results belong to the implementation PR; #63 is separate work.
 
-## Verified checkpoint — 19 October 2026
+## Historical checkpoint — 19 October 2026: before #220
 
 Main is `2aaca80` after [#219](https://github.com/kotrf/suns/pull/219), with orbital
 mirrors/shades, projected research settings, legacy conquest-save recovery and

@@ -117,3 +117,12 @@ retain their original rules and do not gain physical terraforming. Weapons now
 supports radiation terraforming; this is still not a complete combat tree.
 Each empire researches independently, including remote
 players whose settings arrive through turn-order envelopes.
+
+## Optional parallel artifact science
+
+A paid [resonance laboratory](rare-exotic-materials.md) lets retained artifacts
+produce 32 RP/year in their own fields outside the chosen empire focus, subject
+to their delivered-study and active-allocation gates. These are delayed scientific
+reports, shown separately in Research; focused artifacts retain their ordinary
+bonus and are not counted twice. The laboratory requires physically delivered
+xenocrystal, while existing research and ship/station recipes remain available.
