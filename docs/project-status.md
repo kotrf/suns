@@ -1,5 +1,13 @@
 # Project status and development handoff
 
+## Verified checkpoint — 19 October 2026: main after #220
+
+Main is [1155f53](https://github.com/kotrf/suns/commit/1155f531d62e9e57d6cb4faf4d3baffdf32b6965)
+after [#220](https://github.com/kotrf/suns/pull/220): physical science samples and
+observation-gated artifacts, including the review fixes for cargo conservation
+and stale telemetry. Main formats are **save v86 / orders v32**. The rare-material
+implementation below is a separate review branch; #63 remains open.
+
 ## Implementation branch — 19 October 2026: rare exotic materials
 
 `codex/rare-exotic-materials` starts from verified main
@@ -30,7 +38,7 @@ research. Computer empires use the same received knowledge and ordinary orders.
 Save v86 / orders v32 preserve separate physical/confirmed/in-flight manifests.
 Validation results belong to the implementation PR; #63 is separate work.
 
-## Verified checkpoint — 19 October 2026
+## Historical checkpoint — 19 October 2026: before #220
 
 Main is `2aaca80` after [#219](https://github.com/kotrf/suns/pull/219), with orbital
 mirrors/shades, projected research settings, legacy conquest-save recovery and
