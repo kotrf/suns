@@ -45,13 +45,20 @@ pending orders. These small fixed rewards are prototype balance.
 Each specimen is an indivisible 5 kt item, sharing the hold with colonists and
 minerals and contributing to gross mass, flight fuel and gate limits. Local
 transfers require owned co-located endpoints, current local contact for fleets
-and destination capacity. Pending transfers/dispositions replay in order.
+and destination capacity. Previews require current received telemetry at both
+fleet endpoints: a historical manifest stays visible but cannot authorize a
+transfer or a subsequent analysis/activation. Pending transfers/dispositions
+replay in order.
 
-Merging preserves samples in the surviving FleetId. Splitting keeps as many whole
+Manual and on-arrival merging preserve samples in the surviving FleetId, with
+received evidence separate from the physical combined inventory. A merge over
+the 64-specimen bound leaves both fleets intact. Splitting keeps as many whole
 samples as fit in the source, moves the rest into the detachment, then shares bulk
 cargo across the remaining free holds. Impossible indivisible placement rejects
-the split. Combat retains only samples fitting the surviving capacity and reduces
-bulk cargo within the remaining space. Lost samples do not regenerate.
+the split. Integer population is allocated within both holds before minerals;
+both results must fit before the split commits. Combat retains only samples
+fitting the surviving capacity and reduces bulk cargo within the remaining
+space. Lost samples do not regenerate.
 Colonization deposits carried specimens before dismantling the fleet.
 
 Surface conquest keeps specimens and deactivates the former owner's instruments.

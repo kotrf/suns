@@ -105,6 +105,49 @@ void exports_and_order_exchange()
     const auto resolved = TurnProcessor{}.process(host.state, {orders.orders});
     assert(resolved.planets[0].scienceSamples == host.state.planets[0].scienceSamples);
 }
+void colonist_only_split_produces_a_reloadable_save()
+{
+    auto save = save_fixture(); auto& s = save.state; auto& f = s.fleets[0];
+    s.shipDesigns[1].hull = ShipHullType::LightTransport;
+    s.shipDesigns[1].components = {ShipComponentType::FuelMizer}; s.shipDesigns[1].placements.clear();
+    f.ships = {{f.design, 1}, {s.shipDesigns[1].id, 9}}; f.colonists = 11'000;
+    s.nextFleetId = 2;
+    save.state = TurnProcessor{}.process(s, {{1, {SplitFleetOrder{1, {{f.design, 1}, {s.shipDesigns[1].id, 1}}}}}});
+    assert(save.state.fleets.size() == 2);
+    QTemporaryDir dir; QString error; const auto path = dir.filePath("split.suns");
+    assert(write_save_game_file(path, save, error)); SaveGameData loaded;
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.fleets.size() == 2);
+    assert(loaded.state.fleets[0].colonists + loaded.state.fleets[1].colonists == 11'000);
+    for (const auto& part : loaded.state.fleets)
+        assert(fleet_cargo_used(loaded.state, part) <= fleet_cargo_capacity(loaded.state, part) + 1e-6);
+}
+void merged_historical_manifests_stay_reloadable()
+{
+    for (const auto onArrival : {false, true}) {
+        auto save = save_fixture(); auto& s = save.state; auto& f = s.fleets[0];
+        f.position = {900, 0}; f.telemetry.position = f.position;
+        auto target = f; target.id = 2; target.scienceSamples.clear();
+        // Older reports can name specimens no longer physically aboard either fleet.
+        for (UnknownObjectId id = 9; id < 73; ++id) {
+            f.telemetry.scienceSamples.push_back({id, UnknownObjectKind::AncientProbe, false});
+            target.telemetry.scienceSamples.push_back({id + 64, UnknownObjectKind::AncientProbe, false});
+        }
+        if (onArrival) {
+            f.targetFleet = 2; f.destination = target.position;
+            f.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};
+        }
+        s.nextFleetId = 3; s.fleets.push_back(target);
+        save.state = TurnProcessor{}.process(s, onArrival ? std::vector<PlayerOrders>{}
+            : std::vector<PlayerOrders>{{1, {MergeFleetsOrder{2, 1}}}});
+        assert(save.state.fleets.size() == 1 && save.state.fleets[0].scienceSamples.size() == 1);
+        assert(save.state.fleets[0].telemetry.scienceSamples.size() == 64);
+        QTemporaryDir dir; QString error; const auto path = dir.filePath("merged.suns");
+        assert(write_save_game_file(path, save, error)); SaveGameData loaded;
+        assert(read_save_game_file(path, loaded, error));
+        assert(loaded.state.fleets[0].scienceSamples[0].source == 7);
+    }
+}
 }
 namespace suns {
 struct MainWindowTestAccess {
@@ -114,6 +157,9 @@ struct MainWindowTestAccess {
     }
     static const auto& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
     static const auto& state(const MainWindow& w) { return w.state_; }
+    static void orders(MainWindow& w, std::vector<Order> orders) {
+        w.pendingOrders_.orders = std::move(orders); w.rebuildScene();
+    }
     static QString researchSummary(MainWindow& w) { w.refreshResearchPanel(); return w.researchSummary_->text(); }
 };
 }
@@ -162,12 +208,45 @@ void editor_authors_orders_without_mutating_physical_inventory(MainWindow& w)
     MainWindowTestAccess::load(w, boosted); w.installResearch();
     assert(MainWindowTestAccess::researchSummary(w).contains("includes 4 from retained artifacts"));
 }
+void stale_manifest_cannot_transfer_or_create_a_phantom_artifact(MainWindow& w)
+{
+    auto s = fixture(); auto& f = s.fleets[0];
+    f.telemetry.scienceSamples = f.scienceSamples; f.telemetry.observedTurn = s.turn - 1;
+    f.position = {900, 0};
+    s.players[0].technology.researchActive = true;
+    s.players[0].technology.focus = ResearchField::Electronics;
+    s.players[0].technology.researchAllocationPercent = 50;
+    MainWindowTestAccess::load(w, s);
+    auto* tree = w.findChild<QTreeWidget*>("scienceSampleInventory");
+    auto* transfer = w.findChild<QPushButton*>("transferScienceSample");
+    auto* analyze = w.findChild<QPushButton*>("analyzeScienceSample");
+    const auto select = [&](UnknownObjectId id) {
+        for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            if (tree->topLevelItem(i)->data(0, Qt::UserRole).toUInt() == id) {
+                tree->setCurrentItem(tree->topLevelItem(i)); return;
+            }
+        assert(false);
+    };
+    select(7); assert(!transfer->isEnabled() && !analyze->isEnabled());
+    assert(tree->currentItem()->text(1).contains("observed year 9"));
+    transfer->click(); assert(MainWindowTestAccess::orders(w).empty());
+    select(8); assert(!transfer->isEnabled()); // Stale fleet cannot receive local cargo either.
+    MainWindowTestAccess::orders(w, {TransferScienceSampleOrder{{0, 1}, {1, 0}, 7},
+        ProcessScienceSampleOrder{1, 7, true}});
+    select(7); assert(!analyze->isEnabled());
+    assert(tree->currentItem()->data(1, Qt::UserRole).toULongLong() == 1); // Still aboard fleet #1.
+    assert(!MainWindowTestAccess::researchSummary(w).contains("includes 4 from retained artifacts"));
+    assert(MainWindowTestAccess::state(w).fleets[0].scienceSamples.size() == 1);
+    assert(MainWindowTestAccess::state(w).planets[0].scienceSamples.size() == 1);
+}
 }
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
-    persistence_and_migration(); exports_and_order_exchange();
+    persistence_and_migration(); exports_and_order_exchange(); colonist_only_split_produces_a_reloadable_save();
+    merged_historical_manifests_stay_reloadable();
     MainWindow window; window.installUnknownObjects(); window.installScienceSamples();
     editor_authors_orders_without_mutating_physical_inventory(window);
+    stale_manifest_cannot_transfer_or_create_a_phantom_artifact(window);
     std::cout << "Science samples UI, saves, migrations and player exchange passed\n";
 }

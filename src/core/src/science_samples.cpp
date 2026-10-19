@@ -72,6 +72,18 @@ bool transfer_science_sample(GameState& state, PlayerId owner, const TransferSci
     }
     return true;
 }
+bool preview_science_sample_transfer(GameState& state, PlayerId owner, const TransferScienceSampleOrder& order)
+{
+    for (const auto endpoint : {order.source, order.destination}) {
+        if (!endpoint.fleet) continue;
+        const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+            [&](const auto& f) { return f.id == endpoint.fleet && f.owner == owner; });
+        // Inspect the received stamp directly. Re-evaluating contact from the
+        // projected position could synthesize "current" telemetry at an old orbit.
+        if (fleet == state.fleets.end() || fleet->telemetry.observedTurn != state.turn) return false;
+    }
+    return transfer_science_sample(state, owner, order);
+}
 bool unload_science_samples(GameState& state, Planet& colony, Fleet& fleet, std::uint64_t turn)
 {
     const auto* star = find_star(state, colony.star);

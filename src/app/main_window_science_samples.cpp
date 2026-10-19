@@ -40,6 +40,7 @@ void MainWindow::installScienceSamples()
     auto* destination = new QComboBox(body); destination->setObjectName("scienceSampleDestination"); layout->addWidget(destination);
     auto* row = new QHBoxLayout;
     auto* transfer = new QPushButton("Transfer specimen", body); transfer->setObjectName("transferScienceSample"); row->addWidget(transfer);
+    transfer->setToolTip("Requires current received telemetry and a live local link at both fleet endpoints.");
     auto* retain = new QPushButton("Retain / activate artifact", body); retain->setObjectName("retainScienceSample"); row->addWidget(retain);
     auto* analyze = new QPushButton("Analyze (consumes specimen)", body); analyze->setObjectName("analyzeScienceSample"); row->addWidget(analyze);
     layout->addLayout(row);
@@ -54,7 +55,7 @@ void MainWindow::installScienceSamples()
         auto known = sample_plan(state_, pendingOrders_);
         const auto source = endpoint(selected->data(1, Qt::UserRole).toULongLong());
         const auto id = selected->data(0, Qt::UserRole).toUInt();
-        transfer->setEnabled(transfer_science_sample(known, pendingOrders_.player,
+        transfer->setEnabled(preview_science_sample_transfer(known, pendingOrders_.player,
             {source, endpoint(destination->currentData().toULongLong()), id}));
         const auto kind = UnknownObjectKind(selected->data(2, Qt::UserRole).toUInt());
         if (source.planet) {

@@ -160,6 +160,109 @@ void hidden_recovery_waits_for_immutable_telemetry()
     f.task = FleetTask::RecoverSample;
     recover_science_samples(s, f, s.turn); assert(f.scienceSamples.empty());
 }
+void split_colonists_without_minerals_keeps_both_holds_valid()
+{
+    for (const auto traceMinerals : {0.0, 0.001}) {
+        auto s = fixture();
+        s.shipDesigns[1].hull = ShipHullType::LightTransport;
+        s.shipDesigns[1].components = {ShipComponentType::FuelMizer};
+        s.shipDesigns[1].placements.clear();
+        auto& f = s.fleets[0]; f.ships = {{f.design, 1}, {s.shipDesigns[1].id, 9}};
+        f.scienceSamples = {{7, UnknownObjectKind::AncientProbe, false}};
+        s.unknownObjects[0].sampleRecovered = true;
+        f.colonists = traceMinerals == 0 ? 11'000 : 10'999;
+        f.minerals = {traceMinerals, 0, 0};
+        assert(near(fleet_cargo_capacity(s, f), 115));
+        const auto population = f.colonists;
+        const auto split = next(s, {SplitFleetOrder{1, {{f.design, 1}, {s.shipDesigns[1].id, 1}}}});
+        assert(split.fleets.size() == 2);
+        assert(split.fleets[0].colonists + split.fleets[1].colonists == population);
+        assert(near(split.fleets[0].minerals.ironium + split.fleets[1].minerals.ironium, traceMinerals));
+        assert(split.fleets[0].scienceSamples.size() + split.fleets[1].scienceSamples.size() == 1);
+        for (const auto& part : split.fleets)
+            assert(fleet_cargo_used(split, part) <= fleet_cargo_capacity(split, part) + 1e-6);
+    }
+}
+void route_merges_preserve_samples_and_delayed_manifests()
+{
+    for (const auto remote : {false, true}) {
+        for (const auto travel : {false, true}) {
+            auto s = fixture(); auto& source = s.fleets[0];
+            if (remote) source.position = {900, 0};
+            source.scienceSamples = {{7, UnknownObjectKind::AncientProbe, false}};
+            s.unknownObjects[0].sampleRecovered = true;
+            source.telemetry = confirmed_fleet_telemetry(s, source);
+            source.telemetry.observedTurn = s.turn;
+            source.telemetry.position = source.position; source.telemetry.ships = source.ships;
+            if (remote) source.telemetry.scienceSamples.clear(); // Recovered but not yet received.
+            auto target = source; target.id = 2;
+            target.scienceSamples = {{8, UnknownObjectKind::CompactRemnant, false}};
+            target.telemetry.scienceSamples = target.scienceSamples;
+            if (travel) target.position.x += 1;
+            target.telemetry.position = target.position;
+            const auto destination = target.position;
+            s.unknownObjects.push_back({8, destination, UnknownObjectKind::CompactRemnant, true});
+            s.nextUnknownObjectId = 9; s.nextFleetId = 3; s.fleets.push_back(target);
+            const MoveFleetOrder order{1, destination, 1,
+                {FleetArrivalActionKind::MergeWithFleet}, {}, false, 2};
+            if (remote) { // An onboard route already delivered to the distant expedition.
+                s.fleets[0].targetFleet = 2; s.fleets[0].destination = destination;
+                s.fleets[0].warp = 1; s.fleets[0].arrivalAction = order.arrivalAction;
+            }
+            const auto merged = next(s, remote ? std::vector<Order>{} : std::vector<Order>{order});
+            assert(merged.fleets.size() == 1 && merged.fleets[0].id == 2);
+            const auto& fleet = merged.fleets[0];
+            assert(fleet.scienceSamples.size() == 2);
+            assert(fleet.scienceSamples[0].source == 8 && fleet.scienceSamples[1].source == 7);
+            assert(fleet_cargo_used(merged, fleet) <= fleet_cargo_capacity(merged, fleet) + 1e-6);
+            assert(std::all_of(merged.unknownObjects.begin(), merged.unknownObjects.end(),
+                [](const auto& x) { return x.sampleRecovered; }));
+            if (remote) {
+                const auto received = make_player_view(merged, 1).state.fleets[0].scienceSamples;
+                assert(received.size() == 1 && received[0].source == 8);
+                assert(!fleet.telemetryInTransit.empty());
+                assert(fleet.telemetryInTransit.back().telemetry.scienceSamples.size() == 2);
+            }
+        }
+    }
+    // Reject an unrepresentable combined inventory without consuming either fleet.
+    auto full = fixture(); auto& source = full.fleets[0]; source.ships = {{source.design, 5}};
+    source.scienceSamples = {{7, UnknownObjectKind::AncientProbe, false}};
+    full.unknownObjects[0].sampleRecovered = true;
+    auto target = source; target.id = 2; target.scienceSamples.clear();
+    for (UnknownObjectId id = 8; id < 72; ++id) {
+        target.scienceSamples.push_back({id, UnknownObjectKind::AncientProbe, false});
+        full.unknownObjects.push_back({id, target.position, UnknownObjectKind::AncientProbe, true});
+    }
+    full.nextUnknownObjectId = 72; full.nextFleetId = 3; full.fleets.push_back(target);
+    const auto rejected = next(full, {MoveFleetOrder{1, target.position, 1,
+        {FleetArrivalActionKind::MergeWithFleet}, {}, false, 2}});
+    assert(rejected.fleets.size() == 2);
+    assert(rejected.fleets[0].scienceSamples.size() == 1 && rejected.fleets[1].scienceSamples.size() == 64);
+}
+void stale_telemetry_cannot_authorize_transfer_previews()
+{
+    auto s = fixture(); auto& f = s.fleets[0];
+    f.scienceSamples = {{7, UnknownObjectKind::AncientProbe, false}};
+    s.unknownObjects[0].sampleRecovered = true;
+    f.telemetry = confirmed_fleet_telemetry(s, f); f.telemetry.observedTurn = s.turn - 1;
+    f.position = {900, 0};
+    const PlayerOrders orders{1, {TransferScienceSampleOrder{{0, 1}, {1, 0}, 7},
+        ProcessScienceSampleOrder{1, 7, false}}};
+    const auto preview = projected_cargo_order_state(make_player_view(s, 1).state, orders);
+    assert(preview.fleets[0].scienceSamples.size() == 1 && preview.planets[0].scienceSamples.empty());
+    const auto actual = next(s, orders.orders);
+    assert(actual.fleets[0].scienceSamples.size() == 1 && actual.planets[0].scienceSamples.empty());
+    s.planets[0].scienceSamples = f.scienceSamples; f.scienceSamples.clear(); f.telemetry.scienceSamples.clear();
+    const auto reverse = projected_cargo_order_state(make_player_view(s, 1).state,
+        {1, {TransferScienceSampleOrder{{1, 0}, {0, 1}, 7}}});
+    assert(reverse.planets[0].scienceSamples.size() == 1 && reverse.fleets[0].scienceSamples.empty());
+    // An absent snapshot must not become fresh evidence through the projected orbit either.
+    f.telemetry = {};
+    const auto unconfirmed = projected_cargo_order_state(make_player_view(s, 1).state,
+        {1, {TransferScienceSampleOrder{{1, 0}, {0, 1}, 7}}});
+    assert(unconfirmed.planets[0].scienceSamples.size() == 1 && unconfirmed.fleets[0].scienceSamples.empty());
+}
 void merging_remote_fleets_does_not_reveal_hidden_cargo()
 {
     auto s = fixture(); auto& f = s.fleets[0]; f.position = {900, 0};
@@ -255,6 +358,9 @@ int main()
     hold_capacity_atomic_transfers_and_ordered_previews();
     retained_artifact_requires_observation_and_correct_research();
     split_and_merge_conserve_whole_specimens_and_cargo();
+    split_colonists_without_minerals_keeps_both_holds_valid();
+    route_merges_preserve_samples_and_delayed_manifests();
+    stale_telemetry_cannot_authorize_transfer_previews();
     hidden_recovery_waits_for_immutable_telemetry();
     merging_remote_fleets_does_not_reveal_hidden_cargo();
     computer_uses_received_study_and_returns_physical_cargo();
