@@ -1258,7 +1258,7 @@ void stars_hulls_round_trip_and_previous_format_migration()
     save.playerTokens = {{1, 34}, {2, 35}};
     save.pendingOrders = {1, {}};
     for (const auto& hull : reference_hulls()) {
-        if (hull.type == ShipHullType::ExpeditionBase) continue; // This fixture writes the pre-v84 hull catalog.
+        if (hull.type == ShipHullType::ExpeditionBase || hull.type == ShipHullType::SurveyProbe) continue; // This fixture writes the pre-v84 hull catalog.
         ShipDesign design{save.state.nextShipDesignId++, 1, hull.name, hull.type,
             std::vector<ShipComponentType>(hull.requiredEngines, ShipComponentType::QuickJump5)};
         normalize_ship_design_placement(design);
@@ -1290,7 +1290,7 @@ void stars_hulls_round_trip_and_previous_format_migration()
     assert(write_turn_order_file(orders, packet, error));
     TurnOrderFileData read;
     assert(read_turn_order_file(orders, read, error));
-    assert(read.orders.orders.size() == reference_hulls().size() - 1);
+    assert(read.orders.orders.size() == packet.orders.orders.size());
     for (std::size_t i = 0; i < read.orders.orders.size(); ++i) {
         const auto& before = std::get<CreateShipDesignOrder>(packet.orders.orders[i]);
         const auto& after = std::get<CreateShipDesignOrder>(read.orders.orders[i]);
@@ -1555,7 +1555,8 @@ void equipment_catalog_round_trip()
     value.pendingOrders.player = 1;
     value.state.players.front().technology.levels.fill(26);
     for (const auto& equipment : equipment_technologies()) {
-        auto hull = (equipment.component == ShipComponentType::ExpeditionDock || equipment.component == ShipComponentType::ExpeditionWorkshop) ? ShipHullType::ExpeditionBase
+        auto hull = equipment.component == ShipComponentType::SurveyAutopilot ? ShipHullType::SurveyProbe
+            : (equipment.component == ShipComponentType::ExpeditionDock || equipment.component == ShipComponentType::ExpeditionWorkshop) ? ShipHullType::ExpeditionBase
             : equipment.kind == ShipComponentKind::Bomb ? ShipHullType::B52Bomber
             : equipment.kind == ShipComponentKind::Mining ? ShipHullType::Miner
             : equipment.unarmedTransportOnly ? ShipHullType::SmallFreighter : ShipHullType::Nubian;
@@ -1573,7 +1574,7 @@ void equipment_catalog_round_trip()
     assert(write_save_game_file(path, value, error));
     SaveGameData read;
     assert(read_save_game_file(path, read, error));
-    assert(read.state.shipDesigns.size() == 117);
+    assert(read.state.shipDesigns.size() == value.state.shipDesigns.size());
     for (std::size_t index = 2; index < read.state.shipDesigns.size(); ++index) {
         assert(read.state.shipDesigns[index].components == value.state.shipDesigns[index].components);
         assert(read.state.shipDesigns[index].placements == value.state.shipDesigns[index].placements);
@@ -1584,7 +1585,7 @@ void equipment_catalog_round_trip()
     assert(write_turn_order_file(packetPath, packet, error));
     TurnOrderFileData imported;
     assert(read_turn_order_file(packetPath, imported, error));
-    assert(imported.orders.orders.size() == 115);
+    assert(imported.orders.orders.size() == value.pendingOrders.orders.size());
     assert(std::get<CreateShipDesignOrder>(imported.orders.orders.back()).components.back() == ShipComponentType::Superlatanium);
     auto host = value;
     host.mode = SessionMode::Host;
@@ -1593,7 +1594,7 @@ void equipment_catalog_round_trip()
     assert(write_save_game_file(exportPath, make_player_turn(host, 1), error));
     SaveGameData exported;
     assert(read_save_game_file(exportPath, exported, error));
-    assert(exported.mode == SessionMode::PlayerTurn && exported.state.shipDesigns.size() == 117);
+    assert(exported.mode == SessionMode::PlayerTurn && exported.state.shipDesigns.size() == value.state.shipDesigns.size());
     assert(exported.state.shipDesigns.back().components.back() == ShipComponentType::Superlatanium);
     // v59 has the same record shape but rejects v60 equipment IDs.
     QFile file(path);

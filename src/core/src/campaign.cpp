@@ -183,6 +183,8 @@ const std::vector<ResearchUnlock>& research_unlocks()
                     + " kt cargo; " + std::to_string(int(hull.baseFuelCapacity)) + " mg fuel; "
                     + std::to_string(hull.armor) + " base armor.", {}};
             entry.hull = hull.type;
+            if (hull.type == ShipHullType::SurveyProbe)
+                entry.extraLevels[static_cast<std::size_t>(ResearchField::Electronics)] = 18;
             entries.push_back(std::move(entry));
         }
         entries.push_back({ResearchField::Energy,1,"Colony defenses",
@@ -277,6 +279,7 @@ bool ship_hull_access_applicable(const GameState& state, PlayerId player, ShipHu
 bool ship_hull_available_to_player(const GameState& state, PlayerId player, ShipHullType hull)
 {
     if (!ship_hull_access_applicable(state, player, hull)) return false;
+    if (hull == ShipHullType::SurveyProbe && technology_level(state, player, ResearchField::Electronics) < 18) return false;
     if (const auto* reference = reference_hull(hull))
         return technology_level(state, player, ResearchField::Construction) >= reference->constructionLevel;
     if (hull == ShipHullType::RemoteMiner)

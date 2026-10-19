@@ -1,6 +1,26 @@
 # Project status and development handoff
 
-## Verified checkpoint — 19 October 2026: main after #220
+## Verified checkpoint — 19 October 2026: main after #221
+
+Main is [5f01933](https://github.com/kotrf/suns/commit/5f01933b7dd65f95a663853752f7241c79424658)
+after [#221](https://github.com/kotrf/suns/pull/221). Its tree matches reviewed
+`5edd281`: finite xenocrystal logistics, resonance laboratories and both rounds
+of review corrections. Main formats are **save v87 / orders v33**. #63 remains
+open for further materials/applications.
+
+## Implementation branch — autonomous survey probes #60
+
+`codex/autonomous-survey-probes` starts from that verified main. The first
+[autonomous survey slice](autonomous-survey-probes.md) adds a late paid probe
+hull/autopilot, bounded deterministic survey programmes, separate onboard
+notebooks and delivered HQ updates, normal movement/fuel/combat, dated UI and
+fair basic computer construction/launch. Save **v88 / orders v34** retain physical,
+confirmed and in-flight state separately. Validation belongs to the PR.
+#60 stays open for self-replication, copies, beacons and further applications;
+merge is left for review. Next major direction remains #55/#46.
+
+
+## Historical checkpoint — 19 October 2026: main after #220
 
 Main is [1155f53](https://github.com/kotrf/suns/commit/1155f531d62e9e57d6cb4faf4d3baffdf32b6965)
 after [#220](https://github.com/kotrf/suns/pull/220): physical science samples and
@@ -8,7 +28,7 @@ observation-gated artifacts, including the review fixes for cargo conservation
 and stale telemetry. Main formats are **save v86 / orders v32**. The rare-material
 implementation below is a separate review branch; #63 remains open.
 
-## Implementation branch — 19 October 2026: rare exotic materials
+## Historical implementation — 19 October 2026: rare exotic materials
 
 `codex/rare-exotic-materials` starts from verified main
 [1155f53](https://github.com/kotrf/suns/commit/1155f531d62e9e57d6cb4faf4d3baffdf32b6965),

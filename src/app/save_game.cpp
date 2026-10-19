@@ -14,6 +14,7 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
+#include "suns/survey_probes.hpp"
 
 #include <QDataStream>
 #include <QFile>
@@ -32,19 +33,19 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 87;
+constexpr quint32 kSaveFormatVersion = 88;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 33;
+constexpr quint32 kTurnOrderFormatVersion = 34;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
 
 quint8 newestShipComponent()
 {
-    return static_cast<quint8>(gReadSaveFormatVersion >= 84
-        ? kLastShipComponent : gReadSaveFormatVersion >= 82
+    return static_cast<quint8>(gReadSaveFormatVersion >= 88 ? ShipComponentType::SurveyAutopilot : gReadSaveFormatVersion >= 84
+        ? ShipComponentType::ExpeditionWorkshop : gReadSaveFormatVersion >= 82
         ? ShipComponentType::DeepSpaceRelayKit : gReadSaveFormatVersion >= 81
         ? ShipComponentType::InfinityStargate : gReadSaveFormatVersion >= 60
         ? ShipComponentType::Superlatanium : gReadSaveFormatVersion >= 58
@@ -608,7 +609,7 @@ void readShipDesign(QDataStream& stream, ShipDesign& value)
     value.id = static_cast<ShipDesignId>(id);
     value.owner = static_cast<PlayerId>(owner);
     readString(stream, value.name);
-    const auto newestHull = gReadSaveFormatVersion >= 84 ? ShipHullType::ExpeditionBase : gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+    const auto newestHull = gReadSaveFormatVersion >= 88 ? ShipHullType::SurveyProbe : gReadSaveFormatVersion >= 84 ? ShipHullType::ExpeditionBase : gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
         : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
     if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return;
 
@@ -2324,6 +2325,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "strategic_save.inc"
 #include "science_samples_save.inc"
 #include "exotic_materials_save.inc"
+#include "survey_probes_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -2575,6 +2577,8 @@ void writeOrder(QDataStream& stream, const Order& order)
         } else if constexpr (std::is_same_v<T, TransferXenocrystalOrder>) {
             stream << quint8{30} << quint32(concrete.source.planet) << quint32(concrete.source.fleet)
                 << quint32(concrete.destination.planet) << quint32(concrete.destination.fleet) << quint32(concrete.amount);
+        } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
+            stream << quint8{32} << quint32(concrete.fleet); writeEnum(stream, concrete.action); writeProbeProgram(stream, concrete.program);
         } else if constexpr (std::is_same_v<T, SetResonanceLaboratoryOrder>) {
             stream << quint8{31} << quint32(concrete.colony); writeEnum(stream, concrete.action); stream << quint8(concrete.active);
         } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
@@ -2664,7 +2668,7 @@ bool readOrder(QDataStream& stream, Order& order)
     case 2: {
         CreateShipDesignOrder value;
         readString(stream, value.name);
-        const auto newestHull = gReadSaveFormatVersion >= 84 ? ShipHullType::ExpeditionBase : gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
+        const auto newestHull = gReadSaveFormatVersion >= 88 ? ShipHullType::SurveyProbe : gReadSaveFormatVersion >= 84 ? ShipHullType::ExpeditionBase : gReadSaveFormatVersion >= 56 ? ShipHullType::MetaMorph : gReadSaveFormatVersion >= 55 ? ShipHullType::MiniColonyShip : gReadSaveFormatVersion >= 43 ? ShipHullType::HeavyTransport
             : gReadSaveFormatVersion >= 20 ? ShipHullType::Utility : ShipHullType::RemoteMiner;
         if (!readEnum(stream, value.hull, static_cast<quint8>(newestHull))) return false;
         quint32 count{};
@@ -2999,6 +3003,14 @@ bool readOrder(QDataStream& stream, Order& order)
             || !value.amount || value.amount > kMaximumXenocrystal) markCorrupt(stream);
         order = value; return stream.status() == QDataStream::Ok;
     }
+    case 32: {
+        if (gReadSaveFormatVersion < 88) { markCorrupt(stream); return false; }
+        SetProbeProgramOrder value; stream >> value.fleet;
+        if (!readEnum(stream, value.action, quint8(ProbeAction::UpdateKnowledge))) return false;
+        readProbeProgram(stream, value.program);
+        if (!value.fleet) markCorrupt(stream);
+        order = value; return stream.status() == QDataStream::Ok;
+    }
     case 31: {
         if (gReadSaveFormatVersion < 87) { markCorrupt(stream); return false; }
         SetResonanceLaboratoryOrder value; quint8 active{}; stream >> value.colony;
@@ -3152,6 +3164,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeReportSources(stream, data.state);
     writeScienceSamples(stream, data.state);
     writeExoticMaterials(stream, data.state);
+    writeSurveyProbes(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3268,6 +3281,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (version >= 73) readReportSources(stream, loaded.state);
     if (version >= 86) readScienceSamples(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version >= 87) readExoticMaterials(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
+    if (version >= 88) readSurveyProbes(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);
@@ -3462,7 +3476,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

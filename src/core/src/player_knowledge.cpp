@@ -1,4 +1,5 @@
 #include "suns/player_knowledge.hpp"
+#include "suns/survey_probes.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/planetary_recovery.hpp"
@@ -374,13 +375,14 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
             }
         }
 
-        for (const auto& fleet : state.fleets) {
+        for (auto& fleet : state.fleets) {
             const auto range = strategic_sensor_range(state, fleet,observationTurn);
             const auto medium=medium_active_path_factor(state,fleet.position,star.position);
             if (fleet_active_sensors(fleet,observationTurn) && fleet_has_scanner(state, fleet) && within_range(fleet.position, star.position, range*medium)) {
                 auto level = SurveyLevel::SystemScan;
                 if (same_position(fleet.position, star.position)) {
-                    const auto known = best_observed_level(state, fleet.owner, star.id);
+                    const auto known = (fleet.probe.configured || probe_capable(state, fleet)) ? probe_survey_level(fleet, star.id)
+                        : best_observed_level(state, fleet.owner, star.id);
                     if (known < SurveyLevel::OrbitalSurvey) level = SurveyLevel::OrbitalSurvey;
                     else if (known < SurveyLevel::GeologicalSurvey) level = SurveyLevel::GeologicalSurvey;
                     else level = SurveyLevel::DeepSurvey;
@@ -390,6 +392,8 @@ void observe_current_sensor_coverage(GameState& state, std::uint64_t observation
                                fleet_penetrating_sensor_range(state, fleet)*medium_active_sensor_factor(state,fleet.position)*medium)) {
                     level = SurveyLevel::BasicScan;
                 }
+                if (!state.mediumObserver && (fleet.probe.configured || probe_capable(state, fleet)))
+                    record_probe_survey(fleet, star.id, level, observationTurn);
                 queue_survey_report(
                     state, fleet.owner, star.id, fleet.id, fleet.position, observationTurn, level);
             }

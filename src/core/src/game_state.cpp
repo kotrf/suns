@@ -615,6 +615,10 @@ std::string ship_design_validation_error(const ShipDesign& design)
             return construction_kit_kind(c) != OutpostKind::None;
         }) > 1) return "A constructor may carry only one deep-space construction kit.";
     for (const auto component : design.components) {
+        if (component == ShipComponentType::SurveyAutopilot && design.hull != ShipHullType::SurveyProbe)
+            return "Survey Autopilot requires a Survey Probe hull.";
+        if (design.hull == ShipHullType::SurveyProbe && construction_kit_kind(component) != OutpostKind::None)
+            return "Survey Probes cannot carry construction kits.";
         if ((component == ShipComponentType::ExpeditionDock || component == ShipComponentType::ExpeditionWorkshop)
             && design.hull != ShipHullType::ExpeditionBase)
             return "Expedition service modules require an Expedition Base hull.";

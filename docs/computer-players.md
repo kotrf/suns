@@ -71,3 +71,11 @@ rejection, independent multi-computer envelopes, explicit passes, ordinary
 processor equivalence, bounded journals, fixed-seed replays and unchanged
 decisions/PBEM bytes when hidden opponent state changes. Autonomous expansion
 and combat acceptance under #184 remain open.
+
+## Autonomous survey probes (#60)
+
+Late empires can order a normally paid Survey Probe/Survey Autopilot at a supported
+colony and launch a bounded survey programme from current received telemetry.
+Dedicated probes are excluded from generic expansion routing. Programmes use
+received HQ evidence and independent onboard observations; the AI receives no
+hidden mission state. See [the first slice](autonomous-survey-probes.md).

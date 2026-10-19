@@ -16,10 +16,10 @@ void readReconContact(QDataStream& s,ReconContact& c)
     if(!readEnum(s,c.quality,quint8(ContactQuality::Identified)) || !readEnum(s,c.sensor,quint8(ContactSensor::Passive))) return;
     s >> observed >> seen >> due >> c.sourceFleet >> c.sourceColony >> c.star >> c.massMinimum >> c.massMaximum >> c.shipCount;
     c.observedTurn=observed; c.lastSeenTurn=seen; c.deliveryTurn=due;
-    if(!readCount(s,count) || count>40) { markCorrupt(s); return; }
+    if(!readCount(s,count) || count>quint32(gReadSaveFormatVersion>=88 ? ShipHullType::SurveyProbe : gReadSaveFormatVersion>=84 ? ShipHullType::ExpeditionBase : ShipHullType::MetaMorph)+1) { markCorrupt(s); return; }
     for(quint32 i=0;i<count;++i) {
         ShipHullType h;
-        if(!readEnum(s,h,quint8(gReadSaveFormatVersion>=84 ? ShipHullType::ExpeditionBase : ShipHullType::MetaMorph))) return;
+        if(!readEnum(s,h,quint8(gReadSaveFormatVersion>=88 ? ShipHullType::SurveyProbe : gReadSaveFormatVersion>=84 ? ShipHullType::ExpeditionBase : ShipHullType::MetaMorph))) return;
         c.hulls.push_back(h);
     }
     s >> lost >> jammed; c.lost=lost; c.jammed=jammed;

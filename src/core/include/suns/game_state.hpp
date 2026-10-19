@@ -144,6 +144,7 @@ enum class ShipHullType {
     MiniMorph,
     MetaMorph,
     ExpeditionBase,
+    SurveyProbe,
 };
 
 // Hull access families only; population, combat and economy traits are separate.
@@ -355,9 +356,10 @@ enum class ShipComponentType {
     DeepSpaceRelayKit,
     ExpeditionDock,
     ExpeditionWorkshop,
+    SurveyAutopilot,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::ExpeditionWorkshop;
+inline constexpr auto kLastShipComponent = ShipComponentType::SurveyAutopilot;
 
 enum class ShipComponentKind {
     Engine,
@@ -1371,6 +1373,40 @@ struct MobileBaseProgram {
     bool operator==(const MobileBaseProgram&) const = default;
 };
 
+enum class ProbeFlightMode : std::uint8_t { SafeCruise, Economical };
+enum class ProbeAction : std::uint8_t { Configure, Stop, Resume, UpdateKnowledge };
+enum class ProbeStatus : std::uint8_t { Idle, Travelling, Surveying, Returning, Complete, AwaitingFuel, Damaged, MissingEquipment, ManualPause, Stopped };
+struct ProbeProgram {
+    Position center;
+    double radius{300};
+    SurveyLevel depth{SurveyLevel::DeepSurvey};
+    ProbeFlightMode flight{ProbeFlightMode::SafeCruise};
+    std::uint8_t maxWarp{6};
+    double fuelReserve{20};
+    std::uint32_t maxSystems{12}, maxTurns{100};
+    bool returnHome{true};
+};
+struct ProbeSurvey {
+    StarId star{};
+    SurveyLevel level{SurveyLevel::Detected};
+    std::uint64_t observedTurn{};
+};
+struct ProbeCommand {
+    ProbeAction action{ProbeAction::Configure};
+    ProbeProgram program;
+    std::vector<ProbeSurvey> knowledge; // Immutable HQ evidence at issue time.
+};
+struct ProbeMission {
+    bool configured{}, enabled{};
+    ProbeProgram program;
+    ProbeStatus status{ProbeStatus::Idle};
+    Position origin;
+    std::uint64_t startedTurn{};
+    StarId target{};
+    std::vector<StarId> completed;
+    std::vector<ProbeSurvey> surveys; // Host-only onboard knowledge, omitted from telemetry.
+};
+
 struct FleetTelemetry {
     std::uint64_t observedTurn{};
     Position position;
@@ -1394,6 +1430,7 @@ struct FleetTelemetry {
     std::uint64_t lastServiceTurn{};
     std::vector<ScienceSample> scienceSamples;
     std::uint32_t xenocrystal{};
+    ProbeMission probe;
 };
 
 struct PendingFleetCommand {
@@ -1403,6 +1440,7 @@ struct PendingFleetCommand {
     std::optional<FleetTask> task;
     std::optional<ElectronicsProgram> electronics;
     std::optional<MobileBaseProgram> mobileBase;
+    std::optional<ProbeCommand> probe;
 };
 
 struct PendingFleetTelemetry {
@@ -1450,6 +1488,7 @@ struct Fleet {
     std::uint64_t lastServiceTurn{};
     std::vector<ScienceSample> scienceSamples;
     std::uint32_t xenocrystal{};
+    ProbeMission probe;
 };
 
 struct Minefield {

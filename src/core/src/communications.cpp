@@ -1,4 +1,5 @@
 #include "suns/communications.hpp"
+#include "suns/survey_probes.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
@@ -245,6 +246,7 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
 bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram& program)
 {
     if (program.clearRoute) {
+        pause_probe(fleet);
         fleet.destination.reset();
         fleet.arrivalAction.reset();
         fleet.waypointQueue.clear();
@@ -262,6 +264,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         return false;
     }
 
+    pause_probe(fleet);
     fleet.warp = requestedWarp;
 
     // A travel programme replaces stationary work. Delayed movement commands
@@ -307,11 +310,13 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
 {
     if (task == FleetTask::None) {
         fleet.task = FleetTask::None;
+        pause_probe(fleet);
         return true;
     }
     if (task != FleetTask::RemoteMining) {
         if (!strategic_task_available(state, fleet, task)) return false;
         fleet.task = task;
+        pause_probe(fleet);
         return true;
     }
     if (fleet.destination || fleet.targetFleet != 0
@@ -325,6 +330,7 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
             return planet.owner == 0 && star && same_position(star->position, fleet.position);
         });
     if (!atUncolonizedPlanet) return false;
+    pause_probe(fleet);
     fleet.task = FleetTask::RemoteMining;
     return true;
 }
@@ -349,6 +355,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.minerals = fleet.minerals;
     result.scienceSamples = fleet.scienceSamples;
     result.xenocrystal = fleet.xenocrystal;
+    result.probe = fleet.probe; result.probe.surveys.clear();
     result.task = fleet.task;
     result.repeatOrders = fleet.repeatOrders;
     result.routeTemplate = fleet.routeTemplate;
@@ -642,13 +649,14 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.minerals = telemetry.minerals;
     view.scienceSamples = telemetry.scienceSamples;
     view.xenocrystal = telemetry.xenocrystal;
+    view.probe = telemetry.probe; view.probe.surveys.clear();
     view.task = telemetry.task;
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;
     view.targetFleet = telemetry.targetFleet;
     if (!telemetry.ships.empty()) view.ships = telemetry.ships;
     view.pendingCommands.clear();
-    view.telemetry = telemetry;
+    view.telemetry = telemetry; view.telemetry.probe.surveys.clear();
     view.telemetryInTransit.clear();
     return view;
 }
@@ -765,7 +773,11 @@ void deliver_due_fleet_commands(GameState& state)
             if (pending.deliveryTurn > state.turn) break;
             ++processed;
             if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
-            if (pending.mobileBase) {
+            if (pending.probe) {
+                apply_probe_command(state, fleet, *pending.probe);
+                if (pending.probe->action == ProbeAction::Stop) stoppedThrough = pending.issuedTurn;
+            }
+            else if (pending.mobileBase) {
                 if (mobile_base_dock(state, fleet)) fleet.mobileBase = *pending.mobileBase;
             }
             else if (pending.electronics) {

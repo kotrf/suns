@@ -291,6 +291,7 @@ GameState movementPhasePreviewState(
             if (fleet.outpost!=OutpostKind::None || known.outpost!=OutpostKind::None
                 || mobile_base_hulls(preview,fleet)>0 || mobile_base_hulls(preview,known)>0) fleet=known;
             fleet.mobileBase.enabled=false;
+            fleet.probe = known.probe;
         }
         fleet.destination.reset();
         if (fleet.task==FleetTask::DeployOutpost) fleet.task=FleetTask::None;
