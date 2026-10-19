@@ -100,9 +100,43 @@ struct MainWindowTestAccess {
     static void load(MainWindow& w, GameState s) { w.state_ = std::move(s); w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear(); w.rebuildScene(); }
     static const auto& orders(MainWindow& w) { return w.pendingOrders_.orders; }
     static const auto& state(MainWindow& w) { return w.state_; }
+    static void endTurn(MainWindow& w) { w.endTurn(); }
 };
 }
 namespace {
+void stop_before_first_programme_confirmation(MainWindow& w)
+{
+    auto host = fixture(); host.state.players.resize(1); MainWindowTestAccess::load(w, host.state);
+    auto* send = w.findChild<QPushButton*>("sendProbeProgram");
+    auto* stop = w.findChild<QPushButton*>("stopProbeProgram");
+    auto* resume = w.findChild<QPushButton*>("resumeProbeProgram");
+    auto* upload = w.findChild<QPushButton*>("uploadProbeKnowledge");
+    send->click();
+    assert(MainWindowTestAccess::orders(w).size() == 1);
+    assert(std::get<SetProbeProgramOrder>(MainWindowTestAccess::orders(w).back()).action == ProbeAction::Configure);
+    assert(!MainWindowTestAccess::state(w).fleets[0].probe.configured);
+    assert(stop->isEnabled() && !resume->isEnabled() && !upload->isEnabled());
+    stop->click();
+    assert(MainWindowTestAccess::orders(w).size() == 2);
+    assert(std::get<SetProbeProgramOrder>(MainWindowTestAccess::orders(w).back()).action == ProbeAction::Stop);
+    assert(!MainWindowTestAccess::state(w).fleets[0].probe.configured);
+
+    // Submit only Configure, then request Stop while the first launch is in transit.
+    MainWindowTestAccess::load(w, host.state); send->click(); MainWindowTestAccess::endTurn(w);
+    const auto& state = MainWindowTestAccess::state(w);
+    assert(state.turn == host.state.turn + 1 && MainWindowTestAccess::orders(w).empty());
+    assert(!state.fleets[0].probe.configured && state.fleets[0].pendingCommands.size() == 1);
+    assert(state.fleets[0].pendingCommands[0].probe->action == ProbeAction::Configure);
+    assert(!fleet_player_view(state, state.fleets[0]).probe.configured);
+    assert(stop->isEnabled() && !resume->isEnabled() && !upload->isEnabled());
+    stop->click();
+    assert(MainWindowTestAccess::orders(w).size() == 1);
+    assert(std::get<SetProbeProgramOrder>(MainWindowTestAccess::orders(w).back()).action == ProbeAction::Stop);
+    assert(state.fleets[0].pendingCommands.size() == 1);
+    MainWindowTestAccess::endTurn(w);
+    assert(MainWindowTestAccess::state(w).fleets[0].pendingCommands.size() == 2);
+    assert(MainWindowTestAccess::state(w).fleets[0].pendingCommands.back().probe->action == ProbeAction::Stop);
+}
 void ui_and_catalogs(MainWindow& w)
 {
     auto host = fixture(); MainWindowTestAccess::load(w, host.state);
@@ -132,6 +166,6 @@ void ui_and_catalogs(MainWindow& w)
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv); saves_notebooks_telemetry_and_pbem(); immutable_exports_validation_and_v87_migration();
-    MainWindow w; w.installSurveyProbes(); ui_and_catalogs(w);
+    MainWindow w; w.installSurveyProbes(); stop_before_first_programme_confirmation(w); ui_and_catalogs(w);
     std::cout << "Probe UI, catalogs, frozen exports, save/load and PBEM passed\n";
 }

@@ -135,7 +135,9 @@ void MainWindow::refreshSurveyProbes()
     findChild<QPushButton*>("buildSurveyProbe")->setEnabled(colony->count() && ship_design_available_to_player(view, pendingOrders_.player, basic_survey_probe_design(pendingOrders_.player, view.nextShipDesignId)));
     findChild<QPushButton*>("sendProbeProgram")->setEnabled(capable);
     findChild<QPushButton*>("loadProbeProgram")->setEnabled(exists);
-    for (const auto* name : {"stopProbeProgram", "resumeProbeProgram", "uploadProbeKnowledge"}) findChild<QPushButton*>(name)->setEnabled(exists && f->probe.configured && (capable || QString(name) == "stopProbeProgram"));
+    findChild<QPushButton*>("stopProbeProgram")->setEnabled(exists && (capable || f->probe.configured));
+    for (const auto* name : {"resumeProbeProgram", "uploadProbeKnowledge"})
+        findChild<QPushButton*>(name)->setEnabled(exists && f->probe.configured && capable);
     auto* status = findChild<QLabel*>("probeMissionStatus");
     if (exists) {
         QString target = f->probe.target ? QString("#%1").arg(f->probe.target) : "None";

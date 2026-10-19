@@ -105,7 +105,10 @@ source disappear with that fleet under the ordinary reorganization rules.
 The **Autonomous survey probes** dock can order a basic design and its paid
 construction, choose a fleet, load received settings, edit a programme and send
 Configure/Stop/Resume/Upload. The ordinary Designer/production UI supports custom
-fittings. The panel labels telemetry year/age, last reported target, mission state,
+fittings. Stop is available for a known capable probe before its first programme
+confirmation, including while the initial launch command is in transit. Resume
+and Upload require a received programme. The panel labels telemetry year/age,
+last reported target, mission state,
 completed targets and estimated position. It does not predict unknown future
 autonomous choices. The received-survey table uses HQ evidence, not notebook truth.
 
