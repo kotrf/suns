@@ -374,7 +374,7 @@ void owned_remote_laboratory_waits_for_received_evidence()
     s.players[0].surveyKnowledge.clear();
     assert(!make_player_view(s, 1).state.planets[1].resonanceLab.started);
 }
-void xenocrystal_transfers_use_mobile_base_service_phase()
+GameState mobile_base_cargo_fixture()
 {
     auto s = fixture(); s.players[0].technology.levels.fill(26);
     s.shipDesigns.push_back({200, 1, "Expedition", ShipHullType::ExpeditionBase,
@@ -385,6 +385,11 @@ void xenocrystal_transfers_use_mobile_base_service_phase()
     auto& client = s.fleets[0]; client.position = base.position; client.xenocrystal = 8; client.minerals = {5, 0, 0};
     client.fuel = fleet_fuel_capacity(s, client); s.fleets.push_back(base); s.nextFleetId = 3;
     for (auto& f : s.fleets) f.telemetry = confirmed_fleet_telemetry(s, f);
+    return s;
+}
+void xenocrystal_transfers_use_mobile_base_service_phase()
+{
+    auto s = mobile_base_cargo_fixture();
     const TransferXenocrystalOrder crystals{{0, 1}, {0, 2}, 8};
     const TransferCargoOrder minerals{{0, 1}, {0, 2}, 0, {5, 0, 0}};
     auto preview = make_player_view(s, 1).state; assert(preview_xenocrystal_transfer(preview, 1, crystals));
@@ -444,6 +449,59 @@ void xenocrystal_transfers_use_mobile_base_service_phase()
     assert(departed.fleets[0].xenocrystal == 8 && !departed.fleets[1].xenocrystal);
     assert(pending.pendingMobileBaseTransfers.empty() && departed.pendingMobileBaseTransfers.empty());
 }
+void mixed_surface_and_fleet_service_transfers_keep_order()
+{
+    for (const bool surfaceCrystals : {false, true}) for (const bool unloadCrystals : {false, true})
+        for (const bool crystalsFirst : {true, false}) {
+            auto s = mobile_base_cargo_fixture(); auto& base = s.fleets[1]; auto& client = s.fleets[0];
+            base.position = client.position = s.stars[0].position;
+            const auto initialIronium = fleet_cargo_capacity(s, base) - 8;
+            base.minerals = {initialIronium, 0, 0}; base.xenocrystal = unloadCrystals ? 8 : 0;
+            client.xenocrystal = !surfaceCrystals && !unloadCrystals ? 8 : 0;
+            s.planets[0].xenocrystal.surface = surfaceCrystals && !unloadCrystals ? 8 : 0;
+            set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+            const CargoTransferEndpoint other = surfaceCrystals ? CargoTransferEndpoint{1, 0} : CargoTransferEndpoint{0, 1};
+            const CargoTransferEndpoint baseEndpoint{0, 2};
+            const TransferXenocrystalOrder crystals{unloadCrystals ? baseEndpoint : other,
+                unloadCrystals ? other : baseEndpoint, 8};
+            const TransferCargoOrder minerals{surfaceCrystals ? CargoTransferEndpoint{0, 1} : CargoTransferEndpoint{1, 0},
+                baseEndpoint, 0, {5, 0, 0}};
+            const auto initialSourceIronium = surfaceCrystals ? client.minerals.ironium
+                : s.planets[0].minerals.ironium + projected_mineral_mining(s, s.planets[0]).ironium;
+            const auto after = next(s, crystalsFirst ? std::vector<Order>{crystals, minerals} : std::vector<Order>{minerals, crystals});
+            const bool mineralsMoved = unloadCrystals ? crystalsFirst : !crystalsFirst;
+            const bool crystalsMoved = unloadCrystals || crystalsFirst;
+            assert(near(after.fleets[1].minerals.ironium, initialIronium + (mineralsMoved ? 5 : 0)));
+            const auto sourceIronium = surfaceCrystals ? after.fleets[0].minerals.ironium : after.planets[0].minerals.ironium;
+            assert(near(sourceIronium, initialSourceIronium - (mineralsMoved ? 5 : 0)));
+            assert(after.fleets[1].xenocrystal == (!unloadCrystals && crystalsMoved ? 8u : 0u));
+            const auto otherStock = surfaceCrystals ? after.planets[0].xenocrystal.surface : after.fleets[0].xenocrystal;
+            assert(otherStock == (unloadCrystals || !crystalsMoved ? 8u : 0u));
+            assert(after.fleets[1].xenocrystal + after.fleets[0].xenocrystal + after.planets[0].xenocrystal.surface == 8);
+            assert(fleet_cargo_used(after, after.fleets[1]) <= fleet_cargo_capacity(after, after.fleets[1]) + 1e-6);
+            assert(after.pendingMobileBaseTransfers.empty());
+        }
+    auto s = mobile_base_cargo_fixture(); auto& base = s.fleets[1];
+    base.position = s.fleets[0].position = s.stars[0].position;
+    const auto initialIronium = fleet_cargo_capacity(s, base) - 8; base.minerals = {initialIronium, 0, 0};
+    s.pendingMobileBaseTransfers.push_back({1, 2, 1, 2, s.turn - 1, s.turn, 0, {}, 0, 0, false, 8});
+    s.pendingMobileBaseTransfers.push_back({1, 2, 1, 2, s.turn - 1, s.turn, 0, {5, 0, 0}, 0, 0, false, 0});
+    const TransferCargoOrder later{{1, 0}, {0, 2}, 0, {5, 0, 0}};
+    const auto dueFirst = next(s, {later});
+    assert(dueFirst.fleets[1].xenocrystal == 8 && near(dueFirst.fleets[1].minerals.ironium, initialIronium));
+    assert(dueFirst.pendingMobileBaseTransfers.empty());
+    auto reversed = s; std::reverse(reversed.pendingMobileBaseTransfers.begin(), reversed.pendingMobileBaseTransfers.end());
+    const auto dueMineralsFirst = next(reversed, {later});
+    assert(dueMineralsFirst.fleets[1].xenocrystal == 0 && near(dueMineralsFirst.fleets[1].minerals.ironium, initialIronium + 5));
+    assert(dueMineralsFirst.pendingMobileBaseTransfers.empty());
+    s.pendingMobileBaseTransfers.pop_back();
+    s.pendingMobileBaseTransfers[0].deliveryTurn = s.turn + 2;
+    auto inTransit = next(s, {later});
+    assert(inTransit.pendingMobileBaseTransfers.size() == 1 && inTransit.fleets[1].xenocrystal == 0);
+    assert(near(inTransit.fleets[1].minerals.ironium, initialIronium + 5));
+    inTransit = next(next(inTransit));
+    assert(inTransit.pendingMobileBaseTransfers.empty() && inTransit.fleets[0].xenocrystal == 8 && inTransit.fleets[1].xenocrystal == 0);
+}
 void computer_completes_an_ordinary_material_supply_cycle()
 {
     auto s = fixture(); s.stars.resize(2); s.planets.resize(2); s.stars[1].position = {1, 0};
@@ -496,6 +554,7 @@ int main()
     remote_merge_keeps_unreceived_cargo_private();
     laboratory_completion_creates_no_ship(); owned_remote_laboratory_waits_for_received_evidence();
     xenocrystal_transfers_use_mobile_base_service_phase();
+    mixed_surface_and_fleet_service_transfers_keep_order();
     computer_completes_an_ordinary_material_supply_cycle();
     std::cout << "Exotic materials: finite discovery, logistics, laboratory and fair planning passed\n";
 }

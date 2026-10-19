@@ -2120,13 +2120,27 @@ TurnResult TurnProcessor::process_with_events(
     const auto extraction = mine_colonies(next);
     std::vector<ColonyFreightDelivery> freight;
 
-    struct BaseCargoTransfer {
+    struct BaseServiceTransfer {
         PlayerId player;
-        std::variant<TransferCargoOrder, TransferXenocrystalOrder> order;
-        bool delivered{};
+        std::variant<TransferCargoOrder, TransferXenocrystalOrder, TransferFleetFuelOrder> order;
+        FleetId commandReceiver{};
     };
-    std::vector<BaseCargoTransfer> baseCargo;
+    std::vector<BaseServiceTransfer> baseTransfers;
     std::vector<std::pair<PlayerId, TransferFleetFuelOrder>> baseFuel;
+    const auto enqueueReceivedTransfer = [&](const PendingMobileBaseTransfer& packet) {
+        if (packet.xenocrystal) baseTransfers.push_back({packet.owner,
+            TransferXenocrystalOrder{{0, packet.source}, {0, packet.destination}, packet.xenocrystal}, packet.base});
+        else if (packet.fuelOnly) baseTransfers.push_back({packet.owner,
+            TransferFleetFuelOrder{packet.source, packet.destination, packet.fuelAmount, packet.sourceReserve}, packet.base});
+        else baseTransfers.push_back({packet.owner,
+            TransferCargoOrder{{0, packet.source}, {0, packet.destination}, packet.colonists, packet.minerals}, packet.base});
+    };
+    // Commands already due at this boundary precede new submissions, retaining
+    // their saved order. New immediate commands join the same queue in place,
+    // alongside surface exchanges; no cargo moves until the service phase.
+    for (const auto& packet : next.pendingMobileBaseTransfers)
+        if (packet.deliveryTurn <= next.turn) enqueueReceivedTransfer(packet);
+    std::erase_if(next.pendingMobileBaseTransfers, [&](const auto& packet) { return packet.deliveryTurn <= next.turn; });
     const auto acceptTransfer = [&](PlayerId owner, FleetId source, FleetId destination,
                                     std::uint64_t colonists, MineralCargo minerals, double fuel, double reserve, bool fuelOnly,
                                     std::uint32_t xenocrystal = 0) {
@@ -2138,8 +2152,10 @@ TurnResult TurnProcessor::process_with_events(
         const auto* base=mobile_base_hulls(next,*from)>0?from:mobile_base_hulls(next,*to)>0?to:nullptr;
         if (!base) return;
         record_command_transmission(next,owner,base->position,next.turn);
-        next.pendingMobileBaseTransfers.push_back({owner,base->id,source,destination,next.turn,
-            next.turn+communication_delay_turns(next,owner,base->position),colonists,minerals,fuel,reserve,fuelOnly,xenocrystal});
+        const PendingMobileBaseTransfer packet{owner,base->id,source,destination,next.turn,
+            next.turn+communication_delay_turns(next,owner,base->position),colonists,minerals,fuel,reserve,fuelOnly,xenocrystal};
+        if (packet.deliveryTurn <= next.turn) enqueueReceivedTransfer(packet);
+        else next.pendingMobileBaseTransfers.push_back(packet);
     };
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
@@ -2195,7 +2211,7 @@ TurnResult TurnProcessor::process_with_events(
                                 && !concreteOrder.source.planet && !concreteOrder.destination.planet) {
                                 if (concreteOrder.amount) acceptTransfer(submission.player, concreteOrder.source.fleet,
                                     concreteOrder.destination.fleet, 0, {}, 0, 0, false, concreteOrder.amount);
-                            } else baseCargo.push_back({submission.player, concreteOrder, false});
+                            } else baseTransfers.push_back({submission.player, concreteOrder, 0});
                         } else (void)transfer_xenocrystals(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, SetResonanceLaboratoryOrder>) {
                         const auto p = std::find_if(next.planets.begin(), next.planets.end(), [&](const auto& p) { return p.id == concreteOrder.colony && p.owner == submission.player; });
@@ -2326,7 +2342,7 @@ TurnResult TurnProcessor::process_with_events(
                                     && !concreteOrder.source.planet && !concreteOrder.destination.planet)
                                     acceptTransfer(submission.player,concreteOrder.source.fleet,concreteOrder.destination.fleet,
                                         concreteOrder.colonists,concreteOrder.minerals,0,0,false);
-                                else baseCargo.push_back({submission.player, concreteOrder, false});
+                                else baseTransfers.push_back({submission.player, concreteOrder, 0});
                             } else apply_cargo_order(next, submission.player, order, freight);
                         } else apply_cargo_order(next, submission.player, order, freight);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
@@ -2430,30 +2446,30 @@ TurnResult TurnProcessor::process_with_events(
     // Running this after production also activates a newly completed depot at
     // the planning boundary, without requiring a separate Refuel order.
     refuel_fleets_at_orbital_services(next);
-    // Repair once at the end of the year, after movement and construction.
-    // Shipyards supersede onboard repair; fleets recover only once per year.
-    for (const auto& packet : next.pendingMobileBaseTransfers) if (packet.deliveryTurn<=next.turn) {
-        const auto* base=find_service_fleet(next,packet.base);
-        if (!base || base->owner!=packet.owner || !mobile_base_dock(next,*base)) continue;
-        if (packet.xenocrystal) baseCargo.push_back({packet.owner,
-            TransferXenocrystalOrder{{0, packet.source}, {0, packet.destination}, packet.xenocrystal}, true});
-        else if (packet.fuelOnly) baseFuel.emplace_back(packet.owner,TransferFleetFuelOrder{packet.source,packet.destination,packet.fuelAmount,packet.sourceReserve});
-        else baseCargo.push_back({packet.owner,TransferCargoOrder{{0,packet.source},{0,packet.destination},packet.colonists,packet.minerals},true});
-    }
-    std::erase_if(next.pendingMobileBaseTransfers,[&](const auto& packet){return packet.deliveryTurn<=next.turn;});
-    for (const auto& transfer : baseCargo) {
+    // Service validation uses the post-movement world, in receipt order.
+    for (const auto& transfer : baseTransfers) {
+        if (transfer.commandReceiver) {
+            const auto* base = find_service_fleet(next, transfer.commandReceiver);
+            if (!base || base->owner != transfer.player || !mobile_base_dock(next, *base)) continue;
+        }
         const auto dockingAllowed = [&](FleetId id) {
             const auto* f = find_service_fleet(next, id);
             return !f || mobile_base_hulls(next, *f) == 0
                 || mobile_base_service_error(next, *f, next.turn + 1).empty();
         };
         std::visit([&](const auto& cargo) {
-            if (!dockingAllowed(cargo.source.fleet) || !dockingAllowed(cargo.destination.fleet)) return;
-            if constexpr (std::is_same_v<std::decay_t<decltype(cargo)>, TransferXenocrystalOrder>)
-                (void)transfer_xenocrystals(next, transfer.player, cargo, transfer.delivered);
-            else apply_cargo_order(next, transfer.player, cargo, freight);
+            if constexpr (std::is_same_v<std::decay_t<decltype(cargo)>, TransferFleetFuelOrder>)
+                baseFuel.emplace_back(transfer.player, cargo);
+            else {
+                if (!dockingAllowed(cargo.source.fleet) || !dockingAllowed(cargo.destination.fleet)) return;
+                if constexpr (std::is_same_v<std::decay_t<decltype(cargo)>, TransferXenocrystalOrder>)
+                    (void)transfer_xenocrystals(next, transfer.player, cargo, transfer.commandReceiver != 0);
+                else apply_cargo_order(next, transfer.player, cargo, freight);
+            }
         }, transfer.order);
     }
+    // Repair once at the end of the year, after movement and construction.
+    // Shipyards supersede onboard repair; fleets recover only once per year.
     repair_fleet_damage(next, current);
     for (const auto& [player, fuel] : baseFuel) (void)transfer_mobile_base_fuel(next, player, fuel, next.turn + 1);
     service_mobile_bases(next, next.turn + 1);

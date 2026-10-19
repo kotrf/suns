@@ -136,23 +136,30 @@ void remote_base_transfer_survives_save_and_order_exchange()
     auto host = save_fixture(); host.mode = SessionMode::Host; host.playerTokens = {{1, 31}};
     add_mobile_base(host.state); for (auto& f : host.state.fleets) f.position = {900, 0};
     host.state.players.push_back({2, "Host"}); host.playerTokens[2] = 41; host.pendingOrders = {2, {}};
-    host.state.fleets[0].xenocrystal = 0;
+    host.state.stars[1].position = {900, 0}; auto& remote = host.state.planets[1];
+    remote.owner = 1; remote.population = 100000; remote.mines = 0; remote.productionQueue.clear();
+    remote.minerals = {10000, 10000, 10000};
+    host.state.fleets[1].xenocrystal = 0;
+    const auto initialIronium = fleet_cargo_capacity(host.state, host.state.fleets[1]) - 8;
+    host.state.fleets[1].minerals = {initialIronium, 0, 0};
     const auto ordersPath = dir.filePath("remote.sunsorders");
     TurnOrderFileData packet{host.campaignId, host.state.turn, 31,
-        {1, {TransferXenocrystalOrder{{0, 2}, {0, 1}, 8}}}, {"Deliver crystals"}}, received;
+        {1, {TransferXenocrystalOrder{{0, 1}, {0, 2}, 8}}}, {"Deliver crystals"}}, received;
     assert(write_turn_order_file(ordersPath, packet, error) && read_turn_order_file(ordersPath, received, error));
     assert(validate_turn_submission(host, received).isEmpty());
     host.state = TurnProcessor{}.process(host.state, {received.orders});
-    assert(host.state.pendingMobileBaseTransfers.size() == 1 && host.state.fleets[1].xenocrystal == 8);
+    assert(host.state.pendingMobileBaseTransfers.size() == 1 && host.state.fleets[0].xenocrystal == 8);
     const auto due = host.state.pendingMobileBaseTransfers[0].deliveryTurn;
     const auto roundTrip = write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error);
     if (!roundTrip) std::cerr << error.toStdString() << '\n';
     assert(roundTrip);
-    while (loaded.state.turn <= due) loaded.state = TurnProcessor{}.process(loaded.state, {});
-    assert(loaded.state.fleets[0].xenocrystal == 8 && !loaded.state.fleets[1].xenocrystal);
+    while (loaded.state.turn < due) loaded.state = TurnProcessor{}.process(loaded.state, {});
+    loaded.state = TurnProcessor{}.process(loaded.state, {{1, {TransferCargoOrder{{2, 0}, {0, 2}, 0, {5, 0, 0}}}}});
+    assert(loaded.state.fleets[1].xenocrystal == 8 && !loaded.state.fleets[0].xenocrystal);
+    assert(loaded.state.fleets[1].minerals.ironium == initialIronium);
     assert(loaded.state.pendingMobileBaseTransfers.empty());
     loaded.state = TurnProcessor{}.process(loaded.state, {});
-    assert(loaded.state.fleets[0].xenocrystal == 8 && !loaded.state.fleets[1].xenocrystal);
+    assert(loaded.state.fleets[1].xenocrystal == 8 && !loaded.state.fleets[0].xenocrystal);
 }
 }
 namespace suns {

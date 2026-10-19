@@ -32,6 +32,9 @@ crystal exchanges through mobile-base docking and delayed service commands.
 Service deliveries occur after production and cannot fund that year's forecast.
 The save/load regression also corrected the pre-existing radar-contact hull
 bound that rejected Expedition Base observations.
+The repeat review also puts immediate fleet and surface exchanges in one stable
+service order; previously due commands retain their saved order ahead of new
+submissions. Remote commands still in transit reserve no capacity or material.
 
 ## Historical implementation — 19 October 2026: physical science samples
 

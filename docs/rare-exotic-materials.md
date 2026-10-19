@@ -58,7 +58,11 @@ Transfers touching an Expedition Base use its ordinary post-movement service
 phase: Expedition Dock, enabled external services, a stationary base without an
 active route and actual co-location are required. Fleet-to-fleet commands travel
 to a remote base with the normal communication delay; nothing is reserved in
-transit. Bulk cargo and crystals share service ordering and hold limits. These
+transit. At the planning boundary, already-due commands enter the service queue
+in their saved order before new submissions. Commands with zero delay and
+surface exchanges join that same queue in submission order; endpoint type does
+not change priority. Commands still in transit reserve no hold or stock.
+Bulk cargo and crystals share service ordering and hold limits. These
 exchanges occur **after colony production**, so their deliveries become usable
 for construction in the following year. Construction forecasts do not spend
 these future deliveries. Local transfer controls reject pending departures or
