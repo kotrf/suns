@@ -3,6 +3,7 @@
 #include "suns/communications.hpp"
 #include "suns/computer_player.hpp"
 #include "suns/combat.hpp"
+#include "suns/mobile_base.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/production.hpp"
@@ -331,6 +332,118 @@ void remote_merge_keeps_unreceived_cargo_private()
     s.turn = s.fleets[0].telemetryInTransit.back().deliveryTurn; deliver_due_fleet_telemetry(s);
     assert(make_player_view(s, 1).state.fleets[0].xenocrystal == 12);
 }
+void laboratory_completion_creates_no_ship()
+{
+    auto s = fixture(); s.planets[0].xenocrystal.surface = 8;
+    const auto fleetCount = s.fleets.size(); const auto nextFleet = s.nextFleetId;
+    s = next(s, {SetResonanceLaboratoryOrder{1}});
+    for (int year = 1; year < 10; ++year) s = next(s);
+    assert(s.planets[0].resonanceLab.work == kResonanceWork);
+    assert(s.fleets.size() == fleetCount && s.nextFleetId == nextFleet);
+    assert(s.planets[0].productionQueue.empty());
+}
+void owned_remote_laboratory_waits_for_received_evidence()
+{
+    auto s = fixture(); auto& p = s.planets[1]; s.stars[1].position = {900, 0};
+    p.owner = 1; p.population = 100000; p.industry = 1000; p.mines = 0;
+    p.minerals = {10000, 10000, 10000}; p.xenocrystal.surface = 8;
+    s.orbitalStations.push_back({2, 1, p.id, "Remote support", OrbitalStationHullType::Starbase,
+        {OrbitalStationModule::Shipyard}});
+    assert(apply_resonance_order(s, p, {p.id})); (void)resolve_colony_production(s, p, true);
+    set_survey_level(s, 1, p.star, SurveyLevel::DeepSurvey, s.turn);
+    assert(p.resonanceLab.work == 60 && communication_delay_turns(s, 1, {900, 0}) > 0);
+    s = next(s);
+    assert(s.planets[1].resonanceLab.work == 120);
+    assert(make_player_view(s, 1).state.planets[1].resonanceLab.work == 60);
+    assert(!s.players[0].pendingSurveyReports.empty());
+    const auto due = std::find_if(s.players[0].pendingSurveyReports.begin(), s.players[0].pendingSurveyReports.end(),
+        [](const auto& report) { return report.star == 2 && report.planetSnapshot
+            && report.planetSnapshot->resonanceLab.work == 120; });
+    assert(due != s.players[0].pendingSurveyReports.end()); s.turn = due->deliveryTurn;
+    (void)deliver_due_survey_reports(s);
+    assert(make_player_view(s, 1).state.planets[1].resonanceLab.work == 120);
+    while (s.planets[1].resonanceLab.work < kResonanceWork) s = next(s);
+    assert(make_player_view(s, 1).state.planets[1].resonanceLab.work < kResonanceWork);
+    const auto completion = std::find_if(s.players[0].pendingSurveyReports.begin(), s.players[0].pendingSurveyReports.end(),
+        [](const auto& report) { return report.star == 2 && report.planetSnapshot
+            && report.planetSnapshot->resonanceLab.work == kResonanceWork; });
+    assert(completion != s.players[0].pendingSurveyReports.end()); s.turn = completion->deliveryTurn;
+    (void)deliver_due_survey_reports(s);
+    assert(make_player_view(s, 1).state.planets[1].resonanceLab.operational);
+    assert(!resonance_scheduled(make_player_view(s, 1).state.planets[1]));
+    s.players[0].surveyKnowledge.clear();
+    assert(!make_player_view(s, 1).state.planets[1].resonanceLab.started);
+}
+void xenocrystal_transfers_use_mobile_base_service_phase()
+{
+    auto s = fixture(); s.players[0].technology.levels.fill(26);
+    s.shipDesigns.push_back({200, 1, "Expedition", ShipHullType::ExpeditionBase,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5, ShipComponentType::QuickJump5,
+         ShipComponentType::QuickJump5, ShipComponentType::ExpeditionDock, ShipComponentType::RelayArray}});
+    Fleet base; base.id = 2; base.owner = 1; base.design = 200; base.ships = {{200, 1}};
+    base.position = {20, 0}; base.fuel = 5000;
+    auto& client = s.fleets[0]; client.position = base.position; client.xenocrystal = 8; client.minerals = {5, 0, 0};
+    client.fuel = fleet_fuel_capacity(s, client); s.fleets.push_back(base); s.nextFleetId = 3;
+    for (auto& f : s.fleets) f.telemetry = confirmed_fleet_telemetry(s, f);
+    const TransferXenocrystalOrder crystals{{0, 1}, {0, 2}, 8};
+    const TransferCargoOrder minerals{{0, 1}, {0, 2}, 0, {5, 0, 0}};
+    auto preview = make_player_view(s, 1).state; assert(preview_xenocrystal_transfer(preview, 1, crystals));
+    const auto stationary = next(s, {crystals, minerals});
+    assert(stationary.fleets[1].xenocrystal == 8 && !stationary.fleets[0].xenocrystal);
+    auto almostFull = s;
+    almostFull.fleets[1].minerals = {fleet_cargo_capacity(almostFull, almostFull.fleets[1]) - 8, 0, 0};
+    const auto crystalsFirst = next(almostFull, {crystals, minerals});
+    const auto mineralsFirst = next(almostFull, {minerals, crystals});
+    assert(crystalsFirst.fleets[1].xenocrystal == 8 && near(crystalsFirst.fleets[0].minerals.ironium, 5));
+    assert(!mineralsFirst.fleets[1].xenocrystal && mineralsFirst.fleets[0].xenocrystal == 8);
+    assert(near(mineralsFirst.fleets[0].minerals.ironium, 0));
+    auto home = s; home.fleets[1].position = home.stars[0].position; home.fleets[1].xenocrystal = 8;
+    for (auto& f : home.fleets) { f.telemetry = {}; f.telemetry = confirmed_fleet_telemetry(home, f); }
+    const std::vector<Order> unloadAndBuild{TransferXenocrystalOrder{{0, 2}, {1, 0}, 8}, SetResonanceLaboratoryOrder{1}};
+    const auto estimate = planned_production_state(projected_cargo_order_state(make_player_view(home, 1).state,
+        {1, unloadAndBuild}), {1, unloadAndBuild});
+    assert(estimate.planets[0].xenocrystal.surface == 0);
+    auto delivered = next(home, unloadAndBuild);
+    assert(delivered.planets[0].resonanceLab.work == 0 && delivered.planets[0].xenocrystal.surface == 8);
+    delivered = next(delivered);
+    assert(delivered.planets[0].resonanceLab.work == 60 && delivered.planets[0].xenocrystal.surface == 0);
+    for (int reason = 0; reason < 5; ++reason) {
+        auto blocked = s; std::vector<Order> orders{crystals, minerals};
+        if (reason == 0) orders.push_back(MoveFleetOrder{2, {24, 0}, 3});
+        if (reason == 1) std::erase(blocked.shipDesigns.back().components, ShipComponentType::ExpeditionDock);
+        if (reason == 2) blocked.fleets[1].mobileBase.enabled = false;
+        if (reason == 3) orders.push_back(MoveFleetOrder{1, {24, 0}, 3});
+        if (reason == 4) {
+            auto policy = blocked.fleets[1].mobileBase; policy.enabled = false;
+            orders.push_back(SetMobileBaseOrder{2, policy});
+        }
+        for (auto& f : blocked.fleets) { f.telemetry = {}; f.telemetry = confirmed_fleet_telemetry(blocked, f); }
+        const auto result = next(blocked, orders);
+        assert(result.fleets[0].xenocrystal == 8 && !result.fleets[1].xenocrystal);
+        assert(near(result.fleets[0].minerals.ironium, 5));
+        const auto forecast = projected_cargo_order_state(make_player_view(blocked, 1).state, {1, orders});
+        assert(forecast.fleets[0].xenocrystal == 8 && !forecast.fleets[1].xenocrystal);
+        auto known = make_player_view(blocked, 1).state; const PlayerOrders pendingOrders{1, orders};
+        assert(!preview_xenocrystal_transfer(known, 1, crystals, &pendingOrders));
+    }
+    auto disabled = s; disabled.fleets[1].mobileBase.enabled = false;
+    for (auto& f : disabled.fleets) { f.telemetry = {}; f.telemetry = confirmed_fleet_telemetry(disabled, f); }
+    auto enabledPolicy = disabled.fleets[1].mobileBase; enabledPolicy.enabled = true;
+    const PlayerOrders enableThenTransfer{1, {SetMobileBaseOrder{2, enabledPolicy}, crystals}};
+    auto enabledPreview = make_player_view(disabled, 1).state;
+    assert(preview_xenocrystal_transfer(enabledPreview, 1, crystals, &enableThenTransfer));
+    assert(next(disabled, enableThenTransfer.orders).fleets[1].xenocrystal == 8);
+    auto remote = s; for (auto& f : remote.fleets) f.position = {900, 0};
+    const auto delay = communication_delay_turns(remote, 1, {900, 0}); assert(delay > 0);
+    auto pending = next(remote, {crystals});
+    assert(pending.fleets[0].xenocrystal == 8 && !pending.fleets[1].xenocrystal);
+    assert(pending.pendingMobileBaseTransfers.size() == 1);
+    auto departed = pending; departed.fleets[0].position = {901, 0};
+    while (pending.turn <= remote.turn + delay) { pending = next(pending); departed = next(departed); }
+    assert(!pending.fleets[0].xenocrystal && pending.fleets[1].xenocrystal == 8);
+    assert(departed.fleets[0].xenocrystal == 8 && !departed.fleets[1].xenocrystal);
+    assert(pending.pendingMobileBaseTransfers.empty() && departed.pendingMobileBaseTransfers.empty());
+}
 void computer_completes_an_ordinary_material_supply_cycle()
 {
     auto s = fixture(); s.stars.resize(2); s.planets.resize(2); s.stars[1].position = {1, 0};
@@ -381,6 +494,8 @@ int main()
     conquest_keeps_surface_stock_and_paid_project(); partial_combat_loss_discards_only_whole_material_units();
     spending_after_a_scan_sends_a_new_immutable_boundary_snapshot();
     remote_merge_keeps_unreceived_cargo_private();
+    laboratory_completion_creates_no_ship(); owned_remote_laboratory_waits_for_received_evidence();
+    xenocrystal_transfers_use_mobile_base_service_phase();
     computer_completes_an_ordinary_material_supply_cycle();
     std::cout << "Exotic materials: finite discovery, logistics, laboratory and fair planning passed\n";
 }

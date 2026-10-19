@@ -291,6 +291,7 @@ std::optional<std::uint32_t> complete_production(
         return id;
     }
 
+    if (item.kind != ProductionKind::ColonyShip) return std::nullopt;
     const auto designId = item.shipDesign != 0 ? item.shipDesign : kColonyShipDesignId;
     const auto* star = find_star(state, planet.star);
     const auto* design = find_ship_design(state, designId);
@@ -323,7 +324,8 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
     const auto* star = find_star(state, planet.star);
     for (const auto& completion : resolved.completions) {
         const auto& completed = completion.item;
-        if(engineering_kind(completed.kind)) continue; // Dedicated dated engineering milestones below.
+        if (engineering_kind(completed.kind) || completed.kind == ProductionKind::ResonanceLaboratory)
+            continue; // Dedicated dated installation reports, never ship construction.
         const auto object = complete_production(state, planet, completed);
         if (!object || !star) continue;
         const auto design = completed.kind == ProductionKind::ColonyShip
@@ -2043,7 +2045,14 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
         if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
             (void)preview_science_sample_transfer(projected, pending.player, *sample);
         } else if (const auto* crystal = std::get_if<TransferXenocrystalOrder>(&order)) {
-            (void)preview_xenocrystal_transfer(projected, pending.player, *crystal);
+            const auto involvesBase = [&](FleetId id) {
+                const auto* f = find_service_fleet(projected, id);
+                return f && mobile_base_hulls(projected, *f) > 0;
+            };
+            // Base exchanges happen after movement and colony production.
+            // They cannot finance this year's lab work or an earlier transfer.
+            if (!involvesBase(crystal->source.fleet) && !involvesBase(crystal->destination.fleet))
+                (void)preview_xenocrystal_transfer(projected, pending.player, *crystal, &pending);
         } else if (const auto* process = std::get_if<ProcessScienceSampleOrder>(&order)) {
             (void)process_science_sample(projected, pending.player, *process);
         } else if (std::holds_alternative<SetFleetColonistsOrder>(order)
@@ -2111,10 +2120,17 @@ TurnResult TurnProcessor::process_with_events(
     const auto extraction = mine_colonies(next);
     std::vector<ColonyFreightDelivery> freight;
 
-    std::vector<std::pair<PlayerId, TransferCargoOrder>> baseCargo;
+    struct BaseCargoTransfer {
+        PlayerId player;
+        std::variant<TransferCargoOrder, TransferXenocrystalOrder> order;
+        bool delivered{};
+    };
+    std::vector<BaseCargoTransfer> baseCargo;
     std::vector<std::pair<PlayerId, TransferFleetFuelOrder>> baseFuel;
     const auto acceptTransfer = [&](PlayerId owner, FleetId source, FleetId destination,
-                                    std::uint64_t colonists, MineralCargo minerals, double fuel, double reserve, bool fuelOnly) {
+                                    std::uint64_t colonists, MineralCargo minerals, double fuel, double reserve, bool fuelOnly,
+                                    std::uint32_t xenocrystal = 0) {
+        if (xenocrystal > kMaximumXenocrystal) return;
         if (fuelOnly ? (!std::isfinite(fuel) || fuel<=0 || !std::isfinite(reserve) || reserve<0)
                      : !valid_mineral_cargo(minerals)) return;
         const auto* from=find_service_fleet(next,source); const auto* to=find_service_fleet(next,destination);
@@ -2123,7 +2139,7 @@ TurnResult TurnProcessor::process_with_events(
         if (!base) return;
         record_command_transmission(next,owner,base->position,next.turn);
         next.pendingMobileBaseTransfers.push_back({owner,base->id,source,destination,next.turn,
-            next.turn+communication_delay_turns(next,owner,base->position),colonists,minerals,fuel,reserve,fuelOnly});
+            next.turn+communication_delay_turns(next,owner,base->position),colonists,minerals,fuel,reserve,fuelOnly,xenocrystal});
     };
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
@@ -2170,7 +2186,17 @@ TurnResult TurnProcessor::process_with_events(
                     } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
                         (void)transfer_science_sample(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferXenocrystalOrder>) {
-                        (void)transfer_xenocrystals(next, submission.player, concreteOrder);
+                        const auto involvesBase = [&](FleetId id) {
+                            const auto* f = find_service_fleet(next, id);
+                            return f && mobile_base_hulls(next, *f) > 0;
+                        };
+                        if (involvesBase(concreteOrder.source.fleet) || involvesBase(concreteOrder.destination.fleet)) {
+                            if (concreteOrder.source.fleet && concreteOrder.destination.fleet
+                                && !concreteOrder.source.planet && !concreteOrder.destination.planet) {
+                                if (concreteOrder.amount) acceptTransfer(submission.player, concreteOrder.source.fleet,
+                                    concreteOrder.destination.fleet, 0, {}, 0, 0, false, concreteOrder.amount);
+                            } else baseCargo.push_back({submission.player, concreteOrder, false});
+                        } else (void)transfer_xenocrystals(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, SetResonanceLaboratoryOrder>) {
                         const auto p = std::find_if(next.planets.begin(), next.planets.end(), [&](const auto& p) { return p.id == concreteOrder.colony && p.owner == submission.player; });
                         if (p != next.planets.end()) (void)apply_resonance_order(next, *p, concreteOrder);
@@ -2300,7 +2326,7 @@ TurnResult TurnProcessor::process_with_events(
                                     && !concreteOrder.source.planet && !concreteOrder.destination.planet)
                                     acceptTransfer(submission.player,concreteOrder.source.fleet,concreteOrder.destination.fleet,
                                         concreteOrder.colonists,concreteOrder.minerals,0,0,false);
-                                else baseCargo.emplace_back(submission.player, concreteOrder);
+                                else baseCargo.push_back({submission.player, concreteOrder, false});
                             } else apply_cargo_order(next, submission.player, order, freight);
                         } else apply_cargo_order(next, submission.player, order, freight);
                     } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
@@ -2409,18 +2435,24 @@ TurnResult TurnProcessor::process_with_events(
     for (const auto& packet : next.pendingMobileBaseTransfers) if (packet.deliveryTurn<=next.turn) {
         const auto* base=find_service_fleet(next,packet.base);
         if (!base || base->owner!=packet.owner || !mobile_base_dock(next,*base)) continue;
-        if (packet.fuelOnly) baseFuel.emplace_back(packet.owner,TransferFleetFuelOrder{packet.source,packet.destination,packet.fuelAmount,packet.sourceReserve});
-        else baseCargo.emplace_back(packet.owner,TransferCargoOrder{{0,packet.source},{0,packet.destination},packet.colonists,packet.minerals});
+        if (packet.xenocrystal) baseCargo.push_back({packet.owner,
+            TransferXenocrystalOrder{{0, packet.source}, {0, packet.destination}, packet.xenocrystal}, true});
+        else if (packet.fuelOnly) baseFuel.emplace_back(packet.owner,TransferFleetFuelOrder{packet.source,packet.destination,packet.fuelAmount,packet.sourceReserve});
+        else baseCargo.push_back({packet.owner,TransferCargoOrder{{0,packet.source},{0,packet.destination},packet.colonists,packet.minerals},true});
     }
     std::erase_if(next.pendingMobileBaseTransfers,[&](const auto& packet){return packet.deliveryTurn<=next.turn;});
-    for (const auto& [player, cargo] : baseCargo) {
+    for (const auto& transfer : baseCargo) {
         const auto dockingAllowed = [&](FleetId id) {
             const auto* f = find_service_fleet(next, id);
             return !f || mobile_base_hulls(next, *f) == 0
                 || mobile_base_service_error(next, *f, next.turn + 1).empty();
         };
-        if (dockingAllowed(cargo.source.fleet) && dockingAllowed(cargo.destination.fleet))
-            apply_cargo_order(next, player, cargo, freight);
+        std::visit([&](const auto& cargo) {
+            if (!dockingAllowed(cargo.source.fleet) || !dockingAllowed(cargo.destination.fleet)) return;
+            if constexpr (std::is_same_v<std::decay_t<decltype(cargo)>, TransferXenocrystalOrder>)
+                (void)transfer_xenocrystals(next, transfer.player, cargo, transfer.delivered);
+            else apply_cargo_order(next, transfer.player, cargo, freight);
+        }, transfer.order);
     }
     repair_fleet_damage(next, current);
     for (const auto& [player, fuel] : baseFuel) (void)transfer_mobile_base_fuel(next, player, fuel, next.turn + 1);

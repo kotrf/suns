@@ -31,6 +31,15 @@ GameState fixture()
     s.planets[1].xenocrystal = {24, 20, 4, 1}; set_survey_level(s, 1, s.planets[1].star, SurveyLevel::DeepSurvey, s.turn);
     return s;
 }
+void add_mobile_base(GameState& s)
+{
+    s.shipDesigns.push_back({200, 1, "Expedition", ShipHullType::ExpeditionBase,
+        {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5, ShipComponentType::QuickJump5,
+         ShipComponentType::QuickJump5, ShipComponentType::ExpeditionDock, ShipComponentType::RelayArray}});
+    Fleet base; base.id = 2; base.owner = 1; base.design = 200; base.ships = {{200, 1}};
+    base.position = s.fleets[0].position; base.xenocrystal = 8; base.fuel = 5000;
+    base.telemetry = confirmed_fleet_telemetry(s, base); s.fleets.push_back(base); s.nextFleetId = 3; s.nextShipDesignId = 201;
+}
 SaveGameData save_fixture()
 { SaveGameData save; save.state = fixture(); save.pendingOrders = {1, {}}; save.campaignId = 17; save.turnToken = 29; return save; }
 QByteArray bytes(const QString& path) { QFile f(path); assert(f.open(QIODevice::ReadOnly)); return f.readAll(); }
@@ -44,15 +53,19 @@ void persistence_and_migration()
     auto packet = f.telemetry; packet.xenocrystal = 7; f.telemetryInTransit.push_back({15, packet});
     s.planets[0].xenocrystal.surface = 8; assert(apply_resonance_order(s, s.planets[0], {1}));
     (void)resolve_colony_production(s, s.planets[0], true);
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
     assert(apply_resonance_order(s, s.planets[0], {1, ResonanceAction::Pause}));
+    s.pendingMobileBaseTransfers.push_back({1, 2, 1, 2, 10, 16, 0, {}, 0, 0, false, 8});
     assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
     assert(loaded.state.fleets[0].xenocrystal == 8 && loaded.state.fleets[0].telemetry.xenocrystal == 4);
     assert(loaded.state.fleets[0].telemetryInTransit[0].telemetry.xenocrystal == 7);
     assert(loaded.state.planets[0].resonanceLab.work == 60 && loaded.state.planets[0].resonanceLab.crystalsPaid == 8);
     assert(!loaded.state.planets[0].resonanceLab.active && known_xenocrystal(loaded.state, 1, 2)->site.remaining == 20);
+    assert(loaded.state.players[0].surveyKnowledge[0].planetSnapshot->resonanceQueueIndex == 0);
+    assert(loaded.state.pendingMobileBaseTransfers.size() == 1 && loaded.state.pendingMobileBaseTransfers[0].xenocrystal == 8);
     const auto original = bytes(path); auto truncated = original; truncated.chop(1); writeBytes(path, truncated);
     assert(!read_save_game_file(path, loaded, error));
-    for (int defect = 0; defect < 6; ++defect) {
+    for (int defect = 0; defect < 8; ++defect) {
         auto bad = save;
         if (defect == 0) bad.state.planets[1].xenocrystal.remaining = 25;
         if (defect == 1) bad.state.fleets[0].xenocrystal = kMaximumXenocrystal + 1;
@@ -60,6 +73,8 @@ void persistence_and_migration()
         if (defect == 3) bad.state.fleets[0].xenocrystal = 100;
         if (defect == 4) bad.state.players[0].surveyKnowledge[0].planetSnapshot->xenocrystal->observedTurn = s.turn + 1;
         if (defect == 5) bad.state.planets[0].resonanceLab.invested.ironium = 0;
+        if (defect == 6) bad.state.pendingMobileBaseTransfers[0].xenocrystal = kMaximumXenocrystal + 1;
+        if (defect == 7) bad.state.pendingMobileBaseTransfers[0].minerals.ironium = 1;
         assert(write_save_game_file(path, bad, error)); assert(!read_save_game_file(path, loaded, error));
     }
     auto old = original; QByteArray magic;
@@ -88,6 +103,56 @@ void hidden_exports_and_order_exchange()
     assert(std::get<MoveFleetOrder>(loaded.orders.orders[3]).arrivalAction.cargo == FleetCargoKind::Xenocrystal);
     const auto resolved = TurnProcessor{}.process(host.state, {loaded.orders});
     assert(!resolved.planets[0].resonanceLab.started && resolved.fleets[0].xenocrystal == 1);
+}
+void owned_laboratory_exports_use_received_project_and_queue()
+{
+    QTemporaryDir dir; const auto path = dir.filePath("lab.sunsturn"); QString error; SaveGameData loaded;
+    auto host = save_fixture(); host.mode = SessionMode::Host; host.playerTokens = {{1, 31}};
+    auto& s = host.state; auto& p = s.planets[0]; p.xenocrystal.surface = 8;
+    assert(apply_resonance_order(s, p, {1})); (void)resolve_colony_production(s, p, true);
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    assert(write_save_game_file(path, make_player_turn(host, 1), error)); const auto received = bytes(path);
+    // Only the project and its queue change. Pending reports remain host-only.
+    for (int year = 1; year < 10; ++year) {
+        const auto minerals = p.minerals;
+        (void)resolve_colony_production(s, p, true); p.minerals = minerals;
+        p.resonanceLab.operational = resonance_operational(s, p);
+        assert(write_save_game_file(path, make_player_turn(host, 1), error)); assert(bytes(path) == received);
+    }
+    assert(p.resonanceLab.work == kResonanceWork && p.productionQueue.empty());
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.planets[0].resonanceLab.work == 60 && resonance_scheduled(loaded.state.planets[0]));
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    assert(write_save_game_file(path, make_player_turn(host, 1), error)); assert(bytes(path) != received);
+    assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.planets[0].resonanceLab.work == kResonanceWork && !resonance_scheduled(loaded.state.planets[0]));
+    s.players[0].surveyKnowledge.clear();
+    assert(write_save_game_file(path, make_player_turn(host, 1), error));
+    assert(read_save_game_file(path, loaded, error) && !loaded.state.planets[0].resonanceLab.started);
+}
+void remote_base_transfer_survives_save_and_order_exchange()
+{
+    QTemporaryDir dir; const auto path = dir.filePath("remote.suns"); QString error; SaveGameData loaded;
+    auto host = save_fixture(); host.mode = SessionMode::Host; host.playerTokens = {{1, 31}};
+    add_mobile_base(host.state); for (auto& f : host.state.fleets) f.position = {900, 0};
+    host.state.players.push_back({2, "Host"}); host.playerTokens[2] = 41; host.pendingOrders = {2, {}};
+    host.state.fleets[0].xenocrystal = 0;
+    const auto ordersPath = dir.filePath("remote.sunsorders");
+    TurnOrderFileData packet{host.campaignId, host.state.turn, 31,
+        {1, {TransferXenocrystalOrder{{0, 2}, {0, 1}, 8}}}, {"Deliver crystals"}}, received;
+    assert(write_turn_order_file(ordersPath, packet, error) && read_turn_order_file(ordersPath, received, error));
+    assert(validate_turn_submission(host, received).isEmpty());
+    host.state = TurnProcessor{}.process(host.state, {received.orders});
+    assert(host.state.pendingMobileBaseTransfers.size() == 1 && host.state.fleets[1].xenocrystal == 8);
+    const auto due = host.state.pendingMobileBaseTransfers[0].deliveryTurn;
+    const auto roundTrip = write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error);
+    if (!roundTrip) std::cerr << error.toStdString() << '\n';
+    assert(roundTrip);
+    while (loaded.state.turn <= due) loaded.state = TurnProcessor{}.process(loaded.state, {});
+    assert(loaded.state.fleets[0].xenocrystal == 8 && !loaded.state.fleets[1].xenocrystal);
+    assert(loaded.state.pendingMobileBaseTransfers.empty());
+    loaded.state = TurnProcessor{}.process(loaded.state, {});
+    assert(loaded.state.fleets[0].xenocrystal == 8 && !loaded.state.fleets[1].xenocrystal);
 }
 }
 namespace suns {
@@ -137,11 +202,23 @@ void ui_commands_and_previews(MainWindow& w)
     const auto& route = std::get<MoveFleetOrder>(MainWindowTestAccess::orders(w).back());
     assert(route.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable && route.arrivalAction.cargo == FleetCargoKind::Xenocrystal);
     assert(route.queuedWaypoints.size() == 1 && route.queuedWaypoints[0].arrivalAction.cargo == FleetCargoKind::Xenocrystal);
+    auto baseWorld = fixture(); add_mobile_base(baseWorld);
+    MainWindowTestAccess::load(w, baseWorld);
+    from->setCurrentIndex(from->findData(QVariant::fromValue(qulonglong(2))));
+    to->setCurrentIndex(to->findData(QVariant::fromValue(qulonglong(1) << 32))); amount->setValue(8);
+    assert(transfer->isEnabled());
+    MainWindowTestAccess::load(w, baseWorld, {MoveFleetOrder{2, {24, 0}, 3}});
+    assert(!transfer->isEnabled());
+    MainWindowTestAccess::load(w, baseWorld, {TransferXenocrystalOrder{{0, 2}, {1, 0}, 8}, SetResonanceLaboratoryOrder{1}});
+    select_planet(w, 1); assert(details->text().contains("Awaiting 8 physically delivered xenocrystals"));
+    assert(!details->text().contains("Forecast completion: year"));
 }
 }
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv); persistence_and_migration(); hidden_exports_and_order_exchange();
+    owned_laboratory_exports_use_received_project_and_queue();
+    remote_base_transfer_survives_save_and_order_exchange();
     MainWindow w; w.installExoticMaterials(); ui_commands_and_previews(w);
     std::cout << "Exotic material UI, frozen exports, saves and PBEM passed\n";
 }

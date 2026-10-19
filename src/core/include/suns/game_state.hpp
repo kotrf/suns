@@ -694,6 +694,7 @@ struct PlanetSurveySnapshot {
     PlanetaryEngineering engineering; // Dated visible work; private investment is redacted.
     std::optional<XenocrystalObservation> xenocrystal; // DeepSurvey only, frozen at observation.
     ResonanceLaboratory resonanceLab; // Private project evidence captured for its owner only.
+    std::optional<std::uint32_t> resonanceQueueIndex; // Frozen scheduling, including completion/removal.
 };
 
 struct SystemSurveyKnowledge {
@@ -1523,6 +1524,7 @@ struct PendingMobileBaseTransfer {
     MineralCargo minerals;
     double fuelAmount{}, sourceReserve{};
     bool fuelOnly{};
+    std::uint32_t xenocrystal{};
 };
 
 struct GameState {

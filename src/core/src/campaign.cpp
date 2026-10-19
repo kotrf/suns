@@ -484,7 +484,6 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                     known.environment = intel->planetSnapshot->environment.value_or(PlanetEnvironment{});
                     known.naturalEnvironment = intel->planetSnapshot->naturalEnvironment;
                     known.engineering = intel->planetSnapshot->engineering;
-                    if (known.owner == playerId) known.resonanceLab = intel->planetSnapshot->resonanceLab;
                 }
             } else known.environment = {};
             // Surface stocks change through other empires' mining/cargo orders.
@@ -509,6 +508,23 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             known.precursorArtifacts.researchPoints = 0;
             known.precursorArtifacts.present = known_precursor_artifact_hint(
                 host, playerId, planet.id).value_or(false);
+        }
+        // Ownership does not deliver remote construction telemetry. Both the
+        // installation and its remaining queue work come from the same packet.
+        known.resonanceLab = {};
+        std::erase_if(known.productionQueue, [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
+        if (known.owner == playerId) {
+            const auto intel = std::find_if(player->surveyKnowledge.begin(), player->surveyKnowledge.end(),
+                [&](const auto& entry) { return entry.star == planet.star; });
+            if (intel != player->surveyKnowledge.end() && intel->planetSnapshot) {
+                const auto& snapshot = *intel->planetSnapshot;
+                known.resonanceLab = snapshot.resonanceLab;
+                if (snapshot.resonanceQueueIndex) {
+                    const auto index = std::min<std::size_t>(*snapshot.resonanceQueueIndex, known.productionQueue.size());
+                    known.productionQueue.insert(known.productionQueue.begin() + index,
+                        {ProductionKind::ResonanceLaboratory, kResonanceWork - known.resonanceLab.work});
+                }
+            }
         }
         known.xenocrystal = known_xenocrystal(host, playerId, planet.id).value_or(XenocrystalObservation{}).site;
         state.planets.push_back(known);

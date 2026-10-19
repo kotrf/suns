@@ -33,7 +33,8 @@ void MainWindow::installExoticMaterials()
     auto* hint = new QLabel("DeepSurvey reveals rare finite xenocrystal deposits, including on uninhabitable worlds. "
         "Remote Mining with robots, Construction 8 and Electronics 8 extracts one whole unit per mining ship/year, "
         "up to 4 per planet/year, into a physical surface cache. One unit occupies 1 kt of the shared hold. "
-        "Received stocks may be old; local transfers require current reports. Remote voyages use ordinary arrival orders.", body);
+        "Received stocks may be old; local transfers require current reports. Mobile-base exchanges occur after production. "
+        "Remote voyages use ordinary arrival orders.", body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* tree = new QTreeWidget(body); tree->setObjectName("exoticInventory"); tree->setRootIsDecorated(false);
     tree->setHeaderLabels({"Location", "Known deposit", "Received stock", "Extraction/year", "Evidence", "Laboratory"});
@@ -68,7 +69,7 @@ void MainWindow::installExoticMaterials()
     connect(transfer, &QPushButton::clicked, this, [=, this] {
         auto known = plan(state_, pendingOrders_);
         const TransferXenocrystalOrder order{endpoint(from->currentData().toULongLong()), endpoint(to->currentData().toULongLong()), std::uint32_t(amount->value())};
-        if (!preview_xenocrystal_transfer(known, pendingOrders_.player, order)) return;
+        if (!preview_xenocrystal_transfer(known, pendingOrders_.player, order, &pendingOrders_)) return;
         appendPendingOrder(order, "Transfer xenocrystals"); rebuildScene();
     });
     const auto voyage = [=, this](int kind) {
@@ -156,7 +157,7 @@ void MainWindow::refreshExoticMaterialControls()
     auto known = plan(state_, pendingOrders_);
     auto* from = findChild<QComboBox*>("exoticTransferSource"); auto* to = findChild<QComboBox*>("exoticTransferDestination");
     findChild<QPushButton*>("transferXenocrystal")->setEnabled(preview_xenocrystal_transfer(known, pendingOrders_.player,
-        {endpoint(from->currentData().toULongLong()), endpoint(to->currentData().toULongLong()), std::uint32_t(findChild<QSpinBox*>("exoticTransferAmount")->value())}));
+        {endpoint(from->currentData().toULongLong()), endpoint(to->currentData().toULongLong()), std::uint32_t(findChild<QSpinBox*>("exoticTransferAmount")->value())}, &pendingOrders_));
     known = plan(state_, pendingOrders_);
     const auto place = tree->currentItem() ? endpoint(tree->currentItem()->data(0, Qt::UserRole).toULongLong()) : CargoTransferEndpoint{};
     const auto* p = find_planet(known, place.planet);

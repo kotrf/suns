@@ -1,6 +1,7 @@
 #include "suns/exotic_materials.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
+#include "suns/mobile_base.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/science_samples.hpp"
@@ -17,12 +18,13 @@ std::uint64_t mix(std::uint64_t x)
     x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL; return x ^ (x >> 31);
 }
 struct Store { std::uint32_t* amount; Position position; Fleet* fleet; Planet* planet; };
-std::optional<Store> store(GameState& s, PlayerId owner, CargoTransferEndpoint endpoint)
+std::optional<Store> store(GameState& s, PlayerId owner, CargoTransferEndpoint endpoint, bool commandDelivered)
 {
     if (bool(endpoint.planet) == bool(endpoint.fleet)) return {};
     if (endpoint.fleet) {
         auto f = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == endpoint.fleet && f.owner == owner; });
-        if (f == s.fleets.end() || !fleet_has_instant_link(s, *f)) return {};
+        if (f == s.fleets.end() || (!commandDelivered && !fleet_has_instant_link(s, *f))) return {};
+        if (mobile_base_hulls(s, *f) && !mobile_base_service_error(s, *f, s.turn + 1).empty()) return {};
         return Store{&f->xenocrystal, f->position, &*f, nullptr};
     }
     auto p = std::find_if(s.planets.begin(), s.planets.end(), [&](const auto& p) { return p.id == endpoint.planet; });
@@ -110,9 +112,9 @@ bool move_xenocrystals(std::uint32_t& from, std::uint32_t& to, std::uint32_t amo
     if (!amount || &from == &to || amount > from || to > kMaximumXenocrystal || amount > kMaximumXenocrystal - to) return false;
     from -= amount; to += amount; return true;
 }
-bool transfer_xenocrystals(GameState& s, PlayerId owner, const TransferXenocrystalOrder& order)
+bool transfer_xenocrystals(GameState& s, PlayerId owner, const TransferXenocrystalOrder& order, bool commandDelivered)
 {
-    auto from = store(s, owner, order.source), to = store(s, owner, order.destination);
+    auto from = store(s, owner, order.source, commandDelivered), to = store(s, owner, order.destination, commandDelivered);
     if (!from || !to || !same_position(from->position, to->position)) return false;
     if (to->fleet && fleet_cargo_used(s, *to->fleet) + order.amount > fleet_cargo_capacity(s, *to->fleet) + 1e-6) return false;
     if (!move_xenocrystals(*from->amount, *to->amount, order.amount)) return false;
@@ -121,8 +123,33 @@ bool transfer_xenocrystals(GameState& s, PlayerId owner, const TransferXenocryst
         to->planet ? to->planet->star : 0, to->planet ? to->planet->id : 0, sourceFleet, 0, ProductionKind::Research, order.amount);
     return true;
 }
-bool preview_xenocrystal_transfer(GameState& s, PlayerId owner, const TransferXenocrystalOrder& order)
+bool preview_xenocrystal_transfer(GameState& s, PlayerId owner, const TransferXenocrystalOrder& order, const PlayerOrders* pending)
 {
+    const auto isBase = [&](FleetId id) {
+        const auto* f = find_service_fleet(s, id);
+        return f && mobile_base_hulls(s, *f) > 0;
+    };
+    if (pending && (isBase(order.source.fleet) || isBase(order.destination.fleet))) {
+        // A dockside estimate cannot spend cargo before the later service
+        // phase. Either participant's departure invalidates that estimate.
+        for (const auto& command : pending->orders) {
+            if (const auto* move = std::get_if<MoveFleetOrder>(&command); move && !move->clearRoute
+                && (move->fleet == order.source.fleet || move->fleet == order.destination.fleet)) return false;
+            if (const auto* gate = std::get_if<GateFleetOrder>(&command); gate
+                && (gate->fleet == order.source.fleet || gate->fleet == order.destination.fleet)) return false;
+        }
+        auto projected = s;
+        for (const auto endpoint : {order.source, order.destination}) if (isBase(endpoint.fleet)) {
+            auto& base = *std::find_if(projected.fleets.begin(), projected.fleets.end(),
+                [&](const auto& fleet) { return fleet.id == endpoint.fleet; });
+            for (const auto& command : pending->orders)
+                if (const auto* control = std::get_if<SetMobileBaseOrder>(&command); control && control->fleet == base.id
+                    && mobile_base_program_valid(control->program))
+                    base.mobileBase = control->program;
+        }
+        if (!preview_xenocrystal_transfer(projected, owner, order)) return false;
+        s = std::move(projected); return true;
+    }
     for (const auto endpoint : {order.source, order.destination}) {
         if (endpoint.fleet) {
             const auto f = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == endpoint.fleet && f.owner == owner; });

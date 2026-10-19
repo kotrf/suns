@@ -54,6 +54,16 @@ transfers replay in order without advancing the year. Remote arrival policies
 act on the actual surface stock and remaining hold at arrival, so estimates
 based on old evidence remain estimates.
 
+Transfers touching an Expedition Base use its ordinary post-movement service
+phase: Expedition Dock, enabled external services, a stationary base without an
+active route and actual co-location are required. Fleet-to-fleet commands travel
+to a remote base with the normal communication delay; nothing is reserved in
+transit. Bulk cargo and crystals share service ordering and hold limits. These
+exchanges occur **after colony production**, so their deliveries become usable
+for construction in the following year. Construction forecasts do not spend
+these future deliveries. Local transfer controls reject pending departures or
+disabled services rather than showing a fictitious dockside transfer.
+
 Splitting allocates whole samples first, whole crystal units second, integer
 population third and divisible minerals last. Both final holds must fit before
 the operation commits. Explicit and on-arrival merges share the physical and
@@ -106,6 +116,10 @@ laboratory progress/payment/blocking reason. Deposit and surface observations
 retain their own dates when delayed reports arrive out of order. A newer shallow
 scan cannot erase or refresh an older deep measurement. Private project evidence
 is frozen for its owner; foreign surveys do not disclose paid investment.
+Ownership alone does not expose current laboratory progress, payment or
+operation. The received snapshot also retains its queue position and remaining
+work, including while physical completion is still in transit. Without a
+received snapshot the project is unknown; there is no physical-state fallback.
 Hidden extraction, stock movement and depletion cannot rewrite a received
 snapshot or exported player turn.
 Foreign colony warehouses remain private even under DeepSurvey; the received
@@ -133,7 +147,8 @@ restoration without requiring another eight crystals.
 
 Save **v87** appends a bounded **EXOT** extension after v86, retaining deposits,
 surface stores, laboratories, received/in-flight observations and each physical,
-confirmed/in-flight/loss/wormhole cargo record separately. Orders **v33** adds
+confirmed/in-flight/loss/wormhole cargo record separately, plus frozen laboratory
+scheduling and pending mobile-base crystal commands. Orders **v33** adds
 integer transfers and project control, and the xenocrystal arrival cargo type.
 The readers reject invalid bounds, inconsistent paid work and overfilled physical
 crystal holds. v86 and earlier saves keep their previous world, with empty rare

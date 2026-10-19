@@ -26,6 +26,13 @@ Validation belongs to the implementation PR. #63 stays open for further material
 and applications. Merge is left for review; next major direction remains #60,
 then #55/#46, with broader #54/#61/#56 work still open.
 
+PR #221 review follow-up prevents laboratory completion from creating a ship,
+uses received owner snapshots for laboratory state and queue work, and routes
+crystal exchanges through mobile-base docking and delayed service commands.
+Service deliveries occur after production and cannot fund that year's forecast.
+The save/load regression also corrected the pre-existing radar-contact hull
+bound that rejected Expedition Base observations.
+
 ## Historical implementation — 19 October 2026: physical science samples
 
 `codex/field-science-samples` is based on main

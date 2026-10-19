@@ -1535,7 +1535,12 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
     if (!planet || level < SurveyLevel::BasicScan) return std::nullopt;
     if (level >= SurveyLevel::OrbitalSurvey) {
         PlanetSurveySnapshot result{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
-        if (planet->owner == player) result.resonanceLab = planet->resonanceLab;
+        if (planet->owner == player) {
+            result.resonanceLab = planet->resonanceLab;
+            const auto item = std::find_if(planet->productionQueue.begin(), planet->productionQueue.end(),
+                [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
+            if (item != planet->productionQueue.end()) result.resonanceQueueIndex = std::uint32_t(item - planet->productionQueue.begin());
+        }
         if (level >= SurveyLevel::DeepSurvey) result.xenocrystal = XenocrystalObservation{planet->xenocrystal, observedTurn, true, observedTurn,
             std::uint8_t(observedTurn <= state.turn)};
         if (result.xenocrystal && planet->owner && planet->owner != player) result.xenocrystal->site.surface = 0;

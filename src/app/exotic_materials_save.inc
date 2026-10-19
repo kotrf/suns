@@ -31,6 +31,8 @@ void writeExoticObservation(QDataStream& out, const std::optional<PlanetSurveySn
         out << quint64(observation.observedTurn) << quint8(observation.depositSurveyed) << quint64(observation.depositObservedTurn) << quint8(observation.stockPhase);
     }
     writeResonanceLab(out, snapshot ? snapshot->resonanceLab : ResonanceLaboratory{});
+    out << quint8(snapshot && snapshot->resonanceQueueIndex);
+    if (snapshot && snapshot->resonanceQueueIndex) out << quint32(*snapshot->resonanceQueueIndex);
 }
 void readExoticObservation(QDataStream& in, std::optional<PlanetSurveySnapshot>& snapshot, std::uint64_t latest)
 {
@@ -51,6 +53,13 @@ void readExoticObservation(QDataStream& in, std::optional<PlanetSurveySnapshot>&
     ResonanceLaboratory lab; readResonanceLab(in, lab);
     if (snapshot) snapshot->resonanceLab = lab;
     else if (lab.started) markCorrupt(in);
+    quint8 queued{}; in >> queued;
+    if (queued > 1) { markCorrupt(in); return; }
+    if (queued) {
+        quint32 index{}; in >> index;
+        if (!snapshot || !lab.started || lab.work >= kResonanceWork || index > 100000) markCorrupt(in);
+        else snapshot->resonanceQueueIndex = index;
+    }
 }
 void writeExoticMaterials(QDataStream& stream, const GameState& state)
 {
@@ -75,6 +84,8 @@ void writeExoticMaterials(QDataStream& stream, const GameState& state)
         out << quint32(p.pendingSurveyReports.size());
         for (const auto& r : p.pendingSurveyReports) { out << quint32(r.star) << quint64(r.observedTurn); writeExoticObservation(out, r.planetSnapshot); }
     }
+    out << quint32(state.pendingMobileBaseTransfers.size());
+    for (const auto& packet : state.pendingMobileBaseTransfers) out << quint32(packet.xenocrystal);
     if (out.status() != QDataStream::Ok || payload.size() > 32 * 1024 * 1024) { stream.setStatus(QDataStream::WriteFailed); return; }
     stream << kExoticMaterialsMagic << quint32(payload.size()); stream.writeRawData(payload.data(), payload.size());
 }
@@ -117,6 +128,12 @@ void readExoticMaterials(QDataStream& stream, GameState& state, bool playerTurn)
             if (id != r.star || observed != r.observedTurn) markCorrupt(in);
             readExoticObservation(in, r.planetSnapshot, r.observedTurn);
         }
+    }
+    if (!readCount(in, count) || count != state.pendingMobileBaseTransfers.size()) { markCorrupt(stream); return; }
+    for (auto& packet : state.pendingMobileBaseTransfers) {
+        in >> packet.xenocrystal;
+        if (packet.xenocrystal > kMaximumXenocrystal || (packet.xenocrystal
+            && (packet.fuelOnly || packet.colonists || mineral_cargo_mass(packet.minerals) > 0))) markCorrupt(in);
     }
     if (!playerTurn) for (const auto& f : state.fleets)
         if (f.xenocrystal && fleet_cargo_used(state, f) > fleet_cargo_capacity(state, f) + 1e-6) markCorrupt(in);
