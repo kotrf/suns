@@ -1,6 +1,6 @@
 # Shared cargo manifest
 
-Suns! uses one physical cargo hold for population and minerals. Cargo is deliberately not split into separate invisible capacities: fitting, loading and route planning should all compete for the same finite volume/mass budget.
+Suns! uses one physical cargo hold for population, minerals and special cargo. Cargo is deliberately not split into separate invisible capacities: fitting, loading and route planning should all compete for the same finite volume/mass budget.
 
 ## Cargo units
 
@@ -10,11 +10,12 @@ The current manifest contains:
 - Ironium: 1 unit = 1 cargo unit;
 - Boranium: 1 unit = 1 cargo unit;
 - Germanium: 1 unit = 1 cargo unit.
-- scientific specimens: each indivisible sample occupies 5 kt.
+- scientific specimens: each indivisible sample occupies 5 kt;
+- xenocrystal: each whole consumable unit occupies 1 kt.
 
 A fleet's used cargo is therefore:
 
-`colonist cargo + ironium + boranium + germanium + scientific samples`
+`colonist cargo + ironium + boranium + germanium + scientific samples + xenocrystal`
 
 This total may not exceed the fitted design's cargo capacity.
 
@@ -55,3 +56,8 @@ cargo accounts for their occupied hold space. On-arrival **Unload all cargo**
 deposits specimens at a friendly colony; colonization also preserves them.
 
 Earth begins with a small placeholder stock of all three minerals so the logistics model can be exercised immediately. The important foundation is shared: population and minerals compete for one hold and one gross-mass/fuel calculation, while mined minerals remain on the planetary surface until a transport explicitly loads them.
+
+[Rare exotic materials](rare-exotic-materials.md) has a separate received-stock
+panel and whole-unit transfers using the same endpoints/hold/mass. Arrival cargo
+policies can load/unload xenocrystal; Unload all cargo includes it. Surface stock
+and finite deposits use delivered, dated evidence.

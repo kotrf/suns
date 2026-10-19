@@ -189,6 +189,7 @@ MineralCargo projected_remote_mining(const GameState& state, const Planet& plane
 
 MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item)
 {
+    if (item.kind == ProductionKind::ResonanceLaboratory) return {item.remainingCost*0.2,item.remainingCost*0.1,item.remainingCost*0.2};
     if (item.kind == ProductionKind::OrbitalMirrors || item.kind == ProductionKind::OrbitalShades) return {item.remainingCost*0.1,item.remainingCost*0.05,item.remainingCost*0.1};
     if (item.kind == ProductionKind::CleanupContamination) return {0,1,1};
     if (item.kind == ProductionKind::Research || item.kind == ProductionKind::Terraforming) return {};

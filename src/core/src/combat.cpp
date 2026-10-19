@@ -358,8 +358,11 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         const double samplesBefore = science_sample_mass(fleet.scienceSamples);
         fleet.scienceSamples.resize(std::min(fleet.scienceSamples.size(), std::size_t(
             std::max(0.0, std::floor((cargoAfter + epsilon) / kScienceSampleMass)))));
-        const double ordinaryBefore = cargoBefore - samplesBefore;
-        const double ordinaryAfter = cargoAfter - science_sample_mass(fleet.scienceSamples);
+        const auto crystalsBefore = fleet.xenocrystal;
+        fleet.xenocrystal = std::min(fleet.xenocrystal, std::uint32_t(std::max(0.0,
+            std::min(double(fleet.xenocrystal), std::floor(cargoAfter - science_sample_mass(fleet.scienceSamples) + epsilon)))));
+        const double ordinaryBefore = cargoBefore - samplesBefore - crystalsBefore;
+        const double ordinaryAfter = cargoAfter - science_sample_mass(fleet.scienceSamples) - fleet.xenocrystal;
         const double cargoShare = ordinaryBefore > epsilon
             ? std::clamp(ordinaryAfter / ordinaryBefore, 0.0, 1.0) : 0;
         fleet.colonists = std::uint64_t(std::floor(fleet.colonists * cargoShare));

@@ -121,6 +121,13 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::SampleRecovered: subject = QString("Specimen X%1 recovered aboard %2 (5 kt)").arg(event.quantity).arg(fleetName); break;
     case GameEventKind::SampleDepleted: subject = QString("Object X%1: no physical specimen remains").arg(event.quantity); break;
     case GameEventKind::SampleHoldFull: subject = QString("%1: specimen X%2 needs 5 kt of free hold").arg(fleetName).arg(event.quantity); break;
+    case GameEventKind::XenocrystalDiscovered: subject = QString("%1: finite xenocrystal deposit discovered — %2 units remaining").arg(planetName).arg(event.quantity); break;
+    case GameEventKind::XenocrystalAcquired: subject = QString("%1: %2 xenocrystals physically transferred").arg(planetName).arg(event.quantity); break;
+    case GameEventKind::XenocrystalDepleted: subject = QString("%1: xenocrystal deposit exhausted; surface cache %2 units").arg(planetName).arg(event.quantity); break;
+    case GameEventKind::ResonanceProjectStatus:
+        subject = event.quantity > 600
+            ? QString("%1: resonance construction stopped — deliver %2 more xenocrystals").arg(planetName).arg(event.quantity - 600)
+            : QString("%1: resonance laboratory status changed (%2/600 work); check Rare materials").arg(planetName).arg(event.quantity); break;
     case GameEventKind::SampleDelivered: subject = QString("Specimen X%1 delivered to %2").arg(event.quantity).arg(planetName); break;
     case GameEventKind::SampleRetained: subject = QString("Specimen X%1 retained as a working research artifact").arg(event.quantity); break;
     case GameEventKind::ScientificData: subject = QString("Field science: +%1 %2 research points").arg(event.quantity).arg(QString::fromStdString(research_field_name(event.researchField))); break;
@@ -287,9 +294,12 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
         return event.kind == GameEventKind::ScientificData || event.kind == GameEventKind::SampleRecovered
             || event.kind == GameEventKind::SampleRetained || event.kind == GameEventKind::SampleDelivered || event.kind == GameEventKind::SampleDepleted
             || event.kind == GameEventKind::SampleHoldFull || event.kind == GameEventKind::ResearchLevelCompleted
+            || event.kind == GameEventKind::XenocrystalDiscovered || event.kind == GameEventKind::XenocrystalAcquired
+            || event.kind == GameEventKind::XenocrystalDepleted || event.kind == GameEventKind::ResonanceProjectStatus
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered;
     case MessageTypeFilter::ProductionDelays:
         return event.kind == GameEventKind::ProductionWaitingForMinerals
+            || event.kind == GameEventKind::ResonanceProjectStatus
             || event.kind == GameEventKind::ProductionWaitingForShipyard;
     case MessageTypeFilter::Warnings: return event.severity != GameEventSeverity::Information;
     }

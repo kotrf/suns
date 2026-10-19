@@ -61,6 +61,10 @@ enum class GameEventKind {
     SampleDelivered,
     SampleDepleted,
     SampleHoldFull,
+    XenocrystalDiscovered,
+    XenocrystalAcquired,
+    XenocrystalDepleted,
+    ResonanceProjectStatus,
 };
 
 enum class GameEventSeverity {

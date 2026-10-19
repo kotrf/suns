@@ -348,6 +348,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.waypointQueue = fleet.waypointQueue;
     result.minerals = fleet.minerals;
     result.scienceSamples = fleet.scienceSamples;
+    result.xenocrystal = fleet.xenocrystal;
     result.task = fleet.task;
     result.repeatOrders = fleet.repeatOrders;
     result.routeTemplate = fleet.routeTemplate;
@@ -640,6 +641,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.waypointQueue = telemetry.waypointQueue;
     view.minerals = telemetry.minerals;
     view.scienceSamples = telemetry.scienceSamples;
+    view.xenocrystal = telemetry.xenocrystal;
     view.task = telemetry.task;
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;

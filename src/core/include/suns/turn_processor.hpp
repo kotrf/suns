@@ -176,6 +176,16 @@ struct ProcessScienceSampleOrder {
     bool retain{}; // false consumes the specimen for a one-time scientific-data report.
 };
 
+struct TransferXenocrystalOrder {
+    CargoTransferEndpoint source, destination;
+    std::uint32_t amount{};
+};
+struct SetResonanceLaboratoryOrder {
+    PlanetId colony{};
+    ResonanceAction action{ResonanceAction::StartOrResume};
+    bool active{true};
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -206,7 +216,9 @@ using Order = std::variant<
     TransferFleetFuelOrder,
     SetPlanetaryEngineeringOrder,
     TransferScienceSampleOrder,
-    ProcessScienceSampleOrder>;
+    ProcessScienceSampleOrder,
+    TransferXenocrystalOrder,
+    SetResonanceLaboratoryOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

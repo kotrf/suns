@@ -1,6 +1,24 @@
 # Project status and development handoff
 
-## Implementation branch — 19 October 2026: physical science samples
+## Implementation branch — 19 October 2026: rare exotic materials
+
+`codex/rare-exotic-materials` starts from verified main
+[1155f53](https://github.com/kotrf/suns/commit/1155f531d62e9e57d6cb4faf4d3baffdf32b6965),
+the merge of [#220](https://github.com/kotrf/suns/pull/220). That main has physical
+science samples, the review fixes, and save v86 / orders v32.
+
+The first [#63 slice](rare-exotic-materials.md) adds clustered finite xenocrystal
+deposits revealed by delivered DeepSurvey, remote extraction into physical surface
+caches, whole-unit cargo and an optional resonance laboratory. The laboratory
+consumes eight delivered units once and enables retained artifacts to research
+outside the main focus. It preserves paid work through pause/cancel/capture;
+ordinary ships, gates and climate projects keep their existing recipes.
+The branch adds a dedicated UI, fair basic computer use and save v87 / orders v33.
+Validation belongs to the implementation PR. #63 stays open for further materials
+and applications. Merge is left for review; next major direction remains #60,
+then #55/#46, with broader #54/#61/#56 work still open.
+
+## Historical implementation — 19 October 2026: physical science samples
 
 `codex/field-science-samples` is based on main
 [2aaca80](https://github.com/kotrf/suns/commit/2aaca809f3829a7a43631d12825fda942a7ee0cd)

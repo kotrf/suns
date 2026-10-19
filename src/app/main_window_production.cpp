@@ -51,6 +51,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::PlanetaryRadar: name = "Planetary radar (150 ly)"; break;
     case ProductionKind::OrbitalMirrors: name = "Orbital mirrors"; break;
     case ProductionKind::OrbitalShades: name = "Orbital shades"; break;
+    case ProductionKind::ResonanceLaboratory: name = "Resonance laboratory"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;
     case ProductionKind::Research: return "Legacy Research item";
     case ProductionKind::OrbitalStation: name = item.station
@@ -74,7 +75,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
 
 std::vector<ProductionItem> MainWindow::plannedProductionQueue(const Planet& planet) const
 {
-    const auto planned = planned_production_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+    const auto planned = planned_production_state(projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_), pendingOrders_);
     const auto found = std::find_if(planned.planets.begin(), planned.planets.end(),
         [&](const auto& candidate) { return candidate.id == planet.id; });
     return found == planned.planets.end() ? std::vector<ProductionItem>{} : found->productionQueue;
@@ -257,7 +258,7 @@ void MainWindow::refreshProductionQueue()
     }
 
     productionQueuePlanet_ = planet->id;
-    const auto forecastState = planned_production_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+    const auto forecastState = planned_production_state(projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_), pendingOrders_);
     const auto projectedPlanet = std::find_if(forecastState.planets.begin(), forecastState.planets.end(),
         [planet](const auto& candidate) { return candidate.id == planet->id; });
     const auto queue = projectedPlanet->productionQueue;

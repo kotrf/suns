@@ -88,3 +88,8 @@ Tests cover the complete expedition/return/disposition path, observation gates,
 stock/capacity, duplicate rewards, ordered previews, split/merge conservation,
 retained research, computer decisions, delayed manifests, malformed saves,
 migration, byte-identical hidden exports, UI authoring and PBEM orders.
+
+The optional [resonance laboratory](rare-exotic-materials.md) can extend retained
+artifacts to parallel native-field research outside the empire focus. It consumes
+physically delivered xenocrystal; ordinary retained-artifact operation and sample
+analysis do not acquire a rare-material requirement.

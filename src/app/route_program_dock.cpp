@@ -403,6 +403,7 @@ void attachRouteProgramDock(MainWindow& window)
     cargoCombo->addItem("Boranium", static_cast<int>(FleetCargoKind::Boranium));
     cargoCombo->addItem("Germanium", static_cast<int>(FleetCargoKind::Germanium));
     cargoCombo->addItem("All cargo", static_cast<int>(FleetCargoKind::All));
+    cargoCombo->addItem("Xenocrystal (1 kt/unit)", static_cast<int>(FleetCargoKind::Xenocrystal));
     cargoCombo->setEnabled(false);
     auto* reserveSpin = new QSpinBox(waypointGroup);
     reserveSpin->setObjectName("routeReserveSpin");
