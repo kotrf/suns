@@ -1,5 +1,6 @@
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
+#include "suns/survey_probes.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/mobile_base.hpp"
@@ -1099,6 +1100,7 @@ bool merge_fleets(GameState& state, PlayerId player, const MergeFleetsOrder& ord
         || !fleet_ready_for_reorganization(*source)) return false;
     if (!merge_fleet_special_cargo(state, *destination, *source)) return false;
 
+    combine_probe_knowledge(*destination, *source);
     destination->lastMovedTurn = std::max(destination->lastMovedTurn, source->lastMovedTurn);
     destination->lastServiceTurn = std::max(destination->lastServiceTurn, source->lastServiceTurn);
     const auto sourceId = source->id;
@@ -1208,6 +1210,8 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     detached.arrivalAction.reset();
     detached.waypointQueue.clear();
     detached.pendingCommands.clear();
+    pause_probe(detached);
+    pause_probe(remaining);
     detached.mobileBase.clients.clear();
     detached.telemetry = {};
     detached.telemetryInTransit.clear();
@@ -1359,6 +1363,7 @@ void abandon_lost_fleet_target(GameState& state, Fleet& fleet)
 bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
 {
     if (!merge_fleet_special_cargo(state, destination, source)) return false;
+    combine_probe_knowledge(destination, source);
     const auto sourceId = source.id;
     const auto destinationShips = fleet_ship_count(destination);
     const auto sourceShipCount = fleet_ship_count(source);
@@ -2184,6 +2189,7 @@ TurnResult TurnProcessor::process_with_events(
                         if (fleet == next.fleets.end()) return;
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
                             concreteOrder.fleet, concreteOrder.source, concreteOrder.destination);
+                        if (transferred) pause_probe(*fleet);
                         const auto target = transferred ? concreteOrder.destination : concreteOrder.source;
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
                             [&](const auto& p) { return p.id == target && p.owner == submission.player; });
@@ -2201,6 +2207,8 @@ TurnResult TurnProcessor::process_with_events(
                         (void)queue_station_construction(next,submission.player,concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
                         (void)transfer_science_sample(next, submission.player, concreteOrder);
+                    } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
+                        (void)submit_probe_command(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferXenocrystalOrder>) {
                         const auto involvesBase = [&](FleetId id) {
                             const auto* f = find_service_fleet(next, id);
@@ -2415,6 +2423,7 @@ TurnResult TurnProcessor::process_with_events(
     mine_xenocrystals(next);
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
+    advance_survey_probes(next);
     advance_fleets(next, freight, movementFuel);
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);

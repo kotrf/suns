@@ -109,7 +109,7 @@ Command in transit: delivery Turn 46
 
 The estimate is intentionally not authoritative. Interception, combat, fuel
 stalls or other events can already cause a remote fleet to depart from its last
-reported plan. Autonomous contingency doctrines remain future work.
+reported plan. The first [autonomous survey programmes](autonomous-survey-probes.md) carry a separate local notebook and delayed controls. Broader contingency doctrines remain future work.
 
 The eventual map presentation should therefore visually distinguish a confirmed position from an estimated one rather than silently exposing the simulation's real coordinates.
 
@@ -170,3 +170,11 @@ The same model is intended to support:
 Jamming should not reduce the physical speed of the signal. The planned model is link-budget degradation: hostile interference reduces the maximum reliable range of the subspace hop and can make a remote fleet temporarily unreachable. Authentication and deliberately forged messages remain possible future ideas, not part of the base communications model.
 
 When no new command can arrive, a fleet keeps executing its onboard waypoint queue and stops after the program is exhausted. Conditional contingency commands such as "if no contact for N turns, return to the nearest friendly relay" are a future autonomy layer rather than implicit fleet behaviour.
+
+## Autonomous survey programmes (#60)
+
+Dedicated probes use the same command and report transport. Programme payloads
+freeze delivered HQ survey knowledge at issue; onboard observations can advance
+the local mission before HQ receives them. Explicit uploads deliver knowledge
+without resuming paused autonomy. Telemetry carries a dated mission summary,
+not the private notebook. See [rules and limits](autonomous-survey-probes.md).

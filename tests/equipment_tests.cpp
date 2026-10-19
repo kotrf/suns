@@ -18,7 +18,7 @@ GameState equipped_empire()
 
 void reference_values_and_legacy()
 {
-    assert(equipment_technologies().size() == 115);
+    assert(equipment_technologies().size() == 116);
     std::set<C> ids;
     for (const auto& equipment : equipment_technologies()) assert(ids.insert(equipment.component).second);
     const auto tank = component_spec(C::StarsFuelTank);

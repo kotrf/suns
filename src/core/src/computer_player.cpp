@@ -1,5 +1,6 @@
 #include "suns/computer_player.hpp"
 #include "suns/mobile_base.hpp"
+#include "suns/survey_probes.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/science_samples.hpp"
@@ -26,7 +27,7 @@ constexpr std::uint64_t kMinimumSettlers = 100;
 
 bool idle(const Fleet& fleet)
 {
-    return !fleet.destination && fleet.waypointQueue.empty() && !fleet.repeatOrders
+    return !fleet.probe.enabled && !fleet.destination && fleet.waypointQueue.empty() && !fleet.repeatOrders
         && fleet.targetFleet == 0 && fleet.task == FleetTask::None;
 }
 
@@ -534,7 +535,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 continue;
             } else continue;
         }
-        if (!idle(fleet) || fleet.damagePercent >= 100 || goals.size() >= kMaximumComputerFleetGoals) continue;
+        if (probe_capable(state, fleet) || !idle(fleet) || fleet.damagePercent >= 100 || goals.size() >= kMaximumComputerFleetGoals) continue;
         // Use the confirmed position and fuel for a stationary fleet, not a
         // speculative arrival reconstructed from a stale moving snapshot.
         if (fleet.telemetry.observedTurn == 0 || !confirmed_idle(fleet, 0)) continue;
@@ -819,6 +820,50 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
     plan_research(view, plan, reason);
     plan_military(view, plan, reason);
     plan_gate_construction(view, plan, reason);
+    // A paid dedicated probe uses ordinary programme and construction orders.
+    bool hasProbe = false;
+    for (const auto& fleet : view.state.fleets) if (probe_capable(view.state, fleet)) {
+        hasProbe = true;
+        if (!fleet.probe.configured && idle(fleet) && fleet.telemetry.observedTurn == view.state.turn) {
+            ProbeProgram programme; programme.center = fleet.position; programme.radius = 600;
+            double nearest = std::numeric_limits<double>::infinity();
+            for (const auto& star : view.state.stars) if (survey_level(view.state, view.player, star.id) < SurveyLevel::DeepSurvey)
+                nearest = std::min(nearest, distance_between(fleet.position, star.position));
+            if (std::isfinite(nearest)) programme.radius = std::min(1e6, std::max(600.0, nearest + 100.0));
+            plan.orders.orders.push_back(SetProbeProgramOrder{fleet.id, ProbeAction::Configure, programme});
+            explain(reason, "Launch autonomous survey programme from received knowledge");
+        }
+    }
+    if (!hasProbe && ship_hull_available_to_player(view.state, view.player, ShipHullType::SurveyProbe)) {
+        auto design = basic_survey_probe_design(view.player, view.state.nextShipDesignId);
+        bool queued = false;
+        for (const auto& p : view.state.planets) for (const auto& item : p.productionQueue) {
+            const auto* d = find_ship_design(view.state, item.shipDesign);
+            queued |= item.kind == ProductionKind::ColonyShip && d && d->hull == ShipHullType::SurveyProbe;
+        }
+        if (!queued && ship_design_available_to_player(view.state, view.player, design)) {
+            for (const auto& p : view.state.planets) if (p.owner == view.player && p.productionQueue.empty()
+                && colony_has_orbital_service(view.state, p.id, view.player, OrbitalStationModule::Shipyard)
+                && p.minerals.ironium >= ship_design_mineral_cost(design).ironium
+                && p.minerals.boranium >= ship_design_mineral_cost(design).boranium
+                && p.minerals.germanium >= ship_design_mineral_cost(design).germanium) {
+                auto existing = std::find_if(view.state.shipDesigns.begin(), view.state.shipDesigns.end(),
+                    [&](const auto& d) { return d.owner == view.player && d.name == design.name; });
+                for (int suffix = 2; existing != view.state.shipDesigns.end(); ++suffix) {
+                    Fleet candidate; candidate.owner = view.player; candidate.design = existing->id;
+                    if (probe_capable(view.state, candidate) && ship_design_available_to_player(view.state, view.player, *existing)) break;
+                    design.name = "Autonomous Survey Probe " + std::to_string(suffix);
+                    existing = std::find_if(view.state.shipDesigns.begin(), view.state.shipDesigns.end(),
+                        [&](const auto& d) { return d.owner == view.player && d.name == design.name; });
+                }
+                if (existing == view.state.shipDesigns.end()) {
+                    plan.orders.orders.push_back(CreateShipDesignOrder{design.name, design.hull, design.components});
+                    plan.orders.orders.push_back(QueueShipDesignOrder{p.id, 0, design.name});
+                } else plan.orders.orders.push_back(QueueShipDesignOrder{p.id, existing->id});
+                explain(reason, "Build an autonomous survey probe using colony minerals and shipyard"); break;
+            }
+        }
+    }
     plan_exotic_materials(view, plan, reason);
     plan_expansion(view, plan, reason);
     plan.nextState.initialized = true;

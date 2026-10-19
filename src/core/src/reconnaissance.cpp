@@ -120,9 +120,9 @@ bool recon_contact_valid(const ReconContact& c)
         || (c.quality!=ContactQuality::Probable && !c.owner)
         || (c.quality!=ContactQuality::Identified && (c.shipCount || !c.hulls.empty()))
         || (c.quality==ContactQuality::Identified && (!c.shipCount || c.hulls.empty() || c.uncertainty))) return false;
-    return c.hulls.size()<=40 && std::is_sorted(c.hulls.begin(),c.hulls.end())
+    return c.hulls.size()<=std::size_t(ShipHullType::SurveyProbe)+1 && std::is_sorted(c.hulls.begin(),c.hulls.end())
         && std::adjacent_find(c.hulls.begin(),c.hulls.end())==c.hulls.end()
-        && std::all_of(c.hulls.begin(),c.hulls.end(),[](auto h){return h>=ShipHullType::Scout && h<=ShipHullType::ExpeditionBase;});
+        && std::all_of(c.hulls.begin(),c.hulls.end(),[](auto h){return h>=ShipHullType::Scout && h<=ShipHullType::SurveyProbe;});
 }
 Fleet recon_contact_fleet(const ReconContact& c,std::uint64_t currentTurn)
 {

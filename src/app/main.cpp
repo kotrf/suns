@@ -37,6 +37,7 @@ int main(int argc, char* argv[])
     window.installUnknownObjects();
     window.installScienceSamples();
     window.installExoticMaterials();
+    window.installSurveyProbes();
     window.installInterstellarMedium();
     window.installOutposts();
     window.installMobileBases();

@@ -11,7 +11,7 @@ namespace {
 
 void verify_catalog_and_starter_designs()
 {
-    assert(reference_hulls().size() == 33);
+    assert(reference_hulls().size() == 34);
     std::set<ShipHullType> types;
     for (const auto& hull : reference_hulls()) {
         assert(types.insert(hull.type).second);

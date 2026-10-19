@@ -187,6 +187,8 @@ public:
     void installUnknownObjects();
     void installScienceSamples();
     void installExoticMaterials();
+    void installSurveyProbes();
+    void refreshSurveyProbes();
     bool queueUnknownObjectRecovery(UnknownObjectId);
     void installInterstellarMedium();
     void installOutposts();
