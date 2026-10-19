@@ -56,6 +56,11 @@ enum class GameEventKind {
     EngineeringCaptured,
     EngineeringDismantled,
     LandingBlocked,
+    SampleRecovered,
+    SampleRetained,
+    SampleDelivered,
+    SampleDepleted,
+    SampleHoldFull,
 };
 
 enum class GameEventSeverity {

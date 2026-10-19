@@ -65,6 +65,7 @@ QString waypointName(const GameState& state, Position position, FleetId targetFl
 QString actionName(const FleetArrivalAction& action)
 {
     if (action.kind == FleetArrivalActionKind::DeployOutpost) return "Deploy outpost — permanent";
+    if (action.kind == FleetArrivalActionKind::RecoverSample) return "Recover scientific specimen — one attempt";
     if (action.kind == FleetArrivalActionKind::SupplyOutpost) return QString("Supply fuel; keep %1 mg").arg(action.reserveFuel);
     if (const auto task = arrival_work_task(action.kind))
         return QString::fromStdString(fleet_task_name(*task)) + " — persistent";
@@ -407,6 +408,7 @@ QString routeForecast(
             case FleetArrivalActionKind::BombardColony:
             case FleetArrivalActionKind::FieldResearch:
             case FleetArrivalActionKind::RecoverWreckage:
+            case FleetArrivalActionKind::RecoverSample:
                 outcome = "; work begins locally on arrival if equipment and target still permit; future results are unknown";
                 break;
             case FleetArrivalActionKind::EnterWormhole:

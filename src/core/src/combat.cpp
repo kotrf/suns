@@ -1,3 +1,4 @@
+#include "suns/science_samples.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
 
@@ -354,7 +355,13 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         fleet.ships = std::move(survivors);
         normalize_fleet_composition(fleet);
         const double cargoAfter = fleet_cargo_capacity(state, fleet);
-        const double cargoShare = cargoBefore > epsilon ? std::min(1.0, cargoAfter / cargoBefore) : 1;
+        const double samplesBefore = science_sample_mass(fleet.scienceSamples);
+        fleet.scienceSamples.resize(std::min(fleet.scienceSamples.size(), std::size_t(
+            std::max(0.0, std::floor((cargoAfter + epsilon) / kScienceSampleMass)))));
+        const double ordinaryBefore = cargoBefore - samplesBefore;
+        const double ordinaryAfter = cargoAfter - science_sample_mass(fleet.scienceSamples);
+        const double cargoShare = ordinaryBefore > epsilon
+            ? std::clamp(ordinaryAfter / ordinaryBefore, 0.0, 1.0) : 0;
         fleet.colonists = std::uint64_t(std::floor(fleet.colonists * cargoShare));
         fleet.minerals.ironium *= cargoShare;
         fleet.minerals.boranium *= cargoShare;

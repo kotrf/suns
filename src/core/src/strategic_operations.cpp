@@ -1,3 +1,4 @@
+#include "suns/science_samples.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
@@ -184,6 +185,7 @@ std::string fleet_task_name(FleetTask task)
     case FleetTask::FieldResearch: return "Field research";
     case FleetTask::Salvage: return "Recover wreckage";
     case FleetTask::DeployOutpost: return "Deploy deep-space outpost";
+    case FleetTask::RecoverSample: return "Recover scientific specimen";
     }
     return "Unknown task";
 }
@@ -206,6 +208,7 @@ bool fleet_task_equipment_available(const GameState& state, const Fleet& fleet, 
     case FleetTask::SweepMines: return beams;
     case FleetTask::FieldResearch: return fleet_has_scanner(state, fleet);
     case FleetTask::Salvage: return fleet_has_scanner(state, fleet) && fleet_cargo_capacity(state, fleet) > 0;
+    case FleetTask::RecoverSample: return fleet_has_scanner(state, fleet) && fleet_cargo_capacity(state, fleet) >= kScienceSampleMass;
     default: return false;
     }
 }
@@ -249,6 +252,11 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
         const bool object=player && std::any_of(player->objectKnowledge.begin(),player->objectKnowledge.end(),
             [&](const auto& x){return distance_between(x.position,destination)+x.uncertainty<=object_study_radius(state,fleet)+1e-6;});
         if (!wormhole && !object) return "Field research needs a system, reported wormhole within 10 ly, or an object area within the fitted study radius (up to 20 ly). Classify uncertain areas or fit stronger scanners.";
+    }
+    if (*task == FleetTask::RecoverSample) {
+        const bool target = player && std::any_of(player->objectKnowledge.begin(), player->objectKnowledge.end(),
+            [&](const auto& x) { return x.level == ObjectKnowledgeLevel::Studied && same_position(x.position, destination); });
+        if (!target) return "Specimen recovery requires a received completed study at the destination and 5 kt of cargo capacity.";
     }
     if (*task == FleetTask::Salvage) {
         const bool wreck = player && std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(),
@@ -453,6 +461,8 @@ void run_strategic_tasks(GameState& state, std::uint64_t turn)
                 if (distance_between(end.position, fleet->position) <= 10)
                     science_once(state, *fleet, (3ULL<<32)|end.id, end.position, 0, ResearchField::Propulsion, 24, turn);
             research_unknown_objects(state,*fleet,turn);
+        } else if (fleet->task == FleetTask::RecoverSample) {
+            recover_science_samples(state, *fleet, turn);
         } else if (fleet->task == FleetTask::Salvage) {
             const auto wreck = std::min_element(state.wrecks.begin(), state.wrecks.end(), [&](const auto& a, const auto& b) {
                 const double da = distance_between(a.position, fleet->position), db = distance_between(b.position, fleet->position);

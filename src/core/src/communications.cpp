@@ -151,7 +151,7 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::SupplyOutpost) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::RecoverSample) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
             || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
         if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
@@ -347,6 +347,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.arrivalAction = fleet.arrivalAction;
     result.waypointQueue = fleet.waypointQueue;
     result.minerals = fleet.minerals;
+    result.scienceSamples = fleet.scienceSamples;
     result.task = fleet.task;
     result.repeatOrders = fleet.repeatOrders;
     result.routeTemplate = fleet.routeTemplate;
@@ -638,6 +639,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.arrivalAction = telemetry.arrivalAction;
     view.waypointQueue = telemetry.waypointQueue;
     view.minerals = telemetry.minerals;
+    view.scienceSamples = telemetry.scienceSamples;
     view.task = telemetry.task;
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;

@@ -106,6 +106,11 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::EngineeringCaptured: return GameEventKind::EngineeringCaptured;
     case PlayerReportKind::EngineeringDismantled: return GameEventKind::EngineeringDismantled;
     case PlayerReportKind::OutpostFuelExhausted: return GameEventKind::OutpostFuelExhausted;
+    case PlayerReportKind::SampleRecovered: return GameEventKind::SampleRecovered;
+    case PlayerReportKind::SampleRetained: return GameEventKind::SampleRetained;
+    case PlayerReportKind::SampleDelivered: return GameEventKind::SampleDelivered;
+    case PlayerReportKind::SampleDepleted: return GameEventKind::SampleDepleted;
+    case PlayerReportKind::SampleHoldFull: return GameEventKind::SampleHoldFull;
     }
     return GameEventKind::FleetArrived;
 }

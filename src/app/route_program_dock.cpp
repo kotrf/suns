@@ -385,6 +385,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Refuel at depot", int(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Deploy outpost (permanent)", int(FleetArrivalActionKind::DeployOutpost));
     actionCombo->addItem("Supply fuel to outpost", int(FleetArrivalActionKind::SupplyOutpost));
+    actionCombo->addItem("Recover scientific specimen", int(FleetArrivalActionKind::RecoverSample));
     const auto workTip = [&](FleetArrivalActionKind kind, const QString& text) {
         actionCombo->setItemData(actionCombo->findData(int(kind)), text, Qt::ToolTipRole);
     };
