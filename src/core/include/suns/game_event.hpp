@@ -65,6 +65,10 @@ enum class GameEventKind {
     XenocrystalAcquired,
     XenocrystalDepleted,
     ResonanceProjectStatus,
+    VisitorSighted,
+    VisitorExchangeCompleted,
+    VisitorExchangeFailed,
+    VisitorDeparted,
 };
 
 enum class GameEventSeverity {

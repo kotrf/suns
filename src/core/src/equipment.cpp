@@ -180,6 +180,7 @@ bool equipment_access_applicable(const GameState& state, PlayerId player, const 
     case EquipmentAccess::InterstellarTraveler:
     case EquipmentAccess::AlternateReality: return false; // These races do not exist yet.
     case EquipmentAccess::MysteryTrader:
+        if (std::find(owner->acquiredEquipment.begin(), owner->acquiredEquipment.end(), entry.component) != owner->acquiredEquipment.end()) return true;
         return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const auto& design) {
             return design.owner == player && std::find(design.components.begin(), design.components.end(),
                 entry.component) != design.components.end();

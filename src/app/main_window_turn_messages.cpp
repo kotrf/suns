@@ -111,6 +111,10 @@ QString event_subject(const GameState& state, const GameEvent& event)
 
     QString subject;
     switch (event.kind) {
+    case GameEventKind::VisitorSighted: subject=QString("Intergalactic visitor V%1 sighted; check Visitors for the dated offer/track").arg(event.quantity); break;
+    case GameEventKind::VisitorExchangeCompleted: subject=QString("Visitor V%1: 50 kt Germanium exchanged; Multi Cargo Pod blueprint received").arg(event.quantity); break;
+    case GameEventKind::VisitorExchangeFailed: subject=QString("Visitor V%1: encounter ended without exchange (no timed contact, available offer or 50 kt cargo)").arg(event.quantity); break;
+    case GameEventKind::VisitorDeparted: subject=QString("Visitor V%1 departure observed").arg(event.quantity); break;
     case GameEventKind::InterstellarMediumObserved: subject=QString("Cloud C%1: %2").arg(event.mediumObservation?event.mediumObservation->id:0)
         .arg(event.mediumObservation && event.mediumObservation->level==MediumKnowledgeLevel::Characterized?"Characterized":"Detected"); break;
     case GameEventKind::UnknownObjectObserved: subject=QString("Object X%1: %2").arg(event.objectObservation?event.objectObservation->id:0)
@@ -241,6 +245,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     switch (filter) {
     case MessageTypeFilter::All: return true;
     case MessageTypeFilter::Exploration:
+        if(event.kind>=GameEventKind::VisitorSighted && event.kind<=GameEventKind::VisitorDeparted) return true;
         if(event.kind==GameEventKind::UnknownObjectObserved || event.objectObservation || event.mediumObservation) return true;
         return event.kind == GameEventKind::SystemSurveyed
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered
@@ -374,6 +379,19 @@ QString aftermath_text(const GameEvent& event)
 
 QString event_text(const GameState& state, const GameEvent& event)
 {
+    if (event.kind>=GameEventKind::VisitorSighted && event.kind<=GameEventKind::VisitorDeparted) {
+        QString text=QString("%1\nObserved year %2; received year %3.\nReported position: %4, %5.\n")
+            .arg(event_subject(state,event)).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
+            .arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1);
+        if (event.kind==GameEventKind::VisitorExchangeCompleted)
+            text+="The physical exchange consumed 50 kt Germanium. The Multi Cargo Pod blueprint is now acquired; normal technology, fitting, production and mineral costs still apply.";
+        else if (event.kind==GameEventKind::VisitorExchangeFailed)
+            text+="The mission ended without a successful exchange. The announced intercept window, legal Warp, an available offer and 50 kt Germanium at timed physical contact are required. No cargo was charged for this failed encounter.";
+        else if (event.kind==GameEventKind::VisitorDeparted)
+            text+="A receiver observed departure. The visitor has left; this is a delivered observation, distinct from an old trajectory forecast.";
+        else text+="Open Intergalactic visitors for the dated offer and trajectory forecast. Bring 50 kt Germanium to a physical rendezvous before the announced departure. Hidden events do not refresh old contacts.";
+        return text;
+    }
     if (event.mediumObservation) {
         const auto& x=*event.mediumObservation;
         return QString("Cloud C%1 — %2\nObserved year %3; received year %4.\nReported centre %5, %6; radii %7 × %8 ly.\nPeak density %9–%10.\n"

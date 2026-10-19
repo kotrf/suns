@@ -1,6 +1,7 @@
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/survey_probes.hpp"
+#include "suns/intergalactic_visitors.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/mobile_base.hpp"
@@ -1210,6 +1211,7 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     detached.arrivalAction.reset();
     detached.waypointQueue.clear();
     detached.pendingCommands.clear();
+    detached.visitor = {}; remaining.visitor = {};
     pause_probe(detached);
     pause_probe(remaining);
     detached.mobileBase.clients.clear();
@@ -1711,6 +1713,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         Position targetDestination;
         bool targetRouted{};
         OrbitalStationId station{};
+        VisitorId visitor{};
     };
     std::vector<EncounterCandidate> encounters;
     for (const auto& plan : plans) {
@@ -1736,6 +1739,15 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
             targetPlan->destination,
             targetPlan->routed,
         });
+    }
+    for (const auto& plan : plans) {
+        const auto* f = fleet_by_id(state, plan.fleet);
+        if (!f || !f->visitor.track.id || state.mediumObserver) continue;
+        for (const auto& v : state.visitors) if (v.id == f->visitor.track.id && state.turn < v.departureTurn) {
+            const Position end{v.position.x+v.velocity.x, v.position.y+v.velocity.y};
+            const auto geometry = analyze_fleet_encounter(plan.start, plan.endpoint, v.position, end);
+            if (geometry.encounterTimeFraction) encounters.push_back({plan.fleet,0,*geometry.encounterTimeFraction,geometry.encounterPosition,{},false,0,v.id});
+        }
     }
     for (const auto& plan : plans) for (const auto& station : state.orbitalStations) {
         if (station.owner == plan.owner || (!plan.armed && !station_has_weapons(station))) continue;
@@ -1771,7 +1783,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     std::vector<FleetId> encounteredFleets;
     std::vector<EncounterCandidate> resolvedEncounters;
     for (const auto& encounter : encounters) {
-        if (encounter.station) {
+        if (encounter.station || encounter.visitor) {
             if (fleet_id_list_contains(encounteredFleets,encounter.pursuer)) continue;
             const auto plan = std::find_if(plans.begin(),plans.end(),[&](const auto& p) { return p.fleet==encounter.pursuer; });
             if (plan == plans.end()) continue;
@@ -1909,6 +1921,11 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     // found a colony or escape an encounter by entering a wormhole.
     std::erase_if(state.fleets, [&](const auto& f) { return fleet_id_list_contains(mineDestroyedFleets,f.id); });
     resolve_space_battles(state, state.turn + 1);
+    for (const auto& contact : resolvedEncounters) if (contact.visitor) {
+        auto* fleet = fleet_by_id(state, contact.pursuer);
+        if (fleet && same_position(fleet->position, contact.position))
+            complete_visitor_encounter(state, *fleet, contact.visitor, contact.position);
+    }
     std::sort(fixedArrivals.begin(), fixedArrivals.end());
 
     for (const auto id : fixedArrivals) {
@@ -2107,6 +2124,8 @@ TurnResult TurnProcessor::process_with_events(
     std::vector<GameEvent> events = deliver_due_survey_reports(next);
     auto wormholeEvents = deliver_wormhole_reports(next);
     events.insert(events.end(), wormholeEvents.begin(), wormholeEvents.end());
+    auto visitorEvents = deliver_visitor_reports(next);
+    events.insert(events.end(), visitorEvents.begin(), visitorEvents.end());
     auto deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
 
@@ -2189,7 +2208,7 @@ TurnResult TurnProcessor::process_with_events(
                         if (fleet == next.fleets.end()) return;
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
                             concreteOrder.fleet, concreteOrder.source, concreteOrder.destination);
-                        if (transferred) pause_probe(*fleet);
+                        if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }
                         const auto target = transferred ? concreteOrder.destination : concreteOrder.source;
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
                             [&](const auto& p) { return p.id == target && p.owner == submission.player; });
@@ -2207,6 +2226,8 @@ TurnResult TurnProcessor::process_with_events(
                         (void)queue_station_construction(next,submission.player,concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
                         (void)transfer_science_sample(next, submission.player, concreteOrder);
+                    } else if constexpr (std::is_same_v<T, EncounterVisitorOrder>) {
+                        (void)submit_visitor_command(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
                         (void)submit_probe_command(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferXenocrystalOrder>) {
@@ -2424,7 +2445,9 @@ TurnResult TurnProcessor::process_with_events(
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
     advance_survey_probes(next);
+    prepare_visitor_navigation(next);
     advance_fleets(next, freight, movementFuel);
+    advance_visitors(next);
     resolve_bombardments(next, next.turn + 1);
     run_strategic_tasks(next, next.turn + 1);
     deploy_outposts(next, next.turn + 1);
@@ -2525,6 +2548,7 @@ TurnResult TurnProcessor::process_with_events(
     observe_strategic_objects(next, next.turn);
     observe_planetary_aftermath(next,next.turn);
     observe_unknown_objects(next,next.turn);
+    observe_visitors(next);
     observe_interstellar_medium(next,next.turn);
     observe_emission_pulses(next,next.turn);
     deliver_due_fleet_telemetry(next);
@@ -2532,6 +2556,8 @@ TurnResult TurnProcessor::process_with_events(
     deliver_strategic_intel(next);
     auto deliveredIntel = deliver_due_survey_reports(next);
     events.insert(events.end(), deliveredIntel.begin(), deliveredIntel.end());
+    visitorEvents = deliver_visitor_reports(next);
+    events.insert(events.end(), visitorEvents.begin(), visitorEvents.end());
     deliveredReports = deliver_due_player_reports(next);
     events.insert(events.end(), deliveredReports.begin(), deliveredReports.end());
     wormholeEvents = deliver_wormhole_reports(next);

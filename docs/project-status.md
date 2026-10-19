@@ -1,6 +1,25 @@
 # Project status and development handoff
 
-## Verified checkpoint — 19 October 2026: main after #221
+## Verified checkpoint — 20 October 2026: main after #222
+
+Main is [f10b5b9](https://github.com/kotrf/suns/commit/f10b5b9bc5aa2d2eb660723a629fdfa4800af409),
+merged [#222](https://github.com/kotrf/suns/pull/222), including the review fix
+allowing Stop before the first programme acknowledgement. CI for reviewed head
+`d2ab870` passed. Autonomous survey probes are on main; #60 remains open for
+self-replication and further applications. Main formats: **save v88 / orders v34**.
+
+## Implementation branch — intergalactic visitors #46
+
+The user selected #46 next, before the remaining general moving-anomaly work #55.
+`codex/intergalactic-visitors` starts at verified main `f10b5b9`. The first
+[visitor encounter](intergalactic-visitors.md) adds rare physical trajectories,
+delayed immutable sightings/commands, continuous rendezvous, a 50 kt Germanium
+exchange for the existing Multi Cargo Pod blueprint, ordinary paid manufacture,
+a player interface and a prepared demo. Save **v89 / orders v35** keep host,
+received and in-flight state separate. Validation belongs to the PR. #46 stays
+open for richer visitor profiles and gifts; merge is left for review.
+
+## Historical checkpoint — 19 October 2026: main after #221
 
 Main is [5f01933](https://github.com/kotrf/suns/commit/5f01933b7dd65f95a663853752f7241c79424658)
 after [#221](https://github.com/kotrf/suns/pull/221). Its tree matches reviewed
@@ -8,7 +27,7 @@ after [#221](https://github.com/kotrf/suns/pull/221). Its tree matches reviewed
 of review corrections. Main formats are **save v87 / orders v33**. #63 remains
 open for further materials/applications.
 
-## Implementation branch — autonomous survey probes #60
+## Historical implementation — autonomous survey probes #60
 
 `codex/autonomous-survey-probes` starts from that verified main. The first
 [autonomous survey slice](autonomous-survey-probes.md) adds a late paid probe

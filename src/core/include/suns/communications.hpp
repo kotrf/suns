@@ -16,6 +16,7 @@ template<class State, class Visit> void visit_fleet_report_outbox(State& state, 
     for(auto& player:state.players) {
         for(auto& r:player.pendingSurveyReports) visit(player.id,r);
         for(auto& r:player.pendingPlayerReports) visit(player.id,r);
+        for(auto& r:player.pendingVisitorReports) visit(player.id,r);
         for(auto& r:player.pendingWormholeReports) visit(player.id,r);
         for(auto& r:player.pendingStrategicIntel) visit(player.id,r);
         for(auto& r:player.pendingEnemyContacts) visit(player.id,r);
