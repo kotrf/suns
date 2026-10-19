@@ -72,6 +72,31 @@ struct FleetEncounterGeometry {
     Position encounterPosition;
 };
 
+using VisitorId = std::uint32_t;
+struct VisitorObservation {
+    VisitorId id{};
+    Position position, velocity;
+    std::uint64_t observedTurn{}, receivedTurn{}, departureTurn{};
+    bool available{true}, departed{};
+};
+enum class VisitorReportKind : std::uint8_t { Sighted, Exchanged, Failed, Departed };
+struct PendingVisitorReport {
+    VisitorObservation observation;
+    VisitorReportKind kind{VisitorReportKind::Sighted};
+    std::uint64_t observedTurn{}, deliveryTurn{};
+    FleetId transmissionFleet{};
+};
+struct IntergalacticVisitor {
+    VisitorId id{};
+    Position position, velocity;
+    std::uint64_t arrivalTurn{}, departureTurn{};
+    PlayerId customer{}; // Host-only: the first physical exchange consumes the offer.
+};
+struct VisitorMission {
+    VisitorObservation track; // A physically received immutable track, never a host lookup.
+    std::uint8_t warp{8};
+};
+
 enum class StarClass {
     BlueWhite,
     White,
@@ -1244,6 +1269,9 @@ struct Player {
     std::vector<FieldScienceRecord> fieldScience;
     PlayerController controller{PlayerController::Human};
     ComputerState computer;
+    std::vector<VisitorObservation> visitorKnowledge;
+    std::vector<PendingVisitorReport> pendingVisitorReports;
+    std::vector<ShipComponentType> acquiredEquipment;
     std::vector<PlanetAftermathObservation> planetaryAftermath;
     std::vector<ObjectObservation> objectKnowledge;
     std::vector<MediumObservation> mediumKnowledge;
@@ -1431,6 +1459,7 @@ struct FleetTelemetry {
     std::vector<ScienceSample> scienceSamples;
     std::uint32_t xenocrystal{};
     ProbeMission probe;
+    VisitorMission visitor;
 };
 
 struct PendingFleetCommand {
@@ -1441,6 +1470,7 @@ struct PendingFleetCommand {
     std::optional<ElectronicsProgram> electronics;
     std::optional<MobileBaseProgram> mobileBase;
     std::optional<ProbeCommand> probe;
+    std::optional<VisitorMission> visitor;
 };
 
 struct PendingFleetTelemetry {
@@ -1489,6 +1519,7 @@ struct Fleet {
     std::vector<ScienceSample> scienceSamples;
     std::uint32_t xenocrystal{};
     ProbeMission probe;
+    VisitorMission visitor;
 };
 
 struct Minefield {
@@ -1569,6 +1600,8 @@ struct PendingMobileBaseTransfer {
 struct GameState {
     std::uint64_t turn{1};
     std::uint64_t galaxySeed{};
+    VisitorId nextVisitorId{1};
+    std::vector<IntergalacticVisitor> visitors;
     UnknownObjectId nextUnknownObjectId{1};
     std::vector<UnknownObject> unknownObjects;
     bool interstellarMediumEnabled{};

@@ -98,11 +98,12 @@ void combine_probe_knowledge(Fleet& into, const Fleet& from)
     // programme, union only knowledge physically present at the rendezvous.
     if (!into.probe.configured && from.probe.configured) into.probe = from.probe;
     for (const auto& k : from.probe.surveys) record_probe_survey(into, k.star, k.level, k.observedTurn);
+    into.visitor = {};
     pause_probe(into);
 }
 void apply_probe_command(const GameState& s, Fleet& f, const ProbeCommand& command)
 {
-    if (command.action == ProbeAction::Stop) { clear_route(f); pause_probe(f, ProbeStatus::Stopped); return; }
+    if (command.action == ProbeAction::Stop) { f.visitor = {}; clear_route(f); pause_probe(f, ProbeStatus::Stopped); return; }
     if (command.action == ProbeAction::Configure) {
         if (!probe_program_valid(command.program) || !probe_capable(s, f)) return;
         auto notebook = std::move(f.probe.surveys);
@@ -115,7 +116,7 @@ void apply_probe_command(const GameState& s, Fleet& f, const ProbeCommand& comma
     for (const auto& k : command.knowledge) record_probe_survey(f, k.star, k.level, k.observedTurn);
     if (command.action == ProbeAction::Configure || command.action == ProbeAction::Resume) {
         if (!probe_capable(s, f)) { pause_probe(f, ProbeStatus::MissingEquipment); return; }
-        clear_route(f); f.probe.enabled = true; f.probe.status = ProbeStatus::Surveying;
+        clear_route(f); f.visitor = {}; f.probe.enabled = true; f.probe.status = ProbeStatus::Surveying;
     }
 }
 bool submit_probe_command(GameState& s, PlayerId owner, const SetProbeProgramOrder& order)

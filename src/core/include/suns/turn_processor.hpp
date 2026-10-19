@@ -188,6 +188,8 @@ struct SetResonanceLaboratoryOrder {
 
 struct SetProbeProgramOrder { FleetId fleet{}; ProbeAction action{ProbeAction::Configure}; ProbeProgram program; };
 
+struct EncounterVisitorOrder { FleetId fleet{}; VisitorId visitor{}; std::uint8_t warp{8}; }; // visitor=0 cancels.
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -221,7 +223,8 @@ using Order = std::variant<
     ProcessScienceSampleOrder,
     TransferXenocrystalOrder,
     SetResonanceLaboratoryOrder,
-    SetProbeProgramOrder>;
+    SetProbeProgramOrder,
+    EncounterVisitorOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

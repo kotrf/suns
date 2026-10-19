@@ -446,6 +446,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     Player own = *player;
     own.pendingSurveyReports.clear();
     own.pendingPlayerReports.clear();
+    own.pendingVisitorReports.clear();
     own.observedEnemyFleets.clear();
     own.enemyContacts=known_enemy_contacts(host,playerId);
     own.pendingEnemyContacts.clear();

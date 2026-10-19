@@ -35,6 +35,7 @@ add_library(suns_app_ui STATIC
     main_window_unknown_objects.cpp
     main_window_science_samples.cpp
     main_window_exotic_materials.cpp
+    main_window_visitors.cpp
     main_window_survey_probes.cpp
     main_window_interstellar_medium.cpp
     main_window_outposts.cpp

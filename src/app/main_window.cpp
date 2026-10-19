@@ -934,6 +934,7 @@ void MainWindow::rebuildScene()
 
     renderKnownWormholes();
     renderKnownUnknownObjects();
+    renderKnownVisitors();
     renderKnownInterstellarMedium();
     renderStrategicObjects();
     // New markers must already use the active mode before selection/labels

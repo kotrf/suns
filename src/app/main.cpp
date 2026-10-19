@@ -38,6 +38,7 @@ int main(int argc, char* argv[])
     window.installScienceSamples();
     window.installExoticMaterials();
     window.installSurveyProbes();
+    window.installVisitors();
     window.installInterstellarMedium();
     window.installOutposts();
     window.installMobileBases();
@@ -45,6 +46,7 @@ int main(int argc, char* argv[])
     window.installPanelLayoutFixes();
     window.installStrategicOperations();
 
+    if (app.arguments().contains("--visitor-demo")) window.startVisitorDemo();
     window.show();
 
     if (app.arguments().contains("--smoke-test")) {

@@ -21,6 +21,7 @@ add_library(suns_core
     src/production_forecast.cpp
     src/production.cpp
     src/planetary_recovery.cpp
+    src/intergalactic_visitors.cpp
     src/unknown_objects.cpp
     src/science_samples.cpp
     src/exotic_materials.cpp

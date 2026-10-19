@@ -1,6 +1,8 @@
 #include "suns/computer_player.hpp"
+#include "suns/combat.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/survey_probes.hpp"
+#include "suns/intergalactic_visitors.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/science_samples.hpp"
@@ -27,7 +29,7 @@ constexpr std::uint64_t kMinimumSettlers = 100;
 
 bool idle(const Fleet& fleet)
 {
-    return !fleet.probe.enabled && !fleet.destination && fleet.waypointQueue.empty() && !fleet.repeatOrders
+    return !fleet.visitor.track.id && !fleet.probe.enabled && !fleet.destination && fleet.waypointQueue.empty() && !fleet.repeatOrders
         && fleet.targetFleet == 0 && fleet.task == FleetTask::None;
 }
 
@@ -544,6 +546,33 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         if (local && colony_has_orbital_service(state, local->id, view.player, OrbitalStationModule::RefuelingDepot))
             fleet.fuel = fleet_fuel_capacity(state, fleet);
 
+        bool visitorAssigned = false;
+        const auto* empire = find_player(state, view.player);
+        if (!fleet_has_space_weapons(state, fleet) && !fleet_can_colonize(state, fleet)
+            && fleet.telemetry.observedTurn == state.turn && fleet_has_instant_link(state, fleet)
+            && std::find(empire->acquiredEquipment.begin(), empire->acquiredEquipment.end(), kVisitorGift) == empire->acquiredEquipment.end()) {
+            auto contacts = empire->visitorKnowledge;
+            std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+            for (const auto& contact : contacts) if (contact.available && !contact.departed && state.turn < contact.departureTurn) {
+                const auto needed = std::max(0.0, kVisitorGermaniumPrice-fleet.minerals.germanium);
+                if (fleet_cargo_used(state, fleet)+needed > fleet_cargo_capacity(state, fleet)
+                    || (needed && (!local || local->minerals.germanium < needed))) continue;
+                auto trial = fleet; trial.minerals.germanium += needed;
+                for (int warp = fleet_max_warp(state, trial); warp >= 1; --warp) {
+                    trial.warp = std::uint8_t(warp);
+                    if (!fleet_warp_valid(state, trial, trial.warp) || fleet_overdrive_damage_rate(state, trial, trial.warp)>0) continue;
+                    const auto aim = visitor_intercept_destination(trial, contact, state.turn, trial.warp);
+                    if (!aim) continue;
+                    auto returning = trial; returning.position = *aim;
+                    if (leg_fuel(state, trial, *aim)+leg_fuel(state, returning, fleet.position)>trial.fuel) continue;
+                    if (needed) plan.orders.orders.push_back(SetFleetMineralCargoOrder{local->id, fleet.id, trial.minerals});
+                    plan.orders.orders.push_back(EncounterVisitorOrder{fleet.id, contact.id, trial.warp});
+                    explain(reason, "Deliver paid Germanium to a received visitor trajectory"); visitorAssigned=true; break;
+                }
+                if (visitorAssigned) break;
+            }
+        }
+        if (visitorAssigned) continue;
         const bool colonizer = fleet_can_colonize(state, fleet);
         if (colonizer && !fleet_radiation_safe(state, fleet)) continue;
         if (colonizer && fleet.colonists < kMinimumSettlers && local) {

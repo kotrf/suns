@@ -187,6 +187,10 @@ public:
     void installUnknownObjects();
     void installScienceSamples();
     void installExoticMaterials();
+    void installVisitors();
+    void refreshVisitors();
+    void renderKnownVisitors();
+    void startVisitorDemo();
     void installSurveyProbes();
     void refreshSurveyProbes();
     bool queueUnknownObjectRecovery(UnknownObjectId);
