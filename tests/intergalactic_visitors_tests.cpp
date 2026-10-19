@@ -115,6 +115,50 @@ void silent_receipts_and_old_measurements()
     s.players[0].pendingVisitorReports.push_back(old); assert(deliver_visitor_reports(s).empty());
     assert(!known_visitor(s,1,1)->available);
 }
+void physical_refusal_delivers_evidence_but_navigation_failure_keeps_its_age()
+{
+    auto s=remote(); s.players.push_back({2,"Earlier customer"}); s.visitors[0].customer=2;
+    s.fleets[0].electronics={EmissionMode::RadioSilence,63};
+    apply_visitor_command(s,s.fleets[0],{s.players[0].visitorKnowledge[0],8});
+    s=TurnProcessor{}.process(s,{});
+    const auto refusal=std::find_if(s.players[0].pendingVisitorReports.begin(),s.players[0].pendingVisitorReports.end(),
+        [](const auto& r){return r.kind==VisitorReportKind::Failed;});
+    assert(refusal!=s.players[0].pendingVisitorReports.end() && refusal->deliveryTurn==kAwaitingTransmission);
+    assert(!refusal->observation.available && refusal->observation.observedTurn==61);
+    assert(known_visitor(s,1,1)->available && known_visitor(s,1,1)->observedTurn==60);
+    assert(s.fleets[0].minerals.germanium==50 && s.players[0].acquiredEquipment.empty());
+    while(s.turn<63) s=TurnProcessor{}.process(s,{});
+    assert(distance_between(s.fleets[0].position,s.visitors[0].position)>fleet_sensor_range(s,s.fleets[0]));
+    const auto sent=std::find_if(s.players[0].pendingVisitorReports.begin(),s.players[0].pendingVisitorReports.end(),
+        [](const auto& r){return r.kind==VisitorReportKind::Failed;});
+    assert(sent!=s.players[0].pendingVisitorReports.end() && sent->deliveryTurn>s.turn && sent->deliveryTurn!=kAwaitingTransmission);
+    const auto due=sent->deliveryTurn;
+    while(s.turn+1<due) s=TurnProcessor{}.process(s,{});
+    assert(known_visitor(s,1,1)->available && known_visitor(s,1,1)->observedTurn==60);
+    s=TurnProcessor{}.process(s,{});
+    assert(!known_visitor(s,1,1)->available && known_visitor(s,1,1)->observedTurn==61 && known_visitor(s,1,1)->receivedTurn==due);
+    assert(!submit_visitor_command(s,1,{s.fleets[0].id,1,8}));
+    assert(s.fleets[0].minerals.germanium==50 && s.players[0].acquiredEquipment.empty());
+
+    // A failed prediction carries its old track, not a new world measurement.
+    auto navigation=remote(); navigation.fleets[0].electronics={EmissionMode::RadioSilence,62};
+    auto& known=navigation.players[0].visitorKnowledge[0]; known.position={1040,0}; known.departureTurn=100;
+    navigation.visitors[0].position={9999,9999}; navigation.visitors[0].customer=1;
+    apply_visitor_command(navigation,navigation.fleets[0],{known,8});
+    navigation=TurnProcessor{}.process(navigation,{});
+    const auto failure=std::find_if(navigation.players[0].pendingVisitorReports.begin(),navigation.players[0].pendingVisitorReports.end(),
+        [](const auto& r){return r.kind==VisitorReportKind::Failed;});
+    assert(failure!=navigation.players[0].pendingVisitorReports.end() && failure->observedTurn==61 && failure->observation.observedTurn==60);
+    assert(failure->deliveryTurn==kAwaitingTransmission);
+    navigation=TurnProcessor{}.process(navigation,{});
+    const auto sentFailure=std::find_if(navigation.players[0].pendingVisitorReports.begin(),navigation.players[0].pendingVisitorReports.end(),
+        [](const auto& r){return r.kind==VisitorReportKind::Failed;});
+    assert(sentFailure!=navigation.players[0].pendingVisitorReports.end());
+    const auto failureDue=sentFailure->deliveryTurn; assert(failureDue>navigation.turn && failureDue!=kAwaitingTransmission);
+    while(navigation.turn<failureDue) navigation=TurnProcessor{}.process(navigation,{});
+    const auto* unchanged=known_visitor(navigation,1,1);
+    assert(unchanged->available && unchanged->observedTurn==60 && unchanged->receivedTurn==60 && unchanged->position==Position(1040,0));
+}
 void manual_control_and_computer_exchange()
 {
     auto manual=make_visitor_demo(); const auto id=manual.fleets[0].id;
@@ -149,6 +193,7 @@ void simultaneous_customers_and_spawn_are_deterministic()
 int main()
 {
     demo_exchange_and_real_payment(); gift_and_sightings_travel_as_immutable_packets();
+    physical_refusal_delivers_evidence_but_navigation_failure_keeps_its_age();
     delayed_commands_and_hidden_truth_do_not_change_navigation(); silent_receipts_and_old_measurements(); manual_control_and_computer_exchange(); simultaneous_customers_and_spawn_are_deterministic();
     std::cout<<"Visitor physical encounters, payment, delayed knowledge/control and determinism passed\n";
 }

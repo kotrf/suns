@@ -81,7 +81,7 @@ void readVisitors(QDataStream& stream, GameState& s, bool playerTurn)
         if(!readCount(in,count) || count>10000 || (playerTurn && count)) { markCorrupt(stream); return; }
         for(quint32 n=0;n<count;++n) {
             PendingVisitorReport r; readVisitorObservation(in,r.observation,s.turn);
-            if(!readEnum(in,r.kind,quint8(VisitorReportKind::Departed))) return;
+            if(!readEnum(in,r.kind,quint8(VisitorReportKind::Departed))) { markCorrupt(stream); return; }
             quint64 observed{},delivery{}; in >> observed >> delivery >> r.transmissionFleet; r.observedTurn=observed; r.deliveryTurn=delivery;
             if(!r.observedTurn || r.observedTurn>s.turn || r.observation.observedTurn>r.observedTurn
                 || r.deliveryTurn<r.observedTurn || r.observation.receivedTurn
@@ -89,7 +89,8 @@ void readVisitors(QDataStream& stream, GameState& s, bool playerTurn)
             p.pendingVisitorReports.push_back(r);
         }
         if(!readCount(in,count) || count>1) { markCorrupt(stream); return; }
-        for(quint32 n=0;n<count;++n) { ShipComponentType c; if(!readEnum(in,c,quint8(kLastShipComponent))) return;
+        for(quint32 n=0;n<count;++n) { ShipComponentType c;
+            if(!readEnum(in,c,quint8(kLastShipComponent))) { markCorrupt(stream); return; }
             if(c!=kVisitorGift) markCorrupt(in); p.acquiredEquipment.push_back(c); }
     }
     if(!readCount(in,count) || count!=s.fleets.size()+s.pendingFleetLossContacts.size()+s.wormholeTransits.size()) { markCorrupt(stream); return; }

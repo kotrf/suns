@@ -13,6 +13,7 @@
 using namespace suns;
 namespace {
 QByteArray bytes(const QString& path) { QFile f(path); assert(f.open(QIODevice::ReadOnly)); return f.readAll(); }
+void put(const QString& path,const QByteArray& data) { QFile f(path); assert(f.open(QIODevice::WriteOnly)); assert(f.write(data)==data.size()); }
 SaveGameData fixture()
 {
     SaveGameData d; d.state=make_visitor_demo(); d.mode=SessionMode::Host; d.pendingOrders={1,{}};
@@ -61,6 +62,29 @@ void save_orders_and_private_exports()
     bad=fixture(); bad.state.players[0].visitorKnowledge.push_back(bad.state.players[0].visitorKnowledge[0]);
     assert(write_save_game_file(a,bad,error) && !read_save_game_file(a,loaded,error));
 }
+void invalid_visitor_enums_and_truncated_payloads_are_rejected()
+{
+    QTemporaryDir dir; const auto path=dir.filePath("corrupt-visitors.suns"); QString error; SaveGameData loaded;
+    auto bad=fixture(); auto observation=bad.state.players[0].visitorKnowledge[0]; observation.receivedTurn=0;
+    bad.state.players[0].pendingVisitorReports.push_back({observation,static_cast<VisitorReportKind>(255),60,61,0});
+    assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+    bad=fixture(); bad.state.players[0].acquiredEquipment={static_cast<ShipComponentType>(255)};
+    assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+
+    auto valid=fixture(); valid.state.players[0].acquiredEquipment={kVisitorGift};
+    valid.state.players[0].pendingVisitorReports.push_back({observation,VisitorReportKind::Sighted,60,61,0});
+    assert(write_save_game_file(path,valid,error) && read_save_game_file(path,loaded,error));
+    const auto data=bytes(path); QByteArray magic;
+    { QDataStream out(&magic,QIODevice::WriteOnly); out<<quint32{0x56495349}; }
+    const auto extension=data.lastIndexOf(magic), start=extension+8; assert(extension>0 && start<data.size());
+    // Adjust the outer size to remain valid: every shorter inner payload must
+    // fail even when reading its raw bytes from the outer stream succeeds.
+    for(qsizetype cut=0;cut<data.size()-start;++cut) {
+        auto truncated=data.first(start+cut);
+        { QDataStream out(&truncated,QIODevice::ReadWrite); assert(out.device()->seek(extension+4)); out<<quint32(cut); }
+        put(path,truncated); assert(!read_save_game_file(path,loaded,error));
+    }
+}
 }
 namespace suns {
 struct MainWindowTestAccess {
@@ -72,7 +96,8 @@ struct MainWindowTestAccess {
 }
 int main(int argc,char** argv)
 {
-    QApplication app(argc,argv); save_orders_and_private_exports(); MainWindow w; w.installVisitors(); w.startVisitorDemo();
+    QApplication app(argc,argv); invalid_visitor_enums_and_truncated_payloads_are_rejected(); save_orders_and_private_exports();
+    MainWindow w; w.installVisitors(); w.startVisitorDemo();
     auto* tree=w.findChild<QTreeWidget*>("visitorContacts"); auto* send=w.findChild<QPushButton*>("interceptVisitor");
     assert(tree && tree->topLevelItemCount()==1 && send->isEnabled());
     const auto measured=tree->topLevelItem(0)->text(2), forecast=tree->topLevelItem(0)->text(3);

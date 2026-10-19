@@ -176,7 +176,10 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
             const bool newer = old==p.visitorKnowledge.end() || x.observedTurn>old->observedTurn
                 || (x.observedTurn==old->observedTurn && ((old->available && !x.available) || (!old->departed && x.departed)));
             const bool changed = newer && (old==p.visitorKnowledge.end() || x.available!=old->available || x.departed!=old->departed);
-            if (r.kind != VisitorReportKind::Failed && newer) {
+            // Refusals can carry a real contact measurement, while navigation
+            // failures retain their old track. Freshness uses that evidence's
+            // date, never the later mission-status date in r.observedTurn.
+            if (newer) {
                 if (old==p.visitorKnowledge.end()) p.visitorKnowledge.push_back(x);
                 else *old=x;
             }

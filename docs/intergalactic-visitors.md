@@ -88,6 +88,9 @@ The blueprint is acquired only when the immutable exchange receipt reaches HQ.
 Already transmitted receipts survive loss of their source; silent outboxes wait
 for an actual transmission and disappear if their unsent source is lost. Newer
 contact dates cannot be overwritten by older delayed measurements.
+An exchange refusal at physical contact also delivers the measured offer state,
+even with passive/silent scanners. A navigation failure carries only its existing
+track; its later mission-status date never refreshes the observation date.
 
 Computer empires may divert an idle, currently confirmed, connected unarmed
 transport using PlayerView, delivered contacts and conservative fuel budgeting.
@@ -106,6 +109,9 @@ Tests cover the complete demo, timed contact, fuel and exact cargo payment,
 insufficient cargo, competing customers, deterministic generation, immutable
 delayed commands/reports, hidden-state isolation, cancellation/manual control,
 paid AI use, full save continuation, PBEM and UI visibility.
+Review regressions cover delayed physical refusals, unchanged evidence age after
+navigation failures, invalid VISI report/gift enums and every truncated prefix of
+a VISI payload whose outer length remains valid.
 
 #46 stays open for additional request/gift profiles, richer dialogue/portraits,
 alternative trajectories and strategic AI preparation. Visitors are neutral and
