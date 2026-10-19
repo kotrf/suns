@@ -127,6 +127,9 @@ affordable. Late empires retain observed specimens and schedule supported
 laboratories once the required local crystals are known. They wait for dated
 telemetry and cannot inspect hidden host depletion or stocks. This is a basic
 policy, not an optimized supply-chain planner.
+Received ownership that blocks extraction retires the corresponding mission;
+hidden ownership changes do not. Paid laboratories can trigger ordinary station
+restoration without requiring another eight crystals.
 
 Save **v87** appends a bounded **EXOT** extension after v86, retaining deposits,
 surface stores, laboratories, received/in-flight observations and each physical,

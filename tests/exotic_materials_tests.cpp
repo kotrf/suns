@@ -220,6 +220,17 @@ void computer_uses_received_deposits_and_ordinary_orders()
     const auto unchanged = plan_computer_turn(make_player_view(hidden, 1));
     assert(unchanged.nextState.decisions.back().reason == planned.nextState.decisions.back().reason);
     assert(unchanged.orders.orders.size() == planned.orders.orders.size());
+    // Physical capture is not grounds to retire a mission before its report arrives.
+    auto captured = s; captured.players.push_back({2, "Other"}); captured.players[0].computer = planned.nextState;
+    ++captured.turn; captured.planets[1].owner = 2; captured.planets[1].population = 1000;
+    for (auto& f : captured.fleets) f.telemetry.observedTurn = captured.turn;
+    const auto unaware = plan_computer_turn(make_player_view(captured, 1));
+    assert(std::any_of(unaware.nextState.fleetGoals.begin(), unaware.nextState.fleetGoals.end(),
+        [](const auto& goal) { return goal.kind == ComputerFleetGoalKind::ExoticMining; }));
+    set_survey_level(captured, 1, 2, SurveyLevel::DeepSurvey, captured.turn);
+    const auto informed = plan_computer_turn(make_player_view(captured, 1));
+    assert(std::none_of(informed.nextState.fleetGoals.begin(), informed.nextState.fleetGoals.end(),
+        [](const auto& goal) { return goal.target == 2 && goal.kind >= ComputerFleetGoalKind::ExoticMining; }));
 }
 void actual_expedition_mining_return_and_construction()
 {
@@ -347,6 +358,16 @@ void computer_completes_an_ordinary_material_supply_cycle()
     assert(std::any_of(planned.orders.orders.begin(), planned.orders.orders.end(), [](const auto& order) {
         const auto* station = std::get_if<QueueStationOrder>(&order);
         return station && station->construction.loadout.hull >= OrbitalStationHullType::Starbase;
+    }));
+    assert(apply_resonance_order(support, support.planets[0], {1}));
+    support.orbitalStations[0].hull = OrbitalStationHullType::Starbase;
+    (void)resolve_colony_production(support, support.planets[0], true);
+    support.orbitalStations.clear(); // Paid project, no remaining crystals, supporting station lost.
+    assert(support.planets[0].resonanceLab.crystalsPaid == 8 && !support.planets[0].xenocrystal.surface);
+    set_survey_level(support, 1, 1, SurveyLevel::DeepSurvey, support.turn);
+    const auto restore = plan_computer_turn(make_player_view(support, 1));
+    assert(std::any_of(restore.orders.orders.begin(), restore.orders.orders.end(), [](const auto& order) {
+        return std::holds_alternative<QueueStationOrder>(order);
     }));
 }
 }

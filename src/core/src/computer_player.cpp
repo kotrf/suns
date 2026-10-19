@@ -289,7 +289,7 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
         const auto known = known_xenocrystal(s, view.player, p.id);
         if (!p.owner && known && known->depositSurveyed && (known->site.remaining || known->site.surface)) sites.push_back(&p);
         if (p.owner == view.player && p.population) homes.push_back(&p);
-        if (p.owner == view.player && p.population && p.xenocrystal.surface >= kResonanceCrystals
+        if (p.owner == view.player && p.population && (p.resonanceLab.started || p.xenocrystal.surface >= kResonanceCrystals)
             && resonance_technology_available(s, view.player) && !engineering_station_available(s, p)
             && std::none_of(p.productionQueue.begin(), p.productionQueue.end(), [](const auto& item) { return item.kind == ProductionKind::OrbitalStation; })) {
             const auto* station = find_orbital_station_at_planet(s, p.id);
@@ -319,6 +319,16 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
         if (goal != goals.end() && goal->kind < ComputerFleetGoalKind::ExoticMining) continue;
         if (!f.telemetry.observedTurn || f.telemetry.destination || f.telemetry.targetFleet) continue;
         if (goal != goals.end() && f.telemetry.observedTurn <= goal->issuedTurn) continue;
+        if (goal != goals.end()) {
+            const auto* target = find_planet_at_star(s, goal->target);
+            if (target && target->owner && (goal->kind == ComputerFleetGoalKind::ExoticMining
+                || (target->owner != view.player && !f.xenocrystal))) {
+                plan.orders.orders.push_back(SetFleetTaskOrder{f.id, FleetTask::None});
+                goals.erase(goal);
+                explain(reason, "Retire an exotic mission after received ownership blocks extraction");
+                continue;
+            }
+        }
         if (goal != goals.end() && goal->kind == ComputerFleetGoalKind::ExoticMining) {
             const auto* p = find_planet_at_star(s, goal->target);
             const auto known = p ? known_xenocrystal(s, view.player, p->id) : std::nullopt;
