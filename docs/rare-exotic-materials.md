@@ -173,9 +173,15 @@ route, task, electronics, mission and fleet-reorganization handlers with the
 host. Accepted earlier commands affect gate eligibility in order; invalid
 commands do not. Explicit route/task clearing can permit a later pulse, while
 an active route or task leaves its crystals available to another fleet or a
-laboratory. No annual movement or work runs during projection. Locally accepted
-reorganization may derive a current manifest through the existing instant-link
-telemetry fallback; genuinely dated old telemetry still blocks the estimate.
+laboratory. No annual movement or work runs during projection. A resonance
+estimate requires an explicit current received manifest date; a connection at a
+predicted position cannot substitute for reception. Projected local split
+results inherit the source evidence date; a merge inherits the older input
+date, with zero remaining unknown. Derived manifest fields never upgrade that
+date through the connection-based snapshot fallback. Thus current local
+reorganization remains usable while absent/stale evidence, including repeated
+split/merge chains, cannot reserve a pulse. Physical host reorganization and
+telemetry delivery retain their existing rules.
 
 ## Knowledge, interface and computer empires
 

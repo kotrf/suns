@@ -22,8 +22,12 @@ an explicit optional gate-order flag; older orders default to ordinary transit.
 PR #224 review follow-up removes host-state inputs from Cargo/System gate
 forecasts and shares accepted command-phase handlers between projection and
 resolution. Regressions cover undelivered station loss, move/clear/task ordering,
-crystal reservations and fleet reorganization. Validation belongs to the PR.
-#63 remains open; merge is left for review.
+crystal reservations and fleet reorganization. The repeat review restores a
+strict received-date gate check and preserves source/oldest dates through
+projected splits/merges, preventing an unknown or stale manifest from becoming
+current through a connection at a predicted position. Core/Qt regressions cover
+missing telemetry, stale reorganization and genuinely current local splits.
+Validation belongs to the PR. #63 remains open; merge is left for review.
 
 ## Historical checkpoint — 20 October 2026: main after #222
 

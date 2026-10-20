@@ -2055,9 +2055,31 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
     }, order);
 }
 
+std::uint64_t projected_manifest_date(const GameState& state, PlayerId player, FleetId id)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const Fleet& f) { return f.id == id && f.owner == player; });
+    // A predicted position with a link is not evidence of a received report.
+    return fleet != state.fleets.end() && fleet_has_instant_link(state, *fleet)
+        ? fleet->telemetry.observedTurn : 0;
+}
+
+void refresh_projected_manifest(GameState& state, PlayerId player, FleetId id, std::uint64_t receivedTurn)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const Fleet& f) { return f.id == id && f.owner == player; });
+    if (fleet == state.fleets.end()) return;
+    // Snapshot the derived composition, but retain the input evidence date.
+    // The snapshot helper's connection-based date never establishes freshness.
+    fleet->telemetry = {};
+    fleet->telemetry = confirmed_fleet_telemetry(state, *fleet);
+    fleet->telemetry.observedTurn = receivedTurn;
+}
+
 // Command phase only: share validation and receipt semantics with forecasts.
 // No movement, annual work, combat or report delivery is simulated here.
-bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& order, std::set<FleetId>& gated)
+bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& order, std::set<FleetId>& gated,
+    bool projection = false)
 {
     bool handled = true;
     std::visit([&](const auto& value) {
@@ -2117,15 +2139,24 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
             (void)submit_electronics_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
+            const auto receivedTurn = projection ? std::min(projected_manifest_date(state, player, value.source),
+                projected_manifest_date(state, player, value.destination)) : 0;
             const bool usedGate = gated.contains(value.source)
                 || gated.contains(value.destination);
-            if (merge_fleets(state, player, value) && usedGate)
-                gated.insert(value.destination);
+            if (merge_fleets(state, player, value)) {
+                if (usedGate) gated.insert(value.destination);
+                if (projection) refresh_projected_manifest(state, player, value.destination, receivedTurn);
+            }
         } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
+            const auto receivedTurn = projection ? projected_manifest_date(state, player, value.source) : 0;
             const auto detached = state.nextFleetId;
-            if (split_fleet(state, player, value)
-                && gated.contains(value.source))
-                gated.insert(detached);
+            if (split_fleet(state, player, value)) {
+                if (gated.contains(value.source)) gated.insert(detached);
+                if (projection) {
+                    refresh_projected_manifest(state, player, value.source, receivedTurn);
+                    refresh_projected_manifest(state, player, detached, receivedTurn);
+                }
+            }
         } else handled = false;
     }, order);
     return handled;
@@ -2142,7 +2173,7 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
     for (const auto& order : pending.orders) {
-        if (apply_fleet_command_order(projected, pending.player, order, gated)) continue;
+        if (apply_fleet_command_order(projected, pending.player, order, gated, true)) continue;
         if (const auto* gate = std::get_if<GateFleetOrder>(&order)) {
             if (!gated.contains(gate->fleet) && preview_stargate_transfer(projected, pending.player, *gate))
                 gated.insert(gate->fleet);

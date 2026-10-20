@@ -190,7 +190,7 @@ bool preview_stargate_transfer(GameState& s, PlayerId owner, const GateFleetOrde
         const auto known = known_xenocrystal(s, owner, order.source);
         const auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == order.fleet; });
         if (!known || known->observedTurn != s.turn || !known->stockPhase
-            || fleet == s.fleets.end() || confirmed_fleet_telemetry(s, *fleet).observedTurn != s.turn) return false;
+            || fleet == s.fleets.end() || fleet->telemetry.observedTurn != s.turn) return false;
     }
     return transfer_fleet_through_stargate(s, owner, order.fleet, order.source, order.destination, order.resonant);
 }

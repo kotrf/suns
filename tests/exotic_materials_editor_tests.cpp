@@ -288,6 +288,30 @@ void cargo_and_system_gate_forecasts_ignore_unreceived_station_loss(MainWindow& 
     const auto resolved = TurnProcessor{}.process(lost, {{1, {orders.front()}}});
     assert(resolved.planets[0].xenocrystal.surface == 8 && resolved.fleets[0].position == intact.stars[0].position);
 }
+void gate_dialog_requires_received_manifest_after_split(MainWindow& w)
+{
+    for (int evidence = 0; evidence < 3; ++evidence) {
+        auto s = resonance_network(); std::vector<Order> orders;
+        if (!evidence) {
+            s.fleets[0].position = {900, 0}; s.fleets[0].telemetry = {};
+        } else {
+            s.fleets[0].ships[0].count = 2; s.fleets[0].telemetry.ships = s.fleets[0].ships;
+            s.fleets[0].telemetry.observedTurn = evidence == 1 ? s.turn - 1 : s.turn;
+            if (evidence == 1) s.fleets[0].position = {900, 0};
+            orders.push_back(SplitFleetOrder{1, {{s.fleets[0].design, 1}}});
+        }
+        MainWindowTestAccess::load(w, s, orders);
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            dialog->findChild<QCheckBox*>("resonantGateTransit")->setChecked(true);
+            assert(dialog->findChild<QComboBox*>("stargateDestinations")->count() == (evidence == 2 ? 1 : 0));
+            assert(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->isEnabled() == (evidence == 2));
+            dialog->reject();
+        });
+        MainWindowTestAccess::transit(w);
+    }
+}
+
 void gate_dialog_respects_prior_route_and_clear(MainWindow& w)
 {
     const auto s = resonance_network();
@@ -408,5 +432,6 @@ int main(int argc, char** argv)
     resonant_gate_ui_uses_current_received_payment(w);
     cargo_and_system_gate_forecasts_ignore_unreceived_station_loss(w);
     gate_dialog_respects_prior_route_and_clear(w);
+    gate_dialog_requires_received_manifest_after_split(w);
     std::cout << "Exotic material UI, frozen exports, saves and PBEM passed\n";
 }

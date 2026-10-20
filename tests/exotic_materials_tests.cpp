@@ -227,6 +227,53 @@ void resonant_gate_projection_replays_accepted_fleet_commands()
     assert(projected.planets[0].xenocrystal.surface == 8 && next(merging, merged).planets[0].xenocrystal.surface == 8);
 }
 
+void resonant_gate_requires_received_manifest_through_reorganization()
+{
+    const auto gate = GateFleetOrder{1, 1, 2, true};
+    auto unknown = resonance_network();
+    unknown.planets[0].xenocrystal.surface = 8;
+    set_survey_level(unknown, 1, 1, SurveyLevel::DeepSurvey, unknown.turn);
+    unknown.fleets[0].position = {900, 0}; unknown.fleets[0].telemetry = {};
+    auto view = make_player_view(unknown, 1).state;
+    assert(view.fleets[0].telemetry.observedTurn == 0 && view.fleets[0].position == unknown.stars[0].position);
+    assert(!preview_stargate_transfer(view, 1, gate));
+    auto projected = projected_cargo_order_state(make_player_view(unknown, 1).state, {1, {gate}});
+    assert(projected.planets[0].xenocrystal.surface == 8);
+    auto resolved = next(unknown, {gate});
+    assert(resolved.planets[0].xenocrystal.surface == 8 && (resolved.fleets[0].position == Position{900, 0}));
+    auto receiver = resonance_network().fleets[0]; receiver.id = unknown.nextFleetId++;
+    unknown.fleets.push_back(receiver);
+    const std::vector<Order> unknownMerge{MergeFleetsOrder{receiver.id, 1}, GateFleetOrder{receiver.id, 1, 2, true}};
+    projected = projected_cargo_order_state(make_player_view(unknown, 1).state, {1, unknownMerge});
+    assert(projected.planets[0].xenocrystal.surface == 8 && !projected.fleets[0].telemetry.observedTurn);
+    // Both resulting IDs inherit the age of the source evidence, including after a later merge.
+    for (const auto age : {0U, 1U}) {
+        auto s = resonance_network(); s.planets[0].xenocrystal.surface = 8;
+        set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+        s.fleets[0].ships[0].count = 2; s.fleets[0].telemetry.ships = s.fleets[0].ships;
+        s.fleets[0].telemetry.observedTurn = s.turn - age;
+        if (age) s.fleets[0].position = {900, 0};
+        const auto detached = s.nextFleetId;
+        for (const auto fleetId : {FleetId{1}, detached}) {
+            const std::vector<Order> orders{SplitFleetOrder{1, {{s.fleets[0].design, 1}}}, GateFleetOrder{fleetId, 1, 2, true}};
+            projected = projected_cargo_order_state(make_player_view(s, 1).state, {1, orders});
+            resolved = next(s, orders);
+            assert(projected.planets[0].xenocrystal.surface == (age ? 8 : 0));
+            assert(resolved.planets[0].xenocrystal.surface == (age ? 8 : 0));
+            if (age) for (const auto& fleet : projected.fleets) assert(fleet.telemetry.observedTurn == s.turn - age);
+        }
+        const std::vector<Order> regrouped{SplitFleetOrder{1, {{s.fleets[0].design, 1}}}, MergeFleetsOrder{1, detached}, gate};
+        projected = projected_cargo_order_state(make_player_view(s, 1).state, {1, regrouped});
+        assert(projected.planets[0].xenocrystal.surface == (age ? 8 : 0));
+        // A current destination cannot make stale incoming ships current.
+        auto other = s.fleets[0]; other.id = s.nextFleetId++; other.position = s.stars[0].position;
+        other.telemetry.observedTurn = s.turn; s.fleets.push_back(other);
+        const std::vector<Order> mixed{MergeFleetsOrder{other.id, 1}, GateFleetOrder{other.id, 1, 2, true}};
+        projected = projected_cargo_order_state(make_player_view(s, 1).state, {1, mixed});
+        assert(projected.planets[0].xenocrystal.surface == (age ? 8 : 0));
+    }
+}
+
 void add_miner(GameState& s, std::uint32_t count = 1)
 {
     ShipDesign design{3, 1, "Crystal miner", ShipHullType::MiniMiner,
@@ -738,6 +785,7 @@ void computer_completes_an_ordinary_material_supply_cycle()
 }
 int main()
 {
+    resonant_gate_requires_received_manifest_through_reorganization();
     resonant_gate_projection_replays_accepted_fleet_commands();
     resonant_gate_reports_wait_and_freeze_payment();
     computer_uses_only_received_resonance_supplies();
