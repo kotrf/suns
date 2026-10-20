@@ -4,6 +4,7 @@
 #include "suns/communications.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/production.hpp"
+#include "suns/stations.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QCheckBox>
@@ -247,14 +248,64 @@ void remote_base_transfer_survives_save_and_order_exchange()
 namespace suns {
 struct MainWindowTestAccess {
     static void load(MainWindow& w, GameState s, std::vector<Order> orders = {}) {
-        w.state_ = std::move(s); w.pendingOrders_ = {1, std::move(orders)}; w.pendingDescriptions_.clear(); w.selection_.fleet = 1; w.rebuildScene();
+        w.state_ = std::move(s); w.pendingOrders_ = {1, std::move(orders)}; w.pendingDescriptions_.clear(); w.selection_.fleet = 1; w.selection_.star = 1; w.rebuildScene();
     }
+    static QString systemInfo(const MainWindow& w) { return w.selectionLabel_->text(); }
     static void transit(MainWindow& w) { w.openGateTransit(); }
     static const auto& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
     static const auto& state(const MainWindow& w) { return w.state_; }
 };
 }
 namespace {
+void cargo_and_system_gate_forecasts_ignore_unreceived_station_loss(MainWindow& w)
+{
+    auto intact = resonance_network();
+    auto observer = intact.fleets[0]; observer.id = intact.nextFleetId++; observer.name = "Observer transport";
+    intact.fleets.push_back(observer);
+    auto lost = intact;
+    lost.pendingStationContacts.push_back({lost.orbitalStations.back(), lost.turn, lost.turn + 4});
+    lost.orbitalStations.pop_back();
+    assert(known_orbital_station(lost, 1, 2) && known_orbital_station(intact, 1, 2));
+    const std::vector<Order> orders{GateFleetOrder{1, 1, 2, true}, TransferCargoOrder{{1, 0}, {0, 1}, 100, {}}};
+    QStringList expectedContainers; QString expectedInfo;
+    for (const auto* world : {&intact, &lost}) {
+        MainWindowTestAccess::load(w, *world, orders);
+        const auto info = MainWindowTestAccess::systemInfo(w);
+        assert(!info.contains("Queued cargo:"));
+        QStringList containers;
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            assert(dialog->objectName() == "cargoTransferDialog");
+            const auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo"); assert(source);
+            for (int i = 0; i < source->count(); ++i) containers.push_back(source->itemText(i));
+            assert(containers.size() == 2 && containers[1].contains("Observer transport"));
+            dialog->reject();
+        });
+        w.openCargoManifestDialog();
+        if (world == &intact) { expectedContainers = containers; expectedInfo = info; }
+        else { assert(containers == expectedContainers); assert(info == expectedInfo); }
+    }
+    const auto resolved = TurnProcessor{}.process(lost, {{1, {orders.front()}}});
+    assert(resolved.planets[0].xenocrystal.surface == 8 && resolved.fleets[0].position == intact.stars[0].position);
+}
+void gate_dialog_respects_prior_route_and_clear(MainWindow& w)
+{
+    const auto s = resonance_network();
+    MoveFleetOrder move{1, {0, 50}, 5}; MoveFleetOrder clear{1, {0, 0}, 0}; clear.clearRoute = true;
+    for (bool clearRoute : {false, true}) {
+        MainWindowTestAccess::load(w, s, clearRoute ? std::vector<Order>{move, clear} : std::vector<Order>{move});
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            dialog->findChild<QCheckBox*>("resonantGateTransit")->setChecked(true);
+            const auto count = dialog->findChild<QComboBox*>("stargateDestinations")->count();
+            assert(count == (clearRoute ? 1 : 0));
+            assert(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->isEnabled() == clearRoute);
+            dialog->reject();
+        });
+        MainWindowTestAccess::transit(w);
+    }
+}
+
 void resonant_gate_ui_uses_current_received_payment(MainWindow& w)
 {
     auto s = resonance_network(); MainWindowTestAccess::load(w, s);
@@ -355,5 +406,7 @@ int main(int argc, char** argv)
     resonant_gate_cannot_use_later_base_delivery();
     MainWindow w; w.installExoticMaterials(); ui_commands_and_previews(w);
     resonant_gate_ui_uses_current_received_payment(w);
+    cargo_and_system_gate_forecasts_ignore_unreceived_station_loss(w);
+    gate_dialog_respects_prior_route_and_clear(w);
     std::cout << "Exotic material UI, frozen exports, saves and PBEM passed\n";
 }

@@ -164,6 +164,19 @@ default to ordinary mode. Malformed flag values are rejected. The physical,
 received and in-flight crystal stores keep the existing EXOT representation;
 there is no new balance or empire currency.
 
+### PR #224 review follow-up
+
+Cargo and System Details now enter the common projection through PlayerView,
+including endpoint link checks, so an undelivered station loss cannot change
+container lists or population forecasts. The command-boundary projection shares
+route, task, electronics, mission and fleet-reorganization handlers with the
+host. Accepted earlier commands affect gate eligibility in order; invalid
+commands do not. Explicit route/task clearing can permit a later pulse, while
+an active route or task leaves its crystals available to another fleet or a
+laboratory. No annual movement or work runs during projection. Locally accepted
+reorganization may derive a current manifest through the existing instant-link
+telemetry fallback; genuinely dated old telemetry still blocks the estimate.
+
 ## Knowledge, interface and computer empires
 
 The **Rare materials — xenocrystal** dock shows known deposits, remaining units,

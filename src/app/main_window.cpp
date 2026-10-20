@@ -1122,7 +1122,7 @@ void MainWindow::updateControls()
             // Orders are intentions until End Turn. Present the predicted
             // cargo debit separately from the confirmed surface population,
             // because annual population growth may partly obscure the debit.
-            const auto plannedCargo = projected_cargo_order_state(state_, pendingOrders_);
+            const auto plannedCargo = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
             const auto predictedPlanet = std::find_if(plannedCargo.planets.begin(),
                 plannedCargo.planets.end(), [planet](const Planet& candidate) {
                     return candidate.id == planet->id;

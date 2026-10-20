@@ -175,6 +175,58 @@ void resonant_gate_reports_wait_and_freeze_payment()
     assert(event != events.end() && event->quantity == 8 && event->position == s.stars[1].position);
 }
 
+void resonant_gate_projection_replays_accepted_fleet_commands()
+{
+    auto s = resonance_network(); s.planets[0].xenocrystal.surface = 8;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    const GateFleetOrder gate{1, 1, 2, true};
+    const MoveFleetOrder move{1, {0, 50}, 5};
+    PlayerOrders moving{1, {move, gate}};
+    auto projected = projected_cargo_order_state(make_player_view(s, 1).state, moving);
+    assert(projected.planets[0].xenocrystal.surface == 8);
+    assert(projected.fleets[0].position == s.stars[0].position && projected.fleets[0].destination == move.destination);
+    auto resolved = next(s, moving.orders);
+    assert(resolved.planets[0].xenocrystal.surface == 8 && (resolved.fleets[0].position == Position{0, 25}));
+    // No imaginary reservation: the laboratory or a second fleet may use the eight units.
+    auto labOrders = moving; labOrders.orders.push_back(SetResonanceLaboratoryOrder{1});
+    auto lab = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, labOrders), labOrders);
+    assert(forecast_production_queue(lab, lab.planets[0], lab.planets[0].productionQueue, 16)[0].completionTurn);
+    assert(next(s, labOrders.orders).planets[0].resonanceLab.work == 60);
+    auto other = s.fleets[0]; other.id = s.nextFleetId++; s.fleets.push_back(other);
+    auto competing = moving; competing.orders.push_back(GateFleetOrder{other.id, 1, 2, true});
+    projected = projected_cargo_order_state(make_player_view(s, 1).state, competing);
+    assert(!projected.planets[0].xenocrystal.surface && projected.fleets[1].position == s.stars[1].position);
+    resolved = next(s, competing.orders);
+    assert(!resolved.planets[0].xenocrystal.surface && resolved.fleets[1].position == s.stars[1].position);
+    MoveFleetOrder clear{1, s.stars[0].position, 0}; clear.clearRoute = true;
+    for (const auto& commands : {std::vector<Order>{move, clear, gate},
+            std::vector<Order>{MoveFleetOrder{1, {0, 50}, 255}, gate},
+            std::vector<Order>{SetFleetTaskOrder{1, FleetTask::FieldResearch}, SetFleetTaskOrder{1, FleetTask::None}, gate},
+            std::vector<Order>{SetFleetTaskOrder{1, FleetTask::LayMines}, gate}}) {
+        projected = projected_cargo_order_state(make_player_view(s, 1).state, {1, commands});
+        resolved = next(s, commands);
+        assert(!projected.planets[0].xenocrystal.surface && !resolved.planets[0].xenocrystal.surface);
+        assert(projected.fleets[0].position == s.stars[1].position && resolved.fleets[0].position == s.stars[1].position);
+    }
+    auto routed = s; routed.fleets[0].destination = move.destination; routed.fleets[0].telemetry.destination = move.destination;
+    projected = projected_cargo_order_state(make_player_view(routed, 1).state, {1, {clear, gate}});
+    assert(!projected.planets[0].xenocrystal.surface && next(routed, {clear, gate}).fleets[0].position == s.stars[1].position);
+    const std::vector<Order> working{SetFleetTaskOrder{1, FleetTask::FieldResearch}, gate};
+    projected = projected_cargo_order_state(make_player_view(s, 1).state, {1, working});
+    assert(projected.planets[0].xenocrystal.surface == 8 && next(s, working).planets[0].xenocrystal.surface == 8);
+    auto heavy = s; heavy.fleets.resize(1); heavy.fleets[0].ships[0].count = 20;
+    heavy.fleets[0].telemetry.ships = heavy.fleets[0].ships;
+    assert(!stargate_transfer_valid(heavy, 1, 1, 1, 2, true));
+    const std::vector<Order> split{SplitFleetOrder{1, {{heavy.fleets[0].design, 10}}}, gate};
+    projected = projected_cargo_order_state(make_player_view(heavy, 1).state, {1, split});
+    assert(!projected.planets[0].xenocrystal.surface && next(heavy, split).fleets[0].position == s.stars[1].position);
+    auto merging = s;
+    for (auto& fleet : merging.fleets) { fleet.ships[0].count = 10; fleet.telemetry.ships = fleet.ships; }
+    const std::vector<Order> merged{MergeFleetsOrder{1, other.id}, gate};
+    projected = projected_cargo_order_state(make_player_view(merging, 1).state, {1, merged});
+    assert(projected.planets[0].xenocrystal.surface == 8 && next(merging, merged).planets[0].xenocrystal.surface == 8);
+}
+
 void add_miner(GameState& s, std::uint32_t count = 1)
 {
     ShipDesign design{3, 1, "Crystal miner", ShipHullType::MiniMiner,
@@ -686,6 +738,7 @@ void computer_completes_an_ordinary_material_supply_cycle()
 }
 int main()
 {
+    resonant_gate_projection_replays_accepted_fleet_commands();
     resonant_gate_reports_wait_and_freeze_payment();
     computer_uses_only_received_resonance_supplies();
     resonant_gates_pay_once_and_preserve_normal_limits();

@@ -19,7 +19,11 @@ preserving ordinary gates and mass/cargo/link rules. UI and basic specialist
 AI use received information and ordinary orders, reserve earlier pulse payments,
 and cannot spend outdated stock estimates. Save **v90 / orders v36** retain
 an explicit optional gate-order flag; older orders default to ordinary transit.
-Validation belongs to the PR. #63 remains open; merge is left for review.
+PR #224 review follow-up removes host-state inputs from Cargo/System gate
+forecasts and shares accepted command-phase handlers between projection and
+resolution. Regressions cover undelivered station loss, move/clear/task ordering,
+crystal reservations and fleet reorganization. Validation belongs to the PR.
+#63 remains open; merge is left for review.
 
 ## Historical checkpoint — 20 October 2026: main after #222
 
