@@ -6,6 +6,10 @@
 #include "suns/production.hpp"
 #include <QApplication>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QTimer>
 #include <QDataStream>
 #include <QFile>
 #include <QLabel>
@@ -45,6 +49,84 @@ SaveGameData save_fixture()
 QByteArray bytes(const QString& path) { QFile f(path); assert(f.open(QIODevice::ReadOnly)); return f.readAll(); }
 void writeBytes(const QString& path, const QByteArray& bytes)
 { QFile f(path); assert(f.open(QIODevice::WriteOnly)); assert(f.write(bytes) == bytes.size()); }
+GameState resonance_network()
+{
+    auto s = fixture(); s.stars.resize(2); s.planets.resize(2); s.orbitalStations.clear();
+    s.players[0].technology.levels.fill(18); s.fleets[0].xenocrystal = 0;
+    s.stars[0].position = {0, 0}; s.stars[1].position = {250, 0};
+    s.fleets[0].position = s.stars[0].position;
+    s.fleets[0].telemetry = {};
+    s.fleets[0].telemetry = confirmed_fleet_telemetry(s, s.fleets[0]);
+    for (auto& p : s.planets) {
+        p.owner = 1; p.population = 1000000; p.productionQueue.clear(); p.mines = 0;
+        s.orbitalStations.push_back({p.id, 1, p.id, "Paid gate", OrbitalStationHullType::Starbase,
+            {OrbitalStationModule::Shipyard}, {ShipComponentType::JumpGate}});
+    }
+    s.nextOrbitalStationId = 3; s.planets[0].xenocrystal.surface = 8;
+    for (auto& p : s.planets) set_survey_level(s, 1, p.star, SurveyLevel::DeepSurvey, s.turn);
+    return s;
+}
+void resonant_gate_cannot_use_later_base_delivery()
+{
+    auto s = resonance_network(); s.planets[0].xenocrystal.surface = 0; add_mobile_base(s);
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    PlayerOrders orders{1, {TransferXenocrystalOrder{{0, 2}, {1, 0}, 8}, GateFleetOrder{1, 1, 2, true}}};
+    const auto preview = projected_cargo_order_state(make_player_view(s, 1).state, orders);
+    assert(!preview.planets[0].xenocrystal.surface && preview.fleets[0].position == s.stars[0].position);
+    const auto after = TurnProcessor{}.process(s, {orders});
+    assert(after.planets[0].xenocrystal.surface == 8 && after.fleets[0].position == s.stars[0].position);
+    const auto later = TurnProcessor{}.process(after, {{1, {GateFleetOrder{1, 1, 2, true}}}});
+    assert(!later.planets[0].xenocrystal.surface && later.fleets[0].position == s.stars[1].position);
+}
+
+void resonant_gate_persistence_and_exchange()
+{
+    QTemporaryDir dir; QString error; SaveGameData loaded;
+    auto save = save_fixture(); save.state = resonance_network(); save.pendingOrders = {1, {GateFleetOrder{1, 1, 2, true}}};
+    save.pendingDescriptions = {"Resonant jump"};
+    const auto path = dir.filePath("resonance.suns");
+    const auto roundTrip = write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error);
+    if (!roundTrip) std::cerr << error.toStdString() << "\n";
+    assert(roundTrip);
+    assert(std::get<GateFleetOrder>(loaded.pendingOrders.orders[0]).resonant);
+    const auto expected = TurnProcessor{}.process(save.state, {save.pendingOrders});
+    const auto resumed = TurnProcessor{}.process(loaded.state, {loaded.pendingOrders});
+    assert(resumed.fleets[0].position == expected.fleets[0].position && resumed.planets[0].xenocrystal.surface == 0);
+    save.mode = SessionMode::Host; save.playerTokens = {{1, 31}};
+    TurnOrderFileData packet{save.campaignId, save.state.turn, 31, save.pendingOrders, {"Resonant jump"}}, received;
+    save.state.players.push_back({2, "Host"}); save.playerTokens[2] = 41;
+    save.pendingOrders = {2, {}}; save.pendingDescriptions.clear();
+    const auto ordersPath = dir.filePath("resonance.sunsorders");
+    assert(write_turn_order_file(ordersPath, packet, error) && read_turn_order_file(ordersPath, received, error));
+    assert(validate_turn_submission(save, received).isEmpty() && std::get<GateFleetOrder>(received.orders.orders[0]).resonant);
+    const auto exchanged = TurnProcessor{}.process(save.state, {received.orders});
+    assert(exchanged.fleets[0].position == expected.fleets[0].position && !exchanged.planets[0].xenocrystal.surface);
+    // v89/v35 gate payloads end at destination: absence of the new byte defaults to an ordinary jump.
+    QByteArray marker; QDataStream signature(&marker, QIODevice::WriteOnly);
+    signature << quint8{24} << quint32{1} << quint32{1} << quint32{2};
+    for (const auto& name : {path, ordersPath}) {
+        auto current = bytes(name); const auto index = current.indexOf(marker);
+        assert(index >= 0 && current.indexOf(marker, index + 1) < 0);
+        auto malformed = current; malformed[index + marker.size()] = char(2); writeBytes(name, malformed);
+        if (name == path) assert(!read_save_game_file(name, loaded, error));
+        else assert(!read_turn_order_file(name, received, error));
+        current.remove(index + marker.size(), 1);
+        QDataStream legacy(&current, QIODevice::ReadWrite); legacy.device()->seek(4);
+        legacy << quint32(name == path ? 89 : 35); writeBytes(name, current);
+        if (name == path) {
+            assert(read_save_game_file(name, loaded, error));
+            assert(!std::get<GateFleetOrder>(loaded.pendingOrders.orders[0]).resonant);
+        } else {
+            assert(read_turn_order_file(name, received, error));
+            assert(!std::get<GateFleetOrder>(received.orders.orders[0]).resonant);
+        }
+    }
+    const auto playerPath = dir.filePath("resonance.sunsturn");
+    assert(write_save_game_file(playerPath, make_player_turn(save, 1), error)); const auto frozen = bytes(playerPath);
+    save.state.planets[0].xenocrystal.surface = 0; save.state.planets[1].xenocrystal.remaining = 0;
+    assert(write_save_game_file(playerPath, make_player_turn(save, 1), error) && bytes(playerPath) == frozen);
+}
+
 void persistence_and_migration()
 {
     QTemporaryDir dir; const auto path = dir.filePath("exotics.suns"); QString error; SaveGameData loaded;
@@ -167,11 +249,54 @@ struct MainWindowTestAccess {
     static void load(MainWindow& w, GameState s, std::vector<Order> orders = {}) {
         w.state_ = std::move(s); w.pendingOrders_ = {1, std::move(orders)}; w.pendingDescriptions_.clear(); w.selection_.fleet = 1; w.rebuildScene();
     }
+    static void transit(MainWindow& w) { w.openGateTransit(); }
     static const auto& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
     static const auto& state(const MainWindow& w) { return w.state_; }
 };
 }
 namespace {
+void resonant_gate_ui_uses_current_received_payment(MainWindow& w)
+{
+    auto s = resonance_network(); MainWindowTestAccess::load(w, s);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        auto* destinations = dialog->findChild<QComboBox*>("stargateDestinations");
+        auto* pulse = dialog->findChild<QCheckBox*>("resonantGateTransit");
+        auto* details = dialog->findChild<QLabel*>("gateResonanceDetails");
+        assert(pulse && pulse->isEnabled() && !pulse->isChecked() && destinations->count() == 0);
+        assert(details->text().contains("8 units") && details->text().contains("year 10 (age 0)"));
+        pulse->setChecked(true); assert(destinations->count() == 1 && destinations->currentData().toUInt() == 2);
+        assert(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->isEnabled());
+        dialog->accept();
+    });
+    MainWindowTestAccess::transit(w);
+    assert(MainWindowTestAccess::orders(w).size() == 1 && std::get<GateFleetOrder>(MainWindowTestAccess::orders(w)[0]).resonant);
+    assert(MainWindowTestAccess::state(w).planets[0].xenocrystal.surface == 8); // Queueing never pays physically.
+    auto stale = s;
+    stale.players[0].surveyKnowledge[0].planetSnapshot->xenocrystal->observedTurn = stale.turn - 1;
+    MainWindowTestAccess::load(w, stale);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        dialog->findChild<QCheckBox*>("resonantGateTransit")->setChecked(true);
+        assert(dialog->findChild<QComboBox*>("stargateDestinations")->count() == 0);
+        assert(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->isEnabled());
+        dialog->reject();
+    });
+    MainWindowTestAccess::transit(w); assert(MainWindowTestAccess::orders(w).empty());
+    // The same supplies cannot be promised to a second fleet in this planning turn.
+    auto second = s.fleets[0]; second.id = s.nextFleetId++; s.fleets.push_back(second);
+    MainWindowTestAccess::load(w, s, {GateFleetOrder{second.id, 1, 2, true}});
+    assert(w.findChild<QTreeWidget*>("exoticInventory")->topLevelItem(0)->text(2).contains("8 units received → 0 planned"));
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        dialog->findChild<QCheckBox*>("resonantGateTransit")->setChecked(true);
+        assert(dialog->findChild<QComboBox*>("stargateDestinations")->count() == 0);
+        assert(dialog->findChild<QLabel*>("gateResonanceDetails")->text().contains("0 units"));
+        dialog->reject();
+    });
+    MainWindowTestAccess::transit(w);
+}
+
 void select_planet(MainWindow& w, PlanetId id)
 {
     auto* tree = w.findChild<QTreeWidget*>("exoticInventory");
@@ -226,6 +351,9 @@ int main(int argc, char** argv)
     QApplication app(argc, argv); persistence_and_migration(); hidden_exports_and_order_exchange();
     owned_laboratory_exports_use_received_project_and_queue();
     remote_base_transfer_survives_save_and_order_exchange();
+    resonant_gate_persistence_and_exchange();
+    resonant_gate_cannot_use_later_base_delivery();
     MainWindow w; w.installExoticMaterials(); ui_commands_and_previews(w);
+    resonant_gate_ui_uses_current_received_payment(w);
     std::cout << "Exotic material UI, frozen exports, saves and PBEM passed\n";
 }

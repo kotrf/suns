@@ -11,6 +11,12 @@
 #include <limits>
 
 namespace suns {
+bool resonant_gate_technology_available(const GameState& s, PlayerId owner)
+{
+    return technology_level(s, owner, ResearchField::Energy) >= 18
+        && technology_level(s, owner, ResearchField::Electronics) >= 18
+        && technology_level(s, owner, ResearchField::Construction) >= 16;
+}
 namespace {
 std::uint64_t mix(std::uint64_t x)
 {

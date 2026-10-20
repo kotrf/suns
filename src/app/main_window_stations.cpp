@@ -2,6 +2,7 @@
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/stations.hpp"
+#include "suns/exotic_materials.hpp"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -172,7 +173,7 @@ void MainWindow::openGateTransit()
         QMessageBox::information(this, "Stargate transit", "Select one of your fleets first.");
         return;
     }
-    const auto known = make_player_view(state_, pendingOrders_.player).state;
+    const auto known = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
     const auto knownFleet = std::find_if(known.fleets.begin(), known.fleets.end(),
         [&](const Fleet& candidate) { return candidate.id == fleet->id; });
     if (knownFleet == known.fleets.end()) return;
@@ -206,30 +207,60 @@ void MainWindow::openGateTransit()
     layout->addWidget(summary);
     auto* destinations = new QComboBox(&dialog);
     destinations->setObjectName("stargateDestinations");
-    for (const auto& planet : known.planets) {
-        if (stargate_transfer_valid(known, pendingOrders_.player,
-                fleet->id, source, planet.id)) {
-            destinations->addItem(QString::fromStdString(planet.name), uint(planet.id));
-            const auto* gate = station_stargate(*find_orbital_station_at_planet(known, planet.id));
-            destinations->setItemData(destinations->count()-1, gateLimits(*gate), Qt::ToolTipRole);
-        }
-    }
-    if (destinations->count() == 0) summary->setText(summary->text()
-        + "\nNo confirmed destination satisfies these rules. Check endpoint fittings, range, cargo mass, fleet task and communications.");
+    auto* resonant = new QCheckBox("Resonant pulse: spend 8 source xenocrystals for twice the finite range", &dialog);
+    resonant->setObjectName("resonantGateTransit");
+    resonant->setEnabled(resonant_gate_technology_available(known, pendingOrders_.player));
+    const auto observation = known_xenocrystal(known, pendingOrders_.player, source);
+    const auto* sourceColony = find_planet(known, source);
+    auto* resonanceDetails = new QLabel(QString(
+        "Optional resonance requires Energy 18 / Electronics 18 / Construction 16. "
+        "Only an otherwise valid jump beyond ordinary range consumes crystals, at the source, on success. "
+        "Mass and racial cargo restrictions still apply.\nSource stock: %1; stock telemetry: %2. "
+        "Pending valid local deliveries and earlier transits are included; mobile-base deliveries become available after production.")
+        .arg(observation && sourceColony ? QString("%1 units received; %2 units planned")
+            .arg(observation->site.surface).arg(sourceColony->xenocrystal.surface) : "unknown")
+        .arg(observation ? QString("year %1 (age %2)").arg(qulonglong(observation->observedTurn))
+            .arg(qulonglong(known.turn - observation->observedTurn)) : "none"), &dialog);
+    resonanceDetails->setObjectName("gateResonanceDetails"); resonanceDetails->setWordWrap(true);
+    layout->addWidget(resonant); layout->addWidget(resonanceDetails);
+    auto* status = new QLabel(&dialog); status->setObjectName("gateTransitStatus"); status->setWordWrap(true);
+    layout->addWidget(status);
     auto* form = new QFormLayout;
     form->addRow("Destination gate", destinations);
     layout->addLayout(form);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    buttons->button(QDialogButtonBox::Ok)->setEnabled(destinations->count() != 0);
     layout->addWidget(buttons);
+    const auto refresh = [&] {
+        destinations->clear();
+        const bool alreadyQueued = std::any_of(pendingOrders_.orders.begin(), pendingOrders_.orders.end(), [&](const auto& order) {
+            const auto* gate = std::get_if<GateFleetOrder>(&order); return gate && gate->fleet == fleet->id;
+        });
+        if (!alreadyQueued) for (const auto& planet : known.planets) {
+            auto preview = known;
+            if (!preview_stargate_transfer(preview, pendingOrders_.player,
+                    {fleet->id, source, planet.id, resonant->isChecked()})) continue;
+            destinations->addItem(QString::fromStdString(planet.name), uint(planet.id));
+            const auto* gate = station_stargate(*find_orbital_station_at_planet(known, planet.id));
+            destinations->setItemData(destinations->count()-1, gateLimits(*gate), Qt::ToolTipRole);
+        }
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(destinations->count() != 0);
+        status->setText(alreadyQueued ? "A transit is already queued for this fleet; one hop per year."
+            : destinations->count() ? "Planning estimate from received evidence; the host rechecks both gates and payment."
+            : resonant->isChecked() ? "No confirmed resonant destination. Check current stock/fleet telemetry, 8 source crystals, "
+                "range above the ordinary limit and within twice each endpoint's limit, mass, fittings and link."
+            : "No confirmed destination satisfies ordinary gate rules. Check fittings, range, mass, cargo, fleet task and communications.");
+    };
+    connect(resonant, &QCheckBox::toggled, &dialog, refresh); refresh();
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted || destinations->count() == 0) return;
     const PlanetId target = destinations->currentData().toUInt();
-    if (!stargate_transfer_valid(known, pendingOrders_.player, fleet->id, source, target)) return;
-    appendPendingOrder(GateFleetOrder{fleet->id, source, target},
-        QString("Transit fleet %1 through Jump Gate to %2")
-            .arg(QString::fromStdString(fleet->name), destinations->currentText()));
+    auto preview = known;
+    const GateFleetOrder order{fleet->id, source, target, resonant->isChecked()};
+    if (!preview_stargate_transfer(preview, pendingOrders_.player, order)) return;
+    appendPendingOrder(order, QString("Transit fleet %1 through Jump Gate to %2%3")
+        .arg(QString::fromStdString(fleet->name), destinations->currentText(),
+            order.resonant ? " (8 xenocrystals; resonant range)" : ""));
 }
 
 } // namespace suns

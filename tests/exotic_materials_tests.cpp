@@ -33,6 +33,148 @@ GameState fixture()
 }
 GameState next(const GameState& s, std::vector<Order> orders = {})
 { return TurnProcessor{}.process(s, {{1, std::move(orders)}}); }
+GameState resonance_network()
+{
+    auto s = fixture(); s.stars.resize(2); s.planets.resize(2);
+    s.stars[0].position = {0, 0}; s.stars[1].position = {250, 0};
+    s.players[0].technology.levels.fill(18); s.orbitalStations.clear();
+    for (std::size_t i = 0; i < 2; ++i) {
+        auto& p = s.planets[i]; p.owner = 1; p.population = 1000000; p.productionQueue.clear();
+        p.mines = 0; p.industry = 1000;
+        s.orbitalStations.push_back({p.id, 1, p.id, "Paid gate", OrbitalStationHullType::Starbase,
+            {OrbitalStationModule::Shipyard}, {ShipComponentType::JumpGate}});
+    }
+    s.nextOrbitalStationId = 3; s.planets[0].xenocrystal.surface = 16;
+    s.fleets[0].position = s.stars[0].position;
+    s.fleets[0].telemetry = confirmed_fleet_telemetry(s, s.fleets[0]);
+    for (std::size_t i = 0; i < 2; ++i) set_survey_level(s, 1, s.planets[i].star, SurveyLevel::DeepSurvey, s.turn);
+    return s;
+}
+void resonant_gates_pay_once_and_preserve_normal_limits()
+{
+    auto s = resonance_network(); s.planets[1].xenocrystal.surface = 16;
+    assert(!stargate_transfer_valid(s, 1, 1, 1, 2));
+    assert(stargate_transfer_valid(s, 1, 1, 1, 2, true));
+    const auto fuel = s.fleets[0].fuel;
+    const auto result = TurnProcessor{}.process_with_events(s, {{1, {GateFleetOrder{1, 1, 2, true}, GateFleetOrder{1, 2, 1, true}}}});
+    assert(result.state.fleets[0].position == s.stars[1].position && result.state.fleets[0].fuel == fuel);
+    assert(result.state.planets[0].xenocrystal.surface == 8 && result.state.planets[1].xenocrystal.surface == 16);
+    assert(known_xenocrystal(result.state, 1, 1)->site.surface == 8);
+    const auto paid = std::count_if(result.state.players[0].pendingPlayerReports.begin(), result.state.players[0].pendingPlayerReports.end(),
+        [](const auto& r) { return r.kind == PlayerReportKind::StargateTransit && r.quantity == 8; });
+    const auto received = std::count_if(result.events.begin(), result.events.end(),
+        [](const auto& e) { return e.kind == GameEventKind::StargateTransit && e.quantity == 8; });
+    assert(paid + received == 1);
+    for (int defect = 0; defect < 11; ++defect) {
+        auto bad = s;
+        if (defect < 3) bad.players[0].technology.levels[std::size_t(defect == 0 ? ResearchField::Energy
+            : defect == 1 ? ResearchField::Electronics : ResearchField::Construction)] = defect == 2 ? 15 : 17;
+        if (defect == 3) { bad.planets[0].xenocrystal.surface = 7; bad.fleets[0].xenocrystal = 8; bad.planets[1].xenocrystal.surface = 8; }
+        if (defect == 4) bad.orbitalStations[1].damagePercent = 100;
+        if (defect == 5) bad.planets[1].owner = 2;
+        if (defect == 6) bad.stars[1].position = {320.001, 0};
+        if (defect == 7) bad.fleets[0].ships[0].count = 1000;
+        if (defect == 8) bad.fleets[0].minerals = {1, 0, 0};
+        if (defect == 9) bad.fleets[0].destination = Position{20, 0};
+        if (defect == 10) bad.fleets[0].task = FleetTask::RemoteMining;
+        const auto stock = bad.planets[0].xenocrystal.surface;
+        assert(!transfer_fleet_through_stargate(bad, 1, 1, 1, 2, true));
+        assert(bad.planets[0].xenocrystal.surface == stock && bad.fleets[0].position == s.fleets[0].position);
+    }
+    auto ordinary = s; ordinary.stars[1].position = {160, 0}; ordinary.planets[0].xenocrystal.surface = 0;
+    ordinary.players[0].technology.levels.fill(9);
+    assert(transfer_fleet_through_stargate(ordinary, 1, 1, 1, 2));
+    assert(!ordinary.planets[0].xenocrystal.surface);
+    auto unnecessary = s; unnecessary.stars[1].position = {160, 0};
+    assert(!transfer_fleet_through_stargate(unnecessary, 1, 1, 1, 2, true));
+    assert(unnecessary.planets[0].xenocrystal.surface == 16);
+    auto boundary = s; boundary.stars[1].position = {320, 0};
+    assert(stargate_transfer_valid(boundary, 1, 1, 1, 2, true));
+    // The smaller endpoint binds even against an Infinity gate; mass stays finite too.
+    boundary.players[0].race.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
+    boundary.orbitalStations[1].hull = OrbitalStationHullType::Fortress;
+    boundary.orbitalStations[1].components = {ShipComponentType::InfinityStargate};
+    assert(stargate_transfer_valid(boundary, 1, 1, 1, 2, true));
+    boundary.stars[1].position = {321, 0}; assert(!stargate_transfer_valid(boundary, 1, 1, 1, 2, true));
+    auto two = s; two.planets[0].xenocrystal.surface = 8;
+    auto second = two.fleets[0]; second.id = two.nextFleetId++; two.fleets.push_back(second);
+    const auto contested = next(two, {GateFleetOrder{1, 1, 2, true}, GateFleetOrder{second.id, 1, 2, true}});
+    assert(contested.fleets[0].position == s.stars[1].position && contested.fleets[1].position == s.stars[0].position);
+    assert(!contested.planets[0].xenocrystal.surface);
+}
+void resonant_gate_forecasts_reserve_only_received_early_deliveries()
+{
+    auto s = resonance_network(); s.planets[0].xenocrystal.surface = 8;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    PlayerOrders orders{1, {GateFleetOrder{1, 1, 2, true}, SetResonanceLaboratoryOrder{1}}};
+    auto preview = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, orders), orders);
+    assert(!preview.planets[0].xenocrystal.surface);
+    assert(!forecast_production_queue(preview, preview.planets[0], preview.planets[0].productionQueue, 16)[0].completionTurn);
+    auto after = next(s, orders.orders);
+    assert(!after.planets[0].xenocrystal.surface && !after.planets[0].resonanceLab.work);
+    auto stale = make_player_view(s, 1).state;
+    stale.players[0].surveyKnowledge[0].planetSnapshot->xenocrystal->observedTurn = s.turn - 1;
+    assert(!preview_stargate_transfer(stale, 1, {1, 1, 2, true}));
+    auto hidden = s; hidden.planets[0].xenocrystal.surface = 0;
+    assert(make_player_view(s, 1).state.planets[0].xenocrystal == make_player_view(hidden, 1).state.planets[0].xenocrystal);
+    assert(!next(hidden, {GateFleetOrder{1, 1, 2, true}}).planets[0].xenocrystal.surface);
+    // A genuinely local, current unloading order precedes the jump; material aboard is not payment.
+    s.planets[0].xenocrystal.surface = 0; s.fleets[0].xenocrystal = 8;
+    s.fleets[0].telemetry = {}; s.fleets[0].telemetry = confirmed_fleet_telemetry(s, s.fleets[0]);
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    PlayerOrders delivered{1, {TransferXenocrystalOrder{{0, 1}, {1, 0}, 8}, GateFleetOrder{1, 1, 2, true}}};
+    auto estimate = projected_cargo_order_state(make_player_view(s, 1).state, delivered);
+    assert(!estimate.planets[0].xenocrystal.surface && !estimate.fleets[0].xenocrystal);
+    assert(estimate.fleets[0].position == s.stars[1].position);
+    after = next(s, delivered.orders);
+    assert(!after.planets[0].xenocrystal.surface && after.fleets[0].position == s.stars[1].position);
+    auto reversed = next(s, {GateFleetOrder{1, 1, 2, true}, delivered.orders[0]});
+    assert(reversed.planets[0].xenocrystal.surface == 8 && reversed.fleets[0].position == s.stars[0].position);
+}
+
+void computer_uses_only_received_resonance_supplies()
+{
+    auto s = resonance_network(); s.players[0].controller = PlayerController::Computer;
+    s.players[0].race.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
+    s.stars.push_back({3, "Frontier", {300, 0}}); s.players[0].surveyedStars = {1, 2};
+    for (auto& station : s.orbitalStations) station.modules.push_back(OrbitalStationModule::RefuelingDepot);
+    const auto plan = plan_computer_turn(make_player_view(s, 1));
+    const auto pulse = std::find_if(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& order) {
+        const auto* gate = std::get_if<GateFleetOrder>(&order); return gate && gate->fleet == 1 && gate->resonant;
+    });
+    assert(pulse != plan.orders.orders.end());
+    assert(std::get<GateFleetOrder>(*pulse).destination == 2);
+    const auto resolved = next(s, {*pulse});
+    assert(resolved.planets[0].xenocrystal.surface == 8 && resolved.fleets[0].position == s.stars[1].position);
+    auto hidden = s; hidden.planets[0].xenocrystal.surface = 0;
+    const auto same = plan_computer_turn(make_player_view(hidden, 1));
+    assert(plan.nextState == same.nextState);
+    auto stale = make_player_view(s, 1);
+    stale.state.players[0].surveyKnowledge[0].planetSnapshot->xenocrystal->observedTurn = s.turn - 1;
+    const auto refused = plan_computer_turn(stale);
+    assert(std::none_of(refused.orders.orders.begin(), refused.orders.orders.end(), [](const auto& order) {
+        const auto* gate = std::get_if<GateFleetOrder>(&order); return gate && gate->resonant;
+    }));
+}
+
+void resonant_gate_reports_wait_and_freeze_payment()
+{
+    auto s = resonance_network(); s.players[0].race.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
+    s.stars[1].position = {900, 0}; s.planets[1].radar = PlanetaryRadarLevel::None;
+    for (auto& station : s.orbitalStations) station.components = {ShipComponentType::NetworkStargate};
+    const auto result = TurnProcessor{}.process_with_events(s, {{1, {GateFleetOrder{1, 1, 2, true}}}});
+    assert(result.state.fleets[0].position == s.stars[1].position && result.state.planets[0].xenocrystal.surface == 8);
+    assert(std::none_of(result.events.begin(), result.events.end(), [](const auto& e) { return e.kind == GameEventKind::StargateTransit; }));
+    auto delayed = result.state;
+    const auto packet = std::find_if(delayed.players[0].pendingPlayerReports.begin(), delayed.players[0].pendingPlayerReports.end(),
+        [](const auto& r) { return r.kind == PlayerReportKind::StargateTransit; });
+    assert(packet != delayed.players[0].pendingPlayerReports.end() && packet->deliveryTurn > delayed.turn);
+    delayed.turn = packet->deliveryTurn; delayed.planets[0].xenocrystal.surface = 99;
+    const auto events = deliver_due_player_reports(delayed);
+    const auto event = std::find_if(events.begin(), events.end(), [](const auto& e) { return e.kind == GameEventKind::StargateTransit; });
+    assert(event != events.end() && event->quantity == 8 && event->position == s.stars[1].position);
+}
+
 void add_miner(GameState& s, std::uint32_t count = 1)
 {
     ShipDesign design{3, 1, "Crystal miner", ShipHullType::MiniMiner,
@@ -544,6 +686,10 @@ void computer_completes_an_ordinary_material_supply_cycle()
 }
 int main()
 {
+    resonant_gate_reports_wait_and_freeze_payment();
+    computer_uses_only_received_resonance_supplies();
+    resonant_gates_pay_once_and_preserve_normal_limits();
+    resonant_gate_forecasts_reserve_only_received_early_deliveries();
     generated_finite_geographic_deposits(); discovery_is_deep_delayed_and_immutable(); stock_and_deposit_reports_merge_independently();
     finite_mining_requires_received_discovery_and_equipment(); integer_cargo_transfers_splits_and_both_merges();
     stale_previews_cannot_teleport_or_spend_hidden_stocks(); laboratory_pays_once_pauses_resumes_and_requires_support();

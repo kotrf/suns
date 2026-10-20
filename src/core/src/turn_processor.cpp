@@ -2063,8 +2063,12 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
     for (auto& p : projected.planets)
         p.xenocrystal = known_xenocrystal(current, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
+    std::set<FleetId> gated;
     for (const auto& order : pending.orders) {
-        if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
+        if (const auto* gate = std::get_if<GateFleetOrder>(&order)) {
+            if (!gated.contains(gate->fleet) && preview_stargate_transfer(projected, pending.player, *gate))
+                gated.insert(gate->fleet);
+        } else if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
             (void)preview_science_sample_transfer(projected, pending.player, *sample);
         } else if (const auto* crystal = std::get_if<TransferXenocrystalOrder>(&order)) {
             const auto involvesBase = [&](FleetId id) {
@@ -2207,7 +2211,7 @@ TurnResult TurnProcessor::process_with_events(
                             [&](const auto& f) { return f.id == concreteOrder.fleet && f.owner == submission.player; });
                         if (fleet == next.fleets.end()) return;
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
-                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination);
+                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination, concreteOrder.resonant);
                         if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }
                         const auto target = transferred ? concreteOrder.destination : concreteOrder.source;
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
@@ -2216,7 +2220,8 @@ TurnResult TurnProcessor::process_with_events(
                                 : PlayerReportKind::StargateTransitFailed,
                             fleet->position, next.turn + 1, planet == next.planets.end() ? 0 : planet->star,
                             planet == next.planets.end() ? 0 : planet->id, fleet->id, 0,
-                            ProductionKind::ColonyShip, 0, ResearchField::Electronics, 0,
+                            ProductionKind::ColonyShip, transferred && concreteOrder.resonant ? kResonantGateCrystals : 0,
+                            ResearchField::Electronics, 0,
                             fleet->minerals, fleet->colonists);
                         if (transferred) gatedThisTurn.insert(concreteOrder.fleet);
                     } else if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>) {

@@ -1,5 +1,6 @@
 #include "suns/stations.hpp"
 #include "suns/communications.hpp"
+#include "suns/exotic_materials.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -108,7 +109,7 @@ bool stargate_station_available(const GameState& s, PlayerId owner, PlanetId id)
             || player->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
 }
 std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId fleetId,
-    PlanetId source, PlanetId destination)
+    PlanetId source, PlanetId destination, bool resonant)
 {
     if (!source || !destination || source == destination
         || !stargate_station_available(s, owner, source)
@@ -141,23 +142,37 @@ std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId 
     const auto* to = station_stargate(*find_orbital_station_at_planet(s, destination));
     const auto mass = fleet_gross_mass(s, *fleet);
     const auto distance = distance_between(start->position, finish->position);
+    bool extendedRangeNeeded = false;
     for (const auto* gate : {from, to}) {
         if (!std::isfinite(mass) || (gate->maximumMassKt > 0 && mass > gate->maximumMassKt))
             return "Loaded gross fleet mass exceeds an endpoint's limit.";
-        if (!std::isfinite(distance) || (gate->rangeLy > 0 && distance > gate->rangeLy))
+        extendedRangeNeeded |= gate->rangeLy > 0 && distance > gate->rangeLy;
+        if (!std::isfinite(distance) || (gate->rangeLy > 0 && distance > gate->rangeLy * (resonant ? 2 : 1)))
             return "Distance exceeds an endpoint's range.";
+    }
+    if (resonant) {
+        if (!extendedRangeNeeded) return "Ordinary gate range suffices; no resonance is needed.";
+        if (!resonant_gate_technology_available(s, owner))
+            return "Resonance requires Energy 18, Electronics 18 and Construction 16.";
+        if (a->xenocrystal.surface < kResonantGateCrystals)
+            return "Resonance requires 8 physically delivered xenocrystals at the source colony.";
     }
     return {};
 }
 bool stargate_transfer_valid(const GameState& s, PlayerId owner, FleetId fleetId,
-    PlanetId source, PlanetId destination)
+    PlanetId source, PlanetId destination, bool resonant)
 {
-    return stargate_transfer_error(s, owner, fleetId, source, destination).empty();
+    return stargate_transfer_error(s, owner, fleetId, source, destination, resonant).empty();
 }
 bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleetId,
-    PlanetId source, PlanetId destination)
+    PlanetId source, PlanetId destination, bool resonant)
 {
-    if (!stargate_transfer_valid(s, owner, fleetId, source, destination)) return false;
+    if (!stargate_transfer_valid(s, owner, fleetId, source, destination, resonant)) return false;
+    if (resonant) {
+        auto& colony = *std::find_if(s.planets.begin(), s.planets.end(),
+            [=](const Planet& candidate) { return candidate.id == source; });
+        colony.xenocrystal.surface -= kResonantGateCrystals;
+    }
     const auto* p = std::find_if(s.planets.begin(), s.planets.end(),
         [=](const Planet& candidate) { return candidate.id == destination; }).operator->();
     const auto* star = find_star(s, p->star);
@@ -168,6 +183,16 @@ bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleet
     // All fuel stays onboard. Physical movement precedes the normal telemetry
     // stage; no instant report of a remote destination is manufactured here.
     return true;
+}
+bool preview_stargate_transfer(GameState& s, PlayerId owner, const GateFleetOrder& order)
+{
+    if (order.resonant) {
+        const auto known = known_xenocrystal(s, owner, order.source);
+        const auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == order.fleet; });
+        if (!known || known->observedTurn != s.turn || !known->stockPhase
+            || fleet == s.fleets.end() || fleet->telemetry.observedTurn != s.turn) return false;
+    }
+    return transfer_fleet_through_stargate(s, owner, order.fleet, order.source, order.destination, order.resonant);
 }
 StationLoadout station_loadout(const OrbitalStation& s)
 { return {s.hull,s.components,orbital_station_has_module(s,OrbitalStationModule::Shipyard),orbital_station_has_module(s,OrbitalStationModule::RefuelingDepot)}; }

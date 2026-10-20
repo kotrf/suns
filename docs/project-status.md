@@ -1,6 +1,27 @@
 # Project status and development handoff
 
-## Verified checkpoint — 20 October 2026: main after #222
+## Verified checkpoint — 20 October 2026: main after #223
+
+Main is [4a91bd3](https://github.com/kotrf/suns/commit/4a91bd3816a455a1edddca176909e2a6d9b4d106),
+merged [#223](https://github.com/kotrf/suns/pull/223), including the visitor refusal
+knowledge and malformed VISI reader fixes from reviewed head `0fb4af4`.
+The first physical visitor encounter and its playable demo are on main.
+Main formats: **save v89 / orders v35**. #46 remains open.
+
+## Implementation branch — resonant gate pulse #63
+
+The user chose another xenocrystal application rather than colony extraction
+or additional deposit clusters. `codex/xenocrystal-gate-resonance` starts at
+verified main `4a91bd3`. [Resonant transit](rare-exotic-materials.md#spend-resonant-gate-pulse)
+uses Energy 18 / Electronics 18 / Construction 16 and eight source-surface
+crystals per successful extended hop, doubling finite endpoint range while
+preserving ordinary gates and mass/cargo/link rules. UI and basic specialist
+AI use received information and ordinary orders, reserve earlier pulse payments,
+and cannot spend outdated stock estimates. Save **v90 / orders v36** retain
+an explicit optional gate-order flag; older orders default to ordinary transit.
+Validation belongs to the PR. #63 remains open; merge is left for review.
+
+## Historical checkpoint — 20 October 2026: main after #222
 
 Main is [f10b5b9](https://github.com/kotrf/suns/commit/f10b5b9bc5aa2d2eb660723a629fdfa4800af409),
 merged [#222](https://github.com/kotrf/suns/pull/222), including the review fix
@@ -8,7 +29,7 @@ allowing Stop before the first programme acknowledgement. CI for reviewed head
 `d2ab870` passed. Autonomous survey probes are on main; #60 remains open for
 self-replication and further applications. Main formats: **save v88 / orders v34**.
 
-## Implementation branch — intergalactic visitors #46
+## Historical implementation — intergalactic visitors #46
 
 The user selected #46 next, before the remaining general moving-anomaly work #55.
 `codex/intergalactic-visitors` starts at verified main `f10b5b9`. The first

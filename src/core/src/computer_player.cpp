@@ -51,8 +51,15 @@ const Planet* colony_at(const GameState& state, PlayerId player, Position positi
 }
 
 std::optional<GateFleetOrder> gate_staging_order(
-    const GameState& state, const Fleet& fleet, Position target, bool requireRefueling)
+    const GameState& received, const Fleet& fleet, Position target, bool requireRefueling, const PlayerOrders* pending)
 {
+    if (pending && std::any_of(pending->orders.begin(), pending->orders.end(), [&](const auto& order) {
+        const auto* gate = std::get_if<GateFleetOrder>(&order); return gate && gate->fleet == fleet.id;
+    })) return {};
+    auto state = pending ? projected_cargo_order_state(received, *pending) : received;
+    const auto ownFleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const auto& f) { return f.id == fleet.id; });
+    if (ownFleet == state.fleets.end()) return {};
+    *ownFleet = fleet; // Includes the ordinary cargo loading planned by this caller.
     const auto* player = find_player(state, fleet.owner);
     if (!player || player->race.primaryTrait != PrimaryRaceTrait::StargateSpecialist) return {};
     const auto* source = colony_at(state, fleet.owner, fleet.position);
@@ -61,23 +68,32 @@ std::optional<GateFleetOrder> gate_staging_order(
     const auto mass = fleet_gross_mass(state, fleet); // Includes settlers loaded earlier in this plan.
     if (from->maximumMassKt && mass > from->maximumMassKt) return {};
     const Planet* best = nullptr;
+    bool bestResonant = false;
     auto bestDistance = distance_between(fleet.position, target);
     const auto minimumGain = std::max(1.0, warp_distance(fleet.warp));
     for (const auto& planet : state.planets) {
         if (requireRefueling && !colony_has_orbital_service(state, planet.id,
                 fleet.owner, OrbitalStationModule::RefuelingDepot)) continue;
         const auto* star = find_star(state, planet.star);
-        if (!star || !stargate_transfer_valid(state, fleet.owner, fleet.id, source->id, planet.id)) continue;
+        if (!star) continue;
+        const bool resonant = !stargate_transfer_valid(state, fleet.owner, fleet.id, source->id, planet.id);
+        if (resonant) {
+            auto preview = state;
+            if (!preview_stargate_transfer(preview, fleet.owner, {fleet.id, source->id, planet.id, true})) continue;
+            // A scarce pulse must save a substantial ordinary flight leg.
+            if (distance_between(fleet.position, target) - distance_between(star->position, target)
+                < std::max(160.0, 2 * minimumGain)) continue;
+        }
         const auto* gate = station_stargate(*find_orbital_station_at_planet(state, planet.id));
         if (gate->maximumMassKt && mass > gate->maximumMassKt) continue;
         const auto remaining = distance_between(star->position, target);
         if (remaining + minimumGain < distance_between(fleet.position, target)
             && (!best || remaining < bestDistance || (remaining == bestDistance && planet.id < best->id))) {
-            best = &planet; bestDistance = remaining;
+            best = &planet; bestDistance = remaining; bestResonant = resonant;
         }
     }
     if (!best) return {};
-    return GateFleetOrder{fleet.id, source->id, best->id};
+    return GateFleetOrder{fleet.id, source->id, best->id, bestResonant};
 }
 
 double leg_fuel(const GameState& state, const Fleet& fleet, Position destination)
@@ -601,7 +617,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             if (!frontier || distance_between(fleet.position, star->position) < distance_between(fleet.position, frontier->position))
                 frontier = star;
         }
-        if (frontier) if (const auto gate = gate_staging_order(state, fleet, frontier->position, true)) {
+        if (frontier) if (const auto gate = gate_staging_order(state, fleet, frontier->position, true, &plan.orders)) {
             const auto colony = std::find_if(colonies.begin(), colonies.end(),
                 [&](const auto* p) { return p->id == gate->destination; });
             plan.orders.orders.push_back(*gate);

@@ -216,7 +216,7 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         const auto* star = find_star(state, starId); if (!star) return false;
         auto route = std::vector<Position>{star->position};
         if (kind == ComputerFleetGoalKind::Raid) route.push_back(rallyStar->position);
-        if (const auto gate = gate_staging_order(state, fleet, star->position);
+        if (const auto gate = gate_staging_order(state, fleet, star->position, false, &plan.orders);
             gate && goals.size() < kMaximumComputerFleetGoals) {
             const auto colony = std::find_if(colonies.begin(), colonies.end(),
                 [&](const auto* p) { return p->id == gate->destination; });
