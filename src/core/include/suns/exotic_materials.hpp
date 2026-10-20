@@ -10,6 +10,8 @@ inline constexpr std::uint32_t kResonanceWorkPerYear = 60;
 inline constexpr std::uint32_t kResonanceCrystals = 8;
 inline constexpr std::uint32_t kResonanceResearchPerArtifact = 32;
 inline constexpr MineralCargo kResonanceMineralsPerWork{0.2, 0.1, 0.2};
+inline constexpr std::uint32_t kResonantGateCrystals = 8;
+[[nodiscard]] bool resonant_gate_technology_available(const GameState&, PlayerId);
 void generate_xenocrystal_deposits(GameState&);
 [[nodiscard]] std::optional<XenocrystalObservation> known_xenocrystal(const GameState&, PlayerId, PlanetId);
 [[nodiscard]] bool exotic_mining_available(const GameState&, PlayerId);

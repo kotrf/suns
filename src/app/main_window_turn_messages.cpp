@@ -547,10 +547,12 @@ QString event_text(const GameState& state, const GameEvent& event)
             .arg(qulonglong(event.observedTurn)).arg(fleetName, event_planet_name(state, event))
             .arg(event.deliveredMinerals.ironium).arg(event.deliveredMinerals.boranium)
             .arg(event.deliveredMinerals.germanium).arg(qulonglong(event.deliveredColonists));
+        if (event.quantity) text += QString("\nResonant pulse consumed %1 xenocrystals at the source gate.").arg(event.quantity);
     } else if (event.kind == GameEventKind::StargateTransitFailed) {
         text = QString("Turn %1  •  %2 could not transit. The transit caused no movement or fuel charge. "
                        "The resolver rechecked gate ownership, fittings, distance, loaded mass, "
-                       "fleet route/task and command link; at least one requirement was unavailable.")
+                       "fleet route/task, command link and any requested resonance technology/source crystals; "
+                       "at least one requirement was unavailable. No xenocrystals were consumed by this failed transit.")
             .arg(qulonglong(event.observedTurn)).arg(fleetName);
     } else if (event.kind == GameEventKind::FleetArrived) {
         text = QString("Turn %1  •  %2 arrived at %3 and continues its route")

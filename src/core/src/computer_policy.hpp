@@ -13,6 +13,6 @@ bool military_fleet(const GameState&, const Fleet&);
 bool hostile_intel(const PlayerView&);
 void plan_military(const PlayerView&, ComputerTurnPlan&, std::string&);
 std::optional<GateFleetOrder> gate_staging_order(
-    const GameState&, const Fleet&, Position target, bool requireRefueling = false);
+    const GameState&, const Fleet&, Position target, bool requireRefueling = false, const PlayerOrders* pending = nullptr);
 void plan_gate_construction(const PlayerView&, ComputerTurnPlan&, std::string&);
 } // namespace suns::computer_detail

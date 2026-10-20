@@ -34,10 +34,11 @@ void MainWindow::installExoticMaterials()
         "Remote Mining with robots, Construction 8 and Electronics 8 extracts one whole unit per mining ship/year, "
         "up to 4 per planet/year, into a physical surface cache. One unit occupies 1 kt of the shared hold. "
         "Received stocks may be old; local transfers require current reports. Mobile-base exchanges occur after production. "
-        "Remote voyages use ordinary arrival orders.", body);
+        "Remote voyages use ordinary arrival orders. The Stargate transit dialog offers an optional late resonant pulse: "
+        "8 delivered source crystals double finite gate range for one successful jump; mass and cargo rules still apply.", body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* tree = new QTreeWidget(body); tree->setObjectName("exoticInventory"); tree->setRootIsDecorated(false);
-    tree->setHeaderLabels({"Location", "Known deposit", "Received stock", "Extraction/year", "Evidence", "Laboratory"});
+    tree->setHeaderLabels({"Location", "Known deposit", "Stock — received / planned", "Extraction/year", "Evidence", "Laboratory"});
     tree->header()->setSectionResizeMode(QHeaderView::ResizeToContents); layout->addWidget(tree);
     auto* expedition = new QHBoxLayout;
     auto* fleet = new QComboBox(body); fleet->setObjectName("exoticExpeditionFleet"); expedition->addWidget(fleet);
@@ -125,7 +126,8 @@ void MainWindow::refreshExoticMaterials()
         row->setText(1, observation && observation->depositSurveyed
             ? QString("%1 / %2 units").arg(p.xenocrystal.remaining).arg(p.xenocrystal.original) : "Requires DeepSurvey");
         row->setText(2, p.owner && p.owner != pendingOrders_.player ? "Private colony stock"
-            : observation ? QString("%1 units").arg(p.xenocrystal.surface) : "Unknown");
+            : observation ? QString("%1 units received").arg(observation->site.surface)
+                + (p.xenocrystal.surface != observation->site.surface ? QString(" → %1 planned").arg(p.xenocrystal.surface) : "") : "Unknown");
         row->setText(3, observation ? QString("%1 received").arg(p.xenocrystal.extractedLastYear) : "Unknown");
         row->setText(4, observation ? QString("Deposit year %1; stock year %2").arg(qulonglong(observation->depositObservedTurn)).arg(qulonglong(observation->observedTurn)) : "No received rare-material report");
         if (p.owner == pendingOrders_.player) row->setText(5, QString::fromStdString(resonance_block(known, p)));
@@ -134,6 +136,8 @@ void MainWindow::refreshExoticMaterials()
     for (const auto& f : known.fleets) if (f.owner == pendingOrders_.player) {
         auto* row = new QTreeWidgetItem(tree); row->setData(0, Qt::UserRole, QVariant::fromValue(key({0, f.id})));
         row->setText(0, QString::fromStdString(f.name)); row->setText(2, QString("%1 units / kt").arg(f.xenocrystal));
+        if (f.xenocrystal != f.telemetry.xenocrystal) row->setText(2,
+            QString("%1 units received → %2 planned").arg(f.telemetry.xenocrystal).arg(f.xenocrystal));
         row->setText(4, QString("Telemetry year %1").arg(qulonglong(f.telemetry.observedTurn)));
         if (selected == key({0, f.id})) tree->setCurrentItem(row);
     }

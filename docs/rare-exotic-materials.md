@@ -1,6 +1,6 @@
-# Rare exotic materials — first #63 slice
+# Rare exotic materials — #63 slices
 
-Xenocrystal is a scarce enabler for an optional late scientific capability.
+Xenocrystal enables optional late scientific installations and exceptional gate transits.
 Ironium/Boranium/Germanium remain the ordinary industrial economy. Scientific
 samples from [#59](science-samples.md) remain unique objects; xenocrystal is a
 fungible, consumable integer resource, not another artifact or empire currency.
@@ -112,6 +112,77 @@ support restores operation when otherwise eligible. Completed operation can be
 toggled. Dismantling destroys the installation and investment **without refunds**;
 a replacement must be paid for again.
 
+## Spend: resonant gate pulse
+
+The second #63 slice adds an optional consumable use in **Fleet → Transit
+stargate…**. After **Energy 18 / Electronics 18 / Construction 16**, eight
+xenocrystals physically delivered to the **source colony surface cache** enable
+one otherwise valid transit at **twice each endpoint's finite range**. A Jump
+Gate reaches 320 ly instead of 160; a Network Gate reaches 1500 instead of 750.
+The smaller endpoint still binds. Infinity stays unbounded and gives no extra
+benefit when both endpoints already accept the ordinary distance.
+
+This is a paid pulse through already constructed gates, with no permanent
+upgrade or new free fitting. Both stations retain their existing construction,
+ownership, hull, racial access and damage requirements. Fleet mass limits,
+Generalist cargo restrictions, an idle fleet, immediate command link and the
+one-hop-per-fleet-per-year rule remain. Fuel and permitted cargo stay aboard.
+Eight units buy a substantial range extension, at the same material price as a
+laboratory: a 24–48 unit deposit funds only 3–6 such pulses. These are initial
+balance values for review.
+
+Ordinary transits neither require the new technology nor consume crystals.
+A pulse within ordinary range is rejected without payment. Successful extended
+transit consumes all eight units atomically from the source cache; failures
+consume none. Cargo aboard the fleet and destination stock cannot pay. Earlier
+valid local unload orders can supply a pulse in the same year; later unloads,
+remote arrivals, mining and mobile-base service deliveries cannot. Multiple
+fleets compete for the same physical stock in order, and repeated orders cannot
+charge the same fleet twice in a year. Transit precedes colony production, so a
+laboratory waits if the pulse spent its last eight crystals.
+
+The dialog explicitly selects resonance, shows received source stock and its
+telemetry date/age, and labels the result as a planning estimate. Planning uses
+PlayerView plus valid earlier pending cargo/transit orders. Resonant estimates
+require current boundary stock and fleet telemetry, rather than spending stale
+reports. The host independently rechecks real supplies and both gates. Hidden
+stock changes cannot rewrite the old observation or player export; an optimistic
+estimate may consequently fail on the host. Stock updates and successful/failed
+transit messages follow the existing report delivery. Success identifies the
+eight consumed crystals; failure charges none.
+
+The basic Stargate Specialist AI can select the same ordinary paid pulse for
+exploration or military staging from received information. It reserves prior
+planned pulses, requires current evidence and a flight saving of at least
+max(160 ly, two current-warp yearly legs), and awaits normal arrival telemetry.
+It builds gates and transports rare cargo through the existing policies; this
+slice does not add a dedicated gate-fuel supply-chain optimizer.
+
+Save **v90 / orders v36** append the explicit resonance flag to gate orders,
+including pending local orders and PBEM packets. v89/v35 and earlier gate orders
+default to ordinary mode. Malformed flag values are rejected. The physical,
+received and in-flight crystal stores keep the existing EXOT representation;
+there is no new balance or empire currency.
+
+### PR #224 review follow-up
+
+Cargo and System Details now enter the common projection through PlayerView,
+including endpoint link checks, so an undelivered station loss cannot change
+container lists or population forecasts. The command-boundary projection shares
+route, task, electronics, mission and fleet-reorganization handlers with the
+host. Accepted earlier commands affect gate eligibility in order; invalid
+commands do not. Explicit route/task clearing can permit a later pulse, while
+an active route or task leaves its crystals available to another fleet or a
+laboratory. No annual movement or work runs during projection. A resonance
+estimate requires an explicit current received manifest date; a connection at a
+predicted position cannot substitute for reception. Projected local split
+results inherit the source evidence date; a merge inherits the older input
+date, with zero remaining unknown. Derived manifest fields never upgrade that
+date through the connection-based snapshot fallback. Thus current local
+reorganization remains usable while absent/stale evidence, including repeated
+split/merge chains, cannot reserve a pulse. Physical host reorganization and
+telemetry delivery retain their existing rules.
+
 ## Knowledge, interface and computer empires
 
 The **Rare materials — xenocrystal** dock shows known deposits, remaining units,
@@ -160,7 +231,7 @@ inventories and no laboratory.
 
 ## Remaining #63 scope
 
-This is one complete discovery-to-use slice. Additional materials, multiple
+The original discovery-to-use chain and resonant gate pulse are complete slices. Additional materials, multiple
 separated clusters, colony extraction, transport conditional programs, market
-trade, other exceptional modules, wormhole/gate/communications applications and
+trade, other exceptional modules, further wormhole/gate/communications applications and
 further AI/balance work remain future extensions. #63 stays open.

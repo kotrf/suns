@@ -38,6 +38,11 @@ struct MainWindowTestAccess {
         other.colonists = 0;
         other.minerals = {};
         w.state_.fleets.push_back(other);
+        // These local fixture edits represent already received manifests.
+        for (auto& received : w.state_.fleets) {
+            received.telemetry = {};
+            received.telemetry = confirmed_fleet_telemetry(w.state_, received);
+        }
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
         w.selection_.star = w.state_.planets.front().star;
@@ -56,6 +61,8 @@ struct MainWindowTestAccess {
         fleet.colonists = 0;
         w.state_.fleets.resize(1);
         assert(fleet_cargo_capacity(w.state_, fleet) == 25);
+        fleet.telemetry = {};
+        fleet.telemetry = confirmed_fleet_telemetry(w.state_, fleet);
         w.rebuildScene();
     }
     static void installEnemyColony(MainWindow& w)
@@ -64,6 +71,7 @@ struct MainWindowTestAccess {
         w.state_.players.push_back({2, "Enemy"});
         w.state_.planets.front().owner = 2;
         w.state_.planets.front().population = 8'000;
+        set_survey_level(w.state_, 1, 1, SurveyLevel::OrbitalSurvey, w.state_.turn);
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
         w.rebuildScene();

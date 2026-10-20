@@ -81,6 +81,10 @@ const std::vector<ResearchUnlock>& research_unlocks()
                 "Optional colony laboratory: 32 native-field RP/year per retained, studied artifact outside the empire focus. Deliver eight xenocrystals; 600 work (60/year) and I/B/G 120/60/120. Friendly Starbase/Fortress with shipyard required.", {}};
             lab.extraLevels[std::size_t(ResearchField::Electronics)] = 16;
             lab.extraLevels[std::size_t(ResearchField::Construction)] = 14; entries.push_back(std::move(lab));
+            ResearchUnlock pulse{ResearchField::Energy, 18, "Resonant gate pulse",
+                "Optional transit beyond ordinary gate range: consume eight physically delivered source xenocrystals on success to double both finite endpoint ranges. Existing gate construction, mass and racial cargo rules still apply.", {}};
+            pulse.extraLevels[std::size_t(ResearchField::Electronics)] = 18;
+            pulse.extraLevels[std::size_t(ResearchField::Construction)] = 16; entries.push_back(std::move(pulse));
         }
         for (const auto& gate : stargate_technologies()) {
             ResearchUnlock unlock{ResearchField::Energy, gate.energy, gate.name,

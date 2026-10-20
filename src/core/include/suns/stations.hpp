@@ -33,14 +33,17 @@ struct StargateSpec {
 [[nodiscard]] const StargateSpec* station_stargate(const OrbitalStation&);
 [[nodiscard]] bool stargate_component_available(const GameState&, PlayerId, ShipComponentType);
 [[nodiscard]] std::string stargate_transfer_error(
-    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination);
+    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
 [[nodiscard]] const StationHullSpec& station_hull_spec(OrbitalStationHullType);
 [[nodiscard]] bool station_component_supported(ShipComponentType);
 [[nodiscard]] bool stargate_station_available(const GameState&, PlayerId, PlanetId);
 [[nodiscard]] bool stargate_transfer_valid(
-    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination);
+    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
 bool transfer_fleet_through_stargate(
-    GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination);
+    GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
+struct GateFleetOrder;
+// On a PlayerView plus earlier pending orders, reserve only received supplies.
+bool preview_stargate_transfer(GameState&, PlayerId, const GateFleetOrder&);
 [[nodiscard]] bool station_loadout_valid(const StationLoadout&);
 [[nodiscard]] bool station_loadout_available(const GameState&, PlayerId, const StationLoadout&);
 [[nodiscard]] StationLoadout station_loadout(const OrbitalStation&);

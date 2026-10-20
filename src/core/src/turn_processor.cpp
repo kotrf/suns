@@ -2055,16 +2055,129 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
     }, order);
 }
 
+std::uint64_t projected_manifest_date(const GameState& state, PlayerId player, FleetId id)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const Fleet& f) { return f.id == id && f.owner == player; });
+    // A predicted position with a link is not evidence of a received report.
+    return fleet != state.fleets.end() && fleet_has_instant_link(state, *fleet)
+        ? fleet->telemetry.observedTurn : 0;
+}
+
+void refresh_projected_manifest(GameState& state, PlayerId player, FleetId id, std::uint64_t receivedTurn)
+{
+    const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const Fleet& f) { return f.id == id && f.owner == player; });
+    if (fleet == state.fleets.end()) return;
+    // Snapshot the derived composition, but retain the input evidence date.
+    // The snapshot helper's connection-based date never establishes freshness.
+    fleet->telemetry = {};
+    fleet->telemetry = confirmed_fleet_telemetry(state, *fleet);
+    fleet->telemetry.observedTurn = receivedTurn;
+}
+
+// Command phase only: share validation and receipt semantics with forecasts.
+// No movement, annual work, combat or report delivery is simulated here.
+bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& order, std::set<FleetId>& gated,
+    bool projection = false)
+{
+    bool handled = true;
+    std::visit([&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, MoveFleetOrder>) {
+            (void)submit_fleet_route_command(
+                state,
+                player,
+                value.fleet,
+                value.destination,
+                value.warp,
+                value.arrivalAction,
+                value.queuedWaypoints,
+                value.repeatOrders,
+                value.targetFleet,
+                value.clearRoute);
+        } else if constexpr (std::is_same_v<T, EncounterVisitorOrder>) {
+            (void)submit_visitor_command(state, player, value);
+        } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
+            (void)submit_probe_command(state, player, value);
+        } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
+            create_ship_design(state, player, value);
+        } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
+            const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+                return candidate.id == value.colony && candidate.owner == player;
+            });
+            const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+                return candidate.id == value.fleet && candidate.owner == player;
+            });
+            if (planet == state.planets.end() || fleet == state.fleets.end()) return;
+            if (!fleet_at_planet(state, *fleet, *planet)) return;
+            if (!colony_has_orbital_service(
+                    state, planet->id, player,
+                    OrbitalStationModule::RefuelingDepot)) {
+                return;
+            }
+            fleet->fuel = fleet_fuel_capacity(state, *fleet);
+        } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
+            const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
+                return candidate.id == value.planet;
+            });
+            const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
+                return candidate.id == value.fleet && candidate.owner == player;
+            });
+            if (planet == state.planets.end() || fleet == state.fleets.end()) return;
+            if (establish_colony(state, *fleet, *planet, value.colonyPlan)) state.fleets.erase(fleet);
+        } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
+            (void)submit_fleet_task_command(
+                state,
+                player,
+                value.fleet,
+                value.enabled ? FleetTask::RemoteMining : FleetTask::None);
+        } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
+            (void)submit_mobile_base_command(state, player, value.fleet, value.program);
+        } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
+            (void)submit_fleet_task_command(state, player, value.fleet, value.task);
+        } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
+            (void)submit_electronics_command(state, player, value.fleet, value.program);
+        } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
+            const auto receivedTurn = projection ? std::min(projected_manifest_date(state, player, value.source),
+                projected_manifest_date(state, player, value.destination)) : 0;
+            const bool usedGate = gated.contains(value.source)
+                || gated.contains(value.destination);
+            if (merge_fleets(state, player, value)) {
+                if (usedGate) gated.insert(value.destination);
+                if (projection) refresh_projected_manifest(state, player, value.destination, receivedTurn);
+            }
+        } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
+            const auto receivedTurn = projection ? projected_manifest_date(state, player, value.source) : 0;
+            const auto detached = state.nextFleetId;
+            if (split_fleet(state, player, value)) {
+                if (gated.contains(value.source)) gated.insert(detached);
+                if (projection) {
+                    refresh_projected_manifest(state, player, value.source, receivedTurn);
+                    refresh_projected_manifest(state, player, detached, receivedTurn);
+                }
+            }
+        } else handled = false;
+    }, order);
+    return handled;
+}
+
 } // namespace
 
+// UI/AI callers supply a PlayerView: command validation must not inspect host truth.
 GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending)
 {
     GameState projected = current;
     for (auto& p : projected.planets)
         p.xenocrystal = known_xenocrystal(current, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
+    std::set<FleetId> gated;
     for (const auto& order : pending.orders) {
-        if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
+        if (apply_fleet_command_order(projected, pending.player, order, gated, true)) continue;
+        if (const auto* gate = std::get_if<GateFleetOrder>(&order)) {
+            if (!gated.contains(gate->fleet) && preview_stargate_transfer(projected, pending.player, *gate))
+                gated.insert(gate->fleet);
+        } else if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
             (void)preview_science_sample_transfer(projected, pending.player, *sample);
         } else if (const auto* crystal = std::get_if<TransferXenocrystalOrder>(&order)) {
             const auto involvesBase = [&](FleetId id) {
@@ -2185,29 +2298,18 @@ TurnResult TurnProcessor::process_with_events(
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
         for (const auto& order : submission.orders) {
+            if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn)) continue;
             std::visit(
                 [&](const auto& concreteOrder) {
                     using T = std::decay_t<decltype(concreteOrder)>;
 
-                    if constexpr (std::is_same_v<T, MoveFleetOrder>) {
-                        (void)submit_fleet_route_command(
-                            next,
-                            submission.player,
-                            concreteOrder.fleet,
-                            concreteOrder.destination,
-                            concreteOrder.warp,
-                            concreteOrder.arrivalAction,
-                            concreteOrder.queuedWaypoints,
-                            concreteOrder.repeatOrders,
-                            concreteOrder.targetFleet,
-                            concreteOrder.clearRoute);
-                    } else if constexpr (std::is_same_v<T, GateFleetOrder>) {
+                    if constexpr (std::is_same_v<T, GateFleetOrder>) {
                         if (gatedThisTurn.contains(concreteOrder.fleet)) return;
                         const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
                             [&](const auto& f) { return f.id == concreteOrder.fleet && f.owner == submission.player; });
                         if (fleet == next.fleets.end()) return;
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
-                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination);
+                            concreteOrder.fleet, concreteOrder.source, concreteOrder.destination, concreteOrder.resonant);
                         if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }
                         const auto target = transferred ? concreteOrder.destination : concreteOrder.source;
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(),
@@ -2216,7 +2318,8 @@ TurnResult TurnProcessor::process_with_events(
                                 : PlayerReportKind::StargateTransitFailed,
                             fleet->position, next.turn + 1, planet == next.planets.end() ? 0 : planet->star,
                             planet == next.planets.end() ? 0 : planet->id, fleet->id, 0,
-                            ProductionKind::ColonyShip, 0, ResearchField::Electronics, 0,
+                            ProductionKind::ColonyShip, transferred && concreteOrder.resonant ? kResonantGateCrystals : 0,
+                            ResearchField::Electronics, 0,
                             fleet->minerals, fleet->colonists);
                         if (transferred) gatedThisTurn.insert(concreteOrder.fleet);
                     } else if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>) {
@@ -2226,10 +2329,6 @@ TurnResult TurnProcessor::process_with_events(
                         (void)queue_station_construction(next,submission.player,concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
                         (void)transfer_science_sample(next, submission.player, concreteOrder);
-                    } else if constexpr (std::is_same_v<T, EncounterVisitorOrder>) {
-                        (void)submit_visitor_command(next, submission.player, concreteOrder);
-                    } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
-                        (void)submit_probe_command(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, TransferXenocrystalOrder>) {
                         const auto involvesBase = [&](FleetId id) {
                             const auto* f = find_service_fleet(next, id);
@@ -2320,8 +2419,6 @@ TurnResult TurnProcessor::process_with_events(
                         auto* player = mutable_player(next, submission.player);
                         if (!player || concreteOrder.percent > 100) return;
                         player->technology.researchAllocationPercent = concreteOrder.percent;
-                    } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
-                        create_ship_design(next, submission.player, concreteOrder);
                     } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
@@ -2374,54 +2471,8 @@ TurnResult TurnProcessor::process_with_events(
                                 else baseTransfers.push_back({submission.player, concreteOrder, 0});
                             } else apply_cargo_order(next, submission.player, order, freight);
                         } else apply_cargo_order(next, submission.player, order, freight);
-                    } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
-                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
-                            return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
-                        });
-                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
-                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                        });
-                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
-                        if (!fleet_at_planet(next, *fleet, *planet)) return;
-                        if (!colony_has_orbital_service(
-                                next, planet->id, submission.player,
-                                OrbitalStationModule::RefuelingDepot)) {
-                            return;
-                        }
-                        fleet->fuel = fleet_fuel_capacity(next, *fleet);
-                    } else if constexpr (std::is_same_v<T, ColonizePlanetOrder>) {
-                        const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
-                            return candidate.id == concreteOrder.planet;
-                        });
-                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(), [&](const Fleet& candidate) {
-                            return candidate.id == concreteOrder.fleet && candidate.owner == submission.player;
-                        });
-                        if (planet == next.planets.end() || fleet == next.fleets.end()) return;
-                        if (establish_colony(next, *fleet, *planet, concreteOrder.colonyPlan)) next.fleets.erase(fleet);
-                    } else if constexpr (std::is_same_v<T, SetRemoteMiningOrder>) {
-                        (void)submit_fleet_task_command(
-                            next,
-                            submission.player,
-                            concreteOrder.fleet,
-                            concreteOrder.enabled ? FleetTask::RemoteMining : FleetTask::None);
                     } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
                         acceptTransfer(submission.player,concreteOrder.source,concreteOrder.destination,0,{},concreteOrder.amount,concreteOrder.sourceReserve,true);
-                    } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
-                        (void)submit_mobile_base_command(next, submission.player, concreteOrder.fleet, concreteOrder.program);
-                    } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
-                        (void)submit_fleet_task_command(next, submission.player, concreteOrder.fleet, concreteOrder.task);
-                    } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
-                        (void)submit_electronics_command(next, submission.player, concreteOrder.fleet, concreteOrder.program);
-                    } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
-                        const bool usedGate = gatedThisTurn.contains(concreteOrder.source)
-                            || gatedThisTurn.contains(concreteOrder.destination);
-                        if (merge_fleets(next, submission.player, concreteOrder) && usedGate)
-                            gatedThisTurn.insert(concreteOrder.destination);
-                    } else if constexpr (std::is_same_v<T, SplitFleetOrder>) {
-                        const auto detached = next.nextFleetId;
-                        if (split_fleet(next, submission.player, concreteOrder)
-                            && gatedThisTurn.contains(concreteOrder.source))
-                            gatedThisTurn.insert(detached);
                     } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
                         const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
                             [&](const Fleet& candidate) {

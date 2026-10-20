@@ -149,6 +149,7 @@ struct GateFleetOrder {
     FleetId fleet{};
     PlanetId source{};
     PlanetId destination{};
+    bool resonant{}; // Optional paid xenocrystal pulse; doubles finite range only.
 };
 
 struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; };

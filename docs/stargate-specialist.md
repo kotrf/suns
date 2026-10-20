@@ -27,7 +27,7 @@ Station hull, other fittings and services add their normal costs. Refit pays
 the complete fitted station cost, with ordinary production and surface minerals;
 there is no free conversion of already built gates.
 
-Both endpoints impose their own range and mass limits. Infinity connected to
+In ordinary transit, both endpoints impose their own range and mass limits. Infinity connected to
 a Jump Gate still has the Jump Gate's 160 ly / 450 kt limits. Only two Infinity
 gates provide unlimited range and mass. This is an explicit unbounded capability,
 not a very large numeric limit. Mixed fleets use their total gross mass,
@@ -81,6 +81,20 @@ normal gate order and remembers the destination, then waits for newer arrival
 telemetry before issuing the next frontier move. It does not use hidden host
 destinations, hidden enemy state or a speculative same-year arrival. Choices and
 ties are deterministic. Other primary traits retain their existing policy.
+
+## Optional xenocrystal resonance (#63)
+
+A late **Energy 18 / Electronics 18 / Construction 16** pulse consumes eight
+physically delivered source-colony xenocrystals for one successful transit at
+twice the finite range of both endpoints. Select it explicitly in the transit
+dialog. Mass, cargo, ownership, command-link and one-hop rules remain. Ordinary
+transits keep their existing rules and prices. No crystals are charged on
+failure or when ordinary range already suffices. Current received stock and
+fleet telemetry are required for estimates; valid earlier pending transfers
+and transits are included. The host rechecks physical state. See
+[rare materials](rare-exotic-materials.md#spend-resonant-gate-pulse) for payment,
+phase ordering, delayed knowledge, UI and computer policy. Save v90 / orders v36
+add the optional gate-order flag; older packets mean ordinary transit.
 
 ## Persistence and validation
 

@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/communications.hpp"
+#include "suns/campaign.hpp"
 
 #include <QAction>
 #include <QComboBox>
@@ -143,7 +144,7 @@ void MainWindow::openCargoManifestDialog()
     // Exact command-boundary projection. Replaying End Turn here would also
     // grow population, mine ore, run combat, and move ships. Repeated dialog
     // openings must not advance the world or alter a single colonist.
-    GameState planned = projected_cargo_order_state(state_, pendingOrders_);
+    GameState planned = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
 
     const auto* star = find_star(planned, cargoStar->id);
     if (!star) return;
@@ -162,7 +163,7 @@ void MainWindow::openCargoManifestDialog()
     }
     for (const auto& fleet : planned.fleets) {
         if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, star->position)
-            || fleet_telemetry_age(state_, fleet) != 0 || !fleet_has_instant_link(state_, fleet)) continue;
+            || fleet_telemetry_age(planned, fleet) != 0 || !fleet_has_instant_link(planned, fleet)) continue;
         endpoints.push_back({
             {0, fleet.id},
             nullptr,
