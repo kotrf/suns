@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QTreeWidget>
 #include <cassert>
+#include <cmath>
 #include <iostream>
 using namespace suns;
 namespace {
@@ -439,6 +440,38 @@ void colony_mining_panel_uses_received_inputs(MainWindow& w)
     assert(text().contains("Awaiting delivered DeepSurvey"));
 }
 
+void system_population_uses_one_received_baseline(MainWindow& w)
+{
+    auto s = fixture(); auto& colony = s.planets[0];
+    colony.population = 100000; colony.homeworld = false; s.stars[0].position = {900, 0};
+    s.planets[1].owner = 1; s.planets[1].population = 1000000; s.planets[1].homeworld = true;
+    s.planets[1].radar = PlanetaryRadarLevel::Full; s.stars[1].position = {0, 0};
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    ++s.turn; colony.population = 110000;
+    s.fleets[0].position = s.stars[0].position;
+    s.fleets[0].telemetry.position = s.fleets[0].position;
+    s.fleets[0].telemetry.observedTurn = s.turn;
+    MainWindowTestAccess::load(w, s);
+    const auto info = MainWindowTestAccess::systemInfo(w);
+    assert(!info.contains("Queued cargo:"));
+    assert(info.contains("Population received: 100000 /"));
+    assert(info.contains("Population report: year 10 (age 1)"));
+    const auto received = make_player_view(s, 1).state;
+    const auto& baseline = *find_planet(received, 1);
+    const auto growth = projected_population_growth(received, baseline, s.turn);
+    MainWindowTestAccess::load(w, s, {TransferCargoOrder{{1, 0}, {0, 1}, 100, {}}});
+    const auto loaded = MainWindowTestAccess::systemInfo(w);
+    assert(loaded.contains("Queued cargo: -100 / +0 colonists; population after validated orders: 99900"));
+    const auto nextPopulation = 99900 + std::int64_t(std::llround(99900.0 * double(growth) / 100000.0));
+    assert(loaded.contains(QString("Simple next-year estimate: ~%1").arg(qlonglong(nextPopulation))));
+    // Hidden growth/depopulation must not affect the baseline or its growth forecast.
+    colony.population = 90000; colony.mines = 0;
+    MainWindowTestAccess::load(w, s, {TransferCargoOrder{{1, 0}, {0, 1}, 100, {}}});
+    assert(MainWindowTestAccess::systemInfo(w) == loaded);
+    MainWindowTestAccess::load(w, s, {TransferCargoOrder{{1, 0}, {0, 1}, 100000, {}}});
+    assert(!MainWindowTestAccess::systemInfo(w).contains("Queued cargo:"));
+}
+
 void select_planet(MainWindow& w, PlanetId id)
 {
     auto* tree = w.findChild<QTreeWidget*>("exoticInventory");
@@ -502,5 +535,6 @@ int main(int argc, char** argv)
     gate_dialog_respects_prior_route_and_clear(w);
     gate_dialog_requires_received_manifest_after_split(w);
     colony_mining_panel_uses_received_inputs(w);
+    system_population_uses_one_received_baseline(w);
     std::cout << "Exotic material UI, frozen exports, saves and PBEM passed\n";
 }

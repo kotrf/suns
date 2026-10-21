@@ -368,13 +368,20 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
         }
         if (f.xenocrystal) {
             const Planet* home = nullptr; std::optional<std::uint8_t> warp; double distance = std::numeric_limits<double>::infinity();
-            for (const auto* p : homes) if (const auto* star = find_star(s, p->star)) {
-                const auto* origin = goal != goals.end() ? find_planet_at_star(s, goal->target) : nullptr;
-                if (origin && origin->owner == view.player && (p->id == origin->id
-                    || !needsCrystals(*p) || p->xenocrystal.surface >= kResonanceCrystals)) continue;
-                const auto candidate = route_warp(s, f, {star->position});
-                const auto d = distance_between(f.position, star->position);
-                if (candidate && d < distance) { home = p; warp = candidate; distance = d; }
+            const auto* origin = goal != goals.end() ? find_planet_at_star(s, goal->target) : nullptr;
+            // Prefer received consumers. Already loaded cargo must still reach
+            // an own store when demand changes, including returning to origin.
+            for (const bool consumersOnly : {true, false}) {
+                for (const auto* p : homes) if (const auto* star = find_star(s, p->star)) {
+                    if (consumersOnly && ((origin && p->id == origin->id)
+                        || !needsCrystals(*p) || p->xenocrystal.surface >= kResonanceCrystals)) continue;
+                    const auto candidate = route_warp(s, f, {star->position});
+                    const auto d = distance_between(f.position, star->position);
+                    if (candidate && (d < distance || (d == distance && home && p->id < home->id))) {
+                        home = p; warp = candidate; distance = d;
+                    }
+                }
+                if (home) break;
             }
             if (home) {
                 plan.orders.orders.push_back(MoveFleetOrder{f.id, find_star(s, home->star)->position, *warp,

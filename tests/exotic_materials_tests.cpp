@@ -479,6 +479,40 @@ void computer_uses_own_mines_and_exports_received_colony_caches()
     auto hidden = s; hidden.planets[0].xenocrystal.remaining = 0; hidden.planets[0].xenocrystal.surface = 0;
     hidden.planets[0].mines = 0; hidden.planets[0].population = 0;
     assert(plan_computer_turn(make_player_view(hidden, 1)).nextState == returning.nextState);
+    // Another delivery pays the recipient's lab after this hauler has loaded.
+    auto satisfied = s;
+    satisfied.planets[1].xenocrystal.surface = 8;
+    assert(apply_resonance_order(satisfied, satisfied.planets[1], {2}));
+    (void)resolve_colony_production(satisfied, satisfied.planets[1], true, true);
+    assert(satisfied.planets[1].resonanceLab.crystalsPaid == kResonanceCrystals);
+    // Until the payment report arrives, keep using the previously known consumer.
+    const auto unreported = plan_computer_turn(make_player_view(satisfied, 1));
+    assert(std::any_of(unreported.orders.orders.begin(), unreported.orders.orders.end(), [&](const auto& o) {
+        const auto* move = std::get_if<MoveFleetOrder>(&o);
+        return move && move->fleet == 1 && move->destination == s.stars[1].position;
+    }));
+    set_survey_level(satisfied, 1, 2, SurveyLevel::DeepSurvey, satisfied.turn);
+    const auto fallback = plan_computer_turn(make_player_view(satisfied, 1));
+    assert(std::any_of(fallback.orders.orders.begin(), fallback.orders.orders.end(), [&](const auto& o) {
+        const auto* move = std::get_if<MoveFleetOrder>(&o);
+        return move && move->fleet == 1 && move->destination == s.stars[0].position
+            && move->arrivalAction.kind == FleetArrivalActionKind::UnloadAll;
+    }));
+    satisfied.players[0].computer = fallback.nextState;
+    // An issued command is retained until newer fleet telemetry acknowledges it.
+    auto awaitingReport = satisfied; ++awaitingReport.turn;
+    const auto waiting = plan_computer_turn(make_player_view(awaitingReport, 1));
+    assert(std::none_of(waiting.orders.orders.begin(), waiting.orders.orders.end(), [](const auto& o) {
+        const auto* move = std::get_if<MoveFleetOrder>(&o); return move && move->fleet == 1;
+    }));
+    assert(waiting.nextState.fleetGoals == fallback.nextState.fleetGoals);
+    const auto stored = satisfied.planets[0].xenocrystal.surface + satisfied.fleets[0].xenocrystal;
+    satisfied = next(satisfied, fallback.orders.orders);
+    assert(!satisfied.fleets[0].xenocrystal && satisfied.planets[0].xenocrystal.surface == stored + 4);
+    const auto finished = plan_computer_turn(make_player_view(satisfied, 1));
+    assert(std::none_of(finished.nextState.fleetGoals.begin(), finished.nextState.fleetGoals.end(), [](const auto& g) {
+        return g.fleet == 1 && g.kind == ComputerFleetGoalKind::ExoticHauling;
+    }));
 }
 
 void generated_finite_geographic_deposits()

@@ -24,6 +24,16 @@ phase ordering, delayed/reordered private reports, AI hauling, UI estimates,
 save migration/corruption and frozen PBEM exports. CI is recorded on the PR.
 #63 stays open; merge is left for review.
 
+PR [#226](https://github.com/kotrf/suns/pull/226), initial head `217fd41`, passed
+CI 85/85 (59.28 s). Review identified two P2 follow-ups: System Details compared
+physical and received population when calculating cargo deltas; a loaded AI
+hauler stalled when its last consumer's demand disappeared. Follow-up uses one
+received baseline/date for population/output/growth and allows ordinary delivery
+to a reachable own store, retaining the goal until received completion. Added
+Qt cargo/growth and full AI unload/acknowledgement regressions.
+Follow-up local full build and **85/85** CTest suites passed (24.38 s,
+same GCC/Qt Debug environment); `git diff --check` passed. Save/orders unchanged.
+
 ## Historical checkpoint — 20 October 2026: main after #223
 
 Main is [4a91bd3](https://github.com/kotrf/suns/commit/4a91bd3816a455a1edddca176909e2a6d9b4d106),

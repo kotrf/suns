@@ -94,7 +94,10 @@ receive these private inputs or warehouses. The panel and AI use received
 operating data; hidden extraction, depletion, population loss or mine changes
 do not refresh the old observation. Received colony population/mine fields also
 feed the player projection, preventing exports from disclosing a newer hidden
-operating state. Save v90 and earlier have no operating snapshot: estimates wait
+operating state. System Details uses the same received population baseline for
+cargo deltas, economic output and the simple growth estimate, and labels its
+report date/age. Population changes during delivery are never queued cargo.
+Save v90 and earlier have no operating snapshot: estimates wait
 for a normal owner report, while physical mining still follows its existing
 received discovery and actual infrastructure.
 
@@ -104,7 +107,11 @@ received colony ownership blocks them. Haulers can use received own colony
 caches once local laboratory needs have been paid and the source needs no gate
 reserve, delivering to another received colony needing laboratory/gate stock.
 They retain assignment/acknowledgement guards and ordinary Load/Unload orders;
-no hub optimizer or conditional transport programme is introduced.
+if demand disappears after loading, an already loaded hauler unloads at a
+reachable own store (including its source) and releases its assignment only
+after newer idle/empty telemetry confirms completion. Hidden consumer changes
+do not reroute it before the report arrives. No hub optimizer or conditional
+transport programme is introduced.
 
 Save **v91 / orders v36** add the bounded **COLX** extension for received/in-flight
 private operating inputs, keyed to their existing survey snapshots. It rejects
