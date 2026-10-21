@@ -2,7 +2,10 @@
 #include "save_game.hpp"
 #include "suns/campaign.hpp"
 #include "suns/communications.hpp"
+#include "suns/computer_player.hpp"
 #include "suns/science_samples.hpp"
+#include "suns/strategic_operations.hpp"
+#include "suns/player_knowledge.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
@@ -35,6 +38,7 @@ GameState fixture()
     s.planets[0].scienceSamples = {{8, UnknownObjectKind::CompactRemnant, false}};
     s.players[0].objectKnowledge = {{7, {900, 0}, 0, ObjectKnowledgeLevel::Studied, UnknownObjectKind::AncientProbe, 9, 9},
         {8, {800, 0}, 0, ObjectKnowledgeLevel::Studied, UnknownObjectKind::CompactRemnant, 9, 9}};
+    set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
     return s;
 }
 QByteArray bytes(const QString& path) { QFile f(path); assert(f.open(QIODevice::ReadOnly)); return f.readAll(); }
@@ -44,6 +48,74 @@ SaveGameData save_fixture()
 {
     SaveGameData save; save.state = fixture(); save.pendingOrders = {1, {}};
     save.campaignId = 17; save.turnToken = 29; return save;
+}
+void completion_receipts_and_surface_evidence_survive_save_load()
+{
+    auto save = save_fixture(); auto& s = save.state;
+    s.players[0].technology.levels.fill(10); s.players[0].technology.progress.fill(0);
+    assert(process_science_sample(s, 1, {1, 8, false}));
+    const auto packet = s.players[0].pendingPlayerReports.back();
+    s.turn = packet.observedTurn; // Persist the resolved annual boundary, not a half-processed turn.
+    queue_survey_report(s, 1, 1, 0, s.stars[0].position, s.turn, SurveyLevel::DeepSurvey, true);
+    QTemporaryDir dir; const auto path = dir.filePath("receipts.suns"); QString error; SaveGameData loaded;
+    assert(write_save_game_file(path, save, error));
+    if (!read_save_game_file(path, loaded, error)) { std::cerr << error.toStdString() << '\n'; assert(false); }
+    assert(loaded.state.players[0].pendingPlayerReports.back().scientificDataId == packet.scientificDataId);
+    const auto& known = loaded.state.players[0].surveyKnowledge[0].planetSnapshot;
+    assert(known && known->scienceSamples && known->scienceSamples->size() == 1); // Historical inventory.
+    assert(loaded.state.players[0].pendingSurveyReports.back().planetSnapshot->scienceSamples->empty());
+    loaded.state.turn = packet.deliveryTurn;
+    (void)deliver_due_player_reports(loaded.state);
+    const auto field = std::size_t(ResearchField::Energy);
+    assert(loaded.state.players[0].technology.progress[field] == 96);
+    save = loaded;
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    auto replay = packet; replay.deliveryTurn = ++loaded.state.turn;
+    loaded.state.players[0].pendingPlayerReports.push_back(replay);
+    assert(deliver_due_player_reports(loaded.state).empty());
+    assert(loaded.state.players[0].technology.progress[field] == 96);
+    assert(loaded.state.players[0].receivedScientificData.size() == 1);
+
+    // The new bounded tail rejects corrupt receipts and truncation.
+    for (const auto receipts : {std::vector<std::uint64_t>{0}, {2, 1}, {1, 1}}) {
+        auto bad = save; bad.state.players[0].receivedScientificData = receipts;
+        assert(write_save_game_file(path, bad, error) && !read_save_game_file(path, loaded, error));
+    }
+    assert(write_save_game_file(path, save, error));
+    auto original = bytes(path); auto truncated = original; truncated.chop(1); writeBytes(path, truncated);
+    assert(!read_save_game_file(path, loaded, error));
+    QByteArray magic; { QDataStream out(&magic, QIODevice::WriteOnly); out << quint32{0x53434943}; }
+    const auto at = original.lastIndexOf(magic); assert(at >= 0);
+    auto oversized = original;
+    { QDataStream out(&oversized, QIODevice::ReadWrite); assert(out.device()->seek(at + 4)); out << quint32{33 * 1024 * 1024}; }
+    writeBytes(path, oversized); assert(!read_save_game_file(path, loaded, error));
+
+    // v92 preserves physical cargo, but cannot invent historical surface evidence.
+    save = save_fixture(); assert(process_science_sample(save.state, 1, {1, 8, false}));
+    save.state.turn = save.state.players[0].pendingPlayerReports.back().observedTurn;
+    assert(write_save_game_file(path, save, error)); auto old = bytes(path); old.truncate(old.lastIndexOf(magic));
+    { QDataStream out(&old, QIODevice::ReadWrite); assert(out.device()->seek(4)); out << quint32{92}; }
+    writeBytes(path, old); assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.fleets[0].scienceSamples.size() == 1);
+    assert(!loaded.state.players[0].surveyKnowledge[0].planetSnapshot->scienceSamples);
+    assert(loaded.state.players[0].pendingPlayerReports.back().scientificDataId != 0);
+
+    // A real novel wreck produces the same durable once-only award as samples.
+    save = save_fixture(); auto& wreckState = save.state;
+    wreckState.players[0].technology.levels.fill(10); wreckState.players[0].technology.progress.fill(0);
+    auto& salvager = wreckState.fleets[0]; salvager.position = {900, 0}; salvager.task = FleetTask::Salvage;
+    wreckState.wrecks = {{1, salvager.position, 30, {10, 10, 10, 10, 10, 12}}}; wreckState.nextWreckId = 2;
+    run_strategic_tasks(wreckState, wreckState.turn);
+    assert(wreckState.wrecks.empty() && wreckState.players[0].pendingPlayerReports.size() == 1);
+    const auto wreckPacket = wreckState.players[0].pendingPlayerReports.back();
+    assert(wreckPacket.quantity == 24);
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    loaded.state.turn = wreckPacket.deliveryTurn; (void)deliver_due_player_reports(loaded.state);
+    save = loaded;
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    loaded.state.players[0].pendingPlayerReports.push_back(wreckPacket);
+    assert(deliver_due_player_reports(loaded.state).empty());
+    assert(loaded.state.players[0].technology.progress[std::size_t(ResearchField::Weapons)] == 24);
 }
 void persistence_and_migration()
 {
@@ -80,6 +152,23 @@ void persistence_and_migration()
     writeBytes(path, old); assert(read_save_game_file(path, loaded, error));
     assert(loaded.state.fleets[0].scienceSamples.empty() && loaded.state.planets[0].scienceSamples.empty());
     assert(!loaded.state.unknownObjects[0].sampleRecovered);
+}
+void competing_recovery_and_destroyed_cargo_stay_finite_after_reload()
+{
+    auto save = save_fixture(); auto& s = save.state;
+    auto fleet = s.fleets[0]; fleet.position = {900, 0}; fleet.scienceSamples.clear();
+    fleet.task = FleetTask::RecoverSample;
+    auto rival = fleet; rival.id = 2;
+    s.fleets = {rival, fleet}; s.nextFleetId = 3; s.unknownObjects[0].sampleRecovered = false;
+    run_strategic_tasks(s, s.turn);
+    assert(s.fleets[0].scienceSamples.empty() && s.fleets[1].scienceSamples.size() == 1);
+    assert(s.unknownObjects[0].sampleRecovered); // Lower FleetId wins despite reversed storage order.
+    s.fleets.clear(); // Destruction removes the only recovered specimen.
+    QTemporaryDir dir; QString error; const auto path = dir.filePath("depleted.suns"); SaveGameData loaded;
+    assert(write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error));
+    loaded.state.fleets.push_back(fleet);
+    run_strategic_tasks(loaded.state, loaded.state.turn);
+    assert(loaded.state.fleets[0].scienceSamples.empty() && loaded.state.unknownObjects[0].sampleRecovered);
 }
 void exports_and_order_exchange()
 {
@@ -205,8 +294,70 @@ void editor_authors_orders_without_mutating_physical_inventory(MainWindow& w)
     boosted.players[0].technology.researchActive = true;
     boosted.players[0].technology.focus = ResearchField::Energy;
     boosted.players[0].technology.researchAllocationPercent = 50;
+    set_survey_level(boosted,1,1,SurveyLevel::DeepSurvey,boosted.turn);
     MainWindowTestAccess::load(w, boosted); w.installResearch();
     assert(MainWindowTestAccess::researchSummary(w).contains("includes 4 from retained artifacts"));
+}
+void remote_surface_changes_wait_for_receipts_in_ui_ai_and_exports(MainWindow& w)
+{
+    auto host = save_fixture(); auto& s = host.state;
+    s.players[0].controller = PlayerController::Computer;
+    s.stars[0].position = {900, 0}; s.planets[0].homeworld = false;
+    s.stars[1].position = {0, 0}; s.planets[1].owner = 1; s.planets[1].population = 1000000;
+    s.planets[1].homeworld = true; s.planets[1].radar = PlanetaryRadarLevel::Full;
+    s.players[0].technology.researchActive = true;
+    s.players[0].technology.focus = ResearchField::Energy;
+    s.players[0].technology.researchAllocationPercent = 50;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    ++s.turn;
+    host.mode = SessionMode::Host; host.playerTokens = {{1, 31}};
+    QTemporaryDir dir; QString error; const auto path = dir.filePath("remote.sunsturn");
+    const auto orderPath = dir.filePath("ai.sunsorders");
+    const auto exportBytes = [&] {
+        auto humanHost = host; humanHost.state.players[0].controller = PlayerController::Human;
+        assert(write_save_game_file(path, make_player_turn(humanHost, 1), error)); return bytes(path);
+    };
+    const auto aiBytes = [&] {
+        const auto plan = plan_computer_turn(make_player_view(s, 1));
+        TurnOrderFileData packet{17, s.turn, 31, plan.orders, {}};
+        for (std::size_t i = 0; i < plan.orders.orders.size(); ++i) packet.descriptions << "AI order";
+        assert(write_turn_order_file(orderPath, packet, error)); return std::pair{bytes(orderPath), plan.nextState};
+    };
+    const auto compareHidden = [&] (const auto& change) {
+        const auto exported = exportBytes();
+        const auto planned = aiBytes(); MainWindowTestAccess::load(w, s);
+        auto* tree = w.findChild<QTreeWidget*>("scienceSampleInventory");
+        const auto actionState = [&] {
+            for (int i = 0; i < tree->topLevelItemCount(); ++i)
+                if (tree->topLevelItem(i)->data(0, Qt::UserRole).toUInt() == 8)
+                    tree->setCurrentItem(tree->topLevelItem(i));
+            return std::array{w.findChild<QPushButton*>("transferScienceSample")->isEnabled(),
+                w.findChild<QPushButton*>("retainScienceSample")->isEnabled(),
+                w.findChild<QPushButton*>("analyzeScienceSample")->isEnabled()};
+        };
+        const auto actions = actionState();
+        QStringList rows; for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            rows << tree->topLevelItem(i)->text(0) + tree->topLevelItem(i)->text(1) + tree->topLevelItem(i)->text(3);
+        const auto summary = MainWindowTestAccess::researchSummary(w);
+        change();
+        assert(exportBytes() == exported);
+        assert(aiBytes() == planned); MainWindowTestAccess::load(w, s);
+        QStringList after; for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            after << tree->topLevelItem(i)->text(0) + tree->topLevelItem(i)->text(1) + tree->topLevelItem(i)->text(3);
+        assert(rows == after && actionState() == actions && MainWindowTestAccess::researchSummary(w) == summary);
+    };
+    compareHidden([&] { s.planets[0].scienceSamples[0].retained = true; });
+    queue_survey_report(s, 1, 1, 0, s.stars[0].position, s.turn, SurveyLevel::DeepSurvey, true);
+    const auto due = s.players[0].pendingSurveyReports.back().deliveryTurn; assert(due > s.turn);
+    s.turn = due; (void)deliver_due_survey_reports(s); MainWindowTestAccess::load(w, s);
+    assert(MainWindowTestAccess::researchSummary(w).contains("includes 4 from retained artifacts"));
+    auto* tree = w.findChild<QTreeWidget*>("scienceSampleInventory");
+    assert(tree->topLevelItem(0)->text(1).contains("observed year 11"));
+    compareHidden([&] { s.planets[0].scienceSamples.clear(); }); // Loss cannot rewrite a received report.
+    queue_survey_report(s, 1, 1, 0, s.stars[0].position, s.turn, SurveyLevel::DeepSurvey, true);
+    s.turn = s.players[0].pendingSurveyReports.back().deliveryTurn; (void)deliver_due_survey_reports(s);
+    MainWindowTestAccess::load(w, s);
+    assert(!MainWindowTestAccess::researchSummary(w).contains("includes 4 from retained artifacts"));
 }
 void stale_manifest_cannot_transfer_or_create_a_phantom_artifact(MainWindow& w)
 {
@@ -243,10 +394,13 @@ void stale_manifest_cannot_transfer_or_create_a_phantom_artifact(MainWindow& w)
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
-    persistence_and_migration(); exports_and_order_exchange(); colonist_only_split_produces_a_reloadable_save();
+    persistence_and_migration(); completion_receipts_and_surface_evidence_survive_save_load();
+    competing_recovery_and_destroyed_cargo_stay_finite_after_reload();
+    exports_and_order_exchange(); colonist_only_split_produces_a_reloadable_save();
     merged_historical_manifests_stay_reloadable();
     MainWindow window; window.installUnknownObjects(); window.installScienceSamples();
     editor_authors_orders_without_mutating_physical_inventory(window);
     stale_manifest_cannot_transfer_or_create_a_phantom_artifact(window);
+    remote_surface_changes_wait_for_receipts_in_ui_ai_and_exports(window);
     std::cout << "Science samples UI, saves, migrations and player exchange passed\n";
 }

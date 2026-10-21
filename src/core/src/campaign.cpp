@@ -530,12 +530,14 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         known.resonanceLab = {};
         std::erase_if(known.productionQueue, [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
         if (known.owner == playerId) {
+            known.scienceSamples.clear();
             known.engineering = {};
             std::erase_if(known.productionQueue,[](const auto& item) {return engineering_kind(item.kind);});
             const auto intel = std::find_if(player->surveyKnowledge.begin(), player->surveyKnowledge.end(),
                 [&](const auto& entry) { return entry.star == planet.star; });
             if (intel != player->surveyKnowledge.end() && intel->planetSnapshot) {
                 const auto& snapshot = *intel->planetSnapshot;
+                if(snapshot.scienceSamples && intel->observedOwner==playerId) known.scienceSamples=*snapshot.scienceSamples;
                 known.engineering=snapshot.engineering;
                 known.engineering.invested={snapshot.engineering.work*0.1,snapshot.engineering.work*0.05,snapshot.engineering.work*0.1};
                 if(snapshot.environment) known.environment=*snapshot.environment;

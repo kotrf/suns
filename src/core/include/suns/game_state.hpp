@@ -732,6 +732,7 @@ struct PlanetSurveySnapshot {
     ResonanceLaboratory resonanceLab; // Private project evidence captured for its owner only.
     std::optional<std::uint32_t> resonanceQueueIndex; // Frozen scheduling, including completion/removal.
     std::optional<std::uint32_t> engineeringQueueIndex; // Owner-only queue position at observation.
+    std::optional<std::vector<ScienceSample>> scienceSamples; // Owner-only, including a confirmed empty surface.
 };
 
 struct SystemSurveyKnowledge {
@@ -942,6 +943,7 @@ struct PendingPlayerReport {
     std::optional<PlanetAftermathObservation> aftermath;
     std::optional<ObjectObservation> objectObservation;
     std::optional<MediumObservation> mediumObservation;
+    std::uint64_t scientificDataId{}; // Per-recipient durable identity, independent of delivery routing/date.
 };
 
 struct TechnologyState {
@@ -1285,6 +1287,7 @@ struct Player {
     std::vector<PlanetAftermathObservation> planetaryAftermath;
     std::vector<ObjectObservation> objectKnowledge;
     std::vector<MediumObservation> mediumKnowledge;
+    std::vector<std::uint64_t> receivedScientificData; // Sorted durable delivery receipts.
 };
 
 enum class FleetRole {

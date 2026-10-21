@@ -149,6 +149,7 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     };
     mix(static_cast<std::uint64_t>(event_kind(report.kind)));
     mix(recipient);
+    if(report.scientificDataId) mix(report.scientificDataId);
     mix(report.observedTurn);
     mix(report.deliveryTurn);
     mix(report.star);
@@ -277,6 +278,14 @@ SurveyLevel best_observed_level(const GameState& state, PlayerId playerId, StarI
 
 } // namespace
 
+std::uint64_t scientific_data_id(const PendingPlayerReport& report,PlayerId recipient,std::uint64_t objective)
+{
+    auto identity=report;identity.deliveryTurn=0;identity.scientificDataId=0;
+    auto hash=stable_event_id(identity,recipient);
+    for(int byte=0;byte<8;++byte) {hash^=(objective>>(byte*8))&0xffULL;hash*=1099511628211ULL;}
+    return hash?hash:1;
+}
+
 void queue_survey_report(GameState& state, PlayerId owner, StarId star, FleetId fleet,
     Position position, std::uint64_t turn, SurveyLevel level, bool finalSurfaceObservation)
 { queue_survey_report_impl(state, owner, star, fleet, position, turn, level, finalSurfaceObservation); }
@@ -329,6 +338,8 @@ void queue_player_report(
     });
     player->pendingPlayerReports.back().transmissionFleet =
         held_report_source(state,recipient,sourcePosition,observationTurn,source);
+    if(kind==PlayerReportKind::ScientificData)
+        player->pendingPlayerReports.back().scientificDataId=scientific_data_id(player->pendingPlayerReports.back(),recipient);
 }
 
 void observe_fleet_sensor_sweep(
@@ -555,6 +566,12 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            if(report.kind==PlayerReportKind::ScientificData) {
+                const auto id=report.scientificDataId?report.scientificDataId:scientific_data_id(report,player.id);
+                const auto at=std::lower_bound(player.receivedScientificData.begin(),player.receivedScientificData.end(),id);
+                if(at!=player.receivedScientificData.end() && *at==id) continue;
+                player.receivedScientificData.insert(at,id);
+            }
             auto medium=report.mediumObservation;
             if (medium) {
                 medium->receivedTurn=state.turn;

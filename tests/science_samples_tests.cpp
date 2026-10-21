@@ -254,6 +254,7 @@ void stale_telemetry_cannot_authorize_transfer_previews()
     const auto actual = next(s, orders.orders);
     assert(actual.fleets[0].scienceSamples.size() == 1 && actual.planets[0].scienceSamples.empty());
     s.planets[0].scienceSamples = f.scienceSamples; f.scienceSamples.clear(); f.telemetry.scienceSamples.clear();
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
     const auto reverse = projected_cargo_order_state(make_player_view(s, 1).state,
         {1, {TransferScienceSampleOrder{{1, 0}, {0, 1}, 7}}});
     assert(reverse.planets[0].scienceSamples.size() == 1 && reverse.fleets[0].scienceSamples.empty());
@@ -352,8 +353,59 @@ void combat_capacity_loss_keeps_whole_samples_without_overflow()
     for (const auto& object : s.unknownObjects) assert(object.sampleRecovered);
 }
 }
+void completion_audit_surface_inventory_waits_for_delivery()
+{
+    auto s=fixture();studied(s);s.stars[0].position={900,0};s.planets[0].homeworld=false;
+    s.planets[1].owner=1;s.planets[1].population=1000000;s.planets[1].homeworld=true;
+    s.stars[1].position={0,0};s.planets[1].radar=PlanetaryRadarLevel::Full;
+    set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+    s.players[0].technology.researchActive=true;s.players[0].technology.focus=ResearchField::Electronics;
+    s.players[0].technology.researchAllocationPercent=50;
+    const auto before=make_player_view(s,1).state;
+    ++s.turn; // The hidden change follows the previous annual observation.
+    s.unknownObjects[0].sampleRecovered=true;s.planets[0].scienceSamples={{7,UnknownObjectKind::AncientProbe,true}};
+    const auto hidden=make_player_view(s,1).state;
+    assert(hidden.planets[0].scienceSamples==before.planets[0].scienceSamples);
+    assert(retained_sample_research(hidden,hidden.planets[0])==0);
+    auto preview=hidden;assert(!process_science_sample(preview,1,{1,7,false}));
+    queue_survey_report(s,1,1,0,s.stars[0].position,s.turn,SurveyLevel::DeepSurvey,true);
+    const auto due=s.players[0].pendingSurveyReports.back().deliveryTurn;assert(due>s.turn);
+    s.turn=due;(void)deliver_due_survey_reports(s);
+    const auto received=make_player_view(s,1).state;
+    assert(received.planets[0].scienceSamples.size()==1 && retained_sample_research(received,received.planets[0])==4);
+    s.planets[0].scienceSamples.clear();
+    assert(make_player_view(s,1).state.planets[0].scienceSamples==received.planets[0].scienceSamples);
+}
+void completion_audit_generic_science_delivery_is_idempotent()
+{
+    auto s=fixture();studied(s);s.unknownObjects[0].sampleRecovered=true;
+    s.planets[0].scienceSamples={{7,UnknownObjectKind::AncientProbe,false}};
+    assert(process_science_sample(s,1,{1,7,false}));
+    const auto packet=s.players[0].pendingPlayerReports.back();s.turn=packet.deliveryTurn;
+    s.players[0].pendingPlayerReports.push_back(packet);
+    (void)deliver_due_player_reports(s);
+    assert(s.players[0].technology.progress[std::size_t(ResearchField::Electronics)]==64);
+    auto replay=packet;replay.deliveryTurn=++s.turn;s.players[0].pendingPlayerReports.push_back(replay);
+    (void)deliver_due_player_reports(s);
+    assert(s.players[0].technology.progress[std::size_t(ResearchField::Electronics)]==64);
+}
+void completion_audit_equal_rewards_for_distinct_specimens_are_not_deduplicated()
+{
+    auto s=fixture();studied(s);s.unknownObjects[0].sampleRecovered=true;
+    s.unknownObjects.push_back({8,{900,0},UnknownObjectKind::AncientProbe,true});s.nextUnknownObjectId=9;
+    s.planets[0].scienceSamples={{7,UnknownObjectKind::AncientProbe,false},{8,UnknownObjectKind::AncientProbe,false}};
+    assert(process_science_sample(s,1,{1,7,false}) && process_science_sample(s,1,{1,8,false}));
+    assert(s.players[0].pendingPlayerReports[0].scientificDataId!=s.players[0].pendingPlayerReports[1].scientificDataId);
+    s.turn=s.players[0].pendingPlayerReports.back().deliveryTurn;
+    const auto events=deliver_due_player_reports(s);
+    assert(s.players[0].technology.progress[std::size_t(ResearchField::Electronics)]==128);
+    assert(std::count_if(events.begin(),events.end(),[](const auto& e){return e.kind==GameEventKind::ScientificData;})==2);
+}
 int main()
 {
+    completion_audit_generic_science_delivery_is_idempotent();
+    completion_audit_surface_inventory_waits_for_delivery();
+    completion_audit_equal_rewards_for_distinct_specimens_are_not_deduplicated();
     study_recover_return_and_consume_once();
     hold_capacity_atomic_transfers_and_ordered_previews();
     retained_artifact_requires_observation_and_correct_research();

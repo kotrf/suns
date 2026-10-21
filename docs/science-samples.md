@@ -31,7 +31,10 @@ transfer in **Science samples / artifacts**. At a populated owned colony choose:
 
 Analysis consumes the specimen and dispatches ordinary scientific data from the
 colony; research is awarded only after delivery. Repeated orders cannot award it
-twice. A dispatched report survives source loss under the existing communications
+twice. Scientific awards carry stable recipient/objective identities and durable
+delivery receipts, so replaying a packet after rerouting, later delivery or
+save/load cannot award it again. Different specimens with equal RP remain
+separate awards. A dispatched report survives source loss under the existing communications
 rules. An activated artifact can later be consumed, with explicit UI confirmation.
 
 Activation and operation require the current owner's delivered completed study of
@@ -46,7 +49,7 @@ Each specimen is an indivisible 5 kt item, sharing the hold with colonists and
 minerals and contributing to gross mass, flight fuel and gate limits. Local
 transfers require owned co-located endpoints, current local contact for fleets
 and destination capacity. Previews require current received telemetry at both
-fleet endpoints: a historical manifest stays visible but cannot authorize a
+fleet endpoints: a historical fleet manifest stays visible but cannot authorize a
 transfer or a subsequent analysis/activation. Pending transfers/dispositions
 replay in order.
 
@@ -65,7 +68,12 @@ Surface conquest keeps specimens and deactivates the former owner's instruments.
 The captor may analyze them or obtain the observation needed to operate them.
 Transfers also deactivate instruments. Fleet inventories use separate immutable
 confirmed/in-flight telemetry; hidden recovery or loss cannot rewrite received
-or dispatched manifests. Foreign surface inventories are omitted from surveys.
+or dispatched manifests. Owned surface inventories (including confirmed emptiness
+and retention state) also use immutable orbital/deeper survey packets, with the
+observation year shown in the sample panel. Hidden unloading, activation or loss
+cannot change inventory, research forecasts, AI decisions or player exports before
+delivery. Physical execution still validates actual ownership, stock and hold.
+Foreign surface inventories are omitted from surveys.
 Recovery, delivery and activation have dated reports; analysis uses scientific
 data and breakthrough reports.
 
@@ -77,12 +85,18 @@ return. It waits for cargo telemetry, returns to a reachable colony, unloads and
 analyzes. A confirmed empty recovery retires; hidden depletion does not affect
 planning. No direct research grant or privileged host-state access is added.
 
-Save **v86** appends a bounded SAMP extension after v85, storing depletion,
+Current formats are **save v93 / orders v37** (main after #227 was v92/v37).
+The original sample slice, save **v86**, appended a bounded SAMP extension after v85, storing depletion,
 physical manifests and each confirmed/in-flight/loss/wormhole contact separately.
 Older saves start with empty manifests and unclaimed specimens. Host loading
 rejects invalid references/kinds, duplicate physical specimens, retained fleet
-cargo and overfilled holds; historical evidence may overlap. Orders **v32** adds
+cargo and overfilled holds; historical evidence may overlap. The original orders **v32** added
 sample transfers/dispositions and recovery work. Previous formats remain readable.
+Save v93 appends bounded SCIC receipts/pending award IDs and owner surface evidence
+after EQIX, without changing SAMP. v92 physical cargo survives migration; missing
+surface evidence waits for a fresh ordinary report. Legacy pending packets get
+stable IDs (distinct equal-payload packets retain their separate rewards); receipts
+for already delivered pre-v93 generic packets cannot be reconstructed.
 
 Tests cover the complete expedition/return/disposition path, observation gates,
 stock/capacity, duplicate rewards, ordered previews, split/merge conservation,
@@ -94,7 +108,7 @@ artifacts to parallel native-field research outside the empire focus. It consume
 physically delivered xenocrystal; ordinary retained-artifact operation and sample
 analysis do not acquire a rare-material requirement.
 
-The next #59 slice adds an explicit **observation-gated engineering capability**:
+Merged [PR #227](https://github.com/kotrf/suns/pull/227) added an explicit **observation-gated engineering capability**:
 a delivered completed Compact remnant study unlocks the optional Adaptive
 magnetosphere at Energy 18 / Construction 18. It still costs 4,800 production
 work and I/B/G 480/240/480 kt, requires local orbital support and takes at least
@@ -104,3 +118,12 @@ magnetosphere needs only Energy/Construction 16. See
 [magnetic engineering](planetary-engineering.md#artificial-and-adaptive-magnetospheres-56--59).
 Both studies and new construction use normal delayed reports and orders; a
 pending observation cannot unlock construction or captured adaptive operation.
+
+## Completion assessment
+
+The [22 October audit](audits/2026-10-22-field-science-completion.md) maps the
+original #59 requirements to implemented mechanics and tests, including the two
+completion fixes. This is a complete expedition/data/sample/disposition/unlock
+cycle. Further artifact kinds, technology families, observation rewards and
+physical mineral recovery from wrecks are optional extensions. #59 remains open
+until the completion PR is reviewed and merged; #63 is frozen and is not expanded.

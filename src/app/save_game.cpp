@@ -13,6 +13,7 @@
 #include "suns/mobile_base.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/science_samples.hpp"
+#include "suns/player_knowledge.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/survey_probes.hpp"
 #include "suns/intergalactic_visitors.hpp"
@@ -34,7 +35,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 92;
+constexpr quint32 kSaveFormatVersion = 93;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2330,6 +2331,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "visitors_save.inc"
 #include "colony_materials_save.inc"
 #include "engineering_queue_save.inc"
+#include "field_science_completion_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -3185,6 +3187,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeVisitors(stream, data.state);
     writeColonyMaterials(stream, data.state);
     writeEngineeringQueues(stream, data.state);
+    writeFieldScienceCompletion(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3305,6 +3308,8 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (version >= 89) readVisitors(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version >= 91) readColonyMaterials(stream, loaded.state);
     if (version >= 92) readEngineeringQueues(stream, loaded.state);
+    if (version >= 93) readFieldScienceCompletion(stream, loaded.state);
+    else migratePendingScientificData(loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);

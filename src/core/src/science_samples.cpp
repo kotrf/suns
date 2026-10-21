@@ -100,6 +100,8 @@ bool unload_science_samples(GameState& state, Planet& colony, Fleet& fleet, std:
 }
 bool process_science_sample(GameState& state, PlayerId owner, const ProcessScienceSampleOrder& order)
 {
+    const auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==owner;});
+    if(player==state.players.end()) return false;
     const auto colony = std::find_if(state.planets.begin(), state.planets.end(),
         [&](const auto& p) { return p.id == order.colony && p.owner == owner && p.population; });
     if (colony == state.planets.end()) return false;
@@ -118,6 +120,7 @@ bool process_science_sample(GameState& state, PlayerId owner, const ProcessScien
         queue_player_report(state, owner, PlayerReportKind::ScientificData, star->position, state.turn + 1,
             star->id, colony->id, 0, 0, ProductionKind::Research,
             science_sample_research_points(sample->kind), unknown_object_research_field(sample->kind));
+        player->pendingPlayerReports.back().scientificDataId=scientific_data_id(player->pendingPlayerReports.back(),owner,(6ULL<<32)|sample->source);
         colony->scienceSamples.erase(sample);
     }
     return true;

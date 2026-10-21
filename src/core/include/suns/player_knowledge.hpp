@@ -7,6 +7,10 @@
 
 namespace suns {
 
+// Delivery routing/dates do not identify an award. Finite objectives can supply
+// their stable key to distinguish otherwise identical simultaneous findings.
+[[nodiscard]] std::uint64_t scientific_data_id(const PendingPlayerReport&,PlayerId,std::uint64_t objective=0);
+
 // Queue a frozen on-site observation through the normal delayed survey channel.
 void queue_survey_report(GameState&, PlayerId, StarId, FleetId, Position, std::uint64_t, SurveyLevel, bool finalSurfaceObservation = false);
 
