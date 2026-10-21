@@ -93,3 +93,14 @@ The optional [resonance laboratory](rare-exotic-materials.md) can extend retaine
 artifacts to parallel native-field research outside the empire focus. It consumes
 physically delivered xenocrystal; ordinary retained-artifact operation and sample
 analysis do not acquire a rare-material requirement.
+
+The next #59 slice adds an explicit **observation-gated engineering capability**:
+a delivered completed Compact remnant study unlocks the optional Adaptive
+magnetosphere at Energy 18 / Construction 18. It still costs 4,800 production
+work and I/B/G 480/240/480 kt, requires local orbital support and takes at least
+60 years. Study data is sufficient; no physical specimen is consumed and another
+empire's specimen recovery cannot prevent the discovery. The basic Artificial
+magnetosphere needs only Energy/Construction 16. See
+[magnetic engineering](planetary-engineering.md#artificial-and-adaptive-magnetospheres-56--59).
+Both studies and new construction use normal delayed reports and orders; a
+pending observation cannot unlock construction or captured adaptive operation.

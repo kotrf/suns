@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/campaign.hpp"
 
 #include <QAction>
 #include <QDialog>
@@ -245,10 +246,11 @@ void MainWindow::refreshPlanetPolish()
     auto* boranium = findChild<QProgressBar*>("boraniumConcentration");
     auto* germanium = findChild<QProgressBar*>("germaniumConcentration");
     if (!portrait || !ironium || !boranium || !germanium) return;
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
 
     const auto* star = selectedStar();
-    const auto* planet = selectedPlanet();
-    const auto level = star ? survey_level(state_, pendingOrders_.player, star->id) : SurveyLevel::Detected;
+    const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
+    const auto level = star ? survey_level(received, pendingOrders_.player, star->id) : SurveyLevel::Detected;
     if (!star || !planet || level < SurveyLevel::OrbitalSurvey) {
         portrait->setPixmap(compactPortrait(unknownPortrait()));
         if (planetPopulationBar_) planetPopulationBar_->hide();
@@ -263,14 +265,14 @@ void MainWindow::refreshPlanetPolish()
     }
 
     portrait->setPixmap(compactPortrait(
-        renderPlanetPortrait(*planet, star->stellarClass, state_.galaxySeed)));
+        renderPlanetPortrait(*planet, star->stellarClass, received.galaxySeed)));
 
     if (planetPopulationBar_) {
         const bool friendlyColony = planet->owner == pendingOrders_.player;
         planetPopulationBar_->setVisible(friendlyColony);
         if (friendlyColony) {
-            const auto capacity = population_capacity(state_, *planet, state_.turn);
-            const auto growth = projected_population_growth(state_, *planet, state_.turn);
+            const auto capacity = population_capacity(received, *planet, received.turn);
+            const auto growth = projected_population_growth(received, *planet, received.turn);
             const auto percent = capacity == 0
                 ? 0
                 : std::clamp(static_cast<int>(std::lround(
@@ -300,8 +302,8 @@ void MainWindow::refreshPlanetPolish()
         }
         return;
     }
-    const auto concentration = planet_mineral_concentration(state_, *planet);
-    const auto mining = projected_mineral_mining(state_, *planet);
+    const auto concentration = planet_mineral_concentration(received, *planet);
+    const auto mining = projected_mineral_mining(received, *planet);
 
     const struct {
         QProgressBar* bar;

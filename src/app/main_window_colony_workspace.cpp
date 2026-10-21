@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/planetary_recovery.hpp"
 
@@ -211,26 +212,27 @@ void MainWindow::refreshColonyWorkspace()
     auto* status = findChild<QLabel*>("colonyStatusSummary");
     auto* table = findChild<QTreeWidget*>("colonyMineralsTable");
     if (!status || !table) return;
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
     const auto* star = selectedStar();
-    const auto* planet = selectedPlanet();
+    const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
     const bool own = star && planet && planet->owner == pendingOrders_.player
-        && is_surveyed(state_, pendingOrders_.player, star->id);
+        && is_surveyed(received, pendingOrders_.player, star->id);
     QStringList lines;
     if (!star) lines << "<b>No system selected</b>" << "Select a system on the map.";
     else {
         lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name).toHtmlEscaped());
-        const auto age = system_intel_age(state_, pendingOrders_.player, star->id);
+        const auto age = system_intel_age(received, pendingOrders_.player, star->id);
         lines << (!age ? QString("Intel: never scanned") : *age == 0 ? QString("Intel: current")
             : QString("Intel: %1 year%2 old").arg(*age).arg(*age == 1 ? "" : "s"));
         if (planet) {
-            const auto owner = known_planet_owner(state_, pendingOrders_.player, planet->id);
-            const auto habitability = known_planet_habitability(state_, pendingOrders_.player, planet->id);
+            const auto owner = known_planet_owner(received, pendingOrders_.player, planet->id);
+            const auto habitability = known_planet_habitability(received, pendingOrders_.player, planet->id);
             const auto ownership = own ? QString("Your colony") : !owner ? QString("Owner unknown")
                 : *owner == 0 ? QString("Uncolonized") : QString("Empire %1").arg(*owner);
             lines << ownership + (habitability ? QString(" • Hab %1%2%").arg(
-                survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan ? "~" : "").arg(*habitability) : "");
+                survey_level(received, pendingOrders_.player, star->id) == SurveyLevel::BasicScan ? "~" : "").arg(*habitability) : "");
             if (own) {
-                lines << QString("Population: %1 / %2").arg(planet->population).arg(population_capacity(state_, *planet, state_.turn));
+                lines << QString("Population: %1 / %2").arg(planet->population).arg(population_capacity(received, *planet, received.turn));
                 lines << QString("Planetary radar: %1 (%2 ly)")
                     .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
                          planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
@@ -246,15 +248,15 @@ void MainWindow::refreshColonyWorkspace()
                 }
                 if(planet->aftermathKnownLocally && (damage.contamination || damage.lastCleanupTurn))
                     lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
-                        .arg(damage.contamination).arg(contamination_habitability_penalty(state_,pendingOrders_.player,*planet))
+                        .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
                         .arg((damage.contamination+1)/2);
                 lines << QString("Resources: %1 / year • Orbit: %2").arg(colony_output(*planet))
-                    .arg(find_orbital_station_at_planet(state_, planet->id) ? "station" : "no station");
+                    .arg(find_orbital_station_at_planet(received, planet->id) ? "station" : "no station");
             }
-            if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(state_,pendingOrders_.player,planet->id)) {
+            if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(received,pendingOrders_.player,planet->id)) {
                 lines << QString("Last-known aftermath — observed year %1, received %2; age %3 years%4")
                     .arg(qulonglong(a->observedTurn)).arg(qulonglong(a->receivedTurn))
-                    .arg(qulonglong(state_.turn-a->observedTurn)).arg(a->exact ? " (former owner snapshot)" : " (orbital estimate)");
+                    .arg(qulonglong(received.turn-a->observedTurn)).arg(a->exact ? " (former owner snapshot)" : " (orbital estimate)");
                 lines << QString("Ruined factories %1–%2 • mines %3–%4 • contamination %5–%6/100")
                     .arg(qulonglong(a->factoriesMinimum)).arg(qulonglong(a->factoriesMaximum))
                     .arg(qulonglong(a->minesMinimum)).arg(qulonglong(a->minesMaximum))
@@ -263,9 +265,9 @@ void MainWindow::refreshColonyWorkspace()
         }
     }
     status->setText(lines.join("<br>"));
-    const auto mining = own ? projected_mineral_mining(state_, *planet) : MineralCargo{};
-    const bool geology = planet && planet_geology_known(state_, pendingOrders_.player, planet->id);
-    const auto concentration = geology ? planet_mineral_concentration(state_, *planet) : MineralCargo{};
+    const auto mining = own ? projected_mineral_mining(received, *planet) : MineralCargo{};
+    const bool geology = planet && planet_geology_known(received, pendingOrders_.player, planet->id);
+    const auto concentration = geology ? planet_mineral_concentration(received, *planet) : MineralCargo{};
     const auto values = [](const MineralCargo& minerals) { return std::array{minerals.ironium, minerals.boranium, minerals.germanium}; };
     const auto stock = values(own ? planet->minerals : MineralCargo{});
     const auto extraction = values(mining);

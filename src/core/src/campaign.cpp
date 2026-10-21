@@ -73,6 +73,13 @@ const std::vector<ResearchUnlock>& research_unlocks()
                 "Long climate project: 2400 production, I/B/G 240/120/240 kt, at most 80 work/year. Needs a friendly Starbase or Fortress with a shipyard; changes effective temperature by up to 10 points while supported.", {}};
             unlock.extraLevels[std::size_t(ResearchField::Energy)]=14; unlock.planetaryEngineering=true; entries.push_back(std::move(unlock));
         }
+        for(const bool adaptive:{false,true}) {
+            ResearchUnlock unlock{ResearchField::Construction,std::uint8_t(adaptive?18:16),adaptive?"Adaptive magnetosphere":"Artificial magnetosphere",
+                adaptive?"Requires delivered completed Compact remnant field research. Radiation reduction 0–20 while supported; 4800 work (80/year), I/B/G 480/240/480 kt. Needs a populated colony and friendly Starbase/Fortress shipyard; competes with climate engineering."
+                    :"Radiation reduction 0–10 while supported; 2400 work (80/year), I/B/G 240/120/240 kt. Needs a populated colony and friendly Starbase/Fortress shipyard; competes with climate engineering.", {}};
+            unlock.extraLevels[std::size_t(ResearchField::Energy)]=adaptive?18:16;
+            unlock.planetaryEngineering=true; unlock.requiresCompactStudy=adaptive; entries.push_back(std::move(unlock));
+        }
         {
             ResearchUnlock mining{ResearchField::Construction, 8, "Xenocrystal extraction",
                 "Remote mining robots extract whole 1 kt crystals from a received DeepSurvey deposit: one per mining ship/year, up to four per planet/year. Transport the surface cache physically.", {}};
@@ -227,12 +234,13 @@ bool research_unlock_available(const GameState& state, PlayerId player, const Re
     for (std::size_t field = 0; field < kResearchFieldCount; ++field)
         if (technology_level(state, player, static_cast<ResearchField>(field)) < unlock.extraLevels[field])
             return false;
-    return true;
+    return !unlock.requiresCompactStudy || compact_study_received(state,player);
 }
 
 std::string research_unlock_requirement(const ResearchUnlock& unlock)
 {
     std::string text = research_field_name(unlock.field) + " " + std::to_string(unlock.level);
+    if(unlock.requiresCompactStudy) text += "; delivered completed Compact remnant study";
     for (std::size_t field = 0; field < kResearchFieldCount; ++field)
         if (unlock.extraLevels[field]) text += " + " + research_field_name(static_cast<ResearchField>(field))
             + " " + std::to_string(unlock.extraLevels[field]);
@@ -522,10 +530,25 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         known.resonanceLab = {};
         std::erase_if(known.productionQueue, [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
         if (known.owner == playerId) {
+            known.engineering = {};
+            std::erase_if(known.productionQueue,[](const auto& item) {return engineering_kind(item.kind);});
             const auto intel = std::find_if(player->surveyKnowledge.begin(), player->surveyKnowledge.end(),
                 [&](const auto& entry) { return entry.star == planet.star; });
             if (intel != player->surveyKnowledge.end() && intel->planetSnapshot) {
                 const auto& snapshot = *intel->planetSnapshot;
+                known.engineering=snapshot.engineering;
+                known.engineering.invested={snapshot.engineering.work*0.1,snapshot.engineering.work*0.05,snapshot.engineering.work*0.1};
+                if(snapshot.environment) known.environment=*snapshot.environment;
+                known.naturalEnvironment=snapshot.naturalEnvironment;
+                known.observedHabitability.reset();
+                known.observedHabitability=player_planet_habitability(state,playerId,known,state.turn);
+                known.habitability=*known.observedHabitability;
+                if(snapshot.engineeringQueueIndex) {
+                    const auto priorLab=snapshot.resonanceQueueIndex && *snapshot.resonanceQueueIndex<*snapshot.engineeringQueueIndex;
+                    const auto index=std::min<std::size_t>(*snapshot.engineeringQueueIndex-std::uint32_t(priorLab),known.productionQueue.size());
+                    known.productionQueue.insert(known.productionQueue.begin()+index,
+                        {engineering_production_kind(known.engineering.kind),engineering_work(known.engineering.kind)-known.engineering.work});
+                }
                 known.resonanceLab = snapshot.resonanceLab;
                 if (snapshot.resonanceQueueIndex) {
                     const auto index = std::min<std::size_t>(*snapshot.resonanceQueueIndex, known.productionQueue.size());

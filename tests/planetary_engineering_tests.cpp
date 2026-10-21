@@ -4,6 +4,9 @@
 #include "suns/production.hpp"
 #include "suns/stations.hpp"
 #include "suns/terraforming.hpp"
+#include "suns/unknown_objects.hpp"
+#include "suns/computer_player.hpp"
+#include "suns/exotic_materials.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -179,9 +182,122 @@ void planning_forecasts_reports_and_frozen_observations()
     const auto packet=std::find_if(begun.players[0].pendingPlayerReports.begin(),begun.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::EngineeringProgress;});
     assert(packet!=begun.players[0].pendingPlayerReports.end() && packet->deliveryTurn>packet->observedTurn);
 }
+void magnetic_projects_are_paid_finite_and_reversible()
+{
+    for(const auto kind:{E::ArtificialMagnetosphere,E::AdaptiveMagnetosphere}) {
+        auto s=fixture();s.players[0].technology.levels.fill(18);
+        s.players[0].objectKnowledge={{7,{411,7},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::CompactRemnant,s.turn,s.turn}};
+        auto& p=s.planets[0];p.environment.radiation=70;p.naturalEnvironment=p.environment;
+        const auto natural=*p.naturalEnvironment;const auto minerals=p.minerals;
+        const auto strength=engineering_max_strength(kind);const auto total=engineering_work(kind);
+        assert(apply_planetary_engineering_order(s,p,{1,kind,A::StartOrResume,strength}));
+        assert(!apply_planetary_engineering_order(s,p,{1,kind,A::StartOrResume,strength}));
+        assert(!apply_production_batch(s,p,{1,engineering_production_kind(kind),2}));
+        assert(!production_template_valid({"Magnetism",{{engineering_production_kind(kind),total}}}));
+        assert(forecast_production_queue(s,p,p.productionQueue,80)[0].completionTurn==s.turn+total/80);
+        (void)resolve_colony_production(s,p,true);++s.turn;
+        const auto paid=p.engineering.invested.ironium;
+        assert(p.engineering.work==80 && paid==8 && !p.engineering.operational);
+        assert(apply_planetary_engineering_order(s,p,{1,kind,A::Pause,strength}));
+        (void)resolve_colony_production(s,p,true);++s.turn;
+        assert(p.engineering.work==80 && p.engineering.invested.ironium==paid);
+        assert(apply_planetary_engineering_order(s,p,{1,kind,A::StartOrResume,strength}));
+        const auto station=s.orbitalStations[0];s.orbitalStations.clear();
+        (void)resolve_colony_production(s,p,false);++s.turn;
+        assert(p.engineering.work==80 && p.engineering.invested.ironium==paid);
+        s.orbitalStations.push_back(station);
+        while(p.engineering.work<total) {(void)resolve_colony_production(s,p,true);++s.turn;}
+        assert(p.productionQueue.empty() && engineering_state_valid(p.engineering));
+        assert(near(minerals.ironium-p.minerals.ironium,total*0.1));
+        assert(near(minerals.boranium-p.minerals.boranium,total*0.05));
+        assert(engineered_environment(p).radiation==70-strength && engineered_environment(p).temperature==40);
+        assert(p.environment.radiation==70 && p.naturalEnvironment->radiation==natural.radiation);
+        s.orbitalStations.clear();refresh_planetary_engineering(s);assert(engineered_environment(p).radiation==70);
+        s.orbitalStations.push_back(station);refresh_planetary_engineering(s);assert(engineered_environment(p).radiation==70-strength);
+        assert(apply_planetary_engineering_order(s,p,{1,kind,A::SetOutput,0}));assert(engineered_environment(p).radiation==70);
+        assert(apply_planetary_engineering_order(s,p,{1,kind,A::SetOutput,strength}));
+        p.environment.radiation=5;assert(engineered_environment(p).radiation==0);
+        const auto stocks=p.minerals;assert(apply_planetary_engineering_order(s,p,{1,kind,A::Dismantle,strength}));
+        assert(p.minerals.ironium==stocks.ironium && p.environment.radiation==5);
+    }
+}
+void magnetic_technology_and_delivered_science_gate_capability()
+{
+    auto s=fixture();auto& p=s.planets[0];
+    assert(!apply_planetary_engineering_order(s,p,{1,E::ArtificialMagnetosphere,A::StartOrResume,10}));
+    s.players[0].technology.levels.fill(16);
+    assert(planetary_engineering_available(s,1,E::ArtificialMagnetosphere));
+    assert(!apply_planetary_engineering_order(s,p,{1,E::ArtificialMagnetosphere,A::StartOrResume,11}));
+    s.players[0].technology.levels.fill(18);
+    s.unknownObjects={{7,{411,7},UnknownObjectKind::CompactRemnant}};s.nextUnknownObjectId=8;
+    s.shipDesigns[0].hull=ShipHullType::Destroyer;
+    s.shipDesigns[0].components={ShipComponentType::FuelMizer,ShipComponentType::MoleScanner};s.shipDesigns[0].placements.clear();
+    auto& f=s.fleets[0];f.position={410,7};f.task=FleetTask::FieldResearch;
+    assert(!compact_study_received(s,1));
+    assert(!apply_planetary_engineering_order(s,p,{1,E::AdaptiveMagnetosphere,A::StartOrResume,20}));
+    research_unknown_objects(s,f,s.turn);
+    const auto packet=s.players[0].pendingPlayerReports.back();assert(packet.objectObservation && packet.deliveryTurn>s.turn);
+    assert(!compact_study_received(s,1) && !compact_study_received(make_player_view(s,1).state,1));
+    auto hidden=s;hidden.unknownObjects.clear();hidden.fleets.clear();
+    assert(!compact_study_received(hidden,1)); // Physical presence/kind or another observer's work cannot unlock it.
+    s.turn=packet.deliveryTurn;(void)deliver_due_player_reports(s);
+    assert(compact_study_received(s,1) && compact_study_received(make_player_view(s,1).state,1));
+    const auto unlock=std::find_if(research_unlocks().begin(),research_unlocks().end(),[](const auto& u){return u.requiresCompactStudy;});
+    assert(unlock!=research_unlocks().end() && research_unlock_available(s,1,*unlock));
+    assert(apply_planetary_engineering_order(s,p,{1,E::AdaptiveMagnetosphere,A::StartOrResume,20}));
+    assert(!apply_planetary_engineering_order(s,p,{1,E::ArtificialMagnetosphere,A::StartOrResume,10}));
+    s.players.push_back({2,"Captor"});s.players[1].race=race_preset(RacePreset::Terran);s.players[1].technology.levels.fill(18);
+    p.owner=2;p.productionQueue.clear();s.orbitalStations[0].owner=2;
+    assert(!apply_planetary_engineering_order(s,p,{1,E::AdaptiveMagnetosphere,A::StartOrResume,20}));
+    assert(p.engineering.builder==1 && p.engineering.kind==E::AdaptiveMagnetosphere);
+    p.engineering.work=4800;p.engineering.invested={480,240,480};p.engineering.completedTurn=s.turn;
+    refresh_planetary_engineering(s);assert(!p.engineering.operational && engineering_block(s,p)==EngineeringBlock::CompactStudy);
+    s.players[1].objectKnowledge=s.players[0].objectKnowledge;
+    refresh_planetary_engineering(s);assert(p.engineering.operational);
+    s.players[1].technology.levels[std::size_t(ResearchField::Energy)]=17;
+    refresh_planetary_engineering(s);assert(!p.engineering.operational);
+}
+void computer_magnetic_projects_use_received_science_and_ordinary_costs()
+{
+    auto s=fixture();s.players[0].controller=PlayerController::Computer;s.players[0].technology.levels.fill(18);
+    s.planets[0].environment.radiation=55;s.planets[0].naturalEnvironment=s.planets[0].environment;
+    set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+    const auto basic=plan_computer_turn(make_player_view(s,1));
+    const auto project=[](const auto& plan) {
+        const auto it=std::find_if(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& o){return std::holds_alternative<SetPlanetaryEngineeringOrder>(o);});
+        assert(it!=plan.orders.orders.end());return std::get<SetPlanetaryEngineeringOrder>(*it);
+    };
+    assert(project(basic).kind==E::ArtificialMagnetosphere);
+    auto hidden=s;hidden.unknownObjects={{7,{411,7},UnknownObjectKind::CompactRemnant}};
+    assert(project(plan_computer_turn(make_player_view(hidden,1))).kind==E::ArtificialMagnetosphere);
+    s.players[0].objectKnowledge={{7,{411,7},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::CompactRemnant,s.turn,s.turn}};
+    const auto advanced=plan_computer_turn(make_player_view(s,1));assert(project(advanced).kind==E::AdaptiveMagnetosphere);
+    const auto crystals=s.planets[0].xenocrystal.surface;const auto iron=s.planets[0].minerals.ironium;
+    assert(apply_planetary_engineering_order(s,s.planets[0],project(advanced)));
+    (void)resolve_colony_production(s,s.planets[0],true);
+    assert(s.planets[0].engineering.work==80 && near(s.planets[0].minerals.ironium,iron-8));
+    assert(s.planets[0].xenocrystal.surface==crystals);
+}
+void received_queue_retains_engineering_and_laboratory_order()
+{
+    for(const bool labFirst:{false,true}) {
+        auto s=fixture();s.players[0].technology.levels.fill(18);auto& p=s.planets[0];
+        const auto engineering=[&]{assert(apply_planetary_engineering_order(s,p,{1,E::ArtificialMagnetosphere,A::StartOrResume,10}));};
+        const auto lab=[&]{assert(apply_resonance_order(s,p,{1}));};
+        if(labFirst){lab();engineering();}else{engineering();lab();}
+        p.productionQueue.insert(p.productionQueue.begin(),{K::Factory,5});p.productionQueue.push_back({K::Mine,4});
+        set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+        const auto received=make_player_view(s,1).state;
+        assert(received.planets[0].productionQueue.size()==p.productionQueue.size());
+        for(std::size_t i=0;i<p.productionQueue.size();++i)assert(received.planets[0].productionQueue[i].kind==p.productionQueue[i].kind);
+    }
+}
 int main()
 {
     unlocks_materials_and_annual_limit(); pause_capture_and_station_loss_preserve_investment();
     effective_environment_and_terraforming_remain_separate(); supporting_station_forecast_and_research_allocation();
     planning_forecasts_reports_and_frozen_observations();
+    magnetic_projects_are_paid_finite_and_reversible(); magnetic_technology_and_delivered_science_gate_capability();
+    computer_magnetic_projects_use_received_science_and_ordinary_costs();
+    received_queue_retains_engineering_and_laboratory_order();
 }

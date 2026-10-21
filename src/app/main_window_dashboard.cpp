@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/campaign.hpp"
 #include "suns/stations.hpp"
 
 #include "suns/communications.hpp"
@@ -145,10 +146,11 @@ QString MainWindow::selectedPlanetPanelSummary() const
 {
     const auto* star = selectedStar();
     if (!star) return "<span style='color:#8090a2'>No system selected.</span>";
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
 
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));
-    if (const auto age = system_intel_age(state_, pendingOrders_.player, star->id)) {
+    if (const auto age = system_intel_age(received, pendingOrders_.player, star->id)) {
         lines << (*age == 0
                 ? "Planetary intelligence: <b>current</b>"
                 : QString("Planetary intelligence: <b>%1 year%2 old</b>")
@@ -157,8 +159,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
         lines << "Planetary intelligence: <b>never scanned</b>";
     }
 
-    if (!is_surveyed(state_, pendingOrders_.player, star->id)) {
-        if (survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::SystemScan) {
+    if (!is_surveyed(received, pendingOrders_.player, star->id)) {
+        if (survey_level(received, pendingOrders_.player, star->id) >= SurveyLevel::SystemScan) {
             lines << "<b>SYSTEM CONTACT</b> — ordinary scanner data received";
             lines << "Planetary parameters require orbit or a penetrating scanner.";
         } else {
@@ -168,32 +170,32 @@ QString MainWindow::selectedPlanetPanelSummary() const
         return lines.join("<br>");
     }
 
-    const auto* planet = find_planet_at_star(state_, star->id);
+    const auto* planet = find_planet_at_star(received, star->id);
     if (!planet) {
         lines << "No planet in this system.";
         return lines.join("<br>");
     }
 
-    const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id);
-    const auto knownOwner = known_planet_owner(state_, pendingOrders_.player, planet->id);
-    const auto estimated = survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan;
+    const auto knownHabitability = known_planet_habitability(received, pendingOrders_.player, planet->id);
+    const auto knownOwner = known_planet_owner(received, pendingOrders_.player, planet->id);
+    const auto estimated = survey_level(received, pendingOrders_.player, star->id) == SurveyLevel::BasicScan;
     lines << QString("%1 • Habitability <b>%2%3%</b>")
                  .arg(QString::fromStdString(planet->name))
                  .arg(estimated ? "~" : "")
                  .arg(knownHabitability.value_or(0));
     if (estimated) lines << "Basic scan estimate — enter orbit to confirm";
-    if (const auto artifactHint = known_precursor_artifact_hint(state_, pendingOrders_.player, planet->id)) {
+    if (const auto artifactHint = known_precursor_artifact_hint(received, pendingOrders_.player, planet->id)) {
         lines << (*artifactHint
                 ? "<span style='color:#d8bd72'><b>Deep survey:</b> possible artificial structures</span>"
                 : "Deep survey complete — no unexamined unusual sites");
     }
-    if (const auto variability = known_stellar_variability(state_, pendingOrders_.player, star->id);
+    if (const auto variability = known_stellar_variability(received, pendingOrders_.player, star->id);
         variability && variability->variable) {
         if (variability->characterized) {
             lines << QString("<b>Variable star</b> • period %1 years • luminosity ±%2% • now %3%")
                          .arg(variability->periodTurns)
                          .arg(variability->amplitudePercent)
-                         .arg(qRound(stellar_luminosity(*star, state_.turn) * 100.0));
+                         .arg(qRound(stellar_luminosity(*star, received.turn) * 100.0));
         } else {
             lines << "<b>Variable star detected</b> • remain in orbit to characterize its cycle";
         }
@@ -208,7 +210,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
         lines << QString("Defenses %1 / %2 • bombardment protection: population %3%, installations %4%")
             .arg(planet->defenses).arg(kMaximumColonyDefenses)
             .arg(colony_defense_coverage(*planet)*100,0,'f',1).arg(colony_defense_coverage(*planet)*50,0,'f',1);
-        if (const auto* station = known_orbital_station(state_,pendingOrders_.player,planet->id)) {
+        if (const auto* station = known_orbital_station(received,pendingOrders_.player,planet->id)) {
             QStringList services;
             if (orbital_station_has_module(*station, OrbitalStationModule::Shipyard)) {
                 services << "shipyard";
@@ -225,7 +227,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
         } else {
             lines << "Orbital station: <span style='color:#e4b77d'><b>none</b></span> • ships cannot be built or refueled";
         }
-        lines << QString("Production: <b>%1</b>").arg(productionLine(state_, *planet));
+        lines << QString("Production: <b>%1</b>").arg(productionLine(received, *planet));
     } else if (knownOwner == pendingOrders_.player) {
         lines << "<span style='color:#85d5a5'><b>Your colony at last report</b></span>";
         lines << "Current colony details unavailable until the system is scanned again.";
@@ -236,8 +238,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
                      .arg(estimated ? "Estimated" : "Potential")
                      .arg(static_cast<qulonglong>(std::max(0, knownHabitability.value_or(0)))
                          * kPopulationPerHabitability);
-        if (planet_geology_known(state_, pendingOrders_.player, planet->id)) {
-            const auto remoteYield = remoteMiningAtPlanet(state_, pendingOrders_.player, *planet);
+        if (planet_geology_known(received, pendingOrders_.player, planet->id)) {
+            const auto remoteYield = remoteMiningAtPlanet(received, pendingOrders_.player, *planet);
             if (mineral_cargo_mass(remoteYield) > 0.000001) {
                 lines << QString("Remote extraction / turn — I %1 • B %2 • G %3")
                              .arg(remoteYield.ironium, 0, 'f', 2)

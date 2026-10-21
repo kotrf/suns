@@ -94,7 +94,13 @@ closing the window leaves pending orders intact.
 
 Every completed level emits a deterministic `ResearchLevelCompleted` event. Turn Messages announces the new level and names implemented unlocks such as the Mole Scanner.
 
-Future scientific expeditions and reverse engineering can add discovery or artifact requirements alongside field levels. The first slice does not implement those systems and does not assume that RP alone must unlock every late technology.
+Scientific expeditions can add discovery requirements alongside field levels.
+The first concrete engineering capability is Adaptive magnetosphere: Energy 18,
+Construction 18 **and a delivered completed Compact remnant study**. Detection,
+classification and pending reports do not qualify; physical specimen recovery
+is separate and optional. The Research catalog displays this requirement and
+keeps the capability locked until it is satisfied. Ordinary research and basic
+radiation protection remain available through their existing technology rules.
 
 
 ## Campaign technology catalog
