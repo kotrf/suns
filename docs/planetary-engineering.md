@@ -1,4 +1,4 @@
-# Orbital climate engineering
+# Orbital environmental engineering
 
 The first planetary-engineering slice of #56 adds **orbital mirrors** and
 **orbital shades**. They respectively raise or lower effective temperature by
@@ -82,6 +82,77 @@ Save **v85** adds a bounded ENGI extension for physical projects and separate
 received/in-flight survey evidence. Orders **v31** add the project-control order.
 The v84 body and prior readers remain intact; old saves start without projects.
 
-Issue #56 remains open for atmospheric and magnetic engineering, oceans,
+After the first climate slice, #56 remained open for atmospheric engineering, oceans,
 habitats, larger system projects and further balance/AI work. This slice does
 not add autonomous AI project selection or imply manual gameplay acceptance.
+
+## Artificial and adaptive magnetospheres (#56 / #59)
+
+The next slice links a paid engineering project to a concrete field-science
+capability. In Planetary engineering, choose a magnetosphere and its output,
+build through the normal production queue, then keep a populated colony and a
+friendly Starbase/Fortress shipyard to operate it.
+
+| Project | Requirements | Radiation reduction | Work / minimum years | Total I/B/G kt |
+| --- | --- | --- | --- | --- |
+| Artificial magnetosphere | Energy 16 + Construction 16 | 0–10 points | 2,400 / 30 | 240 / 120 / 240 |
+| Adaptive magnetosphere | Energy 18 + Construction 18 + delivered completed Compact remnant study | 0–20 points | 4,800 / 60 | 480 / 240 / 480 |
+
+Both retain the shared 80-work/year assembly limit, normal research allocation,
+queue priority and per-work mineral payments. They occupy the existing **single
+engineering slot per planet**, competing with mirrors/shades. Changing project
+type requires dismantling without refund and a full new build; there is no free
+upgrade or second hidden installation. Ordinary terraforming remains available.
+
+Supported output subtracts whole normalized points from **effective radiation**,
+clamped at zero, without changing temperature, gravity, natural axes or the
+conventionally terraformed baseline. Turning it off, losing population/support
+or dismantling removes the offset without numerical drift. Racial habitability,
+capacity and growth use this environment normally. Lower radiation can help one
+race and hurt another; radiation-immune races receive no radiation-axis benefit.
+This does not grant bombardment defense or remove contamination.
+
+The basic installation needs no expedition or specimen. For the adaptive variant,
+use the existing Unknown objects / expeditions **Field research** mission with
+real scanners, travel and fuel. A completed Compact remnant study must reach that
+empire's headquarters through ordinary communications before it unlocks the
+capability. Detection, classification, RP alone, physical hidden object state,
+another empire's study and pending reports do not qualify. The Research catalog
+and engineering panel show the explicit requirement. A retained/consumed specimen
+is a separate choice under #59 and is not required or spent here. Each empire can
+study the landmark; a rival recovering its one unique specimen does not block
+this scientific discovery. If a world has no suitable landmark, basic protection
+and ordinary terraforming remain available.
+
+Capture and interruption preserve work, builder, dates and paid resources. Resume
+requires the new owner's technology, population and support. As with existing
+climate works, a completed basic magnetosphere is usable with local support;
+**adaptive operation additionally requires the current owner's own delivered
+study and Energy/Construction 18**, including after capture. Unsupported or
+unlicensed adaptive equipment remains physically present, inactive.
+
+Owner project state and scheduling now come from the same dated survey packet;
+queue progress and paid totals do not advance merely because host construction
+advanced. Paid totals are derived from observed work and the fixed recipe.
+The panel labels the evidence year, while its completion/effect calculations
+are forecasts using received state and accepted pending orders. Foreign evidence
+continues to omit paid resources and private scheduling. Milestone/interruption
+messages name the correct project, required time and output range.
+
+The basic AI chooses a supported, idle, sufficiently productive colony only when
+received racial habitability improves by at least five points and received stocks
+cover the full build. It considers both versions through the same received
+unlock and emits a normal project order. Existing expedition policy already
+studies compact objects. No technology, minerals, work or research are granted
+directly to computer empires.
+
+Save **v92 / orders v37** append the project/production enum values without
+renumbering earlier values. The bounded **EQIX** extension stores owner-only
+received/in-flight engineering queue positions; ENGI keeps its existing layout.
+Old saves retain physical works and resource investments; missing queue evidence
+waits for a normal fresh owner report rather than being rebuilt from hidden work.
+
+#56 remains open for atmospheric/ocean engineering, habitats and system projects;
+#59 remains open for further observation-gated capabilities and salvage choices.
+The radical irreversible transformation is deferred, including evacuation and
+capture rules. The costs above are prototype balance, not manual playtest results.

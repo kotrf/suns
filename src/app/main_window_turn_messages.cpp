@@ -157,11 +157,11 @@ QString event_subject(const GameState& state, const GameEvent& event)
     }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
-    case GameEventKind::EngineeringProgress: subject=QString("%1: climate project %2").arg(event_planet_name(state,event),event.quantity==0?"started":event.quantity==100?"completed":QString("%1% milestone").arg(event.quantity)); break;
-    case GameEventKind::EngineeringPaused: subject=QString("%1: climate project interrupted").arg(event_planet_name(state,event)); break;
-    case GameEventKind::EngineeringResumed: subject=QString("%1: climate project resumed").arg(event_planet_name(state,event)); break;
-    case GameEventKind::EngineeringCaptured: subject=QString("%1: climate project captured").arg(event_planet_name(state,event)); break;
-    case GameEventKind::EngineeringDismantled: subject=QString("%1: climate project dismantled").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringProgress: subject=QString("%1: engineering project %2").arg(event_planet_name(state,event),event.quantity==0?"started":event.quantity==100?"completed":QString("%1% milestone").arg(event.quantity)); break;
+    case GameEventKind::EngineeringPaused: subject=QString("%1: engineering project interrupted").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringResumed: subject=QString("%1: engineering project resumed").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringCaptured: subject=QString("%1: engineering project captured").arg(event_planet_name(state,event)); break;
+    case GameEventKind::EngineeringDismantled: subject=QString("%1: engineering project dismantled").arg(event_planet_name(state,event)); break;
     case GameEventKind::OutpostDeployed: subject = QString("%1: outpost deployed").arg(fleetName); break;
     case GameEventKind::OutpostDeploymentFailed: subject = QString("%1: deployment rejected").arg(fleetName); break;
     case GameEventKind::OutpostFuelExhausted: subject = QString("%1: outpost fuel exhausted").arg(fleetName); break;
@@ -526,9 +526,11 @@ QString event_text(const GameState& state, const GameEvent& event)
         QString detail;
         if(event.kind==GameEventKind::EngineeringPaused) detail=QString::fromStdString(engineering_block_name(EngineeringBlock(event.quantity)))+". Progress and paid materials remain on the planet.";
         else if(event.kind==GameEventKind::EngineeringCaptured) detail=QString("Captured at %1% progress. Resume through ordinary production with the new owner's technology and supporting station.").arg(event.quantity);
-        else if(event.kind==GameEventKind::EngineeringDismantled) detail="Owner dismantled the project. Investment is not refunded; its temperature effect is removed.";
+        else if(event.kind==GameEventKind::EngineeringDismantled) detail="Owner dismantled the project. Investment is not refunded; its environmental effect is removed.";
         else if(event.kind==GameEventKind::EngineeringResumed) detail=QString("Work or operation resumed at %1% progress.").arg(event.quantity);
-        else detail=event.quantity==0?"Construction started; at least 30 years at maximum assembly capacity.":event.quantity==100?"Construction completed. Supported operation changes effective temperature; output can be set from 0 to 10.":QString("Construction milestone: %1% complete.").arg(event.quantity);
+        else if(event.quantity==0) detail=QString("Construction started; at least %1 years at maximum assembly capacity.").arg(engineering_work(engineering_project_kind(event.productionKind))/kEngineeringWorkPerYear);
+        else if(event.quantity==100) detail=QString("Construction completed. Supported operation changes its environmental axis; output can be set from 0 to %1.").arg(engineering_max_strength(engineering_project_kind(event.productionKind)));
+        else detail=QString("Construction milestone: %1% complete.").arg(event.quantity);
         text=QString("Year %1 • %2 at %3.\n%4").arg(qulonglong(event.observedTurn)).arg(project,event_planet_name(state,event),detail);
     } else if (event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
         || event.kind == GameEventKind::OutpostFuelExhausted) {

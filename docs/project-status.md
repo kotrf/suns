@@ -1,13 +1,45 @@
 # Project status and development handoff
 
-## Verified checkpoint — 21 October 2026: main after #224
+## Verified checkpoint — 21 October 2026: main after #226
+
+Main is [14c29ff](https://github.com/kotrf/suns/commit/14c29ff04f43c27f372b6d1bad2318a2b03b0125),
+merged [#226](https://github.com/kotrf/suns/pull/226), including reviewed follow-up
+`cacb012`. Its GitHub CI passed. Scaled xenocrystal clusters and finite colony
+mining are on main; formats **save v91 / orders v36**. #63 remains open.
+
+## Implementation branch — magnetic engineering and field-science unlock #56/#59
+
+The user chose this linked slice ahead of the remaining moving phenomena #55.
+`codex/magnetosphere-field-science` starts from that verified main. The basic
+Artificial magnetosphere requires Energy/Construction 16, costs 2400 work and
+I/B/G 240/120/240 kt, takes at least 30 years and reduces effective radiation by
+0–10. Adaptive magnetosphere requires Energy/Construction 18 and the current
+owner's delivered completed Compact remnant study, costs twice as much, takes
+at least 60 years and reduces radiation by 0–20. Both use the existing single
+planetary-engineering slot, ordinary paid production and Starbase/Fortress
+shipyard support. Study data does not consume a unique specimen. Capture keeps
+investment; adaptive operation still requires the new owner's knowledge/tech.
+
+Owner project/queue evidence is frozen in normal survey reports, with bounded
+EQIX scheduling persistence. UI shows requirements, evidence age and forecasts;
+AI chooses useful, supported, fully supplied projects through PlayerView/orders.
+Formats **save v92 / orders v37**. Local GCC 14.2 / Qt 6.12 Debug build
+succeeded; full CTest **85/85** passed (25.44 s). Tests include paid 30/60-year
+construction, pause/support/capture, real delayed study delivery, received AI
+unlocks/costs, mixed laboratory/engineering queue positions, Qt authoring,
+received/pending snapshot save/load, corruption, v91 migration, PBEM orders and
+frozen project exports. `git diff --check` passed. Balance has no manual
+playtest acceptance yet; CI is attached to the PR. #56 and
+#59 stay open for their remaining scope; merge is left for review.
+
+## Historical checkpoint — 21 October 2026: main after #224
 
 Main is [d1a857b](https://github.com/kotrf/suns/commit/d1a857b00d75c0a0a98295d69b63e768674497d9),
 merged [#224](https://github.com/kotrf/suns/pull/224), including reviewed head
 `7b5c14c` and both forecast follow-ups. CI passed 85/85. Resonant gate pulses
 are on main. Formats: **save v90 / orders v36**. Parent #63 remains open.
 
-## Implementation branch — scaled clusters and colony extraction #225
+## Historical implementation — scaled clusters and colony extraction #225
 
 `codex/xenocrystal-clusters-colony-mining` starts from that verified main.
 [The next rare-material slice](rare-exotic-materials.md#colony-extraction-225)

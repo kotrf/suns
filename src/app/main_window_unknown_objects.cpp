@@ -39,7 +39,7 @@ void MainWindow::installUnknownObjects()
     if(findChild<QDockWidget*>("unknownObjectsDock")) return;
     auto* dock=new QDockWidget("Unknown objects / expeditions",this); dock->setObjectName("unknownObjectsDock");
     auto* body=new QWidget(dock); auto* layout=new QVBoxLayout(body);
-    auto* hint=new QLabel("Received physical contacts only. Select a fleet and a row. Fly to the reported area, or arrive with Field research. Active scanners classify nearby objects; study within 20 ly (limited by sensor range) yields finite data, usable after delivery. Objects remain as landmarks. After the study report arrives, a scanner fleet with 5 kt of free hold can recover one finite physical specimen and bring it home.",body);
+    auto* hint=new QLabel("Received physical contacts only. Select a fleet and a row. Fly to the reported area, or arrive with Field research. Active scanners classify nearby objects; study within 20 ly (limited by sensor range) yields finite data, usable after delivery. Objects remain as landmarks. A delivered completed Compact remnant study also unlocks the optional Adaptive magnetosphere at Energy 18 / Construction 18; no specimen is consumed. A delivered completed Compact remnant study also unlocks the optional Adaptive magnetosphere at Energy 18 / Construction 18; no specimen is consumed. After the study report arrives, a scanner fleet with 5 kt of free hold can recover one finite physical specimen and bring it home.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* tree=new QTreeWidget(body); tree->setObjectName("unknownObjectContacts");
     tree->setHeaderLabels({"Object","Knowledge","Observed / received","Position ± ly","Science objective"});

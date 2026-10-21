@@ -1544,6 +1544,9 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
             const auto item = std::find_if(planet->productionQueue.begin(), planet->productionQueue.end(),
                 [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
             if (item != planet->productionQueue.end()) result.resonanceQueueIndex = std::uint32_t(item - planet->productionQueue.begin());
+            const auto engineering = std::find_if(planet->productionQueue.begin(),planet->productionQueue.end(),
+                [](const auto& item) {return engineering_kind(item.kind);});
+            if(engineering!=planet->productionQueue.end()) result.engineeringQueueIndex=std::uint32_t(engineering-planet->productionQueue.begin());
         }
         if (level >= SurveyLevel::DeepSurvey) result.xenocrystal = XenocrystalObservation{planet->xenocrystal, observedTurn, true, observedTurn,
             std::uint8_t(observedTurn <= state.turn)};

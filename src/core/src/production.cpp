@@ -139,8 +139,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     result.hasShipyard = hasShipyard;
     result.engineeringSupport=engineeringSupport.value_or(engineering_station_available(state,planet));
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
-        && planet.engineering.work==kEngineeringWork && planet.engineering.strength>0
-        && planet.owner && planet.population && result.engineeringSupport;
+        && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
+        && planet.owner && planet.population && result.engineeringSupport && engineering_operation_available(state,planet);
     if (planet.owner == 0) return result;
     const auto* player = find_player(state, planet.owner);
     const auto output = colony_output(planet);
@@ -212,13 +212,13 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         }
         if(engineering_kind(queue[index].kind)) {
             auto& e=planet.engineering;
-            if(engineering_project_kind(queue[index].kind)!=e.kind || e.work>=kEngineeringWork) { erase(index); continue; }
+            if(engineering_project_kind(queue[index].kind)!=e.kind || e.work>=engineering_work(e.kind)) { erase(index); continue; }
             const auto work=advance_planetary_engineering(state,planet,available,result.engineeringSupport,
                 kEngineeringWorkPerYear-engineeringUsed);
-            engineeringUsed+=work; available-=work; queue[index].remainingCost=kEngineeringWork-e.work;
-            if(e.work<kEngineeringWork && available>0 && engineeringUsed<kEngineeringWorkPerYear && result.engineeringSupport
-                && planetary_engineering_available(state,planet.owner)) planet.productionWaitingForMinerals=true;
-            if(e.work==kEngineeringWork) { result.completions.push_back({queue[index],origin,true,1}); erase(index); continue; }
+            engineeringUsed+=work; available-=work; queue[index].remainingCost=engineering_work(e.kind)-e.work;
+            if(e.work<engineering_work(e.kind) && available>0 && engineeringUsed<kEngineeringWorkPerYear && result.engineeringSupport
+                && planetary_engineering_available(state,planet.owner,e.kind)) planet.productionWaitingForMinerals=true;
+            if(e.work==engineering_work(e.kind)) { result.completions.push_back({queue[index],origin,true,1}); erase(index); continue; }
             // Bounded annual assembly leaves surplus production for later items.
             // Missing infrastructure/materials hold manual queue priority.
             if(engineeringUsed<kEngineeringWorkPerYear && available>0) break;
@@ -300,8 +300,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     }
     if (researchActive) result.researchPoints += available;
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
-        && planet.engineering.work==kEngineeringWork && planet.engineering.strength>0
-        && planet.owner && planet.population && result.engineeringSupport;
+        && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
+        && planet.owner && planet.population && result.engineeringSupport && engineering_operation_available(state,planet);
     result.queueOrigins = std::move(origins);
     return result;
 }

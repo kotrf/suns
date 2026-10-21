@@ -3,6 +3,7 @@
 #include "suns/campaign.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/production.hpp"
+#include "suns/player_knowledge.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
@@ -35,6 +36,7 @@ struct MainWindowTestAccess {
     static void refresh(MainWindow& w) {w.refreshProductionQueue();}
     static const auto& orders(const MainWindow& w) {return w.pendingOrders_;}
     static GameState state(const MainWindow& w) {return w.state_;}
+    static void load(MainWindow& w,GameState s) {w.state_=std::move(s);w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.star=1;w.rebuildScene();}
     static void foreign(MainWindow& w) {
         w.state_.players.push_back({2,"Other"}); w.state_.planets[0].owner=2;
         auto& p=w.state_.planets[0]; p.engineering={E::OrbitalShades,160,{16,8,16},8,false,2,1,0};
@@ -145,6 +147,59 @@ void persistence(GameState s)
     {QDataStream patch(&legacy,QIODevice::ReadWrite);assert(patch.device()->seek(4));patch<<quint32{84};assert(patch.device()->seek(strategic+4));patch<<quint32(size-8-tailSize);}
     write(path,legacy); assert(read_save_game_file(path,loaded,error)); assert(loaded.state.planets[0].engineering.kind==E::None);
 }
+void magnetic_ui_persistence_and_private_evidence(MainWindow& w)
+{
+    MainWindowTestAccess::setup(w,10);
+    auto s=MainWindowTestAccess::state(w);s.players[0].technology.levels.fill(18);
+    s.unknownObjects={{7,{411,7},UnknownObjectKind::CompactRemnant}};s.nextUnknownObjectId=8;
+    s.planets[0].environment.radiation=70;s.planets[0].naturalEnvironment=s.planets[0].environment;
+    set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+    MainWindowTestAccess::load(w,s);
+    auto* kind=w.findChild<QComboBox*>("engineeringKind");auto* output=w.findChild<QSpinBox*>("engineeringOutput");
+    auto* start=w.findChild<QPushButton*>("engineeringStart");auto* status=w.findChild<QLabel*>("engineeringStatus");
+    kind->setCurrentIndex(kind->findData(int(E::AdaptiveMagnetosphere)));
+    assert(!start->isEnabled() && status->text().contains("delivered completed Compact remnant"));
+    s.players[0].objectKnowledge={{7,{411,7},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::CompactRemnant,9,10}};
+    MainWindowTestAccess::load(w,s);kind->setCurrentIndex(kind->findData(int(E::AdaptiveMagnetosphere)));
+    assert(start->isEnabled() && output->maximum()==20);output->setValue(20);
+    assert(w.findChild<QLabel*>("engineeringEffect")->text().contains("Radiation now: 70 / 100. With that output: 50 / 100."));
+    start->click();
+    const auto& order=std::get<SetPlanetaryEngineeringOrder>(MainWindowTestAccess::orders(w).orders.back());
+    assert(order.kind==E::AdaptiveMagnetosphere && order.strength==20);
+    assert(status->text().contains("Estimated completion: year 70"));
+    assert(apply_planetary_engineering_order(s,s.planets[0],order));
+    for(unsigned i=0;i<38;++i) {(void)resolve_colony_production(s,s.planets[0],true);++s.turn;}
+    assert(s.planets[0].engineering.work==3040);set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+    queue_survey_report(s,1,1,0,s.stars[0].position,s.turn,SurveyLevel::DeepSurvey,true);
+    SaveGameData save;save.state=s;save.mode=SessionMode::Host;save.campaignId=9;save.turnToken=8;save.playerTokens={{1,77}};
+    save.pendingOrders={1,{SetPlanetaryEngineeringOrder{1,E::AdaptiveMagnetosphere,A::SetOutput,20}}};save.pendingDescriptions={"Magnetosphere output"};
+    QTemporaryDir dir;QString error;SaveGameData loaded;
+    const auto path=dir.filePath("magnetic.suns");assert(write_save_game_file(path,save,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.planets[0].engineering.work==3040 && loaded.state.players[0].surveyKnowledge[0].planetSnapshot->engineeringQueueIndex);
+    assert(loaded.state.players[0].pendingSurveyReports.back().planetSnapshot->engineeringQueueIndex);
+    TurnOrderFileData packet{9,s.turn,77,save.pendingOrders,save.pendingDescriptions},imported;
+    const auto orders=dir.filePath("magnetic.sunsorders");assert(write_turn_order_file(orders,packet,error) && read_turn_order_file(orders,imported,error));
+    assert(std::get<SetPlanetaryEngineeringOrder>(imported.orders.orders[0]).strength==20);
+    const auto playerPath=dir.filePath("magnetic.sunsturn");assert(write_save_game_file(playerPath,make_player_turn(save,1),error));
+    const auto frozen=bytes(playerPath);MainWindowTestAccess::load(w,s);const auto oldStatus=status->text();
+    save.state.planets[0].engineering.work=4800;save.state.planets[0].engineering.invested={480,240,480};
+    save.state.planets[0].engineering.completedTurn=save.state.turn;save.state.planets[0].engineering.operational=true;save.state.planets[0].productionQueue.clear();
+    assert(write_save_game_file(playerPath,make_player_turn(save,1),error) && bytes(playerPath)==frozen);
+    MainWindowTestAccess::load(w,save.state);assert(status->text()==oldStatus);
+    auto corrupt=bytes(path);const auto offset=corrupt.lastIndexOf(tag(0x45514958));assert(offset>0);
+    const auto bad=dir.filePath("bad-magnetic.suns");
+    write(bad,corrupt.left(corrupt.size()-1));assert(!read_save_game_file(bad,loaded,error));
+    corrupt[offset+8+4+4+4+4]=char(2);write(bad,corrupt);assert(!read_save_game_file(bad,loaded,error));
+    // Old v91 saves have no EQIX and retain their physical work without inventing a queue report.
+    SaveGameData old;old.state=make_demo_game();old.pendingOrders={1,{}};old.campaignId=9;old.turnToken=8;
+    old.state.turn=2;old.state.planets[0].engineering={E::OrbitalMirrors,80,{8,4,8},7,false,1,1,0};
+    old.state.planets[0].productionQueue={{ProductionKind::OrbitalMirrors,2320}};
+    set_survey_level(old.state,1,1,SurveyLevel::DeepSurvey,old.state.turn);
+    assert(write_save_game_file(path,old,error));auto legacy=bytes(path);const auto legacyTail=legacy.lastIndexOf(tag(0x45514958));
+    legacy.truncate(legacyTail);{QDataStream patch(&legacy,QIODevice::ReadWrite);patch.device()->seek(4);patch<<quint32{91};}
+    write(path,legacy);assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.planets[0].engineering.work==80 && !loaded.state.players[0].surveyKnowledge[0].planetSnapshot->engineeringQueueIndex);
+}
 int main(int argc,char** argv)
 {
     QApplication app(argc,argv); MainWindow w;
@@ -171,4 +226,5 @@ int main(int argc,char** argv)
     const auto text=status->text(), effect=w.findChild<QLabel*>("engineeringEffect")->text();
     MainWindowTestAccess::hidden(w); assert(status->text()==text && w.findChild<QLabel*>("engineeringEffect")->text()==effect);
     persistence(state);
+    magnetic_ui_persistence_and_private_evidence(w);
 }

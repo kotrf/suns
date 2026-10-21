@@ -504,6 +504,8 @@ enum class ProductionKind {
     OrbitalMirrors,
     OrbitalShades,
     ResonanceLaboratory,
+    ArtificialMagnetosphere,
+    AdaptiveMagnetosphere,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -622,9 +624,9 @@ struct PlanetAftermathObservation {
     bool operator==(const PlanetAftermathObservation&) const = default;
 };
 
-enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades };
+enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere };
 enum class EngineeringAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetOutput };
-enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals };
+enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy };
 struct PlanetaryEngineering {
     PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
     std::uint32_t work{};
@@ -729,6 +731,7 @@ struct PlanetSurveySnapshot {
     std::optional<XenocrystalObservation> xenocrystal; // DeepSurvey only, frozen at observation.
     ResonanceLaboratory resonanceLab; // Private project evidence captured for its owner only.
     std::optional<std::uint32_t> resonanceQueueIndex; // Frozen scheduling, including completion/removal.
+    std::optional<std::uint32_t> engineeringQueueIndex; // Owner-only queue position at observation.
 };
 
 struct SystemSurveyKnowledge {
@@ -1830,6 +1833,8 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::PlanetaryRadar: return 16;
     case ProductionKind::Terraforming: return kTerraformingCost;
     case ProductionKind::OrbitalMirrors: case ProductionKind::OrbitalShades: return 2400;
+    case ProductionKind::ArtificialMagnetosphere: return 2400;
+    case ProductionKind::AdaptiveMagnetosphere: return 4800;
     case ProductionKind::ResonanceLaboratory: return 600;
     }
     return kColonyShipCost;

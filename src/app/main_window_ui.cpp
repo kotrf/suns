@@ -805,7 +805,7 @@ void MainWindow::installUiPolish()
                     label->setText(QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum));
                     if(environmentPlanet->engineering.kind!=PlanetaryEngineeringKind::None) label->setText(label->text()
                         + QString(" • %1: %2%, %3").arg(QString::fromStdString(engineering_name(environmentPlanet->engineering.kind)))
-                            .arg(environmentPlanet->engineering.work*100/kEngineeringWork)
+                            .arg(environmentPlanet->engineering.work*100/engineering_work(environmentPlanet->engineering.kind))
                             .arg(environmentPlanet->engineering.operational?"operating":"inactive / under construction"));
                     label->setToolTip(QString("Current technology: T ±%1 / G ±%2 / R ±%3 from natural values.\nEach change costs %4 production. Potential assumes current technology and stellar conditions.")
                         .arg(limits.temperature).arg(limits.gravity).arg(limits.radiation).arg(kTerraformingCost));
