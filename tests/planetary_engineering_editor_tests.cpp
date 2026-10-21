@@ -4,12 +4,18 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/production.hpp"
 #include "suns/player_knowledge.hpp"
+#include "star_item.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
 #include <QDebug>
 #include <QFile>
+#include <QGraphicsScene>
+#include <QImage>
 #include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -37,6 +43,13 @@ struct MainWindowTestAccess {
     static const auto& orders(const MainWindow& w) {return w.pendingOrders_;}
     static GameState state(const MainWindow& w) {return w.state_;}
     static void load(MainWindow& w,GameState s) {w.state_=std::move(s);w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.star=1;w.rebuildScene();}
+    static QString details(const MainWindow& w) {return w.selectionLabel_->text();}
+    static QString dashboard(const MainWindow& w) {return w.selectedPlanetPanelSummary();}
+    static void refreshEnvironment(MainWindow& w) {w.refreshColonyWorkspace();w.refreshPlanetPolish();w.applyMapDisplayMode();}
+    static StarItem* marker(MainWindow& w) {
+        for(auto* item:w.scene_->items()) if(auto* star=dynamic_cast<StarItem*>(item);star && star->data(0).toUInt()==1) return star;
+        assert(false);return nullptr;
+    }
     static void foreign(MainWindow& w) {
         w.state_.players.push_back({2,"Other"}); w.state_.planets[0].owner=2;
         auto& p=w.state_.planets[0]; p.engineering={E::OrbitalShades,160,{16,8,16},8,false,2,1,0};
@@ -200,6 +213,67 @@ void magnetic_ui_persistence_and_private_evidence(MainWindow& w)
     write(path,legacy);assert(read_save_game_file(path,loaded,error));
     assert(loaded.state.planets[0].engineering.work==80 && !loaded.state.players[0].surveyKnowledge[0].planetSnapshot->engineeringQueueIndex);
 }
+void all_environment_widgets_wait_for_engineering_reports()
+{
+    MainWindow w;w.installUiPolish();w.installProductionQueue();w.installPlanetPolish();
+    w.installMapDisplayModes();w.installColonyWorkspace();
+    w.findChild<QComboBox*>("mapDisplayModeCombo")->setCurrentIndex(1);
+    struct Display {
+        QString details,tooltip,dashboard,workspace,population,populationTooltip;
+        int populationPercent{};QRectF markerShape;QImage markerImage;
+        bool operator==(const Display&) const=default;
+    };
+    const auto capture=[&](const GameState& s) {
+        MainWindowTestAccess::load(w,s);MainWindowTestAccess::refreshEnvironment(w);
+        auto* marker=MainWindowTestAccess::marker(w);auto* population=w.findChild<QProgressBar*>("planetPopulationBar");
+        assert(population);QImage image(48,48,QImage::Format_ARGB32_Premultiplied);image.fill(Qt::transparent);
+        {QPainter painter(&image);painter.translate(24,24);marker->paint(&painter,nullptr,nullptr);}
+        return Display{MainWindowTestAccess::details(w),marker->toolTip(),MainWindowTestAccess::dashboard(w),
+            w.findChild<QLabel*>("colonyStatusSummary")->text(),population->format(),population->toolTip(),
+            population->value(),marker->shape().boundingRect(),image};
+    };
+    for(const bool loss:{false,true}) {
+        MainWindowTestAccess::setup(w,30);auto s=MainWindowTestAccess::state(w);
+        s.players[0].technology.levels.fill(16);s.fleets.clear();auto& p=s.planets[0];
+        s.stars[0].position={900,0};p.homeworld=false;p.radar=PlanetaryRadarLevel::None;
+        p.environment={50,50,30};p.naturalEnvironment=p.environment;
+        s.stars[1].position={0,0};s.planets[1].owner=1;s.planets[1].population=1000000;
+        s.planets[1].homeworld=true;s.planets[1].radar=PlanetaryRadarLevel::Full;
+        p.engineering={E::ArtificialMagnetosphere,loss?2400u:2320u,loss?MineralCargo{240,120,240}:MineralCargo{232,116,232},10,loss,1,1,loss?30u:0u};
+        p.productionQueue.clear();if(!loss)p.productionQueue.push_back({ProductionKind::ArtificialMagnetosphere,80});
+        set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);++s.turn;
+        const auto baseline=capture(s);
+        assert(baseline.details.contains(QString("Habitability: <b>%1%</b>").arg(loss?100:91)));
+        auto hidden=s;auto& project=hidden.planets[0].engineering;
+        if(loss) {
+            hidden.pendingStationContacts.push_back({hidden.orbitalStations[0],hidden.turn,hidden.turn+4});
+            hidden.orbitalStations.clear();project.operational=false;
+        } else {
+            project.work=2400;project.invested={240,120,240};project.completedTurn=hidden.turn;
+            project.operational=true;hidden.planets[0].productionQueue.clear();
+        }
+        assert(current_planet_habitability(hidden,hidden.planets[0],hidden.turn)!=current_planet_habitability(s,s.planets[0],s.turn));
+        queue_survey_report(hidden,1,1,0,hidden.stars[0].position,hidden.turn,SurveyLevel::DeepSurvey,true);
+        const auto packet=std::find_if(hidden.players[0].pendingSurveyReports.begin(),hidden.players[0].pendingSurveyReports.end(),
+            [&](const auto& report){return report.star==1 && report.observedTurn==hidden.turn;});
+        assert(packet!=hidden.players[0].pendingSurveyReports.end() && packet->deliveryTurn>hidden.turn);
+        const auto pending=capture(hidden);
+        if(!(pending==baseline))qCritical()<<"Undelivered engineering changed GUI"<<"loss"<<loss
+            <<"details"<<(pending.details!=baseline.details)<<"tooltip"<<(pending.tooltip!=baseline.tooltip)
+            <<"dashboard"<<(pending.dashboard!=baseline.dashboard)<<"workspace"<<(pending.workspace!=baseline.workspace)
+            <<"population"<<(pending.population!=baseline.population)<<"map"<<(pending.markerImage!=baseline.markerImage);
+        assert(pending==baseline);
+        hidden.turn=packet->deliveryTurn;(void)deliver_due_survey_reports(hidden);
+        const auto received=capture(hidden);const auto hab=known_planet_habitability(make_player_view(hidden,1).state,1,1).value();
+        assert(hab==(loss?91:100));
+        assert(received.details.contains(QString("Habitability: <b>%1%</b>").arg(hab)));
+        assert(received.tooltip.contains(QString("habitability %1%").arg(hab)));
+        assert(received.dashboard.contains(QString("Habitability <b>%1%</b>").arg(hab)));
+        assert(received.workspace.contains(QString("Hab %1%").arg(hab)));
+        assert(received.workspace.contains(QString("Population: 100000 / %1").arg(std::uint64_t(hab)*kPopulationPerHabitability)));
+        assert(received.markerImage!=baseline.markerImage && received.markerShape!=baseline.markerShape);
+    }
+}
 int main(int argc,char** argv)
 {
     QApplication app(argc,argv); MainWindow w;
@@ -227,4 +301,5 @@ int main(int argc,char** argv)
     MainWindowTestAccess::hidden(w); assert(status->text()==text && w.findChild<QLabel*>("engineeringEffect")->text()==effect);
     persistence(state);
     magnetic_ui_persistence_and_private_evidence(w);
+    all_environment_widgets_wait_for_engineering_reports();
 }

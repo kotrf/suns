@@ -32,6 +32,19 @@ frozen project exports. `git diff --check` passed. Balance has no manual
 playtest acceptance yet; CI is attached to the PR. #56 and
 #59 stay open for their remaining scope; merge is left for review.
 
+PR [#227](https://github.com/kotrf/suns/pull/227), initial head `586fec2`, passed
+GitHub CI 85/85 (61.07 s). Review identified one P2: GUI consumers outside the
+engineering panel still queried Hab from full host state and disclosed remote
+completion/support loss. Follow-up routes System Details, map tooltip/Hab mode
+(including terraforming potential), dashboard/colony summaries and portrait
+capacity/growth through PlayerView. Physical core calculations remain unchanged.
+Qt regressions reproduce the 91→100 completion and 100→91 support-loss cases,
+compare texts/marker pixels/size/population displays while reports are pending,
+then verify updated Hab and capacity after actual report delivery.
+Follow-up GCC 14.2 / Qt 6.12 Debug full build succeeded; **85/85** CTest suites
+passed (24.08 s), including map selection, colony workspace and engineering Qt
+regressions. `git diff --check` passed. Save v92 / orders v37 are unchanged.
+
 ## Historical checkpoint — 21 October 2026: main after #224
 
 Main is [d1a857b](https://github.com/kotrf/suns/commit/d1a857b00d75c0a0a98295d69b63e768674497d9),

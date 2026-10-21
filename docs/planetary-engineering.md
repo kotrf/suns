@@ -139,6 +139,12 @@ are forecasts using received state and accepted pending orders. Foreign evidence
 continues to omit paid resources and private scheduling. Milestone/interruption
 messages name the correct project, required time and output range.
 
+System Details, map tooltips, Hab colours/sizes (including terraforming potential),
+dashboard/colony summaries and the portrait's population capacity/growth also
+use PlayerView. Undelivered completion or support loss cannot change those
+displays through host habitability; delivery refreshes them from the new packet.
+The host's physical environment, habitability and annual simulation are unchanged.
+
 The basic AI chooses a supported, idle, sufficiently productive colony only when
 received racial habitability improves by at least five points and received stocks
 cover the full build. It considers both versions through the same received

@@ -787,7 +787,7 @@ void MainWindow::rebuildScene()
 
     for (const auto& star : state_.stars) {
         const bool surveyed = is_surveyed(state_, pendingOrders_.player, star.id);
-        const auto* planet = find_planet_at_star(state_, star.id);
+        const auto* planet = find_planet_at_star(playerView, star.id);
         const bool colony = planet && planet->owner == pendingOrders_.player;
 
         auto* marker = new StarItem(star.id, starColor(star.stellarClass), surveyed, colony);
@@ -808,7 +808,7 @@ void MainWindow::rebuildScene()
         if (!surveyed) {
             tooltip += "\nPlanetary parameters unknown — requires orbit or a penetrating scanner";
         } else if (planet) {
-            const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
+            const auto knownHabitability = known_planet_habitability(playerView, pendingOrders_.player, planet->id).value_or(0);
             const auto estimated = survey_level(state_, pendingOrders_.player, star.id) == SurveyLevel::BasicScan;
             tooltip += QString("\n%1 — habitability %2%3% — %4 capacity %5")
                            .arg(QString::fromStdString(planet->name))
@@ -820,7 +820,7 @@ void MainWindow::rebuildScene()
             if (colony) {
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
                                .arg(colony_output(*planet))
-                               .arg(productionSummary(state_, *planet))
+                               .arg(productionSummary(playerView, *planet))
                                .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
             }
         }
@@ -1096,7 +1096,7 @@ void MainWindow::updateControls()
                     ? "Enter orbit or use a penetrating scanner to study the planet."
                     : "The system is detected as soon as it enters friendly sensor coverage."));
     } else if (star && planet) {
-        const auto knownHabitability = known_planet_habitability(state_, pendingOrders_.player, planet->id).value_or(0);
+        const auto knownHabitability = known_planet_habitability(received, pendingOrders_.player, planet->id).value_or(0);
         const auto estimated = survey_level(state_, pendingOrders_.player, star->id) == SurveyLevel::BasicScan;
         const auto variability = stellarVariabilitySummary(state_, *star, pendingOrders_.player);
         const auto variabilityLine = variability.isEmpty()
@@ -1191,7 +1191,7 @@ void MainWindow::updateControls()
                                           "Production: <b>%8</b>%9%10%11")
             .arg(QString::fromStdString(star->name)).arg(QString::fromStdString(planet->name))
             .arg(habitabilityLine).arg(owner).arg(populationLine).arg(planet->industry)
-            .arg(colony_output(*planet)).arg(productionSummary(state_, *planet)).arg(travelLine)
+            .arg(colony_output(*planet)).arg(productionSummary(received, *planet)).arg(travelLine)
             .arg(artifactLine).arg(deepSurveyLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
@@ -1602,8 +1602,9 @@ void MainWindow::queueColonize()
 bool MainWindow::confirmFleetColonization(
     const Fleet& fleet, const Planet& planet, bool scheduledRoute)
 {
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
     const auto habitability = known_planet_habitability(
-        state_, pendingOrders_.player, planet.id).value_or(0);
+        received, pendingOrders_.player, planet.id).value_or(0);
     QStringList composition;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state_, stack.design);

@@ -104,6 +104,7 @@ void MainWindow::installMapDisplayModes()
 void MainWindow::applyMapDisplayMode()
 {
     if (!scene_) return;
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
 
     bool changed = false;
     for (auto* item : scene_->items()) {
@@ -111,13 +112,13 @@ void MainWindow::applyMapDisplayMode()
         if (!marker) continue;
 
         const auto starId = static_cast<StarId>(marker->data(0).toUInt());
-        const auto* star = find_star(state_, starId);
+        const auto* star = find_star(received, starId);
         if (!star) continue;
 
-        const bool surveyed = is_surveyed(state_, pendingOrders_.player, starId);
-        const auto* planet = find_planet_at_star(state_, starId);
+        const bool surveyed = is_surveyed(received, pendingOrders_.player, starId);
+        const auto* planet = find_planet_at_star(received, starId);
         const auto knownHabitability = planet
-            ? known_planet_habitability(state_, pendingOrders_.player, planet->id)
+            ? known_planet_habitability(received, pendingOrders_.player, planet->id)
             : std::optional<std::int32_t>{};
 
         QColor color = spectralColor(star->stellarClass);
@@ -127,17 +128,17 @@ void MainWindow::applyMapDisplayMode()
             scale = 1.15 + 0.25 * std::clamp(knownHabitability.value_or(0), 0, 100) / 100.0;
             color = knownHabitability ? habitabilityColor(*knownHabitability) : QColor("#687381");
             if (planet && knownHabitability && *knownHabitability < 0
-                && (planet->owner == pendingOrders_.player || survey_level(state_, pendingOrders_.player, starId) >= SurveyLevel::OrbitalSurvey)) {
-                const auto* player = find_player(state_, pendingOrders_.player);
+                && (planet->owner == pendingOrders_.player || survey_level(received, pendingOrders_.player, starId) >= SurveyLevel::OrbitalSurvey)) {
+                const auto* player = find_player(received, pendingOrders_.player);
                 if (player && player->race.environmentBased
-                    && player_planet_habitability(state_, pendingOrders_.player,
-                        terraforming_potential(state_, pendingOrders_.player, *planet), state_.turn) >= 0)
+                    && player_planet_habitability(received, pendingOrders_.player,
+                        terraforming_potential(received, pendingOrders_.player, *planet), received.turn) >= 0)
                     color = QColor("#e6bf59");
             }
-            if (survey_level(state_, pendingOrders_.player, starId) == SurveyLevel::BasicScan) color = color.darker(145);
+            if (survey_level(received, pendingOrders_.player, starId) == SurveyLevel::BasicScan) color = color.darker(145);
         } else if (mapDisplayMode_ == 2) {
             const auto knownOwner = planet
-                ? known_planet_owner(state_, pendingOrders_.player, planet->id)
+                ? known_planet_owner(received, pendingOrders_.player, planet->id)
                 : std::optional<PlayerId>{};
             if (!surveyed) {
                 color = QColor("#687381");
