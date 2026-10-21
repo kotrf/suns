@@ -34,7 +34,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 90;
+constexpr quint32 kSaveFormatVersion = 91;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2328,6 +2328,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "exotic_materials_save.inc"
 #include "survey_probes_save.inc"
 #include "visitors_save.inc"
+#include "colony_materials_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -3181,6 +3182,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeExoticMaterials(stream, data.state);
     writeSurveyProbes(stream, data.state);
     writeVisitors(stream, data.state);
+    writeColonyMaterials(stream, data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3299,6 +3301,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if (version >= 87) readExoticMaterials(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version >= 88) readSurveyProbes(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
     if (version >= 89) readVisitors(stream, loaded.state, loaded.mode == SessionMode::PlayerTurn);
+    if (version >= 91) readColonyMaterials(stream, loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);

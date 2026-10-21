@@ -12,10 +12,15 @@ inline constexpr std::uint32_t kResonanceResearchPerArtifact = 32;
 inline constexpr MineralCargo kResonanceMineralsPerWork{0.2, 0.1, 0.2};
 inline constexpr std::uint32_t kResonantGateCrystals = 8;
 [[nodiscard]] bool resonant_gate_technology_available(const GameState&, PlayerId);
-void generate_xenocrystal_deposits(GameState&);
+// Returns the number of geographically distinct placement centers actually used.
+std::size_t generate_xenocrystal_deposits(GameState&);
 [[nodiscard]] std::optional<XenocrystalObservation> known_xenocrystal(const GameState&, PlayerId, PlanetId);
 [[nodiscard]] bool exotic_mining_available(const GameState&, PlayerId);
 [[nodiscard]] std::uint32_t xenocrystal_mining_rate(const GameState&, const Fleet&);
+[[nodiscard]] std::uint32_t colony_xenocrystal_mining_rate(const GameState&, const Planet&);
+// Requires a PlayerView; evaluates received private operating inputs, never live colony truth.
+[[nodiscard]] std::string known_colony_xenocrystal_block(const GameState&, PlayerId, const Planet&);
+[[nodiscard]] std::uint32_t known_colony_xenocrystal_rate(const GameState&, PlayerId, const Planet&);
 void mine_xenocrystals(GameState&);
 void observe_xenocrystal_surface(GameState&, PlayerId, PlanetId, FleetId, std::uint64_t, bool finalSurfaceObservation = false);
 void publish_exotic_material_reports(GameState&, const GameState&);

@@ -646,6 +646,13 @@ struct XenocrystalObservation {
     bool depositSurveyed{};
     std::uint64_t depositObservedTurn{};
     std::uint8_t stockPhase{}; // 0: observation during the year; 1: completed planning boundary.
+    struct Colony {
+        PlayerId owner{};
+        std::uint64_t population{};
+        std::uint32_t mines{};
+        bool operator==(const Colony&) const = default;
+    };
+    std::optional<Colony> colony; // Private frozen operating inputs, sharing the stock evidence date.
 };
 struct ResonanceLaboratory {
     bool started{}, active{true}, operational{};

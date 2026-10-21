@@ -8,6 +8,7 @@
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/campaign.hpp"
+#include "suns/exotic_materials.hpp"
 #include "suns/wormholes.hpp"
 
 #include "suns/communications.hpp"
@@ -949,7 +950,9 @@ void MainWindow::updateControls()
 {
     refreshCargoTransferControls();
     const auto* star = selectedStar();
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
     const auto* planet = selectedPlanet();
+    if (planet && planet->owner == pendingOrders_.player) planet = find_planet(received, planet->id);
     const auto* authoritativeFleet = selectedFleet();
     const auto visibleFleetStorage = authoritativeFleet
         ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
@@ -1119,25 +1122,25 @@ void MainWindow::updateControls()
         }
         QString populationLine;
         if (planet->owner == pendingOrders_.player) {
-            // Orders are intentions until End Turn. Present the predicted
-            // cargo debit separately from the confirmed surface population,
-            // because annual population growth may partly obscure the debit.
-            const auto plannedCargo = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+            // Compare intentions with the same received baseline. Physical
+            // population may have changed while this report was in transit.
+            const auto& receivedPlanet = *find_planet(received, planet->id);
+            const auto plannedCargo = projected_cargo_order_state(received, pendingOrders_);
             const auto predictedPlanet = std::find_if(plannedCargo.planets.begin(),
                 plannedCargo.planets.end(), [planet](const Planet& candidate) {
                     return candidate.id == planet->id;
                 });
             const auto afterCargo = predictedPlanet == plannedCargo.planets.end()
-                ? planet->population : predictedPlanet->population;
-            const auto orderedOut = afterCargo < planet->population ? planet->population - afterCargo : 0;
-            const auto orderedIn = afterCargo > planet->population ? afterCargo - planet->population : 0;
+                ? receivedPlanet.population : predictedPlanet->population;
+            const auto orderedOut = afterCargo < receivedPlanet.population ? receivedPlanet.population - afterCargo : 0;
+            const auto orderedIn = afterCargo > receivedPlanet.population ? afterCargo - receivedPlanet.population : 0;
             // One simple forecast: take the estimated annual growth rate
             // under current conditions and apply that rate to the population
             // after valid queued cargo orders. We deliberately do not simulate
             // next year's arrivals, production, battles, or other events.
-            const auto currentGrowth = projected_population_growth(state_, *planet, state_.turn);
-            const double annualRate = planet->population != 0
-                ? static_cast<double>(currentGrowth) / static_cast<double>(planet->population)
+            const auto currentGrowth = projected_population_growth(received, receivedPlanet, received.turn);
+            const double annualRate = receivedPlanet.population != 0
+                ? static_cast<double>(currentGrowth) / static_cast<double>(receivedPlanet.population)
                 : 0.0;
             const auto estimatedChange = static_cast<std::int64_t>(std::llround(
                 annualRate * static_cast<double>(afterCargo)));
@@ -1145,12 +1148,17 @@ void MainWindow::updateControls()
                 ? afterCargo + static_cast<std::uint64_t>(estimatedChange)
                 : afterCargo - std::min(afterCargo, static_cast<std::uint64_t>(-estimatedChange));
             populationLine = QString("Radar: %1 (%2 ly, scanning + communications)<br>"
-                                     "Population confirmed now: %3 / %4<br>")
-                                 .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full"
-                                      : planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
-                                 .arg(planetary_radar_range(planet->radar), 0, 'f', 0)
-                                 .arg(static_cast<qulonglong>(planet->population))
-                                 .arg(static_cast<qulonglong>(population_capacity(state_, *planet, state_.turn)));
+                                     "Population received: %3 / %4<br>")
+                                 .arg(receivedPlanet.radar == PlanetaryRadarLevel::Full ? "Full"
+                                      : receivedPlanet.radar == PlanetaryRadarLevel::Local ? "Local" : "None")
+                                 .arg(planetary_radar_range(receivedPlanet.radar), 0, 'f', 0)
+                                 .arg(static_cast<qulonglong>(receivedPlanet.population))
+                                 .arg(static_cast<qulonglong>(population_capacity(received, receivedPlanet, received.turn)));
+            const auto observation = known_xenocrystal(received, pendingOrders_.player, planet->id);
+            if (observation && observation->colony && observation->colony->owner == pendingOrders_.player)
+                populationLine += QString("Population report: year %1 (age %2)<br>")
+                    .arg(qulonglong(observation->observedTurn))
+                    .arg(qulonglong(received.turn - std::min(received.turn, observation->observedTurn)));
             if (orderedOut || orderedIn) {
                 populationLine += QString(
                     "Queued cargo: -%1 / +%2 colonists; population after validated orders: %3 (before growth)<br>")

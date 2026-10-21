@@ -534,7 +534,12 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 }
             }
         }
-        known.xenocrystal = known_xenocrystal(host, playerId, planet.id).value_or(XenocrystalObservation{}).site;
+        const auto exotic = known_xenocrystal(host, playerId, planet.id);
+        known.xenocrystal = exotic.value_or(XenocrystalObservation{}).site;
+        if (exotic && exotic->colony && exotic->colony->owner == playerId && known.owner == playerId) {
+            known.population = exotic->colony->population;
+            known.mines = exotic->colony->mines;
+        }
         state.planets.push_back(known);
     }
     for (const auto& design : host.shipDesigns) if (design.owner == playerId) {

@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
 
@@ -23,6 +24,8 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     bool hasShipyard = colony_has_orbital_service(state, planet.id, planet.owner, OrbitalStationModule::Shipyard);
     bool engineeringSupport=engineering_station_available(state,planet);
     auto simulationState = state;
+    const auto exotic = known_xenocrystal(state, planet.owner, planet.id);
+    const bool receivedColony = exotic && exotic->colony && exotic->colony->owner == planet.owner;
     for (std::uint32_t offset = 1; offset <= maximumTurns && !simulated.productionQueue.empty(); ++offset) {
         simulationState.turn = state.turn + offset - 1;
         decay_planet_contamination(simulated);
@@ -30,6 +33,12 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
         simulated.minerals.ironium += mined.ironium;
         simulated.minerals.boranium += mined.boranium;
         simulated.minerals.germanium += mined.germanium;
+        if (receivedColony) {
+            const auto crystals = std::min({colony_xenocrystal_mining_rate(simulationState, simulated),
+                simulated.xenocrystal.remaining, kMaximumXenocrystal - simulated.xenocrystal.surface});
+            simulated.xenocrystal.remaining -= crystals;
+            simulated.xenocrystal.surface += crystals;
+        }
         const auto resolved = resolve_colony_production(simulationState, simulated, hasShipyard, engineeringSupport);
         hasShipyard = resolved.hasShipyard;
         engineeringSupport=resolved.engineeringSupport;
