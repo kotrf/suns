@@ -1,13 +1,44 @@
 # Project status and development handoff
 
-## Verified checkpoint — 21 October 2026: main after #226
+## Verified checkpoint — 22 October 2026 (Europe/Moscow): main after #227
+
+Main is [3326fb6](https://github.com/kotrf/suns/commit/3326fb61b444c8665e890e7ef2714d0b28849399),
+merged [#227](https://github.com/kotrf/suns/pull/227), including reviewed follow-up
+`b11fc45`. Its GitHub CI passed. Artificial/adaptive magnetospheres and the
+received-study prerequisite are implemented, including received Hab displays.
+Main formats are **save v92 / orders v37**.
+
+## Completion branch — field science #59
+
+`codex/field-science-completion` starts from this main. The
+[requirements matrix and audit](audits/2026-10-22-field-science-completion.md)
+cover the existing #173/#211/#220/#227 chain. Two confirmed gaps are corrected:
+replayed generic scientific data could award RP twice, and owned remote surface
+specimens/retention were copied from hidden physical state into PlayerView.
+Awards now have stable identities and persistent sorted delivery receipts;
+owner-only surface manifests, including confirmed emptiness, travel in ordinary
+immutable survey packets. The sample panel labels their observation year.
+
+Formats are **save v93 / orders v37**. The bounded SCIC tail follows EQIX;
+existing SAMP physical cargo and order layouts are unchanged. v92 migration
+preserves physical samples, assigns pending award IDs, and waits for a new owner
+survey instead of synthesizing old surface knowledge from host state. It cannot
+reconstruct receipts for already delivered pre-v93 generic science packets.
+Local GCC 14.2 / Qt 6.12 Debug full build passed; full CTest **85/85** passed
+(56.70 s, offscreen Qt), and `git diff --check` passed. Regression details and
+validation limits are recorded in the audit. #59 is prepared for closure only
+after review and merge; this branch neither closes it nor merges itself.
+#63 is frozen at the end of the queue; remaining large engineering #56 is outside
+this task. More artifact kinds/technology families/rewards are optional follow-ups.
+
+## Historical checkpoint — 21 October 2026: main after #226
 
 Main is [14c29ff](https://github.com/kotrf/suns/commit/14c29ff04f43c27f372b6d1bad2318a2b03b0125),
 merged [#226](https://github.com/kotrf/suns/pull/226), including reviewed follow-up
 `cacb012`. Its GitHub CI passed. Scaled xenocrystal clusters and finite colony
 mining are on main; formats **save v91 / orders v36**. #63 remains open.
 
-## Implementation branch — magnetic engineering and field-science unlock #56/#59
+## Historical implementation — magnetic engineering and field-science unlock #56/#59
 
 The user chose this linked slice ahead of the remaining moving phenomena #55.
 `codex/magnetosphere-field-science` starts from that verified main. The basic
@@ -30,7 +61,7 @@ unlocks/costs, mixed laboratory/engineering queue positions, Qt authoring,
 received/pending snapshot save/load, corruption, v91 migration, PBEM orders and
 frozen project exports. `git diff --check` passed. Balance has no manual
 playtest acceptance yet; CI is attached to the PR. #56 and
-#59 stay open for their remaining scope; merge is left for review.
+#59 stayed open at that implementation checkpoint; #59 completion is assessed above.
 
 PR [#227](https://github.com/kotrf/suns/pull/227), initial head `586fec2`, passed
 GitHub CI 85/85 (61.07 s). Review identified one P2: GUI consumers outside the

@@ -81,6 +81,7 @@ bool science_once(GameState& state, Fleet& fleet, std::uint64_t key,
     p->fieldScience.push_back({key, delivery, held_report_source(state,p->id,fleet.position,turn,fleet.id)});
     queue_player_report(state, p->id, PlayerReportKind::ScientificData, fleet.position,
         turn, star, 0, fleet.id, 0, ProductionKind::Research, points, field, 0, {}, 0, target);
+    p->pendingPlayerReports.back().scientificDataId=scientific_data_id(p->pendingPlayerReports.back(),p->id,key);
     return true;
 }
 

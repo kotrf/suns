@@ -120,7 +120,14 @@ void MainWindow::refreshScienceSamples()
             if (oldId == s.source && oldPlace == endpoint_key(place)) tree->setCurrentItem(row);
         }
     };
-    for (const auto& p : known.planets) if (p.owner == pendingOrders_.player) add(p.scienceSamples, {p.id, 0}, QString::fromStdString(p.name));
+    const auto* player = find_player(known, pendingOrders_.player);
+    for (const auto& p : known.planets) if (p.owner == pendingOrders_.player) {
+        const auto evidence = std::find_if(player->surveyKnowledge.begin(), player->surveyKnowledge.end(),
+            [&](const auto& record) { return record.star == p.star; });
+        const auto name = evidence == player->surveyKnowledge.end() ? QString::fromStdString(p.name)
+            : QString("%1 — observed year %2").arg(QString::fromStdString(p.name)).arg(qulonglong(evidence->observedTurn));
+        add(p.scienceSamples, {p.id, 0}, name);
+    }
     for (const auto& f : known.fleets) if (f.owner == pendingOrders_.player) add(f.scienceSamples, {0, f.id},
         QString("%1 — observed year %2").arg(QString::fromStdString(f.name)).arg(qulonglong(f.telemetry.observedTurn)));
 }

@@ -88,7 +88,7 @@ not add autonomous AI project selection or imply manual gameplay acceptance.
 
 ## Artificial and adaptive magnetospheres (#56 / #59)
 
-The next slice links a paid engineering project to a concrete field-science
+Merged [PR #227](https://github.com/kotrf/suns/pull/227) links a paid engineering project to a concrete field-science
 capability. In Planetary engineering, choose a magnetosphere and its output,
 build through the normal production queue, then keep a populated colony and a
 friendly Starbase/Fortress shipyard to operate it.
@@ -152,13 +152,17 @@ unlock and emits a normal project order. Existing expedition policy already
 studies compact objects. No technology, minerals, work or research are granted
 directly to computer empires.
 
-Save **v92 / orders v37** append the project/production enum values without
+The #227 **save v92 / orders v37** formats appended the project/production enum values without
 renumbering earlier values. The bounded **EQIX** extension stores owner-only
 received/in-flight engineering queue positions; ENGI keeps its existing layout.
 Old saves retain physical works and resource investments; missing queue evidence
 waits for a normal fresh owner report rather than being rebuilt from hidden work.
 
 #56 remains open for atmospheric/ocean engineering, habitats and system projects;
-#59 remains open for further observation-gated capabilities and salvage choices.
+#59's required observation unlock and sample/salvage choice are implemented.
+Further capabilities are optional extensions, not blockers for completion;
+[the completion audit](audits/2026-10-22-field-science-completion.md) prepares
+#59 for closure after review/merge. The completion branch uses save v93 / orders
+v37; engineering costs, effects and EQIX layouts are unchanged.
 The radical irreversible transformation is deferred, including evacuation and
 capture rules. The costs above are prototype balance, not manual playtest results.

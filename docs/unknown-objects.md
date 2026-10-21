@@ -1,7 +1,7 @@
 # Unknown objects and scientific expeditions
 
-This is the first persistent-landmark slice of #55 and the next field-science
-slice of #59. Ancient probes and compact remnants are physical stationary objects,
+This is the first persistent-landmark slice of #55 and the implemented field-science
+chain of #59. Ancient probes and compact remnants are physical stationary objects,
 separate from wormholes and planetary artifact sites. They are not pop-up rewards.
 
 ## Generation and knowledge
@@ -64,8 +64,8 @@ hidden objects or receives free RP.
 
 ## Persistence and remaining scope
 
-Save v79 preserves raw host objects, delivered/in-flight observations, science
-claims, controller goals, messages and object history. Orders stay at v27: no new
+The original save v79 slice preserved raw host objects, delivered/in-flight observations, science
+claims, controller goals, messages and object history. Its orders stayed at v27: no new
 order type or payload is needed. v78 host and player-turn migrations, earlier v77
 reconstruction fixtures, invalid states and byte-identical exports after hidden
 object changes are covered by persistence tests.
@@ -74,6 +74,13 @@ object changes are covered by persistence tests.
 after a delivered completed study, a scanner fleet can recover a finite 5 kt
 specimen, return it to a colony and analyze it or retain its observation-gated
 scientific capability. Landmarks remain available for other empires' data studies.
+
+Merged [#227](https://github.com/kotrf/suns/pull/227) also makes the delivered
+Compact remnant study a prerequisite for Adaptive magnetosphere. Detection,
+classification and undelivered research cannot unlock it; the unique specimen is
+not required. Current completion formats are save v93 / orders v37; the
+[completion audit](audits/2026-10-22-field-science-completion.md) records #59's
+coverage, corrections and review status.
 
 #55 remains open for moving/transient/rogue objects, hazards, unusual resources and
 richer discovery outcomes/reference integration. Current wreck novelty and other

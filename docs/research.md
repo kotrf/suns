@@ -101,6 +101,11 @@ classification and pending reports do not qualify; physical specimen recovery
 is separate and optional. The Research catalog displays this requirement and
 keeps the capability locked until it is satisfied. Ordinary research and basic
 radiation protection remain available through their existing technology rules.
+This capability was merged in #227; samples and the dismantle-versus-retain choice
+were merged in #220. The [#59 completion audit](audits/2026-10-22-field-science-completion.md)
+adds persistent once-only scientific delivery and received surface manifests for
+fair artifact forecasts (save v93 / orders v37). Extra artifact/technology kinds
+are optional future content.
 
 
 ## Campaign technology catalog

@@ -167,13 +167,18 @@ records the highest technology requirements of destroyed fitted equipment.
 consumes one nearest specimen; stable ID breaks distance ties. Only technology
 above the recovering empire's current levels earns science: 12 points per level
 of novelty in the most novel field, capped at 96. Obsolete debris earns no science.
-Competing recoveries resolve by stable FleetId. Physical mineral recovery,
-returning cargo samples, unique artifacts retained instead of dismantled, and
-observation prerequisites on particular technologies remain future #59 slices.
+Competing recoveries resolve by stable FleetId. Physical mineral recovery from
+wrecks remains a possible extension; it is not required to complete #59.
+[Physical samples and usable retained artifacts](science-samples.md) were merged
+in #220, and the delivered-study Adaptive magnetosphere unlock in #227.
+The #59 completion audit adds durable delivery receipts for scientific awards,
+including wreck research: replaying a delivered packet cannot grant another
+award after save/load. [Requirements and tests](audits/2026-10-22-field-science-completion.md).
 
 ## Persistence, evidence and forecasts
 
-This waypoint-work slice uses save **v74** / orders **v24**. Arrival actions
+The original waypoint-work slice used save **v74** / orders **v24**.
+Current completion formats are **save v93 / orders v37**. Arrival actions
 persist in active/queued legs, delayed commands, telemetry, player exports and
 order files; invalid/nonterminal/repeating work programs and unknown action
 values are rejected by readers. Existing earlier readers remain. Fleet task

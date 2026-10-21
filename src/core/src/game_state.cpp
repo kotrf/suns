@@ -1540,6 +1540,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
     if (level >= SurveyLevel::OrbitalSurvey) {
         PlanetSurveySnapshot result{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
         if (planet->owner == player) {
+            result.scienceSamples=planet->scienceSamples;
             result.resonanceLab = planet->resonanceLab;
             const auto item = std::find_if(planet->productionQueue.begin(), planet->productionQueue.end(),
                 [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
