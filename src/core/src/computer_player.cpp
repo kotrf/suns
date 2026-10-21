@@ -304,10 +304,15 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
     const auto& s = view.state; auto& goals = plan.nextState.fleetGoals;
     if (!exotic_mining_available(s, view.player)) return;
     std::vector<const Planet*> sites, homes;
+    const auto needsCrystals = [&](const Planet& p) {
+        return (resonance_technology_available(s, view.player) && !p.resonanceLab.crystalsPaid)
+            || (resonant_gate_technology_available(s, view.player) && stargate_station_available(s, view.player, p.id));
+    };
     for (const auto& p : s.planets) {
         const auto known = known_xenocrystal(s, view.player, p.id);
         if (!p.owner && known && known->depositSurveyed && (known->site.remaining || known->site.surface)) sites.push_back(&p);
-        if (p.owner == view.player && p.population) homes.push_back(&p);
+        if (p.owner == view.player && known && known->colony && known->colony->owner == view.player
+            && known->colony->population) homes.push_back(&p);
         if (p.owner == view.player && p.population && (p.resonanceLab.started || p.xenocrystal.surface >= kResonanceCrystals)
             && resonance_technology_available(s, view.player) && !engineering_station_available(s, p)
             && std::none_of(p.productionQueue.begin(), p.productionQueue.end(), [](const auto& item) { return item.kind == ProductionKind::OrbitalStation; })) {
@@ -328,6 +333,10 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
             && p.resonanceLab.work < kResonanceWork && !resonance_scheduled(p))
             plan.orders.orders.push_back(SetResonanceLaboratoryOrder{p.id});
     }
+    for (const auto* p : homes) if (p->xenocrystal.surface && !needsCrystals(*p)
+        && std::any_of(homes.begin(), homes.end(), [&](const auto* home) {
+            return home->id != p->id && needsCrystals(*home) && home->xenocrystal.surface < kResonanceCrystals;
+        })) sites.push_back(p);
     std::erase_if(goals, [&](const auto& g) {
         return g.kind >= ComputerFleetGoalKind::ExoticMining && std::none_of(s.fleets.begin(), s.fleets.end(),
             [&](const auto& f) { return f.id == g.fleet && f.owner == view.player; });
@@ -360,6 +369,9 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
         if (f.xenocrystal) {
             const Planet* home = nullptr; std::optional<std::uint8_t> warp; double distance = std::numeric_limits<double>::infinity();
             for (const auto* p : homes) if (const auto* star = find_star(s, p->star)) {
+                const auto* origin = goal != goals.end() ? find_planet_at_star(s, goal->target) : nullptr;
+                if (origin && origin->owner == view.player && (p->id == origin->id
+                    || !needsCrystals(*p) || p->xenocrystal.surface >= kResonanceCrystals)) continue;
                 const auto candidate = route_warp(s, f, {star->position});
                 const auto d = distance_between(f.position, star->position);
                 if (candidate && d < distance) { home = p; warp = candidate; distance = d; }
@@ -392,7 +404,7 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
         const Planet* target = nullptr; std::optional<std::uint8_t> warp; double distance = std::numeric_limits<double>::infinity();
         for (const auto* p : sites) {
             const auto known = known_xenocrystal(s, view.player, p->id);
-            if (miner ? !known->site.remaining : !known->site.surface) continue;
+            if (miner ? (p->owner || !known->site.remaining) : !known->site.surface) continue;
             if (std::any_of(goals.begin(), goals.end(), [&](const auto& g) { return g.target == p->star
                 && g.kind == (miner ? ComputerFleetGoalKind::ExoticMining : ComputerFleetGoalKind::ExoticHauling); })) continue;
             const auto* star = find_star(s, p->star); if (!star) continue;
@@ -414,7 +426,10 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
         }
     }
     if (sites.empty()) return;
-    const bool minerExists = std::any_of(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.owner == view.player && xenocrystal_mining_rate(s, f); });
+    const bool needsMiner = std::any_of(sites.begin(), sites.end(), [&](const auto* p) {
+        return !p->owner && p->xenocrystal.remaining;
+    });
+    const bool minerExists = !needsMiner || std::any_of(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.owner == view.player && xenocrystal_mining_rate(s, f); });
     const bool haulerExists = std::any_of(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.owner == view.player && !fleet_can_colonize(s, f)
         && !xenocrystal_mining_rate(s, f) && fleet_cargo_capacity(s, f) >= kResonanceCrystals; });
     if (minerExists && haulerExists) return;
@@ -784,7 +799,10 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 build(kind,std::uint32_t(std::min<std::uint64_t>(remaining,3))); reconstructing=true; break;
             }
         if(reconstructing) continue;
-        const auto minesWanted = std::max(2u, colony->industry / 2);
+        const auto exotic = known_xenocrystal(state, view.player, colony->id);
+        const bool rareDeposit = exotic_mining_available(state, view.player) && exotic && exotic->depositSurveyed
+            && exotic->site.remaining && exotic->colony && exotic->colony->owner == view.player && exotic->colony->population;
+        const auto minesWanted = std::max(rareDeposit ? 25u : 2u, colony->industry / 2);
         const bool lowStock = std::min({colony->minerals.ironium, colony->minerals.boranium, colony->minerals.germanium}) < 15;
         if (colony->mines < minesWanted && (colony->mines < 2 || lowStock) && canAfford(ProductionKind::Mine)) {
             build(ProductionKind::Mine); continue;

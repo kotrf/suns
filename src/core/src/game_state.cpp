@@ -1547,6 +1547,8 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
         }
         if (level >= SurveyLevel::DeepSurvey) result.xenocrystal = XenocrystalObservation{planet->xenocrystal, observedTurn, true, observedTurn,
             std::uint8_t(observedTurn <= state.turn)};
+        if (result.xenocrystal && planet->owner == player)
+            result.xenocrystal->colony = XenocrystalObservation::Colony{player, planet->population, planet->mines};
         if (result.xenocrystal && planet->owner && planet->owner != player) result.xenocrystal->site.surface = 0;
         return result;
     }

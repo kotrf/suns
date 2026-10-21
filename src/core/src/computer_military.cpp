@@ -189,7 +189,7 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
     std::sort(colonies.begin(), colonies.end(), byId); std::sort(enemies.begin(), enemies.end(), byId);
     std::sort(fleets.begin(), fleets.end(), byId);
     std::erase_if(goals, [&](const auto& g) {
-        if (g.kind <= ComputerFleetGoalKind::Resupply || g.kind==ComputerFleetGoalKind::InvestigateObject) return false;
+        if (g.kind < ComputerFleetGoalKind::Gather || g.kind > ComputerFleetGoalKind::Invade) return false;
         return std::none_of(fleets.begin(), fleets.end(), [&](auto f) { return f->id == g.fleet; });
     });
     if (colonies.empty()) return;

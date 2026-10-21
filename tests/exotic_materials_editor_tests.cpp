@@ -4,6 +4,7 @@
 #include "suns/communications.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/production.hpp"
+#include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
 #include <QApplication>
 #include <QComboBox>
@@ -126,6 +127,54 @@ void resonant_gate_persistence_and_exchange()
     assert(write_save_game_file(playerPath, make_player_turn(save, 1), error)); const auto frozen = bytes(playerPath);
     save.state.planets[0].xenocrystal.surface = 0; save.state.planets[1].xenocrystal.remaining = 0;
     assert(write_save_game_file(playerPath, make_player_turn(save, 1), error) && bytes(playerPath) == frozen);
+}
+
+void colony_materials_save_reports_and_frozen_exports()
+{
+    QTemporaryDir dir; const auto path = dir.filePath("colonies.suns"); QString error; SaveGameData loaded;
+    auto save = save_fixture(); auto& s = save.state; auto& p = s.planets[0];
+    p.mines = 100; p.xenocrystal = {30, 7, 23, 4}; p.homeworld = false;
+    s.stars[0].position = {900, 0}; s.stars[1].position = {0, 0};
+    s.planets[1].owner = 1; s.planets[1].population = 1000000; s.planets[1].homeworld = true;
+    s.planets[1].radar = PlanetaryRadarLevel::Full;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    queue_survey_report(s, 1, 1, 0, s.stars[0].position, s.turn, SurveyLevel::DeepSurvey, true);
+    const bool roundTrip = write_save_game_file(path, save, error) && read_save_game_file(path, loaded, error);
+    if (!roundTrip) std::cerr << error.toStdString() << '\n';
+    assert(roundTrip);
+    auto known = *known_xenocrystal(loaded.state, 1, 1);
+    assert(known.colony && known.colony->mines == 100 && known.site.remaining == 7);
+    assert(loaded.state.players[0].pendingSurveyReports.back().planetSnapshot->xenocrystal->colony->mines == 100);
+    const auto original = bytes(path);
+    QByteArray tag; QDataStream marker(&tag, QIODevice::WriteOnly); marker << quint32{0x434f4c58u};
+    const auto offset = original.lastIndexOf(tag); assert(offset > 0);
+    auto legacy = original.left(offset); QDataStream version(&legacy, QIODevice::ReadWrite); version.device()->seek(4); version << quint32{90};
+    writeBytes(path, legacy); assert(read_save_game_file(path, loaded, error));
+    assert(loaded.state.planets[0].xenocrystal == p.xenocrystal && !known_xenocrystal(loaded.state, 1, 1)->colony);
+    for (const auto length : {offset, offset + 4, original.size() - 1}) {
+        writeBytes(path, original.left(length)); assert(!read_save_game_file(path, loaded, error));
+    }
+    // A foreign-owner private input and malformed extension flag are rejected.
+    auto malformed = original; const auto payload = offset + 8;
+    const auto firstFlag = payload + 4 + 4 + 4 + 4; // players, player ID, knowledge count, first star
+    malformed[firstFlag] = char(2); writeBytes(path, malformed); assert(!read_save_game_file(path, loaded, error));
+    malformed = original; QDataStream corruptOwner(&malformed, QIODevice::ReadWrite); corruptOwner.device()->seek(firstFlag + 1);
+    corruptOwner << quint32{2}; writeBytes(path, malformed); assert(!read_save_game_file(path, loaded, error));
+    save.mode = SessionMode::Host; save.playerTokens = {{1, 31}};
+    const auto turnPath = dir.filePath("colony.sunsturn");
+    assert(write_save_game_file(turnPath, make_player_turn(save, 1), error)); const auto received = bytes(turnPath);
+    p.mines = 0; p.population = 0; p.xenocrystal = {30, 0, 0, 0};
+    assert(write_save_game_file(turnPath, make_player_turn(save, 1), error) && bytes(turnPath) == received);
+    assert(read_save_game_file(turnPath, loaded, error));
+    assert(loaded.state.planets[0].mines == 100 && known_colony_xenocrystal_rate(loaded.state, 1, loaded.state.planets[0]) == 4);
+    // Explicit generation changes no ordinary world state and never advances another RNG stream.
+    auto before = save_fixture(); auto after = before;
+    for (auto& planet : before.state.planets) planet.xenocrystal = {};
+    generate_xenocrystal_deposits(after.state);
+    for (auto& planet : after.state.planets) planet.xenocrystal = {};
+    const auto otherPath = dir.filePath("ordinary.suns");
+    assert(write_save_game_file(path, before, error) && write_save_game_file(otherPath, after, error));
+    assert(bytes(path) == bytes(otherPath));
 }
 
 void persistence_and_migration()
@@ -372,6 +421,24 @@ void resonant_gate_ui_uses_current_received_payment(MainWindow& w)
     MainWindowTestAccess::transit(w);
 }
 
+void colony_mining_panel_uses_received_inputs(MainWindow& w)
+{
+    auto s = fixture(); auto& p = s.planets[0]; p.mines = 50; p.xenocrystal = {30, 30, 0, 0};
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    MainWindowTestAccess::load(w, s);
+    const auto text = [&] { return w.findChild<QTreeWidget*>("exoticInventory")->topLevelItem(0)->text(6); };
+    assert(text().contains("Forecast: up to 2 units/year"));
+    p.mines = 0; p.population = 0; p.xenocrystal.remaining = 0;
+    MainWindowTestAccess::load(w, s); assert(text().contains("Forecast: up to 2 units/year"));
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    MainWindowTestAccess::load(w, s); assert(text().contains("No received population"));
+    p.population = 1000; p.xenocrystal.remaining = 30;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    MainWindowTestAccess::load(w, s); assert(text().contains("Requires 25 operating mines"));
+    s.players[0].surveyKnowledge.clear(); MainWindowTestAccess::load(w, s);
+    assert(text().contains("Awaiting delivered DeepSurvey"));
+}
+
 void select_planet(MainWindow& w, PlanetId id)
 {
     auto* tree = w.findChild<QTreeWidget*>("exoticInventory");
@@ -427,11 +494,13 @@ int main(int argc, char** argv)
     owned_laboratory_exports_use_received_project_and_queue();
     remote_base_transfer_survives_save_and_order_exchange();
     resonant_gate_persistence_and_exchange();
+    colony_materials_save_reports_and_frozen_exports();
     resonant_gate_cannot_use_later_base_delivery();
     MainWindow w; w.installExoticMaterials(); ui_commands_and_previews(w);
     resonant_gate_ui_uses_current_received_payment(w);
     cargo_and_system_gate_forecasts_ignore_unreceived_station_loss(w);
     gate_dialog_respects_prior_route_and_clear(w);
     gate_dialog_requires_received_manifest_after_split(w);
+    colony_mining_panel_uses_received_inputs(w);
     std::cout << "Exotic material UI, frozen exports, saves and PBEM passed\n";
 }

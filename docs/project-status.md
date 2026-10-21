@@ -1,6 +1,30 @@
 # Project status and development handoff
 
-## Verified checkpoint — 20 October 2026: main after #223
+## Verified checkpoint — 21 October 2026: main after #224
+
+Main is [d1a857b](https://github.com/kotrf/suns/commit/d1a857b00d75c0a0a98295d69b63e768674497d9),
+merged [#224](https://github.com/kotrf/suns/pull/224), including reviewed head
+`7b5c14c` and both forecast follow-ups. CI passed 85/85. Resonant gate pulses
+are on main. Formats: **save v90 / orders v36**. Parent #63 remains open.
+
+## Implementation branch — scaled clusters and colony extraction #225
+
+`codex/xenocrystal-clusters-colony-mining` starts from that verified main.
+[The next rare-material slice](rare-exotic-materials.md#colony-extraction-225)
+scales centers with actual system count (two at Medium/Normal), preserves the
+deposit budget and adds whole-unit colony extraction through ordinary paid
+mines. Physical mining uses actual infrastructure and the owner's received
+discovery; UI/AI use dated private operating snapshots. Save **v91 / orders v36**
+append COLX without regenerating existing worlds or adding new orders.
+Local validation on 21 October: GCC 14.2, Qt 6.12, Debug/assertions enabled;
+full application/test build succeeded, full CTest **85/85** passed in 22.30 s.
+New regressions cover all size/density presets, custom rounding boundaries,
+spatial/ID determinism, finite colony extraction and ownership transitions,
+phase ordering, delayed/reordered private reports, AI hauling, UI estimates,
+save migration/corruption and frozen PBEM exports. CI is recorded on the PR.
+#63 stays open; merge is left for review.
+
+## Historical checkpoint — 20 October 2026: main after #223
 
 Main is [4a91bd3](https://github.com/kotrf/suns/commit/4a91bd3816a455a1edddca176909e2a6d9b4d106),
 merged [#223](https://github.com/kotrf/suns/pull/223), including the visitor refusal
@@ -8,7 +32,7 @@ knowledge and malformed VISI reader fixes from reviewed head `0fb4af4`.
 The first physical visitor encounter and its playable demo are on main.
 Main formats: **save v89 / orders v35**. #46 remains open.
 
-## Implementation branch — resonant gate pulse #63
+## Historical implementation — resonant gate pulse #63
 
 The user chose another xenocrystal application rather than colony extraction
 or additional deposit clusters. `codex/xenocrystal-gate-resonance` starts at

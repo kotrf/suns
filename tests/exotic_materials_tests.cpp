@@ -283,6 +283,204 @@ void add_miner(GameState& s, std::uint32_t count = 1)
     f.position = s.stars[1].position; f.task = FleetTask::RemoteMining; f.fuel = fleet_fuel_capacity(s, f);
     s.fleets.push_back(f);
 }
+void clusters_scale_without_multiplying_the_deposit_budget()
+{
+    for (int size = 0; size < 5; ++size) for (int density = 0; density < 4; ++density) {
+        const auto config = galaxy_preset(GalaxySize(size), GalaxyDensity(density), 123);
+        auto s = generate_game(config);
+        const auto clusters = generate_xenocrystal_deposits(s);
+        assert(clusters == std::max<std::size_t>(1, s.stars.size() / 144 + (s.stars.size() % 144 >= 72)));
+        assert(std::count_if(s.planets.begin(), s.planets.end(), [](const auto& p) { return p.xenocrystal.original != 0; })
+            == (s.planets.size() + 31) / 32);
+        if (size == int(GalaxySize::Medium) && density == int(GalaxyDensity::Normal)) assert(clusters == 2);
+    }
+    auto separated = fixture(); separated.stars.clear(); separated.planets.clear();
+    for (std::uint32_t i = 0; i < 288; ++i) {
+        separated.stars.push_back({i + 1, "Site", {i < 144 ? -5000.0 : 5000.0, double(i % 144)}, StarClass::Yellow});
+        Planet p; p.id = p.star = i + 1; separated.planets.push_back(p);
+    }
+    separated.galaxySeed = 333;
+    assert(generate_xenocrystal_deposits(separated) == 2);
+    std::size_t left = 0, right = 0;
+    for (const auto& p : separated.planets) if (p.xenocrystal.original) {
+        (p.id <= 144 ? left : right)++; assert(p.xenocrystal.original >= 24 && p.xenocrystal.original <= 48);
+    }
+    assert(left >= 4 && right >= 4 && left + right == 9);
+    auto reordered = separated; std::reverse(reordered.planets.begin(), reordered.planets.end());
+    std::reverse(reordered.stars.begin(), reordered.stars.end()); assert(generate_xenocrystal_deposits(reordered) == 2);
+    for (const auto& p : separated.planets) assert(p.xenocrystal == find_planet(reordered, p.id)->xenocrystal);
+    for (auto& star : reordered.stars) star.position = {};
+    assert(generate_xenocrystal_deposits(reordered) == 1); // No invented distinct centers at coincident positions.
+    assert(std::count_if(reordered.planets.begin(), reordered.planets.end(), [](const auto& p) { return p.xenocrystal.original != 0; }) == 9);
+    reordered.planets.resize(2); reordered.planets[0].homeworld = true;
+    assert(generate_xenocrystal_deposits(reordered) == 1 && !reordered.planets[0].xenocrystal.original);
+    reordered.planets[1].owner = 1; assert(generate_xenocrystal_deposits(reordered) == 0);
+    reordered.planets.clear(); assert(generate_xenocrystal_deposits(reordered) == 0);
+    for (const auto systems : {71U, 72U, 215U, 216U, 287U, 288U, 359U, 360U, 1001U}) {
+        GalaxyConfig custom; custom.seed = 7; custom.starCount = systems; custom.width = custom.height = 4000;
+        auto s = generate_game(custom);
+        assert(generate_xenocrystal_deposits(s) == std::max(1U, (systems + 72) / 144));
+    }
+}
+GameState colony_mining_fixture()
+{
+    auto s = fixture(); auto& p = s.planets[0]; p.xenocrystal = {30, 30, 0, 0}; p.mines = 100;
+    set_survey_level(s, 1, p.star, SurveyLevel::DeepSurvey, s.turn); return s;
+}
+void colonies_extract_finite_whole_units_under_existing_access_rules()
+{
+    auto s = colony_mining_fixture();
+    for (const auto mines : {0U, 24U, 25U, 49U, 50U, 99U, 100U, 10000U}) {
+        auto test = s; test.planets[0].mines = mines; mine_xenocrystals(test);
+        const auto rate = std::min(4U, mines / 25);
+        assert(test.planets[0].xenocrystal.surface == rate && test.planets[0].xenocrystal.remaining == 30 - rate);
+    }
+    for (int block = 0; block < 6; ++block) {
+        auto test = s;
+        if (block == 0) test.planets[0].population = 0;
+        if (block == 1) test.players[0].technology.levels[std::size_t(ResearchField::Construction)] = 7;
+        if (block == 2) test.players[0].technology.levels[std::size_t(ResearchField::Electronics)] = 7;
+        if (block == 3) test.players[0].surveyKnowledge.clear();
+        if (block == 4) { test.players[0].surveyKnowledge.clear(); set_survey_level(test, 1, 1, SurveyLevel::GeologicalSurvey, test.turn); }
+        if (block == 5) test.planets[0].owner = 2;
+        mine_xenocrystals(test); assert(test.planets[0].xenocrystal.remaining == 30 && !test.planets[0].xenocrystal.surface);
+    }
+    auto full = s; full.planets[0].xenocrystal.surface = kMaximumXenocrystal;
+    mine_xenocrystals(full); assert(full.planets[0].xenocrystal.remaining == 30);
+    full.planets[0].xenocrystal.surface--; ++full.turn; mine_xenocrystals(full);
+    assert(full.planets[0].xenocrystal.surface == kMaximumXenocrystal && full.planets[0].xenocrystal.remaining == 29);
+    s.planets[0].xenocrystal.remaining = 3;
+    mine_xenocrystals(s); assert(s.planets[0].xenocrystal.extractedLastYear == 3 && s.planets[0].xenocrystal.surface == 3);
+    ++s.turn; mine_xenocrystals(s); assert(!s.planets[0].xenocrystal.remaining && !s.planets[0].xenocrystal.extractedLastYear);
+    auto reference = colony_mining_fixture(); reference.planets[0].xenocrystal = {};
+    const auto ordinary = next(reference).planets[0].minerals;
+    const auto mined = next(colony_mining_fixture()).planets[0].minerals;
+    assert(near(ordinary.ironium, mined.ironium) && near(ordinary.boranium, mined.boranium) && near(ordinary.germanium, mined.germanium));
+}
+void colony_production_and_gate_orders_observe_the_mining_phase()
+{
+    auto s = colony_mining_fixture(); s.planets[0].xenocrystal.surface = 4;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    const PlayerOrders lab{1, {SetResonanceLaboratoryOrder{1}}};
+    auto preview = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, lab), lab);
+    assert(preview.planets[0].xenocrystal.surface == 4); // Forecasts never manufacture current stock.
+    assert(forecast_production_queue(preview, preview.planets[0], preview.planets[0].productionQueue, 16)[0].completionTurn == s.turn + 10);
+    auto built = next(s, lab.orders);
+    assert(built.planets[0].resonanceLab.work == 60 && !built.planets[0].xenocrystal.surface && built.planets[0].xenocrystal.remaining == 26);
+    auto gates = resonance_network(); gates.planets[0].mines = 100; gates.planets[0].xenocrystal = {30, 30, 4, 0};
+    set_survey_level(gates, 1, 1, SurveyLevel::DeepSurvey, gates.turn);
+    auto early = next(gates, {GateFleetOrder{1, 1, 2, true}});
+    assert(early.fleets[0].position == gates.stars[0].position && early.planets[0].xenocrystal.surface == 8);
+    auto later = next(early, {GateFleetOrder{1, 1, 2, true}});
+    assert(later.fleets[0].position == gates.stars[1].position && later.planets[0].xenocrystal.surface == 4);
+    auto load = next(s, {MoveFleetOrder{1, s.stars[0].position, 1, {FleetArrivalActionKind::LoadAllAvailable, 1, FleetCargoKind::Xenocrystal}}});
+    assert(load.fleets[0].xenocrystal == 8 && !load.planets[0].xenocrystal.surface);
+}
+void colony_mining_reports_preserve_private_dated_inputs()
+{
+    auto s = colony_mining_fixture(); auto& p = s.planets[0];
+    s.stars[0].position = {900, 0}; p.homeworld = false;
+    // Keep a real HQ at Sol's former position, but observe the remote colony by its own sensor source.
+    auto hq = s.planets[1]; hq.owner = 1; hq.population = 1000000; hq.homeworld = true; s.planets[1] = hq;
+    s.stars[1].position = {0, 0};
+    const auto old = *known_xenocrystal(s, 1, p.id); mine_xenocrystals(s);
+    publish_exotic_material_reports(s, s);
+    assert(known_xenocrystal(s, 1, p.id)->site.remaining == old.site.remaining);
+    const auto packet = std::find_if(s.players[0].pendingSurveyReports.begin(), s.players[0].pendingSurveyReports.end(), [&](const auto& r) {
+        return r.star == p.star && r.planetSnapshot && r.planetSnapshot->xenocrystal && r.planetSnapshot->xenocrystal->stockPhase == 1;
+    });
+    assert(packet != s.players[0].pendingSurveyReports.end() && packet->deliveryTurn > s.turn + 1);
+    const auto due = packet->deliveryTurn;
+    p.mines = 0; p.xenocrystal.remaining = 0; p.xenocrystal.surface = 0;
+    auto view = make_player_view(s, 1).state;
+    assert(known_colony_xenocrystal_rate(view, 1, view.planets[0]) == 4);
+    s.turn = due; (void)deliver_due_survey_reports(s);
+    const auto received = *known_xenocrystal(s, 1, p.id);
+    assert(received.site.remaining == 26 && received.site.surface == 4 && received.colony->mines == 100);
+    assert(received.observedTurn == 11);
+    const auto entry = std::find_if(s.players[0].surveyKnowledge.begin(), s.players[0].surveyKnowledge.end(), [&](const auto& k) { return k.star == p.star; });
+    auto stale = *entry->planetSnapshot; stale.xenocrystal->observedTurn = 10; stale.xenocrystal->depositObservedTurn = 10;
+    stale.xenocrystal->colony->mines = 0;
+    s.players[0].pendingSurveyReports.push_back({p.star, 0, 10, s.turn, SurveyLevel::DeepSurvey, 1, 0, stale});
+    (void)deliver_due_survey_reports(s);
+    assert(known_xenocrystal(s, 1, p.id)->colony->mines == 100);
+    const auto foreign = capture_planet_survey(s, 2, p.star, SurveyLevel::DeepSurvey, s.turn);
+    assert(foreign && foreign->xenocrystal && !foreign->xenocrystal->colony && !foreign->xenocrystal->site.surface);
+}
+
+void colonization_and_capture_do_not_double_the_annual_extraction()
+{
+    auto s = fixture(); auto& site = s.planets[1]; s.stars[1].position = {20, 0};
+    site.xenocrystal = {30, 30, 2, 0}; site.mines = 25;
+    set_survey_level(s, 1, site.star, SurveyLevel::DeepSurvey, s.turn); add_miner(s, 8);
+    auto& settler = s.fleets[0]; settler.design = kColonyShipDesignId; settler.ships = {{settler.design, 1}};
+    settler.position = s.stars[1].position; settler.colonists = 100; settler.fuel = fleet_fuel_capacity(s, settler);
+    settler.destination = settler.position; settler.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::Colonize};
+    auto founded = next(s);
+    assert(founded.planets[1].owner == 1 && founded.planets[1].mines == 25);
+    assert(founded.planets[1].xenocrystal.remaining == 26 && founded.planets[1].xenocrystal.surface == 6);
+    auto operated = next(founded);
+    assert(operated.planets[1].xenocrystal.remaining == 25 && operated.planets[1].xenocrystal.surface == 7);
+    auto captured = colony_mining_fixture(); captured.players.push_back({2, "Invader"});
+    captured.players.back().technology.levels.fill(16); captured.planets[0].population = 1;
+    captured.planets[0].mines = 25; captured.orbitalStations.clear();
+    captured.shipDesigns.push_back({4, 2, "Troop transport", ShipHullType::SmallFreighter, {ShipComponentType::FuelMizer}});
+    auto& troops = captured.fleets[0]; troops.owner = 2; troops.design = 4; troops.ships = {{4, 1}};
+    troops.colonists = 1000; troops.destination = troops.position;
+    troops.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::Colonists};
+    captured = TurnProcessor{}.process(captured, {});
+    assert(captured.planets[0].owner == 2 && captured.planets[0].xenocrystal.remaining == 29 && captured.planets[0].xenocrystal.surface == 1);
+    auto withoutStudy = TurnProcessor{}.process(captured, {});
+    assert(withoutStudy.planets[0].xenocrystal.remaining == 29); // Old owner's study does not authorize the invader.
+    captured.planets[0].mines = 100;
+    set_survey_level(captured, 2, 1, SurveyLevel::DeepSurvey, captured.turn);
+    auto informed = TurnProcessor{}.process(captured, {});
+    assert(informed.planets[0].xenocrystal.remaining == 25 && informed.planets[0].xenocrystal.surface == 5);
+    auto own = colony_mining_fixture(); own.planets[0].mines = 25; add_miner(own, 8);
+    own.fleets.back().position = own.stars[0].position;
+    mine_xenocrystals(own); assert(own.planets[0].xenocrystal.surface == 1); // Robots cannot add another four on an owned world.
+}
+
+void computer_uses_own_mines_and_exports_received_colony_caches()
+{
+    auto s = colony_mining_fixture(); s.players[0].controller = PlayerController::Computer;
+    s.planets[0].mines = 0; s.planets[0].industry = 24; s.stars.resize(1); s.planets.resize(1);
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    auto plan = plan_computer_turn(make_player_view(s, 1));
+    assert(std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& o) {
+        const auto* batch = std::get_if<QueueProductionBatchOrder>(&o);
+        const auto* single = std::get_if<QueueProductionOrder>(&o);
+        return (batch && batch->kind == ProductionKind::Mine) || (single && single->kind == ProductionKind::Mine);
+    }));
+    s = colony_mining_fixture(); s.players[0].controller = PlayerController::Computer;
+    s.stars[1].position = {20, 0}; auto& recipient = s.planets[1]; recipient.owner = 1; recipient.population = 1000000;
+    recipient.productionQueue.clear(); recipient.minerals = {10000, 10000, 10000};
+    // The source already paid its local laboratory; a second colony still needs material.
+    s.planets[0].xenocrystal.surface = 8;
+    assert(apply_resonance_order(s, s.planets[0], {1})); (void)resolve_colony_production(s, s.planets[0], true);
+    s.planets[0].xenocrystal.surface = 8;
+    set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    set_survey_level(s, 1, 2, SurveyLevel::DeepSurvey, s.turn);
+    plan = plan_computer_turn(make_player_view(s, 1));
+    assert(std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& o) {
+        const auto* move = std::get_if<MoveFleetOrder>(&o);
+        return move && move->fleet == 1 && move->arrivalAction.cargo == FleetCargoKind::Xenocrystal
+            && move->arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable;
+    }));
+    s.players[0].computer = plan.nextState;
+    s = next(s, plan.orders.orders);
+    assert(s.fleets[0].xenocrystal >= 8);
+    const auto returning = plan_computer_turn(make_player_view(s, 1));
+    assert(std::any_of(returning.orders.orders.begin(), returning.orders.orders.end(), [&](const auto& o) {
+        const auto* move = std::get_if<MoveFleetOrder>(&o);
+        return move && move->fleet == 1 && move->destination == s.stars[1].position
+            && move->arrivalAction.kind == FleetArrivalActionKind::UnloadAll;
+    }));
+    auto hidden = s; hidden.planets[0].xenocrystal.remaining = 0; hidden.planets[0].xenocrystal.surface = 0;
+    hidden.planets[0].mines = 0; hidden.planets[0].population = 0;
+    assert(plan_computer_turn(make_player_view(hidden, 1)).nextState == returning.nextState);
+}
+
 void generated_finite_geographic_deposits()
 {
     GalaxyConfig c; c.seed = 123; c.starCount = 64;
@@ -791,6 +989,12 @@ int main()
     computer_uses_only_received_resonance_supplies();
     resonant_gates_pay_once_and_preserve_normal_limits();
     resonant_gate_forecasts_reserve_only_received_early_deliveries();
+    computer_uses_own_mines_and_exports_received_colony_caches();
+    clusters_scale_without_multiplying_the_deposit_budget();
+    colonies_extract_finite_whole_units_under_existing_access_rules();
+    colonization_and_capture_do_not_double_the_annual_extraction();
+    colony_production_and_gate_orders_observe_the_mining_phase();
+    colony_mining_reports_preserve_private_dated_inputs();
     generated_finite_geographic_deposits(); discovery_is_deep_delayed_and_immutable(); stock_and_deposit_reports_merge_independently();
     finite_mining_requires_received_discovery_and_equipment(); integer_cargo_transfers_splits_and_both_merges();
     stale_previews_cannot_teleport_or_spend_hidden_stocks(); laboratory_pays_once_pauses_resumes_and_requires_support();

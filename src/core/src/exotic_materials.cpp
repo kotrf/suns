@@ -39,27 +39,62 @@ std::optional<Store> store(GameState& s, PlayerId owner, CargoTransferEndpoint e
     return Store{&p->xenocrystal.surface, star->position, nullptr, &*p};
 }
 }
-void generate_xenocrystal_deposits(GameState& s)
+std::size_t generate_xenocrystal_deposits(GameState& s)
 {
     for (auto& p : s.planets) p.xenocrystal = {};
     std::vector<Planet*> candidates;
-    for (auto& p : s.planets) if (!p.homeworld && !p.owner) candidates.push_back(&p);
-    if (candidates.empty()) return;
+    for (auto& p : s.planets) {
+        const auto* star = find_star(s, p.star);
+        if (!p.homeworld && !p.owner && star && std::isfinite(star->position.x) && std::isfinite(star->position.y))
+            candidates.push_back(&p);
+    }
+    if (candidates.empty()) return 0;
     std::sort(candidates.begin(), candidates.end(), [](auto a, auto b) { return a->id < b->id; });
     const auto seed = mix(s.galaxySeed ^ 0x58454e4f43525953ULL);
-    const auto* center = find_star(s, candidates[seed % candidates.size()]->star);
-    if (!center) return;
-    std::sort(candidates.begin(), candidates.end(), [&](auto a, auto b) {
-        const auto* sa = find_star(s, a->star); const auto* sb = find_star(s, b->star);
-        const auto da = sa ? distance_between(center->position, sa->position) : std::numeric_limits<double>::infinity();
-        const auto db = sb ? distance_between(center->position, sb->position) : std::numeric_limits<double>::infinity();
-        return da != db ? da < db : a->id < b->id;
-    });
-    const auto count = std::min(candidates.size(), std::max<std::size_t>(1, (s.planets.size() + 31) / 32));
-    for (std::size_t i = 0; i < count; ++i) {
-        const auto amount = std::uint32_t(24 + mix(seed ^ candidates[i]->id) % 25);
-        candidates[i]->xenocrystal = {amount, amount, 0, 0};
+    const auto budget = std::min(candidates.size(), s.planets.size() / 32 + (s.planets.size() % 32 != 0));
+    // round_half_up(2 * systems / 288), without multiplying a size_t.
+    const auto target = std::min(budget, std::max<std::size_t>(1,
+        s.stars.size() / 144 + (s.stars.size() % 144 >= 72)));
+    const auto separation = [&](const Planet* a, const Planet* b) {
+        return distance_between(find_star(s, a->star)->position, find_star(s, b->star)->position);
+    };
+    std::vector<Planet*> centers{candidates[seed % candidates.size()]};
+    while (centers.size() < target) {
+        Planet* best = nullptr; double farthest = 0;
+        for (auto* p : candidates) {
+            double nearest = std::numeric_limits<double>::infinity();
+            for (const auto* center : centers) nearest = std::min(nearest, separation(p, center));
+            if (nearest > farthest) { best = p; farthest = nearest; }
+        }
+        if (!best) break; // Coincident worlds cannot form distinct geographic centers.
+        centers.push_back(best);
     }
+    std::vector<std::vector<Planet*>> regions(centers.size());
+    for (auto* p : candidates) {
+        std::size_t closest = 0;
+        for (std::size_t i = 1; i < centers.size(); ++i)
+            if (separation(p, centers[i]) < separation(p, centers[closest])) closest = i;
+        regions[closest].push_back(p);
+    }
+    std::vector<std::size_t> allocation(centers.size()); std::size_t assigned = 0;
+    for (std::size_t i = 0; i < centers.size(); ++i) {
+        auto& region = regions[i];
+        std::sort(region.begin(), region.end(), [&](auto a, auto b) {
+            const auto da = separation(a, centers[i]), db = separation(b, centers[i]);
+            return da != db ? da < db : a->id < b->id;
+        });
+        allocation[i] = std::min(region.size(), budget / centers.size() + (i < budget % centers.size()));
+        assigned += allocation[i];
+    }
+    // Undersized regions' quotas move to regions with room. Every pass makes
+    // progress because budget never exceeds the total candidate count.
+    while (assigned < budget) for (std::size_t i = 0; i < centers.size() && assigned < budget; ++i)
+        if (allocation[i] < regions[i].size()) { ++allocation[i]; ++assigned; }
+    for (std::size_t i = 0; i < centers.size(); ++i) for (std::size_t j = 0; j < allocation[i]; ++j) {
+        auto* p = regions[i][j]; const auto amount = std::uint32_t(24 + mix(seed ^ p->id) % 25);
+        p->xenocrystal = {amount, amount, 0, 0};
+    }
+    return centers.size();
 }
 std::optional<XenocrystalObservation> known_xenocrystal(const GameState& s, PlayerId owner, PlanetId id)
 {
@@ -93,23 +128,56 @@ void observe_xenocrystal_surface(GameState& s, PlayerId owner, PlanetId id, Flee
     // to the post-production phase, never to a transfer earlier in the year.
     queue_survey_report(s, owner, p->star, source, star->position, turn, deep ? SurveyLevel::DeepSurvey : SurveyLevel::OrbitalSurvey, finalSurfaceObservation);
 }
+std::uint32_t colony_xenocrystal_mining_rate(const GameState& s, const Planet& p)
+{
+    const auto known = known_xenocrystal(s, p.owner, p.id);
+    if (!p.owner || !p.population || !exotic_mining_available(s, p.owner)
+        || !known || !known->depositSurveyed || !known->site.original) return 0;
+    return std::min(kXenocrystalPerPlanetYear, p.mines / 25);
+}
+std::string known_colony_xenocrystal_block(const GameState& s, PlayerId owner, const Planet& p)
+{
+    if (p.owner != owner) return "Own colony required";
+    const auto known = known_xenocrystal(s, owner, p.id);
+    if (!known || !known->depositSurveyed) return "Awaiting delivered DeepSurvey";
+    if (!known->site.original) return "No surveyed deposit";
+    if (!known->colony || known->colony->owner != owner) return "Awaiting private colony mining report";
+    if (!known->colony->population) return "No received population";
+    if (!exotic_mining_available(s, owner)) return "Requires Construction 8 and Electronics 8";
+    if (known->colony->mines < 25) return "Requires 25 operating mines per unit/year";
+    if (!known->site.remaining) return "Known deposit exhausted";
+    if (p.xenocrystal.surface >= kMaximumXenocrystal) return "Received surface cache full";
+    return {};
+}
+std::uint32_t known_colony_xenocrystal_rate(const GameState& s, PlayerId owner, const Planet& p)
+{
+    if (!known_colony_xenocrystal_block(s, owner, p).empty()) return 0;
+    const auto known = *known_xenocrystal(s, owner, p.id);
+    return std::min({kXenocrystalPerPlanetYear, known.colony->mines / 25,
+        known.site.remaining, kMaximumXenocrystal - p.xenocrystal.surface});
+}
 void mine_xenocrystals(GameState& s)
 {
+    // One annual phase before movement/production. Later ownership changes
+    // cannot re-enter either branch or reset the shared allowance.
     for (auto& p : s.planets) {
         p.xenocrystal.extractedLastYear = 0;
-        if (p.owner || !p.xenocrystal.remaining) continue;
+        if (!p.xenocrystal.remaining) continue;
         const auto* star = find_star(s, p.star); if (!star) continue;
-        for (const auto& f : s.fleets) {
-            if (f.task != FleetTask::RemoteMining || f.destination || !same_position(f.position, star->position)
-                ) continue;
-            const auto known = known_xenocrystal(s, f.owner, p.id);
-            if (!known || !known->depositSurveyed || !known->site.original) continue;
-            const auto mined = std::min({xenocrystal_mining_rate(s, f), p.xenocrystal.remaining,
+        const auto extract = [&](PlayerId owner, FleetId source, std::uint32_t rate) {
+            const auto mined = std::min({rate, p.xenocrystal.remaining,
                 kXenocrystalPerPlanetYear - p.xenocrystal.extractedLastYear, kMaximumXenocrystal - p.xenocrystal.surface});
             p.xenocrystal.remaining -= mined; p.xenocrystal.surface += mined; p.xenocrystal.extractedLastYear += mined;
             if (mined && !p.xenocrystal.remaining)
-                queue_player_report(s, f.owner, PlayerReportKind::XenocrystalDepleted, star->position, s.turn + 1,
-                    p.star, p.id, f.id, 0, ProductionKind::Research, p.xenocrystal.surface);
+                queue_player_report(s, owner, PlayerReportKind::XenocrystalDepleted, star->position, s.turn + 1,
+                    p.star, p.id, source, 0, ProductionKind::Research, p.xenocrystal.surface);
+        };
+        if (p.owner) { extract(p.owner, 0, colony_xenocrystal_mining_rate(s, p)); continue; }
+        for (const auto& f : s.fleets) {
+            if (f.task != FleetTask::RemoteMining || f.destination || !same_position(f.position, star->position)) continue;
+            const auto known = known_xenocrystal(s, f.owner, p.id);
+            if (!known || !known->depositSurveyed || !known->site.original) continue;
+            extract(f.owner, f.id, xenocrystal_mining_rate(s, f));
         }
     }
 }

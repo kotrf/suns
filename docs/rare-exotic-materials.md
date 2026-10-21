@@ -7,12 +7,28 @@ fungible, consumable integer resource, not another artifact or empire currency.
 
 ## Discover, extract, carry
 
-New galaxies deterministically place one deposit per 32 planets (rounded up),
-in a single geographic cluster around a seed-selected unowned world. Deposits
-hold **24–48 whole units** each, never regenerate, and exclude starting capitals.
-Habitability does not filter them: a hostile, uninhabitable planet can be the
-valuable mining site. Generation uses its own integer hash and does not perturb
-ordinary galaxy generation. Older saves receive no retroactive deposits.
+New galaxies use **max(1, round-half-up(systems / 144))** clusters, based
+on the actual generated star count, including Custom maps. Equivalently this
+is `round(2 * systems / 288)`: Medium/Normal's 288 systems give two clusters,
+800 systems give six, and 1000 give seven. Integer quotient/remainder arithmetic
+avoids floating-point rounding and overflow. The independent total deposit
+budget remains **ceil(planets / 32)**, bounded by eligible worlds: more centers
+do not multiply the amount of material. Each deposit still holds **24–48 whole
+units**, never regenerates, and excludes homeworlds and inhabited worlds at
+generation. Hostile/uninhabitable worlds remain eligible.
+
+Eligible worlds are sorted by stable ID. A private seed hash selects the first
+center; each next center maximizes its distance from the nearest existing
+center, with stable-ID ties. Coincident locations cannot create extra centers.
+Centers are bounded by the deposit budget and available distinct eligible
+locations. Worlds belong to the nearest center's Voronoi region; each region
+gets an equal budget share (remainder in center order), taking its nearest
+worlds first. Quotas exceeding a small region's capacity redistribute to other
+regions in bounded passes. This gives separate districts on spacious maps,
+spreads along elongated maps, and uses the available geometry on crowded maps
+without retry loops or a requirement for ideal circles. Generation uses no
+ordinary RNG state and changes only physical crystal sites. Existing saves
+never regenerate, replenish or reposition their deposits.
 
 The existing **DeepSurvey** reveals a deposit, including a surveyed absence.
 System detection, penetrating scans, geology, ownership and cargo delivery do
@@ -36,7 +52,65 @@ cargo** includes crystals; a dedicated xenocrystal unload is also available.
 Uncolonized caches are shared physical caches: another empire with the necessary
 received knowledge and transport can collect them. Colonization and ground
 capture preserve surviving stocks. Colonizing a deposit ends remote extraction
-under the existing uncolonized-world mining rule.
+and enables the owner's colony branch when its requirements are met.
+
+### Colony extraction (#225)
+
+A populated own colony uses its **existing mines**, with the same Construction
+8 / Electronics 8 threshold and its owner's **delivered DeepSurvey** identifying
+the finite deposit. Ownership alone does not reveal the underground resource.
+The formula is **min(4, floor(mines / 25)) whole units/year**: 0–24 mines yield
+zero, 25–49 one, 50–74 two, 75–99 three, and 100+ four. As in existing ordinary
+mining, installed mines operate when population is nonzero; this slice adds no
+separate workforce cap, installation, racial exception, upkeep or per-unit
+industrial recipe. The mines themselves retain normal paid construction and
+ordinary I/B/G output. Empty colonies stop extracting.
+
+Both branches run once in the existing exotic mining phase, **after submitted
+commands and before movement, combat and production**. A planet chooses the
+colony branch if owned, otherwise the remote branch; robots never supplement a
+colony's rate. The shared four-unit annual allowance, finite remaining deposit
+and 1,000,000-unit surface-store bound apply. Newly built mines operate next
+year. Manual founding/capture before this phase uses the resulting owner's
+knowledge and infrastructure; arrival founding/capture after it waits until next
+year. No ownership handler resets the allowance or starts a second extraction.
+Deposits, physical surface stock and surviving ordinary mines persist across
+colonization/capture. A new owner needs its own received discovery.
+
+Gate and local cargo orders execute before extraction and cannot spend the
+coming year's yield. Arrival loading can collect newly mined material; colony
+production can spend it on laboratory work later in the same year. Mobile-base
+services remain after production. Production ETA forecasts replay yearly
+colony extraction from received operating inputs and finite deposit evidence,
+after accepted pending deliveries/transits. This future output never enters
+the current transfer or gate balance. The mining column separately labels the
+potential yearly yield as a **forecast**, with received actual extraction and
+its evidence date alongside it.
+
+Owner-only colony population/mine inputs are frozen with each dated surface
+report. They share that report's stock date and merge independently of older
+geological evidence. A foreign DeepSurvey can measure the deposit but does not
+receive these private inputs or warehouses. The panel and AI use received
+operating data; hidden extraction, depletion, population loss or mine changes
+do not refresh the old observation. Received colony population/mine fields also
+feed the player projection, preventing exports from disclosing a newer hidden
+operating state. Save v90 and earlier have no operating snapshot: estimates wait
+for a normal owner report, while physical mining still follows its existing
+received discovery and actual infrastructure.
+
+AI ordinary industry policy can build up to at least 25 mines on a received own
+deposit, paying the normal queue costs. Existing remote missions retire after
+received colony ownership blocks them. Haulers can use received own colony
+caches once local laboratory needs have been paid and the source needs no gate
+reserve, delivering to another received colony needing laboratory/gate stock.
+They retain assignment/acknowledgement guards and ordinary Load/Unload orders;
+no hub optimizer or conditional transport programme is introduced.
+
+Save **v91 / orders v36** add the bounded **COLX** extension for received/in-flight
+private operating inputs, keyed to their existing survey snapshots. It rejects
+invalid flags, private-owner mismatches, truncation and inconsistent references.
+Physical deposits/cargo keep EXOT; orders are unchanged. Older world layouts and
+remaining quantities are retained exactly.
 
 One unit is **1 kt**. Quantities are unsigned integers throughout mining, cargo,
 orders and persistence; the implementation bounds each store at 1,000,000 units.
@@ -231,7 +305,7 @@ inventories and no laboratory.
 
 ## Remaining #63 scope
 
-The original discovery-to-use chain and resonant gate pulse are complete slices. Additional materials, multiple
-separated clusters, colony extraction, transport conditional programs, market
+The discovery-to-use chain, resonant pulse and scaled clusters/colony extraction
+are complete slices. Additional materials, transport conditional programs, market
 trade, other exceptional modules, further wormhole/gate/communications applications and
 further AI/balance work remain future extensions. #63 stays open.

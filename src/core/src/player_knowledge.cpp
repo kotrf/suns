@@ -240,6 +240,9 @@ void queue_survey_report_impl(
                 candidate.planetSnapshot->xenocrystal = XenocrystalObservation{{0, 0,
                     (!p->owner || p->owner == playerId) ? p->xenocrystal.surface : 0, 0}, observationTurn, false, 0, 1};
         } else candidate.planetSnapshot->xenocrystal->stockPhase = 1;
+        const auto* p = find_planet_at_star(state, star);
+        if (p && p->owner == playerId && candidate.planetSnapshot->xenocrystal)
+            candidate.planetSnapshot->xenocrystal->colony = XenocrystalObservation::Colony{playerId, p->population, p->mines};
     }
     const auto phase = [](const auto& r) { return r.planetSnapshot && r.planetSnapshot->xenocrystal
         ? r.planetSnapshot->xenocrystal->stockPhase : 0; };
@@ -467,6 +470,7 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                         merged.site.extractedLastYear = incomingExotic->site.extractedLastYear;
                         merged.observedTurn = incomingExotic->observedTurn;
                         merged.stockPhase = incomingExotic->stockPhase;
+                        merged.colony = incomingExotic->colony;
                     }
                     if (incomingExotic->depositSurveyed && (!oldExotic || !oldExotic->depositSurveyed
                         || incomingExotic->depositObservedTurn >= oldExotic->depositObservedTurn)) {
