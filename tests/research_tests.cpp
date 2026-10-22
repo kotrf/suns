@@ -264,6 +264,15 @@ void verify_receiver_reserve_matches_research_forecast()
     assert(colony_research_allocation(state, colony, 6) == 5);
     assert(colony_research_allocation(state, colony, 1) == 0);
     assert(colony_research_allocation(state, colony, 0) == 0);
+    auto pendingState = state;
+    pendingState.planets.front().productionQueue.clear();
+    const PlayerOrders pending{1, {QueueProductionBatchOrder{colony.id, ProductionKind::LocalRadar},
+        QueueProductionOrder{colony.id, ProductionKind::Factory}}};
+    const auto planned = planned_production_state(pendingState, pending);
+    assert(planned.planets.front().productionQueue.size() == 2);
+    assert(planned.planets.front().productionQueue.front().kind == ProductionKind::LocalRadar);
+    assert(colony_research_allocation(planned, planned.planets.front(), 6) == 5);
+    assert(TurnProcessor{}.process(pendingState, {pending}).players.front().technology.progress[3] == 5);
     const auto first = TurnProcessor{}.process(state, {});
     assert(first.players.front().technology.progress[3] == 5);
     assert(first.planets.front().productionQueue.front().remainingCost

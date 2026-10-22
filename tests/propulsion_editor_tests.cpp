@@ -47,7 +47,7 @@ struct MainWindowTestAccess {
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();
         if (queueReceiver) window.pendingOrders_.orders.emplace_back(
-            QueueProductionOrder{colony.id, ProductionKind::LocalRadar});
+            QueueProductionBatchOrder{colony.id, ProductionKind::LocalRadar});
         window.pendingOrders_.orders.emplace_back(QueueProductionOrder{colony.id, ProductionKind::Factory});
         window.refreshResearchPanel();
     }
