@@ -26,6 +26,7 @@ std::uint64_t mix(std::uint64_t x)
 struct Store { std::uint32_t* amount; Position position; Fleet* fleet; Planet* planet; };
 std::optional<Store> store(GameState& s, PlayerId owner, CargoTransferEndpoint endpoint, bool commandDelivered)
 {
+    if(endpoint.orbital) return std::nullopt;
     if (bool(endpoint.planet) == bool(endpoint.fleet)) return {};
     if (endpoint.fleet) {
         auto f = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == endpoint.fleet && f.owner == owner; });

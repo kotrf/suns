@@ -37,6 +37,7 @@ struct MainWindowTestAccess {
         planet.mines = 10;
         planet.minerals = {123, 45, 67};
         for (int i = 0; i < 8; ++i) planet.productionQueue.push_back({ProductionKind::Factory, 50, 0});
+        set_survey_level(w.state_,1,planet.star,SurveyLevel::DeepSurvey,w.state_.turn);
         w.selection_.star = 1;
         w.selection_.fleet = 1;
         w.pendingOrders_ = {1, {}};

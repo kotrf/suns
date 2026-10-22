@@ -37,6 +37,7 @@ struct Store {
 };
 std::optional<Store> store(GameState& state, PlayerId owner, CargoTransferEndpoint endpoint)
 {
+    if(endpoint.orbital) return std::nullopt;
     if (bool(endpoint.fleet) == bool(endpoint.planet)) return {};
     if (endpoint.fleet) {
         const auto f = std::find_if(state.fleets.begin(), state.fleets.end(),

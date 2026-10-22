@@ -138,6 +138,7 @@ void computer_uses_only_received_resonance_supplies()
     s.players[0].race.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
     s.stars.push_back({3, "Frontier", {300, 0}}); s.players[0].surveyedStars = {1, 2};
     for (auto& station : s.orbitalStations) station.modules.push_back(OrbitalStationModule::RefuelingDepot);
+    for(const auto& p:s.planets)set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
     const auto plan = plan_computer_turn(make_player_view(s, 1));
     const auto pulse = std::find_if(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& order) {
         const auto* gate = std::get_if<GateFleetOrder>(&order); return gate && gate->fleet == 1 && gate->resonant;

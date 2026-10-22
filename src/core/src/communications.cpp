@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/communications.hpp"
 #include "suns/survey_probes.hpp"
 #include "suns/intergalactic_visitors.hpp"
@@ -27,7 +28,7 @@ struct CommunicationField {
 bool has_friendly_colony(const GameState& state, PlayerId owner, Position position)
 {
     return std::any_of(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
-        if (planet.owner != owner || planet.population == 0) return false;
+        if (planet.owner != owner || total_colony_population(planet) == 0) return false;
         const auto* star = find_star(state, planet.star);
         return star && same_position(star->position, position);
     });
@@ -61,7 +62,7 @@ std::vector<CommunicationField> communication_fields(
     // receiver roots the capital mesh: outposts form separate radio islands
     // until their radar or allied fleet scanner range overlaps that mesh.
     for (const auto& planet : state.planets) {
-        if (planet.owner != player || planet.population == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
+        if (planet.owner != player || total_colony_population(planet) == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
         if (!star) continue;
         fields.push_back({star->position, planetary_radar_range(planet.radar), planet.homeworld});
@@ -447,9 +448,9 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
             return field.connected;
         })) {
         const bool hasColony = std::any_of(state.planets.begin(), state.planets.end(),
-            [&](const Planet& planet) { return planet.owner == player && planet.population > 0; });
+            [&](const Planet& planet) { return planet.owner == player && total_colony_population(planet) > 0; });
         Position capital=position;
-        for(const auto& p:state.planets) if(p.owner==player && p.population)
+        for(const auto& p:state.planets) if(p.owner==player && total_colony_population(p))
             if(const auto* star=find_star(state,p.star)) { capital=star->position; if(p.homeworld) break; }
         return {hasColony ? SignalChannel::Slow : SignalChannel::Fast, position, capital, hasColony ? 1U : 0U, jamDelay};
     }
@@ -470,7 +471,7 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
     std::vector<Position> connectedTransceivers;
 
     for (const auto& planet : state.planets) {
-        if (planet.owner != player || planet.population == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
+        if (planet.owner != player || total_colony_population(planet) == 0 || planet.radar == PlanetaryRadarLevel::None) continue;
         const auto* star = find_star(state, planet.star);
         if (star && std::any_of(fields.begin(), fields.end(), [&](const CommunicationField& field) {
             return field.connected && inside_field(star->position, field);
@@ -542,7 +543,7 @@ void record_pulse(GameState& state, PlayerId owner, Position position, std::uint
             }
         }
     }
-    for(const auto& p:state.planets) if(p.owner==owner && p.population)
+    for(const auto& p:state.planets) if(p.owner==owner && total_colony_population(p))
         if(const auto* star=find_star(state,p.star); star && same_position(star->position,position)) {
             pulse.colony=p.id; pulse.fleet=0; pulse.deceptionStrength=0; break;
         }

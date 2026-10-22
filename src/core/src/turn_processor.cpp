@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/survey_probes.hpp"
@@ -367,11 +368,13 @@ struct CargoEndpointRef {
     Planet* planet{};
     Fleet* fleet{};
     Position position;
+    bool orbital{};
 };
 
 std::optional<CargoEndpointRef> resolve_cargo_endpoint(
     GameState& state, PlayerId player, CargoTransferEndpoint endpoint)
 {
+    if (endpoint.orbital && !endpoint.planet) return std::nullopt;
     if ((endpoint.planet == 0) == (endpoint.fleet == 0)) return std::nullopt;
 
     if (endpoint.planet != 0) {
@@ -381,7 +384,15 @@ std::optional<CargoEndpointRef> resolve_cargo_endpoint(
         if (planet == state.planets.end()) return std::nullopt;
         const auto* star = find_star(state, planet->star);
         if (!star) return std::nullopt;
-        return CargoEndpointRef{&*planet, nullptr, star->position};
+        if(endpoint.orbital) {
+            if(planet->owner!=player || !habitat_completed(*planet)) return std::nullopt;
+            if(state.mediumObserver) {
+                const auto* owner=find_player(state,player);
+                const auto evidence=owner?std::find_if(owner->surveyKnowledge.begin(),owner->surveyKnowledge.end(),[&](const auto& k){return k.star==planet->star;}):std::vector<SystemSurveyKnowledge>::const_iterator{};
+                if(!owner || evidence==owner->surveyKnowledge.end() || evidence->observedTurn!=state.turn || !evidence->planetSnapshot || !evidence->planetSnapshot->habitat) return std::nullopt;
+            }
+        }
+        return CargoEndpointRef{&*planet, nullptr, star->position,endpoint.orbital};
     }
 
     const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
@@ -446,6 +457,23 @@ bool hostile_station_blocks_landing(GameState& state, const Fleet& fleet, const 
     return true;
 }
 
+// floor(losses * group / total), without overflowing and without platform-
+// dependent floating point rounding. The winning force always loses <= total.
+std::uint64_t proportional_population_loss(std::uint64_t losses,std::uint64_t group,std::uint64_t total)
+{
+    std::uint64_t result=0,remainder=0;
+    for(int bit=63;bit>=0;--bit) {
+        result*=2;
+        if(remainder>=total-remainder) {remainder-=total-remainder;++result;}
+        else remainder*=2;
+        if((group>>bit)&1U) {
+            if(remainder>=total-losses) {remainder-=total-losses;++result;}
+            else remainder+=losses;
+        }
+    }
+    return result;
+}
+
 bool invade_colony(
     GameState& state, Fleet& fleet, Planet& planet, std::uint64_t attackingPopulation)
 {
@@ -457,7 +485,7 @@ bool invade_colony(
 
     if (hostile_station_blocks_landing(state, fleet, planet)) return false;
     const auto defender = planet.owner;
-    const auto defendingPopulation = planet.population;
+    const auto defendingPopulation = total_colony_population(planet);
     const auto chance = ground_invasion_success_chance(attackingPopulation, defendingPopulation);
     const auto outcomeRoll = unit_random(ground_combat_random(
         state, fleet, planet, attackingPopulation, defendingPopulation, 0x494e564153494f4eULL));
@@ -478,6 +506,7 @@ bool invade_colony(
         planet.radar = PlanetaryRadarLevel::None;
         planet.homeworld = false;
         planet.population = survivors;
+        planet.habitat.population=0; planet.habitat.service=HabitatService::Empty; planet.habitat.productionPaid=0;
         planet.productionQueue.clear();
         // A settlement default is not a conquest program. Captured worlds
         // await explicit production orders even when that default is selected.
@@ -491,7 +520,9 @@ bool invade_colony(
             static_cast<std::uint64_t>(std::llround(
                 static_cast<long double>(attackingPopulation) * casualtyFactor)));
         survivors = defendingPopulation - losses;
-        planet.population = survivors;
+        const auto orbitalLoss = defendingPopulation ? proportional_population_loss(losses,planet.habitat.population,defendingPopulation):0;
+        planet.habitat.population-=orbitalLoss;
+        planet.population-=losses-orbitalLoss;
     }
 
     if (const auto* star = find_star(state, planet.star)) {
@@ -527,9 +558,9 @@ bool invade_colony(
     return true;
 }
 
-std::uint64_t endpoint_colonists(const CargoEndpointRef& endpoint)
+std::uint64_t& endpoint_colonists(const CargoEndpointRef& endpoint)
 {
-    return endpoint.planet ? endpoint.planet->population : endpoint.fleet->colonists;
+    return endpoint.planet ? (endpoint.orbital?endpoint.planet->habitat.population:endpoint.planet->population) : endpoint.fleet->colonists;
 }
 
 MineralCargo& endpoint_minerals(CargoEndpointRef& endpoint)
@@ -551,11 +582,17 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
     auto source = resolve_cargo_endpoint(state, player, order.source);
     auto destination = resolve_cargo_endpoint(state, player, order.destination);
     if (!source || !destination || !same_position(source->position, destination->position)) return false;
-    if ((source->planet && destination->planet && source->planet == destination->planet)
+    if ((source->planet && destination->planet && source->planet == destination->planet && source->orbital==destination->orbital)
         || (source->fleet && destination->fleet && source->fleet == destination->fleet)) {
         return false;
     }
     if (!valid_mineral_cargo(order.minerals)) return false;
+    if(source->orbital || destination->orbital) {
+        if(mineral_cargo_mass(order.minerals)>epsilon) return false;
+        if(source->planet && destination->planet && (!engineering_station_available(state,*source->planet)
+            || !engineering_operation_available(state,*source->planet))) return false;
+        if(destination->orbital && order.colonists>kOrbitalPopulationCapacity-destination->planet->habitat.population) return false;
+    }
 
     const bool enemyDestination = destination->planet
         && destination->planet->owner != 0
@@ -582,7 +619,8 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
             return false;
         }
         const auto available = endpoint_colonists(*source);
-        if (source->planet ? order.colonists >= available : order.colonists > available) return false;
+        const bool retainLastSurface=source->planet && !source->orbital && !source->planet->habitat.population && !destination->orbital;
+        if (retainLastSurface ? order.colonists >= available : order.colonists > available) return false;
         const auto destinationPopulation = endpoint_colonists(*destination);
         if (order.colonists > std::numeric_limits<std::uint64_t>::max() - destinationPopulation) return false;
         if (source->fleet && destination->planet
@@ -603,10 +641,8 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
 
     // All validation is complete: apply the four resources atomically.
     if (order.colonists > 0) {
-        if (source->planet) source->planet->population -= order.colonists;
-        else source->fleet->colonists -= order.colonists;
-        if (destination->planet) destination->planet->population += order.colonists;
-        else destination->fleet->colonists += order.colonists;
+        endpoint_colonists(*source)-=order.colonists;
+        endpoint_colonists(*destination)+=order.colonists;
     }
 
     auto& destinationMinerals = endpoint_minerals(*destination);
@@ -785,16 +821,19 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::LoadAllAvailable: {
         const auto capacity = fleet_cargo_capacity(state, fleet);
         const auto freeSpace = std::max(0.0, capacity - fleet_cargo_used(state, fleet));
-        if (action.cargo == FleetCargoKind::Colonists) {
+        if (action.cargo == FleetCargoKind::Colonists || action.cargo==FleetCargoKind::OrbitalColonists) {
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (!colony) return false;
-            const auto reserve = std::max<std::uint64_t>(1, action.reservePopulation);
-            if (colony->population <= reserve) return false;
-            const auto available = colony->population - reserve;
+            const bool orbital=action.cargo==FleetCargoKind::OrbitalColonists;
+            if(orbital && !habitat_completed(*colony)) return false;
+            auto& population=orbital?colony->habitat.population:colony->population;
+            const auto reserve=orbital?action.reservePopulation:std::max<std::uint64_t>(1,action.reservePopulation);
+            if(population<=reserve) return false;
+            const auto available=population-reserve;
             const auto capacityColonists = static_cast<std::uint64_t>(
                 std::floor(freeSpace * kColonistsPerCargoUnit + 0.000001));
             const auto load = std::min(available, capacityColonists);
-            colony->population -= load;
+            population -= load;
             fleet.colonists += load;
             return false;
         }
@@ -816,6 +855,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         double* source{};
         double* destination{};
         switch (action.cargo) {
+        case FleetCargoKind::OrbitalColonists: break;
         case FleetCargoKind::Colonists: break;
         case FleetCargoKind::Ironium: source = &surface->minerals.ironium; destination = &fleet.minerals.ironium; break;
         case FleetCargoKind::Boranium: source = &surface->minerals.boranium; destination = &fleet.minerals.boranium; break;
@@ -830,6 +870,13 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         return false;
     }
     case FleetArrivalActionKind::UnloadAll: {
+        if(action.cargo==FleetCargoKind::OrbitalColonists) {
+            auto* colony=friendly_colony_at_fleet(state,fleet);
+            if(!colony || !habitat_completed(*colony) || hostile_station_blocks_landing(state,fleet,*colony)) return false;
+            const auto unload=std::min(fleet.colonists,kOrbitalPopulationCapacity-colony->habitat.population);
+            colony->habitat.population+=unload; fleet.colonists-=unload;
+            record_freight_delivery(freight,*colony,{},unload); return false;
+        }
         if (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All) {
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (colony) {
@@ -856,6 +903,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         if (surface == state.planets.end()) return false;
         MineralCargo delivered;
         switch (action.cargo) {
+        case FleetCargoKind::OrbitalColonists: break;
         case FleetCargoKind::Colonists: break;
         case FleetCargoKind::Ironium:
             delivered.ironium = fleet.minerals.ironium;
@@ -1987,6 +2035,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 void grow_colonies(GameState& state)
 {
     for (auto& planet : state.planets) {
+        planet.habitat.population+=projected_orbital_growth(planet);
         const auto change = projected_population_growth(state, planet, state.turn);
         if (change >= 0) planet.population += static_cast<std::uint64_t>(change);
         else planet.population -= std::min(
@@ -2018,7 +2067,7 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
 
                         if (concreteOrder.colonists > fleet->colonists) {
                             const auto load = concreteOrder.colonists - fleet->colonists;
-                            if (planet->population <= load) return;
+                            if (planet->population < load || (planet->population==load && !planet->habitat.population)) return;
                             planet->population -= load;
                         } else {
                             const auto delivered = fleet->colonists - concreteOrder.colonists;
@@ -2560,6 +2609,7 @@ TurnResult TurnProcessor::process_with_events(
     grow_colonies(next);
     refresh_planetary_engineering(next);
     publish_planetary_engineering_reports(next,current);
+    publish_habitat_reports(next,current);
     publish_exotic_material_reports(next,current);
 
     // The ledger counts physical deliveries; publish one manifest per receiving

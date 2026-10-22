@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
@@ -233,6 +234,7 @@ void MainWindow::refreshColonyWorkspace()
                 survey_level(received, pendingOrders_.player, star->id) == SurveyLevel::BasicScan ? "~" : "").arg(*habitability) : "");
             if (own) {
                 lines << QString("Population: %1 / %2").arg(planet->population).arg(population_capacity(received, *planet, received.turn));
+                if(habitat_completed(*planet)) lines << QString("Orbit: %1 / %2; reserve %3 years").arg(qulonglong(planet->habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity)).arg(planet->habitat.reserveYears);
                 lines << QString("Planetary radar: %1 (%2 ly)")
                     .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
                          planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
@@ -250,7 +252,7 @@ void MainWindow::refreshColonyWorkspace()
                     lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
                         .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
                         .arg((damage.contamination+1)/2);
-                lines << QString("Resources: %1 / year • Orbit: %2").arg(colony_output(*planet))
+                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(received,*planet))
                     .arg(find_orbital_station_at_planet(received, planet->id) ? "station" : "no station");
             }
             if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(received,pendingOrders_.player,planet->id)) {

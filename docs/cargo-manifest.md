@@ -61,3 +61,7 @@ Earth begins with a small placeholder stock of all three minerals so the logisti
 panel and whole-unit transfers using the same endpoints/hold/mass. Arrival cargo
 policies can load/unload xenocrystal; Unload all cargo includes it. Surface stock
 and finite deposits use delivered, dated evidence.
+
+## Orbital habitat integration (#56)
+
+Orbital habitats add a separate population-only endpoint and an Orbital colonists arrival policy. Existing Colonists/All policies retain their surface meaning. Exact transfers conserve real people and respect shared hold/mass, orbital capacity and current received evidence. Emergency evacuation can remove the last orbital resident after station loss; local surface/orbit shuttles need support. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.

@@ -93,6 +93,14 @@ const std::vector<ResearchUnlock>& research_unlocks()
             pulse.extraLevels[std::size_t(ResearchField::Electronics)] = 18;
             pulse.extraLevels[std::size_t(ResearchField::Construction)] = 16; entries.push_back(std::move(pulse));
         }
+        {
+            ResearchUnlock habitat{ResearchField::Construction,18,"Orbital habitat",
+                "One engineering slot; 2 million orbital residents. 4800 work, 80/year, I/B/G 480/240/480; friendly Starbase/Fortress shipyard. Biology 14 and Energy 16. Occupied upkeep: 2 work and I/B/G 1/1/1 yearly; three paid emergency years, then 10% yearly losses. Physical colonist transport required.",{}};
+            habitat.planetaryEngineering=true;
+            habitat.extraLevels[std::size_t(ResearchField::Energy)]=16;
+            habitat.extraLevels[std::size_t(ResearchField::Biology)]=14;
+            entries.push_back(std::move(habitat));
+        }
         for (const auto& gate : stargate_technologies()) {
             ResearchUnlock unlock{ResearchField::Energy, gate.energy, gate.name,
                 std::string("Paid orbital fitting; requires two owned, surviving gates and a live command link. ")
@@ -527,6 +535,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         }
         // Ownership does not deliver remote construction telemetry. Both the
         // installation and its remaining queue work come from the same packet.
+        known.habitat = {};
         known.resonanceLab = {};
         std::erase_if(known.productionQueue, [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
         if (known.owner == playerId) {
@@ -565,6 +574,15 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             known.population = exotic->colony->population;
             known.mines = exotic->colony->mines;
         }
+        if(known.owner==playerId) {
+            const auto evidence=std::find_if(player->surveyKnowledge.begin(),player->surveyKnowledge.end(),[&](const auto& k){return k.star==planet.star;});
+            if(evidence!=player->surveyKnowledge.end() && evidence->observedOwner==playerId && evidence->planetSnapshot && evidence->planetSnapshot->habitat) {
+                const auto& h=*evidence->planetSnapshot->habitat;
+                known.habitat=h.habitat; known.population=h.surfacePopulation; known.industry=h.industry; known.minerals=h.minerals;
+                known.mines=h.mines; known.productionQueue=h.queue;
+                if(known.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !h.stationSupported)known.engineering.operational=false;
+            }
+        }
         state.planets.push_back(known);
     }
     for (const auto& design : host.shipDesigns) if (design.owner == playerId) {
@@ -602,9 +620,19 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         auto contact=recon_contact_fleet(observed,host.turn);
         state.fleets.push_back(contact); state.nextFleetId=std::max(state.nextFleetId,contact.id+1);
     }
-    for (const auto& planet : host.planets) if (const auto* station = known_orbital_station(host,playerId,planet.id)) {
-        state.orbitalStations.push_back(*station);
-        state.nextOrbitalStationId=std::max(state.nextOrbitalStationId,station->id+1);
+    for(const auto& planet:host.planets) {
+        const OrbitalStation* station=nullptr;bool frozen=false;
+        for(const auto& record:player->surveyKnowledge) if(record.star==planet.star && record.observedOwner==playerId
+            && record.planetSnapshot && record.planetSnapshot->habitat) {
+            const auto& observation=*record.planetSnapshot->habitat;frozen=true;
+            if(observation.station)station=&*observation.station;
+            break;
+        }
+        if(!frozen)station=known_orbital_station(host,playerId,planet.id);
+        if(station) {
+            state.orbitalStations.push_back(*station);
+            state.nextOrbitalStationId=std::max(state.nextOrbitalStationId,station->id+1);
+        }
     }
     return view;
 }

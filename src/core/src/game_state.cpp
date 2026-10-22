@@ -2,6 +2,7 @@
 #include "suns/exotic_materials.hpp"
 #include "suns/game_state.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/orbital_habitats.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -1541,6 +1542,9 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
         PlanetSurveySnapshot result{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
         if (planet->owner == player) {
             result.scienceSamples=planet->scienceSamples;
+            result.habitat=HabitatObservation{planet->habitat,engineering_station_available(state,*planet),planet->population,planet->industry,planet->minerals,planet->mines,planet->productionQueue};
+            result.habitat->stationEvidenceTime=3*observedTurn+(observedTurn<=state.turn?2:0);
+            if(const auto* station=find_orbital_station_at_planet(state,planet->id);station && station->owner==player) result.habitat->station=*station;
             result.resonanceLab = planet->resonanceLab;
             const auto item = std::find_if(planet->productionQueue.begin(), planet->productionQueue.end(),
                 [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
@@ -1785,8 +1789,10 @@ std::int64_t projected_population_growth(
 
 std::uint32_t colony_output(const Planet& planet)
 {
-    if (planet.owner == 0) return 0;
-    return planet.industry + static_cast<std::uint32_t>(planet.population / kPopulationPerProductionUnit);
+    if (planet.owner == 0 || (planet.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !total_colony_population(planet))) return 0;
+    const auto orbital=habitat_completed(planet) && planet.engineering.operational
+        && planet.habitat.service==HabitatService::Normal?planet.habitat.population:0;
+    return planet.industry + static_cast<std::uint32_t>((planet.population+orbital) / kPopulationPerProductionUnit);
 }
 
 int stellar_habitability_bias(StarClass stellarClass)
@@ -1811,10 +1817,10 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
 
     for (const auto& planet : state.planets) {
         if (planet.owner != playerId) continue;
-        result.colonyHistory.push_back({planet.id, planet.population, planet.industry,
+        result.colonyHistory.push_back({planet.id, total_colony_population(planet), planet.industry,
             planet.mines, colony_output(planet), planet.minerals});
         ++result.colonies;
-        result.population += planet.population;
+        result.population += total_colony_population(planet);
         result.factories += planet.industry;
         result.mines += planet.mines;
         result.productionOutput += colony_output(planet);

@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/deep_space.hpp"
@@ -161,7 +162,7 @@ bool colony_detects_fleet(const GameState& state, const Planet& colony, const Fl
 {
     if(!turn) turn=state.turn;
     const auto* star = find_star(state, colony.star);
-    return colony.population && colony.radar!=PlanetaryRadarLevel::None && star && distance_between(star->position, target.position)
+    return total_colony_population(colony) && colony.radar!=PlanetaryRadarLevel::None && star && distance_between(star->position, target.position)
         <= fleet_detection_range(state, target, planetary_radar_range(colony.radar)*(1-sensor_interference(state,colony.owner,star->position,turn))
             *medium_active_sensor_factor(state,star->position)*medium_active_path_factor(state,star->position,target.position)) + epsilon;
 }
@@ -341,7 +342,7 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
                 if(auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==recipient;}); player!=state.players.end())
                     player->pendingPlayerReports.back().aftermath=observe_planet_aftermath(planet,recipient==defender,turn);
             }
-            if (!planet.population) {
+            if (!total_colony_population(planet)) {
                 queue_player_report(state, defender, PlayerReportKind::ColonyLost, star->position, turn, star->id, planet.id);
                 planet.owner = 0;
                 planet.radar = PlanetaryRadarLevel::None;
@@ -518,7 +519,7 @@ std::uint64_t report_transmission_turn(const GameState& state,PlayerId owner,Pos
 {
     // Local ship/surface exchange uses the colony's transmitter, even when
     // the observing fleet keeps its own long-range transmitter off.
-    for (const auto& p : state.planets) if (p.owner == owner && p.population)
+    for (const auto& p : state.planets) if (p.owner == owner && total_colony_population(p))
         if (const auto* star = find_star(state,p.star); star && same_position(star->position,position)) return turn;
     // Away from a friendly colony, an explicit observer uses its own program.
     for (const auto& f : state.fleets) if (observer && f.id == observer && f.owner == owner)

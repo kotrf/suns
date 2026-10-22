@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/computer_player.hpp"
 #include "suns/combat.hpp"
 #include "suns/mobile_base.hpp"
@@ -909,9 +910,15 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
                 if(improvement>gain) {best=kind;strength=output;gain=improvement;}
             }
         }
+        const auto capacity=population_capacity(view.state,p,view.state.turn);
+        if(best==PlanetaryEngineeringKind::None && capacity && p.population>=capacity*4/5
+            && planetary_engineering_available(view.state,view.player,PlanetaryEngineeringKind::OrbitalHabitat)
+            && mineral_cargo_sufficient(p.minerals,{500,260,500})) {
+            best=PlanetaryEngineeringKind::OrbitalHabitat;strength=10;
+        }
         if(best!=PlanetaryEngineeringKind::None) {
             plan.orders.orders.push_back(SetPlanetaryEngineeringOrder{p.id,best,EngineeringAction::StartOrResume,strength});
-            explain(reason,"Build received radiation protection at colony "+std::to_string(p.id));
+            explain(reason,(best==PlanetaryEngineeringKind::OrbitalHabitat ? "Build received orbital housing at colony " : "Build received radiation protection at colony ")+std::to_string(p.id));
         }
     }
     plan_military(view, plan, reason);
@@ -962,6 +969,47 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
     }
     plan_exotic_materials(view, plan, reason);
     plan_expansion(view, plan, reason);
+    // Population policy uses only fresh received orbital evidence and ordinary
+    // cargo orders. It never requests emergency action from hidden host losses.
+    for(const auto& p:view.state.planets) if(p.owner==view.player && habitat_completed(p)) {
+        const auto evidence=std::find_if(player->surveyKnowledge.begin(),player->surveyKnowledge.end(),[&](const auto& k){return k.star==p.star;});
+        if(evidence==player->surveyKnowledge.end()) continue;
+        if(evidence->observedTurn==view.state.turn && !p.habitat.population && p.population>400000 && engineering_station_available(view.state,p)
+            && engineering_operation_available(view.state,p)) {
+            plan.orders.orders.push_back(TransferCargoOrder{{p.id,0},{p.id,0,true},200000,{}});
+            explain(reason,"Seed received completed orbital habitat with physical colonists");
+        }
+        if(!p.habitat.population || (p.habitat.service!=HabitatService::Reserve && p.habitat.service!=HabitatService::Failing)) continue;
+        const auto* at=find_star(view.state,p.star); if(!at)continue;
+        for(const auto& f:view.state.fleets) {
+            if(f.owner!=view.player || !idle(f) || !same_position(f.position,at->position))continue;
+            const bool reserved=std::any_of(plan.orders.orders.begin(),plan.orders.orders.end(),[&](const auto& o){return std::visit([&](const auto& v){
+                if constexpr(requires { v.fleet; }) return v.fleet==f.id;
+                else if constexpr(std::is_same_v<std::decay_t<decltype(v)>,TransferCargoOrder>) return v.source.fleet==f.id || v.destination.fleet==f.id;
+                else return false;
+            },o);});
+            if(reserved)continue;
+            const auto space=std::max(0.0,fleet_cargo_capacity(view.state,f)-fleet_cargo_used(view.state,f));
+            const auto count=std::min(p.habitat.population,std::uint64_t(std::floor(space*kColonistsPerCargoUnit)));
+            if(!count)continue;
+            const Planet* safe=nullptr; double shortest=std::numeric_limits<double>::infinity();
+            for(const auto& destination:view.state.planets) {
+                if(destination.owner!=view.player || destination.id==p.id || !destination.population
+                    || current_planet_habitability(view.state,destination,view.state.turn)<=0)continue;
+                const auto* star=find_star(view.state,destination.star);if(!star)continue;
+                const auto d=distance_between(f.position,star->position);auto loaded=f;loaded.colonists+=count;
+                if(d<shortest && fleet_fuel_consumption_for_distance(view.state,loaded,d)<=f.fuel) {safe=&destination;shortest=d;}
+            }
+            if(!safe)continue;
+            plan.orders.orders.push_back(MoveFleetOrder{f.id,at->position,f.warp,
+                {FleetArrivalActionKind::LoadAllAvailable,0,FleetCargoKind::OrbitalColonists},
+                {{find_star(view.state,safe->star)->position,f.warp,{FleetArrivalActionKind::UnloadAll,1,FleetCargoKind::Colonists}}}});
+            auto& goals=plan.nextState.fleetGoals;std::erase_if(goals,[&](const auto& g){return g.fleet==f.id;});
+            goals.push_back({f.id,ComputerFleetGoalKind::Resupply,safe->star,view.state.turn,review_turn(view.state,f)});
+            explain(reason,"Evacuate received failing orbital habitat with an available paid transport");break;
+        }
+    }
+    std::sort(plan.nextState.fleetGoals.begin(),plan.nextState.fleetGoals.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
     plan.nextState.initialized = true;
     if (reason.empty()) reason = plan.nextState.fleetGoals.empty()
         ? "Retain paid queues and research; no safe new missions available."

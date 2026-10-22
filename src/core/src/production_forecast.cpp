@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/production.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
@@ -55,6 +56,7 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             && !result[original].completionTurn && !result[original].retiredTurn
             && std::find(origins.begin(),origins.end(),original)==origins.end())
                 result[original].retiredTurn=state.turn+offset;
+        simulated.habitat.population+=projected_orbital_growth(simulated);
         const auto populationChange = projected_population_growth(simulationState, simulated, simulationState.turn);
         if (populationChange >= 0) simulated.population += static_cast<std::uint64_t>(populationChange);
         else simulated.population -= std::min(simulated.population, static_cast<std::uint64_t>(-populationChange));

@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/mobile_base.hpp"
 #include "main_window.hpp"
 #include "suns/interstellar_medium.hpp"
@@ -228,6 +229,7 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
 {
     const auto cargo = [&] {
         switch (action.cargo) {
+        case FleetCargoKind::OrbitalColonists: return QString("orbital colonists");
         case FleetCargoKind::Colonists: return QString("colonists");
         case FleetCargoKind::Ironium: return QString("Ironium");
         case FleetCargoKind::Boranium: return QString("Boranium");
@@ -819,7 +821,7 @@ void MainWindow::rebuildScene()
                                * kPopulationPerHabitability);
             if (colony) {
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
-                               .arg(colony_output(*planet))
+                               .arg(net_colony_output(playerView,*planet))
                                .arg(productionSummary(playerView, *planet))
                                .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
             }
@@ -952,7 +954,10 @@ void MainWindow::updateControls()
     const auto* star = selectedStar();
     const auto received = make_player_view(state_, pendingOrders_.player).state;
     const auto* planet = selectedPlanet();
-    if (planet && planet->owner == pendingOrders_.player) planet = find_planet(received, planet->id);
+    if (planet) {
+        const auto* known=find_planet(received,planet->id);
+        if(known && known->owner==pendingOrders_.player)planet=known;
+    }
     const auto* authoritativeFleet = selectedFleet();
     const auto visibleFleetStorage = authoritativeFleet
         ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
@@ -973,11 +978,12 @@ void MainWindow::updateControls()
     std::size_t colonies = 0;
     std::uint64_t population = 0;
     std::uint32_t output = 0;
-    for (const auto& candidate : state_.planets) {
+    const auto receivedEconomy=make_player_view(state_,pendingOrders_.player).state;
+    for (const auto& candidate : receivedEconomy.planets) {
         if (candidate.owner == pendingOrders_.player) {
             ++colonies;
-            population += candidate.population;
-            output += colony_output(candidate);
+            population += total_colony_population(candidate);
+            output += net_colony_output(receivedEconomy,candidate);
         }
     }
 
@@ -1154,6 +1160,13 @@ void MainWindow::updateControls()
                                  .arg(planetary_radar_range(receivedPlanet.radar), 0, 'f', 0)
                                  .arg(static_cast<qulonglong>(receivedPlanet.population))
                                  .arg(static_cast<qulonglong>(population_capacity(received, receivedPlanet, received.turn)));
+            if(receivedPlanet.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat) {
+                const auto& orbit=predictedPlanet==plannedCargo.planets.end()?receivedPlanet:*predictedPlanet;
+                populationLine+=QString("Orbital residents received: %1 / %2; after accepted orders: %3. Forecast orbital growth: +%4/year.<br>Support: %5; emergency reserve: %6 years.<br>")
+                    .arg(qulonglong(receivedPlanet.habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity))
+                    .arg(qulonglong(orbit.habitat.population)).arg(qlonglong(projected_orbital_growth(plannedCargo,orbit)))
+                    .arg(QString::fromStdString(habitat_service_name(receivedPlanet.habitat.service))).arg(receivedPlanet.habitat.reserveYears);
+            }
             const auto observation = known_xenocrystal(received, pendingOrders_.player, planet->id);
             if (observation && observation->colony && observation->colony->owner == pendingOrders_.player)
                 populationLine += QString("Population report: year %1 (age %2)<br>")
@@ -1186,12 +1199,13 @@ void MainWindow::updateControls()
                              .arg(QString::fromStdString(fleet->name)).arg(selectedWarp)
                              .arg(turnCount(selectedEta)).arg(routeFuelLine).arg(dynamicArrivalLine);
         }
+        const auto* displayPlanet=find_planet(received,planet->id);if(!displayPlanet)displayPlanet=planet;
         selectionLabel_->setText(QString("<hr><b>%1</b><br>%2<br>%3<br>Status: %4<br>"
                                           "%5Infrastructure: %6<br>Economic output: %7 / turn<br>"
                                           "Production: <b>%8</b>%9%10%11")
             .arg(QString::fromStdString(star->name)).arg(QString::fromStdString(planet->name))
-            .arg(habitabilityLine).arg(owner).arg(populationLine).arg(planet->industry)
-            .arg(colony_output(*planet)).arg(productionSummary(received, *planet)).arg(travelLine)
+            .arg(habitabilityLine).arg(owner).arg(populationLine).arg(displayPlanet->industry)
+            .arg(net_colony_output(received,*displayPlanet)).arg(productionSummary(received, *displayPlanet)).arg(travelLine)
             .arg(artifactLine).arg(deepSurveyLine));
     } else {
         selectionLabel_->setText("<hr>Select a star system.");
@@ -1290,8 +1304,9 @@ void MainWindow::updateControls()
     buildFactoryButton_->setEnabled(ownedColony);
     designShipButton_->setEnabled(true);
 
-    const auto* knownStation = ownedColony ? known_orbital_station(state_, pendingOrders_.player, planet->id) : nullptr;
-    const bool stationExists = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
+    const auto planning = planned_ship_design_state(received, pendingOrders_);
+    const bool stationExists = ownedColony && colony_has_orbital_service(
+        planning, planet->id, pendingOrders_.player, OrbitalStationModule::Shipyard);
     shipDesignCombo_->setEnabled(stationExists && shipDesignCombo_->count() > 0);
     buildOrbitalDockButton_->setEnabled(ownedColony);
     buildOrbitalDockButton_->setObjectName("orbitalStationButton");
@@ -1299,7 +1314,6 @@ void MainWindow::updateControls()
     buildOrbitalDockButton_->setToolTip("View, fit, build or refit the colony's orbital station through production");
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
-    const auto planning = planned_ship_design_state(state_, pendingOrders_);
     const auto* buildDesign = find_ship_design(planning, designId);
     buildShipButton_->setEnabled(stationExists && buildDesign != nullptr
         && buildDesign->owner == pendingOrders_.player);
@@ -1510,14 +1524,14 @@ void MainWindow::queueFleetLoadAll()
 void MainWindow::queueShipDesign()
 {
     const auto* star = selectedStar();
-    const auto* planet = selectedPlanet();
-    if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
+    const auto planning = planned_ship_design_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+    const auto* planet = star ? find_planet_at_star(planning, star->id) : nullptr;
+    if (!star || !is_surveyed(planning, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
-    const auto planning = planned_ship_design_state(state_, pendingOrders_);
     const auto* design = find_ship_design(planning, designId);
     if (!design || design->owner != pendingOrders_.player
-        || !colony_has_orbital_service(state_, planet->id, pendingOrders_.player,
+        || !colony_has_orbital_service(planning, planet->id, pendingOrders_.player,
             OrbitalStationModule::Shipyard)) return;
 
     appendPendingOrder(QueueShipDesignOrder{planet->id,

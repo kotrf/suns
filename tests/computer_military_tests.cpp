@@ -232,6 +232,7 @@ void access_and_paid_work()
         player.race.noRamScoopEngines = (flags & 2) != 0;
         for (auto& p : state.planets) if (p.owner == 2) p.defenses = 20;
         for (auto& station : state.orbitalStations) if (station.owner == 2) station.components = {ShipComponentType::Laser};
+        for(const auto& p:state.planets) if(p.owner==2)set_survey_level(state,2,p.star,SurveyLevel::DeepSurvey,state.turn);
         const auto view = make_player_view(state, 2);
         const auto plan = plan_computer_turn(view);
         const auto planned = planned_ship_design_state(view.state, plan.orders);
@@ -245,6 +246,7 @@ void access_and_paid_work()
         assert(military);
         auto& colony = *std::find_if(state.planets.begin(), state.planets.end(), [](const auto& p) { return p.owner == 2; });
         colony.productionQueue = {{ProductionKind::Mine, 1, 0}};
+        set_survey_level(state,2,colony.star,SurveyLevel::DeepSurvey,state.turn);
         const auto retained = plan_computer_turn(make_player_view(state, 2));
         for (const auto& order : retained.orders.orders) {
             assert(!std::holds_alternative<CancelProductionOrder>(order));

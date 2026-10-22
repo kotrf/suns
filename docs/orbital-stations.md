@@ -97,3 +97,7 @@ Save **v65** adds station fits/damage, queued refit targets, colony defenses,
 station-loss history and undelivered station contacts. Orders **v20** adds fitted
 station construction/refit and defense batches/templates. Existing readers
 remain; all PBEM participants should use the same build.
+
+## Orbital habitat integration (#56)
+
+Orbital habitat structures persist separately from the supporting station. A friendly Starbase/Fortress shipyard supports construction and occupied operation; its loss starts finite emergency reserve use rather than deleting residents instantly. No extra armed station or new station-capture rule is added. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.

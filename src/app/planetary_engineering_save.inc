@@ -9,7 +9,7 @@ void writeEngineeringState(QDataStream& out,const PlanetaryEngineering& e)
 void readEngineeringState(QDataStream& in,PlanetaryEngineering& e)
 {
     quint32 work{},builder{}; quint8 strength{},online{}; quint64 started{},completed{};
-    if(!readEnum(in,e.kind,quint8(gReadSaveFormatVersion>=92?PlanetaryEngineeringKind::AdaptiveMagnetosphere:PlanetaryEngineeringKind::OrbitalShades)))return;
+    if(!readEnum(in,e.kind,quint8(gReadSaveFormatVersion>=94?PlanetaryEngineeringKind::OrbitalHabitat:gReadSaveFormatVersion>=92?PlanetaryEngineeringKind::AdaptiveMagnetosphere:PlanetaryEngineeringKind::OrbitalShades)))return;
     in>>work; readMinerals(in,e.invested); in>>strength>>online>>builder>>started>>completed;
     e.work=work; e.strength=strength; e.operational=online; e.builder=builder; e.startedTurn=started; e.completedTurn=completed;
     if(online>1 || !engineering_state_valid(e))markCorrupt(in);

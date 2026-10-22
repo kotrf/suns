@@ -1911,6 +1911,7 @@ void specialist_gate_fits_and_manifests_round_trip()
     save.state.players[0].technology.levels.fill(26);
     save.state.orbitalStations[0].hull = OrbitalStationHullType::Fortress;
     save.state.orbitalStations[0].components = {ShipComponentType::InfinityStargate};
+    set_survey_level(save.state,1,save.state.planets[0].star,SurveyLevel::DeepSurvey,save.state.turn);
     const StationConstruction work{{OrbitalStationHullType::Starbase,
         {ShipComponentType::NetworkStargate}, true, true}, 1};
     save.pendingOrders = {1, {QueueStationOrder{1, work}, GateFleetOrder{1, 1, 2}}};
@@ -2514,6 +2515,7 @@ void legacy_conquest_with_surviving_station_round_trips()
     planet.productionQueue.clear();
     auto& station=captured.orbitalStations[0]; station.owner=2; station.hull=OrbitalStationHullType::Starbase;
     set_survey_level(captured,2,planet.star,SurveyLevel::GeologicalSurvey,captured.turn);
+    set_survey_level(captured,1,planet.star,SurveyLevel::GeologicalSurvey,captured.turn);
     auto& fleet=captured.fleets[0]; fleet.design=kColonyShipDesignId; fleet.ships={{kColonyShipDesignId,1}};
     fleet.position=captured.stars[0].position; fleet.colonists=0;
     assert(captured.orbitalStations.size()==1 && captured.orbitalStations[0].owner==2);

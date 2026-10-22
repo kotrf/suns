@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
 #include "suns/production.hpp"
 #include "suns/planetary_engineering.hpp"
@@ -53,6 +54,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::OrbitalMirrors: name = "Orbital mirrors"; break;
     case ProductionKind::OrbitalShades: name = "Orbital shades"; break;
     case ProductionKind::ArtificialMagnetosphere: name = "Artificial magnetosphere"; break;
+    case ProductionKind::OrbitalHabitat: name="Orbital habitat"; break;
     case ProductionKind::AdaptiveMagnetosphere: name = "Adaptive magnetosphere"; break;
     case ProductionKind::ResonanceLaboratory: name = "Resonance laboratory"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;
@@ -311,7 +313,7 @@ void MainWindow::refreshProductionQueue()
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
         ? forecastPlayer->technology.researchAllocationPercent
         : 0;
-    const auto output = colony_output(*planet);
+    const auto output = net_colony_output(forecastState,*projectedPlanet);
     const auto guaranteedResearch = static_cast<std::uint32_t>(
         static_cast<std::uint64_t>(output) * allocationPercent / 100U);
     productionQueueSummary_->setText(

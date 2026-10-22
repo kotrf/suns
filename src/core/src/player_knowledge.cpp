@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/survey_probes.hpp"
 #include "suns/exotic_materials.hpp"
@@ -236,6 +237,7 @@ void queue_survey_report_impl(
         held_report_source(state,playerId,sourcePosition,observationTurn,sourceFleet)};
     candidate.planetSnapshot = capture_planet_survey(state, playerId, star, level, observationTurn);
     if (finalSurfaceObservation && candidate.planetSnapshot) {
+        if(candidate.planetSnapshot->habitat)candidate.planetSnapshot->habitat->stationEvidenceTime=3*candidate.observedTurn+2;
         if (!candidate.planetSnapshot->xenocrystal) {
             if (const auto* p = find_planet_at_star(state, star))
                 candidate.planetSnapshot->xenocrystal = XenocrystalObservation{{0, 0,
@@ -471,7 +473,11 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                 && !(oldExotic && incomingExotic && oldExotic->observedTurn == incomingExotic->observedTurn
                     && oldExotic->stockPhase > incomingExotic->stockPhase)
                 && (report.level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey))
-                updated->planetSnapshot = report.planetSnapshot;
+            {
+                auto evidence=report.planetSnapshot;
+                merge_received_habitat_station(evidence,updated->planetSnapshot);
+                updated->planetSnapshot=std::move(evidence);
+            }
             if (updated != player.surveyKnowledge.end() && updated->planetSnapshot) {
                 if (newerExotic) {
                     auto merged = oldExotic.value_or(*incomingExotic);
@@ -629,6 +635,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 if(std::any_of(events.begin(),events.end(),[&](const auto& e){return e.id==id;})
                     || std::any_of(player.history.begin(),player.history.end(),[&](const auto& h){return std::any_of(h.milestones.begin(),h.milestones.end(),[&](const auto& m){return m.eventId==id;});})) continue;
             }
+            apply_received_station_battle(player,report);
             if (report.kind == PlayerReportKind::ScientificData) apply_scientific_data(state, player, report, events);
             auto severity = event_severity(report.kind);
             if (report.kind == PlayerReportKind::XenocrystalDepleted

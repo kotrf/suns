@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
@@ -238,7 +239,7 @@ void MainWindow::refreshResearchPanel()
         for (const auto& planet : planned.planets) {
             if (planet.owner != player->id) continue;
             guaranteedRp += static_cast<std::uint32_t>(
-                static_cast<std::uint64_t>(colony_output(planet)) * allocationPercent / 100U);
+                static_cast<std::uint64_t>(net_colony_output(planned,planet)) * allocationPercent / 100U);
             artifactRp += retained_sample_research(planned, planet);
             const auto parallel = resonance_research(planned, planet);
             for (std::size_t field = 0; field < parallel.size(); ++field) parallelRp[field] += parallel[field];

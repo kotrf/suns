@@ -531,6 +531,11 @@ QString event_text(const GameState& state, const GameEvent& event)
         else if(event.quantity==0) detail=QString("Construction started; at least %1 years at maximum assembly capacity.").arg(engineering_work(engineering_project_kind(event.productionKind))/kEngineeringWorkPerYear);
         else if(event.quantity==100) detail=QString("Construction completed. Supported operation changes its environmental axis; output can be set from 0 to %1.").arg(engineering_max_strength(engineering_project_kind(event.productionKind)));
         else detail=QString("Construction milestone: %1% complete.").arg(event.quantity);
+        if(event.productionKind==ProductionKind::OrbitalHabitat) {
+            if(event.kind==GameEventKind::EngineeringProgress && event.quantity==100) detail="Construction complete: empty habitat for 2 million residents with three emergency reserve years. Transport or resettle real colonists.";
+            if(event.kind==GameEventKind::EngineeringPaused || event.kind==GameEventKind::EngineeringResumed)
+                detail+=QString(" Emergency reserve reported: %1 years; orbital residents lost in this annual status report: %2. Ordinary delayed observations provide the population manifest.").arg(event.technologyLevel).arg(qulonglong(event.deliveredColonists));
+        }
         text=QString("Year %1 • %2 at %3.\n%4").arg(qulonglong(event.observedTurn)).arg(project,event_planet_name(state,event),detail);
     } else if (event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
         || event.kind == GameEventKind::OutpostFuelExhausted) {

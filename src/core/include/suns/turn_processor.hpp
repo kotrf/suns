@@ -101,6 +101,7 @@ struct SetFleetMineralCargoOrder {
 struct CargoTransferEndpoint {
     PlanetId planet{};
     FleetId fleet{};
+    bool orbital{}; // Only population, at an owned completed habitat.
 };
 
 struct TransferCargoOrder {

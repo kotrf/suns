@@ -137,3 +137,7 @@ to their delivered-study and active-allocation gates. These are delayed scientif
 reports, shown separately in Research; focused artifacts retain their ordinary
 bonus and are not counted twice. The laboratory requires physically delivered
 xenocrystal, while existing research and ship/station recipes remain available.
+
+## Orbital habitat integration (#56)
+
+Orbital habitats require Construction 18, Energy 16 and Biology 14. They use separate physical residents and ordinary colony output/research allocation after mandatory paid upkeep. They do not require field samples or xenocrystal. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.

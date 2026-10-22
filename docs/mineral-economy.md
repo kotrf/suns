@@ -10,7 +10,9 @@ Stellar spectral class provides only a weak prior. Hot blue/white systems are bi
 
 ## Extraction
 
-Every settled world has baseline extraction capacity from its population. Yield is:
+Every world with surface residents has baseline extraction capacity from its
+surface population. Orbital habitat residents add no extraction workforce, and
+a colony with no surface residents has no baseline or mine extraction. Yield is:
 
 `extraction units × concentration / 100`
 
@@ -50,3 +52,8 @@ queue order and atomic-spending rules as turn resolution.
 ## Save compatibility
 
 Save format v2 persists the Mine count on each planet. The v2 reader still accepts v1 saves; older planets simply load with zero built Mines.
+
+Occupied [orbital habitats](orbital-habitats.md) debit mandatory life support
+and affordable reserve recharge before research and queue construction. These
+physical I/B/G payments share the colony store; orbital output is included once
+and only while service operates. Forecasts use the same maintenance resolver.

@@ -1,6 +1,66 @@
 # Project status and development handoff
 
-## Verified checkpoint — 22 October 2026 (Europe/Moscow): main after #227
+## Verified checkpoint — 22 October 2026 (Europe/Moscow): main after #228
+
+Main is `697bec011e0babddd0459a43dffc7c816d4c0144`, merged #228.
+#59 is closed. Formats: **save v93 / orders v37**. Prior #59/#227 branch wording
+below is historical; physical samples, working artifacts, delivered observation
+unlocks and science delivery receipts are on main.
+
+## Implementation branch — orbital habitats #56
+
+`codex/orbital-habitats` starts from that main. The user approved the
+[complete first habitat design](orbital-habitats.md): distinct orbital residents
+under one colony owner/economy, competing for its single engineering slot, and
+combined defense under existing invasion/casualty rules. Real construction,
+colonist transport, ongoing upkeep, finite emergency reserves, attrition,
+evacuation and inherited physical infrastructure form the first slice.
+
+Formats **save v94 / orders v38** add HABI state/annual receipts/private received
+operating evidence and explicit orbital bulk-cargo endpoints/route policies.
+No rare-material extension or irreversible transformation is included; #63 is
+frozen at the end of the queue and #56 remains open. PR merge is left to review.
+
+Validation: GCC 14.2 / Qt 6.12 Debug full application/test build succeeded;
+full CTest **87/87** passed (59.48 s, offscreen Qt). After the final System
+Details received-owner selection adjustment, the application was rebuilt and
+colony workspace, map selection and habitat editor suites passed again.
+`git diff --check` passed. New core/editor tests cover paid construction,
+mandatory upkeep before research, no extra mining workforce, finite emergency
+reserves and attrition, cargo conservation/capacity and full evacuation, orbital
+survivors after surface bombing, combined defense/capture, stale-transfer
+rejection, same-year station battle/survey ordering, honest AI, annual receipts,
+partial construction save/pause/reload/resume, v93 migration, corruption,
+private player exports, deterministic replay and orders v38 PBEM.
+Existing UI/AI fixtures now explicitly acknowledge station/economic facts instead
+of reading live host changes. Balance has no manual gameplay acceptance;
+validation is Linux/offscreen Qt, without a cross-platform or sanitizer run.
+GitHub CI belongs to the pushed PR head and is reported separately.
+
+### PR #229 review follow-up
+
+Initial head `1bcfacc` passed GitHub Actions build/CTest **87/87** (65.39 s).
+Its review reproduced two P2 gaps, now covered by regressions and corrected:
+
+- Ship-building controls and `queueShipDesign` consumed host station services
+  while PlayerView had frozen received fits. Both now use received state plus
+  admissible pending designs; physical host execution retains its own checks.
+  Qt tests exercise hidden shipyard removal/addition, delayed receipt and
+  delivered battle loss, including direct order authoring.
+- One-year upkeep/output/growth estimates omitted ordinary mining before
+  maintenance. Both helpers now simulate mining and service on a copy; the
+  engineering blocking explanation includes that known mining too. Core/Qt
+  tests compare sufficient/insufficient extraction from empty stores with the
+  real next turn (3 RP/+18,750 orbital residents in the supplied case), preserve
+  the baseline, and verify a 3-year queue estimate without duplicate mining.
+
+Review follow-up validation: GCC 14.2 / Qt 6.12 Debug full build passed;
+full CTest **87/87** passed (62.19 s, offscreen Qt). The habitat editor suite
+passed again after strengthening the independent combo/button assertions.
+`git diff --check` passed. Original manual/cross-platform/sanitizer limits remain.
+Save v94 / orders v38, balance and issue scope are unchanged.
+
+## Historical checkpoint — 22 October 2026 (Europe/Moscow): main after #227
 
 Main is [3326fb6](https://github.com/kotrf/suns/commit/3326fb61b444c8665e890e7ef2714d0b28849399),
 merged [#227](https://github.com/kotrf/suns/pull/227), including reviewed follow-up
@@ -8,7 +68,7 @@ merged [#227](https://github.com/kotrf/suns/pull/227), including reviewed follow
 received-study prerequisite are implemented, including received Hab displays.
 Main formats are **save v92 / orders v37**.
 
-## Completion branch — field science #59
+## Historical completion branch — field science #59
 
 `codex/field-science-completion` starts from this main. The
 [requirements matrix and audit](audits/2026-10-22-field-science-completion.md)

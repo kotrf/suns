@@ -27,6 +27,7 @@ add_library(suns_core
     src/exotic_materials.cpp
     src/interstellar_medium.cpp
     src/terraforming.cpp
+    src/orbital_habitats.cpp
     src/planetary_engineering.cpp
     src/propulsion.cpp
     src/scanners.cpp
