@@ -1304,8 +1304,9 @@ void MainWindow::updateControls()
     buildFactoryButton_->setEnabled(ownedColony);
     designShipButton_->setEnabled(true);
 
-    const auto* knownStation = ownedColony ? known_orbital_station(state_, pendingOrders_.player, planet->id) : nullptr;
-    const bool stationExists = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
+    const auto planning = planned_ship_design_state(received, pendingOrders_);
+    const bool stationExists = ownedColony && colony_has_orbital_service(
+        planning, planet->id, pendingOrders_.player, OrbitalStationModule::Shipyard);
     shipDesignCombo_->setEnabled(stationExists && shipDesignCombo_->count() > 0);
     buildOrbitalDockButton_->setEnabled(ownedColony);
     buildOrbitalDockButton_->setObjectName("orbitalStationButton");
@@ -1313,7 +1314,6 @@ void MainWindow::updateControls()
     buildOrbitalDockButton_->setToolTip("View, fit, build or refit the colony's orbital station through production");
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
-    const auto planning = planned_ship_design_state(state_, pendingOrders_);
     const auto* buildDesign = find_ship_design(planning, designId);
     buildShipButton_->setEnabled(stationExists && buildDesign != nullptr
         && buildDesign->owner == pendingOrders_.player);
@@ -1524,14 +1524,14 @@ void MainWindow::queueFleetLoadAll()
 void MainWindow::queueShipDesign()
 {
     const auto* star = selectedStar();
-    const auto* planet = selectedPlanet();
-    if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
+    const auto planning = planned_ship_design_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+    const auto* planet = star ? find_planet_at_star(planning, star->id) : nullptr;
+    if (!star || !is_surveyed(planning, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
 
     const auto designId = static_cast<ShipDesignId>(shipDesignCombo_->currentData().toUInt());
-    const auto planning = planned_ship_design_state(state_, pendingOrders_);
     const auto* design = find_ship_design(planning, designId);
     if (!design || design->owner != pendingOrders_.player
-        || !colony_has_orbital_service(state_, planet->id, pendingOrders_.player,
+        || !colony_has_orbital_service(planning, planet->id, pendingOrders_.player,
             OrbitalStationModule::Shipyard)) return;
 
     appendPendingOrder(QueueShipDesignOrder{planet->id,

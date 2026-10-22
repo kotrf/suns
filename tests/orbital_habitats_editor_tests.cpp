@@ -5,6 +5,7 @@
 #include "suns/production.hpp"
 #include "suns/campaign.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/stations.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
@@ -17,9 +18,16 @@
 using namespace suns;
 namespace suns {
 struct MainWindowTestAccess {
-    static void load(MainWindow& w,const GameState& s) {w.state_=s;w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.star=1;w.rebuildScene();}
+    static void load(MainWindow& w,const GameState& s) {w.state_=s;w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.star=1;w.refreshShipDesignChoices();w.rebuildScene();}
     static const auto& orders(MainWindow& w) {return w.pendingOrders_;}
     static const auto& state(MainWindow& w) {return w.state_;}
+    static bool shipControls(MainWindow& w) {
+        assert(w.shipDesignCombo_->isEnabled()==w.buildShipButton_->isEnabled());
+        return w.buildShipButton_->isEnabled();
+    }
+    static void queueShip(MainWindow& w) {w.queueShipDesign();}
+    static QString details(MainWindow& w) {return w.selectionLabel_->text();}
+    static void research(MainWindow& w) {w.installResearch();w.refreshResearchPanel();}
 };
 }
 namespace {
@@ -105,6 +113,67 @@ void pbem_and_hidden_changes_are_private()
     assert(std::get<MoveFleetOrder>(loaded.orders.orders[1]).arrivalAction.cargo==FleetCargoKind::OrbitalColonists);
     assert(std::get<SetPlanetaryEngineeringOrder>(loaded.orders.orders[2]).kind==PlanetaryEngineeringKind::OrbitalHabitat);
 }
+void ship_authoring_waits_for_station_evidence()
+{
+    for(const bool initiallySupported:{true,false}) {
+        auto s=fixture(false);s.fleets.clear();s.stars[0].position={900,0};s.planets[0].homeworld=false;
+        s.stars[1].position={0,0};s.planets[1].owner=1;s.planets[1].population=1000000;
+        s.planets[1].homeworld=true;s.planets[1].radar=PlanetaryRadarLevel::Full;
+        if(!initiallySupported)s.orbitalStations[0].modules.clear();
+        set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+        ++s.turn;
+        if(initiallySupported)s.orbitalStations[0].modules.clear();
+        else s.orbitalStations[0].modules={OrbitalStationModule::Shipyard};
+        MainWindow w;MainWindowTestAccess::load(w,s);
+        assert(MainWindowTestAccess::shipControls(w)==initiallySupported);
+        MainWindowTestAccess::queueShip(w);
+        assert(MainWindowTestAccess::orders(w).orders.size()==(initiallySupported?1U:0U));
+        if(initiallySupported) {
+            const auto executed=TurnProcessor{}.process(s,{MainWindowTestAccess::orders(w)});
+            assert(executed.planets[0].productionQueue.empty()); // Execution still checks physical support.
+        }
+        queue_survey_report(s,1,1,0,s.stars[0].position,s.turn,SurveyLevel::DeepSurvey,true);
+        const auto receipt=s.players[0].pendingSurveyReports.back().deliveryTurn;
+        assert(receipt>s.turn);
+        (void)deliver_due_survey_reports(s);MainWindowTestAccess::load(w,s);
+        assert(MainWindowTestAccess::shipControls(w)==initiallySupported);
+        s.turn=receipt;(void)deliver_due_survey_reports(s);MainWindowTestAccess::load(w,s);
+        assert(MainWindowTestAccess::shipControls(w)==!initiallySupported);
+        MainWindowTestAccess::queueShip(w);
+        assert(MainWindowTestAccess::orders(w).orders.size()==(initiallySupported?0U:1U));
+    }
+    auto s=fixture(false);s.fleets.clear();const auto station=s.orbitalStations[0].id;
+    s.orbitalStations.clear();MainWindow w;MainWindowTestAccess::load(w,s);
+    assert(MainWindowTestAccess::shipControls(w));
+    PendingPlayerReport loss;loss.kind=PlayerReportKind::SpaceBattle;loss.observedTurn=s.turn+1;loss.deliveryTurn=s.turn+2;
+    loss.battle.emplace();loss.battle->observedTurn=loss.observedTurn;
+    SpaceBattleUnit unit;unit.station=station;unit.owner=1;unit.initialShips=1;unit.survivingShips=0;
+    loss.battle->units.push_back(unit);s.players[0].pendingPlayerReports.push_back(loss);
+    (void)deliver_due_player_reports(s);MainWindowTestAccess::load(w,s);assert(MainWindowTestAccess::shipControls(w));
+    s.turn=loss.deliveryTurn;(void)deliver_due_player_reports(s);MainWindowTestAccess::load(w,s);
+    assert(!MainWindowTestAccess::shipControls(w));MainWindowTestAccess::queueShip(w);
+    assert(MainWindowTestAccess::orders(w).orders.empty());
+}
+void gui_upkeep_forecast_includes_ordinary_mining()
+{
+    MainWindow w;w.installPlanetaryEngineering();MainWindowTestAccess::research(w);
+    for(const bool supplied:{true,false}) {
+        auto s=fixture();s.fleets.clear();auto& p=s.planets[0];
+        p.population=1000000;p.habitat.population=1500000;p.industry=0;p.mines=supplied?20:0;p.minerals={};
+        p.observedConcentration=supplied?MineralCargo{50,50,50}:MineralCargo{1,1,1};
+        s.players[0].technology.researchActive=true;s.players[0].technology.researchAllocationPercent=100;
+        set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+        MainWindowTestAccess::load(w,s);MainWindowTestAccess::research(w);
+        const auto status=w.findChild<QLabel*>("engineeringStatus")->text();
+        assert(status.contains(supplied?"projected growth +18750/year":"projected growth +0/year"));
+        assert(status.contains("Upkeep minerals unavailable")==!supplied);
+        assert(MainWindowTestAccess::details(w).contains(supplied?"Forecast orbital growth: +18750/year":"Forecast orbital growth: +0/year"));
+        const auto research=w.findChild<QLabel*>("researchSummary")->text();
+        assert(research.contains(supplied?"Guaranteed RP next turn: 3,":"Guaranteed RP next turn: 2,"));
+        assert(!mineral_cargo_mass(MainWindowTestAccess::state(w).planets[0].minerals));
+        assert(MainWindowTestAccess::state(w).planets[0].habitat==p.habitat);
+    }
+}
 void gui_authors_build_and_population_orders_without_mutation()
 {
     MainWindow w;MainWindowTestAccess::load(w,fixture(false));w.installPlanetaryEngineering();
@@ -124,5 +193,6 @@ void gui_authors_build_and_population_orders_without_mutation()
 int main(int argc,char** argv)
 {
     QApplication app(argc,argv);annual_receipts_and_private_evidence_roundtrip();partial_construction_and_queue_survive_reload();pbem_and_hidden_changes_are_private();
+    ship_authoring_waits_for_station_evidence();gui_upkeep_forecast_includes_ordinary_mining();
     gui_authors_build_and_population_orders_without_mutation();
 }

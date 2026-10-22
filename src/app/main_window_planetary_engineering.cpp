@@ -119,12 +119,14 @@ void MainWindow::installPlanetaryEngineering()
         }
         if(kind==PlanetaryEngineeringKind::OrbitalHabitat && owned) {
             const auto potential=std::uint64_t(p->industry)+total_colony_population(*p)/kPopulationPerProductionUnit;
+            const auto mined=projected_mineral_mining(known,*p);
+            const MineralCargo supplied{p->minerals.ironium+mined.ironium,p->minerals.boranium+mined.boranium,p->minerals.germanium+mined.germanium};
             const auto cause=!engineering_station_available(known,*p)?"Supporting Starbase/Fortress shipyard unavailable"
                 :!engineering_operation_available(known,*p)?"Operating technology unavailable"
                 :potential<2?"Insufficient output for mandatory upkeep"
-                :!mineral_cargo_sufficient(p->minerals,{1,1,1})?"Upkeep minerals unavailable"
-                :"Support and upkeep available in received evidence; next annual payment/recharge is a forecast";
-            text+=QString("\nKnown operating condition: %1.").arg(cause);
+                :!mineral_cargo_sufficient(supplied,{1,1,1})?"Upkeep minerals unavailable after ordinary mining"
+                :"Support and upkeep available from received stocks and forecast ordinary mining; next annual payment/recharge is a forecast";
+            text+=QString("\nForecast operating condition: %1.").arg(cause);
             const auto* owner=find_player(known,pendingOrders_.player);
             if(owner)for(const auto& record:owner->surveyKnowledge)if(record.star==p->star && record.planetSnapshot && record.planetSnapshot->habitat)
                 text+=QString(" Station evidence: year %1 (also incorporates received battle reports).").arg(qulonglong(record.planetSnapshot->habitat->stationEvidenceTime/3));

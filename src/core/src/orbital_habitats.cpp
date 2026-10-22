@@ -57,15 +57,30 @@ std::uint32_t service_orbital_habitat(const GameState& state, Planet& p, bool su
     }
     return h.productionPaid;
 }
+namespace {
+Planet after_ordinary_mining(const GameState& state,const Planet& planet)
+{
+    // One-year UI estimates start at the received planning boundary. Ordinary
+    // extraction precedes upkeep in the real turn; arrivals remain unpredicted.
+    // Queue forecasts already perform this phase and call the service resolver
+    // directly, so they must not use this helper and mine a second time.
+    auto forecast=planet;
+    const auto mined=projected_mineral_mining(state,forecast);
+    forecast.minerals.ironium+=mined.ironium;
+    forecast.minerals.boranium+=mined.boranium;
+    forecast.minerals.germanium+=mined.germanium;
+    return forecast;
+}
+}
 std::int64_t projected_orbital_growth(const GameState& state,const Planet& planet)
 {
-    auto forecast=planet;
+    auto forecast=after_ordinary_mining(state,planet);
     (void)service_orbital_habitat(state,forecast,engineering_station_available(state,forecast));
     return projected_orbital_growth(forecast);
 }
 std::uint32_t net_colony_output(const GameState& state,const Planet& planet)
 {
-    auto forecast=planet;
+    auto forecast=after_ordinary_mining(state,planet);
     const auto paid=service_orbital_habitat(state,forecast,engineering_station_available(state,forecast));
     const auto gross=colony_output(forecast);
     return gross-std::min(gross,paid);

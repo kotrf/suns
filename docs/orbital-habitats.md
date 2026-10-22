@@ -125,11 +125,18 @@ pre-combat observation from the same year, and cannot overwrite a later
 final-phase refit observation.
 
 Planetary engineering provides build/pause/dismantle and resettlement controls;
-System Details and colony summaries expose orbital population. Existing evidence
-year/age and forecast labels apply. Cargo requires current received endpoint
+System Details and colony summaries expose orbital population. Ship-building
+controls and order authoring use the same received station snapshot as the
+engineering panel, including delivered station-loss evidence; physical execution
+still checks the current host shipyard. Evidence year/age and forecast labels
+apply. Cargo requires current received endpoint
 information for immediate orbital transfers; historical visibility is not a live
 transfer permit. Routes use received planning data but execute against real stock,
-capacity, ownership and combat. Future arrivals are not guaranteed supply.
+capacity, ownership and combat. One-year upkeep/output/growth forecasts first
+add ordinary mining from received colony inputs, then apply annual service to a
+copy. They do not mutate the observation or assume future freight arrivals. The
+queue forecaster already mines each simulated year and uses the service resolver
+directly, so mining is not added twice. Future arrivals are not guaranteed supply.
 
 The basic AI works only through PlayerView and ordinary paid orders. It can choose
 a habitat at a productive, near-capacity colony with a free slot, technologies,

@@ -104,6 +104,35 @@ void orbital_output_is_counted_once_and_upkeep_precedes_research()
     assert(p.habitat.service==HabitatService::Reserve && !p.habitat.productionPaid && !colony_output(p));
     assert(p.minerals.ironium==100 && !projected_mineral_mining(s,p).ironium);
 }
+void annual_helpers_match_mining_before_maintenance()
+{
+    for(const bool supplied:{true,false}) {
+        auto s=fixture();finish(s);s.fleets.clear();auto& p=s.planets[0];
+        p.population=1000000;p.habitat.population=1500000;p.industry=0;p.mines=supplied?20:0;p.minerals={};
+        p.observedConcentration=supplied?MineralCargo{50,50,50}:MineralCargo{1,1,1};
+        auto& science=s.players[0].technology;science.researchActive=true;science.researchAllocationPercent=100;
+        const auto field=std::size_t(science.focus);const auto before=science.progress[field];
+        set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+        const auto received=make_player_view(s,1).state;
+        const auto next=TurnProcessor{}.process(s,{});
+        const auto& result=next.planets[0];
+        assert(result.habitat.service==(supplied?HabitatService::Normal:HabitatService::Reserve));
+        assert(result.habitat.population-p.habitat.population==(supplied?18750U:0U));
+        assert(net_colony_output(received,received.planets[0])==next.players[0].technology.progress[field]-before);
+        assert(projected_orbital_growth(received,received.planets[0])==std::int64_t(result.habitat.population-p.habitat.population));
+        assert(!mineral_cargo_mass(received.planets[0].minerals) && received.planets[0].habitat==p.habitat);
+    }
+    // The queue forecaster already mines before maintenance: one mining phase
+    // yields only 0.733 kt after upkeep, so a factory's I/G bill needs 3 years.
+    auto s=fixture();finish(s);s.fleets.clear();auto& p=s.planets[0];
+    p.population=1000000;p.habitat.population=1500000;p.industry=0;p.mines=20;p.minerals={};p.observedConcentration=MineralCargo{10,10,10};
+    p.productionQueue={{ProductionKind::Factory,3}};
+    const auto estimate=forecast_production_queue(s,p,p.productionQueue,5);
+    assert(estimate[0].completionTurn==s.turn+3);
+    const auto year=s.turn;
+    for(unsigned n=1;n<=3;++n){s=TurnProcessor{}.process(s,{});assert(s.planets[0].industry==(n==3?1U:0U));}
+    assert(s.turn==year+3);
+}
 void cargo_is_atomic_and_routes_can_evacuate_without_station()
 {
     auto s=fixture();finish(s);auto& p=s.planets[0];auto& f=s.fleets[0];
@@ -251,6 +280,7 @@ int main()
 {
     construction_is_paid_unique_and_persistent();maintenance_reserve_growth_and_recovery();
     orbital_output_is_counted_once_and_upkeep_precedes_research();
+    annual_helpers_match_mining_before_maintenance();
     cargo_is_atomic_and_routes_can_evacuate_without_station();received_evidence_and_ai_are_not_host_truth();
     delivered_battle_evidence_survives_late_survey_delivery();
     computer_builds_seeds_and_pays_through_ordinary_orders();

@@ -37,6 +37,29 @@ of reading live host changes. Balance has no manual gameplay acceptance;
 validation is Linux/offscreen Qt, without a cross-platform or sanitizer run.
 GitHub CI belongs to the pushed PR head and is reported separately.
 
+### PR #229 review follow-up
+
+Initial head `1bcfacc` passed GitHub Actions build/CTest **87/87** (65.39 s).
+Its review reproduced two P2 gaps, now covered by regressions and corrected:
+
+- Ship-building controls and `queueShipDesign` consumed host station services
+  while PlayerView had frozen received fits. Both now use received state plus
+  admissible pending designs; physical host execution retains its own checks.
+  Qt tests exercise hidden shipyard removal/addition, delayed receipt and
+  delivered battle loss, including direct order authoring.
+- One-year upkeep/output/growth estimates omitted ordinary mining before
+  maintenance. Both helpers now simulate mining and service on a copy; the
+  engineering blocking explanation includes that known mining too. Core/Qt
+  tests compare sufficient/insufficient extraction from empty stores with the
+  real next turn (3 RP/+18,750 orbital residents in the supplied case), preserve
+  the baseline, and verify a 3-year queue estimate without duplicate mining.
+
+Review follow-up validation: GCC 14.2 / Qt 6.12 Debug full build passed;
+full CTest **87/87** passed (62.19 s, offscreen Qt). The habitat editor suite
+passed again after strengthening the independent combo/button assertions.
+`git diff --check` passed. Original manual/cross-platform/sanitizer limits remain.
+Save v94 / orders v38, balance and issue scope are unchanged.
+
 ## Historical checkpoint — 22 October 2026 (Europe/Moscow): main after #227
 
 Main is [3326fb6](https://github.com/kotrf/suns/commit/3326fb61b444c8665e890e7ef2714d0b28849399),
