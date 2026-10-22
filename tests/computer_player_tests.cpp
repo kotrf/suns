@@ -266,6 +266,7 @@ void known_targets_and_conservative_fuel()
     // speculative route based on an authoritative future refill.
     state = expansion_fixture();
     state.orbitalStations.clear();
+    for(const auto& p:state.planets)if(p.owner==2)set_survey_level(state,2,p.star,SurveyLevel::DeepSurvey,state.turn);
     for (auto& fleet : state.fleets) if (fleet.owner == 2) { fleet.fuel = 0; fleet.telemetry.fuel = 0; }
     const auto stranded = plan_computer_turn(make_player_view(state, 2));
     assert(std::none_of(stranded.orders.orders.begin(), stranded.orders.orders.end(),
@@ -405,6 +406,7 @@ void legal_civilian_designs_and_recovery()
         state.players[1].technology.levels.fill(8);
         for (auto& colony : state.planets) if (colony.owner == 2) {
             colony.mines = 2; colony.minerals = {1000, 1000, 1000};
+            set_survey_level(state,2,colony.star,SurveyLevel::DeepSurvey,state.turn);
         }
         std::erase_if(state.fleets, [](const auto& fleet) { return fleet.owner == 2; });
         const auto view = make_player_view(state, 2);

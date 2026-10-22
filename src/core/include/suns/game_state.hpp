@@ -506,6 +506,7 @@ enum class ProductionKind {
     ResonanceLaboratory,
     ArtificialMagnetosphere,
     AdaptiveMagnetosphere,
+    OrbitalHabitat,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -624,9 +625,9 @@ struct PlanetAftermathObservation {
     bool operator==(const PlanetAftermathObservation&) const = default;
 };
 
-enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere };
+enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere, OrbitalHabitat };
 enum class EngineeringAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetOutput };
-enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy };
+enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy, HabitatTechnology, HabitatReserve, HabitatFailure };
 struct PlanetaryEngineering {
     PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
     std::uint32_t work{};
@@ -665,6 +666,17 @@ struct ResonanceLaboratory {
 };
 enum class ResonanceAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetActive };
 
+enum class HabitatService : std::uint8_t { Empty, Normal, Reserve, Failing };
+struct OrbitalHabitat {
+    std::uint64_t population{};
+    std::uint8_t reserveYears{};
+    HabitatService service{HabitatService::Empty};
+    std::uint64_t servicedTurn{}; // Annual debit/loss guard, including after reload.
+    std::uint32_t productionPaid{}; // Current year's mandatory upkeep and reserve replenishment.
+    std::uint64_t populationLost{};
+    bool operator==(const OrbitalHabitat&) const = default;
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -693,6 +705,7 @@ struct Planet {
     std::vector<ScienceSample> scienceSamples;
     XenocrystalSite xenocrystal;
     ResonanceLaboratory resonanceLab;
+    OrbitalHabitat habitat;
 };
 
 struct OrbitalStation {
@@ -704,6 +717,18 @@ struct OrbitalStation {
     std::vector<OrbitalStationModule> modules;
     std::vector<ShipComponentType> components;
     double damagePercent{};
+};
+
+struct HabitatObservation {
+    OrbitalHabitat habitat;
+    bool stationSupported{};
+    std::uint64_t surfacePopulation{};
+    std::uint32_t industry{};
+    MineralCargo minerals;
+    std::uint32_t mines{};
+    std::vector<ProductionItem> queue;
+    std::optional<OrbitalStation> station;
+    std::uint64_t stationEvidenceTime{}; // 3*year + phase: observation 0, battle 1, final surface 2.
 };
 
 struct PendingStationContact {
@@ -732,6 +757,7 @@ struct PlanetSurveySnapshot {
     ResonanceLaboratory resonanceLab; // Private project evidence captured for its owner only.
     std::optional<std::uint32_t> resonanceQueueIndex; // Frozen scheduling, including completion/removal.
     std::optional<std::uint32_t> engineeringQueueIndex; // Owner-only queue position at observation.
+    std::optional<HabitatObservation> habitat; // Private frozen population and operating supplies.
     std::optional<std::vector<ScienceSample>> scienceSamples; // Owner-only, including a confirmed empty surface.
 };
 
@@ -1371,6 +1397,7 @@ enum class FleetCargoKind {
     Germanium,
     All,
     Xenocrystal,
+    OrbitalColonists,
 };
 
 struct FleetArrivalAction {
@@ -1838,6 +1865,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::OrbitalMirrors: case ProductionKind::OrbitalShades: return 2400;
     case ProductionKind::ArtificialMagnetosphere: return 2400;
     case ProductionKind::AdaptiveMagnetosphere: return 4800;
+    case ProductionKind::OrbitalHabitat: return 4800;
     case ProductionKind::ResonanceLaboratory: return 600;
     }
     return kColonyShipCost;

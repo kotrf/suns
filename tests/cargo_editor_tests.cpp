@@ -38,6 +38,7 @@ struct MainWindowTestAccess {
         other.colonists = 0;
         other.minerals = {};
         w.state_.fleets.push_back(other);
+        set_survey_level(w.state_,1,w.state_.planets.front().star,SurveyLevel::DeepSurvey,w.state_.turn);
         // These local fixture edits represent already received manifests.
         for (auto& received : w.state_.fleets) {
             received.telemetry = {};

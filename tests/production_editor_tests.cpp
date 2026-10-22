@@ -31,6 +31,7 @@ struct MainWindowTestAccess {
         w.state_ = make_demo_game();
         w.state_.players.front().technology.researchAllocationPercent = 100;
         w.state_.planets.front().productionQueue = {{ProductionKind::Factory, 2, 0}};
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
         w.pendingOrders_ = {1, {QueueProductionOrder{1, ProductionKind::Mine}}};
         w.pendingDescriptions_ = {"Build mine"};
         w.selection_.star = w.state_.planets.front().star;
@@ -50,6 +51,7 @@ struct MainWindowTestAccess {
     {
         w.state_.orbitalStations.clear();
         w.state_.planets.front().productionQueue = {{ProductionKind::OrbitalStation, 3, 0}};
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
         w.rebuildScene();
         w.refreshProductionQueue();
     }
@@ -79,6 +81,7 @@ struct MainWindowTestAccess {
         w.state_.planets.front().environment = {24, 50, 20};
         w.state_.planets.front().industry = 36;
         w.state_.planets.front().minerals = {1000, 1000, 1000};
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
         w.selection_.star = w.state_.planets.front().star;
@@ -89,6 +92,7 @@ struct MainWindowTestAccess {
     {
         w.state_=make_demo_game(); w.state_.players.front().technology.levels.fill(1);
         w.state_.planets.front().productionQueue.clear();
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
         w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
         w.selection_.star=w.state_.planets.front().star; w.rebuildScene(); w.refreshProductionQueue();
     }
@@ -97,6 +101,7 @@ struct MainWindowTestAccess {
         w.state_=make_demo_game(); w.state_.players.front().technology.researchActive=false;
         auto& p=w.state_.planets.front(); p.productionQueue.clear(); p.industry=12;
         p.warDamage={3,2,1,0,1,1};
+        set_survey_level(w.state_,1,p.star,SurveyLevel::DeepSurvey,w.state_.turn);
         w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
         w.selection_.star=p.star; w.rebuildScene(); w.refreshProductionQueue();
     }

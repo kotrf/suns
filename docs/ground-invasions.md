@@ -64,3 +64,15 @@ before subsequent growth or ownership changes. Both participants receive a
 summary, including the former defender on colony capture. Empire History credits
 these casualties only when the report arrives, in Ground losses and Operational
 reports. This does not change the battle outcome or casualty formula.
+
+## Orbital habitats (#56)
+
+A habitat does not create a separate owner or a second invasion. Defending
+strength is surface plus orbital residents. A successful defense distributes
+its population losses proportionally between the two groups, in whole people.
+If the defender loses, its orbital residents are destroyed along with surface
+defenders; attacker survivors settle the surface and inherit the empty structure,
+paid work and reserves. The new owner's own technology and support govern use.
+An orbital-only colony therefore cannot be captured by bypassing its defenders.
+Surface bombardment does not kill orbital residents or abandon their colony;
+direct habitat combat, surrender and loyalty remain outside this slice.

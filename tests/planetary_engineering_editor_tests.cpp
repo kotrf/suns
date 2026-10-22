@@ -35,6 +35,7 @@ struct MainWindowTestAccess {
         w.state_.planets[0].environment={40,50,20}; w.state_.planets[0].industry=1000;
         w.state_.planets[0].minerals={1000,1000,1000};
         w.state_.orbitalStations[0].hull=OrbitalStationHullType::Starbase;
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
         w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear(); w.selection_.star=1; w.rebuildScene();
         w.refreshProductionQueue();
     }

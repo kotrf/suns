@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/reconnaissance.hpp"
@@ -71,6 +72,7 @@ QString actionName(const FleetArrivalAction& action)
         return QString::fromStdString(fleet_task_name(*task)) + " — persistent";
     const auto cargoName = [&] {
         switch (action.cargo) {
+        case FleetCargoKind::OrbitalColonists: return QString("orbital colonists");
         case FleetCargoKind::Colonists: return QString("colonists");
         case FleetCargoKind::Ironium: return QString("Ironium");
         case FleetCargoKind::Boranium: return QString("Boranium");
@@ -362,6 +364,8 @@ QString routeForecast(
             case FleetArrivalActionKind::LoadAllAvailable:
                 if (leg.arrivalAction.cargo == FleetCargoKind::Xenocrystal) {
                     outcome = QString("; projected xenocrystals aboard: %1 (received surface-stock estimate)").arg(after->xenocrystal);
+                } else if (leg.arrivalAction.cargo == FleetCargoKind::OrbitalColonists) {
+                    outcome=QString("; projected orbital colonists aboard: %1 (received population/capacity estimate; zero reserve permits complete evacuation)").arg(qulonglong(after->colonists));
                 } else if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
                     outcome = QString("; projected colonists aboard: %1")
                                   .arg(static_cast<qulonglong>(after->colonists));
@@ -375,6 +379,10 @@ QString routeForecast(
                 }
                 break;
             case FleetArrivalActionKind::UnloadAll:
+                if(leg.arrivalAction.cargo==FleetCargoKind::OrbitalColonists) {
+                    outcome=QString("; projected orbital delivery, limited by received habitat capacity; colonists remaining aboard: %1").arg(qulonglong(after->colonists));
+                    break;
+                }
                 if ((leg.arrivalAction.cargo == FleetCargoKind::Colonists
                         || leg.arrivalAction.cargo == FleetCargoKind::All)
                     && targetOwnerBeforeTurn != 0

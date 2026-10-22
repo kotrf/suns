@@ -77,3 +77,7 @@ supported formats remain readable.
 through the same queue and forecast resolver. Once-only batches cost 4/3 resources
 and ordinary factory/mine minerals. Annual rules and colony templates cannot create
 planet-specific reconstruction. Queue reservations prevent overbooking ruins.
+
+## Orbital habitat integration (#56)
+
+Occupied orbital habitats pay yearly upkeep (and affordable emergency-reserve recharge) before research allocation and optional queue work. Construction retains the existing 80-work/year engineering limit, paid progress and single slot. A newly completed support station helps the next annual maintenance phase. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.

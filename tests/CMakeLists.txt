@@ -433,6 +433,16 @@ if(SUNS_BUILD_APP)
         suns_engineering_research_forecast_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 endif()
 
+add_executable(suns_orbital_habitats_tests orbital_habitats_tests.cpp)
+target_link_libraries(suns_orbital_habitats_tests PRIVATE Suns::Core)
+add_test(NAME suns_orbital_habitats_tests COMMAND suns_orbital_habitats_tests)
+if(SUNS_BUILD_APP)
+    add_executable(suns_orbital_habitats_editor_tests orbital_habitats_editor_tests.cpp)
+    target_link_libraries(suns_orbital_habitats_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_orbital_habitats_editor_tests COMMAND suns_orbital_habitats_editor_tests)
+    set_tests_properties(suns_orbital_habitats_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
 # These suites use assert, including some operations inside its expressions.
 add_executable(suns_science_samples_tests science_samples_tests.cpp)
 target_link_libraries(suns_science_samples_tests PRIVATE Suns::Core)

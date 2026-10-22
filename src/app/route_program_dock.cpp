@@ -398,6 +398,7 @@ void attachRouteProgramDock(MainWindow& window)
     workTip(FleetArrivalActionKind::SupplyOutpost, "Transfer actual fuel to an owned outpost at these coordinates, retaining the specified reserve. Receiver capacity and stock can change before arrival.");
     auto* cargoCombo = new QComboBox(waypointGroup);
     cargoCombo->setObjectName("routeCargoCombo");
+    cargoCombo->addItem("Orbital colonists",static_cast<int>(FleetCargoKind::OrbitalColonists));
     cargoCombo->addItem("Colonists", static_cast<int>(FleetCargoKind::Colonists));
     cargoCombo->addItem("Ironium", static_cast<int>(FleetCargoKind::Ironium));
     cargoCombo->addItem("Boranium", static_cast<int>(FleetCargoKind::Boranium));
@@ -503,7 +504,7 @@ void attachRouteProgramDock(MainWindow& window)
         workHereButton->setEnabled(window.selectedFleetForRouteProgram() != 0 && arrival_work_task(action).has_value());
         cargoCombo->setEnabled(transfersCargo);
         reserveSpin->setEnabled(
-            action == FleetArrivalActionKind::LoadAllAvailable && cargo == FleetCargoKind::Colonists);
+            action == FleetArrivalActionKind::LoadAllAvailable && (cargo == FleetCargoKind::Colonists || cargo==FleetCargoKind::OrbitalColonists));
     };
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });
     QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, [=](int) { updateCargoControls(); });

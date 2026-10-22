@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/communications.hpp"
@@ -18,7 +19,7 @@ bool newer(const ReconContact& a,const ReconContact& b)
 std::vector<Receiver> receivers(const GameState& s,PlayerId owner,std::uint64_t turn)
 {
     std::vector<Receiver> result;
-    for(const auto& p:s.planets) if(p.owner==owner && p.population && p.radar!=PlanetaryRadarLevel::None)
+    for(const auto& p:s.planets) if(p.owner==owner && total_colony_population(p) && p.radar!=PlanetaryRadarLevel::None)
         if(const auto* star=find_star(s,p.star)) {
             const double jam=sensor_interference(s,owner,star->position,turn);
             result.push_back({star->position,0,p.id,planetary_radar_range(p.radar)*(1-jam)*medium_active_sensor_factor(s,star->position),0,jam,false,planetary_radar_range(p.radar)});

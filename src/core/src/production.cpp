@@ -1,6 +1,7 @@
 #include "suns/production.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/orbital_habitats.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/stations.hpp"
 #include "suns/campaign.hpp"
@@ -140,10 +141,12 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     result.engineeringSupport=engineeringSupport.value_or(engineering_station_available(state,planet));
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
         && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
-        && planet.owner && planet.population && result.engineeringSupport && engineering_operation_available(state,planet);
+        && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
     if (planet.owner == 0) return result;
     const auto* player = find_player(state, planet.owner);
-    const auto output = colony_output(planet);
+    const auto upkeep=service_orbital_habitat(state,planet,result.engineeringSupport);
+    const auto gross=colony_output(planet);
+    const auto output=gross-std::min(gross,upkeep);
     const bool researchActive = player && player->technology.researchActive;
     const auto requestedResearch = researchActive ? static_cast<std::uint32_t>(
         std::uint64_t(output) * player->technology.researchAllocationPercent / 100U) : 0U;
@@ -301,7 +304,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     if (researchActive) result.researchPoints += available;
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
         && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
-        && planet.owner && planet.population && result.engineeringSupport && engineering_operation_available(state,planet);
+        && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
     result.queueOrigins = std::move(origins);
     return result;
 }

@@ -82,9 +82,9 @@ Save **v85** adds a bounded ENGI extension for physical projects and separate
 received/in-flight survey evidence. Orders **v31** add the project-control order.
 The v84 body and prior readers remain intact; old saves start without projects.
 
-After the first climate slice, #56 remained open for atmospheric engineering, oceans,
-habitats, larger system projects and further balance/AI work. This slice does
-not add autonomous AI project selection or imply manual gameplay acceptance.
+The initial climate slice did not include autonomous AI selection. Later
+magnetosphere and habitat sections below describe the implemented follow-ups;
+atmospheric/ocean and larger system projects remain future #56 work.
 
 ## Artificial and adaptive magnetospheres (#56 / #59)
 
@@ -158,11 +158,21 @@ received/in-flight engineering queue positions; ENGI keeps its existing layout.
 Old saves retain physical works and resource investments; missing queue evidence
 waits for a normal fresh owner report rather than being rebuilt from hidden work.
 
-#56 remains open for atmospheric/ocean engineering, habitats and system projects;
-#59's required observation unlock and sample/salvage choice are implemented.
-Further capabilities are optional extensions, not blockers for completion;
-[the completion audit](audits/2026-10-22-field-science-completion.md) prepares
-#59 for closure after review/merge. The completion branch uses save v93 / orders
-v37; engineering costs, effects and EQIX layouts are unchanged.
+#56 remains open for atmospheric/ocean engineering and system projects; habitats
+are implemented in the branch below. #59's required observation unlock and
+sample/salvage choice are complete; its [completion audit](audits/2026-10-22-field-science-completion.md)
+was merged in #228 and #59 is closed. Main uses save v93 / orders v37;
+engineering costs, effects and EQIX layouts are unchanged.
 The radical irreversible transformation is deferred, including evacuation and
 capture rules. The costs above are prototype balance, not manual playtest results.
+
+## Orbital habitats (#56)
+
+This branch adds [separate orbital residents](orbital-habitats.md)
+inside the same colony and single engineering slot. Construction 18 / Energy 16 /
+Biology 14; 4800 work (80/year), I/B/G 480/240/480; 2 million capacity. Real
+colonist transfers, occupied upkeep, a finite paid emergency reserve, attrition
+and ordinary evacuation/capture make the structure a demographic commitment.
+Its private economic evidence is frozen with normal reports. Save v94 / orders
+v38; prior environmental engineering recipes and effects remain unchanged.
+#228 is merged and #59 closed; its observation-gated capability is complete.

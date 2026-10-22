@@ -38,6 +38,7 @@ GameState network(C component = C::NetworkStargate)
     f.repeatOrders = false; f.targetFleet = 0; f.colonists = 0; f.minerals = {};
     f.telemetry.position = f.position; f.telemetry.observedTurn = s.turn;
     f.telemetry.destination.reset(); f.telemetry.waypointQueue.clear();
+    for(const auto& p:s.planets)set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
     return s;
 }
 void setup_and_research_are_trait_specific()
@@ -178,6 +179,7 @@ void computers_pay_for_networks_and_use_received_gates()
     assert(std::none_of(dryNetwork.orders.orders.begin(), dryNetwork.orders.orders.end(),
         [](const auto& o) { return std::holds_alternative<GateFleetOrder>(o); }));
     for (auto& station : s.orbitalStations) station.modules.push_back(OrbitalStationModule::RefuelingDepot);
+    for(const auto& p:s.planets)set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
     const auto view = make_player_view(s, 1);
     const auto plan = plan_computer_turn(view);
     assert(std::any_of(plan.orders.orders.begin(), plan.orders.orders.end(), [](const auto& o) { return std::holds_alternative<GateFleetOrder>(o); }));
@@ -214,6 +216,7 @@ void computers_pay_for_networks_and_use_received_gates()
     s.players[0].technology.levels[std::size_t(ResearchField::Construction)] = 9;
     for (auto& station : s.orbitalStations) { station.hull = OrbitalStationHullType::OrbitalDock; station.components = {C::Laser}; }
     for (auto& planet : s.planets) { planet.defenses = 100; planet.mines = 20; }
+    for(const auto& planet:s.planets)set_survey_level(s,1,planet.star,SurveyLevel::DeepSurvey,s.turn);
     const auto build = plan_computer_turn(make_player_view(s, 1));
     assert(std::any_of(build.orders.orders.begin(), build.orders.orders.end(), [](const auto& o) {
         const auto* station = std::get_if<QueueStationOrder>(&o);
@@ -225,6 +228,7 @@ void computers_pay_for_networks_and_use_received_gates()
     assert(station_stargate(paid.orbitalStations[0])->component == C::NetworkStargate);
     assert(station_stargate(paid.orbitalStations[1])->component == C::NetworkStargate);
     for (auto& planet : s.planets) planet.minerals = {};
+    for(const auto& planet:s.planets)set_survey_level(s,1,planet.star,SurveyLevel::DeepSurvey,s.turn);
     const auto poor = plan_computer_turn(make_player_view(s, 1));
     assert(std::none_of(poor.orders.orders.begin(), poor.orders.orders.end(), [](const auto& o) { return std::holds_alternative<QueueStationOrder>(o); }));
 }

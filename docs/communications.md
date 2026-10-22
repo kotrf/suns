@@ -178,3 +178,12 @@ freeze delivered HQ survey knowledge at issue; onboard observations can advance
 the local mission before HQ receives them. Explicit uploads deliver knowledge
 without resuming paused autonomy. Telemetry carries a dated mission summary,
 not the private notebook. See [rules and limits](autonomous-survey-probes.md).
+
+## Orbital population
+
+An orbital-only habitat colony remains inhabited for local exchange, radar
+operation and report routing. It keeps its existing built radar; housing grants
+no free radar or extra range. Habitat population, reserves, operating inputs and
+station evidence reach headquarters through ordinary delayed observations.
+Delivered battle evidence can acknowledge station loss/damage before a surface
+report arrives; older packets cannot restore a station already known lost.

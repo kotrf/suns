@@ -23,6 +23,7 @@ struct MainWindowTestAccess {
         for (auto id : {1U, 2U}) w.state_.orbitalStations.push_back({id, 1, id, "Infinity gate",
             OrbitalStationHullType::Fortress, {OrbitalStationModule::Shipyard}, {ShipComponentType::InfinityStargate}});
         w.state_.nextOrbitalStationId = 3;
+        for(const auto& planet:w.state_.planets)set_survey_level(w.state_,1,planet.star,SurveyLevel::DeepSurvey,w.state_.turn);
         auto& f = w.state_.fleets[0]; f.design = kColonyShipDesignId; f.ships = {{kColonyShipDesignId, 1}};
         f.colonists = 1000; f.telemetry.colonists = 1000; f.telemetry.ships = f.ships;
         w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear();

@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
@@ -67,7 +68,7 @@ void observe_unknown_objects(GameState& s,std::uint64_t turn)
         std::vector<Receiver> receivers;
         for(const auto& f:s.fleets) if(f.owner==player.id && fleet_has_scanner(s,f) && fleet_active_sensors(f,turn))
             receivers.push_back({f.position,std::max(1.0,strategic_sensor_range(s,f,turn)),f.id,0});
-        for(const auto& p:s.planets) if(p.owner==player.id && p.population && p.radar!=PlanetaryRadarLevel::None)
+        for(const auto& p:s.planets) if(p.owner==player.id && total_colony_population(p) && p.radar!=PlanetaryRadarLevel::None)
             if(const auto* star=find_star(s,p.star)) receivers.push_back({star->position,
                 planetary_radar_range(p.radar)*(1-sensor_interference(s,player.id,star->position,turn))*medium_active_sensor_factor(s,star->position),0,p.id});
         for(const auto& object:s.unknownObjects) {

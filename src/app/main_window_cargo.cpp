@@ -1,3 +1,5 @@
+#include "suns/orbital_habitats.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "main_window.hpp"
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
@@ -51,11 +53,12 @@ double mineralValue(const MineralCargo& minerals, int index)
 
 std::uint64_t endpointColonists(const CargoEndpointView& endpoint)
 {
-    return endpoint.planet ? endpoint.planet->population : endpoint.fleet->colonists;
+    return endpoint.planet ? (endpoint.endpoint.orbital?endpoint.planet->habitat.population:endpoint.planet->population) : endpoint.fleet->colonists;
 }
 
 MineralCargo endpointMinerals(const CargoEndpointView& endpoint)
 {
+    if(endpoint.endpoint.orbital) return {};
     return endpoint.planet ? endpoint.planet->minerals : endpoint.fleet->minerals;
 }
 
@@ -161,6 +164,8 @@ void MainWindow::openCargoManifestDialog()
             QString("%1 — %2").arg(prefix, QString::fromStdString(planet->name)),
         });
     }
+    if(const auto* p=find_planet_at_star(planned,star->id);p && p->owner==pendingOrders_.player && habitat_completed(*p))
+        endpoints.push_back({{p->id,0,true},p,nullptr,QString("Orbital settlement — %1").arg(QString::fromStdString(p->name))});
     for (const auto& fleet : planned.fleets) {
         if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, star->position)
             || fleet_telemetry_age(planned, fleet) != 0 || !fleet_has_instant_link(planned, fleet)) continue;
@@ -346,16 +351,18 @@ void MainWindow::openCargoManifestDialog()
                 - fleet_cargo_used(planned, *destination.fleet))
             : std::numeric_limits<double>::infinity();
         const auto sliderHold = destination.fleet ? freeHold
-            : fleet_cargo_capacity(planned, *source.fleet);
+            : source.fleet?fleet_cargo_capacity(planned,*source.fleet):colonist_cargo_mass(kOrbitalPopulationCapacity);
         auto availableColonists = endpointColonists(source);
-        if (source.planet) {
+        if (source.planet && !source.endpoint.orbital && !source.planet->habitat.population && !destination.endpoint.orbital) {
             availableColonists = source.planet->owner == pendingOrders_.player && availableColonists > 0
                 ? availableColonists - 1 : 0;
         }
         if (destination.planet && destination.planet->owner == 0) availableColonists = 0;
+        const bool orbital=source.endpoint.orbital || destination.endpoint.orbital;
+        const auto orbitalRoom=destination.endpoint.orbital?kOrbitalPopulationCapacity-destination.planet->habitat.population:std::numeric_limits<std::uint64_t>::max();
         const auto colonistRoom = std::max(0.0, freeHold - mineral_cargo_mass(transferMinerals()));
         const auto colonistMaximum = static_cast<int>(std::min({
-            static_cast<double>(availableColonists),
+            static_cast<double>(std::min(availableColonists,orbitalRoom)),
             std::floor(colonistRoom * kColonistsPerCargoUnit + kEpsilon),
             static_cast<double>(std::numeric_limits<int>::max())}));
         const auto colonistScale = static_cast<int>(std::min(
@@ -370,7 +377,7 @@ void MainWindow::openCargoManifestDialog()
             colonistSlider->setToolTip(QString("Hold scale: %1 people; available to transfer: %2 people")
                 .arg(colonistScale).arg(colonistMaximum));
         }
-        const auto availableMinerals = invasion ? MineralCargo{} : endpointMinerals(source);
+        const auto availableMinerals = (invasion || orbital) ? MineralCargo{} : endpointMinerals(source);
         for (int index = 0; index < 3; ++index) {
             const auto selected = transferMinerals();
             const auto otherCargo = colonist_cargo_mass(static_cast<std::uint64_t>(colonistSpin->value()))
@@ -384,8 +391,8 @@ void MainWindow::openCargoManifestDialog()
                 0,
                 invasion ? 0 : sliderMaximum(std::max(0.0, sliderHold - otherCargo)));
             control.slider->setValue(static_cast<int>(std::lround(control.spin->value() * kMineralScale)));
-            control.slider->setEnabled(!invasion);
-            control.spin->setEnabled(!invasion);
+            control.slider->setEnabled(!invasion && !orbital);
+            control.spin->setEnabled(!invasion && !orbital);
             control.slider->setToolTip(QString("Hold scale: %1 kt; available to transfer: %2 kt")
                 .arg(static_cast<double>(control.slider->maximum()) / kMineralScale, 0, 'f', 2)
                 .arg(control.spin->maximum(), 0, 'f', 2));
@@ -469,12 +476,21 @@ void MainWindow::openCargoManifestDialog()
                 .arg(capacity, 0, 'f', 2)
                 .arg(grossMass, 0, 'f', 2));
         } else {
-            capacitySummary->setText("<b>Destination hold:</b> planetary surface has no cargo-capacity limit.");
+            capacitySummary->setText(destination.endpoint.orbital
+                ?QString("<b>Orbital housing:</b> %1 / %2 residents after transfer").arg(qulonglong(destinationCurrentColonists+colonists)).arg(qulonglong(kOrbitalPopulationCapacity))
+                :"<b>Destination hold:</b> planetary surface has no cargo-capacity limit.");
         }
 
         const bool distinct = sourceIndex != destinationIndex;
         const bool hasCargo = colonists > 0 || mineral_cargo_mass(minerals) > kEpsilon;
-        const bool valid = distinct && hasCargo && capacityValid
+        auto validationState=planned;
+        const PlayerOrders validationOrders{pendingOrders_.player,{TransferCargoOrder{source.endpoint,destination.endpoint,colonists,minerals}}};
+        const auto validated=projected_cargo_order_state(validationState,validationOrders);
+        const auto* targetPlanet=destination.planet?find_planet(validated,destination.planet->id):nullptr;
+        const auto* sourcePlanet=source.planet?find_planet(validated,source.planet->id):nullptr;
+        const bool orbitalValid=!orbital || (colonists>0 && ((destination.endpoint.orbital && targetPlanet && targetPlanet->habitat.population==destinationCurrentColonists+colonists)
+            || (source.endpoint.orbital && sourcePlanet && sourcePlanet->habitat.population+colonists==sourceCurrentColonists)));
+        const bool valid = orbitalValid && distinct && hasCargo && capacityValid
             && (!invasion || (colonists > 0 && mineral_cargo_mass(minerals) <= kEpsilon));
         acceptButton->setEnabled(valid);
         acceptButton->setText(invasion ? "Queue invasion" : "Queue transfer");
