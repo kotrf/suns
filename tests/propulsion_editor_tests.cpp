@@ -33,6 +33,28 @@ struct MainWindowTestAccess {
         window.installResearch();
         window.refreshResearchPanel();
     }
+    static void receiverResearch(MainWindow& window, std::uint8_t allocation, bool active = true,
+        bool queueReceiver = true)
+    {
+        window.state_ = make_demo_game();
+        auto& colony = window.state_.planets.front();
+        colony.radar = PlanetaryRadarLevel::None;
+        colony.minerals = {100, 100, 100};
+        colony.productionQueue.clear();
+        window.state_.players.front().technology.researchAllocationPercent = allocation;
+        window.state_.players.front().technology.researchActive = active;
+        set_survey_level(window.state_, 1, colony.star, SurveyLevel::DeepSurvey, window.state_.turn);
+        window.pendingOrders_ = {1, {}};
+        window.pendingDescriptions_.clear();
+        if (queueReceiver) window.pendingOrders_.orders.emplace_back(
+            QueueProductionOrder{colony.id, ProductionKind::LocalRadar});
+        window.pendingOrders_.orders.emplace_back(QueueProductionOrder{colony.id, ProductionKind::Factory});
+        window.refreshResearchPanel();
+    }
+    static GameState resolveResearch(const MainWindow& window)
+    {
+        return TurnProcessor{}.process(window.state_, {window.pendingOrders_});
+    }
 };
 } // namespace suns
 
@@ -103,6 +125,22 @@ int main(int argc, char** argv)
     const auto withNubian = plan->topLevelItemCount();
     catalog->itemDoubleClicked(find("Nubian"), 0);
     assert(plan->topLevelItemCount() == withNubian);
+
+    // Pending receiver construction reserves one point even at 100% science.
+    // Compare the displayed guarantee with actual End Turn, not the UI helper.
+    MainWindowTestAccess::receiverResearch(window, 100);
+    auto* summary = window.findChild<QLabel*>("researchSummary");
+    assert(summary && summary->text().contains("Guaranteed RP next turn: 5,"));
+    assert(MainWindowTestAccess::resolveResearch(window).players.front().technology.progress[3] == 5);
+    MainWindowTestAccess::receiverResearch(window, 50);
+    assert(summary->text().contains("Guaranteed RP next turn: 3,"));
+    assert(MainWindowTestAccess::resolveResearch(window).players.front().technology.progress[3] == 3);
+    MainWindowTestAccess::receiverResearch(window, 100, true, false);
+    assert(summary->text().contains("Guaranteed RP next turn: 6,"));
+    assert(MainWindowTestAccess::resolveResearch(window).players.front().technology.progress[3] == 6);
+    MainWindowTestAccess::receiverResearch(window, 100, false);
+    assert(summary->text().contains("Research is paused"));
+    assert(MainWindowTestAccess::resolveResearch(window).players.front().technology.progress[3] == 0);
 
     auto state = generate_campaign(GalaxyConfig{}, {{"Designer", RacePreset::Terran, true}});
     state.players.front().technology.levels[static_cast<std::size_t>(ResearchField::Propulsion)] = 20;

@@ -1,6 +1,7 @@
 #include "suns/game_event.hpp"
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/production.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -248,6 +249,41 @@ void verify_percentage_is_taken_before_production_and_leftovers_follow()
     assert(third.players.front().technology.progress[3] == 13);
 }
 
+void verify_receiver_reserve_matches_research_forecast()
+{
+    using namespace suns;
+    auto state = make_demo_game();
+    auto& colony = state.planets.front();
+    colony.radar = PlanetaryRadarLevel::None;
+    colony.minerals = {100, 100, 100};
+    colony.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)},
+        {ProductionKind::Factory, kFactoryCost}};
+    auto& technology = state.players.front().technology;
+    technology.researchAllocationPercent = 100;
+    assert(colony_output(colony) == 6);
+    assert(colony_research_allocation(state, colony, 6) == 5);
+    assert(colony_research_allocation(state, colony, 1) == 0);
+    assert(colony_research_allocation(state, colony, 0) == 0);
+    const auto first = TurnProcessor{}.process(state, {});
+    assert(first.players.front().technology.progress[3] == 5);
+    assert(first.planets.front().productionQueue.front().remainingCost
+        == production_cost(ProductionKind::LocalRadar) - 1);
+
+    technology.researchAllocationPercent = 50;
+    assert(colony_research_allocation(state, colony, 6) == 3);
+    const auto half = TurnProcessor{}.process(state, {});
+    assert(half.players.front().technology.progress[3] == 3);
+    assert(half.planets.front().radar == PlanetaryRadarLevel::Local);
+
+    technology.researchAllocationPercent = 100;
+    colony.productionQueue.erase(colony.productionQueue.begin());
+    assert(colony_research_allocation(state, colony, 6) == 6);
+    assert(TurnProcessor{}.process(state, {}).players.front().technology.progress[3] == 6);
+    technology.researchActive = false;
+    assert(colony_research_allocation(state, colony, 6) == 0);
+    assert(TurnProcessor{}.process(state, {}).players.front().technology.progress[3] == 0);
+}
+
 void verify_new_research_changes_scouting_and_fuel_logistics()
 {
     auto state = suns::make_demo_game();
@@ -295,6 +331,7 @@ int main()
     verify_active_research_can_be_moved_removed_and_resumed();
     verify_component_unlock_is_enforced_for_new_designs();
     verify_percentage_is_taken_before_production_and_leftovers_follow();
+    verify_receiver_reserve_matches_research_forecast();
     verify_new_research_changes_scouting_and_fuel_logistics();
     return 0;
 }

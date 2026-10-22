@@ -134,6 +134,20 @@ void apply_default_production_template(const GameState& state, Planet& planet)
     if (found != player->productionTemplates.end()) (void)apply_production_template(planet, *player, found->name);
 }
 
+std::uint32_t colony_research_allocation(const GameState& state, const Planet& planet, std::uint32_t output)
+{
+    const auto* player = find_player(state, planet.owner);
+    if (!player || !player->technology.researchActive) return 0;
+    const auto requested = static_cast<std::uint32_t>(
+        std::uint64_t(output) * player->technology.researchAllocationPercent / 100U);
+    const bool bootstrappingReceiver = planet.radar == PlanetaryRadarLevel::None
+        && std::any_of(planet.productionQueue.begin(), planet.productionQueue.end(),
+            [](const ProductionItem& item) { return item.kind == ProductionKind::LocalRadar; });
+    // A remote settlement must always be able to bootstrap its local receiver,
+    // including when the empire's research allocation is set to 100%.
+    return bootstrappingReceiver && output > 0 ? std::min(requested, output - 1) : requested;
+}
+
 ColonyProductionResolution resolve_colony_production(const GameState& state, Planet& planet, bool hasShipyard, std::optional<bool> engineeringSupport)
 {
     ColonyProductionResolution result;
@@ -148,15 +162,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     const auto gross=colony_output(planet);
     const auto output=gross-std::min(gross,upkeep);
     const bool researchActive = player && player->technology.researchActive;
-    const auto requestedResearch = researchActive ? static_cast<std::uint32_t>(
-        std::uint64_t(output) * player->technology.researchAllocationPercent / 100U) : 0U;
-    const bool bootstrappingReceiver = planet.radar == PlanetaryRadarLevel::None
-        && std::any_of(planet.productionQueue.begin(), planet.productionQueue.end(),
-            [](const ProductionItem& item) { return item.kind == ProductionKind::LocalRadar; });
-    // A remote settlement must always be able to bootstrap its local receiver,
-    // including when the empire's research allocation is set to 100%.
-    const auto allocated = bootstrappingReceiver && output > 0
-        ? std::min(requestedResearch, output - 1) : requestedResearch;
+    const auto allocated = colony_research_allocation(state, planet, output);
     result.researchPoints = allocated;
     auto available = output - allocated;
     auto& queue = planet.productionQueue;
