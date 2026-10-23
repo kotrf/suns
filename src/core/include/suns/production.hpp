@@ -22,6 +22,11 @@ struct ColonyProductionResolution {
 [[nodiscard]] std::uint64_t reconstruction_remaining(const Planet&,ProductionKind);
 [[nodiscard]] std::uint64_t reconstruction_available(const Planet&,ProductionKind);
 
+// Guaranteed research share of output after upkeep, before queue leftovers.
+// Reserves one production point for a queued first local receiver.
+[[nodiscard]] std::uint32_t colony_research_allocation(
+    const GameState& state, const Planet& planet, std::uint32_t output);
+
 // Common yearly queue resolver used by the host and the production forecast.
 // Mutates local buildings, minerals and environment; callers materialize ships
 // and orbital stations from the completion list.

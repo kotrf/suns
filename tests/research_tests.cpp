@@ -1,6 +1,9 @@
 #include "suns/game_event.hpp"
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/production.hpp"
+#include "suns/orbital_habitats.hpp"
+#include "remote_receiver_fixture.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -248,6 +251,76 @@ void verify_percentage_is_taken_before_production_and_leftovers_follow()
     assert(third.players.front().technology.progress[3] == 13);
 }
 
+void verify_receiver_reserve_matches_research_forecast()
+{
+    using namespace suns;
+    auto state = make_demo_game();
+    auto& colony = state.planets.front();
+    colony.radar = PlanetaryRadarLevel::None;
+    colony.minerals = {100, 100, 100};
+    colony.productionQueue = {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)},
+        {ProductionKind::Factory, kFactoryCost}};
+    auto& technology = state.players.front().technology;
+    technology.researchAllocationPercent = 100;
+    assert(colony_output(colony) == 6);
+    assert(colony_research_allocation(state, colony, 6) == 5);
+    assert(colony_research_allocation(state, colony, 1) == 0);
+    assert(colony_research_allocation(state, colony, 0) == 0);
+    auto pendingState = state;
+    pendingState.planets.front().productionQueue.clear();
+    const PlayerOrders pending{1, {QueueProductionBatchOrder{colony.id, ProductionKind::LocalRadar},
+        QueueProductionOrder{colony.id, ProductionKind::Factory}}};
+    const auto planned = planned_production_state(pendingState, pending);
+    assert(planned.planets.front().productionQueue.size() == 2);
+    assert(planned.planets.front().productionQueue.front().kind == ProductionKind::LocalRadar);
+    assert(colony_research_allocation(planned, planned.planets.front(), 6) == 5);
+    assert(TurnProcessor{}.process(pendingState, {pending}).players.front().technology.progress[3] == 5);
+    const auto first = TurnProcessor{}.process(state, {});
+    assert(first.players.front().technology.progress[3] == 5);
+    assert(first.planets.front().productionQueue.front().remainingCost
+        == production_cost(ProductionKind::LocalRadar) - 1);
+
+    technology.researchAllocationPercent = 50;
+    assert(colony_research_allocation(state, colony, 6) == 3);
+    const auto half = TurnProcessor{}.process(state, {});
+    assert(half.players.front().technology.progress[3] == 3);
+    assert(half.planets.front().radar == PlanetaryRadarLevel::Local);
+
+    technology.researchAllocationPercent = 100;
+    colony.productionQueue.erase(colony.productionQueue.begin());
+    assert(colony_research_allocation(state, colony, 6) == 6);
+    assert(TurnProcessor{}.process(state, {}).players.front().technology.progress[3] == 6);
+    technology.researchActive = false;
+    assert(colony_research_allocation(state, colony, 6) == 0);
+    assert(TurnProcessor{}.process(state, {}).players.front().technology.progress[3] == 0);
+}
+
+void verify_receiver_completion_waits_for_delivered_report()
+{
+    using namespace suns;
+    auto state = test::remote_receiver_fixture();
+    const auto guarantee = [](const GameState& host) {
+        const auto view = make_player_view(host, 1);
+        const auto& colony = *find_planet(view.state, 2);
+        return colony_research_allocation(view.state, colony, net_colony_output(view.state, colony));
+    };
+    assert(guarantee(state) == 5);
+    auto next = TurnProcessor{}.process(state, {});
+    assert(find_planet(next, 2)->radar == PlanetaryRadarLevel::Local);
+    assert(colony_research_allocation(next, *find_planet(next, 2), 6) == 6);
+    auto view = make_player_view(next, 1);
+    assert(find_planet(view.state, 2)->radar == PlanetaryRadarLevel::None);
+    assert(find_planet(view.state, 2)->productionQueue.size() == 2);
+    assert(guarantee(next) == 5);
+    test::deliver_receiver_report(next);
+    view = make_player_view(next, 1);
+    assert(find_planet(view.state, 2)->radar == PlanetaryRadarLevel::Local);
+    assert(find_planet(view.state, 2)->productionQueue.size() == 1);
+    assert(guarantee(next) == 6);
+    next.planets[1].radar = PlanetaryRadarLevel::None;
+    assert(guarantee(next) == 6);
+}
+
 void verify_new_research_changes_scouting_and_fuel_logistics()
 {
     auto state = suns::make_demo_game();
@@ -295,6 +368,8 @@ int main()
     verify_active_research_can_be_moved_removed_and_resumed();
     verify_component_unlock_is_enforced_for_new_designs();
     verify_percentage_is_taken_before_production_and_leftovers_follow();
+    verify_receiver_reserve_matches_research_forecast();
+    verify_receiver_completion_waits_for_delivered_report();
     verify_new_research_changes_scouting_and_fuel_logistics();
     return 0;
 }

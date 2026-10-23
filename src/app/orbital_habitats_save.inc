@@ -1,4 +1,5 @@
 // v94: bounded habitat truth and owner-only frozen operating evidence.
+// v95 adds the received radar tier to the same evidence as the production queue.
 constexpr quint32 kOrbitalHabitatsMagic=0x48414249u; // HABI
 void writeHabitat(QDataStream& out,const OrbitalHabitat& h)
 {
@@ -33,6 +34,7 @@ void writeHabitatEvidence(QDataStream& out,const auto& record,PlayerId owner)
             writeOrbitalStation(out,*evidence->station);out<<evidence->station->damagePercent;
             writeVector(out,evidence->station->components,[](QDataStream& stream,ShipComponentType c){writeEnum(stream,c);});
         }
+        writeEnum(out,evidence->radar);
     }
 }
 void readHabitatEvidence(QDataStream& in,auto& record,PlayerId owner,const GameState& state)
@@ -58,6 +60,7 @@ void readHabitatEvidence(QDataStream& in,auto& record,PlayerId owner,const GameS
         if((planet && station.planet!=planet->id) || !station.planet || !station.id || station.owner!=owner || !std::isfinite(station.damagePercent)
             || station.damagePercent<0 || station.damagePercent>=100 || !station_loadout_valid(station_loadout(station)))markCorrupt(in);
     }
+    if(gReadSaveFormatVersion>=95) readEnum(in,value.radar,quint8(PlanetaryRadarLevel::Full));
     const bool support=value.station && value.station->hull>=OrbitalStationHullType::Starbase && value.station->damagePercent<100
         && orbital_station_has_module(*value.station,OrbitalStationModule::Shipyard);
     if(support!=value.stationSupported)markCorrupt(in);

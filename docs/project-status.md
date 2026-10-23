@@ -1,13 +1,37 @@
 # Project status and development handoff
 
-## Verified checkpoint — 22 October 2026 (Europe/Moscow): main after #228
+## Verified checkpoint — 23 October 2026 (Europe/Moscow): main after #229
+
+Main is `155f9e1e4f9fee7ce5e440b1fc57595d9dc0df48`, merged #229,
+including reviewed `ec135c4` (GitHub Actions 87/87). Formats are
+**save v94 / orders v38**. Orbital habitats and both review corrections below
+are on main. #59 is closed; broader #56 stays open; #63 stays frozen last.
+
+## Completion audit branch — science and technology #44
+
+`codex/science-progression-completion` starts from that main. The
+[requirements matrix and completion decision](audits/2026-10-23-science-progression-completion.md)
+cover the implemented science foundation. A shared allocation helper makes the
+Research guarantee honor the existing one-point first-receiver reserve; core and
+Qt regressions compare pending-order forecasts with actual resolution. Obsolete
+combat guidance is corrected. Review follow-up freezes the receiver tier with
+the received queue, including delayed completion/loss and persistent reports.
+The branch uses **save v95 / orders v38**; old v94 packets await fresh receiver
+evidence without host-state reconstruction. Balance and host allocation rules
+are unchanged.
+Seven focused core suites passed locally; Qt/save/full validation belongs to the
+pushed commit's CI because this environment lacks Qt/CMake. #44 remains open
+pending review, successful CI and merge, with optional capability/AI expansions
+kept in their own issues. Historical local Qt results below belong to prior work.
+
+## Historical checkpoint — 22 October 2026 (Europe/Moscow): main after #228
 
 Main is `697bec011e0babddd0459a43dffc7c816d4c0144`, merged #228.
 #59 is closed. Formats: **save v93 / orders v37**. Prior #59/#227 branch wording
 below is historical; physical samples, working artifacts, delivered observation
 unlocks and science delivery receipts are on main.
 
-## Implementation branch — orbital habitats #56
+## Historical implementation branch — orbital habitats #56 (merged as #229)
 
 `codex/orbital-habitats` starts from that main. The user approved the
 [complete first habitat design](orbital-habitats.md): distinct orbital residents

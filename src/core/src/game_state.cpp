@@ -1543,6 +1543,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
         if (planet->owner == player) {
             result.scienceSamples=planet->scienceSamples;
             result.habitat=HabitatObservation{planet->habitat,engineering_station_available(state,*planet),planet->population,planet->industry,planet->minerals,planet->mines,planet->productionQueue};
+            result.habitat->radar=planet->radar;
             result.habitat->stationEvidenceTime=3*observedTurn+(observedTurn<=state.turn?2:0);
             if(const auto* station=find_orbital_station_at_planet(state,planet->id);station && station->owner==player) result.habitat->station=*station;
             result.resonanceLab = planet->resonanceLab;

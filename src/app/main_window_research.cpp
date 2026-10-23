@@ -238,8 +238,7 @@ void MainWindow::refreshResearchPanel()
     if (planActive) {
         for (const auto& planet : planned.planets) {
             if (planet.owner != player->id) continue;
-            guaranteedRp += static_cast<std::uint32_t>(
-                static_cast<std::uint64_t>(net_colony_output(planned,planet)) * allocationPercent / 100U);
+            guaranteedRp += colony_research_allocation(planned, planet, net_colony_output(planned,planet));
             artifactRp += retained_sample_research(planned, planet);
             const auto parallel = resonance_research(planned, planet);
             for (std::size_t field = 0; field < parallel.size(); ++field) parallelRp[field] += parallel[field];
@@ -315,7 +314,7 @@ void MainWindow::refreshResearchPanel()
             nextUnlocks << QString::fromStdString(unlock.name);
     }
     researchUnlock_->setText(!planActive ? "Research paused; accumulated RP is preserved."
-        : nextUnlocks.isEmpty() ? "No implemented capability at the next level. Weapons awaits combat rules."
+        : nextUnlocks.isEmpty() ? "No new capability becomes available at the next level with current prerequisites."
         : "Next unlock: " + nextUnlocks.join(", "));
 
     const auto previousRow = researchPlanTree_->indexOfTopLevelItem(researchPlanTree_->currentItem());

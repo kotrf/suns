@@ -729,6 +729,7 @@ struct HabitatObservation {
     std::vector<ProductionItem> queue;
     std::optional<OrbitalStation> station;
     std::uint64_t stationEvidenceTime{}; // 3*year + phase: observation 0, battle 1, final surface 2.
+    PlanetaryRadarLevel radar{PlanetaryRadarLevel::None}; // Same dated packet as the production queue.
 };
 
 struct PendingStationContact {

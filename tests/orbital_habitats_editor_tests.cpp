@@ -6,6 +6,7 @@
 #include "suns/campaign.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
+#include "remote_receiver_fixture.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
@@ -79,6 +80,57 @@ void annual_receipts_and_private_evidence_roundtrip()
     writeBytes(path,data);assert(read_save_game_file(path,loaded,error));
     assert(!loaded.state.planets[0].habitat.population && !loaded.state.players[0].surveyKnowledge[0].planetSnapshot->habitat);
 }
+void receiver_evidence_survives_reload_and_v94_migration()
+{
+    auto s=TurnProcessor{}.process(test::remote_receiver_fixture(),{});
+    QTemporaryDir dir;QString error;SaveGameData loaded;
+    const auto path=dir.filePath("receiver.suns");
+    assert(write_save_game_file(path,envelope(s),error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.planets[1].radar==PlanetaryRadarLevel::Local);
+    assert(find_planet(make_player_view(loaded.state,1).state,2)->radar==PlanetaryRadarLevel::None);
+    test::deliver_receiver_report(loaded.state);
+    assert(find_planet(make_player_view(loaded.state,1).state,2)->radar==PlanetaryRadarLevel::Local);
+    assert(write_save_game_file(path,envelope(loaded.state),error) && read_save_game_file(path,loaded,error));
+    assert(find_planet(make_player_view(loaded.state,1).state,2)->radar==PlanetaryRadarLevel::Local);
+
+    auto exportHost=envelope(s);exportHost.mode=SessionMode::Host;exportHost.playerTokens={{1,31}};
+    auto exported=make_player_turn(exportHost,1);
+    assert(write_save_game_file(path,exported,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.players[0].pendingSurveyReports.empty());
+    assert(find_planet(loaded.state,2)->radar==PlanetaryRadarLevel::None);
+
+    auto bad=s;
+    for(auto& k:bad.players[0].surveyKnowledge) if(k.star==2)
+        k.planetSnapshot->habitat->radar=static_cast<PlanetaryRadarLevel>(3);
+    assert(write_save_game_file(path,envelope(bad),error) && !read_save_game_file(path,loaded,error));
+
+    // One owned observation, followed only by the empty pending-report count.
+    // Remove its v95 radar byte to recreate the actual v94 HABI layout.
+    auto legacy=make_demo_game();auto& player=legacy.players[0];
+    player.surveyKnowledge.clear();player.pendingSurveyReports.clear();
+    legacy.planets[0].productionQueue={{ProductionKind::Factory,kFactoryCost}};
+    set_survey_level(legacy,1,1,SurveyLevel::DeepSurvey,legacy.turn);
+    assert(player.surveyKnowledge.size()==1 && legacy.players.size()==1);
+    assert(write_save_game_file(path,envelope(legacy),error));
+    auto data=bytes(path);QByteArray marker;
+    {QDataStream out(&marker,QIODevice::WriteOnly);out<<quint32{0x48414249};}
+    const auto at=data.lastIndexOf(marker);assert(at>0);
+    quint32 magic{},size{};
+    {QDataStream in(data);assert(in.device()->seek(at));in>>magic>>size;}
+    assert(at+8+size==data.size() && data.endsWith(QByteArray(4,'\0')));
+    assert(quint8(data[data.size()-5])==quint8(PlanetaryRadarLevel::Full));
+    data.remove(data.size()-5,1);
+    {QDataStream out(&data,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{94};
+        assert(out.device()->seek(at+4));out<<quint32(size-1);}
+    writeBytes(path,data);assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.planets[0].radar==PlanetaryRadarLevel::Full);
+    const auto view=make_player_view(loaded.state,1);
+    assert(view.state.planets[0].radar==PlanetaryRadarLevel::None);
+    assert(view.state.planets[0].productionQueue.size()==1);
+    set_survey_level(loaded.state,1,1,SurveyLevel::DeepSurvey,loaded.state.turn);
+    assert(make_player_view(loaded.state,1).state.planets[0].radar==PlanetaryRadarLevel::Full);
+}
+
 void partial_construction_and_queue_survive_reload()
 {
     auto s=fixture(false);auto& p=s.planets[0];
@@ -193,6 +245,7 @@ void gui_authors_build_and_population_orders_without_mutation()
 int main(int argc,char** argv)
 {
     QApplication app(argc,argv);annual_receipts_and_private_evidence_roundtrip();partial_construction_and_queue_survive_reload();pbem_and_hidden_changes_are_private();
+    receiver_evidence_survives_reload_and_v94_migration();
     ship_authoring_waits_for_station_evidence();gui_upkeep_forecast_includes_ordinary_mining();
     gui_authors_build_and_population_orders_without_mutation();
 }

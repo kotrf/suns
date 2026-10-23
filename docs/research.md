@@ -27,8 +27,8 @@ Level costs are `18 * (1 + level * (level - 1) / 2)` RP: 18, 36 and 72 for level
 ## Empire allocation and colony production
 
 The player sets one empire-wide research allocation from 0% to 100%. Every
-colony contributes that percentage of its yearly resource output to the common
-RP pool before resolving its local production queue. Integer rounding happens
+colony contributes that percentage of its yearly resource output, after mandatory
+orbital-habitat upkeep, to the common RP pool before resolving its local production queue. Integer rounding happens
 per colony and the remainder stays available for production.
 
 After a colony finishes everything it can in its local queue, all unused output
@@ -124,8 +124,9 @@ must complete in the local queue; see [Terraforming](terraforming.md).
 
 Saves made before v59 retain their existing automatic Biology tolerance bonus
 through an explicit compatibility flag. Legacy scalar-habitability campaigns
-retain their original rules and do not gain physical terraforming. Weapons now
-supports radiation terraforming; this is still not a complete combat tree.
+retain their original rules and do not gain physical terraforming. Weapons
+supports paid radiation terraforming as well as the operational weapons and
+bombardment catalogs described above.
 Each empire researches independently, including remote
 players whose settings arrive through turn-order envelopes.
 
@@ -141,3 +142,17 @@ xenocrystal, while existing research and ship/station recipes remain available.
 ## Orbital habitat integration (#56)
 
 Orbital habitats require Construction 18, Energy 16 and Biology 14. They use separate physical residents and ordinary colony output/research allocation after mandatory paid upkeep. They do not require field samples or xenocrystal. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.
+
+## Completion audit (#44)
+
+The [completion audit](audits/2026-10-23-science-progression-completion.md)
+maps the original requirements to implementation and existing test coverage.
+The science foundation is implemented; further capability families, deeper AI
+evaluation and balance tuning belong to their own follow-ups. Closing #44
+remains a decision after review and merge of the audit.
+
+Research uses the receiver tier and production queue from the same delivered
+owner observation. A remote receiver completing physically cannot change the
+guarantee until that report arrives. Save v95 persists this paired evidence in
+HABI, including pending reports; orders remain v38. Older v94 evidence confirms
+no receiver tier until refreshed, rather than reading hidden current radar state.
