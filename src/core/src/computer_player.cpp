@@ -1042,6 +1042,20 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
             [&](const auto& f) { return f.id==move->fleet; });
         if (original==view.state.fleets.end()) continue;
         auto fleet=*original;
+        // Match expansion's paid loading/automatic local-depot refuelling
+        // assumptions before materializing its funded route.
+        if (confirmed_idle(fleet,0)) {
+            fleet.position=fleet.telemetry.position;
+            if (const auto* local=colony_at(view.state,view.player,fleet.position);
+                local && colony_has_orbital_service(view.state,local->id,view.player,OrbitalStationModule::RefuelingDepot))
+                fleet.fuel=fleet_fuel_capacity(view.state,fleet);
+        }
+        for (const auto& pending:plan.orders.orders) {
+            if (const auto* load=std::get_if<SetFleetColonistsOrder>(&pending); load && load->fleet==fleet.id)
+                fleet.colonists=load->colonists;
+            if (const auto* load=std::get_if<SetFleetMineralCargoOrder>(&pending); load && load->fleet==fleet.id)
+                fleet.minerals=load->minerals;
+        }
         std::vector<FleetWaypoint> input{{move->destination,move->warp,move->arrivalAction}};
         input.insert(input.end(),move->queuedWaypoints.begin(),move->queuedWaypoints.end());
         std::vector<FleetWaypoint> output;

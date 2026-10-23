@@ -171,19 +171,22 @@ void safe_warp_and_integrated_hull_risk()
     assert(near(fleet_medium_damage_rate(s,f,10,0),18));
     assert(near(fleet_medium_damage_rate(s,f,10,0.25),13.5));
     assert(near(fleet_medium_damage_rate(s,f,10,1),0));
-    // Two engines in one hull, including a non-primary conventional engine.
-    s.shipDesigns[0].components.push_back(ShipComponentType::FusionDrive);
+    // A mixed fleet must respect its conventional escort, then handle
+    // opposing scoop/conventional curves when their tolerance crosses.
+    auto escort=s.shipDesigns[0]; escort.id=33; escort.name="Conventional escort";
+    escort.components[0]=ShipComponentType::FusionDrive; s.shipDesigns.push_back(escort);
+    f.ships={{f.design,1},{escort.id,1}};
     f.warp=9; const Position end{1081,0};
     const auto mixed=fleet_segment_damage(s,f,end);
     s.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
     assert(near(mixed,fleet_segment_damage(s,f,end)));
-    // Opposing risk curves cross inside a cloud; subdivision stays additive.
     s.shipDesigns[0].components[0]=ShipComponentType::RamScoopDrive; f.warp=10;
-    s.shipDesigns[0].components.back()=ShipComponentType::HighWarpDrive;
+    s.shipDesigns.back().components[0]=ShipComponentType::HighWarpDrive;
     const auto full=fleet_segment_damage(s,f,{1100,0});
     half=f; half.position={1035,0};
     assert(near(full,fleet_segment_damage(s,f,{1035,0})+fleet_segment_damage(s,half,{1100,0}),1e-5));
-    s.shipDesigns[0].components={ShipComponentType::FusionDrive}; f.warp=8; f.damagePercent=99.9;
+    s.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
+    f.ships.clear(); f.warp=8; f.damagePercent=99.9;
     const auto stopped=TurnProcessor{}.process_with_events(s,{}).state.fleets[0];
     assert(stopped.damagePercent==100 && stopped.position.x>1016 && stopped.position.x<1064);
     // Hull limit also clips fuel consumption at the actually travelled point.
@@ -231,6 +234,17 @@ void computer_uses_received_bypasses()
     assert(route.queuedWaypoints.size()>=3 && route.queuedWaypoints.back().arrivalAction.kind==FleetArrivalActionKind::Refuel);
     auto f=s.fleets[0]; f.warp=route.warp;
     assert(fleet_segment_damage(s,f,route.destination)<1e-8);
+    // Planning already assumes automatic service at a received friendly depot.
+    // Bypass materialization must use that same fuel, even with an empty tank.
+    s.fleets[0].fuel=0; s.fleets[0].telemetry.fuel=0;
+    const auto empty=plan_computer_turn(make_player_view(s,1));
+    const auto emptyMove=std::find_if(empty.orders.orders.begin(),empty.orders.orders.end(),[](const auto& o) {
+        const auto* m=std::get_if<MoveFleetOrder>(&o); return m && m->fleet==1;
+    });
+    assert(emptyMove!=empty.orders.orders.end());
+    const auto& funded=std::get<MoveFleetOrder>(*emptyMove);
+    assert(funded.destination==route.destination && funded.queuedWaypoints.size()==route.queuedWaypoints.size());
+    s.fleets[0].fuel=200; s.fleets[0].telemetry.fuel=200;
     s.interstellarClouds.clear();
     const auto changed=plan_computer_turn(make_player_view(s,1));
     const auto again=std::find_if(changed.orders.orders.begin(),changed.orders.orders.end(),[](const auto& o) {

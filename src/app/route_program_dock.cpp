@@ -137,8 +137,9 @@ private:
             style()->unpolish(this);
             style()->polish(this);
         }
+        const auto damageText=damageRate_<0.01 ? QString("<0.01") : QString::number(damageRate_,'f',2);
         setFormat((unsafe
-            ? QString("W%1 • +%2% damage/turn").arg(value()).arg(damageRate_, 0, 'f', 0)
+            ? QString("W%1 • +%2% damage/turn").arg(value()).arg(damageText)
             : QString("W%1 • base W%2").arg(value()).arg(safeWarp_))
             + (fuelLimited ? " • fuel!" : ""));
         setToolTip((unsafe
