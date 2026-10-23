@@ -19,8 +19,9 @@ down for conventional engines and up for scoops. Full flown-segment integration
 covers mixed fitted engines, hull-limited movement and free-speed coasting.
 Player and computer route alternatives use received profiles only and ordinary
 delayed coordinate waypoints. See [rules, estimates and limits](interstellar-medium.md).
-No save/orders format changes. PR review and exact-head CI are pending; do not
-merge or claim manual balance acceptance from these notes. Optional ionization,
+No save/orders format changes. [PR #231](https://github.com/kotrf/suns/pull/231)
+is for review; read its current exact-head CI before any merge. These notes do
+not authorize merge or claim manual balance acceptance. Optional ionization,
 radio propagation and science remain future extensions; #63 is untouched.
 
 ## Historical checkpoint — main after #229

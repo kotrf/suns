@@ -245,6 +245,23 @@ void computer_uses_received_bypasses()
     const auto& funded=std::get<MoveFleetOrder>(*emptyMove);
     assert(funded.destination==route.destination && funded.queuedWaypoints.size()==route.queuedWaypoints.size());
     s.fleets[0].fuel=200; s.fleets[0].telemetry.fuel=200;
+    // Newly received clouds must also revise an acknowledged in-flight
+    // programme when a bypass is safe at the same Warp (no speed reduction).
+    auto active=s; ++active.turn;
+    active.players[0].computer=plan.nextState;
+    active.players[0].computer.fleetGoals[0].reviewTurn=active.turn;
+    auto& flying=active.fleets[0];
+    flying.destination=active.stars[1].position; flying.warp=8;
+    flying.waypointQueue={{{0,0},8,{FleetArrivalActionKind::Refuel}}};
+    flying.telemetry.destination=flying.destination; flying.telemetry.warp=8;
+    flying.telemetry.waypointQueue=flying.waypointQueue; flying.telemetry.observedTurn=active.turn;
+    const auto replanned=plan_computer_turn(make_player_view(active,1));
+    const auto revised=std::find_if(replanned.orders.orders.begin(),replanned.orders.orders.end(),[](const auto& o) {
+        const auto* m=std::get_if<MoveFleetOrder>(&o); return m && m->fleet==1;
+    });
+    assert(revised!=replanned.orders.orders.end());
+    const auto& bypass=std::get<MoveFleetOrder>(*revised);
+    assert(bypass.warp==8 && bypass.destination!=*flying.destination && bypass.queuedWaypoints.size()>=3);
     s.interstellarClouds.clear();
     const auto changed=plan_computer_turn(make_player_view(s,1));
     const auto again=std::find_if(changed.orders.orders.begin(),changed.orders.orders.end(),[](const auto& o) {

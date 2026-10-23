@@ -121,6 +121,8 @@ fuel across the route, without advance credit for future scooping. They prefer
 short travel with a modest fuel-budget penalty; stable candidate order breaks
 ties. Chosen bypasses become ordinary delayed MoveFleetOrder waypoints, preserve
 survey/colonization/return actions and existing acknowledgement-based goals.
+At the existing review boundary, fresh telemetry and received hazards can revise
+an acknowledged programme with a bypass even when its Warp stays unchanged.
 When no safe funded bypass exists they try a lower Warp. This is a bounded
 navigation heuristic, not a global route optimizer or a new supply programme.
 

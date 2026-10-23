@@ -580,21 +580,30 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             if (state.turn < existing->reviewTurn || fleet.telemetry.observedTurn <= existing->issuedTurn) continue;
             // Fresh telemetry may show a failed route (changed ownership,
             // interception), or insufficient fuel. Retire only an acknowledged
-            // idle programme, or replace an acknowledged route with a slower one.
+            // idle programme, or replace an acknowledged route when fuel or
+            // newly received medium hazards warrant a slower speed/bypass.
             if (confirmed_idle(fleet, existing->issuedTurn)) {
                 goals.erase(existing);
             } else if (fleet.destination && same_position(fleet.telemetry.position, fleet.position)) {
                 std::vector<Position> remaining{*fleet.destination};
                 for (const auto& waypoint : fleet.waypointQueue) remaining.push_back(waypoint.destination);
                 const auto warp = route_warp(state, fleet, remaining);
-                if (warp && *warp < fleet.warp) {
+                auto moving=fleet;
+                bool receivedHazard=fleet_segment_damage(state,moving,*fleet.destination)>1e-6;
+                moving.position=*fleet.destination;
+                for (const auto& waypoint:fleet.waypointQueue) {
+                    moving.warp=waypoint.warp;
+                    receivedHazard=receivedHazard || fleet_segment_damage(state,moving,waypoint.destination)>1e-6;
+                    moving.position=waypoint.destination;
+                }
+                if (warp && (*warp < fleet.warp || receivedHazard)) {
                     auto waypoints = fleet.waypointQueue;
                     for (auto& waypoint : waypoints) waypoint.warp = *warp;
                     plan.orders.orders.push_back(MoveFleetOrder{fleet.id, *fleet.destination, *warp,
                         fleet.arrivalAction.value_or(FleetArrivalAction{}), std::move(waypoints)});
                     existing->issuedTurn = state.turn;
                     existing->reviewTurn = review_turn(state, fleet);
-                    explain(reason, "Conserve fuel for fleet " + std::to_string(fleet.id));
+                    explain(reason, "Revise received route risks/fuel for fleet " + std::to_string(fleet.id));
                 }
                 continue;
             } else continue;

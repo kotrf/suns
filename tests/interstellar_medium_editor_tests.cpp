@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "route_program_dock.hpp"
 #include <QAction>
 #include <QApplication>
 #include <QGraphicsScene>
@@ -67,6 +68,7 @@ int main(int argc,char** argv)
     overlay->setChecked(false); assert(count()==0 && tree->topLevelItemCount()==1);
     overlay->setChecked(original);
     suns::MainWindowTestAccess::alternativeFixture(w);
+    suns::attachRouteProgramDock(w);
     assert(w.findChild<QPushButton*>("routeAlternativesButton"));
     QTimer::singleShot(0,[] {
         auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog);
