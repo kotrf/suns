@@ -536,6 +536,9 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         // Ownership does not deliver remote construction telemetry. Both the
         // installation and its remaining queue work come from the same packet.
         known.habitat = {};
+        // Owned remote construction is known only through delivered reports.
+        // Older packets without receiver evidence confirm no receiver tier.
+        known.radar = PlanetaryRadarLevel::None;
         known.resonanceLab = {};
         std::erase_if(known.productionQueue, [](const auto& item) { return item.kind == ProductionKind::ResonanceLaboratory; });
         if (known.owner == playerId) {
@@ -580,6 +583,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 const auto& h=*evidence->planetSnapshot->habitat;
                 known.habitat=h.habitat; known.population=h.surfacePopulation; known.industry=h.industry; known.minerals=h.minerals;
                 known.mines=h.mines; known.productionQueue=h.queue;
+                known.radar=h.radar;
                 if(known.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !h.stationSupported)known.engineering.operational=false;
             }
         }

@@ -14,7 +14,11 @@ are on main. #59 is closed; broader #56 stays open; #63 stays frozen last.
 cover the implemented science foundation. A shared allocation helper makes the
 Research guarantee honor the existing one-point first-receiver reserve; core and
 Qt regressions compare pending-order forecasts with actual resolution. Obsolete
-combat guidance is corrected. No formats, balance or host allocation rules change.
+combat guidance is corrected. Review follow-up freezes the receiver tier with
+the received queue, including delayed completion/loss and persistent reports.
+The branch uses **save v95 / orders v38**; old v94 packets await fresh receiver
+evidence without host-state reconstruction. Balance and host allocation rules
+are unchanged.
 Seven focused core suites passed locally; Qt/save/full validation belongs to the
 pushed commit's CI because this environment lacks Qt/CMake. #44 remains open
 pending review, successful CI and merge, with optional capability/AI expansions

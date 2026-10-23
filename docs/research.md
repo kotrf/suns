@@ -150,3 +150,9 @@ maps the original requirements to implementation and existing test coverage.
 The science foundation is implemented; further capability families, deeper AI
 evaluation and balance tuning belong to their own follow-ups. Closing #44
 remains a decision after review and merge of the audit.
+
+Research uses the receiver tier and production queue from the same delivered
+owner observation. A remote receiver completing physically cannot change the
+guarantee until that report arrives. Save v95 persists this paired evidence in
+HABI, including pending reports; orders remain v38. Older v94 evidence confirms
+no receiver tier until refreshed, rather than reading hidden current radar state.

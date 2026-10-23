@@ -2,6 +2,8 @@
 #include "suns/game_state.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/production.hpp"
+#include "suns/orbital_habitats.hpp"
+#include "remote_receiver_fixture.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -293,6 +295,32 @@ void verify_receiver_reserve_matches_research_forecast()
     assert(TurnProcessor{}.process(state, {}).players.front().technology.progress[3] == 0);
 }
 
+void verify_receiver_completion_waits_for_delivered_report()
+{
+    using namespace suns;
+    auto state = test::remote_receiver_fixture();
+    const auto guarantee = [](const GameState& host) {
+        const auto view = make_player_view(host, 1);
+        const auto& colony = *find_planet(view.state, 2);
+        return colony_research_allocation(view.state, colony, net_colony_output(view.state, colony));
+    };
+    assert(guarantee(state) == 5);
+    auto next = TurnProcessor{}.process(state, {});
+    assert(find_planet(next, 2)->radar == PlanetaryRadarLevel::Local);
+    assert(colony_research_allocation(next, *find_planet(next, 2), 6) == 6);
+    auto view = make_player_view(next, 1);
+    assert(find_planet(view.state, 2)->radar == PlanetaryRadarLevel::None);
+    assert(find_planet(view.state, 2)->productionQueue.size() == 2);
+    assert(guarantee(next) == 5);
+    test::deliver_receiver_report(next);
+    view = make_player_view(next, 1);
+    assert(find_planet(view.state, 2)->radar == PlanetaryRadarLevel::Local);
+    assert(find_planet(view.state, 2)->productionQueue.size() == 1);
+    assert(guarantee(next) == 6);
+    next.planets[1].radar = PlanetaryRadarLevel::None;
+    assert(guarantee(next) == 6);
+}
+
 void verify_new_research_changes_scouting_and_fuel_logistics()
 {
     auto state = suns::make_demo_game();
@@ -341,6 +369,7 @@ int main()
     verify_component_unlock_is_enforced_for_new_designs();
     verify_percentage_is_taken_before_production_and_leftovers_follow();
     verify_receiver_reserve_matches_research_forecast();
+    verify_receiver_completion_waits_for_delivered_report();
     verify_new_research_changes_scouting_and_fuel_logistics();
     return 0;
 }

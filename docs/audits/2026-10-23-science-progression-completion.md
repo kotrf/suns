@@ -3,7 +3,8 @@
 23 October 2026 (Europe/Moscow). Base: main
 [`155f9e1`](https://github.com/kotrf/suns/commit/155f9e1e4f9fee7ce5e440b1fc57595d9dc0df48),
 after [#229](https://github.com/kotrf/suns/pull/229).
-Formats remain **save v94 / orders v38**. The updated
+The base uses **save v94 / orders v38**; the reviewed completion branch uses
+**save v95 / orders v38** for persistent receiver evidence. The updated
 [#44](https://github.com/kotrf/suns/issues/44) separates the implemented science
 foundation from later capability families; its original requirements remain in
 the issue for comparison.
@@ -42,8 +43,24 @@ every test was executed locally for this audit. Execution results follow below.
    prerequisites. `research.md` also stops describing Weapons as a future combat
    tree and states the mandatory-upkeep ordering.
 
-No research costs, unlock levels, racial access, receipts, physical inventories,
-save layouts or order layouts change. Additional capabilities remain paid
+3. **Remote receiver completion escaped through the forecast.** Review of
+   `72663eb` reproduced a hidden completed receiver changing the guarantee from
+   five to six RP while the received queue and observation year stayed unchanged.
+   Owner-only operating evidence now captures the radar tier with that queue;
+   PlayerView restores both from the same delivered packet and never falls back
+   to live radar truth. Physical host resolution still uses the real receiver.
+   Core and Qt regressions cover delayed completion and report arrival; core
+   coverage also verifies that a subsequent hidden loss cannot rewrite evidence.
+
+Save v95 adds one validated radar-tier byte to each present HABI observation,
+including packets still in transit. Existing v94 records retain their queue and
+other evidence; no receiver tier is confirmed until a fresh report arrives.
+The migration does not invent past radar knowledge from current physical state.
+Save/reload, player export, invalid enums and a reconstructed v94 payload are
+covered in `orbital_habitats_editor_tests.cpp`.
+
+No research costs, unlock levels, racial access, receipts, physical inventories
+or order layouts change. Additional capabilities remain paid
 construction or fitting decisions after research, rather than automatic gifts.
 
 ## Validation
@@ -51,7 +68,7 @@ construction or fitting decisions after research, rather than automatic gifts.
 - Seven focused core suites rebuilt and passed against the updated core:
   research, campaign, ship designer, production queue, science samples,
   planetary engineering and orbital habitats. The new receiver/allocation
-  regression is included in the research suite.
+  and remote receiver-delivery regressions are included in the research suite.
 - The computer-player suite also passed on the unchanged audit base before the
   allocation helper was extracted; post-change AI validation belongs to CI.
 - `git diff --check` passed.

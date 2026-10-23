@@ -3,6 +3,7 @@
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
 #include "suns/equipment.hpp"
+#include "remote_receiver_fixture.hpp"
 
 #include <QApplication>
 #include <QComboBox>
@@ -54,6 +55,13 @@ struct MainWindowTestAccess {
     static GameState resolveResearch(const MainWindow& window)
     {
         return TurnProcessor{}.process(window.state_, {window.pendingOrders_});
+    }
+    static void loadResearch(MainWindow& window, const GameState& state)
+    {
+        window.state_ = state;
+        window.pendingOrders_ = {1, {}};
+        window.pendingDescriptions_.clear();
+        window.refreshResearchPanel();
     }
 };
 } // namespace suns
@@ -141,6 +149,18 @@ int main(int argc, char** argv)
     MainWindowTestAccess::receiverResearch(window, 100, false);
     assert(summary->text().contains("Research is paused"));
     assert(MainWindowTestAccess::resolveResearch(window).players.front().technology.progress[3] == 0);
+
+    auto remote = test::remote_receiver_fixture();
+    // The HQ contributes six RP; the remote colony contributes five.
+    MainWindowTestAccess::loadResearch(window, remote);
+    assert(summary->text().contains("Guaranteed RP next turn: 11,"));
+    remote = TurnProcessor{}.process(remote, {});
+    assert(remote.planets[1].radar == PlanetaryRadarLevel::Local);
+    MainWindowTestAccess::loadResearch(window, remote);
+    assert(summary->text().contains("Guaranteed RP next turn: 11,"));
+    test::deliver_receiver_report(remote);
+    MainWindowTestAccess::loadResearch(window, remote);
+    assert(summary->text().contains("Guaranteed RP next turn: 12,"));
 
     auto state = generate_campaign(GalaxyConfig{}, {{"Designer", RacePreset::Terran, true}});
     state.players.front().technology.levels[static_cast<std::size_t>(ResearchField::Propulsion)] = 20;
