@@ -1502,13 +1502,21 @@ MovementBudget fleet_movement_budget(
         fleet.position.x+(destination.x-fleet.position.x)*distance/full,
         fleet.position.y+(destination.y-fleet.position.y)*distance/full} : fleet.position; };
     const bool fuelLimited = paidDistance < maximumDistance - epsilon;
-    const auto damageRate = fleet_overdrive_damage_rate(state, fleet, fleet.warp);
-    if (damageRate > 0.0)
-        paidDistance = std::min(paidDistance, speed * (100.0 - fleet.damagePercent) / damageRate);
+    const auto capDamageDistance=[&](const Fleet& moving,double maximum,auto endpoint) {
+        if (fleet_segment_damage(state,moving,endpoint(maximum)) < 100.0-moving.damagePercent) return maximum;
+        double low=0,high=maximum;
+        for (int i=0;i<48;++i) {
+            const auto mid=(low+high)*0.5;
+            if (fleet_segment_damage(state,moving,endpoint(mid)) < 100.0-moving.damagePercent) low=mid;
+            else high=mid;
+        }
+        return high;
+    };
+    paidDistance=capDamageDistance(fleet,paidDistance,along);
     MovementBudget result{
         paidDistance,
         fleet_fuel_change_for_segment(state, fleet, along(paidDistance)),
-        speed > 0.0 ? damageRate * paidDistance / speed : 0.0,
+        fleet_segment_damage(state, fleet, along(paidDistance)),
         fleet_fuel_consumption_for_segment(state, fleet, along(paidDistance)),
     };
     const auto bounds=fleet_segment_fuel_bounds(state,fleet,paidDistance);
@@ -1521,8 +1529,11 @@ MovementBudget fleet_movement_budget(
         auto coasting = fleet;
         coasting.warp = freeWarp;
         coasting.position=along(paidDistance);
-        const auto freeDistance = std::min(
+        coasting.damagePercent += result.damage;
+        auto freeDistance = std::min(
             remaining - paidDistance, warp_distance(freeWarp) * std::max(0.0, time - paidDistance / speed));
+        freeDistance=capDamageDistance(coasting,freeDistance,[&](double d) { return along(paidDistance+d); });
+        result.damage += fleet_segment_damage(state,coasting,along(paidDistance+freeDistance));
         result.distance += freeDistance;
         result.fuelChange += fleet_fuel_change_for_segment(state, coasting, along(paidDistance+freeDistance));
         result.fuelConsumed += fleet_fuel_consumption_for_segment(state, coasting, along(paidDistance+freeDistance));

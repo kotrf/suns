@@ -110,6 +110,28 @@ double leg_fuel(const GameState& state, const Fleet& fleet, Position destination
         +fleet_segment_fuel_bounds(state,fleet,std::max(0.0,distance-years*step)).consumedMaximum;
 }
 
+std::optional<MediumRouteAlternative> navigation_leg(const GameState& state,const Fleet& fleet,Position destination)
+{
+    const auto* observer=find_player(state,fleet.owner);
+    if (!state.interstellarMediumEnabled || !observer || observer->mediumKnowledge.empty()) {
+        const auto needed=leg_fuel(state,fleet,destination);
+        if (fleet_overdrive_damage_rate(state,fleet,fleet.warp)>1e-8 || needed>fleet.fuel+1e-6) return {};
+        const auto distance=distance_between(fleet.position,destination);
+        return MediumRouteAlternative{{destination},distance,distance/warp_distance(fleet.warp),needed,0};
+    }
+    std::optional<MediumRouteAlternative> best;
+    double bestScore=std::numeric_limits<double>::infinity();
+    for (auto candidate:medium_route_alternatives(state,fleet,destination,fleet.warp)) {
+        if (candidate.damage>1e-6) continue;
+        double needed=0; auto moving=fleet;
+        for (const auto end:candidate.destinations) { needed+=leg_fuel(state,moving,end); moving.position=end; }
+        if (needed>fleet.fuel+1e-6) continue;
+        const double score=candidate.years+0.5*needed/std::max(1.0,fleet_fuel_capacity(state,fleet));
+        if (score<bestScore-1e-8) { candidate.fuel=needed; bestScore=score; best=std::move(candidate); }
+    }
+    return best;
+}
+
 std::optional<std::uint8_t> route_warp(
     const GameState& state, Fleet fleet, const std::vector<Position>& destinations)
 {
@@ -121,13 +143,14 @@ std::optional<std::uint8_t> route_warp(
     const auto startPosition=fleet.position;
     for (int warp = cruise; warp >= 1; --warp) {
         fleet.warp = static_cast<std::uint8_t>(warp);
-        if (!fleet_warp_valid(state, fleet, fleet.warp)
-            || fleet_overdrive_damage_rate(state, fleet, fleet.warp) > 0) continue;
+        if (!fleet_warp_valid(state, fleet, fleet.warp)) continue;
         double needed = 0;
         auto position = startPosition;
         for (const auto destination : destinations) {
             fleet.position=position;
-            needed += leg_fuel(state, fleet, destination);
+            const auto leg=navigation_leg(state,fleet,destination);
+            if (!leg) { needed=std::numeric_limits<double>::infinity(); break; }
+            needed += leg->fuel;
             position = destination;
         }
         // Conservative: collected/generated fuel is a reserve, not advance credit.
@@ -601,8 +624,9 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                     trial.warp = std::uint8_t(warp);
                     if (!fleet_warp_valid(state, trial, trial.warp) || fleet_overdrive_damage_rate(state, trial, trial.warp)>0) continue;
                     const auto aim = visitor_intercept_destination(trial, contact, state.turn, trial.warp);
-                    if (!aim) continue;
+                    if (!aim || fleet_segment_damage(state,trial,*aim)>1e-6) continue;
                     auto returning = trial; returning.position = *aim;
+                    if (fleet_segment_damage(state,returning,fleet.position)>1e-6) continue;
                     if (leg_fuel(state, trial, *aim)+leg_fuel(state, returning, fleet.position)>trial.fuel) continue;
                     if (needed) plan.orders.orders.push_back(SetFleetMineralCargoOrder{local->id, fleet.id, trial.minerals});
                     plan.orders.orders.push_back(EncounterVisitorOrder{fleet.id, contact.id, trial.warp});
@@ -1008,6 +1032,33 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
             goals.push_back({f.id,ComputerFleetGoalKind::Resupply,safe->star,view.state.turn,review_turn(view.state,f)});
             explain(reason,"Evacuate received failing orbital habitat with an available paid transport");break;
         }
+    }
+    // Materialize the same received-profile paths used by route_warp as normal
+    // waypoints. Final arrival actions stay at their original destinations.
+    for (auto& order:plan.orders.orders) if (auto* move=std::get_if<MoveFleetOrder>(&order)) {
+        if (move->clearRoute || move->targetFleet
+            || std::any_of(move->queuedWaypoints.begin(),move->queuedWaypoints.end(),[](const auto& p) { return p.targetFleet!=0; })) continue;
+        const auto original=std::find_if(view.state.fleets.begin(),view.state.fleets.end(),
+            [&](const auto& f) { return f.id==move->fleet; });
+        if (original==view.state.fleets.end()) continue;
+        auto fleet=*original;
+        std::vector<FleetWaypoint> input{{move->destination,move->warp,move->arrivalAction}};
+        input.insert(input.end(),move->queuedWaypoints.begin(),move->queuedWaypoints.end());
+        std::vector<FleetWaypoint> output;
+        bool valid=true;
+        for (const auto& waypoint:input) {
+            fleet.warp=waypoint.warp;
+            const auto path=navigation_leg(view.state,fleet,waypoint.destination);
+            if (!path) { valid=false; break; }
+            for (std::size_t i=0;i<path->destinations.size();++i)
+                output.push_back({path->destinations[i],waypoint.warp,
+                    i+1==path->destinations.size()?waypoint.arrivalAction:FleetArrivalAction{}});
+            fleet.position=waypoint.destination; fleet.fuel-=path->fuel;
+        }
+        if (!valid || output.size()<=input.size()) continue;
+        move->destination=output[0].destination; move->warp=output[0].warp; move->arrivalAction=output[0].arrivalAction;
+        move->queuedWaypoints.assign(output.begin()+1,output.end());
+        explain(reason,"Bypass received cloud with fleet "+std::to_string(move->fleet));
     }
     std::sort(plan.nextState.fleetGoals.begin(),plan.nextState.fleetGoals.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
     plan.nextState.initialized = true;

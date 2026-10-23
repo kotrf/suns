@@ -1,5 +1,6 @@
 #include "suns/interstellar_medium.hpp"
 #include "suns/campaign.hpp"
+#include "suns/computer_player.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/reconnaissance.hpp"
@@ -150,8 +151,97 @@ void distant_and_passive_observers()
     s.players[0].pendingPlayerReports.clear(); s.fleets[0].electronics.mode=EmissionMode::Passive;
     observe_interstellar_medium(s,10); assert(s.players[0].pendingPlayerReports.empty());
 }
+void safe_warp_and_integrated_hull_risk()
+{
+    auto s=medium_fixture(); auto& f=s.fleets[0];
+    s.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
+    f.position={1000,0}; f.warp=8; f.fuel=200; f.destination=Position{1064,0};
+    s.interstellarClouds={{1,{1032,0},16,20,1}};
+    assert(fleet_overdrive_damage_rate(s,f,8)==0); // both endpoints clear
+    const auto expected=12*medium_segment_density(s,f.position,*f.destination);
+    assert(expected>0 && near(fleet_segment_damage(s,f,*f.destination),expected));
+    const auto result=TurnProcessor{}.process_with_events(s,{});
+    assert(result.state.fleets[0].position==*f.destination);
+    assert(near(result.state.fleets[0].damagePercent,expected));
+    auto half=f; half.position={1032,0};
+    assert(near(fleet_segment_damage(s,f,{1032,0})+fleet_segment_damage(s,half,*f.destination),expected));
+    assert(near(fleet_medium_damage_rate(s,f,8,0.25),3));
+    assert(near(fleet_medium_damage_rate(s,f,8,1),12));
+    s.shipDesigns[0].components[0]=ShipComponentType::RamScoopDrive;
+    assert(near(fleet_medium_damage_rate(s,f,10,0),18));
+    assert(near(fleet_medium_damage_rate(s,f,10,0.25),13.5));
+    assert(near(fleet_medium_damage_rate(s,f,10,1),0));
+    // Two engines in one hull, including a non-primary conventional engine.
+    s.shipDesigns[0].components.push_back(ShipComponentType::FusionDrive);
+    f.warp=9; const Position end{1081,0};
+    const auto mixed=fleet_segment_damage(s,f,end);
+    s.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
+    assert(near(mixed,fleet_segment_damage(s,f,end)));
+    // Opposing risk curves cross inside a cloud; subdivision stays additive.
+    s.shipDesigns[0].components[0]=ShipComponentType::RamScoopDrive; f.warp=10;
+    s.shipDesigns[0].components.back()=ShipComponentType::HighWarpDrive;
+    const auto full=fleet_segment_damage(s,f,{1100,0});
+    half=f; half.position={1035,0};
+    assert(near(full,fleet_segment_damage(s,f,{1035,0})+fleet_segment_damage(s,half,{1100,0}),1e-5));
+    s.shipDesigns[0].components={ShipComponentType::FusionDrive}; f.warp=8; f.damagePercent=99.9;
+    const auto stopped=TurnProcessor{}.process_with_events(s,{}).state.fleets[0];
+    assert(stopped.damagePercent==100 && stopped.position.x>1016 && stopped.position.x<1064);
+    // Hull limit also clips fuel consumption at the actually travelled point.
+    assert(near(stopped.fuel,200-fleet_fuel_change_for_segment(s,f,stopped.position),1e-6));
+    s.interstellarMediumEnabled=false; f.damagePercent=0;
+    assert(fleet_segment_damage(s,f,*f.destination)==0);
+}
+void received_route_alternatives()
+{
+    auto s=medium_fixture(); auto f=s.fleets[0]; f.position={0,0}; f.fuel=200; f.warp=8;
+    s.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
+    const Position target{64,0};
+    s.interstellarClouds={{1,{32,0},12,10,1}};
+    assert(medium_route_alternatives(s,f,target,8).size()==1); // hidden geometry
+    s.players[0].mediumKnowledge={{1,{32,0},12,10,1,1,MediumKnowledgeLevel::Characterized,9,10}};
+    const auto paths=medium_route_alternatives(s,f,target,8);
+    assert(paths.size()==3 && paths[0].damage>0);
+    assert(paths[1].damage<1e-8 && paths[2].damage<1e-8 && paths[1].distance>64);
+    assert(paths[1].destinations.back()==target && paths[1].destinations.size()==3);
+    s.interstellarClouds={{2,{500,500},100,100,0.5}};
+    const auto hidden=medium_route_alternatives(s,f,target,8);
+    assert(paths.size()==hidden.size());
+    for (std::size_t i=0;i<paths.size();++i) {
+        assert(paths[i].destinations==hidden[i].destinations);
+        assert(near(paths[i].fuel,hidden[i].fuel) && near(paths[i].damage,hidden[i].damage));
+    }
+}
+void computer_uses_received_bypasses()
+{
+    auto s=make_demo_game(); s.turn=10; s.players[0].controller=PlayerController::Computer;
+    s.interstellarMediumEnabled=true; s.wormholeRules.spawnChancePerTurn=0;
+    s.stars.resize(2); s.planets.resize(2); s.stars[1].position={64,0};
+    s.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
+    s.fleets[0].fuel=200; s.fleets[0].telemetry.fuel=200;
+    s.fleets[0].telemetry.observedTurn=s.turn;
+    s.players[0].surveyedStars={1}; s.players[0].surveyKnowledge.clear();
+    s.players[0].mediumKnowledge={{1,{32,0},12,10,1,1,MediumKnowledgeLevel::Characterized,9,10}};
+    s.interstellarClouds={{1,{32,0},12,10,1}};
+    const auto plan=plan_computer_turn(make_player_view(s,1));
+    const auto move=std::find_if(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& o) {
+        const auto* m=std::get_if<MoveFleetOrder>(&o); return m && m->fleet==1;
+    });
+    assert(move!=plan.orders.orders.end()); const auto& route=std::get<MoveFleetOrder>(*move);
+    assert(route.warp==8 && !same_position(route.destination,s.stars[1].position));
+    assert(route.queuedWaypoints.size()>=3 && route.queuedWaypoints.back().arrivalAction.kind==FleetArrivalActionKind::Refuel);
+    auto f=s.fleets[0]; f.warp=route.warp;
+    assert(fleet_segment_damage(s,f,route.destination)<1e-8);
+    s.interstellarClouds.clear();
+    const auto changed=plan_computer_turn(make_player_view(s,1));
+    const auto again=std::find_if(changed.orders.orders.begin(),changed.orders.orders.end(),[](const auto& o) {
+        const auto* m=std::get_if<MoveFleetOrder>(&o); return m && m->fleet==1;
+    });
+    assert(again!=changed.orders.orders.end()); const auto& same=std::get<MoveFleetOrder>(*again);
+    assert(same.destination==route.destination && same.queuedWaypoints.size()==route.queuedWaypoints.size());
+}
 int main()
 {
+    safe_warp_and_integrated_hull_risk(); received_route_alternatives(); computer_uses_received_bypasses();
     generation_and_projection(); integration_is_bounded_and_resolves_cloud_crossings();
     fuel_and_movement_use_the_same_segment(); fitted_engines_and_fuel_reserves();
     active_sensors_are_attenuated_without_changing_passive_reception();

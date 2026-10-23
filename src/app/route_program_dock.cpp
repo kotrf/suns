@@ -129,7 +129,7 @@ protected:
 private:
     void updateAppearance()
     {
-        const bool unsafe = safeWarp_ > 0 && value() > safeWarp_;
+        const bool unsafe = damageRate_ > 1e-8;
         const bool fuelLimited = !fuelWarning_.isEmpty();
         if (property("unsafe").toBool() != unsafe || property("fuelLimited").toBool() != fuelLimited) {
             setProperty("unsafe", unsafe);
@@ -139,12 +139,12 @@ private:
         }
         setFormat((unsafe
             ? QString("W%1 • +%2% damage/turn").arg(value()).arg(damageRate_, 0, 'f', 0)
-            : QString("W%1 • safe W%2").arg(value()).arg(safeWarp_))
+            : QString("W%1 • base W%2").arg(value()).arg(safeWarp_))
             + (fuelLimited ? " • fuel!" : ""));
         setToolTip((unsafe
-            ? QString("Unsafe overdrive: rated W%1, selected W%2. Hull damage accumulates while moving.")
+            ? QString("Hull risk at the reported position: base rating W%1, selected W%2. Check the route forecast for clouds along the path.")
                   .arg(safeWarp_).arg(value())
-            : QString("Selected W%1; fleet safe limit W%2.").arg(value()).arg(safeWarp_))
+            : QString("Selected W%1; base rating W%2. No local risk in received profiles; check the complete route forecast.").arg(value()).arg(safeWarp_))
             + (fuelLimited ? "\n" + fuelWarning_ : "\nFuel preview covers up to 96 years; no warning does not guarantee arrival."));
     }
 
@@ -461,6 +461,10 @@ void attachRouteProgramDock(MainWindow& window)
     auto* waypointActions = new QHBoxLayout;
     waypointActions->setSpacing(4);
     waypointActions->addWidget(appendButton, 1);
+    auto* alternativesButton = new QPushButton("Compare routes…", waypointGroup);
+    alternativesButton->setObjectName("routeAlternativesButton");
+    alternativesButton->setToolTip("Compare the direct route and coarse cloud bypasses to the selected star, then append your choice.");
+    waypointLayout->addWidget(alternativesButton);
     auto* workHereButton = new QPushButton("Start work here", waypointGroup);
     workHereButton->setObjectName("routeWorkHereButton");
     workHereButton->setToolTip("Use the selected On arrival work at this stationary fleet's reported position. Queues an ordinary route order with normal command delay; emissions stay unchanged.");
@@ -811,7 +815,8 @@ void attachRouteProgramDock(MainWindow& window)
         QMessageBox::information(
             &window,
             "Unsafe Warp overdrive",
-            "Every fleet has a safe Warp limit set by the least tolerant engine in its ships. "
+            "Every fleet has a base safe Warp rating set by the least tolerant fitted engine. "
+            "Cloud density shifts safe Warp by up to one: down for conventional engines, up for scoops. "
             "You may still order any speed through Warp 10. Above the safe limit the selector turns red: "
             "fuel use rises sharply and hull damage accumulates on every turn spent moving. "
             "The exact damage rate is determined by the fitted engine; at 100% damage the fleet is immobilized. "
@@ -969,6 +974,14 @@ void attachRouteProgramDock(MainWindow& window)
             routeTree->scrollToItem(added);
         };
     QObject::connect(appendButton, &QPushButton::clicked, panel, appendCurrentTarget);
+    QObject::connect(alternativesButton, &QPushButton::clicked, panel, [=, &window] {
+        if (targetTypeCombo->currentData().toInt()!=0) {
+            QMessageBox::information(&window,"Route alternatives","Choose a star destination to compare routes."); return;
+        }
+        window.appendSelectedStarWaypoint(static_cast<std::uint8_t>(warpSelector->value()),
+            actionFromControls(actionCombo,cargoCombo,reserveSpin,fuelReserveSpin,colonyPlan),true);
+        refreshRouteTable();
+    });
     QObject::connect(workHereButton, &QPushButton::clicked, panel, [=, &window] {
         window.startSelectedFleetWorkHere(actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan));
     });
