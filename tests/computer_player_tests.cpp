@@ -1,5 +1,6 @@
 #include "suns/computer_player.hpp"
 #include "suns/communications.hpp"
+#include "suns/interstellar_medium.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -366,7 +367,14 @@ void autonomous_fixed_seed_campaigns()
                     const auto* fleet = &*std::find_if(view.state.fleets.begin(), view.state.fleets.end(),
                         [&](const auto& f) { return f.id == move->fleet; });
                     assert(fleet->owner == id && fleet_warp_valid(view.state, *fleet, move->warp));
-                    assert(fleet_overdrive_damage_rate(view.state, *fleet, move->warp) == 0);
+                    auto moving=*fleet; moving.warp=move->warp;
+                    assert(fleet_segment_damage(view.state,moving,move->destination)<1e-6);
+                    moving.position=move->destination;
+                    for (const auto& waypoint:move->queuedWaypoints) {
+                        moving.warp=waypoint.warp;
+                        assert(fleet_segment_damage(view.state,moving,waypoint.destination)<1e-6);
+                        moving.position=waypoint.destination;
+                    }
                 }
             }
             state = resolve_controlled_campaign_turn(state, {{1, {}}}).state;

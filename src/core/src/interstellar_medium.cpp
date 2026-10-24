@@ -1,6 +1,7 @@
 #include "suns/interstellar_medium.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/propulsion.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
 
@@ -94,11 +95,13 @@ void generate_interstellar_medium(GameState& s)
     }
 }
 double interstellar_density(const GameState& s, Position p) { return density(profiles(s),p); }
-double medium_segment_density(const GameState& s, Position start, Position end)
+namespace {
+template<class Transform>
+double segment_integral(const std::vector<InterstellarCloud>& clouds, Position start, Position end, Transform transform, bool adaptive=false)
 {
-    const auto clouds=profiles(s); if (clouds.empty()) return 0;
+    if (clouds.empty()) return transform(0.0);
     const double dx=end.x-start.x, dy=end.y-start.y;
-    if (dx*dx+dy*dy<1e-20) return density(clouds,start);
+    if (dx*dx+dy*dy<1e-20) return transform(density(clouds,start));
     std::vector<double> cuts{0,1};
     for (const auto& c:clouds) {
         const double x=(start.x-c.center.x)/c.radiusX, y=(start.y-c.center.y)/c.radiusY;
@@ -109,15 +112,144 @@ double medium_segment_density(const GameState& s, Position start, Position end)
             if (t>0 && t<1) cuts.push_back(t);
     }
     std::sort(cuts.begin(),cuts.end());
-    double integral=0;
-    for (std::size_t i=1; i<cuts.size(); ++i) {
-        const double half=(cuts[i]-cuts[i-1])*0.5, mid=(cuts[i]+cuts[i-1])*0.5;
+    const auto integrate=[&](double a,double b) {
+        const double half=(b-a)*0.5,mid=(a+b)*0.5;
+        double value=0;
         for (const auto& [node,weight]:quadrature()) {
             const double t=mid+half*node;
-            integral+=half*weight*density(clouds,{start.x+dx*t,start.y+dy*t});
+            value+=half*weight*transform(density(clouds,{start.x+dx*t,start.y+dy*t}));
+        }
+        return value;
+    };
+    const auto refine=[&](auto&& self,double a,double b,double whole,int depth)->double {
+        const double mid=(a+b)*0.5,left=integrate(a,mid),right=integrate(mid,b);
+        if (depth==0 || std::abs(left+right-whole)<1e-12) return left+right;
+        return self(self,a,mid,left,depth-1)+self(self,mid,b,right,depth-1);
+    };
+    double integral=0;
+    for (std::size_t i=1;i<cuts.size();++i) {
+        const double whole=integrate(cuts[i-1],cuts[i]);
+        // Refine inside each support interval, so a narrow cloud cannot sit
+        // entirely on one side of a whole-route subdivision and escape refinement.
+        integral+=adaptive ? refine(refine,cuts[i-1],cuts[i],whole,16) : whole;
+    }
+    return integral;
+}
+
+// Each engine's rate is affine over density 0..1. Keep the individual curves:
+// the least tolerant conventional/scoop engine can change inside a cloud.
+using DamageCurves = std::vector<std::pair<double,double>>;
+DamageCurves damage_curves(const GameState& s, const Fleet& fleet, std::uint8_t warp)
+{
+    DamageCurves result;
+    if (!warp || warp>kMaxWarp) return result;
+    for (const auto& stack:fleet_ship_stacks(fleet))
+        if (const auto* design=find_ship_design(s,stack.design))
+            for (const auto component:design->components) {
+                const auto spec=component_spec(component);
+                if (spec.kind!=ShipComponentKind::Engine) continue;
+                const auto* ref=propulsion_technology(component);
+                const bool scoop=ref ? ref->ramScoop
+                    : component==ShipComponentType::RamScoopDrive
+                    || component==ShipComponentType::RadiatingRamScoopDrive
+                    || component==ShipComponentType::EfficientRamScoopDrive;
+                const double clear=spec.overdriveDamagePercent[warp];
+                // Conventional Warp 10 still pays a bounded environmental
+                // penalty where its next (virtual) unsafe tier would begin.
+                const double dense=scoop ? spec.overdriveDamagePercent[warp-1]
+                    : warp<kMaxWarp ? spec.overdriveDamagePercent[warp+1]
+                    : std::min(100.0,clear+18.0);
+                result.emplace_back(clear,dense);
+            }
+    return result;
+}
+double damage_rate(const DamageCurves& curves,double d)
+{
+    double result=0;
+    for (const auto& [clear,dense]:curves) result=std::max(result,clear+(dense-clear)*d);
+    return result;
+}
+}
+double medium_segment_density(const GameState& s, Position start, Position end)
+{
+    const auto clouds=profiles(s);
+    return std::clamp(segment_integral(clouds,start,end,[](double d) { return d; }),0.0,1.0);
+}
+double fleet_medium_damage_rate(const GameState& s,const Fleet& fleet,std::uint8_t warp,double d)
+{
+    return damage_rate(damage_curves(s,fleet,warp),std::clamp(d,0.0,1.0));
+}
+double fleet_segment_damage(const GameState& s,const Fleet& fleet,Position end)
+{
+    const auto distance=distance_between(fleet.position,end);
+    if (!fleet.warp || fleet.warp>kMaxWarp || distance<=0) return 0;
+    if (!s.interstellarMediumEnabled)
+        return fleet_overdrive_damage_rate(s,fleet,fleet.warp)*distance/warp_distance(fleet.warp);
+    const auto curves=damage_curves(s,fleet,fleet.warp);
+    const auto clouds=profiles(s);
+    if (clouds.empty()) return damage_rate(curves,0)*distance/warp_distance(fleet.warp);
+    // Maxima of opposing engine curves have kinks; affine single-engine
+    // profiles are integrated exactly without further subdivision.
+    return segment_integral(clouds,fleet.position,end,[&](double d) { return damage_rate(curves,d); },true)
+        *distance/warp_distance(fleet.warp);
+}
+std::vector<MediumRouteAlternative> medium_route_alternatives(
+    const GameState& state,const Fleet& source,Position destination,std::uint8_t warp)
+{
+    if (!fleet_warp_valid(state,source,warp)) return {};
+    // Construct a small navigation projection rather than copying the full host.
+    GameState received;
+    received.interstellarMediumEnabled=state.interstellarMediumEnabled;
+    received.mediumObserver=source.owner;
+    if (const auto* player=find_player(state,source.owner)) {
+        Player observer; observer.id=player->id; observer.race=player->race;
+        observer.mediumKnowledge=player->mediumKnowledge;
+        received.players.push_back(std::move(observer));
+    }
+    for (const auto& stack:fleet_ship_stacks(source))
+        if (const auto* design=find_ship_design(state,stack.design)) received.shipDesigns.push_back(*design);
+    const auto& s=received;
+    std::vector<std::vector<Position>> paths{{destination}};
+    const auto length=distance_between(source.position,destination);
+    if (length>1e-6) {
+        const double ux=(destination.x-source.position.x)/length,uy=(destination.y-source.position.y)/length;
+        auto clouds=profiles(s);
+        std::sort(clouds.begin(),clouds.end(),[](const auto& a,const auto& b) { return a.id<b.id; });
+        if (clouds.size()>4) clouds.resize(4);
+        for (const auto& c:clouds) {
+            if (segment_integral(std::vector<InterstellarCloud>{c},source.position,destination,[](double d) { return d; })<1e-6) continue;
+            const double center=(c.center.x-source.position.x)*ux+(c.center.y-source.position.y)*uy;
+            const double along=std::hypot(c.radiusX*ux,c.radiusY*uy)+2;
+            const double across=std::hypot(c.radiusX*uy,c.radiusY*ux)+2;
+            const double lateral=(c.center.x-source.position.x)*(-uy)+(c.center.y-source.position.y)*ux;
+            for (double sign:{-1.0,1.0}) {
+                std::vector<Position> points;
+                for (double t:{std::clamp(center-along,0.0,length),std::clamp(center+along,0.0,length)}) {
+                    const Position p{source.position.x+ux*t-uy*(lateral+sign*across),
+                        source.position.y+uy*t+ux*(lateral+sign*across)};
+                    if ((points.empty() || !same_position(points.back(),p)) && !same_position(source.position,p)) points.push_back(p);
+                }
+                points.push_back(destination); paths.push_back(std::move(points));
+            }
         }
     }
-    return std::clamp(integral,0.0,1.0);
+    std::vector<MediumRouteAlternative> result;
+    for (auto& path:paths) {
+        MediumRouteAlternative route; route.destinations=std::move(path);
+        auto fleet=source; fleet.warp=warp;
+        for (const auto end:route.destinations) {
+            const auto distance=distance_between(fleet.position,end);
+            route.distance+=distance;
+            route.damage+=fleet_segment_damage(s,fleet,end);
+            // Coarse whole-leg estimate. The ordinary route forecast applies
+            // actual per-year billing, command delay, collection and arrivals.
+            route.fuel+=fleet_fuel_consumption_for_segment(s,fleet,end);
+            fleet.position=end;
+        }
+        route.years=route.distance/warp_distance(warp);
+        result.push_back(std::move(route));
+    }
+    return result;
 }
 double medium_active_sensor_factor(const GameState& s,Position p) { return 1-0.20*interstellar_density(s,p); }
 double medium_active_path_factor(const GameState& s,Position a,Position b) { return 1-0.30*medium_segment_density(s,a,b); }
