@@ -558,8 +558,8 @@ QString event_text(const GameState& state, const GameEvent& event)
     } else if (event.kind == GameEventKind::StargateTransitFailed) {
         text = QString("Turn %1  •  %2 could not transit. The transit caused no movement or fuel charge. "
                        "The resolver rechecked gate ownership, fittings, distance, loaded mass, "
-                       "fleet route/task, command link and any requested resonance technology/source crystals; "
-                       "at least one requirement was unavailable. No xenocrystals were consumed by this failed transit.")
+                       "fleet condition and any requested resonance technology/source crystals; "
+                       "at least one requirement was unavailable. No xenocrystals were consumed by this failed transit. An onboard gate step stays in place and retries next year; Stop or replacement waits for command delivery.")
             .arg(qulonglong(event.observedTurn)).arg(fleetName);
     } else if (event.kind == GameEventKind::FleetArrived) {
         text = QString("Turn %1  •  %2 arrived at %3 and continues its route")

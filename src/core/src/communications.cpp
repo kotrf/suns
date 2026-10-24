@@ -154,10 +154,13 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::RecoverSample) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::TransitStargate) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
             || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
         if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
+        if (action.kind == FleetArrivalActionKind::TransitStargate) {
+            if (!action.gateSource || !action.gateDestination || action.gateSource == action.gateDestination) return false;
+        } else if (action.gateSource || action.gateDestination || action.gateResonant) return false;
         if (target != 0) {
             return action.kind == FleetArrivalActionKind::None
                 || action.kind == FleetArrivalActionKind::MergeWithFleet;
@@ -373,14 +376,15 @@ void activate_next_predicted_waypoint(
     std::uint8_t& warp,
     std::vector<FleetWaypoint>& queue,
     bool repeatOrders,
-    const std::vector<FleetWaypoint>& routeTemplate)
+    const std::vector<FleetWaypoint>& routeTemplate, bool& gatePending)
 {
     if (!destination && queue.empty() && repeatOrders) queue = routeTemplate;
     while (!destination && !queue.empty()) {
         const auto waypoint = queue.front();
         queue.erase(queue.begin());
         warp = waypoint.warp;
-        if (!same_position(position, waypoint.destination)) {
+        gatePending = waypoint.arrivalAction.kind == FleetArrivalActionKind::TransitStargate;
+        if (gatePending || !same_position(position, waypoint.destination)) {
             destination = waypoint.destination;
             return;
         }
@@ -395,11 +399,12 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
     auto destination = telemetry.destination;
     auto warp = telemetry.warp;
     auto queue = telemetry.waypointQueue;
+    bool gatePending = telemetry.arrivalAction && telemetry.arrivalAction->kind == FleetArrivalActionKind::TransitStargate;
 
     for (std::uint64_t turn = 0; turn < age; ++turn) {
         if (!destination) {
             activate_next_predicted_waypoint(
-                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate);
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, gatePending);
             if (!destination) break;
         }
 
@@ -407,17 +412,19 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
         const auto maximumDistance = warp_distance(warp);
         if (remaining <= epsilon || maximumDistance <= epsilon) {
             position = *destination;
+            if (gatePending) break; // A geometric dot cannot confirm a gate outcome.
             destination.reset();
             activate_next_predicted_waypoint(
-                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate);
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, gatePending);
             continue;
         }
 
         if (maximumDistance >= remaining - epsilon) {
             position = *destination;
+            if (gatePending) break; // A geometric dot cannot confirm a gate outcome.
             destination.reset();
             activate_next_predicted_waypoint(
-                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate);
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, gatePending);
         } else {
             const auto fraction = maximumDistance / remaining;
             position.x += (destination->x - position.x) * fraction;
@@ -697,13 +704,24 @@ bool submit_fleet_route_command(
                 return candidate.id == candidateId && candidate.owner == player;
             });
     };
-    const auto knownEntry = [&](const FleetArrivalAction& action) {
+    const auto knownEntry = [&](Position position, const FleetArrivalAction& action) {
+        if (action.kind == FleetArrivalActionKind::TransitStargate) {
+            const auto* source = find_planet(state, action.gateSource);
+            const auto* star = source ? find_star(state, source->star) : nullptr;
+            const auto* destination = find_planet(state, action.gateDestination);
+            // The intent must name received systems, but newly received loss of
+            // a fitting must not silently discard a programme authored earlier.
+            // Physical ownership/fittings are checked locally at every attempt.
+            return star && destination && same_position(position, star->position)
+                && survey_level(state,player,source->star)>=SurveyLevel::OrbitalSurvey
+                && survey_level(state,player,destination->star)>=SurveyLevel::OrbitalSurvey;
+        }
         if (action.kind != FleetArrivalActionKind::EnterWormhole) return true;
         const auto* knowledge = known_wormhole(state, player, action.wormholeEndpoint);
         return knowledge && !knowledge->collapsed && knowledge->stability != WormholeStability::Unknown;
     };
-    if (!knownEntry(arrivalAction) || std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
-        [&](const auto& waypoint) { return !knownEntry(waypoint.arrivalAction); })) return false;
+    if (!knownEntry(destination, arrivalAction) || std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
+        [&](const auto& waypoint) { return !knownEntry(waypoint.destination, waypoint.arrivalAction); })) return false;
     if (!validTarget(targetFleet)
         || std::any_of(queuedWaypoints.begin(), queuedWaypoints.end(),
             [&](const FleetWaypoint& waypoint) { return !validTarget(waypoint.targetFleet); })) {

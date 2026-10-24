@@ -1,6 +1,35 @@
 # Project status and development handoff
 
-## Verified checkpoint — 23 October 2026: main after #230
+## Current implementation — deferred/scheduled gates #195
+
+Branch `codex/scheduled-stargate-routes` starts from fresh main `4292aee`
+(merged #231; exact merge CI green). It adds ordinary delayed gate commands and
+an onboard gate arrival action with approach, separate hop years, physical
+revalidation, hold/retry and subsequent route continuation. One hop per year
+survives reorganization; receiving-system combat remains active. The UI authors
+and forecasts received gate programmes; AI keeps normal received staging orders.
+Save v96 / orders v39 extend the shared action codec; gate prices and #63 rules
+stay unchanged. [Mechanics and boundaries](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).
+Validation: GCC 14.2 / Qt 6.12 Debug full application/test build succeeded;
+full CTest **87/87** passed (58.58 s, offscreen Qt), and `git diff --check` passed.
+New checks cover multi-hop/repeating routes, real approach fuel, load → gate →
+unload → flight, held/captured/out-of-limit transit and restoration, delayed
+commands/stops, split-year limits, destination combat, stable competing pulse
+payments, received-only AI/deferred staging, hidden-independent forecasts and
+player exports, in-flight programme editing and save/PBEM action payloads.
+Validation is Linux/offscreen Qt; no manual balance, cross-platform or sanitizer
+run. GitHub checks are reported on the PR's exact pushed head. Prepared for
+review; no merge or issue closure performed.
+
+## Verified checkpoint — 24 October 2026: main after #231
+
+Main `4292aee4c8e31aae592b389f206b6124dcae3e38` includes #231 and both
+review corrections: full-hold arrival-load budgeting and confirmed initial depot
+service for active programmes. The reviewed head `979b52a` and the merge both
+passed GitHub CI; save v95 / orders v38. The agreed #105 navigation slice is
+complete; optional medium extensions remain future work.
+
+## Historical checkpoint — 23 October 2026: main after #230
 
 Main is `bde65922e2c960a653f12b62157b8167dbe1317a`, merged #230. The
 science completion audit and received radar-tier fixes were independently
@@ -10,7 +39,7 @@ are **save v95 / orders v38**. #44 and #59 are closed; broader #56 stays open;
 reconstructing it from host truth. See the
 [science completion matrix](audits/2026-10-23-science-progression-completion.md).
 
-## Active branch — medium navigation #105
+## Merged branch — medium navigation #105 (historical review checkpoints)
 
 `codex/medium-navigation-completion` starts from that main. The user confirmed
 that clouds may cause hull risk at a Warp safe in empty space. The first

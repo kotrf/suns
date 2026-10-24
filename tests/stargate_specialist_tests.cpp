@@ -253,9 +253,223 @@ void military_reinforcement_uses_a_gate_without_a_speculative_followup()
         const auto* move = std::get_if<MoveFleetOrder>(&order); return move && move->fleet == 1;
     }));
 }
+FleetArrivalAction gate_step(PlanetId source, PlanetId destination, bool resonant = false)
+{
+    FleetArrivalAction action{FleetArrivalActionKind::TransitStargate};
+    action.gateSource=source; action.gateDestination=destination; action.gateResonant=resonant;
+    return action;
+}
+void autonomous_gate_routes_use_separate_years_and_real_approach_fuel()
+{
+    auto s=network(); const auto fuel=s.fleets[0].fuel;
+    MoveFleetOrder route{1,{0,0},5,gate_step(1,2),{{{700,0},5,gate_step(2,1)},{{0,25},5,{}}}};
+    auto first=TurnProcessor{}.process(s,{{1,{route}}});
+    assert((first.fleets[0].position==Position{700,0}) && first.fleets[0].fuel==fuel);
+    assert(first.fleets[0].arrivalAction->gateSource==2 && first.fleets[0].waypointQueue.size()==1);
+    auto second=TurnProcessor{}.process(first,{});
+    assert((second.fleets[0].position==Position{0,0}) && second.fleets[0].fuel==fuel);
+    auto third=TurnProcessor{}.process(second,{});
+    assert((third.fleets[0].position==Position{0,25}) && third.fleets[0].fuel<fuel && !third.fleets[0].destination);
+    // A conventional approach cannot also jump in its arrival year.
+    s.fleets[0].position={-25,0}; s.fleets[0].telemetry={};
+    s.fleets[0].telemetry=confirmed_fleet_telemetry(s,s.fleets[0]);
+    auto approaching=TurnProcessor{}.process(s,{{1,{MoveFleetOrder{1,{0,0},5,gate_step(1,2)}}}});
+    assert((approaching.fleets[0].position==Position{0,0}) && approaching.fleets[0].arrivalAction);
+    const auto afterFlight=approaching.fleets[0].fuel; assert(afterFlight<fuel);
+    auto jumped=TurnProcessor{}.process(approaching,{});
+    assert((jumped.fleets[0].position==Position{700,0}) && jumped.fleets[0].fuel==afterFlight);
+    route.queuedWaypoints.pop_back(); route.repeatOrders=true;
+    auto repeating=TurnProcessor{}.process(network(),{{1,{route}}});
+    for(int i=0;i<5;++i) {
+        assert(repeating.fleets[0].position==Position(i%2?Position{0,0}:Position{700,0}));
+        repeating=TurnProcessor{}.process(repeating,{});
+    }
+}
+void gate_route_waits_rechecks_and_never_charges_failed_pulses()
+{
+    for(int variant=0;variant<5;++variant) {
+        auto s=network();
+        if(variant==0) s.orbitalStations[1].components.clear();
+        if(variant==1) s.orbitalStations[1].owner=s.planets[1].owner=2;
+        if(variant==2) s.fleets[0].ships={{s.fleets[0].design,1000}};
+        if(variant==3) { s.orbitalStations[1].components={C::JumpGate}; }
+        if(variant==4) { s.players[0].race.primaryTrait=PrimaryRaceTrait::Generalist; s.fleets[0].minerals={1,0,0}; }
+        const auto fuel=s.fleets[0].fuel;
+        auto waiting=TurnProcessor{}.process(s,{{1,{MoveFleetOrder{1,{0,0},5,gate_step(1,2),{{{700,25},5,{}}}}}}});
+        assert(waiting.fleets[0].position==Position{} && waiting.fleets[0].fuel==fuel);
+        assert(waiting.fleets[0].arrivalAction->kind==FleetArrivalActionKind::TransitStargate && waiting.fleets[0].waypointQueue.size()==1);
+        auto again=TurnProcessor{}.process(waiting,{});
+        assert(again.fleets[0].position==Position{} && again.fleets[0].arrivalAction);
+        again.orbitalStations[1].components={C::NetworkStargate};
+        again.orbitalStations[1].owner=again.planets[1].owner=1;
+        again.fleets[0].ships={{again.fleets[0].design,1}}; again.fleets[0].minerals={};
+        again.players[0].race.primaryTrait=PrimaryRaceTrait::StargateSpecialist;
+        auto resumed=TurnProcessor{}.process(again,{});
+        assert((resumed.fleets[0].position==Position{700,0}) && resumed.fleets[0].destination==Position(700,25));
+    }
+    auto paid=network(); paid.stars[1].position={900,0};
+    for(auto& p:paid.planets) p.mines=0;
+    paid.planets[0].xenocrystal.surface=7;
+    auto waiting=TurnProcessor{}.process(paid,{{1,{MoveFleetOrder{1,{0,0},5,gate_step(1,2,true)}}}});
+    assert(waiting.planets[0].xenocrystal.surface==7 && waiting.fleets[0].position==Position{});
+    waiting.planets[0].xenocrystal.surface=8;
+    auto completed=TurnProcessor{}.process(waiting,{});
+    assert((completed.fleets[0].position==Position{900,0}) && completed.planets[0].xenocrystal.surface==0);
+    auto later=TurnProcessor{}.process(completed,{});
+    assert(later.planets[0].xenocrystal.surface==0 && !later.fleets[0].arrivalAction);
+}
+void remote_gate_commands_and_stops_wait_for_delivery()
+{
+    auto s=network(); s.planets[1].radar=PlanetaryRadarLevel::None;
+    s.fleets[0].position={700,0}; s.fleets[0].telemetry={};
+    s.fleets[0].telemetry=confirmed_fleet_telemetry(s,s.fleets[0]);
+    const auto delay=communication_delay_turns(s,1,{700,0}); assert(delay>0);
+    auto sent=TurnProcessor{}.process(s,{{1,{GateFleetOrder{1,2,1}}}});
+    assert((sent.fleets[0].position==Position{700,0}) && !sent.fleets[0].pendingCommands.empty());
+    const auto delivery=sent.fleets[0].pendingCommands[0].deliveryTurn;
+    // Reception remains possible without a working headquarters mesh.
+    sent.planets[0].radar=PlanetaryRadarLevel::None;
+    while(sent.turn<=delivery) {
+        const auto before=sent.turn;
+        sent=TurnProcessor{}.process(sent,{});
+        if(before<delivery) assert((sent.fleets[0].position==Position{700,0}));
+    }
+    assert(sent.fleets[0].position==Position{} && sent.fleets[0].pendingCommands.empty());
+    // A held programme continues locally until the stop packet arrives.
+    s.orbitalStations[0].components.clear();
+    s.fleets[0].destination=s.fleets[0].position; s.fleets[0].arrivalAction=gate_step(2,1);
+    MoveFleetOrder stop{1,{700,0},5}; stop.clearRoute=true;
+    auto stopping=TurnProcessor{}.process(s,{{1,{stop}}});
+    assert(stopping.fleets[0].arrivalAction && !stopping.fleets[0].pendingCommands.empty());
+    const auto stopDelivery=stopping.fleets[0].pendingCommands[0].deliveryTurn;
+    while(stopping.turn<=stopDelivery) stopping=TurnProcessor{}.process(stopping,{});
+    assert(!stopping.fleets[0].destination && !stopping.fleets[0].arrivalAction);
+    stopping.orbitalStations[0].components={C::NetworkStargate};
+    assert((TurnProcessor{}.process(stopping,{}).fleets[0].position==Position{700,0}));
+}
+void gate_routes_preserve_annual_limits_through_split_and_fight_at_destination()
+{
+    auto s=network(); s.stars[1].position={100,0}; s.fleets[0].ships={{s.fleets[0].design,2}};
+    const auto child=s.nextFleetId;
+    const auto design=s.fleets[0].design;
+    auto split=TurnProcessor{}.process(s,{{1,{GateFleetOrder{1,1,2},SplitFleetOrder{1,{{design,1}}},
+        MoveFleetOrder{child,{100,0},5,gate_step(2,1)}}}});
+    const auto findChild=[&](const GameState& state)->const Fleet& {
+        const auto found=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f){return f.id==child;});
+        assert(found!=state.fleets.end()); return *found;
+    };
+    assert((findChild(split).position==Position{100,0}) && findChild(split).arrivalAction);
+    auto returned=TurnProcessor{}.process(split,{}); assert(findChild(returned).position==Position{});
+    // Gate arrivals join the normal battle phase at the receiving system.
+    auto battle=network(); battle.players.push_back({2,"Defender"});
+    battle.shipDesigns.push_back({99,2,"Gate ambush",ShipHullType::Scout,{C::FusionDrive,C::Laser}});
+    auto enemy=battle.fleets[0]; enemy.id=battle.nextFleetId++; enemy.owner=2; enemy.design=99;
+    enemy.ships={{99,100}}; enemy.position={700,0}; enemy.telemetry={}; battle.fleets.push_back(enemy);
+    const auto fought=TurnProcessor{}.process_with_events(battle,{{1,{MoveFleetOrder{1,{0,0},5,gate_step(1,2)}}}});
+    const auto foughtHere=[](const auto& r) { return r.battle && (r.position==Position{700,0}); };
+    assert(std::any_of(fought.events.begin(),fought.events.end(),foughtHere)
+        || std::any_of(fought.state.players[0].pendingPlayerReports.begin(),fought.state.players[0].pendingPlayerReports.end(),foughtHere));
+}
+
+void scheduled_gate_competition_spends_once_in_stable_fleet_order()
+{
+    auto s=network(); s.stars[1].position={900,0};
+    for(auto& p:s.planets) p.mines=0;
+    s.planets[0].xenocrystal.surface=8;
+    auto other=s.fleets[0]; other.id=s.nextFleetId++; s.fleets.push_back(other);
+    const PlayerOrders commands{1,{MoveFleetOrder{1,{0,0},5,gate_step(1,2,true)},
+        MoveFleetOrder{other.id,{0,0},5,gate_step(1,2,true)}}};
+    auto reversed=s; std::reverse(reversed.fleets.begin(),reversed.fleets.end());
+    auto first=TurnProcessor{}.process(s,{commands});
+    const auto replay=TurnProcessor{}.process(reversed,{commands});
+    assert(first.planets[0].xenocrystal.surface==0 && replay.planets[0].xenocrystal.surface==0);
+    for(const auto& fleet:first.fleets) {
+        const auto twin=std::find_if(replay.fleets.begin(),replay.fleets.end(),[&](const auto& f){return f.id==fleet.id;});
+        assert(twin!=replay.fleets.end() && twin->position==fleet.position);
+        assert(fleet.position==(fleet.id==1?Position{900,0}:Position{}));
+    }
+    const auto held=TurnProcessor{}.process(first,{});
+    assert(held.planets[0].xenocrystal.surface==0 && held.fleets[1].position==Position{});
+    first.planets[0].xenocrystal.surface=8;
+    const auto second=TurnProcessor{}.process(first,{});
+    assert(second.planets[0].xenocrystal.surface==0 && (second.fleets[1].position==Position{900,0}));
+}
+
+void computer_stages_a_deferred_hop_from_received_remote_orbit()
+{
+    auto s=network(); s.players[0].controller=PlayerController::Computer;
+    s.stars.push_back({3,"Frontier",{-40,0}}); s.players[0].surveyedStars={1,2};
+    for(auto& station:s.orbitalStations) station.modules.push_back(OrbitalStationModule::RefuelingDepot);
+    s.planets[1].radar=PlanetaryRadarLevel::None;
+    auto& f=s.fleets[0]; f.position={700,0}; f.telemetry.position=f.position;
+    f.telemetry.observedTurn=s.turn-1;
+    for(const auto& p:s.planets)set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+    assert(communication_delay_turns(s,1,f.position)>0);
+    const auto plan=plan_computer_turn(make_player_view(s,1));
+    assert(std::any_of(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& order) {
+        const auto* gate=std::get_if<GateFleetOrder>(&order); return gate && gate->fleet==1 && gate->source==2 && gate->destination==1;
+    }));
+    auto hidden=s; hidden.orbitalStations[0].components.clear();
+    assert(plan.nextState==plan_computer_turn(make_player_view(hidden,1)).nextState);
+    auto sent=TurnProcessor{}.process(s,{plan.orders});
+    assert((sent.fleets[0].position==Position{700,0}) && !sent.fleets[0].pendingCommands.empty());
+    const auto due=sent.fleets[0].pendingCommands[0].deliveryTurn;
+    while(sent.turn<=due) sent=TurnProcessor{}.process(sent,{});
+    assert(sent.fleets[0].position==Position{});
+}
+
+void one_delivered_programme_loads_gates_unloads_and_continues_flight()
+{
+    auto s=network();
+    for(auto& p:s.planets) { p.mines=0; p.productionQueue.clear(); }
+    s.shipDesigns.push_back({30,1,"Gate freighter",ShipHullType::LightTransport,{C::FusionDrive,C::CargoPod}});
+    auto& fleet=s.fleets[0]; fleet.design=30; fleet.ships={{30,1}};
+    fleet.fuel=fleet_fuel_capacity(s,fleet);
+    const auto fuel=fleet.fuel, capacity=fleet_cargo_capacity(s,fleet);
+    const auto baseline2=TurnProcessor{}.process(TurnProcessor{}.process(s,{}),{});
+    const auto baseline3=TurnProcessor{}.process(baseline2,{});
+    const MoveFleetOrder programme{1,{0,0},5,{FleetArrivalActionKind::LoadAllAvailable,1,FleetCargoKind::Ironium},
+        {{{0,0},5,gate_step(1,2)},{{700,0},5,{FleetArrivalActionKind::UnloadAll,1,FleetCargoKind::Ironium}},{{700,25},5,{}}}};
+    auto loaded=TurnProcessor{}.process(s,{{1,{programme}}});
+    assert(loaded.fleets[0].minerals.ironium==capacity && loaded.fleets[0].position==Position{});
+    auto hopped=TurnProcessor{}.process(loaded,{});
+    assert((hopped.fleets[0].position==Position{700,0}) && hopped.fleets[0].minerals.ironium==capacity);
+    assert(hopped.fleets[0].fuel==fuel && std::abs(hopped.planets[1].minerals.ironium-baseline2.planets[1].minerals.ironium)<1e-6);
+    auto unloaded=TurnProcessor{}.process(hopped,{});
+    assert(unloaded.fleets[0].minerals.ironium==0 && std::abs(unloaded.planets[1].minerals.ironium-baseline3.planets[1].minerals.ironium-capacity)<1e-6);
+    auto onward=TurnProcessor{}.process(unloaded,{});
+    assert((onward.fleets[0].position==Position{700,25}) && onward.fleets[0].fuel<fuel && !onward.fleets[0].destination);
+}
+
+void gate_route_knowledge_and_authoring_do_not_follow_hidden_fittings()
+{
+    auto s=network(); auto hidden=s; hidden.orbitalStations[1].components.clear();
+    const auto action=gate_step(1,2);
+    auto known=make_player_view(s,1).state, unchanged=make_player_view(hidden,1).state;
+    assert(submit_fleet_route_command(s,1,1,{0,0},5,action,{}));
+    assert(submit_fleet_route_command(hidden,1,1,{0,0},5,action,{}));
+    assert(submit_fleet_route_command(known,1,1,{0,0},5,action,{}));
+    assert(submit_fleet_route_command(unchanged,1,1,{0,0},5,action,{}));
+    // Position extrapolation may approach a source, but never confirms its hop.
+    auto telemetry=s.fleets[0].telemetry; telemetry.arrivalAction=action; telemetry.destination=Position{};
+    s.fleets[0].telemetry=telemetry; s.turn+=20;
+    assert(projected_fleet_position(s,s.fleets[0])==Position{});
+    auto malformed=action; malformed.gateSource=malformed.gateDestination;
+    assert(!submit_fleet_route_command(s,1,1,{0,0},5,malformed,{}));
+    assert(!submit_fleet_route_command(s,1,1,{0,1},5,action,{}));
+}
+
 }
 int main()
 {
+    autonomous_gate_routes_use_separate_years_and_real_approach_fuel();
+    gate_route_waits_rechecks_and_never_charges_failed_pulses();
+    remote_gate_commands_and_stops_wait_for_delivery();
+    gate_route_knowledge_and_authoring_do_not_follow_hidden_fittings();
+    gate_routes_preserve_annual_limits_through_split_and_fight_at_destination();
+    scheduled_gate_competition_spends_once_in_stable_fleet_order();
+    computer_stages_a_deferred_hop_from_received_remote_orbit();
+    one_delivered_programme_loads_gates_unloads_and_continues_flight();
     setup_and_research_are_trait_specific();
     gate_fittings_are_paid_and_cannot_be_stacked();
     loaded_mixed_fleets_and_both_endpoint_limits();

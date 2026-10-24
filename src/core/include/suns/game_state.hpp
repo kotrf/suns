@@ -1366,6 +1366,7 @@ enum class FleetArrivalActionKind {
     DeployOutpost,
     SupplyOutpost,
     RecoverSample,
+    TransitStargate,
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1409,6 +1410,8 @@ struct FleetArrivalAction {
     // Frozen at order creation; later template edits never change a voyage.
     std::optional<ProductionTemplate> colonyPlan;
     double reserveFuel{}; // SupplyOutpost only, in mg. Older action payloads stay unchanged.
+    PlanetId gateSource{}, gateDestination{}; // TransitStargate: approach source, then wait/retry locally.
+    bool gateResonant{};
     bool operator==(const FleetArrivalAction&) const = default;
 };
 

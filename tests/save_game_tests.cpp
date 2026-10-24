@@ -2587,8 +2587,68 @@ void blocked_landing_packets_and_messages_round_trip()
     }
 }
 
+void scheduled_gate_routes_round_trip_pending_packets_and_private_evidence()
+{
+    using namespace suns;
+    QTemporaryDir directory; assert(directory.isValid()); QString error;
+    const auto path=directory.filePath("gates.suns"), ordersPath=directory.filePath("gates.orders");
+    SaveGameData save; save.state=make_demo_game(); save.state.turn=10;
+    save.campaignId=901; save.turnToken=902; save.mode=SessionMode::Host;
+    save.playerTokens={{1,902}}; save.pendingOrders={1,{}};
+    auto& state=save.state; state.stars.resize(2); state.planets.resize(2); state.stars[1].position={100,0};
+    state.players[0].technology.levels.fill(26); state.players[0].race.primaryTrait=PrimaryRaceTrait::StargateSpecialist;
+    state.orbitalStations.clear();
+    for(auto& p:state.planets) {
+        p.owner=1; p.population=100000; p.radar=PlanetaryRadarLevel::Full;
+        state.orbitalStations.push_back({p.id,1,p.id,"Gate",OrbitalStationHullType::Starbase,
+            {OrbitalStationModule::Shipyard},{ShipComponentType::JumpGate}});
+    }
+    state.nextOrbitalStationId=3;
+    FleetArrivalAction gate{FleetArrivalActionKind::TransitStargate}; gate.gateSource=1; gate.gateDestination=2;
+    auto back=gate; back.gateSource=2; back.gateDestination=1;
+    auto& fleet=state.fleets[0]; fleet.destination=Position{}; fleet.arrivalAction=gate;
+    fleet.waypointQueue={{{100,0},5,back}}; fleet.repeatOrders=true;
+    fleet.routeTemplate={{{0,0},5,gate},{{100,0},5,back}};
+    fleet.telemetry={}; fleet.telemetry=confirmed_fleet_telemetry(state,fleet);
+    FleetRouteProgram replacement{{0,0},5,gate,{{{100,0},5,back}},false,true};
+    auto pulse=gate; pulse.gateResonant=true; replacement.arrivalAction=pulse;
+    fleet.pendingCommands.push_back({10,13,replacement});
+    for(const auto& p:state.planets)set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
+    assert(write_save_game_file(path,save,error)); SaveGameData loaded;
+    assert(read_save_game_file(path,loaded,error));
+    const auto& restored=loaded.state.fleets[0];
+    assert(restored.arrivalAction==gate && restored.telemetry.arrivalAction==gate);
+    assert(restored.waypointQueue[0].arrivalAction==back && restored.routeTemplate[1].arrivalAction==back);
+    assert(restored.pendingCommands[0].program.arrivalAction==pulse && restored.pendingCommands[0].program.repeatOrders);
+    auto expected=state, actual=loaded.state;
+    for(int i=0;i<5;++i) {
+        expected=TurnProcessor{}.process(expected,{}); actual=TurnProcessor{}.process(actual,{});
+        assert(expected.fleets[0].position==actual.fleets[0].position && expected.fleets[0].fuel==actual.fleets[0].fuel);
+    }
+    MoveFleetOrder route{1,{0,0},5,pulse,{{{100,0},5,back}},true};
+    TurnOrderFileData packet{901,10,902,{1,{route}},{"Gate programme"}}, imported;
+    assert(write_turn_order_file(ordersPath,packet,error) && read_turn_order_file(ordersPath,imported,error));
+    const auto& command=std::get<MoveFleetOrder>(imported.orders.orders[0]);
+    assert(command.arrivalAction==pulse && command.queuedWaypoints[0].arrivalAction==back && command.repeatOrders);
+    // An older orders reader must reject the new action rather than reinterpret it.
+    QFile old(ordersPath); assert(old.open(QIODevice::ReadOnly)); auto bytes=old.readAll(); old.close();
+    { QDataStream patch(&bytes,QIODevice::ReadWrite); assert(patch.device()->seek(4)); patch<<quint32{38}; }
+    assert(old.open(QIODevice::WriteOnly)); assert(old.write(bytes)==bytes.size()); old.close();
+    assert(!read_turn_order_file(ordersPath,imported,error));
+    // Hidden gate loss does not modify the previously delivered player file.
+    const auto a=directory.filePath("known.suns"), b=directory.filePath("hidden.suns");
+    assert(write_save_game_file(a,make_player_turn(save,1),error));
+    save.state.orbitalStations[1].components.clear();
+    assert(write_save_game_file(b,make_player_turn(save,1),error));
+    QFile first(a), second(b); assert(first.open(QIODevice::ReadOnly) && second.open(QIODevice::ReadOnly));
+    assert(first.readAll()==second.readAll());
+    auto invalid=packet; std::get<MoveFleetOrder>(invalid.orders.orders[0]).arrivalAction.gateDestination=1;
+    assert(!write_turn_order_file(ordersPath,invalid,error));
+}
+
 int main()
 {
+    scheduled_gate_routes_round_trip_pending_packets_and_private_evidence();
     legacy_conquest_with_surviving_station_round_trips();
     blocked_landing_packets_and_messages_round_trip();
     survey_snapshots_round_trip_and_keep_hidden_terraforming_private();

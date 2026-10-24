@@ -90,7 +90,7 @@ std::optional<GateFleetOrder> gate_staging_order(
                 fleet.owner, OrbitalStationModule::RefuelingDepot)) continue;
         const auto* star = find_star(state, planet.star);
         if (!star) continue;
-        const bool resonant = !stargate_transfer_valid(state, fleet.owner, fleet.id, source->id, planet.id);
+        const bool resonant = !stargate_transfer_error(state, fleet.owner, fleet.id, source->id, planet.id, false, true).empty();
         if (resonant) {
             auto preview = state;
             if (!preview_stargate_transfer(preview, fleet.owner, {fleet.id, source->id, planet.id, true})) continue;
@@ -599,6 +599,12 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             if (confirmed_idle(fleet, existing->issuedTurn)) {
                 goals.erase(existing);
             } else if (fleet.destination && same_position(fleet.telemetry.position, fleet.position)) {
+                // Keep autonomous gate steps until acknowledgement; flattening
+                // them to coordinate legs would lose the jump and waiting policy.
+                if ((fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::TransitStargate)
+                    || std::any_of(fleet.waypointQueue.begin(),fleet.waypointQueue.end(),[](const auto& w) {
+                        return w.arrivalAction.kind == FleetArrivalActionKind::TransitStargate;
+                    })) continue;
                 std::vector<Position> remaining{*fleet.destination};
                 for (const auto& waypoint : fleet.waypointQueue) remaining.push_back(waypoint.destination);
                 const auto warp = route_warp(state, fleet, remaining);
@@ -1096,6 +1102,12 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
                     output.push_back({path->destinations[i],fleet.warp,
                         i+1==path->destinations.size()?waypoint.arrivalAction:FleetArrivalAction{}});
                 fleet.position=waypoint.destination; fleet.fuel-=path->fuel;
+                if (waypoint.arrivalAction.kind==FleetArrivalActionKind::TransitStargate) {
+                    const auto* p=find_planet(view.state,waypoint.arrivalAction.gateDestination);
+                    const auto* star=p?find_star(view.state,p->star):nullptr;
+                    if (!star) { valid=false; break; }
+                    fleet.position=star->position; // No fuel or future depot credit for the hop.
+                }
                 if (waypoint.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable)
                     fleet.minerals.ironium+=std::max(0.0,fleet_cargo_capacity(view.state,fleet)-fleet_cargo_used(view.state,fleet));
             }

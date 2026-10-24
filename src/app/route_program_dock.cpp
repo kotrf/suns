@@ -387,6 +387,9 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Deploy outpost (permanent)", int(FleetArrivalActionKind::DeployOutpost));
     actionCombo->addItem("Supply fuel to outpost", int(FleetArrivalActionKind::SupplyOutpost));
     actionCombo->addItem("Recover scientific specimen", int(FleetArrivalActionKind::RecoverSample));
+    actionCombo->addItem("Stargate hop (use Add gate step…)",int(FleetArrivalActionKind::TransitStargate));
+    if (auto* model=qobject_cast<QStandardItemModel*>(actionCombo->model()))
+        model->item(actionCombo->count()-1)->setEnabled(false);
     const auto workTip = [&](FleetArrivalActionKind kind, const QString& text) {
         actionCombo->setItemData(actionCombo->findData(int(kind)), text, Qt::ToolTipRole);
     };
@@ -462,6 +465,11 @@ void attachRouteProgramDock(MainWindow& window)
     auto* waypointActions = new QHBoxLayout;
     waypointActions->setSpacing(4);
     waypointActions->addWidget(appendButton, 1);
+    auto* gateButton = new QPushButton("Add gate step…", waypointGroup);
+    gateButton->setObjectName("routeAddGateButton");
+    gateButton->setToolTip("Append an approach and autonomous gate hop using received owned gates; unavailable transit waits and retries.");
+    QObject::connect(gateButton,&QPushButton::clicked,panel,[&window] { window.openStargateRouteDialog(); });
+    waypointLayout->addWidget(gateButton);
     auto* alternativesButton = new QPushButton("Compare routes…", waypointGroup);
     alternativesButton->setObjectName("routeAlternativesButton");
     alternativesButton->setToolTip("Compare the direct route and coarse cloud bypasses to the selected star, then append your choice.");

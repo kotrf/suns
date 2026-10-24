@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "suns/communications.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/stations.hpp"
@@ -195,7 +196,7 @@ void MainWindow::openGateTransit()
     const bool specialist = find_player(known, pendingOrders_.player)->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist;
     auto* summary = new QLabel(
         QString("%1 — loaded gross mass %2 kt. Source: %3. Transit requires two surviving, owned gates, "
-                "an idle fleet, a live command link and no pending commands. One hop per fleet per year. "
+                "an idle fleet for immediate transit. Remote commands travel normally and install an onboard gate step; unavailable transit waits and retries. One hop per fleet per year. "
                 "Both endpoints must accept the distance and mass. %4")
             .arg(QString::fromStdString(fleet->name))
             .arg(fleet_gross_mass(known, *knownFleet), 0, 'f', 1)
@@ -258,6 +259,16 @@ void MainWindow::openGateTransit()
     auto preview = known;
     const GateFleetOrder order{fleet->id, source, target, resonant->isChecked()};
     if (!preview_stargate_transfer(preview, pendingOrders_.player, order)) return;
+    if (communication_delay_turns(known,pendingOrders_.player,knownFleet->position)>0) {
+        const auto* planet=find_planet(known,source);
+        const auto* star=planet?find_star(known,planet->star):nullptr;
+        if (!star) return;
+        FleetArrivalAction action{FleetArrivalActionKind::TransitStargate};
+        action.gateSource=source; action.gateDestination=target; action.gateResonant=order.resonant;
+        appendPendingOrder(MoveFleetOrder{fleet->id,star->position,knownFleet->warp,action},
+            QString("Deliver gate programme to %1; wait and retry at source").arg(QString::fromStdString(fleet->name)));
+        return;
+    }
     appendPendingOrder(order, QString("Transit fleet %1 through Jump Gate to %2%3")
         .arg(QString::fromStdString(fleet->name), destinations->currentText(),
             order.resonant ? " (8 xenocrystals; resonant range)" : ""));
