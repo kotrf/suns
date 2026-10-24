@@ -33,6 +33,18 @@ The five focused suites pass (2.00 s). The full Debug application/test build and
 CTest **87/87** pass (54.21 s, offscreen Qt); `git diff --check` is clean.
 Formats remain v96/v39; no gameplay price or #63 extension is included.
 
+Additional review P2 — 25 October: route editing now prioritizes the current
+unsent draft, then the latest sent navigation command (including Stop), then the
+received onboard programme. An old active-route telemetry snapshot can no longer
+erase a gate step when a waypoint is appended. Non-navigation command packets
+do not mask the sent route. The regression reproduces moving remote telemetry,
+executes the extended programme through TurnProcessor without new commands,
+compares the gate-only control and verifies a newer Stop does not revive an
+older gate programme. Full Debug application/test build and CTest **87/87**
+passed (55.89 s, offscreen Qt); `git diff --check` is clean. The reproduction
+failed on the pre-fix editor, before the new TurnProcessor delivery checks.
+No format or balance changes.
+
 ## Verified checkpoint — 24 October 2026: main after #231
 
 Main `4292aee4c8e31aae592b389f206b6124dcae3e38` includes #231 and both

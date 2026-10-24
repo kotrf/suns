@@ -96,3 +96,8 @@ Own commands already sent remain in the gate forecast with their original
 issue/delivery dates after End Turn; they are not incoming telemetry. Reached
 No action points at the receiving system share the hop's ETA and zero additional
 movement fuel, including when the traversal restarts a repeating programme.
+
+Route edits use the current draft first, then the latest sent navigation command
+(including Stop), then the received onboard route. This also applies while old
+telemetry shows an active voyage: appending a waypoint retains the gate programme
+already in transit. Non-navigation settings packets do not replace that intent.

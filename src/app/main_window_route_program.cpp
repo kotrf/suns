@@ -148,23 +148,20 @@ const MoveFleetOrder* pendingMove(const PlayerOrders& pending, FleetId fleet)
 std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const PlayerOrders& pending, const Fleet& fleet)
 {
     if (const auto* move = pendingMove(pending, fleet.id)) return *move;
-    if (!fleet.destination) {
-        // Confirmed fleet telemetry intentionally omits the remote command
-        // journal. A delayed Colonize order must still be visible in the
-        // route table while its packet is travelling to an already-arrived
-        // fleet; otherwise the last waypoint seems to disappear.
-        const auto actual = std::find_if(state.fleets.begin(), state.fleets.end(),
-            [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
-        if (actual != state.fleets.end()) {
-            for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
-                if (it->task || it->electronics || it->program.clearRoute) continue;
-                const auto& command = it->program;
-                return MoveFleetOrder{fleet.id, command.destination, command.warp,
-                    command.arrivalAction, command.queuedWaypoints, command.repeatOrders, command.targetFleet};
-            }
+    // The owner's latest sent navigation intent outranks older telemetry,
+    // whether that snapshot shows an idle fleet or a still-active old route.
+    const auto actual = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
+    if (actual != state.fleets.end()) {
+        for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
+            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor) continue;
+            const auto& command = it->program;
+            return MoveFleetOrder{fleet.id, command.destination, command.warp,
+                command.arrivalAction, command.queuedWaypoints, command.repeatOrders,
+                command.targetFleet, command.clearRoute};
         }
-        return std::nullopt;
     }
+    if (!fleet.destination) return std::nullopt;
 
     return MoveFleetOrder{
         fleet.id,

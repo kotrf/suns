@@ -30,6 +30,14 @@ struct MainWindowTestAccess {
         w.selection_.fleet = 1; w.selection_.star = 1; w.rebuildScene();
     }
     static const std::vector<Order>& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
+    static GameState snapshot(const MainWindow& w) { return w.state_; }
+    static void movingRemote(MainWindow& w) {
+        remote(w);
+        auto& f=w.state_.fleets[0]; f.position={5060,0}; f.destination=Position{5000,0}; f.warp=1;
+        f.telemetry.position=f.position; f.telemetry.destination=f.destination; f.telemetry.warp=1;
+        w.state_.stars.push_back({3,"Beyond the receiving gate",{0,25}});
+        ++w.planningRevision_; w.rebuildScene();
+    }
     static void transit(MainWindow& w) { w.openGateTransit(); }
     static void star(MainWindow& w, StarId id) { w.selection_.star=id; }
     static void advance(MainWindow& w) { w.endTurn(); }
@@ -138,6 +146,38 @@ int main(int argc, char** argv)
     const auto& extended=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
     assert(extended.arrivalAction.gateSource==2 && extended.arrivalAction.gateDestination==1);
     assert(extended.queuedWaypoints.size()==1 && extended.queuedWaypoints[0].arrivalAction.gateDestination==2);
+    // Sent gate programmes must outrank old active-route telemetry as well as idle telemetry.
+    MainWindowTestAccess::install(window,true); MainWindowTestAccess::movingRemote(window);
+    assert(window.appendStargateRouteStep(2,1,5));
+    MainWindowTestAccess::advance(window);
+    const auto sent=MainWindowTestAccess::snapshot(window);
+    assert(sent.fleets[0].telemetry.destination && !sent.fleets[0].pendingCommands.empty());
+    MainWindowTestAccess::star(window,3);
+    assert(window.appendSelectedStarWaypoint(5,{}));
+    const auto& revised=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
+    assert(revised.queuedWaypoints.size()==2);
+    assert(revised.queuedWaypoints[0].arrivalAction.gateSource==2
+        && revised.queuedWaypoints[0].arrivalAction.gateDestination==1);
+    const auto run=[&](GameState state, bool edited) {
+        const PlayerOrders orders{1,MainWindowTestAccess::orders(window)};
+        for(int year=0;year<120;++year) {
+            state=TurnProcessor{}.process(state,edited && year==0?std::vector<PlayerOrders>{orders}:std::vector<PlayerOrders>{});
+            if(!state.fleets[0].destination && state.fleets[0].pendingCommands.empty()) return state;
+        }
+        assert(false && "Gate programme must finish without further headquarters commands"); return state;
+    };
+    const auto control=run(sent,false), delivered=run(sent,true);
+    assert(control.fleets[0].position==Position{});
+    assert((delivered.fleets[0].position==Position{0,25}) && delivered.fleets[0].fuel<control.fleets[0].fuel);
+    assert(!delivered.fleets[0].fuelStalled && delivered.fleets[0].fuel>0);
+    // A more recent sent Stop also outranks the older sent gate programme.
+    MainWindowTestAccess::install(window,true); MainWindowTestAccess::movingRemote(window);
+    assert(window.appendStargateRouteStep(2,1,5)); MainWindowTestAccess::advance(window);
+    assert(window.clearSelectedFleetRouteProgram()); MainWindowTestAccess::advance(window);
+    MainWindowTestAccess::star(window,3); assert(window.appendSelectedStarWaypoint(5,{}));
+    const auto& afterStop=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
+    assert(afterStop.queuedWaypoints.empty() && afterStop.arrivalAction.kind==FleetArrivalActionKind::None
+        && (afterStop.destination==Position{0,25}));
     MainWindowTestAccess::install(window, false);
     QTimer::singleShot(0, [&] {
         auto* d = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(d);
