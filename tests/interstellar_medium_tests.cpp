@@ -1,6 +1,8 @@
 #include "suns/interstellar_medium.hpp"
 #include "suns/campaign.hpp"
 #include "suns/computer_player.hpp"
+#include "suns/orbital_habitats.hpp"
+#include "suns/planetary_engineering.hpp"
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/reconnaissance.hpp"
@@ -270,8 +272,87 @@ void computer_uses_received_bypasses()
     assert(again!=changed.orders.orders.end()); const auto& same=std::get<MoveFleetOrder>(*again);
     assert(same.destination==route.destination && same.queuedWaypoints.size()==route.queuedWaypoints.size());
 }
+GameState arrival_load_fixture(double fuel)
+{
+    auto s=make_demo_game(); s.turn=10; s.wormholeRules.spawnChancePerTurn=0;
+    auto& player=s.players[0]; player.controller=PlayerController::Computer;
+    player.race=race_preset(RacePreset::Terran); player.technology.levels.fill(18);
+    player.technology.researchActive=false; player.objectKnowledge.clear();
+    s.unknownObjects.clear(); s.stars.resize(2); s.planets.resize(2); s.orbitalStations.clear();
+    s.stars[1].position={64,0};
+    for (auto& star:s.stars) star.variability={};
+    for (auto& p:s.planets) {
+        p.owner=1; p.population=500000; p.environment={50,50,20}; p.naturalEnvironment=p.environment;
+        p.industry=100; p.minerals={10000,10000,10000}; p.productionQueue.clear();
+    }
+    auto& home=s.planets[0];
+    home.engineering.kind=PlanetaryEngineeringKind::OrbitalHabitat;
+    home.engineering.work=engineering_work(home.engineering.kind); home.engineering.strength=10;
+    home.habitat.population=200000; home.habitat.service=HabitatService::Reserve; home.habitat.reserveYears=2;
+    auto& design=s.shipDesigns[0]; design.hull=ShipHullType::SmallFreighter;
+    design.components={ShipComponentType::FusionDrive,ShipComponentType::MoleScanner}; design.placements.clear();
+    assert(ship_design_available_to_player(s,1,design));
+    auto& f=s.fleets[0]; f.warp=8; f.ships={{f.design,10}}; f.fuel=fuel; f.colonists=0; f.minerals={};
+    f.telemetry={}; f.telemetry=confirmed_fleet_telemetry(s,f);
+    assert(near(fleet_cargo_capacity(s,f),700) && near(f.telemetry.fuel,fuel));
+    for (const auto& star:s.stars) set_survey_level(s,1,star.id,SurveyLevel::DeepSurvey,s.turn);
+    s.interstellarMediumEnabled=true; s.interstellarClouds={{1,{32,0},12,10,1}};
+    player.mediumKnowledge={{1,{32,0},12,10,1,1,MediumKnowledgeLevel::Characterized,9,10}};
+    return s;
+}
+MoveFleetOrder planned_move(const ComputerTurnPlan& plan)
+{
+    const auto it=std::find_if(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& o) {
+        const auto* move=std::get_if<MoveFleetOrder>(&o); return move && move->fleet==1;
+    });
+    assert(it!=plan.orders.orders.end()); return std::get<MoveFleetOrder>(*it);
+}
+void arrival_loads_are_funded_through_actual_delivery()
+{
+    for (const auto cargo:{FleetCargoKind::OrbitalColonists,FleetCargoKind::Ironium})
+        for (const double fuel:{20.0,780.0,1200.0}) {
+            if (fuel==20 && cargo==FleetCargoKind::OrbitalColonists) continue;
+            auto s=arrival_load_fixture(fuel);
+            if (cargo==FleetCargoKind::Ironium) {
+                // An acknowledged mineral shuttle exercises the same load-
+                // then-travel programme, without relying on habitat policy.
+                s.planets[0].habitat.population=0;
+                auto& f=s.fleets[0]; f.destination=f.position;
+                f.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::LoadAllAvailable,0,cargo};
+                f.waypointQueue={{{64,0},8,{FleetArrivalActionKind::UnloadAll,0,cargo}}};
+                f.telemetry={}; f.telemetry=confirmed_fleet_telemetry(s,f);
+                auto& computer=s.players[0].computer; computer.initialized=true;
+                computer.decisions={{9,1,"Issued mineral shuttle"}};
+                computer.fleetGoals={{1,ComputerFleetGoalKind::Resupply,2,9,10}};
+            }
+            const auto plan=plan_computer_turn(make_player_view(s,1));
+            const auto route=planned_move(plan);
+            if (fuel==20) {
+                assert(route.clearRoute && route.queuedWaypoints.empty());
+                const auto held=TurnProcessor{}.process(s,{plan.orders});
+                assert(same_position(held.fleets[0].position,{0,0}) && near(held.fleets[0].minerals.ironium,0));
+                assert(!held.fleets[0].fuelStalled && near(held.fleets[0].fuel,fuel));
+                continue;
+            }
+            assert(!route.clearRoute && route.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable);
+            assert(route.arrivalAction.cargo==cargo && !route.queuedWaypoints.empty());
+            if (fuel==780) assert(route.queuedWaypoints.back().warp<8);
+            else assert(route.queuedWaypoints.size()>1); // load -> actual bypass -> unload
+            auto state=s; bool sawLoad=false,delivered=false;
+            for (int year=0;year<8 && !delivered;++year) {
+                state=TurnProcessor{}.process(state,year==0 ? std::vector<PlayerOrders>{plan.orders} : std::vector<PlayerOrders>{});
+                const auto& f=state.fleets[0];
+                sawLoad=sawLoad || (cargo==FleetCargoKind::OrbitalColonists ? f.colonists==70000 : near(f.minerals.ironium,700));
+                assert(!f.fuelStalled && f.damagePercent==0 && f.fuel>=0 && f.fuel<=fuel);
+                const bool empty=cargo==FleetCargoKind::OrbitalColonists ? f.colonists==0 : near(f.minerals.ironium,0);
+                delivered=sawLoad && same_position(f.position,{64,0}) && empty;
+            }
+            assert(sawLoad && delivered && state.fleets[0].fuel>0);
+        }
+}
 int main()
 {
+    arrival_loads_are_funded_through_actual_delivery();
     safe_warp_and_integrated_hull_risk(); received_route_alternatives(); computer_uses_received_bypasses();
     generation_and_projection(); integration_is_bounded_and_resolves_cloud_crossings();
     fuel_and_movement_use_the_same_segment(); fitted_engines_and_fuel_reserves();

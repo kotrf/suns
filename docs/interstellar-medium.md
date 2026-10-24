@@ -123,8 +123,18 @@ ties. Chosen bypasses become ordinary delayed MoveFleetOrder waypoints, preserve
 survey/colonization/return actions and existing acknowledgement-based goals.
 At the existing review boundary, fresh telemetry and received hazards can revise
 an acknowledged programme with a bypass even when its Warp stays unchanged.
-When no safe funded bypass exists they try a lower Warp. This is a bounded
-navigation heuristic, not a global route optimizer or a new supply programme.
+Route materialization carries paid cargo changes into its budgeting clone.
+After an arrival **Load All**, it reserves a full shared hold for every remaining
+leg: future stocks may grow, and a later unload may fail or be partial. This
+conservative ballast never enters physical state or orders. No later leg is
+priced as an empty transport merely because a previous waypoint loads cargo.
+If the programme no longer fits its fuel reserve, the planner retries the whole
+itinerary at lower Warp caps, preserving arrival actions. If no funded safe
+programme exists, it emits an ordinary delayed stop and retains acknowledgement
+handling instead of issuing an underfunded fallback. Regression scenarios execute
+both orbital-passenger evacuation and mineral loading through real movement and
+unloading, with no extra refuelling.
+This is a bounded navigation heuristic, not a global route optimizer or a new supply programme.
 
 MEDI was introduced in save **v80**, orders **v27**; this completion keeps current
 **save v95 / orders v38** unchanged. The bounded MEDI section retains host profiles,

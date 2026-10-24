@@ -24,6 +24,14 @@ is for review; read its current exact-head CI before any merge. These notes do
 not authorize merge or claim manual balance acceptance. Optional ionization,
 radio propagation and science remain future extensions; #63 is untouched.
 
+PR #231 P2 follow-up (24 October): arrival Load All now reserves full-hold mass
+for later legs, without assuming a successful future unload. The materializer
+retries the complete programme at lower Warp caps or sends a normal delayed stop
+if no safe funded itinerary exists. Physical TurnProcessor regressions cover
+70,000 orbital passengers, 700 kt minerals, actual bypass delivery, a tight-fuel
+slower route and an unfunded hold. The prior `dd06cfd` CI result (87/87) belongs
+to the pre-fix head; read the updated PR's exact-head checks for this correction.
+
 ## Historical checkpoint — main after #229
 
 Main was `155f9e1e4f9fee7ce5e440b1fc57595d9dc0df48`, save v94 / orders v38,

@@ -1045,7 +1045,8 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
     // Materialize the same received-profile paths used by route_warp as normal
     // waypoints. Final arrival actions stay at their original destinations.
     for (auto& order:plan.orders.orders) if (auto* move=std::get_if<MoveFleetOrder>(&order)) {
-        if (move->clearRoute || move->targetFleet
+        if (!view.state.interstellarMediumEnabled || player->mediumKnowledge.empty()
+            || move->clearRoute || move->targetFleet
             || std::any_of(move->queuedWaypoints.begin(),move->queuedWaypoints.end(),[](const auto& p) { return p.targetFleet!=0; })) continue;
         const auto original=std::find_if(view.state.fleets.begin(),view.state.fleets.end(),
             [&](const auto& f) { return f.id==move->fleet; });
@@ -1067,21 +1068,45 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
         }
         std::vector<FleetWaypoint> input{{move->destination,move->warp,move->arrivalAction}};
         input.insert(input.end(),move->queuedWaypoints.begin(),move->queuedWaypoints.end());
+        // Arrival inventories can grow or become unavailable before delivery.
+        // After Load All, reserve a full hold for every later leg, including
+        // after an unload that could fail or only partially complete. Ballast
+        // exists only in this budgeting clone; no physical cargo is created.
+        const auto prepared=fleet;
+        std::uint8_t maximumWarp=1;
+        for (const auto& waypoint:input) maximumWarp=std::max(maximumWarp,waypoint.warp);
         std::vector<FleetWaypoint> output;
-        bool valid=true;
-        for (const auto& waypoint:input) {
-            fleet.warp=waypoint.warp;
-            const auto path=navigation_leg(view.state,fleet,waypoint.destination);
-            if (!path) { valid=false; break; }
-            for (std::size_t i=0;i<path->destinations.size();++i)
-                output.push_back({path->destinations[i],waypoint.warp,
-                    i+1==path->destinations.size()?waypoint.arrivalAction:FleetArrivalAction{}});
-            fleet.position=waypoint.destination; fleet.fuel-=path->fuel;
+        bool valid=false;
+        for (int cap=maximumWarp;cap>=1 && !valid;--cap) {
+            fleet=prepared; output.clear(); valid=true;
+            for (const auto& waypoint:input) {
+                fleet.warp=std::min(waypoint.warp,static_cast<std::uint8_t>(cap));
+                if (!fleet_warp_valid(view.state,fleet,fleet.warp)) { valid=false; break; }
+                const auto path=navigation_leg(view.state,fleet,waypoint.destination);
+                if (!path) { valid=false; break; }
+                for (std::size_t i=0;i<path->destinations.size();++i)
+                    output.push_back({path->destinations[i],fleet.warp,
+                        i+1==path->destinations.size()?waypoint.arrivalAction:FleetArrivalAction{}});
+                fleet.position=waypoint.destination; fleet.fuel-=path->fuel;
+                if (waypoint.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable)
+                    fleet.minerals.ironium+=std::max(0.0,fleet_cargo_capacity(view.state,fleet)-fleet_cargo_used(view.state,fleet));
+            }
         }
-        if (!valid || output.size()<=input.size()) continue;
+        if (!valid) {
+            // Keep the existing acknowledgement cycle, but send an ordinary
+            // stop instead of approving an unfunded/unsafe fallback route.
+            move->destination=prepared.position; move->warp=std::max<std::uint8_t>(1,prepared.warp);
+            move->arrivalAction={}; move->queuedWaypoints.clear(); move->repeatOrders=false; move->clearRoute=true;
+            explain(reason,"Hold unfunded received route for fleet "+std::to_string(move->fleet));
+            continue;
+        }
+        bool changed=output.size()!=input.size();
+        for (std::size_t i=0;!changed && i<input.size();++i)
+            changed=output[i].warp!=input[i].warp || !same_position(output[i].destination,input[i].destination);
+        if (!changed) continue;
         move->destination=output[0].destination; move->warp=output[0].warp; move->arrivalAction=output[0].arrivalAction;
         move->queuedWaypoints.assign(output.begin()+1,output.end());
-        explain(reason,"Bypass received cloud with fleet "+std::to_string(move->fleet));
+        explain(reason,"Fund received cloud route with fleet "+std::to_string(move->fleet));
     }
     std::sort(plan.nextState.fleetGoals.begin(),plan.nextState.fleetGoals.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
     plan.nextState.initialized = true;
