@@ -32,6 +32,15 @@ if no safe funded itinerary exists. Physical TurnProcessor regressions cover
 slower route and an unfunded hold. The prior `dd06cfd` CI result (87/87) belongs
 to the pre-fix head; read the updated PR's exact-head checks for this correction.
 
+Second P2 follow-up (24 October): initial received depot service is now shared by
+Warp selection and route materialization, including acknowledged active loading
+programmes with fresh position telemetry. Idle-only top-up no longer cancels a
+funded shuttle. Physical controls cover the original onboard delivery and the
+revised safe bypass starting with 20 mg, plus missing/hidden/non-refuelling,
+stale-position and future-waypoint negatives. Future supplies are not prepaid;
+the first P2 full-hold cargo reserve remains. `d9556ca` passed 87/87 before this
+follow-up; the updated PR head needs its own exact-head CI.
+
 ## Historical checkpoint — main after #229
 
 Main was `155f9e1e4f9fee7ce5e440b1fc57595d9dc0df48`, save v94 / orders v38,

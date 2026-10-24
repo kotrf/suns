@@ -51,6 +51,19 @@ const Planet* colony_at(const GameState& state, PlayerId player, Position positi
     return nullptr;
 }
 
+// Host depot service happens before orders, including active programmes.
+// Credit only received service at the confirmed initial position, never a
+// projected future arrival. An active programme needs fresh telemetry; an
+// acknowledged idle fleet retains its established stationary-depot treatment.
+void budget_initial_depot_service(const GameState& received,Fleet& fleet)
+{
+    if (!fleet.telemetry.observedTurn || !same_position(fleet.position,fleet.telemetry.position)
+        || (fleet.telemetry.observedTurn!=received.turn && !confirmed_idle(fleet,0))) return;
+    if (const auto* local=colony_at(received,fleet.owner,fleet.position);
+        local && colony_has_orbital_service(received,local->id,fleet.owner,OrbitalStationModule::RefuelingDepot))
+        fleet.fuel=fleet_fuel_capacity(received,fleet);
+}
+
 std::optional<GateFleetOrder> gate_staging_order(
     const GameState& received, const Fleet& fleet, Position target, bool requireRefueling, const PlayerOrders* pending)
 {
@@ -136,6 +149,7 @@ std::optional<std::uint8_t> route_warp(
     const GameState& state, Fleet fleet, const std::vector<Position>& destinations)
 {
     if (fleet.damagePercent >= 100.0) return std::nullopt;
+    budget_initial_depot_service(state,fleet);
     auto cruise = fleet_max_warp(state, fleet);
     for (const auto& stack : fleet_ship_stacks(fleet))
         if (const auto* design = find_ship_design(state, stack.design))
@@ -614,8 +628,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         if (fleet.telemetry.observedTurn == 0 || !confirmed_idle(fleet, 0)) continue;
         fleet.position = fleet.telemetry.position;
         const auto* local = colony_at(state, view.player, fleet.position);
-        if (local && colony_has_orbital_service(state, local->id, view.player, OrbitalStationModule::RefuelingDepot))
-            fleet.fuel = fleet_fuel_capacity(state, fleet);
+        budget_initial_depot_service(state,fleet);
 
         bool visitorAssigned = false;
         const auto* empire = find_player(state, view.player);
@@ -1052,14 +1065,9 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
             [&](const auto& f) { return f.id==move->fleet; });
         if (original==view.state.fleets.end()) continue;
         auto fleet=*original;
-        // Match expansion's paid loading/automatic local-depot refuelling
-        // assumptions before materializing its funded route.
-        if (confirmed_idle(fleet,0)) {
-            fleet.position=fleet.telemetry.position;
-            if (const auto* local=colony_at(view.state,view.player,fleet.position);
-                local && colony_has_orbital_service(view.state,local->id,view.player,OrbitalStationModule::RefuelingDepot))
-                fleet.fuel=fleet_fuel_capacity(view.state,fleet);
-        }
+        // Use the same confirmed initial service as Warp selection, including
+        // an acknowledged loading programme currently at a received depot.
+        budget_initial_depot_service(view.state,fleet);
         for (const auto& pending:plan.orders.orders) {
             if (const auto* load=std::get_if<SetFleetColonistsOrder>(&pending); load && load->fleet==fleet.id)
                 fleet.colonists=load->colonists;

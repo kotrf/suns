@@ -300,6 +300,19 @@ GameState arrival_load_fixture(double fuel)
     player.mediumKnowledge={{1,{32,0},12,10,1,1,MediumKnowledgeLevel::Characterized,9,10}};
     return s;
 }
+GameState active_mineral_shuttle_fixture(double fuel)
+{
+    auto s=arrival_load_fixture(fuel); s.planets[0].habitat.population=0;
+    auto& f=s.fleets[0]; f.destination=f.position;
+    f.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::LoadAllAvailable,0,FleetCargoKind::Ironium};
+    f.waypointQueue={{{64,0},8,{FleetArrivalActionKind::UnloadAll,0,FleetCargoKind::Ironium}}};
+    f.telemetry={}; f.telemetry=confirmed_fleet_telemetry(s,f);
+    auto& computer=s.players[0].computer; computer.initialized=true;
+    computer.decisions={{9,1,"Issued mineral shuttle"}};
+    computer.fleetGoals={{1,ComputerFleetGoalKind::Resupply,2,9,10}};
+    set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
+    return s;
+}
 MoveFleetOrder planned_move(const ComputerTurnPlan& plan)
 {
     const auto it=std::find_if(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& o) {
@@ -312,19 +325,7 @@ void arrival_loads_are_funded_through_actual_delivery()
     for (const auto cargo:{FleetCargoKind::OrbitalColonists,FleetCargoKind::Ironium})
         for (const double fuel:{20.0,780.0,1200.0}) {
             if (fuel==20 && cargo==FleetCargoKind::OrbitalColonists) continue;
-            auto s=arrival_load_fixture(fuel);
-            if (cargo==FleetCargoKind::Ironium) {
-                // An acknowledged mineral shuttle exercises the same load-
-                // then-travel programme, without relying on habitat policy.
-                s.planets[0].habitat.population=0;
-                auto& f=s.fleets[0]; f.destination=f.position;
-                f.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::LoadAllAvailable,0,cargo};
-                f.waypointQueue={{{64,0},8,{FleetArrivalActionKind::UnloadAll,0,cargo}}};
-                f.telemetry={}; f.telemetry=confirmed_fleet_telemetry(s,f);
-                auto& computer=s.players[0].computer; computer.initialized=true;
-                computer.decisions={{9,1,"Issued mineral shuttle"}};
-                computer.fleetGoals={{1,ComputerFleetGoalKind::Resupply,2,9,10}};
-            }
+            auto s=cargo==FleetCargoKind::Ironium ? active_mineral_shuttle_fixture(fuel) : arrival_load_fixture(fuel);
             const auto plan=plan_computer_turn(make_player_view(s,1));
             const auto route=planned_move(plan);
             if (fuel==20) {
@@ -350,8 +351,59 @@ void arrival_loads_are_funded_through_actual_delivery()
             assert(sawLoad && delivered && state.fleets[0].fuel>0);
         }
 }
+void initial_depot_service_preserves_active_loading()
+{
+    enum class Case { Missing, Hidden, ShipyardOnly, Received, StalePosition, LaterWaypoint };
+    for (const auto kind:{Case::Missing,Case::Hidden,Case::ShipyardOnly,Case::Received,Case::StalePosition,Case::LaterWaypoint}) {
+        auto s=active_mineral_shuttle_fixture(20);
+        if (kind!=Case::Missing) {
+            auto depot=make_demo_game().orbitalStations[0];
+            depot.modules=kind==Case::ShipyardOnly ? std::vector<OrbitalStationModule>{OrbitalStationModule::Shipyard}
+                : std::vector<OrbitalStationModule>{OrbitalStationModule::RefuelingDepot};
+            if (kind==Case::LaterWaypoint) depot.planet=2;
+            s.orbitalStations.push_back(depot);
+            if (kind!=Case::Hidden) set_survey_level(s,1,depot.planet,SurveyLevel::DeepSurvey,s.turn);
+        }
+        if (kind==Case::StalePosition) {
+            s.fleets[0].telemetry.observedTurn=9;
+            s.players[0].computer.decisions={{8,1,"Old loading programme"}};
+            s.players[0].computer.fleetGoals[0].issuedTurn=8;
+        }
+        const auto view=make_player_view(s,1);
+        const auto plan=plan_computer_turn(view); const auto route=planned_move(plan);
+        assert(near(s.fleets[0].fuel,20)); // Planning never fills the physical tank.
+        if (kind!=Case::Received) {
+            assert(route.clearRoute); // No free credit from missing/hidden services or stale motion.
+            continue;
+        }
+        assert(!route.clearRoute && route.warp==8 && route.queuedWaypoints.size()>1);
+        assert(route.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable && route.arrivalAction.cargo==FleetCargoKind::Ironium);
+        assert(route.queuedWaypoints.back().arrivalAction.kind==FleetArrivalActionKind::UnloadAll);
+        // Changing only hidden station truth cannot change the received plan.
+        auto hidden=s; hidden.orbitalStations.clear();
+        const auto same=planned_move(plan_computer_turn(make_player_view(hidden,1)));
+        assert(!same.clearRoute && same.warp==route.warp && same.destination==route.destination
+            && same.queuedWaypoints.size()==route.queuedWaypoints.size());
+        const auto deliver=[&](GameState state,bool revised) {
+            bool loaded=false;
+            for (int year=0;year<8;++year) {
+                state=TurnProcessor{}.process(state,revised && year==0?std::vector<PlayerOrders>{plan.orders}:std::vector<PlayerOrders>{});
+                const auto& f=state.fleets[0]; loaded=loaded || near(f.minerals.ironium,700);
+                assert(!f.fuelStalled && f.fuel>=0 && f.fuel<=fleet_fuel_capacity(state,f));
+                if (revised) assert(f.damagePercent==0);
+                if (loaded && same_position(f.position,{64,0}) && near(f.minerals.ironium,0)) {
+                    assert(f.fuel>0); return;
+                }
+            }
+            assert(false && "Automatically refuelled shuttle must deliver its cargo");
+        };
+        deliver(s,false); // The original onboard programme is physically funded.
+        deliver(s,true);  // The AI preserves loading and safely bypasses the cloud.
+    }
+}
 int main()
 {
+    initial_depot_service_preserves_active_loading();
     arrival_loads_are_funded_through_actual_delivery();
     safe_warp_and_integrated_hull_risk(); received_route_alternatives(); computer_uses_received_bypasses();
     generation_and_projection(); integration_is_bounded_and_resolves_cloud_crossings();

@@ -123,6 +123,14 @@ ties. Chosen bypasses become ordinary delayed MoveFleetOrder waypoints, preserve
 survey/colonization/return actions and existing acknowledgement-based goals.
 At the existing review boundary, fresh telemetry and received hazards can revise
 an acknowledged programme with a bypass even when its Warp stays unchanged.
+Warp selection and route materialization share the host's initial automatic
+orbital-depot service: a received own working depot at the confirmed starting
+position can fill the budgeting tank before orders, including an active loading
+programme. Active programmes require fresh telemetry at that position; the
+existing acknowledged-idle treatment remains. Hidden stations, modules without
+refuelling, stale active positions and depots at later waypoints give no initial
+credit. Physical host service still performs the real fill.
+
 Route materialization carries paid cargo changes into its budgeting clone.
 After an arrival **Load All**, it reserves a full shared hold for every remaining
 leg: future stocks may grow, and a later unload may fail or be partial. This
