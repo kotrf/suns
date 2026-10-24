@@ -1,7 +1,8 @@
 # Interstellar medium
 
-First three linked slices of #105: persistent broad density profiles, physical
-fuel/sensor effects, and delayed player surveys with an optional map overlay.
+Playable navigation foundation of #105: persistent broad density profiles,
+physical fuel/sensor/hull effects, delayed surveys, an optional map overlay and
+received-profile route alternatives for players and computer empires.
 Free coordinate flight remains available; no lanes, grid, new orders or new
 per-fleet controls are introduced.
 
@@ -35,8 +36,31 @@ from collection for this affordability check. Existing uniform-space campaigns
 retain the previous legacy accounting.
 
 Actual movement, fuel-limited/free-speed coasting, rendezvous, interceptions and
-continued merged routes use the same segment helpers. Engine safe Warp and
-overdrive rules are unchanged. Density-dependent safe Warp is later scope.
+continued merged routes use the same segment helpers.
+
+### Safe Warp and hull risk
+
+Density shifts the effective safe Warp continuously by at most one tier: down
+for conventional engines and up for scoops. This is engine/field tolerance,
+not mechanical drag. It does not change the ordered speed or silently accelerate
+ships. Let `R(w)` be the fitted engine's existing damage percentage per full
+movement year at Warp `w`. At local density `d`:
+
+- Conventional: `(1-d) * R(w) + d * R(w+1)`.
+- Scoop: `(1-d) * R(w) + d * R(w-1)`.
+
+Warp 0 has zero rate. For conventional Warp 10, the virtual next tier is
+`min(100, R(10)+18)` percentage points/year. Zero density preserves the engine's
+existing curve; maximum density shifts it one tier. Mixed fleets and multiple
+engines in a hull use the maximum **local** rate of every fitted engine. That
+maximum is integrated over the actual flown segment and multiplied by its time
+at the requested Warp. Adaptive quadrature refines engine-curve crossings inside
+each cloud-support interval, so straight-route subdivision preserves damage.
+
+Paid movement and free-speed coasting both obey this hull budget. At 100% damage
+the fleet stops at the computed point; fuel is billed only to that point. The
+existing immobilization and repair rules remain. Uniform-space campaigns keep
+the previous overdrive rules.
 
 ## Sensors and surveys
 
@@ -76,17 +100,52 @@ fitted engines, cargo changes and annual rounding. Unknown density can change
 coasting, actual arrival, future refuelling and therefore the travelled schedule;
 the range is not a guarantee for every possible completed itinerary. Direct-leg
 fuel summaries also show this uncertainty; use Route forecast for annual costs.
-Computer empires reserve the same bounded worst-case gross fuel without reading
-host clouds or taking credit for future scooping. Choosing cloud detours is later
-scope.
+**Compare routes…** in Add waypoint compares a direct leg and up to two coarse
+bypasses per received cloud (at most nine candidates). It starts at the final
+static waypoint of the current programme, or the reported fleet position for a
+new programme. Distance, gross fuel, movement time and potential hull damage are
+coarse estimates for the appended portion: command delay, annual rounding,
+refuelling and earlier legs are excluded. Use **Route forecast** afterwards for
+the full programme. Choosing a bypass appends ordinary coordinate waypoints;
+arrival work stays at the original final destination. Cancel leaves orders
+unchanged. Moving fleet targets retain the existing rendezvous editor.
 
-Save **v80**, orders **v27**. The bounded MEDI section retains host profiles,
+The Warp selector shows the base engine rating and **local received-profile**
+hull risk; a clear starting point does not prove the whole route safe. Route
+forecast applies the shared integrated damage rules and warns on immobilization.
+All geometry and risk estimates remain independent of hidden cloud edits.
+
+Computer empires evaluate the same bounded candidates while selecting mission
+Warp, reject expected hull damage and reserve conservative worst-case gross
+fuel across the route, without advance credit for future scooping. They prefer
+short travel with a modest fuel-budget penalty; stable candidate order breaks
+ties. Chosen bypasses become ordinary delayed MoveFleetOrder waypoints, preserve
+survey/colonization/return actions and existing acknowledgement-based goals.
+At the existing review boundary, fresh telemetry and received hazards can revise
+an acknowledged programme with a bypass even when its Warp stays unchanged.
+Route materialization carries paid cargo changes into its budgeting clone.
+After an arrival **Load All**, it reserves a full shared hold for every remaining
+leg: future stocks may grow, and a later unload may fail or be partial. This
+conservative ballast never enters physical state or orders. No later leg is
+priced as an empty transport merely because a previous waypoint loads cargo.
+If the programme no longer fits its fuel reserve, the planner retries the whole
+itinerary at lower Warp caps, preserving arrival actions. If no funded safe
+programme exists, it emits an ordinary delayed stop and retains acknowledgement
+handling instead of issuing an underfunded fallback. Regression scenarios execute
+both orbital-passenger evacuation and mineral loading through real movement and
+unloading, with no extra refuelling.
+This is a bounded navigation heuristic, not a global route optimizer or a new supply programme.
+
+MEDI was introduced in save **v80**, orders **v27**; this completion keeps current
+**save v95 / orders v38** unchanged. The bounded MEDI section retains host profiles,
 projection identity, received surveys and in-flight/message evidence. Real v79
 layouts load with uniform space and remain uniform on resave; clouds are not
 injected into existing routes. Earlier v78/v77 migration fixtures also remove
 the actual new bounded section before exercising their historical layout.
 
-#105 stays open for medium-dependent safe Warp/engine balance, cloud detours and
-AI route alternatives, ionization/turbulence, communications effects and field
-science/advanced characterization. The current scalar model deliberately keeps
-these distinct from the delivered fuel and active-sensor rules.
+The agreed navigation scope now includes density-dependent hull risk, explicit
+coarse route choice and basic AI bypasses. Optional ionization/turbulence,
+communications effects and field science/advanced characterization remain
+separate future extensions. This work does not expand frozen #63 or introduce
+new scientific rewards. Initial one-tier balance needs playtesting; automated
+coverage verifies physical accounting, determinism and knowledge boundaries.

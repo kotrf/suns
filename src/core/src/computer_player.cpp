@@ -110,6 +110,28 @@ double leg_fuel(const GameState& state, const Fleet& fleet, Position destination
         +fleet_segment_fuel_bounds(state,fleet,std::max(0.0,distance-years*step)).consumedMaximum;
 }
 
+std::optional<MediumRouteAlternative> navigation_leg(const GameState& state,const Fleet& fleet,Position destination)
+{
+    const auto* observer=find_player(state,fleet.owner);
+    if (!state.interstellarMediumEnabled || !observer || observer->mediumKnowledge.empty()) {
+        const auto needed=leg_fuel(state,fleet,destination);
+        if (fleet_overdrive_damage_rate(state,fleet,fleet.warp)>1e-8 || needed>fleet.fuel+1e-6) return {};
+        const auto distance=distance_between(fleet.position,destination);
+        return MediumRouteAlternative{{destination},distance,distance/warp_distance(fleet.warp),needed,0};
+    }
+    std::optional<MediumRouteAlternative> best;
+    double bestScore=std::numeric_limits<double>::infinity();
+    for (auto candidate:medium_route_alternatives(state,fleet,destination,fleet.warp)) {
+        if (candidate.damage>1e-6) continue;
+        double needed=0; auto moving=fleet;
+        for (const auto end:candidate.destinations) { needed+=leg_fuel(state,moving,end); moving.position=end; }
+        if (needed>fleet.fuel+1e-6) continue;
+        const double score=candidate.years+0.5*needed/std::max(1.0,fleet_fuel_capacity(state,fleet));
+        if (score<bestScore-1e-8) { candidate.fuel=needed; bestScore=score; best=std::move(candidate); }
+    }
+    return best;
+}
+
 std::optional<std::uint8_t> route_warp(
     const GameState& state, Fleet fleet, const std::vector<Position>& destinations)
 {
@@ -121,13 +143,14 @@ std::optional<std::uint8_t> route_warp(
     const auto startPosition=fleet.position;
     for (int warp = cruise; warp >= 1; --warp) {
         fleet.warp = static_cast<std::uint8_t>(warp);
-        if (!fleet_warp_valid(state, fleet, fleet.warp)
-            || fleet_overdrive_damage_rate(state, fleet, fleet.warp) > 0) continue;
+        if (!fleet_warp_valid(state, fleet, fleet.warp)) continue;
         double needed = 0;
         auto position = startPosition;
         for (const auto destination : destinations) {
             fleet.position=position;
-            needed += leg_fuel(state, fleet, destination);
+            const auto leg=navigation_leg(state,fleet,destination);
+            if (!leg) { needed=std::numeric_limits<double>::infinity(); break; }
+            needed += leg->fuel;
             position = destination;
         }
         // Conservative: collected/generated fuel is a reserve, not advance credit.
@@ -557,21 +580,30 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             if (state.turn < existing->reviewTurn || fleet.telemetry.observedTurn <= existing->issuedTurn) continue;
             // Fresh telemetry may show a failed route (changed ownership,
             // interception), or insufficient fuel. Retire only an acknowledged
-            // idle programme, or replace an acknowledged route with a slower one.
+            // idle programme, or replace an acknowledged route when fuel or
+            // newly received medium hazards warrant a slower speed/bypass.
             if (confirmed_idle(fleet, existing->issuedTurn)) {
                 goals.erase(existing);
             } else if (fleet.destination && same_position(fleet.telemetry.position, fleet.position)) {
                 std::vector<Position> remaining{*fleet.destination};
                 for (const auto& waypoint : fleet.waypointQueue) remaining.push_back(waypoint.destination);
                 const auto warp = route_warp(state, fleet, remaining);
-                if (warp && *warp < fleet.warp) {
+                auto moving=fleet;
+                bool receivedHazard=fleet_segment_damage(state,moving,*fleet.destination)>1e-6;
+                moving.position=*fleet.destination;
+                for (const auto& waypoint:fleet.waypointQueue) {
+                    moving.warp=waypoint.warp;
+                    receivedHazard=receivedHazard || fleet_segment_damage(state,moving,waypoint.destination)>1e-6;
+                    moving.position=waypoint.destination;
+                }
+                if (warp && (*warp < fleet.warp || receivedHazard)) {
                     auto waypoints = fleet.waypointQueue;
                     for (auto& waypoint : waypoints) waypoint.warp = *warp;
                     plan.orders.orders.push_back(MoveFleetOrder{fleet.id, *fleet.destination, *warp,
                         fleet.arrivalAction.value_or(FleetArrivalAction{}), std::move(waypoints)});
                     existing->issuedTurn = state.turn;
                     existing->reviewTurn = review_turn(state, fleet);
-                    explain(reason, "Conserve fuel for fleet " + std::to_string(fleet.id));
+                    explain(reason, "Revise received route risks/fuel for fleet " + std::to_string(fleet.id));
                 }
                 continue;
             } else continue;
@@ -601,8 +633,9 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                     trial.warp = std::uint8_t(warp);
                     if (!fleet_warp_valid(state, trial, trial.warp) || fleet_overdrive_damage_rate(state, trial, trial.warp)>0) continue;
                     const auto aim = visitor_intercept_destination(trial, contact, state.turn, trial.warp);
-                    if (!aim) continue;
+                    if (!aim || fleet_segment_damage(state,trial,*aim)>1e-6) continue;
                     auto returning = trial; returning.position = *aim;
+                    if (fleet_segment_damage(state,returning,fleet.position)>1e-6) continue;
                     if (leg_fuel(state, trial, *aim)+leg_fuel(state, returning, fleet.position)>trial.fuel) continue;
                     if (needed) plan.orders.orders.push_back(SetFleetMineralCargoOrder{local->id, fleet.id, trial.minerals});
                     plan.orders.orders.push_back(EncounterVisitorOrder{fleet.id, contact.id, trial.warp});
@@ -1008,6 +1041,72 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
             goals.push_back({f.id,ComputerFleetGoalKind::Resupply,safe->star,view.state.turn,review_turn(view.state,f)});
             explain(reason,"Evacuate received failing orbital habitat with an available paid transport");break;
         }
+    }
+    // Materialize the same received-profile paths used by route_warp as normal
+    // waypoints. Final arrival actions stay at their original destinations.
+    for (auto& order:plan.orders.orders) if (auto* move=std::get_if<MoveFleetOrder>(&order)) {
+        if (!view.state.interstellarMediumEnabled || player->mediumKnowledge.empty()
+            || move->clearRoute || move->targetFleet
+            || std::any_of(move->queuedWaypoints.begin(),move->queuedWaypoints.end(),[](const auto& p) { return p.targetFleet!=0; })) continue;
+        const auto original=std::find_if(view.state.fleets.begin(),view.state.fleets.end(),
+            [&](const auto& f) { return f.id==move->fleet; });
+        if (original==view.state.fleets.end()) continue;
+        auto fleet=*original;
+        // Match expansion's paid loading/automatic local-depot refuelling
+        // assumptions before materializing its funded route.
+        if (confirmed_idle(fleet,0)) {
+            fleet.position=fleet.telemetry.position;
+            if (const auto* local=colony_at(view.state,view.player,fleet.position);
+                local && colony_has_orbital_service(view.state,local->id,view.player,OrbitalStationModule::RefuelingDepot))
+                fleet.fuel=fleet_fuel_capacity(view.state,fleet);
+        }
+        for (const auto& pending:plan.orders.orders) {
+            if (const auto* load=std::get_if<SetFleetColonistsOrder>(&pending); load && load->fleet==fleet.id)
+                fleet.colonists=load->colonists;
+            if (const auto* load=std::get_if<SetFleetMineralCargoOrder>(&pending); load && load->fleet==fleet.id)
+                fleet.minerals=load->minerals;
+        }
+        std::vector<FleetWaypoint> input{{move->destination,move->warp,move->arrivalAction}};
+        input.insert(input.end(),move->queuedWaypoints.begin(),move->queuedWaypoints.end());
+        // Arrival inventories can grow or become unavailable before delivery.
+        // After Load All, reserve a full hold for every later leg, including
+        // after an unload that could fail or only partially complete. Ballast
+        // exists only in this budgeting clone; no physical cargo is created.
+        const auto prepared=fleet;
+        std::uint8_t maximumWarp=1;
+        for (const auto& waypoint:input) maximumWarp=std::max(maximumWarp,waypoint.warp);
+        std::vector<FleetWaypoint> output;
+        bool valid=false;
+        for (int cap=maximumWarp;cap>=1 && !valid;--cap) {
+            fleet=prepared; output.clear(); valid=true;
+            for (const auto& waypoint:input) {
+                fleet.warp=std::min(waypoint.warp,static_cast<std::uint8_t>(cap));
+                if (!fleet_warp_valid(view.state,fleet,fleet.warp)) { valid=false; break; }
+                const auto path=navigation_leg(view.state,fleet,waypoint.destination);
+                if (!path) { valid=false; break; }
+                for (std::size_t i=0;i<path->destinations.size();++i)
+                    output.push_back({path->destinations[i],fleet.warp,
+                        i+1==path->destinations.size()?waypoint.arrivalAction:FleetArrivalAction{}});
+                fleet.position=waypoint.destination; fleet.fuel-=path->fuel;
+                if (waypoint.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable)
+                    fleet.minerals.ironium+=std::max(0.0,fleet_cargo_capacity(view.state,fleet)-fleet_cargo_used(view.state,fleet));
+            }
+        }
+        if (!valid) {
+            // Keep the existing acknowledgement cycle, but send an ordinary
+            // stop instead of approving an unfunded/unsafe fallback route.
+            move->destination=prepared.position; move->warp=std::max<std::uint8_t>(1,prepared.warp);
+            move->arrivalAction={}; move->queuedWaypoints.clear(); move->repeatOrders=false; move->clearRoute=true;
+            explain(reason,"Hold unfunded received route for fleet "+std::to_string(move->fleet));
+            continue;
+        }
+        bool changed=output.size()!=input.size();
+        for (std::size_t i=0;!changed && i<input.size();++i)
+            changed=output[i].warp!=input[i].warp || !same_position(output[i].destination,input[i].destination);
+        if (!changed) continue;
+        move->destination=output[0].destination; move->warp=output[0].warp; move->arrivalAction=output[0].arrivalAction;
+        move->queuedWaypoints.assign(output.begin()+1,output.end());
+        explain(reason,"Fund received cloud route with fleet "+std::to_string(move->fleet));
     }
     std::sort(plan.nextState.fleetGoals.begin(),plan.nextState.fleetGoals.end(),[](const auto& a,const auto& b){return a.fleet<b.fleet;});
     plan.nextState.initialized = true;

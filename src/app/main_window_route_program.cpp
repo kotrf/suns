@@ -10,6 +10,7 @@
 #include "suns/communications.hpp"
 
 #include <QGraphicsView>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QStatusBar>
 
@@ -229,7 +230,7 @@ QString routeForecast(
     lines << "<br><b>Forecast if no further orders are issued:</b>";
     lines << "<i>Navigation only: hostile encounters can interrupt this route; combat is not forecast.</i>";
     if (state.interstellarMediumEnabled) lines << "<i>Medium estimate: received cloud profiles only. Undiscovered or approximately detected density can change fuel, coasting and ETA. "
-        "Fuel ranges cover density 0–1 along the forecast flown segments; actual arrival/refuelling may change. Engine safe Warp is unchanged.</i>";
+        "Fuel ranges cover density 0–1 along the forecast flown segments; actual arrival/refuelling may change. Density changes engine safe Warp and hull risk; the estimate can miss unknown hazards.</i>";
 
     bool firstTurn = true;
     bool dependsOnDynamicResult = false;
@@ -515,7 +516,9 @@ double MainWindow::selectedFleetOverdriveDamageForRouteProgram(std::uint8_t warp
 {
     const auto* fleet = selectedFleet();
     if (!fleet) return 0.0;
-    return fleet_overdrive_damage_rate(state_, fleet_player_view(state_, *fleet), warp);
+    auto received=state_;
+    project_interstellar_medium(received,fleet->owner);
+    return fleet_overdrive_damage_rate(received, fleet_player_view(state_, *fleet), warp);
 }
 
 bool MainWindow::selectedFleetRepeatOrdersForRouteProgram() const
@@ -918,7 +921,7 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
     return appendRouteWaypoint(fleet.position, 0, std::max<std::uint8_t>(1, fleet.warp), action);
 }
 
-bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction)
+bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction, bool compareRoutes)
 {
     const auto* authoritativeFleet = selectedFleet();
     const auto visibleFleetStorage = authoritativeFleet
@@ -996,7 +999,45 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         if (!confirmFleetColonization(*fleet, known ? *planet : unknown, true)) return false;
     }
 
-    return appendRouteWaypoint(star->position, 0, warp, arrivalAction);
+    if (!compareRoutes) return appendRouteWaypoint(star->position, 0, warp, arrivalAction);
+    auto departure=*fleet;
+    if (const auto route=effectiveRoute(state_,pendingOrders_,*fleet); route && !routeIsClearIntent(*fleet,*route)) {
+        if (route->targetFleet || std::any_of(route->queuedWaypoints.begin(),route->queuedWaypoints.end(),
+            [](const auto& p) { return p.targetFleet!=0; })) {
+            statusBar()->showMessage("Compare a static route before adding moving fleet targets.",4000); return false;
+        }
+        departure.position=route->queuedWaypoints.empty()?route->destination:route->queuedWaypoints.back().destination;
+    }
+    const auto alternatives=medium_route_alternatives(state_,departure,star->position,warp);
+    if (alternatives.empty()) return false;
+    QStringList choices;
+    for (std::size_t i=0;i<alternatives.size();++i) {
+        const auto& a=alternatives[i];
+        choices << QString("%1: %2 ly, ~%3 years, ~%4 mg fuel, +%5% potential hull damage")
+            .arg(i==0?QString("Direct"):QString("Bypass %1").arg(static_cast<qulonglong>(i)))
+            .arg(a.distance,0,'f',1).arg(a.years,0,'f',1).arg(a.fuel,0,'f',1).arg(a.damage,0,'f',2);
+    }
+    bool accepted=false;
+    const auto choice=QInputDialog::getItem(this,"Route alternatives",
+        "Append to the selected star from the end of the current route.\n"
+        "Received cloud profiles only; unknown density can change the result.\n"
+        "Coarse travel time and gross fuel exclude command delay, per-year rounding, refuelling and prior legs.\n"
+        "Use Route forecast after choosing to check the complete programme.",choices,0,false,&accepted);
+    if (!accepted) return false;
+    const auto index=choices.indexOf(choice);
+    if (index<0 || !appendRouteWaypoint(star->position,0,warp,arrivalAction)) return false;
+    const auto& positions=alternatives[static_cast<std::size_t>(index)].destinations;
+    if (positions.size()==1) return true;
+    auto route=effectiveRoute(state_,pendingOrders_,*fleet);
+    if (!route) return false;
+    auto legs=routeLegs(*route);
+    const auto final=legs.back(); legs.pop_back();
+    for (std::size_t i=0;i+1<positions.size();++i) legs.push_back({positions[i],warp,{}});
+    legs.push_back(final);
+    route->destination=legs[0].destination; route->warp=legs[0].warp;
+    route->arrivalAction=legs[0].arrivalAction; route->targetFleet=legs[0].targetFleet;
+    route->queuedWaypoints.assign(legs.begin()+1,legs.end());
+    return stageSelectedFleetRoute(*fleet,*route,"Selected route appended for End Turn");
 }
 
 bool MainWindow::appendFleetTargetWaypoint(

@@ -1,28 +1,42 @@
 # Project status and development handoff
 
-## Verified checkpoint — 23 October 2026 (Europe/Moscow): main after #229
+## Verified checkpoint — 23 October 2026: main after #230
 
-Main is `155f9e1e4f9fee7ce5e440b1fc57595d9dc0df48`, merged #229,
-including reviewed `ec135c4` (GitHub Actions 87/87). Formats are
-**save v94 / orders v38**. Orbital habitats and both review corrections below
-are on main. #59 is closed; broader #56 stays open; #63 stays frozen last.
+Main is `bde65922e2c960a653f12b62157b8167dbe1317a`, merged #230. The
+science completion audit and received radar-tier fixes were independently
+reviewed and passed Debug CI **87/87** on the identical pre-merge tree. Formats
+are **save v95 / orders v38**. #44 and #59 are closed; broader #56 stays open;
+#63 stays frozen last. Old v94 packets await fresh receiver evidence rather than
+reconstructing it from host truth. See the
+[science completion matrix](audits/2026-10-23-science-progression-completion.md).
 
-## Completion audit branch — science and technology #44
+## Active branch — medium navigation #105
 
-`codex/science-progression-completion` starts from that main. The
-[requirements matrix and completion decision](audits/2026-10-23-science-progression-completion.md)
-cover the implemented science foundation. A shared allocation helper makes the
-Research guarantee honor the existing one-point first-receiver reserve; core and
-Qt regressions compare pending-order forecasts with actual resolution. Obsolete
-combat guidance is corrected. Review follow-up freezes the receiver tier with
-the received queue, including delayed completion/loss and persistent reports.
-The branch uses **save v95 / orders v38**; old v94 packets await fresh receiver
-evidence without host-state reconstruction. Balance and host allocation rules
-are unchanged.
-Seven focused core suites passed locally; Qt/save/full validation belongs to the
-pushed commit's CI because this environment lacks Qt/CMake. #44 remains open
-pending review, successful CI and merge, with optional capability/AI expansions
-kept in their own issues. Historical local Qt results below belong to prior work.
+`codex/medium-navigation-completion` starts from that main. The user confirmed
+that clouds may cause hull risk at a Warp safe in empty space. The first
+continuous balance shifts effective engine tolerance by up to one Warp tier,
+down for conventional engines and up for scoops. Full flown-segment integration
+covers mixed fitted engines, hull-limited movement and free-speed coasting.
+Player and computer route alternatives use received profiles only and ordinary
+delayed coordinate waypoints. See [rules, estimates and limits](interstellar-medium.md).
+No save/orders format changes. [PR #231](https://github.com/kotrf/suns/pull/231)
+is for review; read its current exact-head CI before any merge. These notes do
+not authorize merge or claim manual balance acceptance. Optional ionization,
+radio propagation and science remain future extensions; #63 is untouched.
+
+PR #231 P2 follow-up (24 October): arrival Load All now reserves full-hold mass
+for later legs, without assuming a successful future unload. The materializer
+retries the complete programme at lower Warp caps or sends a normal delayed stop
+if no safe funded itinerary exists. Physical TurnProcessor regressions cover
+70,000 orbital passengers, 700 kt minerals, actual bypass delivery, a tight-fuel
+slower route and an unfunded hold. The prior `dd06cfd` CI result (87/87) belongs
+to the pre-fix head; read the updated PR's exact-head checks for this correction.
+
+## Historical checkpoint — main after #229
+
+Main was `155f9e1e4f9fee7ce5e440b1fc57595d9dc0df48`, save v94 / orders v38,
+with the orbital habitat slice and reviewed corrections from #229 (CI 87/87).
+The #44 branch described above has since merged as #230 and closed #44.
 
 ## Historical checkpoint — 22 October 2026 (Europe/Moscow): main after #228
 

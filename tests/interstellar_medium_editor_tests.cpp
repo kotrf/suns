@@ -1,9 +1,13 @@
 #include "main_window.hpp"
+#include "route_program_dock.hpp"
 #include <QAction>
 #include <QApplication>
 #include <QGraphicsScene>
 #include <QGraphicsItem>
 #include <QPushButton>
+#include <QInputDialog>
+#include <QComboBox>
+#include <QTimer>
 #include <QTreeWidget>
 #include <cassert>
 namespace suns {
@@ -19,6 +23,16 @@ struct MainWindowTestAccess {
         w.state_.players[0].mediumKnowledge={{1,{710,10},80,60,0,1,MediumKnowledgeLevel::Detected,1,1}};
         w.rebuildScene();
     }
+    static void alternativeFixture(MainWindow& w) {
+        w.state_=make_demo_game(); w.state_.interstellarMediumEnabled=true;
+        w.state_.shipDesigns[0].components[0]=ShipComponentType::FusionDrive;
+        w.state_.stars[1].position={64,0};
+        w.state_.players[0].mediumKnowledge={{1,{32,0},12,10,1,1,MediumKnowledgeLevel::Characterized,1,1}};
+        w.state_.interstellarClouds={{1,{32,0},12,10,1}};
+        w.pendingOrders_={1,{}}; w.pendingDescriptions_.clear();
+        w.selection_.fleet=1; w.selection_.star=2; w.rebuildScene();
+    }
+    static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void changeHidden(MainWindow& w) {
         w.state_.interstellarClouds={{1,{40,0},100,100,1},{2,{0,0},100,100,1}};
         w.rebuildScene();
@@ -42,13 +56,35 @@ int main(int argc,char** argv)
     for (const auto* item:w.routeProgramScene()->items()) if (item->data(1).toInt()==7) {
         assert(item->sceneBoundingRect().center().x()==710 && !item->toolTip().contains("9000"));
     }
+    const auto risk=w.selectedFleetOverdriveDamageForRouteProgram(8);
     const auto forecast=w.selectedFleetRouteProgramForecast(); const auto rows=w.selectedFleetRouteProgramRows();
     assert(forecast.contains("Medium estimate") && !rows.empty() && rows[0].fuelUsed.contains("–"));
     assert(rows[0].fuelTooltip.contains("received profiles") && rows[0].eta.startsWith("≈"));
     suns::MainWindowTestAccess::changeHidden(w);
     assert(w.selectedFleetRouteProgramForecast()==forecast);
+    assert(w.selectedFleetOverdriveDamageForRouteProgram(8)==risk);
     const auto changed=w.selectedFleetRouteProgramRows();
     assert(changed[0].eta==rows[0].eta && changed[0].fuelUsed==rows[0].fuelUsed && changed[0].fuelRemaining==rows[0].fuelRemaining);
     overlay->setChecked(false); assert(count()==0 && tree->topLevelItemCount()==1);
     overlay->setChecked(original);
+    suns::MainWindowTestAccess::alternativeFixture(w);
+    suns::attachRouteProgramDock(w);
+    assert(w.findChild<QPushButton*>("routeAlternativesButton"));
+    QTimer::singleShot(0,[] {
+        auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        dialog->reject();
+    });
+    assert(!w.appendSelectedStarWaypoint(8,{},true));
+    assert(suns::MainWindowTestAccess::orders(w).orders.empty());
+    QTimer::singleShot(0,[] {
+        auto* dialog=qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); assert(dialog);
+        auto* choices=dialog->findChild<QComboBox*>(); assert(choices && choices->count()==3);
+        choices->setCurrentIndex(1); dialog->accept();
+    });
+    assert(w.appendSelectedStarWaypoint(8,{},true));
+    const auto& orders=suns::MainWindowTestAccess::orders(w);
+    assert(orders.orders.size()==1);
+    const auto& route=std::get<suns::MoveFleetOrder>(orders.orders[0]);
+    assert(route.queuedWaypoints.size()==2 && route.queuedWaypoints.back().destination==suns::Position(64,0));
+    assert(route.destination.y!=0 && !route.repeatOrders && route.warp==8);
 }

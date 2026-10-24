@@ -1421,6 +1421,8 @@ std::uint8_t fleet_free_warp(const GameState& state, const Fleet& fleet)
 double fleet_overdrive_damage_rate(
     const GameState& state, const Fleet& fleet, std::uint8_t warp)
 {
+    if (state.interstellarMediumEnabled)
+        return fleet_medium_damage_rate(state,fleet,warp,interstellar_density(state,fleet.position));
     double result = 0.0;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         if (const auto* design = find_ship_design(state, stack.design)) {
