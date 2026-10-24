@@ -5,12 +5,23 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/production.hpp"
+#include "suns/stations.hpp"
+#include "suns/exotic_materials.hpp"
+#include "suns/campaign.hpp"
 #include "suns/interstellar_medium.hpp"
 
 #include "suns/communications.hpp"
 
 #include <QGraphicsView>
 #include <QInputDialog>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QVBoxLayout>
 #include <QMessageBox>
 #include <QStatusBar>
 
@@ -64,8 +75,17 @@ QString waypointName(const GameState& state, Position position, FleetId targetFl
     return QString("(%1, %2)").arg(position.x, 0, 'f', 0).arg(position.y, 0, 'f', 0);
 }
 
-QString actionName(const FleetArrivalAction& action)
+QString gateDestinationName(const GameState& state, PlanetId id)
 {
+    const auto* planet=find_planet(state,id);
+    const auto* star=planet?find_star(state,planet->star):nullptr;
+    return star?QString::fromStdString(star->name):QString("Gate %1").arg(id);
+}
+
+QString actionName(const GameState& state, const FleetArrivalAction& action)
+{
+    if (action.kind == FleetArrivalActionKind::TransitStargate) return QString("Gate %1 → %2%3; wait and retry if unavailable")
+        .arg(gateDestinationName(state,action.gateSource),gateDestinationName(state,action.gateDestination)).arg(action.gateResonant ? " (8 source xenocrystals on success)" : "");
     if (action.kind == FleetArrivalActionKind::DeployOutpost) return "Deploy outpost — permanent";
     if (action.kind == FleetArrivalActionKind::RecoverSample) return "Recover scientific specimen — one attempt";
     if (action.kind == FleetArrivalActionKind::SupplyOutpost) return QString("Supply fuel; keep %1 mg").arg(action.reserveFuel);
@@ -128,23 +148,20 @@ const MoveFleetOrder* pendingMove(const PlayerOrders& pending, FleetId fleet)
 std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const PlayerOrders& pending, const Fleet& fleet)
 {
     if (const auto* move = pendingMove(pending, fleet.id)) return *move;
-    if (!fleet.destination) {
-        // Confirmed fleet telemetry intentionally omits the remote command
-        // journal. A delayed Colonize order must still be visible in the
-        // route table while its packet is travelling to an already-arrived
-        // fleet; otherwise the last waypoint seems to disappear.
-        const auto actual = std::find_if(state.fleets.begin(), state.fleets.end(),
-            [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
-        if (actual != state.fleets.end()) {
-            for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
-                if (it->task || it->electronics || it->program.clearRoute) continue;
-                const auto& command = it->program;
-                return MoveFleetOrder{fleet.id, command.destination, command.warp,
-                    command.arrivalAction, command.queuedWaypoints, command.repeatOrders, command.targetFleet};
-            }
+    // The owner's latest sent navigation intent outranks older telemetry,
+    // whether that snapshot shows an idle fleet or a still-active old route.
+    const auto actual = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
+    if (actual != state.fleets.end()) {
+        for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
+            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor) continue;
+            const auto& command = it->program;
+            return MoveFleetOrder{fleet.id, command.destination, command.warp,
+                command.arrivalAction, command.queuedWaypoints, command.repeatOrders,
+                command.targetFleet, command.clearRoute};
         }
-        return std::nullopt;
     }
+    if (!fleet.destination) return std::nullopt;
 
     return MoveFleetOrder{
         fleet.id,
@@ -209,7 +226,12 @@ QString routeForecast(
     })) return "WH approach uses last observed coordinates. Local sensors can reacquire a drifting mouth. "
         "Entry, lifetime, exit and survival cannot be forecast with certainty.";
 
-    GameState simulated = state;
+    // Gate forecasts need immutable received fittings/queues/stocks. Live host
+    // station loss must not invalidate a previously delivered programme.
+    const bool gateRoute=std::any_of(legs.begin(),legs.end(),[](const auto& leg) {
+        return leg.arrivalAction.kind==FleetArrivalActionKind::TransitStargate;
+    });
+    GameState simulated = gateRoute ? make_player_view(state,pending.player).state : state;
     simulated.pendingMobileBaseTransfers.clear(); // Host-only undelivered logistics are not planning evidence.
     project_interstellar_medium(simulated,pending.player);
     // Navigation previews must never resolve battles using hidden enemy fits,
@@ -225,6 +247,12 @@ QString routeForecast(
     const auto missing = missing_fleet_contacts(state, pending.player);
     simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
     for (auto& f : simulated.fleets) f = fleet_player_view(state, f);
+    if (gateRoute) for (auto& f : simulated.fleets) {
+        // These are the owner's sent commands, not incoming telemetry or host
+        // logistics. Keep their original issue/delivery dates in the forecast.
+        if (const auto* original=findFleet(state,f.id); original && original->owner==pending.player)
+            f.pendingCommands=original->pendingCommands;
+    }
     for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining && f.task != FleetTask::DeployOutpost) f.task = FleetTask::None;
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
@@ -338,14 +366,37 @@ QString routeForecast(
 
         const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
             + after->waypointQueue.size();
-        const auto expectedRemaining = legs.size() - legIndex - 1;
-        const auto expectedAfterRepeatRestart = route.repeatOrders && legIndex + 1 == legs.size()
-            ? after->routeTemplate.size()
-            : expectedRemaining;
         const auto* movingTarget = findFleet(next, leg.targetFleet);
-        const auto arrivalPosition = movingTarget ? movingTarget->position : leg.destination;
+        auto arrivalPosition = movingTarget ? movingTarget->position : leg.destination;
+        if (leg.arrivalAction.kind == FleetArrivalActionKind::TransitStargate) {
+            const auto* p = find_planet(next, leg.arrivalAction.gateDestination);
+            if (const auto* star = p ? find_star(next,p->star) : nullptr) arrivalPosition = star->position;
+            dependsOnDynamicResult = true;
+            if (after->arrivalAction && after->arrivalAction->kind == FleetArrivalActionKind::TransitStargate
+                && same_position(after->position, leg.destination)) {
+                const auto error = stargate_transfer_error(next,after->owner,after->id,
+                    leg.arrivalAction.gateSource,leg.arrivalAction.gateDestination,leg.arrivalAction.gateResonant,true);
+                if (!error.empty()) {
+                    lines << QString("%1. Gate step waiting (forecast): %2 Later legs remain blocked; retries once per year.")
+                        .arg(qulonglong(legIndex+1)).arg(QString::fromStdString(error).toHtmlEscaped());
+                    break;
+                }
+            }
+        }
+        // Activation can consume multiple already-reached No action points,
+        // including the receiving-system point immediately following a hop.
+        std::size_t skipped=0;
+        while (legIndex+1+skipped<legs.size()) {
+            const auto& candidate=legs[legIndex+1+skipped];
+            if (candidate.targetFleet || candidate.arrivalAction.kind!=FleetArrivalActionKind::None
+                || !same_position(candidate.destination,arrivalPosition)) break;
+            ++skipped;
+        }
+        const auto completed=legIndex+1+skipped;
+        const auto expectedRemaining=route.repeatOrders && completed==legs.size()
+            ? after->routeTemplate.size() : legs.size()-completed;
         const bool arrived = same_position(after->position, arrivalPosition)
-            && remainingLegs == expectedAfterRepeatRestart;
+            && remainingLegs == expectedRemaining;
 
         if (arrived) {
             markArrival();
@@ -359,6 +410,9 @@ QString routeForecast(
             QString outcome;
             bool invasionOutcomeUncertain = false;
             switch (leg.arrivalAction.kind) {
+            case FleetArrivalActionKind::TransitStargate:
+                outcome = "; projected gate hop completed; no transit fuel charge; physical support and payment are rechecked";
+                break;
             case FleetArrivalActionKind::None:
                 if (leg.targetFleet != 0) outcome = "; moving-target rendezvous completed";
                 break;
@@ -447,6 +501,12 @@ QString routeForecast(
                 || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {
                 dependsOnDynamicResult = true;
             }
+            for (std::size_t i=0;i<skipped;++i) {
+                ++legIndex;
+                markArrival();
+                lines << QString("%1. %2 — T+%3; already reached, no action")
+                    .arg(qulonglong(legIndex+1)).arg(waypointName(state,legs[legIndex].destination)).arg(step);
+            }
             ++legIndex;
             if (invasionOutcomeUncertain) {
                 lines << "<i>Later route results depend on the ground battle, so the forecast stops here.</i>";
@@ -468,7 +528,7 @@ QString routeForecast(
                          .arg(kForecastHorizon);
         }
     } else if (dependsOnDynamicResult) {
-        lines << "<i>Projected legs after Load All depend on the colony state that actually exists on arrival.</i>";
+        lines << "<i>Projected legs depend on actual arrival cargo and gate support/payment.</i>";
     }
     if (route.repeatOrders && legIndex == legs.size()) {
         lines << "<i>Repeat Orders restarts the complete program after the final arrival.</i>";
@@ -654,8 +714,10 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
         if (forecast.fuelShortageTurn) tooltip += QString("\nFuel shortage at T+%1 on this leg: the ordered Warp cannot be maintained. "
             "Reduce Warp or add a refuelling stop; free-speed coasting may still allow a later arrival.").arg(*forecast.fuelShortageTurn);
         rows.push_back({
-            waypointName(state_, leg.destination, leg.targetFleet),
-            actionName(leg.arrivalAction),
+            leg.arrivalAction.kind == FleetArrivalActionKind::TransitStargate
+                ? waypointName(state_,leg.destination) + " → " + gateDestinationName(state_,leg.arrivalAction.gateDestination) + " [gate]"
+                : waypointName(state_, leg.destination, leg.targetFleet),
+            actionName(state_,leg.arrivalAction),
             leg.warp,
             index == 0,
             forecast.arrivalTurn ? (medium?QString("≈%1").arg(*forecast.arrivalTurn):QString::number(*forecast.arrivalTurn)) : QString("—"),
@@ -690,9 +752,12 @@ std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
         if (const auto* targetFleet = findFleet(state_, target)) return targetFleet->position;
         return snapshot;
     };
-    points.push_back(resolvedPosition(route->destination, route->targetFleet));
-    for (const auto& waypoint : route->queuedWaypoints) {
-        points.push_back(resolvedPosition(waypoint.destination, waypoint.targetFleet));
+    for (const auto& waypoint : routeLegs(*route)) {
+        points.push_back(resolvedPosition(waypoint.destination,waypoint.targetFleet));
+        if (waypoint.arrivalAction.kind==FleetArrivalActionKind::TransitStargate) {
+            const auto* p=find_planet(state_,waypoint.arrivalAction.gateDestination);
+            if (const auto* star=p?find_star(state_,p->star):nullptr) points.push_back(star->position);
+        }
     }
     return points;
 }
@@ -921,6 +986,62 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
     return appendRouteWaypoint(fleet.position, 0, std::max<std::uint8_t>(1, fleet.warp), action);
 }
 
+bool MainWindow::appendStargateRouteStep(PlanetId source, PlanetId destination, std::uint8_t warp, bool resonant)
+{
+    const auto* selected = selectedFleet();
+    if (!selected || selected->owner != pendingOrders_.player || source == destination) return false;
+    const auto known = make_player_view(state_,pendingOrders_.player).state;
+    if (!stargate_station_available(known,pendingOrders_.player,source)
+        || !stargate_station_available(known,pendingOrders_.player,destination)) return false;
+    const auto* planet = find_planet(known,source);
+    const auto* star = planet ? find_star(known,planet->star) : nullptr;
+    if (!star) return false;
+    FleetArrivalAction action{FleetArrivalActionKind::TransitStargate};
+    action.gateSource = source; action.gateDestination = destination; action.gateResonant = resonant;
+    return appendRouteWaypoint(star->position,0,warp,action);
+}
+
+void MainWindow::openStargateRouteDialog()
+{
+    const auto* selected = selectedFleet();
+    if (!selected || selected->owner != pendingOrders_.player) return;
+    const auto known = make_player_view(state_,pendingOrders_.player).state;
+    QDialog dialog(this); dialog.setObjectName("stargateRouteDialog");
+    dialog.setWindowTitle("Add stargate route step");
+    auto* layout = new QVBoxLayout(&dialog);
+    auto* help = new QLabel("Approach the source using the selected Warp, then spend a separate year on the gate hop. "
+        "The delivered onboard programme waits and retries once per year if the gates, cargo or payment are unavailable. "
+        "Later waypoints stay blocked. Stop or a replacement takes effect after command delivery.",&dialog);
+    help->setWordWrap(true); layout->addWidget(help);
+    auto* source = new QComboBox(&dialog); source->setObjectName("routeGateSource");
+    auto* destination = new QComboBox(&dialog); destination->setObjectName("routeGateDestination");
+    for (const auto& planet : known.planets) if (stargate_station_available(known,pendingOrders_.player,planet.id)) {
+        source->addItem(QString::fromStdString(planet.name),uint(planet.id));
+        destination->addItem(QString::fromStdString(planet.name),uint(planet.id));
+    }
+    if (destination->count()>1) destination->setCurrentIndex(1);
+    auto* form = new QFormLayout;
+    form->addRow("Source gate",source); form->addRow("Destination gate",destination); layout->addLayout(form);
+    auto* resonant = new QCheckBox("Request resonant pulse: 8 source xenocrystals on successful extended-range transit",&dialog);
+    resonant->setObjectName("routeGateResonant");
+    resonant->setEnabled(resonant_gate_technology_available(known,pendingOrders_.player)); layout->addWidget(resonant);
+    auto* status = new QLabel(&dialog); status->setObjectName("routeGateEstimate"); status->setWordWrap(true); layout->addWidget(status);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,&dialog); layout->addWidget(buttons);
+    const auto refresh = [&] {
+        const auto from = source->currentData().toUInt(), to = destination->currentData().toUInt();
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(from && to && from!=to);
+        status->setText("Forecast from received gates and fleet telemetry. Arrival mass, source stocks and physical gate support are rechecked locally; "
+            "no future supplies or successful transit are guaranteed. Command and report delivery use normal communications.");
+    };
+    connect(source,&QComboBox::currentIndexChanged,&dialog,refresh);
+    connect(destination,&QComboBox::currentIndexChanged,&dialog,refresh); refresh();
+    connect(buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);
+    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    if (dialog.exec()==QDialog::Accepted && source->currentData()!=destination->currentData())
+        appendStargateRouteStep(source->currentData().toUInt(),destination->currentData().toUInt(),
+            selectedFleetSuggestedWarpForRouteProgram(),resonant->isChecked());
+}
+
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction, bool compareRoutes)
 {
     const auto* authoritativeFleet = selectedFleet();
@@ -1007,6 +1128,11 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
             statusBar()->showMessage("Compare a static route before adding moving fleet targets.",4000); return false;
         }
         departure.position=route->queuedWaypoints.empty()?route->destination:route->queuedWaypoints.back().destination;
+        const auto& last=route->queuedWaypoints.empty()?route->arrivalAction:route->queuedWaypoints.back().arrivalAction;
+        if(last.kind==FleetArrivalActionKind::TransitStargate) {
+            const auto* p=find_planet(state_,last.gateDestination);
+            if(const auto* exit=p?find_star(state_,p->star):nullptr) departure.position=exit->position;
+        }
     }
     const auto alternatives=medium_route_alternatives(state_,departure,star->position,warp);
     if (alternatives.empty()) return false;
@@ -1123,18 +1249,11 @@ bool MainWindow::appendRouteWaypoint(
         return true;
     }
 
-    if (fleet->destination) {
-        MoveFleetOrder route{
-            fleet->id,
-            *fleet->destination,
-            fleet->warp,
-            fleet->arrivalAction.value_or(FleetArrivalAction{}),
-            fleet->waypointQueue,
-            fleet->repeatOrders,
-            fleet->targetFleet,
-        };
-        route.queuedWaypoints.push_back({destination, warp, arrivalAction, targetFleet});
-        appendPendingOrder(route, routeDescription(state_, *fleet, route));
+    if (auto existing = effectiveRoute(state_,pendingOrders_,*fleet); existing && !routeIsClearIntent(*fleet,*existing)) {
+        // The latest sent programme remains editable while its command travels
+        // to an idle remote fleet, including an unacknowledged gate step.
+        existing->queuedWaypoints.push_back({destination,warp,arrivalAction,targetFleet});
+        appendPendingOrder(*existing,routeDescription(state_,*fleet,*existing));
         return true;
     }
 
@@ -1283,6 +1402,10 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
             if (answer != QMessageBox::Yes) return false;
         }
+    }
+    if (action.kind == FleetArrivalActionKind::TransitStargate) {
+        if (leg.arrivalAction.kind != FleetArrivalActionKind::TransitStargate) return false;
+        action = leg.arrivalAction;
     }
     leg.arrivalAction = action;
     route->destination = legs.front().destination;

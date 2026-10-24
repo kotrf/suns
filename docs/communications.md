@@ -187,3 +187,12 @@ no free radar or extra range. Habitat population, reserves, operating inputs and
 station evidence reach headquarters through ordinary delayed observations.
 Delivered battle evidence can acknowledge station loss/damage before a surface
 report arrives; older packets cannot restore a station already known lost.
+
+## Scheduled stargate programmes (#195)
+
+Remote gate commands now use the same delivered route-programme transport as
+ordinary movement. After reception, a gate waypoint checks local physical support
+and can wait/retry without headquarters contact. Stop and replacement remain
+subject to delivery. Transit reports and fleet telemetry remain separate immutable
+received facts; position extrapolation stops at an unconfirmed gate hop. See
+[gate route rules](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).

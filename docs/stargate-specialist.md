@@ -39,9 +39,10 @@ Select a fleet, then **Fleet → Transit stargate…**. The dialog shows the sou
 limits, loaded mass, racial cargo rule and confirmed valid destinations. The
 station designer shows gate limits, prerequisites and price.
 
-The fleet must be idle at its source, with no route, repeating programme,
-stationary work, moving target or commands in transit. It needs an immediate
-command link. Both planets and surviving fitted stations must belong to the
+An immediate explicit transit still needs an idle fleet at its source, with no
+route, repeating programme, stationary work, moving target or commands in transit.
+With a delayed link the command installs an ordinary delivered gate programme
+instead; see the scheduled-route rules below. Both planets and surviving fitted stations must belong to the
 fleet's empire. Destroyed, foreign, ungated and unexplored frontier systems are
 not destinations. The host rechecks physical conditions when resolving the
 ordinary `GateFleetOrder`. One fleet can make one gate hop per year.
@@ -61,8 +62,72 @@ phase when a station also supplies that service.
 
 Frontier ships must still reach a system conventionally and establish a paid
 destination gate. Gate technology does not move stations or provide access to
-unknown/ungated space. Deferred gate orders, scheduled route-programme gate hops,
-allied networks, unsafe overgating and traffic statistics remain separate work.
+unknown/ungated space. Allied networks, unsafe overgating and traffic statistics
+remain future work.
+
+## Deferred commands and scheduled gate routes (#195)
+
+The route dock's **Add gate step…** selects two received owned gates. Each step
+is an ordinary waypoint at the source with a `TransitStargate` arrival action,
+containing stable source/destination planet IDs and an explicit resonance flag.
+Append normal cargo, flight or further gate waypoints afterwards; reorder,
+remove, edit approach Warp and Stop use the existing route controls. Gate steps
+also work in repeating programmes. A single step has one action, so loading or
+unloading needs its own waypoint before/after it.
+
+Example: Load All at A → gate A to B → Unload All at B → flight to C. After the
+programme's real command delivery, it runs without annual headquarters commands
+or a continuing link. Existing generalist cargo restrictions still apply; a
+specialist can transport a loaded freighter within both endpoints' limits.
+
+Rules for this slice:
+
+- Approach uses ordinary propulsion, fuel, mass, hull risk and combat. Arrival
+  by flight and the gate hop require **separate years**. A hop consumes its
+  movement year, with no further flight or second hop that year. Reorganization
+  preserves the existing `lastMovedTurn` accounting, so split/merge cannot reset
+  the annual limit.
+- Gate steps already at the source run before ordinary movement and battle
+  resolution. A successful arrival therefore participates in combat at the
+  destination that same year. Gate travel itself burns no fuel or hull health;
+  normal generation, depot service and combat remain active.
+- Physical execution rechecks surviving owned endpoints, exact source position,
+  loaded gross mass, range, racial cargo restrictions, hull condition and any
+  requested resonance payment. It needs no headquarters link or acknowledgement
+  once the programme is onboard; unrelated commands in flight do not disable it.
+- **Unavailable transit holds and retries once per year.** It preserves the
+  step, subsequent waypoints, cargo and fuel. There is no automatic skip or
+  conventional fallback. Restored gates, changed cargo/mass or replenished
+  source stocks can permit a later attempt. Captured/destroyed gates cannot
+  grant transit. Failed attempts never spend crystals.
+- Stop/replacement takes effect only on delivery, through the normal ordered
+  command queue. Before then the old onboard programme keeps running. Manual
+  routes pause probe/visitor autonomy through the existing mechanism.
+- Standalone remote `GateFleetOrder` follows the same command-delivery path.
+  The UI records a remote transit as a visible route draft so later waypoints
+  can be appended before submission. Immediate standalone transit keeps its
+  existing order-phase validation/payment and one-hop behavior.
+
+Telemetry carries the current gate action and remaining programme in its dated
+snapshot. Success/failure reports use ordinary immutable delivery; a failed
+attempt reports no payment. A geometric extrapolation stops at an unconfirmed
+gate step instead of inventing a successful hop. Headquarters sees only received
+results. Waiting fleets remain physical combat targets.
+
+The route table names both systems and labels the gate step. Its forecast runs
+received station/cargo/economic evidence through the normal processor, labels gate
+outcomes and dependent legs as projected, and reports a waiting reason when the
+received conditions cannot support transit. Hidden station changes cannot update
+an old forecast or player file. The forecast is conditional on arrival-time
+support and supplies; it is neither a reservation nor delivered telemetry.
+Conventional cloud-route comparisons after a gate start at its planned exit.
+
+Save **v96 / orders v39** append the arrival-action ordinal and its conditional
+source/destination/resonance payload. Fleet state, dated/in-flight telemetry,
+repeating templates and pending route commands all reuse the same action codec.
+Older actions keep their byte layout; v95 saves and v38 packets remain readable.
+Old packet versions reject the new ordinal. No gate prices, equipment catalog,
+rare-material rules or existing save migration policy are expanded.
 
 ## Computer empires
 
@@ -78,7 +143,10 @@ that saves more than one current movement-year's distance. Civilian staging
 requires a refueling service at the receiving hub, so exploration can still
 reserve a return route to a depot. The planner emits a
 normal gate order and remembers the destination, then waits for newer arrival
-telemetry before issuing the next frontier move. It does not use hidden host
+telemetry before issuing the next frontier move. Remote staging now sends the
+same ordinary delayed gate command and can execute it without a continuing HQ
+link; it never grants fuel, fittings or speculative arrival acknowledgement.
+It does not use hidden host
 destinations, hidden enemy state or a speculative same-year arrival. Choices and
 ties are deterministic. Other primary traits retain their existing policy.
 

@@ -36,11 +36,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 95;
+constexpr quint32 kSaveFormatVersion = 96;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 38;
+constexpr quint32 kTurnOrderFormatVersion = 39;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -227,11 +227,17 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
     if (!std::isfinite(value.reserveFuel) || value.reserveFuel < 0 || value.reserveFuel > 1e12
         || (value.kind != FleetArrivalActionKind::SupplyOutpost && value.reserveFuel != 0)) { stream.setStatus(QDataStream::WriteFailed); return; }
     if (value.kind == FleetArrivalActionKind::SupplyOutpost) stream << value.reserveFuel;
+    if (value.kind == FleetArrivalActionKind::TransitStargate) {
+        if (!value.gateSource || !value.gateDestination || value.gateSource == value.gateDestination) {
+            stream.setStatus(QDataStream::WriteFailed); return;
+        }
+        stream << quint32(value.gateSource) << quint32(value.gateDestination) << value.gateResonant;
+    } else if (value.gateSource || value.gateDestination || value.gateResonant) stream.setStatus(QDataStream::WriteFailed);
 }
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
+    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 96 ? FleetArrivalActionKind::TransitStargate : gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
         ? FleetArrivalActionKind::SupplyOutpost : gReadSaveFormatVersion >= 74
         ? FleetArrivalActionKind::RecoverWreckage : gReadSaveFormatVersion >= 54
         ? FleetArrivalActionKind::EnterWormhole : FleetArrivalActionKind::MergeWithFleet))) return;
@@ -250,6 +256,13 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
     value.reserveFuel = 0;
     if (value.kind == FleetArrivalActionKind::SupplyOutpost) stream >> value.reserveFuel;
     if (!std::isfinite(value.reserveFuel) || value.reserveFuel < 0 || value.reserveFuel > 1e12) markCorrupt(stream);
+    value.gateSource = value.gateDestination = 0; value.gateResonant = false;
+    if (value.kind == FleetArrivalActionKind::TransitStargate) {
+        quint32 source{}, destination{};
+        stream >> source >> destination >> value.gateResonant;
+        value.gateSource = source; value.gateDestination = destination;
+        if (!source || !destination || source == destination) markCorrupt(stream);
+    }
 }
 
 void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)
@@ -304,7 +317,8 @@ bool invalidWaypointWork(const FleetRouteProgram& value)
 {
     if (gReadSaveFormatVersion < 74) return false;
     const auto work = [](const FleetArrivalAction& action) {
-        return arrival_work_task(action.kind).has_value() || action.colonyPlan.has_value();
+        return arrival_work_task(action.kind).has_value() || action.colonyPlan.has_value()
+            || action.kind == FleetArrivalActionKind::TransitStargate;
     };
     const bool hasWork = work(value.arrivalAction) || std::any_of(
         value.queuedWaypoints.begin(), value.queuedWaypoints.end(),
@@ -3517,7 +3531,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

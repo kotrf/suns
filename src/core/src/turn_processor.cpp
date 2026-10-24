@@ -1342,6 +1342,32 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
         }
         return false;
     }
+    if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::TransitStargate) {
+        const auto action = *fleet.arrivalAction;
+        const auto* source = find_planet(state, action.gateSource);
+        const auto* star = source ? find_star(state, source->star) : nullptr;
+        // Arriving by flight and jumping require separate years. The route
+        // remains at this step; no later cargo action or flight can run early.
+        if (fleet.lastMovedTurn > state.turn) {
+            if (star) fleet.destination = star->position;
+            return false;
+        }
+        const bool transferred = transfer_fleet_through_stargate(state, fleet.owner, fleet.id,
+            action.gateSource, action.gateDestination, action.gateResonant, true);
+        const auto* planet = find_planet(state, transferred ? action.gateDestination : action.gateSource);
+        queue_player_report(state, fleet.owner, transferred ? PlayerReportKind::StargateTransit
+                : PlayerReportKind::StargateTransitFailed, fleet.position, state.turn + 1,
+            planet ? planet->star : 0, planet ? planet->id : 0, fleet.id, 0, ProductionKind::ColonyShip,
+            transferred && action.gateResonant ? kResonantGateCrystals : 0, ResearchField::Electronics, 0,
+            fleet.minerals, fleet.colonists);
+        if (!transferred) {
+            // Hold and retry on the next turn. A delayed stop/replacement uses
+            // the same ordinary command path as any other route programme.
+            fleet.destination = fleet.position;
+            return false;
+        }
+        fleet.arrivalAction.reset();
+    }
     if (execute_arrival_action(state, fleet, freight)) {
         queue_fleet_movement_report(state, fleet, PlayerReportKind::RouteCompleted, state.turn + 1);
         consumedFleets.push_back(fleet.id);
@@ -1414,6 +1440,10 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
 {
     if (!merge_fleet_special_cargo(state, destination, source)) return false;
     combine_probe_knowledge(destination, source);
+    // A gate-spent movement year and used service capacity survive the
+    // pursuing FleetId just as they do an explicit merge order.
+    destination.lastMovedTurn = std::max(destination.lastMovedTurn, source.lastMovedTurn);
+    destination.lastServiceTurn = std::max(destination.lastServiceTurn, source.lastServiceTurn);
     const auto sourceId = source.id;
     const auto destinationShips = fleet_ship_count(destination);
     const auto sourceShipCount = fleet_ship_count(source);
@@ -1679,6 +1709,17 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     fleetIds.reserve(state.fleets.size());
     for (const auto& fleet : state.fleets) fleetIds.push_back(fleet.id);
     std::sort(fleetIds.begin(), fleetIds.end());
+    // Gate steps already at their source run before motion/battles, so the
+    // destination participates in this year's ordinary encounter resolution.
+    // An approach arriving later in the year waits for the following boundary.
+    for (const auto id : fleetIds) {
+        auto* fleet = fleet_by_id(state,id);
+        if (!fleet || !fleet->destination || !same_position(fleet->position,*fleet->destination)
+            || !fleet->arrivalAction || fleet->arrivalAction->kind != FleetArrivalActionKind::TransitStargate) continue;
+        fleet->destination.reset();
+        (void)finish_fleet_arrival(state,*fleet,consumedFleets,freight);
+        skipMovement.push_back(id);
+    }
     for (const auto id : fleetIds) {
         auto* fleet = fleet_by_id(state, id);
         if (!fleet || fleet->targetFleet == 0) continue;
@@ -1720,7 +1761,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
         plan.owner = fleet.owner;
         plan.armed = fleet_has_space_weapons(state, fleet);
         plan.start = fleet.position;
-        if (!fleet_id_list_contains(skipMovement, fleet.id) && fleet.destination
+        if (fleet.lastMovedTurn <= state.turn && !fleet_id_list_contains(skipMovement, fleet.id) && fleet.destination
             && fleet_warp_valid(state, fleet, fleet.warp)) {
             plan.routed = true;
             plan.active = true;
@@ -2368,6 +2409,18 @@ TurnResult TurnProcessor::process_with_events(
                         const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
                             [&](const auto& f) { return f.id == concreteOrder.fleet && f.owner == submission.player; });
                         if (fleet == next.fleets.end()) return;
+                        if (communication_delay_turns(next, submission.player, fleet->position) > 0) {
+                            const auto* source = find_planet(next, concreteOrder.source);
+                            const auto* star = source ? find_star(next, source->star) : nullptr;
+                            if (star) {
+                                FleetArrivalAction action{FleetArrivalActionKind::TransitStargate};
+                                action.gateSource = concreteOrder.source; action.gateDestination = concreteOrder.destination;
+                                action.gateResonant = concreteOrder.resonant;
+                                (void)submit_fleet_route_command(next, submission.player, fleet->id,
+                                    star->position, fleet->warp, action, {});
+                            }
+                            return;
+                        }
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
                             concreteOrder.fleet, concreteOrder.source, concreteOrder.destination, concreteOrder.resonant);
                         if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }

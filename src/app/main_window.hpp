@@ -104,6 +104,8 @@ public:
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction, bool compareRoutes = false);
     bool startSelectedFleetWorkHere(FleetArrivalAction arrivalAction);
+    void openStargateRouteDialog();
+    bool appendStargateRouteStep(PlanetId source, PlanetId destination, std::uint8_t warp, bool resonant = false);
     bool appendFleetTargetWaypoint(
         FleetId targetFleet, std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool beginRouteProgramMapTargetPick();

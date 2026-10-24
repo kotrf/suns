@@ -109,7 +109,7 @@ bool stargate_station_available(const GameState& s, PlayerId owner, PlanetId id)
             || player->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
 }
 std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId fleetId,
-    PlanetId source, PlanetId destination, bool resonant)
+    PlanetId source, PlanetId destination, bool resonant, bool onboard)
 {
     if (!source || !destination || source == destination
         || !stargate_station_available(s, owner, source)
@@ -129,11 +129,13 @@ std::string stargate_transfer_error(const GameState& s, PlayerId owner, FleetId 
     if (!start || !finish || fleet == s.fleets.end()) return "Fleet or gate system is unavailable.";
     if (fleet->outpost != OutpostKind::None) return "Deployed outposts are permanently anchored.";
     if (!same_position(fleet->position, start->position)
-        || fleet->destination || fleet->targetFleet || !fleet->waypointQueue.empty()
-        || fleet->repeatOrders || fleet->task != FleetTask::None)
+        || (!onboard && (fleet->destination || fleet->targetFleet || !fleet->waypointQueue.empty()
+        || fleet->repeatOrders || fleet->task != FleetTask::None)))
         return "Fleet must be idle at the source gate with no route or work task.";
-    if (!fleet->pendingCommands.empty() || !fleet_has_instant_link(s, *fleet))
+    if (!onboard && (!fleet->pendingCommands.empty() || !fleet_has_instant_link(s, *fleet)))
         return "A live command link and no commands in transit are required.";
+    if (fleet->lastMovedTurn > s.turn) return "A gate hop requires a separate movement year.";
+    if (fleet->damagePercent >= 100) return "An immobilized fleet cannot transit.";
     const auto* player = find_player(s, owner);
     if (player->race.primaryTrait != PrimaryRaceTrait::StargateSpecialist
         && (fleet->colonists || mineral_cargo_mass(fleet->minerals) > 0.000001 || fleet->xenocrystal))
@@ -165,9 +167,9 @@ bool stargate_transfer_valid(const GameState& s, PlayerId owner, FleetId fleetId
     return stargate_transfer_error(s, owner, fleetId, source, destination, resonant).empty();
 }
 bool transfer_fleet_through_stargate(GameState& s, PlayerId owner, FleetId fleetId,
-    PlanetId source, PlanetId destination, bool resonant)
+    PlanetId source, PlanetId destination, bool resonant, bool onboard)
 {
-    if (!stargate_transfer_valid(s, owner, fleetId, source, destination, resonant)) return false;
+    if (!stargate_transfer_error(s, owner, fleetId, source, destination, resonant, onboard).empty()) return false;
     if (resonant) {
         auto& colony = *std::find_if(s.planets.begin(), s.planets.end(),
             [=](const Planet& candidate) { return candidate.id == source; });
@@ -191,6 +193,16 @@ bool preview_stargate_transfer(GameState& s, PlayerId owner, const GateFleetOrde
         const auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == order.fleet; });
         if (!known || known->observedTurn != s.turn || !known->stockPhase
             || fleet == s.fleets.end() || fleet->telemetry.observedTurn != s.turn) return false;
+    }
+    const auto fleet = std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& f) { return f.id == order.fleet && f.owner == owner; });
+    if (fleet != s.fleets.end() && communication_delay_turns(s, owner, fleet->position) > 0) {
+        if (!stargate_transfer_error(s, owner, order.fleet, order.source, order.destination, order.resonant, true).empty()) return false;
+        const auto* source = find_planet(s, order.source);
+        const auto* star = source ? find_star(s, source->star) : nullptr;
+        if (!star) return false;
+        FleetArrivalAction action{FleetArrivalActionKind::TransitStargate};
+        action.gateSource = order.source; action.gateDestination = order.destination; action.gateResonant = order.resonant;
+        return submit_fleet_route_command(s, owner, fleet->id, star->position, fleet->warp, action, {});
     }
     return transfer_fleet_through_stargate(s, owner, order.fleet, order.source, order.destination, order.resonant);
 }

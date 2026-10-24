@@ -82,3 +82,22 @@ and tooltip distinguish fuel shortage from hull-damage risk. The forecast uses
 turn processing, including cargo changes, command delays, fuel generation and
 orbital refuelling, up to 96 years. It is cached until the plan or candidate
 changes. Absence of a warning does not guarantee arrival beyond that horizon.
+
+## Gate steps
+
+A gate row describes approach plus an autonomous hop, not a conventional flight
+to the receiving system. Its ETA includes command delivery, a separate hop year
+and earlier legs. Gate outcomes and later legs are explicitly projected from
+received evidence; a blocked gate displays a forecast reason and leaves later
+ETA unknown. Neither hidden station loss nor undelivered telemetry can confirm
+or invalidate the hop. See [scheduled gates](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).
+
+Own commands already sent remain in the gate forecast with their original
+issue/delivery dates after End Turn; they are not incoming telemetry. Reached
+No action points at the receiving system share the hop's ETA and zero additional
+movement fuel, including when the traversal restarts a repeating programme.
+
+Route edits use the current draft first, then the latest sent navigation command
+(including Stop), then the received onboard route. This also applies while old
+telemetry shows an active voyage: appending a waypoint retains the gate programme
+already in transit. Non-navigation settings packets do not replace that intent.

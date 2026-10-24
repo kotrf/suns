@@ -32,15 +32,19 @@ struct StargateSpec {
 [[nodiscard]] const StargateSpec* stargate_spec(ShipComponentType);
 [[nodiscard]] const StargateSpec* station_stargate(const OrbitalStation&);
 [[nodiscard]] bool stargate_component_available(const GameState&, PlayerId, ShipComponentType);
+// onboard skips only the idle/live-link authoring checks for a delivered route
+// step. Physical gates, position, annual movement, mass, cargo and payment still apply.
 [[nodiscard]] std::string stargate_transfer_error(
-    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
+    const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false,
+    bool onboard = false);
 [[nodiscard]] const StationHullSpec& station_hull_spec(OrbitalStationHullType);
 [[nodiscard]] bool station_component_supported(ShipComponentType);
 [[nodiscard]] bool stargate_station_available(const GameState&, PlayerId, PlanetId);
 [[nodiscard]] bool stargate_transfer_valid(
     const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
 bool transfer_fleet_through_stargate(
-    GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false);
+    GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false,
+    bool onboard = false);
 struct GateFleetOrder;
 // On a PlayerView plus earlier pending orders, reserve only received supplies.
 bool preview_stargate_transfer(GameState&, PlayerId, const GateFleetOrder&);
