@@ -250,6 +250,12 @@ QString routeForecast(
     const auto missing = missing_fleet_contacts(state, pending.player);
     simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
     for (auto& f : simulated.fleets) f = fleet_player_view(state, f);
+    if (gateRoute) for (auto& f : simulated.fleets) {
+        // These are the owner's sent commands, not incoming telemetry or host
+        // logistics. Keep their original issue/delivery dates in the forecast.
+        if (const auto* original=findFleet(state,f.id); original && original->owner==pending.player)
+            f.pendingCommands=original->pendingCommands;
+    }
     for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining && f.task != FleetTask::DeployOutpost) f.task = FleetTask::None;
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
@@ -363,10 +369,6 @@ QString routeForecast(
 
         const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
             + after->waypointQueue.size();
-        const auto expectedRemaining = legs.size() - legIndex - 1;
-        const auto expectedAfterRepeatRestart = route.repeatOrders && legIndex + 1 == legs.size()
-            ? after->routeTemplate.size()
-            : expectedRemaining;
         const auto* movingTarget = findFleet(next, leg.targetFleet);
         auto arrivalPosition = movingTarget ? movingTarget->position : leg.destination;
         if (leg.arrivalAction.kind == FleetArrivalActionKind::TransitStargate) {
@@ -384,8 +386,20 @@ QString routeForecast(
                 }
             }
         }
+        // Activation can consume multiple already-reached No action points,
+        // including the receiving-system point immediately following a hop.
+        std::size_t skipped=0;
+        while (legIndex+1+skipped<legs.size()) {
+            const auto& candidate=legs[legIndex+1+skipped];
+            if (candidate.targetFleet || candidate.arrivalAction.kind!=FleetArrivalActionKind::None
+                || !same_position(candidate.destination,arrivalPosition)) break;
+            ++skipped;
+        }
+        const auto completed=legIndex+1+skipped;
+        const auto expectedRemaining=route.repeatOrders && completed==legs.size()
+            ? after->routeTemplate.size() : legs.size()-completed;
         const bool arrived = same_position(after->position, arrivalPosition)
-            && remainingLegs == expectedAfterRepeatRestart;
+            && remainingLegs == expectedRemaining;
 
         if (arrived) {
             markArrival();
@@ -489,6 +503,12 @@ QString routeForecast(
                 || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
                 || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {
                 dependsOnDynamicResult = true;
+            }
+            for (std::size_t i=0;i<skipped;++i) {
+                ++legIndex;
+                markArrival();
+                lines << QString("%1. %2 — T+%3; already reached, no action")
+                    .arg(qulonglong(legIndex+1)).arg(waypointName(state,legs[legIndex].destination)).arg(step);
             }
             ++legIndex;
             if (invasionOutcomeUncertain) {

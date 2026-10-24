@@ -91,3 +91,8 @@ and earlier legs. Gate outcomes and later legs are explicitly projected from
 received evidence; a blocked gate displays a forecast reason and leaves later
 ETA unknown. Neither hidden station loss nor undelivered telemetry can confirm
 or invalidate the hop. See [scheduled gates](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).
+
+Own commands already sent remain in the gate forecast with their original
+issue/delivery dates after End Turn; they are not incoming telemetry. Reached
+No action points at the receiving system share the hop's ETA and zero additional
+movement fuel, including when the traversal restarts a repeating programme.

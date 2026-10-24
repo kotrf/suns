@@ -459,9 +459,26 @@ void gate_route_knowledge_and_authoring_do_not_follow_hidden_fittings()
     assert(!submit_fleet_route_command(s,1,1,{0,1},5,action,{}));
 }
 
+void rendezvous_preserves_the_gate_spent_movement_year()
+{
+    auto s=network();
+    auto receiver=s.fleets[0]; receiver.id=s.nextFleetId++; receiver.position={700,0};
+    receiver.destination=Position{700,25}; receiver.warp=5; receiver.telemetry={};
+    s.fleets.push_back(receiver);
+    const MoveFleetOrder programme{1,{0,0},5,gate_step(1,2),
+        {{{700,0},5,{FleetArrivalActionKind::MergeWithFleet},receiver.id}}};
+    const auto hopped=TurnProcessor{}.process(s,{{1,{programme}}});
+    assert(hopped.fleets.size()==1 && hopped.fleets[0].id==receiver.id);
+    assert(fleet_ship_count(hopped.fleets[0])==2 && (hopped.fleets[0].position==Position{700,0}));
+    assert(hopped.fleets[0].lastMovedTurn==hopped.turn && hopped.fleets[0].fuel==600);
+    const auto onward=TurnProcessor{}.process(hopped,{});
+    assert((onward.fleets[0].position==Position{700,25}) && onward.fleets[0].fuel<600);
+}
+
 }
 int main()
 {
+    rendezvous_preserves_the_gate_spent_movement_year();
     autonomous_gate_routes_use_separate_years_and_real_approach_fuel();
     gate_route_waits_rechecks_and_never_charges_failed_pulses();
     remote_gate_commands_and_stops_wait_for_delivery();

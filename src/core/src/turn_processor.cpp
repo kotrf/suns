@@ -1440,6 +1440,10 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
 {
     if (!merge_fleet_special_cargo(state, destination, source)) return false;
     combine_probe_knowledge(destination, source);
+    // A gate-spent movement year and used service capacity survive the
+    // pursuing FleetId just as they do an explicit merge order.
+    destination.lastMovedTurn = std::max(destination.lastMovedTurn, source.lastMovedTurn);
+    destination.lastServiceTurn = std::max(destination.lastServiceTurn, source.lastServiceTurn);
     const auto sourceId = source.id;
     const auto destinationShips = fleet_ship_count(destination);
     const auto sourceShipCount = fleet_ship_count(source);

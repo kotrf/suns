@@ -31,6 +31,7 @@ struct MainWindowTestAccess {
     }
     static const std::vector<Order>& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
     static void transit(MainWindow& w) { w.openGateTransit(); }
+    static void star(MainWindow& w, StarId id) { w.selection_.star=id; }
     static void advance(MainWindow& w) { w.endTurn(); }
     static void fitting(MainWindow& w) { w.openStationDesigner(); }
     static void hideDestinationGate(MainWindow& w, bool deliver) {
@@ -106,6 +107,19 @@ int main(int argc, char** argv)
     assert(window.selectedFleetRouteProgramForecast().contains("Gate step waiting (forecast)"));
     assert(!window.appendStargateRouteStep(1,2,5));
     assert(window.removeSelectedFleetRouteProgramLeg(1) && window.clearSelectedFleetRouteProgram());
+    // A receiving-system No action point can complete in the hop year.
+    for (const bool middle:{false,true}) for (const bool repeat:{false,true}) {
+        MainWindowTestAccess::install(window,true);
+        assert(window.appendStargateRouteStep(1,2,5));
+        MainWindowTestAccess::star(window,2);
+        assert(window.appendSelectedStarWaypoint(5,{}));
+        if(middle) assert(window.appendStargateRouteStep(2,1,5));
+        if(repeat) assert(window.setSelectedFleetRepeatOrdersForRouteProgram(true));
+        const auto forecastRows=window.selectedFleetRouteProgramRows();
+        assert(forecastRows.size()==(middle?3:2) && forecastRows[0].eta=="1" && forecastRows[1].eta=="1");
+        assert(forecastRows[1].fuelUsed=="0.0");
+        if(middle) assert(forecastRows[2].eta=="2");
+    }
     MainWindowTestAccess::install(window,true); MainWindowTestAccess::remote(window);
     QTimer::singleShot(0,[&] {
         auto* d=qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(d);
@@ -115,7 +129,11 @@ int main(int argc, char** argv)
     MainWindowTestAccess::transit(window);
     const auto& deferred=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
     assert(deferred.arrivalAction.gateSource==2 && deferred.arrivalAction.gateDestination==1);
+    const auto originalEta=window.selectedFleetRouteProgramRows()[0].eta.toInt();
+    assert(originalEta>1);
     MainWindowTestAccess::advance(window);
+    assert(window.selectedFleetRouteProgramRows()[0].eta.toInt()==originalEta-1);
+    assert(window.selectedFleetRouteProgramForecast().contains("projected gate hop completed"));
     assert(window.appendStargateRouteStep(1,2,5));
     const auto& extended=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
     assert(extended.arrivalAction.gateSource==2 && extended.arrivalAction.gateDestination==1);

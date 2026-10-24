@@ -21,6 +21,18 @@ Validation is Linux/offscreen Qt; no manual balance, cross-platform or sanitizer
 run. GitHub checks are reported on the PR's exact pushed head. Prepared for
 review; no merge or issue closure performed.
 
+Review corrections — 25 October 2026: rendezvous merging now carries the latest
+movement/service epochs to the surviving FleetId, preventing a just-gated fleet
+from flying again that year. Gate forecasts retain the owner's sent command
+journal with its original delivery dates while continuing to omit incoming
+telemetry and hidden logistics. Reached receiving-system No action points are
+accounted for alongside the hop, including trailing points and repeat restart.
+Regressions cover the actual gate → merge → next-year flight, ETA after End Turn,
+and intermediate/trailing no-action points in ordinary and repeating programmes.
+The five focused suites pass (2.00 s). The full Debug application/test build and
+CTest **87/87** pass (54.21 s, offscreen Qt); `git diff --check` is clean.
+Formats remain v96/v39; no gameplay price or #63 extension is included.
+
 ## Verified checkpoint — 24 October 2026: main after #231
 
 Main `4292aee4c8e31aae592b389f206b6124dcae3e38` includes #231 and both
