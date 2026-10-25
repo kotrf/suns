@@ -1,5 +1,7 @@
 #include "suns/mobile_base.hpp"
 #include "suns/communications.hpp"
+#include "suns/orbital_bases.hpp"
+#include "suns/deep_space.hpp"
 #include "suns/turn_processor.hpp"
 #include <algorithm>
 #include <cmath>
@@ -43,6 +45,7 @@ std::uint32_t mobile_base_hulls(const GameState& state, const Fleet& fleet)
 }
 bool mobile_base_dock(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost == OutpostKind::OrbitalShipyard || fleet_construction_kit(state,fleet)==OutpostKind::OrbitalShipyard) return true;
     return fleet.outpost == OutpostKind::None && service_modules(state, fleet, ShipComponentType::ExpeditionDock) > 0;
 }
 double mobile_base_repair_capacity(const GameState& state, const Fleet& fleet)
@@ -58,6 +61,10 @@ bool mobile_base_program_valid(const MobileBaseProgram& program)
 }
 std::string mobile_base_service_error(const GameState& state, const Fleet& fleet, std::uint64_t serviceTurn)
 {
+    // The constructor's receiving collar remains usable while assembling,
+    // paused, unstaffed or exhausted: otherwise it could never be resupplied.
+    if (fleet.outpost == OutpostKind::OrbitalShipyard)
+        return fleet.damagePercent >= 100 ? "Base disabled by damage" : "";
     if (!mobile_base_dock(state, fleet)) return "Expedition Dock required";
     if (!fleet.mobileBase.enabled) return "External services disabled";
     if (fleet.damagePercent >= 100) return "Base immobilized by damage";
@@ -105,6 +112,10 @@ void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
     std::sort(bases.begin(), bases.end());
     for (const auto id : bases) {
         auto& base = *client_fleet(state, id);
+        if (base.outpost == OutpostKind::None && service_modules(state,base,ShipComponentType::ExpeditionDock)==0) continue;
+        if (base.outpost == OutpostKind::OrbitalShipyard
+            && (!base.mobileBase.enabled || !base.orbitalBase.supported || !base.colonists
+                || base.orbitalBase.assemblyYears < kOrbitalAssemblyYears)) continue;
         if (base.lastServiceTurn >= serviceTurn || !mobile_base_service_error(state, base, serviceTurn).empty()) continue;
         base.lastServiceTurn = serviceTurn;
         double budget = mobile_base_repair_capacity(state, base);

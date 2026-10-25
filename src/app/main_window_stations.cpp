@@ -3,6 +3,7 @@
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/stations.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/exotic_materials.hpp"
 #include <QCheckBox>
 #include <QComboBox>
@@ -10,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QDockWidget>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
@@ -35,6 +37,11 @@ void MainWindow::openStationDesigner()
     if(!selected || selected->owner!=pendingOrders_.player) return;
     const PlanetId planetId=selected->id;
     const auto known=make_player_view(state_,pendingOrders_.player).state;
+    if (orbital_base_at(known,planetId)) {
+        installOrbitalBases();
+        if (auto* panel=findChild<QDockWidget*>("orbitalBasesDock")) { panel->show(); panel->raise(); }
+        return;
+    }
     const auto* station=known_orbital_station(known,pendingOrders_.player,planetId);
     const auto plannedQueue=plannedProductionQueue(*selected);
     const bool existingQueued=std::any_of(plannedQueue.begin(),plannedQueue.end(),

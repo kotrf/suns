@@ -170,7 +170,7 @@ void MainWindow::refreshFleetSummary()
     std::uint64_t ships{};
     std::size_t fleets{};
     for (const auto& source : contacts) {
-        if (source.owner != pendingOrders_.player || source.id == previous) continue;
+        if (source.owner != pendingOrders_.player || source.id == previous || unreported_orbital_ship(state_,source)) continue;
         previous = source.id;
         auto fleet = fleet_player_view(state_, source);
         const bool awaitingWormholeReport = std::any_of(state_.wormholeTransits.begin(), state_.wormholeTransits.end(), [&](const auto& transit) {

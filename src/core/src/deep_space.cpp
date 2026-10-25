@@ -1,5 +1,7 @@
 #include "suns/deep_space.hpp"
 #include "suns/communications.hpp"
+#include "suns/orbital_bases.hpp"
+#include "suns/stations.hpp"
 #include "suns/player_knowledge.hpp"
 #include <algorithm>
 #include <cmath>
@@ -7,6 +9,7 @@
 namespace suns {
 OutpostKind construction_kit_kind(ShipComponentType component)
 {
+    if (component == ShipComponentType::OrbitalShipyardKit) return OutpostKind::OrbitalShipyard;
     if (component == ShipComponentType::FuelDepotKit) return OutpostKind::FuelDepot;
     if (component == ShipComponentType::DeepSpaceRelayKit) return OutpostKind::CommunicationsRelay;
     return OutpostKind::None;
@@ -30,6 +33,7 @@ bool outpost_online(const Fleet& fleet)
 std::string outpost_kind_name(OutpostKind kind)
 {
     switch (kind) {
+    case OutpostKind::OrbitalShipyard: return "Orbital shipyard";
     case OutpostKind::FuelDepot: return "Fuel depot";
     case OutpostKind::CommunicationsRelay: return "Communications relay";
     default: return "Mobile constructor";
@@ -39,6 +43,7 @@ std::string outpost_deployment_error(const GameState& state, const Fleet& fleet,
 {
     if (fleet.outpost != OutpostKind::None) return "This outpost is already permanently deployed.";
     if (fleet_construction_kit(state, fleet) == OutpostKind::None) return "Deploy one ship fitted with exactly one outpost construction kit; split mixed fleets first.";
+    if (fleet_construction_kit(state, fleet) == OutpostKind::OrbitalShipyard) return "Use Orbital shipyards to select the destination planet and deploy.";
     if (fleet.damagePercent >= 100 || fleet.colonists) return "Deployment requires an operational hull with no colonists aboard.";
     if (!std::isfinite(position.x) || !std::isfinite(position.y)) return "Deployment needs a finite position.";
     for (const auto& star : state.stars) if (distance_between(star.position, position) < kOutpostStellarClearanceLy)
@@ -47,7 +52,15 @@ std::string outpost_deployment_error(const GameState& state, const Fleet& fleet,
 }
 bool outpost_state_valid(const GameState& state, const Fleet& fleet)
 {
-    if (fleet.outpost > OutpostKind::CommunicationsRelay) return false;
+    if (fleet.outpost > OutpostKind::OrbitalShipyard) return false;
+    if (fleet.outpost == OutpostKind::OrbitalShipyard) {
+        // Validate physical anchoring here; the trailing ORBI section validates
+        // the independently dated construction/crew state after it has loaded.
+        return fleet_construction_kit(state, fleet) == OutpostKind::OrbitalShipyard
+            && !fleet.destination && !fleet.targetFleet && fleet.waypointQueue.empty()
+            && !fleet.arrivalAction && !fleet.repeatOrders && fleet.routeTemplate.empty()
+            && fleet.task == FleetTask::None;
+    }
     if (fleet.outpost == OutpostKind::None) return true;
     auto constructor = fleet; constructor.outpost = OutpostKind::None;
     // A disabled installation still exists; it simply has no active services.
@@ -74,7 +87,7 @@ std::vector<Fleet> known_outposts(const GameState& state, PlayerId owner)
 void maintain_outposts(GameState& state, std::uint64_t turn)
 {
     std::vector<FleetId> exhausted;
-    for (auto& fleet : state.fleets) if (fleet.outpost != OutpostKind::None && fleet.fuel > 0) {
+    for (auto& fleet : state.fleets) if (fleet.outpost != OutpostKind::None && fleet.outpost != OutpostKind::OrbitalShipyard && fleet.fuel > 0) {
         fleet.fuel = std::max(0.0, fleet.fuel - kOutpostUpkeepMg);
         if (fleet.fuel == 0) exhausted.push_back(fleet.id);
     }
@@ -113,7 +126,8 @@ Fleet* depot_at(GameState& state, const Fleet& visitor)
 {
     Fleet* result = nullptr;
     for (auto& candidate : state.fleets) if (candidate.id != visitor.id && candidate.owner == visitor.owner
-        && candidate.outpost == OutpostKind::FuelDepot && candidate.damagePercent < 100
+        && (candidate.outpost == OutpostKind::FuelDepot || (candidate.outpost == OutpostKind::OrbitalShipyard
+            && candidate.orbitalBase.supported && candidate.orbitalBase.assemblyYears == kOrbitalAssemblyYears)) && candidate.damagePercent < 100
         && same_position(candidate.position, visitor.position) && (!result || candidate.id < result->id)) result = &candidate;
     return result;
 }
@@ -128,7 +142,7 @@ double refuel_from_outpost(GameState& state, Fleet& visitor)
     if (visitor.outpost != OutpostKind::None) return 0;
     auto* depot = depot_at(state, visitor);
     if (!depot || !outpost_online(*depot)) return 0;
-    const auto amount = transfer(*depot, visitor, std::min(depot->fuel,
+    const auto amount = transfer(*depot, visitor, std::min(std::max(0.0, depot->fuel - (depot->outpost == OutpostKind::OrbitalShipyard ? depot->mobileBase.fuelReserve : 0.0)),
         std::max(0.0, fleet_fuel_capacity(state, visitor) - visitor.fuel)));
     if (amount > 0 && depot->fuel == 0) queue_player_report(state, depot->owner, PlayerReportKind::OutpostFuelExhausted,
         depot->position, state.turn + 1, 0, 0, depot->id, 0, ProductionKind::ColonyShip, std::uint32_t(depot->outpost));

@@ -615,7 +615,12 @@ std::string ship_design_validation_error(const ShipDesign& design)
     if (std::count_if(design.components.begin(), design.components.end(), [](auto c) {
             return construction_kit_kind(c) != OutpostKind::None;
         }) > 1) return "A constructor may carry only one deep-space construction kit.";
+    if (std::count_if(design.components.begin(), design.components.end(), [](auto c) {
+        return c >= ShipComponentType::BulkRadiationScreen && c <= ShipComponentType::AdvancedRadiationScreen;
+    }) > 1) return "Only one radiation screen may be fitted; upgrade it instead of stacking.";
     for (const auto component : design.components) {
+        if (component >= ShipComponentType::OrbitalShipyardKit && component <= ShipComponentType::AdvancedRadiationScreen
+            && design.hull != ShipHullType::ExpeditionBase) return "Orbital base equipment requires an Expedition Base hull.";
         if (component == ShipComponentType::SurveyAutopilot && design.hull != ShipHullType::SurveyProbe)
             return "Survey Autopilot requires a Survey Probe hull.";
         if (design.hull == ShipHullType::SurveyProbe && construction_kit_kind(component) != OutpostKind::None)
@@ -623,7 +628,8 @@ std::string ship_design_validation_error(const ShipDesign& design)
         if ((component == ShipComponentType::ExpeditionDock || component == ShipComponentType::ExpeditionWorkshop)
             && design.hull != ShipHullType::ExpeditionBase)
             return "Expedition service modules require an Expedition Base hull.";
-        if (design.hull == ShipHullType::ExpeditionBase && construction_kit_kind(component) != OutpostKind::None)
+        if (design.hull == ShipHullType::ExpeditionBase && construction_kit_kind(component) != OutpostKind::None
+            && component != ShipComponentType::OrbitalShipyardKit)
             return "Mobile bases cannot deploy permanent outposts.";
         if (static_cast<int>(component) < 0 || component > kLastShipComponent)
             return "Unknown ship component.";
@@ -1837,7 +1843,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
     std::sort(knownFleets.begin(), knownFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     for (const auto& source : knownFleets) {
-        if (source.owner != playerId) continue;
+        if (source.owner != playerId || unreported_orbital_ship(state,source)) continue;
         const bool pendingTransit = std::any_of(state.wormholeTransits.begin(), state.wormholeTransits.end(),
             [&](const auto& t) { return t.lastContact.id == source.id && t.lastContact.owner == playerId
                 && t.status != WormholeTransitStatus::EmergenceConfirmed
@@ -1847,7 +1853,9 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
             [&](const auto& report) { return report.battle && report.deliveryTurn > state.turn
                 && std::any_of(report.battle->units.begin(), report.battle->units.end(),
                     [&](const auto& unit) { return unit.fleet == source.id && unit.owner == playerId; }); });
-        const auto fleet = pendingTransit || undeliveredBattle ? fleet_player_view(state, source) : source;
+        const auto fleet = pendingTransit || undeliveredBattle
+            || source.outpost == OutpostKind::OrbitalShipyard || source.telemetry.outpost == OutpostKind::OrbitalShipyard
+            ? fleet_player_view(state, source) : source;
         ++result.fleets;
         result.population += fleet.colonists;
         result.ships += fleet_ship_count(fleet);
@@ -2005,6 +2013,7 @@ void initialize_initial_fleet_telemetry(Fleet& fleet, std::uint64_t turn)
     fleet.telemetry.fuel = fleet.fuel;
     fleet.telemetry.damagePercent = fleet.damagePercent;
     fleet.telemetry.outpost = fleet.outpost;
+    fleet.telemetry.orbitalBase = fleet.orbitalBase;
     fleet.telemetry.mobileBase = fleet.mobileBase;
     fleet.telemetry.lastMovedTurn = fleet.lastMovedTurn;
     fleet.telemetry.lastServiceTurn = fleet.lastServiceTurn;

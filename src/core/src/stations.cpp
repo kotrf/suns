@@ -1,4 +1,5 @@
 #include "suns/stations.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/communications.hpp"
 #include "suns/exotic_materials.hpp"
 #include <algorithm>
@@ -241,6 +242,7 @@ bool station_has_weapons(const OrbitalStation& s)
 { return std::any_of(s.components.begin(),s.components.end(),[](auto c) { return component_spec(c).weaponPower > 0; }); }
 bool station_construction_valid(const GameState& s, const Planet& p, const StationConstruction& work)
 {
+    if (orbital_base_at(s, p.id)) return false;
     if (!p.owner || !station_loadout_available(s,p.owner,work.loadout)) return false;
     const auto* existing = find_orbital_station_at_planet(s,p.id);
     return work.refitStation ? existing && existing->id == work.refitStation && existing->owner == p.owner : !existing;

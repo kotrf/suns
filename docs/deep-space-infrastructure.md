@@ -94,3 +94,11 @@ Deep-space shipyards, gates and mobile services belong to later work, including
 [#61](https://github.com/kotrf/suns/issues/61). Deferred transport networks #53
 are not required for this slice. Computer empires do not yet plan deployment or
 resupply networks automatically.
+
+## Independent orbital founding (#54 / #61)
+
+[Independent orbital shipyards](independent-orbital-shipyards.md) add a transported
+constructor permanently anchored at a planet without surface colonization. Real
+workers, delivered materials/fuel, separate manufacture and fitted radiation
+protection are required. It shares the single orbital station slot and reuses
+the anchored hull/combat/contact mechanisms; it is not a flying shipyard.

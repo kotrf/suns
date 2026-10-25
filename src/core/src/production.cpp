@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/orbital_habitats.hpp"
@@ -171,7 +172,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     std::vector<std::uint32_t> annualUsed(queue.size());
     planet.productionWaitingForMinerals = false;
     planet.productionWaitingForShipyard = false;
-    bool stationExists = hasShipyard || find_orbital_station_at_planet(state, planet.id) != nullptr;
+    bool stationExists = hasShipyard || find_orbital_station_at_planet(state, planet.id) != nullptr || orbital_base_at(state,planet.id);
     const auto erase = [&](std::size_t index) {
         queue.erase(queue.begin() + index);
         origins.erase(origins.begin() + index);
@@ -375,7 +376,7 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
             } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
                 if (engineering_kind(value.kind) || recovery_kind(value.kind) || value.kind == ProductionKind::Factory || value.kind == ProductionKind::Mine || value.kind == ProductionKind::Terraforming || value.kind == ProductionKind::ColonyDefense)
                     (void)apply_production_batch(result, colony, {colony.id, value.kind});
-                else if (value.kind == ProductionKind::OrbitalStation && !find_orbital_station_at_planet(result, colony.id)
+                else if (value.kind == ProductionKind::OrbitalStation && !find_orbital_station_at_planet(result, colony.id) && !orbital_base_at(result,colony.id)
                     && std::none_of(queue.begin(), queue.end(), [](const auto& item) { return item.kind == ProductionKind::OrbitalStation; }))
                     queue.push_back({value.kind, kOrbitalDockCost});
                 else if (value.kind == ProductionKind::ColonyShip

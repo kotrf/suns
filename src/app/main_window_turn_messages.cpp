@@ -164,6 +164,7 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::EngineeringDismantled: subject=QString("%1: engineering project dismantled").arg(event_planet_name(state,event)); break;
     case GameEventKind::OutpostDeployed: subject = QString("%1: outpost deployed").arg(fleetName); break;
     case GameEventKind::OutpostDeploymentFailed: subject = QString("%1: deployment rejected").arg(fleetName); break;
+    case GameEventKind::OrbitalBaseStatus: subject = QString("%1: orbital life support / refit; %2 residents lost").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
     case GameEventKind::OutpostFuelExhausted: subject = QString("%1: outpost fuel exhausted").arg(fleetName); break;
     case GameEventKind::StargateTransit: subject = QString("%1 transited to %2").arg(fleetName, planetName); break;
     case GameEventKind::StargateTransitFailed: subject = QString("%1: stargate transit rejected").arg(fleetName); break;
@@ -537,15 +538,21 @@ QString event_text(const GameState& state, const GameEvent& event)
                 detail+=QString(" Emergency reserve reported: %1 years; orbital residents lost in this annual status report: %2. Ordinary delayed observations provide the population manifest.").arg(event.technologyLevel).arg(qulonglong(event.deliveredColonists));
         }
         text=QString("Year %1 • %2 at %3.\n%4").arg(qulonglong(event.observedTurn)).arg(project,event_planet_name(state,event),detail);
+    } else if (event.kind == GameEventKind::OrbitalBaseStatus) {
+        text=QString("Year %1 • %2. %3\nResidents lost during the observed year: %4. Radiation protection and emergency life-support reserves are separate; deliver supplies, refit protection or evacuate.")
+            .arg(qulonglong(event.observedTurn)).arg(fleetName)
+            .arg(event.quantity==3 ? "Paid base refit completed." : event.quantity==2 ? "Base evacuated / empty." : event.quantity==1 ? "Life support supplied." : "Life support unavailable: using reserves or suffering attrition.")
+            .arg(qulonglong(event.deliveredColonists));
     } else if (event.kind == GameEventKind::OutpostDeployed || event.kind == GameEventKind::OutpostDeploymentFailed
         || event.kind == GameEventKind::OutpostFuelExhausted) {
         const auto kind=QString::fromStdString(outpost_kind_name(OutpostKind(event.quantity)));
         text=QString("Year %1 • %2 at %3, %4.\n%5")
             .arg(qulonglong(event.observedTurn)).arg(fleetName).arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1)
             .arg(event.kind==GameEventKind::OutpostDeployed
-                ? kind + " permanently deployed. Upkeep: 1 mg/year. Depots dispense finite fuel; relays extend communications by 300 ly while powered."
+                ? (event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital constructor anchored permanently. Six supplied assembly years are required; use Independent orbital shipyards for workers, stocks and radiation protection.") : kind + " permanently deployed. Upkeep: 1 mg/year. Depots dispense finite fuel; relays extend communications by 300 ly while powered.")
                 : event.kind==GameEventKind::OutpostFuelExhausted
                 ? QString("Operating fuel exhausted: depot/relay services are offline. Send a tanker with Supply outpost; the installation remains in place.")
+                : event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital deployment failed. The one-ship constructor must be idle at the selected planet, with no occupied station slot or foreign surface colony.")
                 : QString("Deployment failed physical validation. Check one ship with one kit, no colonists, hull condition, an idle final waypoint, 5 ly stellar clearance and 1 ly separation from other installations."));
     } else if (event.kind == GameEventKind::StargateTransit) {
         text = QString("Turn %1  •  %2 transited to the gate at %3 without burning fuel.\n"

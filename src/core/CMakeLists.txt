@@ -9,6 +9,7 @@ add_library(suns_core
     src/stations.cpp
     src/deep_space.cpp
     src/mobile_base.cpp
+    src/orbital_bases.cpp
     src/survey_probes.cpp
     src/combat.cpp
     src/strategic_operations.cpp

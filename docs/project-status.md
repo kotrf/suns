@@ -1,6 +1,40 @@
 # Project status and development handoff
 
-## Current implementation — deferred/scheduled gates #195
+## Current implementation — independent orbital founding (#54 / #61)
+
+Branch `codex/independent-orbital-shipyards` starts from main `0d4ec03`, merged
+#232. Its reviewed head `004da54` passed GitHub CI; main is save v96 / orders v39.
+The user chose permanently orbital yards founded from physically transported
+constructors, real workers/supplies and fitted passive radiation protection.
+[Complete first-slice rules and prototype balance](independent-orbital-shipyards.md).
+The branch uses save v97 / orders v40; #54/#61 remain open and #63 stays frozen.
+
+The implementation reuses anchored FleetIds, actual hull/fittings/cargo/combat,
+ordinary delayed commands and immutable telemetry. It adds six supplied annual
+assembly stages, 40-work staffed manufacture, cumulative whole-kt mineral
+payments, paid refits and finite life support/refueling. Orbital background is a
+fixed public stellar-class proxy, independent of surface Hab/magnetospheres;
+three mutually exclusive screen modules subtract 20/40/60. No natural growth,
+surface mining, flying yard, new rare material or station capture is introduced.
+A received base can survive subsequent friendly surface colonization; its queue
+stays separate and it occupies that planet's one station slot. Converting or
+decommissioning the fixed hull remains future work.
+
+Validation: GCC 14.2 / Qt 6.12 Debug full application/test build succeeded;
+final offscreen CTest **90/90** passed (56.88 s), and `git diff --check` is clean.
+New core, Qt editor and persistence suites cover supplied assembly/pause/resume,
+finite cumulative mineral payments and refits, durable request receipts,
+delayed/overtaking cancellation, workforce/hold/fuel conservation and evacuation,
+radiation/immune races and emergency attrition, permanent anchoring, occupied orbit,
+hostile landing blocking, later friendly surface founding and combat destruction.
+They also cover honest AI loading/deployment/ship orders, immutable received UI
+and exports, hidden remote launches, malformed tails, v96 migration and PBEM.
+The catalog count and historical v94 fixture were updated for the new components
+and trailing extension. Full-field research/habitat/gate/navigation suites also
+pass. No manual balance, cross-platform or sanitizer acceptance is claimed.
+Prepared for review; no merge or issue closure is performed.
+
+## Historical branch — deferred/scheduled gates #195 (merged #232)
 
 Branch `codex/scheduled-stargate-routes` starts from fresh main `4292aee`
 (merged #231; exact merge CI green). It adds ordinary delayed gate commands and

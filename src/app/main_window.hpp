@@ -199,6 +199,7 @@ public:
     void installInterstellarMedium();
     void installOutposts();
     void installMobileBases();
+    void installOrbitalBases();
     void installPlanetaryEngineering();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 

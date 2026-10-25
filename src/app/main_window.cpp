@@ -591,7 +591,7 @@ const Fleet* MainWindow::selectedFleet() const
         && transit.status != WormholeTransitStatus::PresumedLost
         && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
     const auto* fleet = findFleet(state_, *selection_.fleet);
-    if (fleet && fleet->owner == pendingOrders_.player) return fleet;
+    if (fleet && fleet->owner == pendingOrders_.player && !unreported_orbital_ship(state_,*fleet)) return fleet;
     return nullptr;
 }
 
@@ -662,7 +662,7 @@ void MainWindow::rebuildScene()
 
     if (!selectedFleet()) {
         const auto fallback = std::find_if(state_.fleets.begin(), state_.fleets.end(), [this](const Fleet& fleet) {
-            return fleet.owner == pendingOrders_.player;
+            return fleet.owner == pendingOrders_.player && !unreported_orbital_ship(state_,fleet);
         });
         selection_.fleet = fallback == state_.fleets.end()
             ? std::optional<FleetId>{}

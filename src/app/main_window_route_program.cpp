@@ -154,7 +154,7 @@ std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const Playe
         [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
     if (actual != state.fleets.end()) {
         for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
-            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor) continue;
+            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor || it->orbitalBase) continue;
             const auto& command = it->program;
             return MoveFleetOrder{fleet.id, command.destination, command.warp,
                 command.arrivalAction, command.queuedWaypoints, command.repeatOrders,

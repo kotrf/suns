@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/computer_player.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/combat.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/survey_probes.hpp"
@@ -1061,6 +1062,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
             explain(reason,"Evacuate received failing orbital habitat with an available paid transport");break;
         }
     }
+    plan_orbital_bases(view, plan.orders);
     // Materialize the same received-profile paths used by route_warp as normal
     // waypoints. Final arrival actions stay at their original destinations.
     for (auto& order:plan.orders.orders) if (auto* move=std::get_if<MoveFleetOrder>(&order)) {
