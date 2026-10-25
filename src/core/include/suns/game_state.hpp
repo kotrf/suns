@@ -1270,10 +1270,18 @@ struct ComputerDecision {
     bool operator==(const ComputerDecision&) const = default;
 };
 
+struct ComputerOrbitalBuild {
+    FleetId fleet{};
+    ShipDesignId design{};
+    std::uint64_t item{}, issuedTurn{};
+    bool operator==(const ComputerOrbitalBuild&) const = default;
+};
+
 struct ComputerState {
     bool initialized{};
     std::vector<ComputerDecision> decisions;
     std::vector<ComputerFleetGoal> fleetGoals;
+    std::vector<ComputerOrbitalBuild> orbitalBuilds;
     std::optional<ComputerResearchGoal> researchGoal;
     bool operator==(const ComputerState&) const = default;
 };

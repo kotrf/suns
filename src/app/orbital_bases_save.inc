@@ -69,6 +69,13 @@ void writeOrbitalBases(QDataStream& stream, const GameState& state)
     for (const auto& f:state.fleets) write(f);
     for (const auto& f:state.pendingFleetLossContacts) write(f.lastContact);
     for (const auto& f:state.wormholeTransits) write(f.lastContact);
+    // v98: owner planner intentions survive saves without consulting host traffic.
+    out << quint32(state.players.size());
+    for (const auto& player:state.players) {
+        out << quint32(player.id) << quint32(player.computer.orbitalBuilds.size());
+        for (const auto& intent:player.computer.orbitalBuilds)
+            out << quint32(intent.fleet) << quint32(intent.design) << quint64(intent.item) << quint64(intent.issuedTurn);
+    }
     if (out.status()!=QDataStream::Ok) { stream.setStatus(QDataStream::WriteFailed); return; }
     stream << quint32(0x4f524249) << quint32(payload.size()); stream.writeRawData(payload.data(),payload.size());
 }
@@ -113,5 +120,20 @@ void readOrbitalBases(QDataStream& stream, GameState& state)
     }
     for (auto& f:state.pendingFleetLossContacts) read(f.lastContact);
     for (auto& f:state.wormholeTransits) read(f.lastContact);
+    if (gReadSaveFormatVersion>=98) {
+        if (!readCount(in,count) || count!=state.players.size()) {markCorrupt(stream);return;}
+        for (auto& player:state.players) {
+            quint32 id{},jobs{};in >> id;
+            if (id!=player.id || !readCount(in,jobs) || jobs>kMaximumComputerFleetGoals) {markCorrupt(in);break;}
+            for (quint32 i=0;i<jobs;++i) {
+                ComputerOrbitalBuild intent;quint64 item{},issued{};
+                in >> intent.fleet >> intent.design >> item >> issued;intent.item=item;intent.issuedTurn=issued;
+                const auto* design=find_ship_design(state,intent.design);
+                if (!design || design->owner!=player.id) markCorrupt(in);
+                player.computer.orbitalBuilds.push_back(intent);
+            }
+            if (!computer_state_valid(player,state.turn)) {markCorrupt(in);break;}
+        }
+    }
     if (in.status()!=QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

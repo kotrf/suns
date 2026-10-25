@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "orbital_base_fixture.hpp"
+#include "route_program_dock.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QLabel>
@@ -18,6 +19,17 @@ struct MainWindowTestAccess {
         f.orbitalBase.background=100;f.orbitalBase.queue.push_back({201,3});f.colonists=1;f.minerals={};
         w.rebuildScene();
     }
+    static void remoteLaunch(MainWindow& w) {
+        w.state_=orbital_test::world(5000);orbital_test::deploy(w.state_);
+        auto& yard=orbital_test::base(w.state_);yard.orbitalBase.assemblyYears=6;yard.orbitalBase.supported=true;
+        orbital_test::acknowledge(w.state_);
+        apply_orbital_base_command(w.state_,yard,{OrbitalBaseAction::QueueShip,0,201,101});
+        service_orbital_bases(w.state_,w.state_.turn);
+        assert(w.state_.fleets.size()==2 && unreported_orbital_ship(w.state_,w.state_.fleets.back()));
+        assert(make_player_view(w.state_,1).state.fleets.size()==1);
+        w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.fleet=1;w.selection_.star=2;w.rebuildScene();
+    }
+    static void deliverLaunch(MainWindow& w) { orbital_test::acknowledge(w.state_);w.rebuildScene(); }
     static void transport(MainWindow& w) {
         auto& s=w.state_;auto f=s.fleets[0];f.id=2;f.design=202;f.ships={{202,1}};f.outpost=OutpostKind::None;f.orbitalBase={};f.name="Supply transport";
         f.telemetry={};s.fleets.push_back(f);s.nextFleetId=3;orbital_test::acknowledge(s);w.rebuildScene();
@@ -47,4 +59,16 @@ int main(int argc,char** argv) {
     w.findChild<QPushButton*>("orbitalBaseEvacuate")->click();
     const auto cargo=std::get<TransferCargoOrder>(MainWindowTestAccess::orders(w).back());
     assert(cargo.source.fleet==1 && cargo.destination.fleet==2 && cargo.colonists==1000);
+    MainWindow remote;MainWindowTestAccess::remoteLaunch(remote);attachRouteProgramDock(remote);
+    assert(remote.availableOwnedFleetsForRouteProgram()==std::vector<FleetId>{1});
+    assert(remote.availableFleetTargetsForRouteProgram().empty());
+    assert(!remote.selectFleetForRouteProgram(2));
+    assert(remote.fleetTargetNameForRouteProgram(2)=="Fleet 2");
+    auto* sources=remote.findChild<QComboBox*>("routeSourceFleetCombo");
+    auto* targets=remote.findChild<QComboBox*>("routeTargetFleetCombo");assert(sources && targets);
+    assert(sources->findData(2u)<0 && targets->findData(2u)<0);
+    MainWindowTestAccess::deliverLaunch(remote);
+    assert(remote.availableOwnedFleetsForRouteProgram()==(std::vector<FleetId>{1,2}));
+    assert(remote.availableFleetTargetsForRouteProgram()==std::vector<FleetId>{2});
+    assert(sources->findData(2u)>=0 && remote.selectFleetForRouteProgram(2));
 }

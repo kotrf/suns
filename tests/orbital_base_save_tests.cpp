@@ -45,6 +45,16 @@ void migration_and_corruption(const QString& p) {
     QFile old(p+".v96");assert(old.open(QIODevice::WriteOnly));old.write(raw);old.close();SaveGameData loaded;
     assert(read_save_game_file(p+".v96",loaded,error));
     for(const auto& f:loaded.state.fleets)assert(!f.orbitalBase.planet && !f.orbitalShipyardBirth);
+    auto previous=world();deploy(previous);acknowledge(previous);assert(write_save_game_file(p,data(previous),error));
+    auto v97=bytes(p);const auto at97=v97.lastIndexOf(marker);assert(at97>0);quint32 size97{};
+    {QDataStream in(v97);assert(in.device()->seek(at97+4));in>>size97;}
+    assert(at97+8+size97==v97.size());
+    v97.chop(12); // v98 adds one player-count/id/empty-intent-count block.
+    {QDataStream out(&v97,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{97};
+        assert(out.device()->seek(at97+4));out<<quint32(size97-12);}
+    QFile old97(p+".v97");assert(old97.open(QIODevice::WriteOnly));old97.write(v97);old97.close();
+    assert(read_save_game_file(p+".v97",loaded,error));
+    assert(base(loaded.state).orbitalBase.planet==2 && loaded.state.players[0].computer.orbitalBuilds.empty());
     auto s=world();deploy(s);acknowledge(s);assert(write_save_game_file(p,data(s),error));raw=bytes(p);
     const auto tail=raw.lastIndexOf(marker);assert(tail>0);
     raw[tail+8+4+4+1+4+1+1]=char(2); // Invalid physical active boolean, inside the bounded tail.
@@ -53,6 +63,27 @@ void migration_and_corruption(const QString& p) {
     // Two physical stations may never occupy the same planet's station slot.
     auto duplicate=base(s);duplicate.id=2;s.fleets.push_back(duplicate);s.nextFleetId=3;
     assert(write_save_game_file(p,data(s),error));assert(!read_save_game_file(p,loaded,error));
+}
+void ai_intent_survives_reload(const QString& p) {
+    auto s=world(5000);deploy(s);base(s).orbitalBase.assemblyYears=6;base(s).orbitalBase.supported=true;
+    s.players[0].controller=PlayerController::Computer;
+    Player human;human.id=2;human.name="Human observer";s.players.push_back(human);acknowledge(s);
+    std::size_t sent=0;for(int i=0;i<10;++i)sent+=orbital_ai_year(s).size();
+    assert(sent==1 && s.players[0].computer.orbitalBuilds.size()==1);
+    const auto intent=s.players[0].computer.orbitalBuilds[0];assert(intent.item);
+    QString error;auto host=data(s);host.pendingOrders.player=2;host.playerTokens={{2,77}};
+    assert(write_save_game_file(p,host,error));SaveGameData loaded;
+    if(!read_save_game_file(p,loaded,error)){std::cerr<<error.toStdString()<<"\n";assert(false);}
+    assert(loaded.state.players[0].computer==s.players[0].computer);
+    for(int i=10;i<39;++i) {
+        assert(orbital_ai_year(s).empty());assert(orbital_ai_year(loaded.state).empty());
+    }
+    assert(base(s).orbitalBase.acceptedItems==std::vector<std::uint64_t>{intent.item});
+    assert(base(loaded.state).orbitalBase.acceptedItems==base(s).orbitalBase.acceptedItems);
+    assert(s.fleets.size()==2 && loaded.state.fleets.size()==2);
+    acknowledge(s);acknowledge(loaded.state);
+    const auto next=orbital_ai_year(s),restored=orbital_ai_year(loaded.state);
+    assert(next.size()==1 && restored.size()==1 && next[0].command.item==restored[0].command.item && next[0].command.item!=intent.item);
 }
 void hidden_exports_and_inflight(const QString& p) {
     auto s=world(5000);deploy(s);acknowledge(s);const auto actual=base(s).orbitalBase;
@@ -80,4 +111,4 @@ void hidden_exports_and_inflight(const QString& p) {
     assert(base(loaded.state).orbitalBase.assemblyYears==actual.assemblyYears && base(loaded.state).colonists==25000);
 }
 }
-int main(int argc,char** argv){QCoreApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());roundtrip(dir.filePath("roundtrip.suns"));migration_and_corruption(dir.filePath("migration.suns"));hidden_exports_and_inflight(dir.filePath("remote.suns"));}
+int main(int argc,char** argv){QCoreApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());roundtrip(dir.filePath("roundtrip.suns"));ai_intent_survives_reload(dir.filePath("ai.suns"));migration_and_corruption(dir.filePath("migration.suns"));hidden_exports_and_inflight(dir.filePath("remote.suns"));}

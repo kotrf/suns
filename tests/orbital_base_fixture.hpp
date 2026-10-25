@@ -4,6 +4,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/campaign.hpp"
+#include "suns/computer_player.hpp"
 #include <algorithm>
 namespace orbital_test {
 using namespace suns;
@@ -46,4 +47,14 @@ inline GameState world(double distance=40, C shield=C::AdvancedRadiationScreen) 
 }
 inline void deploy(GameState& s) { apply_orbital_base_command(s,base(s),{OrbitalBaseAction::Deploy,2}); }
 inline void tick(GameState& s, std::vector<Order> orders={}) { s=TurnProcessor{}.process(s,{PlayerOrders{1,std::move(orders)}}); }
+// Isolate the yard planner's ordinary orders while retaining full controller memory.
+inline std::vector<OrbitalBaseOrder> orbital_ai_year(GameState& s) {
+    auto plan=plan_computer_turn(make_player_view(s,1));std::vector<Order> orders;std::vector<OrbitalBaseOrder> requests;
+    for(const auto& o:plan.orders.orders)if(const auto* b=std::get_if<OrbitalBaseOrder>(&o);b && b->command.action==OrbitalBaseAction::QueueShip) {
+        orders.push_back(o);requests.push_back(*b);
+    }
+    tick(s,std::move(orders));s.players[0].computer=std::move(plan.nextState);
+    for(auto& f:s.fleets)f.telemetryInTransit.clear();
+    return requests;
+}
 }

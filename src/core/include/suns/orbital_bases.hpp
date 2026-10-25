@@ -13,6 +13,6 @@ inline constexpr std::uint32_t kOrbitalAnnualWork = 40;
 [[nodiscard]] bool orbital_base_command_valid(const OrbitalBaseCommand&);
 [[nodiscard]] bool submit_orbital_base_command(GameState&, PlayerId, FleetId, const OrbitalBaseCommand&);
 void apply_orbital_base_command(GameState&, Fleet&, const OrbitalBaseCommand&);
-void plan_orbital_bases(const struct PlayerView&, struct PlayerOrders&);
+void plan_orbital_bases(const struct PlayerView&, struct PlayerOrders&, ComputerState&);
 void service_orbital_bases(GameState&, std::uint64_t);
 } // namespace suns

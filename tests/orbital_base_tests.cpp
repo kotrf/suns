@@ -121,16 +121,16 @@ void ai_received_orders() {
     std::erase_if(loading.players[0].surveyKnowledge,[](const auto& k){return k.star==1;});
     set_survey_level(loading,1,1,SurveyLevel::DeepSurvey,loading.turn);
     base(loading).position={0,0};base(loading).colonists=0;base(loading).minerals={};acknowledge(loading);
-    PlayerOrders supply{1,{}};plan_orbital_bases(make_player_view(loading,1),supply);
+    ComputerState memory;PlayerOrders supply{1,{}};plan_orbital_bases(make_player_view(loading,1),supply,memory);
     assert(std::any_of(supply.orders.begin(),supply.orders.end(),[](const auto& o){return std::holds_alternative<TransferCargoOrder>(o);}));
     tick(loading,supply.orders);
     assert(base(loading).colonists==25000 && base(loading).minerals.ironium==220);
 
     auto s=world();deploy(s);base(s).orbitalBase.assemblyYears=6;base(s).orbitalBase.supported=true;acknowledge(s);
-    PlayerOrders o{1,{}};plan_orbital_bases(make_player_view(s,1),o);
+    PlayerOrders o{1,{}};plan_orbital_bases(make_player_view(s,1),o,memory);
     assert(std::any_of(o.orders.begin(),o.orders.end(),[](const auto& order){const auto* b=std::get_if<OrbitalBaseOrder>(&order);return b && b->command.action==OrbitalBaseAction::QueueShip;}));
     // A received idle constructor at its surveyed target can deploy honestly.
-    auto c=world();PlayerOrders deployment{1,{}};plan_orbital_bases(make_player_view(c,1),deployment);
+    auto c=world();PlayerOrders deployment{1,{}};plan_orbital_bases(make_player_view(c,1),deployment,memory);
     assert(std::any_of(deployment.orders.begin(),deployment.orders.end(),[](const auto& order){const auto* b=std::get_if<OrbitalBaseOrder>(&order);return b && b->command.action==OrbitalBaseAction::Deploy;}));
 }
 void delayed_cancel_keeps_other_jobs() {
@@ -155,6 +155,35 @@ void delayed_cancel_keeps_other_jobs() {
     while(s.turn<delivery)tick(s);
     assert(base(s).orbitalBase.queue.size()==1 && base(s).orbitalBase.queue[0].id==102);
 }
+void ai_waits_for_orbital_acknowledgement() {
+    auto s=world(5000);deploy(s);base(s).orbitalBase.assemblyYears=6;base(s).orbitalBase.supported=true;
+    s.players[0].controller=PlayerController::Computer;acknowledge(s);
+    assert(communication_delay_turns(s,1,base(s).position)==34);
+    std::size_t sent=0;std::uint64_t request=0;
+    for(int year=0;year<39;++year)for(const auto& order:orbital_ai_year(s)) {
+        ++sent;request=order.command.item;
+    }
+    assert(sent==1 && request);
+    assert(base(s).orbitalBase.acceptedItems==std::vector<std::uint64_t>{request});
+    assert(base(s).orbitalBase.queue.empty() && s.fleets.size()==2);
+    auto newer=s;base(newer).telemetry.observedTurn=s.turn;
+    auto noReceipt=plan_computer_turn(make_player_view(newer,1));
+    assert(noReceipt.nextState.orbitalBuilds==s.players[0].computer.orbitalBuilds);
+    for(const auto& o:noReceipt.orders.orders)if(const auto* b=std::get_if<OrbitalBaseOrder>(&o))assert(b->command.action!=OrbitalBaseAction::QueueShip);
+    auto accepted=newer;auto& known=base(accepted).telemetry.orbitalBase;
+    known.lastItemId=request;known.acceptedItems={request};
+    known.queue={{s.players[0].computer.orbitalBuilds[0].design,0,false,request}};
+    const auto working=plan_computer_turn(make_player_view(accepted,1));
+    assert(working.nextState.orbitalBuilds==s.players[0].computer.orbitalBuilds);
+    for(const auto& o:working.orders.orders)if(const auto* b=std::get_if<OrbitalBaseOrder>(&o))assert(b->command.action!=OrbitalBaseAction::QueueShip);
+    acknowledge(s);
+    const auto next=plan_computer_turn(make_player_view(s,1));std::size_t fresh=0;
+    for(const auto& o:next.orders.orders)if(const auto* b=std::get_if<OrbitalBaseOrder>(&o);b && b->command.action==OrbitalBaseAction::QueueShip) {
+        ++fresh;assert(b->command.item && b->command.item!=request);
+    }
+    assert(fresh==1);
+    assert(next.nextState.orbitalBuilds==plan_computer_turn(make_player_view(s,1)).nextState.orbitalBuilds);
+}
 void orbit_control_and_knowledge() {
     auto s=world(); deploy(s); const auto old=base(s).orbitalBase.planet;
     Fleet duplicate=base(s); duplicate.id=2;duplicate.outpost=OutpostKind::None;duplicate.orbitalBase={};
@@ -170,8 +199,8 @@ void orbit_control_and_knowledge() {
     auto altered=make_player_view(remote,1).state;
     assert(base(altered).colonists==base(known).colonists);
     assert(base(altered).orbitalBase.assemblyYears==0);
-    PlayerOrders ai{1,{}};plan_orbital_bases(make_player_view(remote,1),ai);
+    ComputerState memory;PlayerOrders ai{1,{}};plan_orbital_bases(make_player_view(remote,1),ai,memory);
     for(const auto& o:ai.orders)assert(!std::holds_alternative<OrbitalBaseOrder>(o));
 }
 }
-int main(){assembly_and_build();shortages_cancellation_and_refit();radiation_and_life_support();delivered_transfers_and_commands();orbit_control_and_knowledge();combat_and_surface_founding();ai_received_orders();delayed_cancel_keeps_other_jobs();std::cout<<"Orbital shipyard tests passed\n";}
+int main(){assembly_and_build();shortages_cancellation_and_refit();radiation_and_life_support();delivered_transfers_and_commands();orbit_control_and_knowledge();combat_and_surface_founding();ai_received_orders();delayed_cancel_keeps_other_jobs();ai_waits_for_orbital_acknowledgement();std::cout<<"Orbital shipyard tests passed\n";}

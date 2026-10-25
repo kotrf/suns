@@ -7,7 +7,7 @@ Branch `codex/independent-orbital-shipyards` starts from main `0d4ec03`, merged
 The user chose permanently orbital yards founded from physically transported
 constructors, real workers/supplies and fitted passive radiation protection.
 [Complete first-slice rules and prototype balance](independent-orbital-shipyards.md).
-The branch uses save v97 / orders v40; #54/#61 remain open and #63 stays frozen.
+The branch uses save v98 / orders v40; #54/#61 remain open and #63 stays frozen.
 
 The implementation reuses anchored FleetIds, actual hull/fittings/cargo/combat,
 ordinary delayed commands and immutable telemetry. It adds six supplied annual
@@ -33,6 +33,21 @@ The catalog count and historical v94 fixture were updated for the new components
 and trailing extension. Full-field research/habitat/gate/navigation suites also
 pass. No manual balance, cross-platform or sanitizer acceptance is claimed.
 Prepared for review; no merge or issue closure is performed.
+
+Review follow-up — 25 October: two P2 reproductions failed on `583d605` before
+correction. Route source/target lists and explicit selection now withhold a
+remote newborn ship until delivered telemetry; enemy target choices also use
+received contacts. The AI keeps a per-base stable request ID in its durable
+controller state and waits for received acceptance and completion/cancellation.
+A newer empty queue alone cannot acknowledge an intention. Save v98 appends this
+memory to ORBI; v97/v96 migration is supported, orders stay v40. The regressions
+cover 39 years with a 34-year command delay and unavailable return telemetry,
+in-progress/completed acknowledgements, repeat planning, save/load continuation,
+and actual Qt source/target lists before and after delivered launch evidence.
+Full Debug/Qt application/test build succeeded; final CTest **90/90** passed
+(59.09 s, offscreen Qt), and `git diff --check` is clean. The new core/Qt
+reproductions failed on the pre-fix head; the save/load continuation and v97/v96
+migration checks now pass too. GitHub CI belongs to the newly pushed head.
 
 ## Historical branch — deferred/scheduled gates #195 (merged #232)
 

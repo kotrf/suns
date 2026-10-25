@@ -151,19 +151,29 @@ recheck co-location, ownership, supplies and hold capacity on receipt, after
 movement. Hidden stocks, refits, losses and work cannot rewrite old telemetry or
 player exports. A new remote ship's existence is withheld until received evidence.
 
+The route editor also filters unreported new hulls from source/target lists and
+rejects selecting them by ID; their names/positions appear only after receipt.
+
 The basic AI receives PlayerView only. It can fund one constructor at an available
 colony yard for a surveyed unowned uninhabitable target, load finite workers and
 supplies, fly to a radiation-safe orbit, deploy and queue an affordable available
-ship after received completion. Base stockpile information and design technology
+ship after received completion. It persists a stable build-request ID per base
+and waits for that ID in the delivered durable receipts and for its job to leave
+the received queue before requesting another hull. A newer empty snapshot without
+the receipt, hidden host acceptance/launch, and save/load cannot release the wait.
+Base stockpile information and design technology
 are never read from hidden host state. This first planner does not maintain a
 multi-base rescue/resupply network or automatically refit radiation screens.
 
 ## Persistence and acceptance
 
-Save **v97** adds the bounded ORBI tail for physical, confirmed, in-flight and
+Current formats are **save v98 / orders v40**. Save v97 introduced the bounded
+ORBI tail for physical, confirmed, in-flight and
 retained-loss base states, independent command payloads and private new-ship
-provenance. Orders **v40** adds OrbitalBaseOrder; the previous supported save v96 /
-orders v39 remain readable with no orbital founding state. Component and outpost
+provenance. Save v98 appends the controller's pending orbital-build intentions;
+v97 loads with no such memory, and v96 loads with no orbital founding state.
+Orders **v40** adds OrbitalBaseOrder; the order payload is unchanged by the review
+correction, and previous supported v39 packets remain readable. Component and outpost
 IDs append to existing enums. New operating-status reports remain ordinary
 immutable delayed messages. A historical v94 migration fixture strips later
 tails before reconstructing the genuine old layout.

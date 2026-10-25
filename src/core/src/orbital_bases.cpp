@@ -239,9 +239,18 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
 
 // A deliberately small honest planner: one expedition, received targets only.
 namespace suns {
-void plan_orbital_bases(const PlayerView& view, PlayerOrders& orders)
+void plan_orbital_bases(const PlayerView& view, PlayerOrders& orders, ComputerState& memory)
 {
     const auto& s=view.state;
+    // An empty old queue is not acknowledgement. Only a received durable
+    // receipt plus absence of that same job proves completion/cancellation.
+    std::erase_if(memory.orbitalBuilds,[&](const auto& intent) {
+        const auto* f=find_service_fleet(s,intent.fleet);
+        if (!f || f->owner!=view.player || f->outpost!=OutpostKind::OrbitalShipyard) return true;
+        const auto& b=f->orbitalBase;
+        return std::binary_search(b.acceptedItems.begin(),b.acceptedItems.end(),intent.item)
+            && std::none_of(b.queue.begin(),b.queue.end(),[&](auto job){return job.id==intent.item;});
+    });
     const Planet* target=nullptr;
     for (const auto& p:s.planets) if (!p.owner && survey_level(s,view.player,p.star)>=SurveyLevel::OrbitalSurvey
         && !orbital_base_at(s,p.id) && !find_orbital_station_at_planet(s,p.id)
@@ -253,12 +262,20 @@ void plan_orbital_bases(const PlayerView& view, PlayerOrders& orders)
     for (const auto& f:s.fleets) if (f.owner==view.player && fleet_construction_kit(s,f)==OutpostKind::OrbitalShipyard) {
         existing=true;
         if (f.outpost==OutpostKind::OrbitalShipyard) {
+            if (memory.orbitalBuilds.size()>=kMaximumComputerFleetGoals
+                || std::any_of(memory.orbitalBuilds.begin(),memory.orbitalBuilds.end(),[&](auto i){return i.fleet==f.id;})) continue;
             if (f.orbitalBase.assemblyYears==kOrbitalAssemblyYears && f.orbitalBase.queue.empty()
                 && f.orbitalBase.supported && f.colonists>=5000) {
                 for (const auto& d:s.shipDesigns) if (d.owner==view.player && d.hull!=ShipHullType::ExpeditionBase
                     && ship_design_available_to_player(s,view.player,d) && !ship_design_can_colonize(d)
                     && mineral_cargo_sufficient(f.minerals,ship_design_mineral_cost(d))) {
-                    orders.orders.push_back(OrbitalBaseOrder{f.id,{OrbitalBaseAction::QueueShip,0,d.id}}); break;
+                    const auto latest=std::max<std::uint64_t>(f.orbitalBase.lastItemId,s.turn<<32);
+                    if (latest==std::numeric_limits<std::uint64_t>::max()) break;
+                    const auto item=latest+1;
+                    orders.orders.push_back(OrbitalBaseOrder{f.id,{OrbitalBaseAction::QueueShip,0,d.id,item}});
+                    memory.orbitalBuilds.push_back({f.id,d.id,item,s.turn});
+                    std::sort(memory.orbitalBuilds.begin(),memory.orbitalBuilds.end(),[](auto a,auto b){return a.fleet<b.fleet;});
+                    break;
                 }
             }
             continue;
