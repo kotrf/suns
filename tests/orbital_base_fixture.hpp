@@ -46,6 +46,17 @@ inline GameState world(double distance=40, C shield=C::AdvancedRadiationScreen) 
     acknowledge(s); return s;
 }
 inline void deploy(GameState& s) { apply_orbital_base_command(s,base(s),{OrbitalBaseAction::Deploy,2}); }
+inline void recovery_transport(GameState& s) {
+    Fleet f; f.id=s.nextFleetId++; f.owner=1; f.design=202; f.ships={{202,1}};
+    f.name="Recovery transport"; f.position=base(s).position; f.fuel=0;
+    s.fleets.push_back(f);
+}
+inline OrbitalBaseCommand retirement(bool rebuild=false, std::uint64_t id=100) {
+    OrbitalBaseCommand c; c.action=rebuild?OrbitalBaseAction::RebuildStation:OrbitalBaseAction::Decommission;
+    c.receiver=2; c.item=id;
+    if(rebuild)c.station=StationLoadout{OrbitalStationHullType::Starbase,{},true,true};
+    return c;
+}
 inline void tick(GameState& s, std::vector<Order> orders={}) { s=TurnProcessor{}.process(s,{PlayerOrders{1,std::move(orders)}}); }
 // Isolate the yard planner's ordinary orders while retaining full controller memory.
 inline std::vector<OrbitalBaseOrder> orbital_ai_year(GameState& s) {

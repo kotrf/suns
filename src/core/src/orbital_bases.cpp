@@ -60,9 +60,56 @@ std::uint64_t orbital_radiation_losses(const GameState& s, const Fleet& f)
     const auto rate = std::min(excess, 100);
     return (f.colonists / 500) * rate + ((f.colonists % 500) * rate + 499) / 500;
 }
+MineralCargo orbital_base_recovery(const GameState& s, const Fleet& f)
+{
+    MineralCargo bill{};
+    for (const auto stack : fleet_ship_stacks(f)) if (const auto* d = find_ship_design(s, stack.design)) {
+        const auto m = ship_design_mineral_cost(*d);
+        bill.ironium += m.ironium * stack.count;
+        bill.boranium += m.boranium * stack.count;
+        bill.germanium += m.germanium * stack.count;
+    }
+    bill.ironium += 20 * f.orbitalBase.assemblyYears;
+    bill.boranium += 10 * f.orbitalBase.assemblyYears;
+    bill.germanium += 20 * f.orbitalBase.assemblyYears;
+    const auto fraction = std::clamp(100 - f.damagePercent, 0.0, 100.0) / 400;
+    return {std::floor(bill.ironium * fraction), std::floor(bill.boranium * fraction),
+        std::floor(bill.germanium * fraction)};
+}
+std::string orbital_retirement_error(const GameState& s, const Fleet& f, const OrbitalBaseCommand& c)
+{
+    if (f.outpost != OutpostKind::OrbitalShipyard) return "Not an independent orbital base";
+    if (f.colonists) return "Evacuate all residents first";
+    if (!f.scienceSamples.empty() || f.xenocrystal) return "Unload all specimens and xenocrystal first";
+    if (!f.orbitalBase.queue.empty()) return "Cancel remaining ship/refit jobs first (investment is lost)";
+    if (f.damagePercent >= 100) return "Receiving collar disabled by damage";
+    const auto* receiver = find_service_fleet(s, c.receiver);
+    if (!receiver || receiver->id == f.id || receiver->owner != f.owner
+        || receiver->outpost != OutpostKind::None || receiver->damagePercent >= 100
+        || !same_position(receiver->position, f.position)) return "Waiting for the designated recovery transport at the base";
+    const auto recovered = orbital_base_recovery(s, f);
+    if (fleet_cargo_used(s, *receiver) + mineral_cargo_mass(f.minerals) + mineral_cargo_mass(recovered)
+        > fleet_cargo_capacity(s, *receiver)) return "Recovery transport needs room for all stocks and recovered I/B/G";
+    if (receiver->fuel + f.fuel > fleet_fuel_capacity(s, *receiver)) return "Recovery transport needs tank space for all remaining fuel";
+    if (c.action == OrbitalBaseAction::RebuildStation) {
+        const auto* p = find_planet(s, f.orbitalBase.planet);
+        if (!p || p->owner != f.owner || !p->population) return "Station rebuilding requires your populated surface colony";
+        if (!c.station || !station_loadout_available(s, f.owner, *c.station)) return "Waiting for station technology/access";
+        if (find_orbital_station_at_planet(s, p->id)
+            || std::any_of(p->productionQueue.begin(), p->productionQueue.end(), [](const auto& i) {
+                return i.kind == ProductionKind::OrbitalStation;
+            })) return "Another station or station project occupies this orbit";
+    }
+    return {};
+}
 std::string orbital_base_status(const GameState& s, const Fleet& f)
 {
     if (f.outpost != OutpostKind::OrbitalShipyard) return "Mobile orbital constructor";
+    if (f.orbitalBase.retirement) {
+        const auto error = orbital_retirement_error(s, f, *f.orbitalBase.retirement);
+        return error.empty() ? "Evacuated: recovery scheduled at the annual service phase"
+            : "Retirement waiting: " + error;
+    }
     if (!f.colonists) return "Empty: deliver workers";
     if (f.damagePercent >= 100) return "Disabled by damage";
     if (!f.orbitalBase.supported) return "Life support unavailable: emergency reserves / population losses";
@@ -76,12 +123,18 @@ std::string orbital_base_status(const GameState& s, const Fleet& f)
 }
 bool orbital_base_command_valid(const OrbitalBaseCommand& c)
 {
-    if (c.action > OrbitalBaseAction::Refit) return false;
+    if (c.action > OrbitalBaseAction::CancelRetirement) return false;
+    const bool retirement = c.action == OrbitalBaseAction::Decommission || c.action == OrbitalBaseAction::RebuildStation;
+    if (!retirement && (c.receiver || c.station)) return false;
     switch (c.action) {
     case OrbitalBaseAction::Deploy: return c.planet && !c.design && !c.item;
     case OrbitalBaseAction::QueueShip: case OrbitalBaseAction::Refit: return c.design && !c.planet;
     case OrbitalBaseAction::Cancel: return !c.planet && !c.design && c.item;
     case OrbitalBaseAction::SetActive: return !c.planet && !c.design && !c.item;
+    case OrbitalBaseAction::Decommission: return !c.planet && !c.design && c.item && c.receiver && !c.station;
+    case OrbitalBaseAction::RebuildStation: return !c.planet && !c.design && c.item && c.receiver
+        && c.station && station_loadout_valid(*c.station);
+    case OrbitalBaseAction::CancelRetirement: return !c.planet && !c.design && c.item;
     }
     return false;
 }
@@ -135,6 +188,25 @@ void apply_orbital_base_command(GameState& s, Fleet& f, const OrbitalBaseCommand
     }
     if (f.outpost != OutpostKind::OrbitalShipyard) return;
     if (c.action == OrbitalBaseAction::SetActive) { f.orbitalBase.active = c.active; return; }
+    if (c.action == OrbitalBaseAction::CancelRetirement) {
+        auto& b = f.orbitalBase;
+        if (!std::binary_search(b.acceptedItems.begin(), b.acceptedItems.end(), c.item)) {
+            if (b.acceptedItems.size() >= 100000) return;
+            b.acceptedItems.insert(std::lower_bound(b.acceptedItems.begin(), b.acceptedItems.end(), c.item), c.item);
+            b.lastItemId = std::max(b.lastItemId, c.item);
+        }
+        if (b.retirement && b.retirement->item == c.item) b.retirement.reset();
+        return;
+    }
+    if (c.action == OrbitalBaseAction::Decommission || c.action == OrbitalBaseAction::RebuildStation) {
+        auto& b = f.orbitalBase;
+        if (b.retirement || b.acceptedItems.size() >= 100000
+            || std::binary_search(b.acceptedItems.begin(), b.acceptedItems.end(), c.item)) return;
+        b.acceptedItems.insert(std::lower_bound(b.acceptedItems.begin(), b.acceptedItems.end(), c.item), c.item);
+        b.lastItemId = std::max(b.lastItemId, c.item);
+        b.retirement = c;
+        return;
+    }
     if (c.action == OrbitalBaseAction::Cancel) {
         auto& base=f.orbitalBase;
         // A faster newer cancel may overtake its original slow build packet.
@@ -147,6 +219,7 @@ void apply_orbital_base_command(GameState& s, Fleet& f, const OrbitalBaseCommand
         std::erase_if(base.queue, [&](const auto& item) { return item.id == c.item; });
         return;
     }
+    if (f.orbitalBase.retirement) return;
     const auto* d = find_ship_design(s, c.design);
     if (!d || !ship_design_available_to_player(s, f.owner, *d) || f.orbitalBase.queue.size() >= 128) return;
     if (c.action == OrbitalBaseAction::Refit) {
@@ -163,6 +236,7 @@ void apply_orbital_base_command(GameState& s, Fleet& f, const OrbitalBaseCommand
 void service_orbital_bases(GameState& s, std::uint64_t turn)
 {
     std::vector<FleetId> ids;
+    std::vector<FleetId> retired;
     for (const auto& f : s.fleets) if (f.outpost == OutpostKind::OrbitalShipyard) ids.push_back(f.id);
     std::sort(ids.begin(), ids.end());
     for (const auto id : ids) {
@@ -178,6 +252,33 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
         };
         b.servicedTurn = turn; b.populationLost = 0; b.supported = false;
         b.exposure = std::max(0, int(b.background) - orbital_screen(s, f));
+        if (b.retirement && orbital_retirement_error(s, f, *b.retirement).empty()) {
+            const auto command = *b.retirement;
+            auto& receiver = *std::find_if(s.fleets.begin(), s.fleets.end(), [&](const auto& r) { return r.id == command.receiver; });
+            const auto recovered = orbital_base_recovery(s, f);
+            receiver.minerals.ironium += f.minerals.ironium + recovered.ironium;
+            receiver.minerals.boranium += f.minerals.boranium + recovered.boranium;
+            receiver.minerals.germanium += f.minerals.germanium + recovered.germanium;
+            receiver.fuel += f.fuel;
+            if (command.station) {
+                auto& p = *std::find_if(s.planets.begin(), s.planets.end(), [&](const auto& p) { return p.id == b.planet; });
+                ProductionItem item{ProductionKind::OrbitalStation, station_build_cost(*command.station)};
+                item.station = StationConstruction{*command.station};
+                p.productionQueue.push_back(std::move(item)); // Normal full-price colony production, starting next year.
+            }
+            transfer_fleet_report_outbox(s, f.owner, f.id, receiver.id);
+            queue_player_report(s, f.owner, PlayerReportKind::OrbitalBaseStatus, f.position, turn,
+                0, b.planet, f.id, 0, ProductionKind::OrbitalStation, command.station ? 5 : 4,
+                ResearchField::Electronics, 0, recovered, 0, {}, 0, {}, receiver.id);
+            const auto delivery = find_player(s, f.owner)->pendingPlayerReports.back().deliveryTurn;
+            if (delivery > turn) {
+                auto contact = fleet_player_view(s, f);
+                contact.pendingCommands.clear(); contact.telemetryInTransit = f.telemetryInTransit;
+                s.pendingFleetLossContacts.push_back({std::move(contact), delivery});
+            }
+            retired.push_back(f.id);
+            continue;
+        }
         if (!f.colonists) { if (previouslySupported) report(2); continue; }
         if (f.damagePercent < 100 && f.fuel >= 1 && pay(f, {1, 1, 1})) {
             f.fuel -= 1; b.supported = true;
@@ -187,7 +288,7 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
         const auto radiation = orbital_radiation_losses(s, f);
         b.populationLost += radiation; f.colonists -= radiation;
         if (b.populationLost || b.supported != previouslySupported) report(b.supported ? 1 : 0);
-        if (!b.supported || !b.active || !f.colonists) continue;
+        if (!b.supported || !b.active || !f.colonists || b.retirement) continue;
         if (b.assemblyYears < kOrbitalAssemblyYears) {
             if (f.colonists >= 5000 && pay(f, {20, 10, 20})) {
                 ++b.assemblyYears;
@@ -234,6 +335,7 @@ void service_orbital_bases(GameState& s, std::uint64_t turn)
             s.fleets.push_back(std::move(ship)); // No free initial fuel or minerals.
         }
     }
+    std::erase_if(s.fleets, [&](const auto& f) { return std::binary_search(retired.begin(), retired.end(), f.id); });
 }
 } // namespace suns
 
@@ -262,6 +364,7 @@ void plan_orbital_bases(const PlayerView& view, PlayerOrders& orders, ComputerSt
     for (const auto& f:s.fleets) if (f.owner==view.player && fleet_construction_kit(s,f)==OutpostKind::OrbitalShipyard) {
         existing=true;
         if (f.outpost==OutpostKind::OrbitalShipyard) {
+            if (f.orbitalBase.retirement) continue;
             if (memory.orbitalBuilds.size()>=kMaximumComputerFleetGoals
                 || std::any_of(memory.orbitalBuilds.begin(),memory.orbitalBuilds.end(),[&](auto i){return i.fleet==f.id;})) continue;
             if (f.orbitalBase.assemblyYears==kOrbitalAssemblyYears && f.orbitalBase.queue.empty()

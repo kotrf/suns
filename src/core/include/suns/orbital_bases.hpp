@@ -10,6 +10,8 @@ inline constexpr std::uint32_t kOrbitalAnnualWork = 40;
 [[nodiscard]] std::uint8_t orbital_screen(const GameState&, const Fleet&);
 [[nodiscard]] std::uint64_t orbital_radiation_losses(const GameState&, const Fleet&);
 [[nodiscard]] std::string orbital_base_status(const GameState&, const Fleet&);
+[[nodiscard]] MineralCargo orbital_base_recovery(const GameState&, const Fleet&);
+[[nodiscard]] std::string orbital_retirement_error(const GameState&, const Fleet&, const OrbitalBaseCommand&);
 [[nodiscard]] bool orbital_base_command_valid(const OrbitalBaseCommand&);
 [[nodiscard]] bool submit_orbital_base_command(GameState&, PlayerId, FleetId, const OrbitalBaseCommand&);
 void apply_orbital_base_command(GameState&, Fleet&, const OrbitalBaseCommand&);

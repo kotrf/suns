@@ -899,6 +899,14 @@ std::uint64_t fleet_report_delivery_turn(const GameState& state, PlayerId owner,
     return turn+communication_delay_turns(state,owner,position,turn);
 }
 
+void transfer_fleet_report_outbox(GameState& state, PlayerId player, FleetId source, FleetId receiver)
+{
+    visit_fleet_report_outbox(state, [&](PlayerId owner, auto& report) {
+        if (owner == player && report.deliveryTurn == kAwaitingTransmission && report.transmissionFleet == source)
+            report.transmissionFleet = receiver;
+    });
+}
+
 void dispatch_fleet_report_outbox(GameState& state)
 {
     visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
@@ -918,6 +926,10 @@ void dispatch_fleet_report_outbox(GameState& state)
                 for(auto& loss:state.pendingStationContacts) if(loss.deliveryTurn==kAwaitingTransmission && loss.lastContact.owner==owner)
                     if(std::any_of(report.battle->units.begin(),report.battle->units.end(),[&](const auto& u){return u.owner==owner && u.station==loss.lastContact.id;})) loss.deliveryTurn=report.deliveryTurn;
             }
+            if (report.kind == PlayerReportKind::OrbitalBaseStatus && (report.quantity == 4 || report.quantity == 5))
+                for (auto& loss : state.pendingFleetLossContacts)
+                    if (loss.deliveryTurn == kAwaitingTransmission && loss.lastContact.owner == owner
+                        && loss.lastContact.id == report.fleet) loss.deliveryTurn = report.deliveryTurn;
         }
     });
 }

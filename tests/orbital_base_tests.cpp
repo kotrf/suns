@@ -202,5 +202,125 @@ void orbit_control_and_knowledge() {
     ComputerState memory;PlayerOrders ai{1,{}};plan_orbital_bases(make_player_view(remote,1),ai,memory);
     for(const auto& o:ai.orders)assert(!std::holds_alternative<OrbitalBaseOrder>(o));
 }
+void retirement_evacuation_and_atomic_recovery() {
+    auto s=world();deploy(s);recovery_transport(s);base(s).fuel=20;
+    base(s).orbitalBase.assemblyYears=3;
+    auto damaged=base(s);damaged.damagePercent=50;
+    const auto full=orbital_base_recovery(s,base(s)),half=orbital_base_recovery(s,damaged);
+    assert(half.ironium<=full.ironium/2 && half.boranium<=full.boranium/2 && half.germanium<=full.germanium/2);
+    const auto request=retirement();
+    apply_orbital_base_command(s,base(s),request);
+    assert(base(s).orbitalBase.retirement);
+    assert(orbital_retirement_error(s,base(s),request).find("residents")!=std::string::npos);
+    const auto stages=base(s).orbitalBase.assemblyYears;
+    tick(s);assert(base(s).orbitalBase.assemblyYears==stages); // Retirement suspends manufacture, not upkeep.
+    const auto people=base(s).colonists;
+    const auto recovery=orbital_base_recovery(s,base(s)),stock=base(s).minerals;
+    const auto fuel=base(s).fuel;
+    tick(s,{TransferCargoOrder{{0,1},{0,2},people,{}}}); // Same service phase sees the real evacuation.
+    assert(!orbital_base_at(s,2) && s.fleets.size()==1 && s.fleets[0].id==2);
+    const auto& transport=s.fleets[0];
+    assert(transport.colonists==people && transport.fuel==fuel);
+    assert(transport.minerals.ironium==stock.ironium+recovery.ironium);
+    assert(transport.minerals.boranium==stock.boranium+recovery.boranium);
+    assert(transport.minerals.germanium==stock.germanium+recovery.germanium);
+    assert(!submit_orbital_base_command(s,1,1,request));
+    const auto recovered=transport.minerals;
+    tick(s,{OrbitalBaseOrder{1,request}});
+    assert(s.fleets[0].minerals.ironium==recovered.ironium); // No second refund after replay.
+    assert(!find_orbital_station_at_planet(s,2));
 }
-int main(){assembly_and_build();shortages_cancellation_and_refit();radiation_and_life_support();delivered_transfers_and_commands();orbit_control_and_knowledge();combat_and_surface_founding();ai_received_orders();delayed_cancel_keeps_other_jobs();ai_waits_for_orbital_acknowledgement();std::cout<<"Orbital shipyard tests passed\n";}
+void retirement_guards_and_cancellation() {
+    auto s=world();deploy(s);recovery_transport(s);base(s).colonists=0;base(s).fuel=20;
+    const auto request=retirement();
+    base(s).xenocrystal=1;
+    assert(orbital_retirement_error(s,base(s),request).find("specimens")!=std::string::npos);
+    base(s).xenocrystal=0;base(s).scienceSamples.push_back({});
+    assert(!orbital_retirement_error(s,base(s),request).empty());base(s).scienceSamples.clear();
+    apply_orbital_base_command(s,base(s),{OrbitalBaseAction::QueueShip,0,201,10});
+    apply_orbital_base_command(s,base(s),request);
+    assert(orbital_retirement_error(s,base(s),request).find("jobs")!=std::string::npos);
+    apply_orbital_base_command(s,base(s),{OrbitalBaseAction::Cancel,0,0,10});
+    s.fleets[1].position.x+=1;
+    assert(orbital_retirement_error(s,base(s),request).find("transport")!=std::string::npos);
+    s.fleets[1].position=base(s).position;
+    s.fleets[1].minerals={fleet_cargo_capacity(s,s.fleets[1]),0,0};
+    assert(orbital_retirement_error(s,base(s),request).find("room")!=std::string::npos);
+    const auto before=base(s).minerals;tick(s);
+    assert(orbital_base_at(s,2) && s.fleets[1].minerals.ironium==fleet_cargo_capacity(s,s.fleets[1]));
+    assert(base(s).minerals.ironium==before.ironium); // Empty blocked retirement spends nothing.
+    s.fleets[1].minerals={};s.fleets[1].fuel=fleet_fuel_capacity(s,s.fleets[1]);
+    assert(orbital_retirement_error(s,base(s),request).find("tank")!=std::string::npos);
+    s.fleets[1].fuel=0;
+    apply_orbital_base_command(s,base(s),{OrbitalBaseAction::CancelRetirement,0,0,request.item});
+    assert(!base(s).orbitalBase.retirement);
+    apply_orbital_base_command(s,base(s),request);assert(!base(s).orbitalBase.retirement);
+    const auto overtaken=retirement(false,101);
+    apply_orbital_base_command(s,base(s),{OrbitalBaseAction::CancelRetirement,0,0,overtaken.item});
+    apply_orbital_base_command(s,base(s),overtaken);assert(!base(s).orbitalBase.retirement);
+    const auto fresh=retirement(false,102);apply_orbital_base_command(s,base(s),fresh);
+    apply_orbital_base_command(s,base(s),fresh);assert(base(s).orbitalBase.retirement->item==102);
+    tick(s);assert(!orbital_base_at(s,2));
+}
+void rebuild_uses_normal_paid_station_production() {
+    auto s=world();deploy(s);recovery_transport(s);base(s).colonists=0;base(s).fuel=20;
+    auto request=retirement(true);
+    assert(orbital_retirement_error(s,base(s),request).find("colony")!=std::string::npos);
+    auto& colony=s.planets[1];colony.owner=1;colony.population=1000000;colony.industry=1000;
+    colony.environment=s.planets[0].environment;colony.habitability=100;colony.minerals={10000,10000,10000};
+    assert(orbital_retirement_error(s,base(s),request).empty());
+    auto control=s;tick(control);
+    tick(s,{OrbitalBaseOrder{1,request},OrbitalBaseOrder{1,request}});
+    assert(!orbital_base_at(s,2) && !find_orbital_station_at_planet(s,2));
+    assert(s.planets[1].productionQueue.size()==1);
+    assert(s.planets[1].productionQueue[0].remainingCost==station_build_cost(*request.station));
+    assert(s.planets[1].minerals.ironium==control.planets[1].minerals.ironium); // Ordinary population mining still runs; no station debit yet.
+    const auto bill=station_mineral_cost(*request.station);
+    tick(s,{OrbitalBaseOrder{1,request}});tick(control);
+    for(int i=0;i<20 && !find_orbital_station_at_planet(s,2);++i){tick(s);tick(control);}
+    const auto* station=find_orbital_station_at_planet(s,2);assert(station);
+    assert(station->hull==OrbitalStationHullType::Starbase && station->owner==1);
+    assert(s.planets[1].productionQueue.empty());
+    assert(std::abs(s.planets[1].minerals.ironium-control.planets[1].minerals.ironium+bill.ironium)<1e-6);
+    assert(std::abs(s.planets[1].minerals.boranium-control.planets[1].minerals.boranium+bill.boranium)<1e-6);
+    assert(std::abs(s.planets[1].minerals.germanium-control.planets[1].minerals.germanium+bill.germanium)<1e-6);
+    assert(colony_has_orbital_service(s,2,1,OrbitalStationModule::Shipyard));
+    auto occupied=world();deploy(occupied);recovery_transport(occupied);base(occupied).colonists=0;base(occupied).fuel=20;
+    occupied.planets[1].owner=1;occupied.planets[1].population=10000;
+    ProductionItem other{ProductionKind::OrbitalStation,24};other.station=StationConstruction{};
+    occupied.planets[1].productionQueue.push_back(other);
+    assert(orbital_retirement_error(occupied,base(occupied),request).find("project")!=std::string::npos);
+}
+void retirement_delay_and_silent_handover() {
+    auto s=world(5000);deploy(s);recovery_transport(s);base(s).colonists=0;base(s).fuel=20;acknowledge(s);
+    assert(submit_orbital_base_command(s,1,1,retirement()));
+    assert(!base(s).orbitalBase.retirement && base(s).pendingCommands.size()==1);
+    const auto delivery=base(s).pendingCommands[0].deliveryTurn;
+    while(s.turn<delivery) { tick(s);assert(orbital_base_at(s,2)); }
+    tick(s);assert(!orbital_base_at(s,2));
+    assert(make_player_view(s,1).state.fleets.size()==2); // Old base observation remains until retirement report.
+    auto silent=world(5000);deploy(silent);recovery_transport(silent);base(silent).colonists=0;base(silent).fuel=20;
+    base(silent).electronics.mode=EmissionMode::Passive;
+    silent.fleets[1].electronics.mode=EmissionMode::Passive;acknowledge(silent);
+    queue_player_report(silent,1,PlayerReportKind::OrbitalBaseStatus,base(silent).position,silent.turn,
+        0,2,1,0,ProductionKind::OrbitalStation,3);
+    assert(silent.players[0].pendingPlayerReports.back().transmissionFleet==1);
+    apply_orbital_base_command(silent,base(silent),retirement());
+    tick(silent);assert(!orbital_base_at(silent,2));
+    assert(silent.pendingFleetLossContacts.size()==1 && silent.pendingFleetLossContacts[0].deliveryTurn==kAwaitingTransmission);
+    auto& reports=silent.players[0].pendingPlayerReports;
+    const auto report=std::find_if(reports.begin(),reports.end(),[](const auto& r){return r.kind==PlayerReportKind::OrbitalBaseStatus && r.quantity==4;});
+    assert(report!=reports.end() && report->transmissionFleet==2);
+    const auto held=std::find_if(reports.begin(),reports.end(),[](const auto& r){return r.kind==PlayerReportKind::OrbitalBaseStatus && r.quantity==3;});
+    assert(held!=reports.end() && held->transmissionFleet==2); // The old source's actual unsent report travelled locally.
+    silent.fleets[0].electronics.mode=EmissionMode::Standard;
+    tick(silent);
+    assert(silent.pendingFleetLossContacts[0].deliveryTurn!=kAwaitingTransmission);
+    const auto received=silent.pendingFleetLossContacts[0].deliveryTurn;
+    while(silent.turn<received)tick(silent);
+    assert(silent.pendingFleetLossContacts.empty());
+    assert(make_player_view(silent,1).state.fleets.size()==1);
+}
+
+}
+int main(){retirement_evacuation_and_atomic_recovery();retirement_guards_and_cancellation();rebuild_uses_normal_paid_station_production();retirement_delay_and_silent_handover();assembly_and_build();shortages_cancellation_and_refit();radiation_and_life_support();delivered_transfers_and_commands();orbit_control_and_knowledge();combat_and_surface_founding();ai_received_orders();delayed_cancel_keeps_other_jobs();ai_waits_for_orbital_acknowledgement();std::cout<<"Orbital shipyard tests passed\n";}

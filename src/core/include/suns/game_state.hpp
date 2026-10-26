@@ -1492,13 +1492,17 @@ struct ProbeMission {
     std::vector<ProbeSurvey> surveys; // Host-only onboard knowledge, omitted from telemetry.
 };
 
-enum class OrbitalBaseAction : std::uint8_t { Deploy, SetActive, QueueShip, Cancel, Refit };
+enum class OrbitalBaseAction : std::uint8_t {
+    Deploy, SetActive, QueueShip, Cancel, Refit, Decommission, RebuildStation, CancelRetirement
+};
 struct OrbitalBaseCommand {
     OrbitalBaseAction action{OrbitalBaseAction::Deploy};
     PlanetId planet{};
     ShipDesignId design{};
     std::uint64_t item{}; // Stable build request, never a queue index. Zero allocates on receipt.
     bool active{true};
+    FleetId receiver{}; // Physical recovery transport; no abstract refund.
+    std::optional<StationLoadout> station; // Rebuild at an owned populated colony.
 };
 struct OrbitalBuildItem {
     ShipDesignId design{};
@@ -1515,6 +1519,7 @@ struct OrbitalBaseState {
     std::uint64_t lastItemId{};
     std::vector<std::uint64_t> acceptedItems; // Sorted durable receipts, including completed/cancelled jobs.
     std::vector<OrbitalBuildItem> queue;
+    std::optional<OrbitalBaseCommand> retirement; // Received intent; waits for safe evacuation/recovery.
 };
 
 struct FleetTelemetry {

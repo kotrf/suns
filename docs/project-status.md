@@ -1,6 +1,34 @@
 # Project status and development handoff
 
-## Current implementation — independent orbital founding (#54 / #61)
+## Current work — orbital base retirement and colony rebuilding (#54 / #61)
+
+Branch `codex/orbital-base-lifecycle` starts from fresh main `6d04c44`, merged
+#233. The reviewed #233 head `f959ee9` passed GitHub CI; its tree is identical
+to that main merge. Main formats are save v98 / orders v40; this branch introduces
+save v99 / orders v41. #54/#61 remain open, #63 stays frozen.
+
+The user selected base lifecycle as the next slice. Safe delayed retirement
+waits for evacuation and real recovery transport capacity, conserves remaining
+stocks/fuel, and recovers 25% of the current fitted hull/paid assembly mineral
+bill reduced by damage. Colony rebuilding queues a full-price ordinary station
+only after actual retirement; no services are granted while it builds. Stable
+request/cancel receipts and delayed completion knowledge survive save/load and
+PBEM. Station capture and automatic destructive AI policies remain future work.
+[Detailed rules](independent-orbital-shipyards.md#retirement-and-colony-station-rebuilding-54--61).
+
+Validation: GCC 14.2 / Qt 6.12.0 Debug full application/test build succeeded.
+Final offscreen CTest **90/90** passed (57.86 s), and `git diff --check` is clean.
+New scenarios cover same-year real evacuation/recovery, shared-hold/tank guards,
+precious cargo and queued-job blockers, one-time damage-adjusted recovery,
+delayed/overtaking cancellation, full normal station production/mineral payment,
+34-year command delay, silent report handover, immutable player exports,
+physical/received/in-transit retirement snapshots, retained dismantled contacts,
+v98/v97/v96 migration, malformed ORLC state and PBEM payloads. The station-cost
+control includes ordinary population mining rather than assuming fixed stocks.
+Validation is Linux/offscreen Qt; no manual balance, cross-platform or sanitizer
+acceptance is claimed. Prepared for review; no merge or issue closure performed.
+
+## Merged implementation — independent orbital founding (#233, historical branch checkpoint)
 
 Branch `codex/independent-orbital-shipyards` starts from main `0d4ec03`, merged
 #232. Its reviewed head `004da54` passed GitHub CI; main is save v96 / orders v39.

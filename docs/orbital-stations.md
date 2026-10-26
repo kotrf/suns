@@ -109,3 +109,11 @@ constructor permanently anchored at a planet without surface colonization. Real
 workers, delivered materials/fuel, separate manufacture and fitted radiation
 protection are required. It shares the single orbital station slot and reuses
 the anchored hull/combat/contact mechanisms; it is not a flying shipyard.
+
+An evacuated independent yard can now be dismantled into a real recovery
+transport. Over an owned populated colony it can instead be replaced by one
+full-price ordinary station project: the old hull is removed before normal
+construction starts, so services are unavailable during rebuilding. Stocks,
+fuel, partial material recovery, delayed cancellation and report rules are in
+the linked independent-yard document. Station capture is unchanged and remains
+outside this slice.

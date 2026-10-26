@@ -3,12 +3,24 @@ void writeOrbitalCommand(QDataStream& out, const OrbitalBaseCommand& c)
 {
     if (!orbital_base_command_valid(c)) { out.setStatus(QDataStream::WriteFailed); return; }
     writeEnum(out,c.action); out << quint32(c.planet) << quint32(c.design) << quint64(c.item) << quint8(c.active);
+    if (c.action == OrbitalBaseAction::Decommission || c.action == OrbitalBaseAction::RebuildStation) {
+        out << quint32(c.receiver);
+        if (c.station) writeStationFit(out, StationConstruction{*c.station});
+    }
 }
 void readOrbitalCommand(QDataStream& in, OrbitalBaseCommand& c)
 {
     quint8 active{}; quint64 item{};
-    if (!readEnum(in,c.action,quint8(OrbitalBaseAction::Refit))) return;
+    if (!readEnum(in,c.action,quint8(gReadSaveFormatVersion >= 99 ? OrbitalBaseAction::CancelRetirement : OrbitalBaseAction::Refit))) return;
     in >> c.planet >> c.design >> item >> active; c.item=item; c.active=active;
+    if (c.action == OrbitalBaseAction::Decommission || c.action == OrbitalBaseAction::RebuildStation) {
+        in >> c.receiver;
+        if (c.action == OrbitalBaseAction::RebuildStation) {
+            StationConstruction station; readStationFit(in, station);
+            if (station.refitStation) markCorrupt(in);
+            c.station = std::move(station.loadout);
+        }
+    }
     if (active>1 || !orbital_base_command_valid(c)) markCorrupt(in);
 }
 void writeOrbitalBase(QDataStream& out, const OrbitalBaseState& b)
@@ -135,5 +147,56 @@ void readOrbitalBases(QDataStream& stream, GameState& state)
             if (!computer_state_valid(player,state.turn)) {markCorrupt(in);break;}
         }
     }
+    if (in.status()!=QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
+}
+
+// v99: keep the v97/v98 ORBI layout intact for legacy readers/fixtures.
+void writeOrbitalLifecycle(QDataStream& stream, const GameState& state)
+{
+    QByteArray payload; QDataStream out(&payload,QIODevice::WriteOnly); out.setVersion(stream.version());
+    out << quint32(state.fleets.size()+state.pendingFleetLossContacts.size()+state.wormholeTransits.size());
+    const auto writeState = [&](const OrbitalBaseState& b) {
+        out << quint8(b.retirement.has_value());
+        if (b.retirement) writeOrbitalCommand(out, *b.retirement);
+    };
+    const auto write = [&](const Fleet& f) {
+        out << quint32(f.id); writeState(f.orbitalBase); writeState(f.telemetry.orbitalBase);
+        out << quint32(f.telemetryInTransit.size());
+        for (const auto& p : f.telemetryInTransit) writeState(p.telemetry.orbitalBase);
+    };
+    for (const auto& f : state.fleets) write(f);
+    for (const auto& f : state.pendingFleetLossContacts) write(f.lastContact);
+    for (const auto& f : state.wormholeTransits) write(f.lastContact);
+    if (out.status()!=QDataStream::Ok) { stream.setStatus(QDataStream::WriteFailed); return; }
+    stream << quint32(0x4f524c43) << quint32(payload.size()); stream.writeRawData(payload.data(),payload.size());
+}
+void readOrbitalLifecycle(QDataStream& stream, GameState& state)
+{
+    quint32 magic{},size{},count{}; stream >> magic >> size;
+    if (magic!=0x4f524c43 || size>64*1024*1024) { markCorrupt(stream); return; }
+    QByteArray payload(size,'\0');
+    if (stream.readRawData(payload.data(),size)!=int(size)) { markCorrupt(stream); return; }
+    QDataStream in(payload); in.setVersion(stream.version());
+    if (!readCount(in,count) || count!=state.fleets.size()+state.pendingFleetLossContacts.size()+state.wormholeTransits.size()) { markCorrupt(stream); return; }
+    const auto readState = [&](OrbitalBaseState& b, OutpostKind kind) {
+        quint8 has{}; in >> has;
+        if (has>1) { markCorrupt(in); return; }
+        if (!has) return;
+        OrbitalBaseCommand c; readOrbitalCommand(in,c);
+        if (kind!=OutpostKind::OrbitalShipyard
+            || (c.action!=OrbitalBaseAction::Decommission && c.action!=OrbitalBaseAction::RebuildStation)
+            || !std::binary_search(b.acceptedItems.begin(), b.acceptedItems.end(), c.item)) { markCorrupt(in); return; }
+        b.retirement = std::move(c);
+    };
+    const auto read = [&](Fleet& f) {
+        quint32 id{},packets{}; in >> id;
+        if (id!=f.id) { markCorrupt(in); return; }
+        readState(f.orbitalBase,f.outpost); readState(f.telemetry.orbitalBase,f.telemetry.outpost);
+        if (!readCount(in,packets) || packets!=f.telemetryInTransit.size()) { markCorrupt(in); return; }
+        for (auto& p : f.telemetryInTransit) readState(p.telemetry.orbitalBase,p.telemetry.outpost);
+    };
+    for (auto& f : state.fleets) read(f);
+    for (auto& f : state.pendingFleetLossContacts) read(f.lastContact);
+    for (auto& f : state.wormholeTransits) read(f.lastContact);
     if (in.status()!=QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }

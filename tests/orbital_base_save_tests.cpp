@@ -48,7 +48,7 @@ void migration_and_corruption(const QString& p) {
     auto previous=world();deploy(previous);acknowledge(previous);assert(write_save_game_file(p,data(previous),error));
     auto v97=bytes(p);const auto at97=v97.lastIndexOf(marker);assert(at97>0);quint32 size97{};
     {QDataStream in(v97);assert(in.device()->seek(at97+4));in>>size97;}
-    assert(at97+8+size97==v97.size());
+    v97.resize(at97+8+size97); // Remove the later v99 ORLC extension.
     v97.chop(12); // v98 adds one player-count/id/empty-intent-count block.
     {QDataStream out(&v97,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{97};
         assert(out.device()->seek(at97+4));out<<quint32(size97-12);}
@@ -110,5 +110,67 @@ void hidden_exports_and_inflight(const QString& p) {
     assert(read_save_game_file(p+".one",loaded,error));
     assert(base(loaded.state).orbitalBase.assemblyYears==actual.assemblyYears && base(loaded.state).colonists==25000);
 }
+void lifecycle_persistence_and_player_exports(const QString& p) {
+    auto s=world(5000);deploy(s);recovery_transport(s);base(s).fuel=20;acknowledge(s);
+    const auto request=retirement(true);
+    assert(submit_orbital_base_command(s,1,1,request));
+    auto host=data(s);QString error;SaveGameData loaded;
+    assert(write_save_game_file(p,host,error));assert(read_save_game_file(p,loaded,error));
+    const auto& pending=base(loaded.state).pendingCommands.back().orbitalBase;
+    assert(pending && pending->receiver==2 && pending->station==request.station && pending->item==request.item);
+    // The accepted, blocked mission is distinct from an in-flight packet and survives its own tail.
+    apply_orbital_base_command(s,base(s),request);base(s).pendingCommands.clear();
+    host=data(s);assert(write_save_game_file(p,host,error));assert(read_save_game_file(p,loaded,error));
+    assert(base(loaded.state).orbitalBase.retirement->station==request.station);
+    assert(!base(loaded.state).telemetry.orbitalBase.retirement);
+    tick(s);tick(loaded.state);
+    assert(base(s).colonists==base(loaded.state).colonists);
+    assert(base(s).orbitalBase.retirement->item==base(loaded.state).orbitalBase.retirement->item);
+    assert(write_save_game_file(p,data(s),error));assert(read_save_game_file(p,loaded,error));
+    assert(!base(loaded.state).telemetry.orbitalBase.retirement);
+    assert(std::any_of(base(loaded.state).telemetryInTransit.begin(),base(loaded.state).telemetryInTransit.end(),
+        [](const auto& packet){return packet.telemetry.orbitalBase.retirement.has_value();}));
+    acknowledge(s);assert(write_save_game_file(p,data(s),error));assert(read_save_game_file(p,loaded,error));
+    assert(base(loaded.state).telemetry.orbitalBase.retirement->item==request.item);
+    auto corrupt=bytes(p);QByteArray lifecycleMarker;
+    {QDataStream out(&lifecycleMarker,QIODevice::WriteOnly);out<<quint32{0x4f524c43};}
+    const auto lifecycleAt=corrupt.lastIndexOf(lifecycleMarker);assert(lifecycleAt>0);
+    corrupt[lifecycleAt+16]=char(2); // Invalid retirement-presence flag in the bounded tail.
+    QFile bad(p+".bad-lifecycle");assert(bad.open(QIODevice::WriteOnly));bad.write(corrupt);bad.close();
+    assert(!read_save_game_file(p+".bad-lifecycle",loaded,error));
+    auto missingReceipt=s;base(missingReceipt).orbitalBase.acceptedItems.clear();base(missingReceipt).orbitalBase.lastItemId=0;
+    assert(write_save_game_file(p,data(missingReceipt),error));assert(!read_save_game_file(p,loaded,error));
+    // v98 has the same ORBI layout but no ORLC extension; a genuine old record gets no retirement intent.
+    auto legacy=data(world());assert(write_save_game_file(p,legacy,error));auto raw=bytes(p);
+    QByteArray marker;{QDataStream out(&marker,QIODevice::WriteOnly);out<<quint32{0x4f524c43};}
+    const auto at=raw.lastIndexOf(marker);assert(at>0);raw.resize(at);
+    {QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{98};}
+    QFile old(p+".v98");assert(old.open(QIODevice::WriteOnly));old.write(raw);old.close();
+    assert(read_save_game_file(p+".v98",loaded,error));assert(!base(loaded.state).orbitalBase.retirement);
+    // PBEM preserves stable IDs, physical recipients, station fits and overtaking cancellation.
+    TurnOrderFileData packet;packet.campaignId=55;packet.turn=s.turn;packet.turnToken=77;packet.orders.player=1;
+    packet.orders.orders={OrbitalBaseOrder{1,request},OrbitalBaseOrder{1,retirement(false,101)},
+        OrbitalBaseOrder{1,{OrbitalBaseAction::CancelRetirement,0,0,request.item}}};
+    packet.descriptions={"Rebuild","Dismantle","Cancel retirement"};
+    assert(write_turn_order_file(p+".orders",packet,error));TurnOrderFileData parsed;
+    assert(read_turn_order_file(p+".orders",parsed,error));
+    const auto& c=std::get<OrbitalBaseOrder>(parsed.orders.orders[0]).command;
+    assert(c.station==request.station && c.receiver==2 && c.item==100);
+    assert(std::get<OrbitalBaseOrder>(parsed.orders.orders[2]).command.action==OrbitalBaseAction::CancelRetirement);
+    // Hidden completion and changed transport stocks cannot alter the old player export.
+    auto remote=world(5000);deploy(remote);recovery_transport(remote);base(remote).colonists=0;base(remote).fuel=20;acknowledge(remote);
+    auto before=make_player_turn(data(remote),1);assert(write_save_game_file(p+".before",before,error));
+    apply_orbital_base_command(remote,base(remote),retirement());service_orbital_bases(remote,remote.turn);
+    assert(!orbital_base_at(remote,2) && remote.pendingFleetLossContacts.size()==1);
+    auto after=make_player_turn(data(remote),1);assert(write_save_game_file(p+".after",after,error));
+    assert(bytes(p+".before")==bytes(p+".after"));
+    assert(write_save_game_file(p,data(remote),error));assert(read_save_game_file(p,loaded,error));
+    assert(loaded.state.pendingFleetLossContacts.size()==1 && !orbital_base_at(loaded.state,2));
+    const auto receipt=remote.pendingFleetLossContacts[0].deliveryTurn;
+    while(remote.turn<receipt){tick(remote);tick(loaded.state);}
+    assert(remote.pendingFleetLossContacts.empty() && loaded.state.pendingFleetLossContacts.empty());
+    assert(remote.fleets[0].minerals.ironium==loaded.state.fleets[0].minerals.ironium);
 }
-int main(int argc,char** argv){QCoreApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());roundtrip(dir.filePath("roundtrip.suns"));ai_intent_survives_reload(dir.filePath("ai.suns"));migration_and_corruption(dir.filePath("migration.suns"));hidden_exports_and_inflight(dir.filePath("remote.suns"));}
+
+}
+int main(int argc,char** argv){QCoreApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());lifecycle_persistence_and_player_exports(dir.filePath("lifecycle.suns"));roundtrip(dir.filePath("roundtrip.suns"));ai_intent_survives_reload(dir.filePath("ai.suns"));migration_and_corruption(dir.filePath("migration.suns"));hidden_exports_and_inflight(dir.filePath("remote.suns"));}
