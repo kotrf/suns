@@ -1,6 +1,35 @@
 # Project status and development handoff
 
-## Current implementation — independent orbital founding (#54 / #61)
+## Current work — Medium-map UI preview performance
+
+Branch `codex/ui-preview-performance` starts from main `6d04c44`, merged #233,
+save v98 / orders v40. The independent retirement PR #234 remains separate;
+no format, balance, simulation or knowledge-rule changes are introduced here.
+
+The user reported map/panel slowdown at roughly 300 systems and a save freeze.
+A confirmed UI defect repeatedly ran a full TurnProcessor movement/logistics
+preview from polling panels even while idle. One per-window preview is now
+shared until the planning revision/player/turn changes; redraw invalidation
+covers edits, state updates, new games and same-year loads. Cargo regressions
+exercise same-size replacement, repeated reads and actual same-year save/load.
+The optional `suns_ui_performance_probe` target is outside CTest/default builds.
+[Reproduction, measurements and save-investigation boundary](ui-performance.md).
+
+Local GCC 14.2 / Qt 6.12 Debug/offscreen measurements: at 288 systems idle CPU
+changes from ~100% to 4.4% of one core, heartbeat gaps 317 → 22 ms, full redraw
+186 → 124 ms. At 1000 systems, gaps are 1170 → 53 ms; other refresh costs remain.
+All four measured fresh saves loaded successfully. The player's save freeze
+is not reproduced; OS/build provenance and chooser-versus-write stage are pending.
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+final offscreen CTest **90/90** passed (59.45 s), and `git diff --check` is clean.
+Four focused editor suites passed (1.93 s). The optional probe built and all
+four isolated 288/1000-system control/fixed runs saved and loaded successfully.
+Native file-dialog behavior, the player's exact campaign and other platforms
+remain unverified; no fix for the reported save freeze is claimed. Ready for
+review without automatic merge.
+
+## Merged implementation — independent orbital founding (#233, historical branch checkpoint)
 
 Branch `codex/independent-orbital-shipyards` starts from main `0d4ec03`, merged
 #232. Its reviewed head `004da54` passed GitHub CI; main is save v96 / orders v39.

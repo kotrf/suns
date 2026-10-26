@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "route_program_dock.hpp"
+#include "save_game.hpp"
 #include "suns/communications.hpp"
 #include "suns/reconnaissance.hpp"
 
@@ -16,6 +17,7 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTimer>
+#include <QTemporaryDir>
 #include <cassert>
 #include <cmath>
 
@@ -79,6 +81,35 @@ struct MainWindowTestAccess {
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static const GameState& state(const MainWindow& w) { return w.state_; }
+    static void planningRefreshRegressions(MainWindow& w)
+    {
+        installFullTransport(w);
+        const auto turn=w.state_.turn;
+        assert(w.selectedFleetPlanningView()->colonists==0);
+        w.colonistLoadSpin_->setValue(100);w.queueColonists();
+        assert(w.selectedFleetPlanningView()->colonists==100);
+        w.colonistLoadSpin_->setValue(200);w.queueColonists();
+        assert(w.pendingOrders_.orders.size()==1 && w.state_.turn==turn);
+        assert(w.selectedFleetPlanningView()->colonists==200); // Same-size replacement, same year.
+        const auto fuel=w.selectedFleetPlanningView()->fuel;
+        for (int i=0;i<20;++i) {
+            w.updateControls();
+            assert(w.selectedFleetPlanningView()->colonists==200);
+            assert(w.selectedFleetPlanningView()->fuel==fuel);
+        }
+        assert(w.state_.fleets.front().colonists==0 && w.state_.turn==turn);
+        w.pendingOrders_.orders.clear();w.pendingDescriptions_.clear();w.rebuildScene();
+        assert(w.selectedFleetPlanningView()->colonists==0);
+        // A different saved boundary can reuse both turn and fleet IDs.
+        auto saved=w.campaignSnapshot();auto& fleet=saved.state.fleets.front();
+        fleet.colonists=300;fleet.telemetry={};fleet.telemetry=confirmed_fleet_telemetry(saved.state,fleet);
+        QTemporaryDir dir;assert(dir.isValid());QString error;
+        const auto path=dir.filePath("same-year.suns");
+        assert(write_save_game_file(path,saved,error));assert(w.loadGameFromPath(path));
+        assert(w.state_.turn==turn && w.selectedFleetPlanningView()->colonists==300);
+        installFullTransport(w); // New session/fixture, again at that same year and ID.
+        assert(w.state_.turn==turn && w.selectedFleetPlanningView()->colonists==0);
+    }
     static QString systemInfo(const MainWindow& w) { return w.selectionLabel_->text(); }
     static void endTurn(MainWindow& w) { w.endTurn(); }
     static void selectStar(MainWindow& w, std::optional<StarId> star)
@@ -405,4 +436,5 @@ int main(int argc, char** argv)
     assert(dockWindow.statusBar()->currentMessage() == explanation);
     suns::MainWindowTestAccess::installOldSolReport(dockWindow, 1500);
     assert(transferButton->toolTip() == explanation);
+    suns::MainWindowTestAccess::planningRefreshRegressions(dockWindow);
 }

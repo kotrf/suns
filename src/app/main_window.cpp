@@ -609,9 +609,23 @@ std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
     if (!fleet) return std::nullopt;
     auto visible = fleet_player_view(state_, *fleet);
     if (!fleet_has_instant_link(state_, *fleet) || fleet_telemetry_age(state_, *fleet) != 0) return visible;
-    const auto preview = movementPhasePreviewState(state_, pendingOrders_, processor_);
+    const auto& preview = movementPlanningPreview();
     if (const auto* planned = findFleet(preview, fleet->id)) visible = *planned;
     return visible;
+}
+
+const GameState& MainWindow::movementPlanningPreview() const
+{
+    // Panels poll much more often than the game/order boundary changes. Share
+    // the identical simulation across those readers; rebuildScene invalidates
+    // it for edits, telemetry, loads and new games (including reused turn IDs).
+    if (!movementPreview_ || movementPreviewRevision_ != planningRevision_
+        || movementPreviewPlayer_ != pendingOrders_.player || movementPreview_->turn != state_.turn + 1) {
+        movementPreview_ = movementPhasePreviewState(state_, pendingOrders_, processor_);
+        movementPreviewRevision_ = planningRevision_;
+        movementPreviewPlayer_ = pendingOrders_.player;
+    }
+    return *movementPreview_;
 }
 
 const Planet* MainWindow::selectedFriendlyColonyForFleet() const
@@ -964,7 +978,7 @@ void MainWindow::updateControls()
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     const bool surveyed = star && is_surveyed(state_, pendingOrders_.player, star->id);
-    const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
+    const auto& movementPreview = movementPlanningPreview();
     const auto* plannedFleet = authoritativeFleet ? findFleet(movementPreview, authoritativeFleet->id) : nullptr;
     const bool instantLink = authoritativeFleet && fleet_has_instant_link(state_, *authoritativeFleet)
         && fleet_telemetry_age(state_, *authoritativeFleet) == 0;
