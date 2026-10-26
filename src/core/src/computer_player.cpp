@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/computer_player.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/combat.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/survey_probes.hpp"
@@ -904,8 +905,9 @@ bool computer_state_valid(const Player& player, std::uint64_t boundaryTurn)
     if (player.controller > PlayerController::Computer
         || player.computer.decisions.size() > kMaximumComputerDecisionRecords
         || player.computer.initialized != !player.computer.decisions.empty()
-        || player.computer.fleetGoals.size() > kMaximumComputerFleetGoals) return false;
-    if (!player.computer.initialized && (!player.computer.fleetGoals.empty() || player.computer.researchGoal)) return false;
+        || player.computer.fleetGoals.size() > kMaximumComputerFleetGoals
+        || player.computer.orbitalBuilds.size() > kMaximumComputerFleetGoals) return false;
+    if (!player.computer.initialized && (!player.computer.fleetGoals.empty() || !player.computer.orbitalBuilds.empty() || player.computer.researchGoal)) return false;
     if (player.controller == PlayerController::Human) return !player.computer.initialized;
     std::uint64_t previous = 0;
     for (const auto& record : player.computer.decisions) {
@@ -920,6 +922,11 @@ bool computer_state_valid(const Player& player, std::uint64_t boundaryTurn)
             || goal.target == 0 || goal.issuedTurn == 0 || goal.issuedTurn >= boundaryTurn
             || goal.reviewTurn < goal.issuedTurn) return false;
         previousFleet = goal.fleet;
+    }
+    previousFleet=0;
+    for (const auto& intent:player.computer.orbitalBuilds) {
+        if (intent.fleet<=previousFleet || !intent.design || !intent.item || !intent.issuedTurn || intent.issuedTurn>=boundaryTurn) return false;
+        previousFleet=intent.fleet;
     }
     if (player.computer.researchGoal && (player.computer.researchGoal->field > ResearchField::Weapons
         || player.computer.researchGoal->level == 0)) return false;
@@ -1061,6 +1068,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
             explain(reason,"Evacuate received failing orbital habitat with an available paid transport");break;
         }
     }
+    plan_orbital_bases(view, plan.orders, plan.nextState);
     // Materialize the same received-profile paths used by route_warp as normal
     // waypoints. Final arrival actions stay at their original destinations.
     for (auto& order:plan.orders.orders) if (auto* move=std::get_if<MoveFleetOrder>(&order)) {

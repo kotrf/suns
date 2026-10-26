@@ -105,3 +105,11 @@ Core and UI/save suites cover priorities, finite fuel and all three mineral
 limits, dry mass, missing/foreign clients, movement and arrivals, reorganization,
 repeat orders, delayed commands, UI authoring, save/PBEM round trips and hidden
 physical changes leaving exported evidence unchanged.
+
+## Independent orbital founding (#54 / #61)
+
+[Independent orbital shipyards](independent-orbital-shipyards.md) add a transported
+constructor permanently anchored at a planet without surface colonization. Real
+workers, delivered materials/fuel, separate manufacture and fitted radiation
+protection are required. It shares the single orbital station slot and reuses
+the anchored hull/combat/contact mechanisms; it is not a flying shipyard.

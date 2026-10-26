@@ -382,9 +382,13 @@ enum class ShipComponentType {
     ExpeditionDock,
     ExpeditionWorkshop,
     SurveyAutopilot,
+    OrbitalShipyardKit,
+    BulkRadiationScreen,
+    CompositeRadiationScreen,
+    AdvancedRadiationScreen,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::SurveyAutopilot;
+inline constexpr auto kLastShipComponent = ShipComponentType::AdvancedRadiationScreen;
 
 enum class ShipComponentKind {
     Engine,
@@ -852,6 +856,7 @@ enum class PlayerReportKind {
     XenocrystalAcquired,
     XenocrystalDepleted,
     ResonanceProjectStatus,
+    OrbitalBaseStatus,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1265,10 +1270,18 @@ struct ComputerDecision {
     bool operator==(const ComputerDecision&) const = default;
 };
 
+struct ComputerOrbitalBuild {
+    FleetId fleet{};
+    ShipDesignId design{};
+    std::uint64_t item{}, issuedTurn{};
+    bool operator==(const ComputerOrbitalBuild&) const = default;
+};
+
 struct ComputerState {
     bool initialized{};
     std::vector<ComputerDecision> decisions;
     std::vector<ComputerFleetGoal> fleetGoals;
+    std::vector<ComputerOrbitalBuild> orbitalBuilds;
     std::optional<ComputerResearchGoal> researchGoal;
     bool operator==(const ComputerState&) const = default;
 };
@@ -1336,7 +1349,7 @@ enum class FleetTask {
 
 // A paid constructor hull becomes a permanent, fixed installation. It keeps
 // its stable FleetId, fitted hull, cargo and the normal combat/contact model.
-enum class OutpostKind : std::uint8_t { None, FuelDepot, CommunicationsRelay };
+enum class OutpostKind : std::uint8_t { None, FuelDepot, CommunicationsRelay, OrbitalShipyard };
 
 enum class EmissionMode : std::uint8_t { Standard, Passive, RadioSilence };
 struct ElectronicsProgram {
@@ -1479,6 +1492,31 @@ struct ProbeMission {
     std::vector<ProbeSurvey> surveys; // Host-only onboard knowledge, omitted from telemetry.
 };
 
+enum class OrbitalBaseAction : std::uint8_t { Deploy, SetActive, QueueShip, Cancel, Refit };
+struct OrbitalBaseCommand {
+    OrbitalBaseAction action{OrbitalBaseAction::Deploy};
+    PlanetId planet{};
+    ShipDesignId design{};
+    std::uint64_t item{}; // Stable build request, never a queue index. Zero allocates on receipt.
+    bool active{true};
+};
+struct OrbitalBuildItem {
+    ShipDesignId design{};
+    std::uint32_t work{};
+    bool refit{};
+    std::uint64_t id{};
+};
+struct OrbitalBaseState {
+    PlanetId planet{};
+    std::uint8_t assemblyYears{}, reserveYears{};
+    bool active{true}, supported{};
+    std::uint64_t servicedTurn{}, populationLost{};
+    std::uint8_t background{}, exposure{};
+    std::uint64_t lastItemId{};
+    std::vector<std::uint64_t> acceptedItems; // Sorted durable receipts, including completed/cancelled jobs.
+    std::vector<OrbitalBuildItem> queue;
+};
+
 struct FleetTelemetry {
     std::uint64_t observedTurn{};
     Position position;
@@ -1497,6 +1535,7 @@ struct FleetTelemetry {
     double damagePercent{};
     ElectronicsProgram electronics;
     OutpostKind outpost{OutpostKind::None};
+    OrbitalBaseState orbitalBase;
     MobileBaseProgram mobileBase;
     std::uint64_t lastMovedTurn{};
     std::uint64_t lastServiceTurn{};
@@ -1515,6 +1554,7 @@ struct PendingFleetCommand {
     std::optional<MobileBaseProgram> mobileBase;
     std::optional<ProbeCommand> probe;
     std::optional<VisitorMission> visitor;
+    std::optional<OrbitalBaseCommand> orbitalBase;
 };
 
 struct PendingFleetTelemetry {
@@ -1557,6 +1597,7 @@ struct Fleet {
     double damagePercent{};
     ElectronicsProgram electronics;
     OutpostKind outpost{OutpostKind::None};
+    OrbitalBaseState orbitalBase;
     MobileBaseProgram mobileBase;
     std::uint64_t lastMovedTurn{};
     std::uint64_t lastServiceTurn{};
@@ -1564,6 +1605,7 @@ struct Fleet {
     std::uint32_t xenocrystal{};
     ProbeMission probe;
     VisitorMission visitor;
+    bool orbitalShipyardBirth{}; // Host provenance: hide a new remote ship until first received telemetry.
 };
 
 struct Minefield {

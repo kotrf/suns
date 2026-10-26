@@ -155,6 +155,7 @@ struct GateFleetOrder {
 
 struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; };
 struct SetFleetElectronicsOrder { FleetId fleet{}; ElectronicsProgram program; };
+struct OrbitalBaseOrder { FleetId fleet{}; OrbitalBaseCommand command; };
 struct SetMobileBaseOrder { FleetId fleet{}; MobileBaseProgram program; };
 struct TransferFleetFuelOrder {
     FleetId source{}, destination{};
@@ -226,7 +227,8 @@ using Order = std::variant<
     TransferXenocrystalOrder,
     SetResonanceLaboratoryOrder,
     SetProbeProgramOrder,
-    EncounterVisitorOrder>;
+    EncounterVisitorOrder,
+    OrbitalBaseOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

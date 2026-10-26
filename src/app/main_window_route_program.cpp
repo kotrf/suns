@@ -154,7 +154,7 @@ std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const Playe
         [&](const Fleet& candidate) { return candidate.id == fleet.id && candidate.owner == fleet.owner; });
     if (actual != state.fleets.end()) {
         for (auto it = actual->pendingCommands.rbegin(); it != actual->pendingCommands.rend(); ++it) {
-            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor) continue;
+            if (it->task || it->electronics || it->mobileBase || it->probe || it->visitor || it->orbitalBase) continue;
             const auto& command = it->program;
             return MoveFleetOrder{fleet.id, command.destination, command.warp,
                 command.arrivalAction, command.queuedWaypoints, command.repeatOrders,
@@ -765,13 +765,13 @@ std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
 std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
 {
     const auto source = selectedFleetForRouteProgram();
-    std::vector<FleetId> targets;
-    for (const auto& fleet : state_.fleets) {
-        if (fleet.id != source) targets.push_back(fleet.id);
-    }
-    for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player))
-        if (contact.id != source) targets.push_back(contact.id);
+    auto targets = availableOwnedFleetsForRouteProgram();
+    std::erase(targets, source);
+    for (const auto& contact : known_enemy_contacts(state_, pendingOrders_.player))
+        if (contact.fleet != source && !contact.lost && contact.quality != ContactQuality::Probable)
+            targets.push_back(contact.fleet);
     std::sort(targets.begin(), targets.end());
+    targets.erase(std::unique(targets.begin(), targets.end()), targets.end());
     return targets;
 }
 
@@ -779,7 +779,7 @@ std::vector<FleetId> MainWindow::availableOwnedFleetsForRouteProgram() const
 {
     std::vector<FleetId> fleets;
     for (const auto& fleet : state_.fleets) {
-        if (fleet.owner == pendingOrders_.player) fleets.push_back(fleet.id);
+        if (fleet.owner == pendingOrders_.player && !unreported_orbital_ship(state_,fleet)) fleets.push_back(fleet.id);
     }
     for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player)) fleets.push_back(contact.id);
     std::sort(fleets.begin(), fleets.end());
@@ -802,7 +802,7 @@ std::vector<FleetId> MainWindow::ownedFleetsAtSelectedSystem() const
 QString MainWindow::fleetSourceNameForRouteProgram(FleetId id) const
 {
     const auto* fleet = findFleet(state_, id);
-    if (!fleet) return fleetTargetNameForRouteProgram(id);
+    if (!fleet || unreported_orbital_ship(state_,*fleet)) return fleetTargetNameForRouteProgram(id);
     auto name = fleetTargetNameForRouteProgram(id);
     for (const auto& order : pendingOrders_.orders) {
         if (const auto* rename = std::get_if<RenameFleetOrder>(&order); rename && rename->fleet == id)
@@ -830,7 +830,7 @@ QString MainWindow::selectedSystemFleetHeading() const
 
 std::optional<Fleet> MainWindow::knownFleetTarget(FleetId id) const
 {
-    if(const auto* f=findFleet(state_,id); f && f->owner==pendingOrders_.player) return fleet_player_view(state_,*f);
+    if(const auto* f=findFleet(state_,id); f && f->owner==pendingOrders_.player && !unreported_orbital_ship(state_,*f)) return fleet_player_view(state_,*f);
     for(const auto& f:missing_fleet_contacts(state_,pendingOrders_.player)) if(f.id==id) return f;
     for(const auto& c:known_enemy_contacts(state_,pendingOrders_.player))
         if(c.fleet==id && !c.lost && c.quality!=ContactQuality::Probable) return recon_contact_fleet(c,state_.turn);
@@ -882,6 +882,7 @@ bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
     const auto* fleet = findFleet(state_, fleetId);
     const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     const bool ownContact = std::any_of(missing.begin(), missing.end(), [=](const auto& contact) { return contact.id == fleetId; });
+    if (fleet && unreported_orbital_ship(state_,*fleet)) return false;
     if ((!fleet || fleet->owner != pendingOrders_.player) && !ownContact) return false;
     if (selection_.fleet == fleetId) return true;
     warpControlFleetId_.reset();

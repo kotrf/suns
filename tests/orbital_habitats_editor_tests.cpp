@@ -117,6 +117,7 @@ void receiver_evidence_survives_reload_and_v94_migration()
     const auto at=data.lastIndexOf(marker);assert(at>0);
     quint32 magic{},size{};
     {QDataStream in(data);assert(in.device()->seek(at));in>>magic>>size;}
+    data.resize(at+8+size); // Remove subsequent extensions when constructing the historical v94 fixture.
     assert(at+8+size==data.size() && data.endsWith(QByteArray(4,'\0')));
     assert(quint8(data[data.size()-5])==quint8(PlanetaryRadarLevel::Full));
     data.remove(data.size()-5,1);

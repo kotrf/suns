@@ -81,3 +81,11 @@ planet-specific reconstruction. Queue reservations prevent overbooking ruins.
 ## Orbital habitat integration (#56)
 
 Occupied orbital habitats pay yearly upkeep (and affordable emergency-reserve recharge) before research allocation and optional queue work. Construction retains the existing 80-work/year engineering limit, paid progress and single slot. A newly completed support station helps the next annual maintenance phase. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.
+
+## Independent orbital shipyards
+
+[Staffed orbital yards](independent-orbital-shipyards.md) use their own received
+queue, workers and delivered orbital stocks, without a surface colony. Ship/refit
+materials are paid cumulatively as work is done; cancellation addresses a stable
+request ID and retains no refund. Ordinary colony production rules above are
+unchanged.

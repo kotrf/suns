@@ -44,10 +44,10 @@ void readOutposts(QDataStream& stream, GameState& state)
     }
     const auto read = [&](Fleet& f) {
         quint32 id{},packets{}; in >> id;
-        if (id!=f.id || !readEnum(in,f.outpost,quint8(OutpostKind::CommunicationsRelay))
-            || !readEnum(in,f.telemetry.outpost,quint8(OutpostKind::CommunicationsRelay))
+        if (id!=f.id || !readEnum(in,f.outpost,quint8(gReadSaveFormatVersion>=97?OutpostKind::OrbitalShipyard:OutpostKind::CommunicationsRelay))
+            || !readEnum(in,f.telemetry.outpost,quint8(gReadSaveFormatVersion>=97?OutpostKind::OrbitalShipyard:OutpostKind::CommunicationsRelay))
             || !readCount(in,packets) || packets!=f.telemetryInTransit.size()) { markCorrupt(in); return; }
-        for (auto& t:f.telemetryInTransit) if (!readEnum(in,t.telemetry.outpost,quint8(OutpostKind::CommunicationsRelay))) return;
+        for (auto& t:f.telemetryInTransit) if (!readEnum(in,t.telemetry.outpost,quint8(gReadSaveFormatVersion>=97?OutpostKind::OrbitalShipyard:OutpostKind::CommunicationsRelay))) return;
         if (!outpostCarrierValid(state,f)) markCorrupt(in);
     };
     for (auto& f:state.fleets) read(f);

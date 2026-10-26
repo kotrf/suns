@@ -1556,7 +1556,7 @@ void equipment_catalog_round_trip()
     value.state.players.front().technology.levels.fill(26);
     for (const auto& equipment : equipment_technologies()) {
         auto hull = equipment.component == ShipComponentType::SurveyAutopilot ? ShipHullType::SurveyProbe
-            : (equipment.component == ShipComponentType::ExpeditionDock || equipment.component == ShipComponentType::ExpeditionWorkshop) ? ShipHullType::ExpeditionBase
+            : (equipment.component == ShipComponentType::ExpeditionDock || equipment.component == ShipComponentType::ExpeditionWorkshop || equipment.component >= ShipComponentType::OrbitalShipyardKit) ? ShipHullType::ExpeditionBase
             : equipment.kind == ShipComponentKind::Bomb ? ShipHullType::B52Bomber
             : equipment.kind == ShipComponentKind::Mining ? ShipHullType::Miner
             : equipment.unarmedTransportOnly ? ShipHullType::SmallFreighter : ShipHullType::Nubian;

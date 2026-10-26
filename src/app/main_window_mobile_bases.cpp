@@ -66,7 +66,7 @@ void MainWindow::installMobileBases()
     // Rebuild a planning world from received owner evidence before every query.
     const auto knownWorld=[this] {
         GameState known=state_; known.fleets.clear();
-        for (const auto& f:state_.fleets) if (f.owner==pendingOrders_.player) known.fleets.push_back(fleet_player_view(state_,f));
+        for (const auto& f:state_.fleets) if (f.owner==pendingOrders_.player && !unreported_orbital_ship(state_,f)) known.fleets.push_back(fleet_player_view(state_,f));
         for (const auto& f:missing_fleet_contacts(state_,pendingOrders_.player))
             if (!find_service_fleet(known,f.id)) known.fleets.push_back(fleet_player_view(state_,f));
         return known;

@@ -168,7 +168,9 @@ ordering, surface bombing with orbital survivors, GUI order authoring, v93 migra
 annual guard save/load, private exports and PBEM payloads. Full validation results
 are recorded at the top of project-status before the PR is prepared.
 
-Future #56 work includes independent orbital founding, additional housing sizes,
-dedicated habitat combat, atmospheric/ocean/climate projects and bounded system
-engineering. Radical irreversible transformation stays deferred for a separate
+Independent staffed orbital shipyard founding is now a separate
+[#54/#61 slice](independent-orbital-shipyards.md), with no natural growth or
+planetary engineering support. Larger independent residential settlements,
+additional housing sizes, dedicated habitat combat, atmospheric/ocean/climate
+projects and bounded system engineering remain future #56 work. Radical irreversible transformation stays deferred for a separate
 preparation/evacuation/point-of-no-return/capture discussion. #56 stays open.

@@ -101,3 +101,11 @@ remain; all PBEM participants should use the same build.
 ## Orbital habitat integration (#56)
 
 Orbital habitat structures persist separately from the supporting station. A friendly Starbase/Fortress shipyard supports construction and occupied operation; its loss starts finite emergency reserve use rather than deleting residents instantly. No extra armed station or new station-capture rule is added. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.
+
+## Independent orbital founding (#54 / #61)
+
+[Independent orbital shipyards](independent-orbital-shipyards.md) add a transported
+constructor permanently anchored at a planet without surface colonization. Real
+workers, delivered materials/fuel, separate manufacture and fitted radiation
+protection are required. It shares the single orbital station slot and reuses
+the anchored hull/combat/contact mechanisms; it is not a flying shipyard.

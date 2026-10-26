@@ -6,6 +6,7 @@
 #include "suns/turn_processor.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/mobile_base.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -281,7 +282,7 @@ std::optional<std::uint32_t> complete_production(
             if (!complete_station_construction(state,planet,*item.station)) return std::nullopt;
             return find_orbital_station_at_planet(state,planet.id)->id;
         }
-        if (find_orbital_station_at_planet(state, planet.id)) return std::nullopt;
+        if (find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state,planet.id)) return std::nullopt;
         const auto id = state.nextOrbitalStationId++;
         state.orbitalStations.push_back({
             id,
@@ -441,7 +442,8 @@ std::uint32_t report_population(std::uint64_t population)
 bool hostile_station_blocks_landing(GameState& state, const Fleet& fleet, const Planet& planet)
 {
     const auto* station = find_orbital_station_at_planet(state, planet.id);
-    if (!station || station->owner == fleet.owner) return false;
+    const auto* base = orbital_base_at(state, planet.id);
+    if ((!station || station->owner == fleet.owner) && (!base || base->owner == fleet.owner)) return false;
     // Orbital control is required even against an unarmed dock. A failed
     // landing commits neither colonists nor minerals to the surface.
     const auto* player = find_player(state, fleet.owner);
@@ -2233,6 +2235,8 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
                 player,
                 value.fleet,
                 value.enabled ? FleetTask::RemoteMining : FleetTask::None);
+        } else if constexpr (std::is_same_v<T, OrbitalBaseOrder>) {
+            (void)submit_orbital_base_command(state, player, value.fleet, value.command);
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
             (void)submit_mobile_base_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
@@ -2475,7 +2479,7 @@ TurnResult TurnProcessor::process_with_events(
                                 [](const ProductionItem& item) {
                                     return item.kind == ProductionKind::OrbitalStation;
                                 });
-                            if (!find_orbital_station_at_planet(next, planet->id) && !alreadyQueued) {
+                            if (!find_orbital_station_at_planet(next, planet->id) && !orbital_base_at(next, planet->id) && !alreadyQueued) {
                                 planet->productionQueue.push_back({
                                     ProductionKind::OrbitalStation, kOrbitalDockCost, 0});
                             }
@@ -2668,6 +2672,7 @@ TurnResult TurnProcessor::process_with_events(
     // Shipyards supersede onboard repair; fleets recover only once per year.
     repair_fleet_damage(next, current);
     for (const auto& [player, fuel] : baseFuel) (void)transfer_mobile_base_fuel(next, player, fuel, next.turn + 1);
+    service_orbital_bases(next, next.turn + 1);
     service_mobile_bases(next, next.turn + 1);
     refresh_planetary_engineering(next);
     grow_colonies(next);

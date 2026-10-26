@@ -310,6 +310,10 @@ QString componentTooltip(ShipComponentType component)
     if (spec.fieldRepairPerTurn > 0.0)
         facts << "Field repair: 8 hull-damage points per year per equipped ship; mixed fleets scale by equipped ship fraction. A friendly shipyard repairs 20 instead.";
     if (spec.radiationHazard > 0.0) facts << "Radiation hazard: 10% colonist losses per travel turn unless the race is immune or has radiation tolerance ≥ 85%.";
+    if (component == ShipComponentType::OrbitalShipyardKit)
+        return "Convert one Expedition Base into a permanent orbital shipyard: six supplied assembly years, real workers and finite fuel/minerals. No surface colony needed.";
+    if (component >= ShipComponentType::BulkRadiationScreen && component <= ShipComponentType::AdvancedRadiationScreen)
+        return "One passive radiation screen per base; reduces orbital exposure by 20 / 40 / 60. No combat shield bonus.";
     if (component == ShipComponentType::FuelDepotKit || component == ShipComponentType::DeepSpaceRelayKit)
         facts << "One paid kit per constructor. Fly to deep space, then deploy permanently (one ship, no colonists, 5 ly from stars, 1 ly from another outpost). Upkeep 1 mg/year; tanker deliveries replenish fuel. Depot stock is finite; the relay adds 300 ly only after deployment.";
     if (spec.type == ShipComponentType::ExpeditionDock)
@@ -667,6 +671,10 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         ShipComponentType::DeepPenetratingScanner,
         ShipComponentType::RelayArray,
         ShipComponentType::FieldRepairBay,
+        ShipComponentType::OrbitalShipyardKit,
+        ShipComponentType::BulkRadiationScreen,
+        ShipComponentType::CompositeRadiationScreen,
+        ShipComponentType::AdvancedRadiationScreen,
         ShipComponentType::FuelDepotKit,
         ShipComponentType::DeepSpaceRelayKit,
         ShipComponentType::AnomalyDetector,

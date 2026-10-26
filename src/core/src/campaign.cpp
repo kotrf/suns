@@ -593,7 +593,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         state.shipDesigns.push_back(design);
         state.nextShipDesignId = std::max(state.nextShipDesignId, design.id + 1);
     }
-    for (const auto& fleet : host.fleets) if (fleet.owner == playerId) {
+    for (const auto& fleet : host.fleets) if (fleet.owner == playerId && !unreported_orbital_ship(host,fleet)) {
         auto known = fleet_player_view(host, fleet);
         // fleet_player_view supports legacy UI fixtures; do not let its fallback
         // to current composition disclose undelivered changes to a remote fleet.

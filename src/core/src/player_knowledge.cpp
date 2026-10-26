@@ -117,6 +117,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::XenocrystalDiscovered: return GameEventKind::XenocrystalDiscovered;
     case PlayerReportKind::XenocrystalAcquired: return GameEventKind::XenocrystalAcquired;
     case PlayerReportKind::XenocrystalDepleted: return GameEventKind::XenocrystalDepleted;
+    case PlayerReportKind::OrbitalBaseStatus: return GameEventKind::OrbitalBaseStatus;
     case PlayerReportKind::ResonanceProjectStatus: return GameEventKind::ResonanceProjectStatus;
     }
     return GameEventKind::FleetArrived;
@@ -127,7 +128,7 @@ GameEventSeverity event_severity(PlayerReportKind kind)
     if (kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
         || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
-    return kind == PlayerReportKind::EngineeringPaused || kind == PlayerReportKind::OutpostDeploymentFailed || kind == PlayerReportKind::OutpostFuelExhausted
+    return kind == PlayerReportKind::OrbitalBaseStatus || kind == PlayerReportKind::EngineeringPaused || kind == PlayerReportKind::OutpostDeploymentFailed || kind == PlayerReportKind::OutpostFuelExhausted
             || kind == PlayerReportKind::StargateTransitFailed || kind == PlayerReportKind::EnemyFleetDetected
             || kind == PlayerReportKind::FleetStalledForFuel
             || kind == PlayerReportKind::FleetTargetLost
@@ -640,6 +641,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
             auto severity = event_severity(report.kind);
             if (report.kind == PlayerReportKind::XenocrystalDepleted
                 || (report.kind == PlayerReportKind::ResonanceProjectStatus && report.quantity > kResonanceWork)) severity = GameEventSeverity::Warning;
+            if (report.kind==PlayerReportKind::OrbitalBaseStatus && report.quantity>0 && !report.deliveredColonists) severity=GameEventSeverity::Information;
             if(report.sensorStatus) severity=report.quantity?GameEventSeverity::Warning:GameEventSeverity::Information;
             if (report.battle) {
                 bool survivors = false, losses = false;

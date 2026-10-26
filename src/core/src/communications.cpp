@@ -3,6 +3,7 @@
 #include "suns/survey_probes.hpp"
 #include "suns/intergalactic_visitors.hpp"
 #include "suns/mobile_base.hpp"
+#include "suns/orbital_bases.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/reconnaissance.hpp"
@@ -351,6 +352,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.damagePercent = fleet.damagePercent;
     result.electronics = fleet.electronics;
     result.outpost = fleet.outpost;
+    result.orbitalBase = fleet.orbitalBase;
     result.mobileBase = fleet.mobileBase;
     result.lastMovedTurn = fleet.lastMovedTurn;
     result.lastServiceTurn = fleet.lastServiceTurn;
@@ -584,6 +586,11 @@ bool fleet_has_instant_link(const GameState& state, const Fleet& fleet)
         && communication_delay_turns(state, fleet.owner, fleet.position) == 0;
 }
 
+bool unreported_orbital_ship(const GameState& state, const Fleet& fleet)
+{
+    return fleet.orbitalShipyardBirth && !fleet.telemetry.observedTurn && !fleet_has_instant_link(state,fleet);
+}
+
 FleetTelemetry confirmed_fleet_telemetry(const GameState& state, const Fleet& fleet)
 {
     if (fleet.telemetry.observedTurn != 0) return fleet.telemetry;
@@ -627,7 +634,8 @@ std::vector<Fleet> missing_fleet_contacts(const GameState& state, PlayerId playe
 {
     auto contacts = wormhole_missing_contacts(state, player);
     for (const auto& loss : state.pendingFleetLossContacts)
-        if (loss.lastContact.owner == player && loss.deliveryTurn > state.turn)
+        if (loss.lastContact.owner == player && loss.deliveryTurn > state.turn
+            && !unreported_orbital_ship(state,loss.lastContact))
             contacts.push_back(fleet_player_view(state, loss.lastContact));
     return contacts;
 }
@@ -650,6 +658,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.damagePercent = telemetry.damagePercent;
     view.electronics = telemetry.electronics;
     view.outpost = telemetry.outpost;
+    view.orbitalBase = telemetry.orbitalBase;
     view.mobileBase = telemetry.mobileBase;
     view.lastMovedTurn = telemetry.lastMovedTurn;
     view.lastServiceTurn = telemetry.lastServiceTurn;
@@ -665,7 +674,8 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;
     view.targetFleet = telemetry.targetFleet;
-    if (!telemetry.ships.empty()) view.ships = telemetry.ships;
+    if (!telemetry.ships.empty()) { view.ships = telemetry.ships; view.design = view.ships.front().design; }
+    view.orbitalShipyardBirth = false;
     view.pendingCommands.clear();
     view.telemetry = telemetry; view.telemetry.probe.surveys.clear();
     view.telemetryInTransit.clear();
@@ -795,7 +805,10 @@ void deliver_due_fleet_commands(GameState& state)
             if (pending.deliveryTurn > state.turn) break;
             ++processed;
             if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
-            if (pending.visitor) {
+            if (pending.orbitalBase) {
+                apply_orbital_base_command(state, fleet, *pending.orbitalBase);
+            }
+            else if (pending.visitor) {
                 apply_visitor_command(state, fleet, *pending.visitor);
                 if (!pending.visitor->track.id) stoppedThrough = pending.issuedTurn;
             }
