@@ -227,6 +227,7 @@ private:
     void queueMapLabelRefresh();
     void refreshMapLabels();
     void updateControls();
+    [[nodiscard]] const GameState& movementPlanningPreview() const;
     void refreshShipDesignChoices();
     void openShipDesigner();
     void openEmpireHistory();
@@ -326,6 +327,9 @@ private:
     GameState state_;
     TurnProcessor processor_;
     std::uint64_t planningRevision_{};
+    mutable std::uint64_t movementPreviewRevision_{std::uint64_t(-1)};
+    mutable PlayerId movementPreviewPlayer_{};
+    mutable std::optional<GameState> movementPreview_;
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
     mutable FleetId routeEtaFleet_{};
     mutable std::vector<RouteProgramLegForecast> routeLegForecasts_;

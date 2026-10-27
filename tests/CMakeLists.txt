@@ -334,6 +334,9 @@ if(SUNS_BUILD_APP)
     set_tests_properties(suns_cargo_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 20)
+    # Manual timings have no portable pass/fail latency threshold.
+    add_executable(suns_ui_performance_probe EXCLUDE_FROM_ALL ui_performance_probe.cpp)
+    target_link_libraries(suns_ui_performance_probe PRIVATE suns_app_ui)
 endif()
 
 if(SUNS_BUILD_APP)
