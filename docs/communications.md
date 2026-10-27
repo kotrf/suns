@@ -196,3 +196,25 @@ and can wait/retry without headquarters contact. Stop and replacement remain
 subject to delivery. Transit reports and fleet telemetry remain separate immutable
 received facts; position extrapolation stops at an unconfirmed gate hop. See
 [gate route rules](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).
+
+## Audit corrections (save v100 build)
+
+When no homeworld-rooted field survives but an owned colony remains, the slow
+fallback uses its physical endpoint and distance / 150 ly per year (minimum one
+year); it no longer grants a flat one-year link across the galaxy. Orbital-only
+populated colonies participate in command emissions and signal interception.
+Both connectivity passes use a frontier traversal with results independent of
+fleet storage order. Incoming instant commands do not require outgoing TX.
+
+A full fleet manifest carries the pending confirmations of its entire absorbed
+merge lineage, including A→B→C. If a later faster transmission overtakes the
+original reports, all ancestor loss contacts expire with the new combined
+manifest. Forwarding is independent of report storage order, traverses already
+faster confirmations, and excludes merges observed after that snapshot.
+
+The orbital-lifecycle integration (save v101) extends the same confirmation
+lineage to dismantled bases. Their archived physical retirement request names
+the recovery transport, while the old received contact remains unchanged. A
+faster full manifest from that transport or its merged successor forwards the
+retirement report too; old base stocks cannot coexist with their received
+recovered cargo. ORLC preserves this witness through host save/load.

@@ -163,8 +163,12 @@ The recovery transport physically receives the completion report and any held
 base reports. Silent/passive reception does not force it to transmit. Already
 sent packets keep their original source/date; held packets await the transport's
 normal transmission or friendly-orbit sharing. Headquarters retains the last
-confirmed base contact until the dismantling report arrives. No combat casualty
-or wreck is invented for deliberate retirement. Received UI shows the evidence
+confirmed base contact until the dismantling report arrives. A later faster
+full manifest from the recovery transport also forwards that confirmation. If
+the transport merges into another fleet, the confirmation follows that manifest
+lineage too. The retained host archive preserves the physical retirement
+request separately from the old received telemetry; it is not player evidence.
+No combat casualty or wreck is invented for deliberate retirement. Received UI shows the evidence
 age, recovery forecast, received mission/stop reason and separately labelled
 sent/local intent. Forecasts use received fitting/stages/damage and stocks;
 hidden evacuation, capacity changes or demolition do not rewrite old exports.
@@ -229,9 +233,13 @@ multi-base rescue/resupply network or automatically refit radiation screens.
 
 ## Persistence and acceptance
 
-Current branch formats are **save v99 / orders v41**. Save v99 appends bounded
-ORLC retirement state for physical, received, in-flight and retained contacts;
-v98 loads with no retirement mission. Orders v41 adds retirement/rebuilding payloads.
+Current branch formats are **save v101 / orders v41**, integrating main
+`7e2e769` after #236 (save v100 / orders v40). The writer preserves the v100
+CCON conditions tail, then appends bounded ORLC retirement state for physical,
+received, in-flight and retained contacts. Development v99 from the original
+#234 branch reads ORLC without CCON; main v100 reads CCON without ORLC. Both
+load without discarding their evidence/intent. v98 loads with neither tail and
+no retirement mission. Orders v41 adds retirement/rebuilding payloads.
 The original founding formats are save v98 / orders v40. Save v97 introduced the bounded
 ORBI tail for physical, confirmed, in-flight and
 retained-loss base states, independent command payloads and private new-ship

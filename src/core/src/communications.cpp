@@ -15,6 +15,8 @@
 #include <utility>
 #include <type_traits>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace suns {
 
@@ -78,20 +80,13 @@ std::vector<CommunicationField> communication_fields(
         fields.push_back({fleet.position, range, false});
     }
 
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        for (auto& candidate : fields) {
-            if (candidate.connected) continue;
-            const auto overlapsConnected = std::any_of(
-                fields.begin(), fields.end(), [&](const CommunicationField& connected) {
-                    return connected.connected
-                        && distance_between(candidate.position, connected.position)
-                            <= candidate.radius + connected.radius + 0.000001;
-                });
-            if (!overlapsConnected) continue;
-            candidate.connected = true;
-            changed = true;
+    std::vector<std::size_t> frontier;
+    for (std::size_t i=0;i<fields.size();++i) if(fields[i].connected) frontier.push_back(i);
+    for (std::size_t head=0;head<frontier.size();++head) {
+        const auto current=frontier[head];
+        for (std::size_t i=0;i<fields.size();++i) if(!fields[i].connected
+            && distance_between(fields[i].position,fields[current].position)<=fields[i].radius+fields[current].radius+0.000001) {
+            fields[i].connected=true;frontier.push_back(i);
         }
     }
 
@@ -112,21 +107,13 @@ std::vector<bool> field_component_containing(
         component[index] = inside_field(position, fields[index]);
     }
 
-    bool changed = true;
-    while (changed) {
-        changed = false;
-        for (std::size_t candidate = 0; candidate < fields.size(); ++candidate) {
-            if (component[candidate]) continue;
-            for (std::size_t member = 0; member < fields.size(); ++member) {
-                if (!component[member]) continue;
-                if (distance_between(fields[candidate].position, fields[member].position)
-                    > fields[candidate].radius + fields[member].radius + 0.000001) {
-                    continue;
-                }
-                component[candidate] = true;
-                changed = true;
-                break;
-            }
+    std::vector<std::size_t> frontier;
+    for(std::size_t i=0;i<fields.size();++i) if(component[i])frontier.push_back(i);
+    for(std::size_t head=0;head<frontier.size();++head) {
+        const auto member=frontier[head];
+        for(std::size_t i=0;i<fields.size();++i) if(!component[i]
+            && distance_between(fields[i].position,fields[member].position)<=fields[i].radius+fields[member].radius+0.000001) {
+            component[i]=true;frontier.push_back(i);
         }
     }
     return component;
@@ -461,7 +448,7 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
         Position capital=position;
         for(const auto& p:state.planets) if(p.owner==player && total_colony_population(p))
             if(const auto* star=find_star(state,p.star)) { capital=star->position; if(p.homeworld) break; }
-        return {hasColony ? SignalChannel::Slow : SignalChannel::Fast, position, capital, hasColony ? 1U : 0U, jamDelay};
+        return {hasColony ? SignalChannel::Slow : SignalChannel::Fast, position, capital, hasColony ? std::max(1U, static_cast<std::uint32_t>(std::ceil(distance_between(position,capital)/kCommunicationSignalSpeed))) : 0U, jamDelay};
     }
 
     // A position inside any field connected to a colony root belongs to the
@@ -570,7 +557,7 @@ void record_command_transmission(GameState& state,PlayerId owner,Position target
 {
     const auto route=communication_route(state,owner,target,turn);
     // Commands originate at the actual connected endpoint, never at their silent receiver.
-    if(std::any_of(state.planets.begin(),state.planets.end(),[&](const auto& p){return p.owner==owner && p.homeworld && p.population;}))
+    if(std::any_of(state.planets.begin(),state.planets.end(),[&](const auto& p){return p.owner==owner && p.homeworld && total_colony_population(p);}))
         record_pulse(state,owner,route.receiver,turn,route.channel);
 }
 std::uint64_t dispatch_report_delivery_turn(GameState& state,PlayerId owner,Position source,std::uint64_t turn,FleetId observer)
@@ -871,6 +858,43 @@ void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
         record_report_transmission(state,fleet.owner,fleet.position,observationTurn,fleet.id);
         const auto snapshot = authoritative_snapshot(state, fleet, observationTurn);
         const auto delay = communication_delay_turns(state, fleet.owner, fleet.position, observationTurn);
+        // A full manifest also carries confirmation of the operations that made
+        // it. A later transmission may overtake the original slow report (for
+        // example after a gate hop). Follow the entire absorbed lineage, even
+        // through an edge whose report already arrives sooner. Report order
+        // must not leave an ancestor's old manifest alongside the new one.
+        for (auto& player : state.players) if (player.id == fleet.owner) {
+            using Confirmation = std::pair<PendingPlayerReport*, FleetId>;
+            std::unordered_map<FleetId, std::vector<Confirmation>> confirmations;
+            for (auto& report : player.pendingPlayerReports) {
+                if (report.observedTurn > observationTurn) continue;
+                if (report.kind == PlayerReportKind::FleetsMerged)
+                    confirmations[report.fleet].push_back({&report, report.quantity});
+                else if (report.kind == PlayerReportKind::OrbitalBaseStatus && (report.quantity == 4 || report.quantity == 5)) {
+                    const auto loss = std::find_if(state.pendingFleetLossContacts.begin(), state.pendingFleetLossContacts.end(), [&](const auto& loss) {
+                        return loss.lastContact.owner == player.id && loss.lastContact.id == report.fleet;
+                    });
+                    if (loss != state.pendingFleetLossContacts.end() && loss->lastContact.orbitalBase.retirement)
+                        confirmations[loss->lastContact.orbitalBase.retirement->receiver].push_back({&report, report.fleet});
+                }
+            }
+            if (!confirmations.contains(fleet.id)) continue;
+            std::vector<FleetId> lineage{fleet.id};
+            std::unordered_set<FleetId> visited{fleet.id};
+            for (std::size_t i = 0; i < lineage.size(); ++i) {
+                const auto edges = confirmations.find(lineage[i]);
+                if (edges == confirmations.end()) continue;
+                for (const auto& [report, source] : edges->second) {
+                    if (visited.insert(source).second) lineage.push_back(source);
+                    if (observationTurn + delay >= report->deliveryTurn) continue;
+                    report->deliveryTurn = observationTurn + delay;
+                    report->transmissionFleet = 0;
+                    for (auto& missing : state.pendingFleetLossContacts)
+                        if (missing.lastContact.owner == fleet.owner && missing.lastContact.id == source)
+                            missing.deliveryTurn = std::min(missing.deliveryTurn, report->deliveryTurn);
+                }
+            }
+        }
         if (delay == 0) {
             if (snapshot.observedTurn >= fleet.telemetry.observedTurn) fleet.telemetry = snapshot;
             std::erase_if(fleet.telemetryInTransit, [&](const PendingFleetTelemetry& packet) {
@@ -920,6 +944,10 @@ void dispatch_fleet_report_outbox(GameState& state)
         if constexpr(std::is_same_v<std::remove_cvref_t<decltype(report)>,PendingPlayerReport>) {
             if(report.contact) { report.contact->deliveryTurn=report.deliveryTurn; report.contact->transmissionFleet=0; }
             if(report.sensorStatus) { report.sensorStatus->deliveryTurn=report.deliveryTurn; report.sensorStatus->transmissionFleet=0; }
+            if(report.kind==PlayerReportKind::FleetsMerged)
+                for(auto& missing:state.pendingFleetLossContacts)
+                    if(missing.deliveryTurn==kAwaitingTransmission && missing.lastContact.owner==owner
+                        && missing.lastContact.id==report.quantity) missing.deliveryTurn=report.deliveryTurn;
             if(report.battle) {
                 for(auto& loss:state.pendingFleetLossContacts) if(loss.deliveryTurn==kAwaitingTransmission && loss.lastContact.owner==owner)
                     if(std::any_of(report.battle->units.begin(),report.battle->units.end(),[&](const auto& u){return u.owner==owner && u.fleet==loss.lastContact.id;})) loss.deliveryTurn=report.deliveryTurn;

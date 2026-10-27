@@ -127,3 +127,12 @@ completion fixes. This is a complete expedition/data/sample/disposition/unlock
 cycle. Further artifact kinds, technology families, observation rewards and
 physical mineral recovery from wrecks are optional extensions. #59 remains open
 until the completion PR is reviewed and merged; #63 is frozen and is not expanded.
+
+## Main audit follow-up (save v100 build)
+
+A remote autonomous merge preserves both pre-merge contacts until received
+confirmation. It never rewrites their old confirmed manifests or recalls sent
+telemetry. A later full manifest carries/coalesces merge confirmation if it
+arrives faster than the original report; this avoids showing a specimen in both
+an absorbed contact and the received combined fleet. A never-reported newborn
+source creates no phantom historical contact. Physical specimens stay unique.

@@ -1499,7 +1499,12 @@ std::optional<PlayerId> known_planet_owner(
         [planetId](const Planet& candidate) { return candidate.id == planetId; });
     if (planetIt == state.planets.end()) return std::nullopt;
     const auto* planet = &*planetIt;
-    if (planet->owner == player) return player;
+    if (planet->owner == player) {
+        if(const auto* p=find_player(state,player))
+            for(const auto& k:p->surveyKnowledge) if(k.star==planet->star && k.observedOwner==player)return player;
+        const auto* star=find_star(state,planet->star);
+        if(star && communication_delay_turns(state,player,star->position)==0)return player;
+    }
     if (survey_level(state, player, planet->star) < SurveyLevel::OrbitalSurvey)
         return std::nullopt;
     const auto* knownPlayer = find_player(state, player);
@@ -1551,6 +1556,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
         if (planet->owner == player) {
             result.scienceSamples=planet->scienceSamples;
             result.habitat=HabitatObservation{planet->habitat,engineering_station_available(state,*planet),planet->population,planet->industry,planet->minerals,planet->mines,planet->productionQueue};
+            result.habitat->conditions=ColonyConditions{planet->defenses,planet->warDamage};
             result.habitat->radar=planet->radar;
             result.habitat->stationEvidenceTime=3*observedTurn+(observedTurn<=state.turn?2:0);
             if(const auto* station=find_orbital_station_at_planet(state,planet->id);station && station->owner==player) result.habitat->station=*station;
@@ -1593,7 +1599,11 @@ std::optional<std::int32_t> known_planet_habitability(
     if (level < SurveyLevel::BasicScan && planet->owner != player) return std::nullopt;
     if (planet->observedHabitability) return planet->observedHabitability;
 
-    if (planet->owner == player) return player_planet_habitability(state, player, *planet, state.turn);
+    if (planet->owner == player) {
+        const auto* star=find_star(state,planet->star);
+        if(star && communication_delay_turns(state,player,star->position)==0)
+            return player_planet_habitability(state, player, *planet, state.turn);
+    }
     auto observationTurn = state.turn;
     const PlanetSurveySnapshot* snapshot = nullptr;
     if (const auto* knownPlayer = find_player(state, player)) {
@@ -1615,9 +1625,10 @@ std::optional<std::int32_t> known_planet_habitability(
     knownPlanet.habitability = snapshot->habitability;
     knownPlanet.environment = *snapshot->environment;
     knownPlanet.engineering = snapshot->engineering;
+    if(snapshot->habitat && snapshot->habitat->conditions)knownPlanet.warDamage=snapshot->habitat->conditions->damage;
     const auto aftermath=known_planet_aftermath(state,player,planetId);
-    knownPlanet.warDamage.contamination=aftermath
-        ? (unsigned(aftermath->contaminationMinimum)+aftermath->contaminationMaximum)/2 : 0;
+    if(aftermath && aftermath->observedTurn>=observationTurn)
+        knownPlanet.warDamage.contamination=(unsigned(aftermath->contaminationMinimum)+aftermath->contaminationMaximum)/2;
     return player_planet_habitability(state, player, knownPlanet,
         level >= SurveyLevel::GeologicalSurvey ? state.turn : observationTurn);
 }

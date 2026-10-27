@@ -2,10 +2,12 @@
 
 ## Current work — orbital base retirement and colony rebuilding (#54 / #61)
 
-Branch `codex/orbital-base-lifecycle` starts from fresh main `6d04c44`, merged
-#233. The reviewed #233 head `f959ee9` passed GitHub CI; its tree is identical
-to that main merge. Main formats are save v98 / orders v40; this branch introduces
-save v99 / orders v41. #54/#61 remain open, #63 stays frozen.
+PR #234 / branch `codex/orbital-base-lifecycle` originally started at `6d04c44`
+(#233), and now integrates fresh main `7e2e769` (merged #236). The #236
+reviewed head `95c3bf8` passed GitHub CI. Main is save v100 / orders v40; this branch
+uses save v101 / orders v41. The combined writer appends CCON then ORLC;
+v100 retains colony conditions, development v99 retains retirement state.
+#54/#61 remain open, #63 stays frozen.
 
 The user selected base lifecycle as the next slice. Safe delayed retirement
 waits for evacuation and real recovery transport capacity, conserves remaining
@@ -16,17 +18,91 @@ request/cancel receipts and delayed completion knowledge survive save/load and
 PBEM. Station capture and automatic destructive AI policies remain future work.
 [Detailed rules](independent-orbital-shipyards.md#retirement-and-colony-station-rebuilding-54--61).
 
-Validation: GCC 14.2 / Qt 6.12.0 Debug full application/test build succeeded.
-Final offscreen CTest **90/90** passed (57.86 s), and `git diff --check` is clean.
+Integration follow-up: v99/v100 migration fixtures exercise physical, received
+and in-flight retirement state, delayed cancellation and exact CCON evidence.
+A reproduced faster-recovery-manifest defect is corrected: confirmations
+follow the transport and its merged successors, while old UI/export contacts
+keep their received telemetry. The archived physical request is persisted by
+existing ORLC; no extra command fields or snapshot exposure are introduced.
+
+Current integrated validation: GCC 14.2 / Qt 6.12.0 Debug full application/test
+build succeeded; offscreen CTest **92/92** passed (59.96 s), focused core/save/Qt
+suites **8/8** passed (1.98 s), and `git diff --check` is clean.
 New scenarios cover same-year real evacuation/recovery, shared-hold/tank guards,
 precious cargo and queued-job blockers, one-time damage-adjusted recovery,
 delayed/overtaking cancellation, full normal station production/mineral payment,
 34-year command delay, silent report handover, immutable player exports,
 physical/received/in-transit retirement snapshots, retained dismantled contacts,
-v98/v97/v96 migration, malformed ORLC state and PBEM payloads. The station-cost
+v100/v99/v98/v97/v96 migration, malformed/missing ORLC/CCON tails and PBEM
+payloads. The station-cost
 control includes ordinary population mining rather than assuming fixed stocks.
 Validation is Linux/offscreen Qt; no manual balance, cross-platform or sanitizer
 acceptance is claimed. Prepared for review; no merge or issue closure performed.
+
+## Merged implementation — main audit corrections (#236, historical branch checkpoint)
+
+Branch `codex/audit-corrections` starts from main `c161b0e` (merged #235).
+The user authorized all 12 reproduced correctness fixes and three measured
+performance corrections. [Original audit and correction matrix](audits/2026-10-27-main-code-audit.md).
+Main remains save v98 / orders v40; this branch uses save v100 / orders v40.
+CCON stores dated defense/war-damage evidence alongside immutable colony packets.
+Development save v99 from separate PR #234 is explicitly rejected rather than
+silently dropping its ORLC missions. That PR needs format reconciliation on rebase.
+#63 remains frozen; empty-colony factory policy is outside these proven defects.
+
+Validation: GCC14.2 / Qt6.12 Debug full application/test build succeeded;
+post-review offscreen CTest **92/92** passed (59.73s), `git diff --check` clean.
+Two new suites cover core/save and real Qt controls; existing sample/legacy-save
+fixtures were updated for received merge contacts and trailing extensions.
+A separate150-boundary Medium/288 campaign with5AI saves, loads, reserializes
+and continues from loaded state every year: all150 cycles succeeded; bytes are
+stable after the initial legacy telemetry-stack normalization.
+Measured CPU: route warning W1 1379→32ms; reversed128-node communication queries
+1106→45ms; probe1000/full notebook target selection430→0.8ms.
+A later faster full manifest forwards/coalesces its merge confirmation so an
+absorbed source cannot coexist with its newly received combined manifest.
+Unknown source ships never create phantom missing contacts.
+
+Review follow-up on `8c0ea71`: both P2 findings reproduced before correction.
+Route forecasts now retain each PlayerView missing contact exactly once (the
+real Qt mining/load forecast stays at 8 kt instead of 16 kt). A faster full manifest
+forwards the entire pending merge lineage A→B→C, independent of report order
+and through a final edge whose report needs no deadline adjustment. Core tests
+perform two real rendezvous merges, host save/load and player-turn export;
+the received result contains exactly three ships and 30 kt, with no old contacts.
+Save v100 / orders v40 are unchanged.
+Linux/offscreen validation only; no native chooser, user disk, other OS or
+sanitizer acceptance is claimed. Ready for review, no automatic merge.
+
+## Merged implementation — Medium-map UI preview performance (#235)
+
+Branch `codex/ui-preview-performance` starts from main `6d04c44`, merged #233,
+save v98 / orders v40. The independent retirement PR #234 remains separate;
+no format, balance, simulation or knowledge-rule changes are introduced here.
+
+The user reported map/panel slowdown at roughly 300 systems and a save freeze.
+A confirmed UI defect repeatedly ran a full TurnProcessor movement/logistics
+preview from polling panels even while idle. One per-window preview is now
+shared until the planning revision/player/turn changes; redraw invalidation
+covers edits, state updates, new games and same-year loads. Cargo regressions
+exercise same-size replacement, repeated reads and actual same-year save/load.
+The optional `suns_ui_performance_probe` target is outside CTest/default builds.
+[Reproduction, measurements and save-investigation boundary](ui-performance.md).
+
+Local GCC 14.2 / Qt 6.12 Debug/offscreen measurements: at 288 systems idle CPU
+changes from ~100% to 4.4% of one core, heartbeat gaps 317 → 22 ms, full redraw
+186 → 124 ms. At 1000 systems, gaps are 1170 → 53 ms; other refresh costs remain.
+All four measured fresh saves loaded successfully. The player's save freeze
+is not reproduced; OS/build provenance and chooser-versus-write stage are pending.
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+final offscreen CTest **90/90** passed (59.45 s), and `git diff --check` is clean.
+Four focused editor suites passed (1.93 s). The optional probe built and all
+four isolated 288/1000-system control/fixed runs saved and loaded successfully.
+Native file-dialog behavior, the player's exact campaign and other platforms
+remain unverified; no fix for the reported save freeze is claimed. Ready for
+review without automatic merge.
+
 
 ## Merged implementation — independent orbital founding (#233, historical branch checkpoint)
 

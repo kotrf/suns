@@ -11,7 +11,7 @@ void writeOrbitalCommand(QDataStream& out, const OrbitalBaseCommand& c)
 void readOrbitalCommand(QDataStream& in, OrbitalBaseCommand& c)
 {
     quint8 active{}; quint64 item{};
-    if (!readEnum(in,c.action,quint8(gReadSaveFormatVersion >= 99 ? OrbitalBaseAction::CancelRetirement : OrbitalBaseAction::Refit))) return;
+    if (!readEnum(in,c.action,quint8((gReadSaveFormatVersion == 99 || gReadSaveFormatVersion >= 101) ? OrbitalBaseAction::CancelRetirement : OrbitalBaseAction::Refit))) return;
     in >> c.planet >> c.design >> item >> active; c.item=item; c.active=active;
     if (c.action == OrbitalBaseAction::Decommission || c.action == OrbitalBaseAction::RebuildStation) {
         in >> c.receiver;
@@ -150,7 +150,7 @@ void readOrbitalBases(QDataStream& stream, GameState& state)
     if (in.status()!=QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
 }
 
-// v99: keep the v97/v98 ORBI layout intact for legacy readers/fixtures.
+// ORLC (development v99, combined v101): preserve the existing ORBI layout.
 void writeOrbitalLifecycle(QDataStream& stream, const GameState& state)
 {
     QByteArray payload; QDataStream out(&payload,QIODevice::WriteOnly); out.setVersion(stream.version());

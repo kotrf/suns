@@ -218,7 +218,11 @@ void route_merges_preserve_samples_and_delayed_manifests()
             assert(std::all_of(merged.unknownObjects.begin(), merged.unknownObjects.end(),
                 [](const auto& x) { return x.sampleRecovered; }));
             if (remote) {
-                const auto received = make_player_view(merged, 1).state.fleets[0].scienceSamples;
+                const auto receivedWorld=make_player_view(merged,1).state;
+                assert(receivedWorld.fleets.size()==2); // Keep both pre-merge contacts until its report arrives.
+                const auto knownTarget=std::find_if(receivedWorld.fleets.begin(),receivedWorld.fleets.end(),[](const auto& f){return f.id==2;});
+                assert(knownTarget!=receivedWorld.fleets.end());
+                const auto received = knownTarget->scienceSamples;
                 assert(received.size() == 1 && received[0].source == 8);
                 assert(!fleet.telemetryInTransit.empty());
                 assert(fleet.telemetryInTransit.back().telemetry.scienceSamples.size() == 2);

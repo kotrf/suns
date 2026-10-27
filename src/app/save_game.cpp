@@ -37,7 +37,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 99;
+constexpr quint32 kSaveFormatVersion = 101;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2350,6 +2350,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "field_science_completion_save.inc"
 #include "orbital_habitats_save.inc"
 #include "orbital_bases_save.inc"
+#include "colony_conditions_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -3225,6 +3226,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeFieldScienceCompletion(stream, data.state);
     writeOrbitalHabitats(stream,data.state);
     writeOrbitalBases(stream,data.state);
+    writeColonyConditions(stream,data.state);
     writeOrbitalLifecycle(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
@@ -3265,6 +3267,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
                            .arg(kSaveFormatVersion);
         return false;
     }
+    // v99 carries ORLC, v100 carries CCON, and v101 preserves both tails.
     gReadSaveFormatVersion = version;
 
     SaveGameData loaded;
@@ -3350,7 +3353,8 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     else migratePendingScientificData(loaded.state);
     if(version>=94) readOrbitalHabitats(stream,loaded.state);
     if(version>=97) readOrbitalBases(stream,loaded.state);
-    if(version>=99) readOrbitalLifecycle(stream,loaded.state);
+    if(version>=100) readColonyConditions(stream,loaded.state);
+    if(version==99 || version>=101) readOrbitalLifecycle(stream,loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);
@@ -3545,7 +3549,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 41 ? 99 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

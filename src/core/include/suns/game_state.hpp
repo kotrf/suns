@@ -723,6 +723,11 @@ struct OrbitalStation {
     double damagePercent{};
 };
 
+struct ColonyConditions {
+    std::uint16_t defenses{};
+    PlanetWarDamage damage;
+};
+
 struct HabitatObservation {
     OrbitalHabitat habitat;
     bool stationSupported{};
@@ -734,6 +739,7 @@ struct HabitatObservation {
     std::optional<OrbitalStation> station;
     std::uint64_t stationEvidenceTime{}; // 3*year + phase: observation 0, battle 1, final surface 2.
     PlanetaryRadarLevel radar{PlanetaryRadarLevel::None}; // Same dated packet as the production queue.
+    std::optional<ColonyConditions> conditions;
 };
 
 struct PendingStationContact {
