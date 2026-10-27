@@ -83,6 +83,52 @@ void delayed_merge() {
  (void)deliver_due_player_reports(n);
  assert(n.pendingFleetLossContacts.empty() && make_player_view(n,1).state.fleets.size()==1);
 }
+void chained_merge_confirmation() {
+ for(bool reverseReports:{false,true}) for(bool finalReportAlreadyFaster:{false,true}) {
+  auto s=world(5000);s.turn=5;s.fleets.clear();
+  for(int i=0;i<3;++i) {
+   Fleet f;f.id=10+i;f.owner=1;f.design=202;f.ships={{202,1}};f.name="Chain transport";
+   f.position={4999.0+i,0};f.fuel=500;f.minerals={10,0,0};
+   f.telemetry.observedTurn=1;f.telemetry.position=f.position;f.telemetry.ships=f.ships;
+   f.telemetry.fuel=f.fuel;f.telemetry.minerals=f.minerals;
+   if(i==0){f.destination=Position{5000.0+i,0};f.targetFleet=11+i;f.warp=1;f.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};}
+   s.fleets.push_back(f);
+  }
+  s.nextFleetId=13;
+  // Two real rendezvous operations, with a route installed aboard B between
+  // them. HQ still has the three old contacts while both reports travel home.
+  s=TurnProcessor{}.process(s,{});
+  assert(s.fleets.size()==2);
+  auto intermediate=std::find_if(s.fleets.begin(),s.fleets.end(),[](const auto& f){return f.id==11;});
+  assert(intermediate!=s.fleets.end());
+  intermediate->destination=Position{5001,0};intermediate->targetFleet=12;
+  intermediate->warp=1;intermediate->arrivalAction=FleetArrivalAction{FleetArrivalActionKind::MergeWithFleet};
+  s=TurnProcessor{}.process(s,{});
+  assert(s.fleets.size()==1 && s.fleets[0].id==12 && fleet_ship_count(s.fleets[0])==3);
+  assert(s.fleets[0].minerals.ironium==30 && s.pendingFleetLossContacts.size()==2);
+  assert(make_player_view(s,1).state.fleets.size()==3);
+  if(finalReportAlreadyFaster) {
+   // Traversal must also cross an edge that needs no deadline adjustment.
+   for(auto& report:s.players[0].pendingPlayerReports)
+    if(report.kind==PlayerReportKind::FleetsMerged && report.fleet==12)report.deliveryTurn=s.turn+1;
+   for(auto& loss:s.pendingFleetLossContacts)
+    if(loss.lastContact.id==11)loss.deliveryTurn=s.turn+1;
+  }
+  if(reverseReports)std::reverse(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end());
+  QTemporaryDir dir;assert(dir.isValid());SaveGameData save;save.state=s;save.campaignId=55;save.turnToken=66;
+  save.pendingOrders.player=1;save.mode=SessionMode::Host;save.playerTokens={{1,77}};QString error;SaveGameData loaded;
+  const auto path=dir.filePath("chain.suns");
+  assert(write_save_game_file(path,save,error));assert(read_save_game_file(path,loaded,error));s=std::move(loaded.state);
+  s.fleets[0].position={0,0};publish_fleet_telemetry(s,s.turn+1);++s.turn;
+  (void)deliver_due_player_reports(s);
+  const auto known=make_player_view(s,1).state;
+  assert(s.pendingFleetLossContacts.empty() && known.fleets.size()==1);
+  assert(fleet_ship_count(known.fleets[0])==3 && known.fleets[0].minerals.ironium==30);
+  save.state=s;assert(write_save_game_file(path,make_player_turn(save,1),error));
+  assert(read_save_game_file(path,loaded,error));assert(loaded.state.fleets.size()==1);
+  assert(fleet_ship_count(loaded.state.fleets[0])==3 && loaded.state.fleets[0].minerals.ironium==30);
+ }
+}
 void conditions_are_frozen() {
  auto s=world(900);auto& p=s.planets[1];p.owner=1;p.population=1000000;p.defenses=20;
  set_survey_level(s,1,2,SurveyLevel::DeepSurvey,s.turn);const auto before=make_player_view(s,1);
@@ -113,4 +159,4 @@ void delayed_founding() {
  for(int i=0;i<7;++i)n=TurnProcessor{}.process(n,{});
  assert(known_planet_owner(n,1,2)==1 && find_planet(make_player_view(n,1).state,2)->owner==1);
 }
-int main(int argc,char**argv){QCoreApplication app(argc,argv);merge_regressions();root_and_habitat();safe_ai_target();delayed_cargo_and_birth();delayed_merge();conditions_are_frozen();delayed_founding();mesh_order_independence();}
+int main(int argc,char**argv){QCoreApplication app(argc,argv);chained_merge_confirmation();merge_regressions();root_and_habitat();safe_ai_target();delayed_cargo_and_birth();delayed_merge();conditions_are_frozen();delayed_founding();mesh_order_independence();}

@@ -247,8 +247,8 @@ QString routeForecast(
 
     simulated.wormholes.clear();
     simulated.wormholeRules.spawnChancePerTurn = 0.0;
-    const auto missing = missing_fleet_contacts(state, pending.player);
-    simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
+    // PlayerView already includes last contacts for unconfirmed fleet losses.
+    // Appending them again would duplicate their projected mining/logistics.
     for (auto& f : simulated.fleets) f = fleet_player_view(state, f);
     for (auto& f : simulated.fleets) {
         // These are the owner's sent commands, not incoming telemetry or host

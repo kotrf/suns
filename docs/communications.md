@@ -205,3 +205,9 @@ year); it no longer grants a flat one-year link across the galaxy. Orbital-only
 populated colonies participate in command emissions and signal interception.
 Both connectivity passes use a frontier traversal with results independent of
 fleet storage order. Incoming instant commands do not require outgoing TX.
+
+A full fleet manifest carries the pending confirmations of its entire absorbed
+merge lineage, including A→B→C. If a later faster transmission overtakes the
+original reports, all ancestor loss contacts expire with the new combined
+manifest. Forwarding is independent of report storage order, traverses already
+faster confirmations, and excludes merges observed after that snapshot.

@@ -12,7 +12,7 @@ silently dropping its ORLC missions. That PR needs format reconciliation on reba
 #63 remains frozen; empty-colony factory policy is outside these proven defects.
 
 Validation: GCC14.2 / Qt6.12 Debug full application/test build succeeded;
-final offscreen CTest **92/92** passed (58.82s), `git diff --check` clean.
+post-review offscreen CTest **92/92** passed (59.73s), `git diff --check` clean.
 Two new suites cover core/save and real Qt controls; existing sample/legacy-save
 fixtures were updated for received merge contacts and trailing extensions.
 A separate150-boundary Medium/288 campaign with5AI saves, loads, reserializes
@@ -23,6 +23,15 @@ Measured CPU: route warning W1 1379→32ms; reversed128-node communication queri
 A later faster full manifest forwards/coalesces its merge confirmation so an
 absorbed source cannot coexist with its newly received combined manifest.
 Unknown source ships never create phantom missing contacts.
+
+Review follow-up on `8c0ea71`: both P2 findings reproduced before correction.
+Route forecasts now retain each PlayerView missing contact exactly once (the
+real Qt mining/load forecast stays at 8 kt instead of 16 kt). A faster full manifest
+forwards the entire pending merge lineage A→B→C, independent of report order
+and through a final edge whose report needs no deadline adjustment. Core tests
+perform two real rendezvous merges, host save/load and player-turn export;
+the received result contains exactly three ships and 30 kt, with no old contacts.
+Save v100 / orders v40 are unchanged.
 Linux/offscreen validation only; no native chooser, user disk, other OS or
 sanitizer acceptance is claimed. Ready for review, no automatic merge.
 

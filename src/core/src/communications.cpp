@@ -15,6 +15,8 @@
 #include <utility>
 #include <type_traits>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace suns {
 
@@ -858,17 +860,31 @@ void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
         const auto delay = communication_delay_turns(state, fleet.owner, fleet.position, observationTurn);
         // A full manifest also carries confirmation of the merges that made
         // it. A later transmission may overtake the original slow report (for
-        // example after a gate hop). Coalesce identical confirmations at their
-        // earliest physical arrival, without changing observation data/pulses.
-        for(auto& player:state.players) if(player.id==fleet.owner)
-            for(auto& report:player.pendingPlayerReports)
-                if(report.kind==PlayerReportKind::FleetsMerged && report.fleet==fleet.id
-                    && report.observedTurn<=observationTurn && observationTurn+delay<report.deliveryTurn) {
-                    report.deliveryTurn=observationTurn+delay;report.transmissionFleet=0;
-                    for(auto& missing:state.pendingFleetLossContacts)
-                        if(missing.lastContact.owner==fleet.owner && missing.lastContact.id==report.quantity)
-                            missing.deliveryTurn=std::min(missing.deliveryTurn,report.deliveryTurn);
+        // example after a gate hop). Follow the entire absorbed lineage, even
+        // through an edge whose report already arrives sooner. Report order
+        // must not leave an ancestor's old manifest alongside the new one.
+        for (auto& player : state.players) if (player.id == fleet.owner) {
+            std::unordered_map<FleetId, std::vector<PendingPlayerReport*>> merges;
+            for (auto& report : player.pendingPlayerReports)
+                if (report.kind == PlayerReportKind::FleetsMerged && report.observedTurn <= observationTurn)
+                    merges[report.fleet].push_back(&report);
+            if (!merges.contains(fleet.id)) continue;
+            std::vector<FleetId> lineage{fleet.id};
+            std::unordered_set<FleetId> visited{fleet.id};
+            for (std::size_t i = 0; i < lineage.size(); ++i) {
+                const auto edges = merges.find(lineage[i]);
+                if (edges == merges.end()) continue;
+                for (auto* report : edges->second) {
+                    if (visited.insert(report->quantity).second) lineage.push_back(report->quantity);
+                    if (observationTurn + delay >= report->deliveryTurn) continue;
+                    report->deliveryTurn = observationTurn + delay;
+                    report->transmissionFleet = 0;
+                    for (auto& missing : state.pendingFleetLossContacts)
+                        if (missing.lastContact.owner == fleet.owner && missing.lastContact.id == report->quantity)
+                            missing.deliveryTurn = std::min(missing.deliveryTurn, report->deliveryTurn);
                 }
+            }
+        }
         if (delay == 0) {
             if (snapshot.observedTurn >= fleet.telemetry.observedTurn) fleet.telemetry = snapshot;
             std::erase_if(fleet.telemetryInTransit, [&](const PendingFleetTelemetry& packet) {

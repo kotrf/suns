@@ -11,6 +11,7 @@
 #include <ctime>
 #include <iostream>
 #include <cassert>
+#include <cmath>
 using namespace suns;
 namespace suns {
 struct MainWindowTestAccess {
@@ -23,8 +24,37 @@ struct MainWindowTestAccess {
  static void merge(MainWindow& w){w.openMergeFleetsDialog();}
 };
 }
+void missing_miner_forecast(MainWindow& w) {
+ auto s=orbital_test::world(5000);s.fleets.clear();s.nextFleetId=3;
+ auto& p=s.planets[1];p.minerals={};p.observedConcentration=MineralCargo{100,100,100};
+ s.shipDesigns.push_back({204,1,"Remote miner",ShipHullType::MiniMiner,
+     {ShipComponentType::QuickJump5,ShipComponentType::RoboMiniMiner,ShipComponentType::RoboMiniMiner}});
+ s.nextShipDesignId=205;assert(ship_design_valid(*find_ship_design(s,204)));
+ assert(ship_design_available_to_player(s,1,*find_ship_design(s,204)));
+ Fleet carrier;carrier.id=1;carrier.owner=1;carrier.design=202;carrier.ships={{202,1}};
+ carrier.name="Collector";carrier.position={5000,0};carrier.fuel=500;
+ carrier.destination=carrier.position;carrier.warp=1;
+ carrier.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::LoadAllAvailable};
+ carrier.arrivalAction->cargo=FleetCargoKind::Ironium;
+ Fleet miner;miner.id=2;miner.owner=1;miner.design=204;miner.ships={{204,1}};
+ miner.name="Last reported miner";miner.position=carrier.position;miner.fuel=100;miner.task=FleetTask::RemoteMining;
+ s.fleets={carrier,miner};orbital_test::acknowledge(s);
+ s.fleets[0].telemetry.warp=1;s.fleets[0].telemetry.arrivalAction=carrier.arrivalAction;
+ s.fleets[1].telemetry.task=FleetTask::RemoteMining;
+ set_survey_level(s,1,2,SurveyLevel::GeologicalSurvey,s.turn);
+ s.pendingFleetLossContacts.push_back({s.fleets[1],s.turn+34});s.fleets.pop_back();
+ auto received=make_player_view(s,1).state;
+ assert(received.fleets.size()==2);
+ const auto control=TurnProcessor{}.process(received,{});
+ const auto f=std::find_if(control.fleets.begin(),control.fleets.end(),[](const auto& f){return f.id==1;});
+ assert(f!=control.fleets.end() && std::abs(f->minerals.ironium-8)<1e-6);
+ MainWindowTestAccess::set(w,s);
+ const auto forecast=w.selectedFleetRouteProgramForecast();
+ assert(forecast.contains("projected mineral cargo aboard: 8.0"));
+ assert(!forecast.contains("projected mineral cargo aboard: 16.0"));
+}
 int main(int argc,char** argv){
- QApplication app(argc,argv);MainWindow w;
+ QApplication app(argc,argv);MainWindow w;missing_miner_forecast(w);
  auto s=orbital_test::world(5000);orbital_test::deploy(s);orbital_test::base(s).orbitalBase.assemblyYears=6;orbital_test::base(s).orbitalBase.supported=true;
  s.shipDesigns.push_back({203,1,"New colony ship",ShipHullType::ColonyShip,{ShipComponentType::FusionDrive,ShipComponentType::ColonyModule}});s.nextShipDesignId=204;
  orbital_test::acknowledge(s);MainWindowTestAccess::set(w,s);
