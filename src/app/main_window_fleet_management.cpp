@@ -68,7 +68,10 @@ void MainWindow::openRenameFleetDialog()
 
 void MainWindow::openMergeFleetsDialog()
 {
-    const auto* destination = selectedFleet();
+    const auto* selected=selectedFleet();
+    const auto received=make_player_view(state_,pendingOrders_.player).state;
+    const auto found=std::find_if(received.fleets.begin(),received.fleets.end(),[&](const auto& f){return selected && f.id==selected->id;});
+    const auto* destination=found==received.fleets.end()?nullptr:&*found;
     if (!destination) {
         statusBar()->showMessage("Select the fleet whose FleetId should survive", 3000);
         return;
@@ -80,7 +83,7 @@ void MainWindow::openMergeFleetsDialog()
     }
 
     std::vector<const Fleet*> candidates;
-    for (const auto& fleet : state_.fleets) {
+    for (const auto& fleet : received.fleets) {
         if (fleet.id != destination->id
             && fleet.owner == destination->owner
             && same_position(fleet.position, destination->position)

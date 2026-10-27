@@ -226,12 +226,15 @@ QString routeForecast(
     })) return "WH approach uses last observed coordinates. Local sensors can reacquire a drifting mouth. "
         "Entry, lifetime, exit and survival cannot be forecast with certainty.";
 
-    // Gate forecasts need immutable received fittings/queues/stocks. Live host
-    // station loss must not invalidate a previously delivered programme.
-    const bool gateRoute=std::any_of(legs.begin(),legs.end(),[](const auto& leg) {
-        return leg.arrivalAction.kind==FleetArrivalActionKind::TransitStargate;
+    // Every route uses received fittings, queues and stocks. Physical hidden
+    // station losses must not invalidate a previously delivered programme.
+    GameState simulated = make_player_view(state,pending.player).state;
+    // Chart-only systems have no received physical planet to service a route.
+    // Re-observing every chart entry for 96 simulated years adds no navigation
+    // evidence; keep all received planets and their stellar environments.
+    std::erase_if(simulated.stars,[&](const auto& star) {
+        return std::none_of(simulated.planets.begin(),simulated.planets.end(),[&](const auto& p){return p.star==star.id;});
     });
-    GameState simulated = gateRoute ? make_player_view(state,pending.player).state : state;
     simulated.pendingMobileBaseTransfers.clear(); // Host-only undelivered logistics are not planning evidence.
     project_interstellar_medium(simulated,pending.player);
     // Navigation previews must never resolve battles using hidden enemy fits,
@@ -244,10 +247,10 @@ QString routeForecast(
 
     simulated.wormholes.clear();
     simulated.wormholeRules.spawnChancePerTurn = 0.0;
-    const auto missing = missing_fleet_contacts(state, pending.player);
-    simulated.fleets.insert(simulated.fleets.end(), missing.begin(), missing.end());
+    // PlayerView already includes last contacts for unconfirmed fleet losses.
+    // Appending them again would duplicate their projected mining/logistics.
     for (auto& f : simulated.fleets) f = fleet_player_view(state, f);
-    if (gateRoute) for (auto& f : simulated.fleets) {
+    for (auto& f : simulated.fleets) {
         // These are the owner's sent commands, not incoming telemetry or host
         // logistics. Keep their original issue/delivery dates in the forecast.
         if (const auto* original=findFleet(state,f.id); original && original->owner==pending.player)

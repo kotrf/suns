@@ -1001,10 +1001,7 @@ void MainWindow::updateControls()
         }
     }
 
-    auto knownFleets = state_.fleets;
-    for (auto& known : knownFleets) if (known.owner == pendingOrders_.player) known = fleet_player_view(state_, known);
-    const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
-    knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
+    const auto& knownFleets = received.fleets;
     const auto colonyShips = static_cast<std::size_t>(std::count_if(knownFleets.begin(), knownFleets.end(), [&](const Fleet& candidate) {
         return candidate.owner == pendingOrders_.player && fleet_can_colonize(state_, candidate);
     }));
@@ -1021,7 +1018,7 @@ void MainWindow::updateControls()
         .arg(static_cast<qulonglong>(colonies))
         .arg(static_cast<qulonglong>(population))
         .arg(output)
-        .arg(static_cast<qulonglong>(state_.shipDesigns.size()))
+        .arg(static_cast<qulonglong>(received.shipDesigns.size()))
         .arg(static_cast<qulonglong>(colonyShips))
         .arg(static_cast<qulonglong>(inTransit))
         .arg(player ? QString::fromStdString(player->name).toHtmlEscaped() : QString("Empire")));

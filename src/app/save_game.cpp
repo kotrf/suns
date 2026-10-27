@@ -37,7 +37,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 98;
+constexpr quint32 kSaveFormatVersion = 100;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2350,6 +2350,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "field_science_completion_save.inc"
 #include "orbital_habitats_save.inc"
 #include "orbital_bases_save.inc"
+#include "colony_conditions_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -3225,6 +3226,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeFieldScienceCompletion(stream, data.state);
     writeOrbitalHabitats(stream,data.state);
     writeOrbitalBases(stream,data.state);
+    writeColonyConditions(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3262,6 +3264,12 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
                            .arg(version)
                            .arg(kOldestSupportedSaveFormatVersion)
                            .arg(kSaveFormatVersion);
+        return false;
+    }
+    // v99 belongs to the independent, unmerged orbital-retirement branch.
+    // Accepting its base records while dropping ORLC would lose active intent.
+    if(version==99) {
+        errorMessage="Save v99 belongs to the orbital-retirement development branch. Open it with that branch; this build cannot safely migrate its retirement state.";
         return false;
     }
     gReadSaveFormatVersion = version;
@@ -3349,6 +3357,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     else migratePendingScientificData(loaded.state);
     if(version>=94) readOrbitalHabitats(stream,loaded.state);
     if(version>=97) readOrbitalBases(stream,loaded.state);
+    if(version>=100) readColonyConditions(stream,loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);

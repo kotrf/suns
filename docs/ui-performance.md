@@ -76,3 +76,12 @@ This does not validate a native file chooser, network filesystem or a specific
 long-running user campaign. OS/build provenance and whether the freeze occurred
 before the chooser appeared or after accepting a filename are still pending.
 Do not describe the cache correction as a proven fix for that separate report.
+
+## Full-audit follow-up
+
+The next correction branch also fixes the independent route-warning hotspot:
+all route types use received state, and chart-only systems without a received
+planet are omitted from the disposable navigation world. On the same 288-system
+W1 candidate, cold warning CPU changes from1379ms to32ms (W5:270ms to8ms).
+Received planets/stations, sent commands and their timing remain in the model.
+See the complete audit for the network/probe measurements and regression map.

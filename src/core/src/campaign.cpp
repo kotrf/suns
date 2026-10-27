@@ -489,11 +489,34 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         state.stars.push_back(publicStar);
     }
     for (const auto& planet : host.planets) {
-        const bool owned = planet.owner == playerId;
+        const bool owned = known_planet_owner(host,playerId,planet.id)==playerId;
         const auto level = survey_level(host, playerId, planet.star);
         if (!owned && level < SurveyLevel::BasicScan) continue;
         Planet known;
-        if (owned) known = planet;
+        if (owned) {
+            known = planet;
+            known.owner=playerId;
+            known.defenses=0;known.warDamage={};known.aftermathKnownLocally=false;
+            const auto record=std::find_if(player->surveyKnowledge.begin(),player->surveyKnowledge.end(),[&](const auto& r){return r.star==planet.star;});
+            if(record!=player->surveyKnowledge.end() && record->planetSnapshot && record->planetSnapshot->habitat
+                && record->planetSnapshot->habitat->conditions) {
+                const auto& c=*record->planetSnapshot->habitat->conditions;
+                known.defenses=c.defenses;known.warDamage=c.damage;
+            }
+            const auto aftermath=std::find_if(player->planetaryAftermath.begin(),player->planetaryAftermath.end(),[&](const auto& a){return a.planet==planet.id;});
+            if(aftermath!=player->planetaryAftermath.end() && aftermath->exact
+                && (record==player->surveyKnowledge.end() || aftermath->observedTurn>=record->observedTurn)) {
+                auto& damage=known.warDamage;
+                damage.factoriesDestroyed=damage.factoriesReconstructed+aftermath->factoriesMinimum;
+                damage.minesDestroyed=damage.minesReconstructed+aftermath->minesMinimum;
+                damage.contamination=aftermath->contaminationMinimum;
+                if(damage.factoriesDestroyed || damage.minesDestroyed || damage.contamination)
+                    damage.lastBombardmentTurn=aftermath->observedTurn;
+            }
+            if(const auto* star=find_star(host,planet.star);star && communication_delay_turns(host,playerId,star->position)==0) {
+                known.defenses=planet.defenses;known.warDamage=planet.warDamage;
+            }
+        }
         else {
             known.aftermathKnownLocally=false;
             known.id = planet.id;

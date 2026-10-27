@@ -48,7 +48,7 @@ void migration_and_corruption(const QString& p) {
     auto previous=world();deploy(previous);acknowledge(previous);assert(write_save_game_file(p,data(previous),error));
     auto v97=bytes(p);const auto at97=v97.lastIndexOf(marker);assert(at97>0);quint32 size97{};
     {QDataStream in(v97);assert(in.device()->seek(at97+4));in>>size97;}
-    assert(at97+8+size97==v97.size());
+    v97.resize(at97+8+size97); // Strip later bounded extensions before constructing a genuine v97 fixture.
     v97.chop(12); // v98 adds one player-count/id/empty-intent-count block.
     {QDataStream out(&v97,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{97};
         assert(out.device()->seek(at97+4));out<<quint32(size97-12);}

@@ -64,7 +64,9 @@ bool same_aftermath_estimate(const PlanetAftermathObservation& a,const PlanetAft
 std::optional<PlanetAftermathObservation> known_planet_aftermath(const GameState& s,PlayerId owner,PlanetId id)
 {
     const auto p=std::find_if(s.planets.begin(),s.planets.end(),[&](const auto& p){return p.id==id;});
-    if(p!=s.planets.end() && p->owner==owner && p->aftermathKnownLocally) {
+    const auto* star=p!=s.planets.end()?find_star(s,p->star):nullptr;
+    if(p!=s.planets.end() && p->owner==owner && p->aftermathKnownLocally
+        && star && communication_delay_turns(s,owner,star->position)==0) {
         auto result=observe_planet_aftermath(*p,true,s.turn); result.receivedTurn=s.turn; return result;
     }
     if(const auto* player=find_player(s,owner)) {
