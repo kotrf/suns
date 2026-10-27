@@ -315,6 +315,7 @@ std::optional<std::uint32_t> complete_production(
         0,
     });
     state.fleets.back().ships = {{design->id, 1}};
+    state.fleets.back().orbitalShipyardBirth = true;
     return id;
 }
 
@@ -737,8 +738,9 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     // remote colonies use only an explicitly assigned autonomous template.
     if (colonyPlan) planet.productionQueue = colonyPlan->items;
     planet.productionWaitingForMinerals = false;
-    set_survey_level(
-        state, fleet.owner, planet.star, SurveyLevel::GeologicalSurvey, state.turn + 1);
+    const auto* foundedStar=find_star(state,planet.star);
+    if(foundedStar) queue_survey_report(state,fleet.owner,planet.star,0,foundedStar->position,
+        state.turn+1,SurveyLevel::GeologicalSurvey);
     const auto* star = find_star(state, planet.star);
     if (star) {
         queue_player_report(
@@ -1440,6 +1442,12 @@ void abandon_lost_fleet_target(GameState& state, Fleet& fleet)
 
 bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
 {
+    if (source.outpost != OutpostKind::None || destination.outpost != OutpostKind::None) return false;
+    const bool local=fleet_has_instant_link(state,destination);
+    const bool sourceReported=!unreported_orbital_ship(state,source);
+    const auto oldTelemetry=destination.telemetry;
+    auto oldSource=fleet_player_view(state,source);
+    oldSource.telemetryInTransit=source.telemetryInTransit;
     if (!merge_fleet_special_cargo(state, destination, source)) return false;
     combine_probe_knowledge(destination, source);
     // A gate-spent movement year and used service capacity survive the
@@ -1447,8 +1455,8 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     destination.lastMovedTurn = std::max(destination.lastMovedTurn, source.lastMovedTurn);
     destination.lastServiceTurn = std::max(destination.lastServiceTurn, source.lastServiceTurn);
     const auto sourceId = source.id;
-    const auto destinationShips = fleet_ship_count(destination);
-    const auto sourceShipCount = fleet_ship_count(source);
+    const auto destinationShips = fleet_dry_mass(state, destination);
+    const auto sourceShipCount = fleet_dry_mass(state, source);
     auto sourceShips = fleet_ship_stacks(source);
     sync_fleet_presentation(state, destination);
     destination.ships.insert(destination.ships.end(), sourceShips.begin(), sourceShips.end());
@@ -1466,7 +1474,8 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
     sync_fleet_presentation(state, destination);
     destination.warp = std::min(destination.warp, fleet_max_warp(state, destination));
     destination.fuel = std::min(destination.fuel, fleet_fuel_capacity(state, destination));
-    refresh_merged_fleet_manifest(destination);
+    if(local) refresh_merged_fleet_manifest(destination);
+    else destination.telemetry=oldTelemetry;
 
     queue_player_report(
         state,
@@ -1480,6 +1489,11 @@ bool merge_rendezvous_fleet(GameState& state, Fleet& source, Fleet& destination)
         destination.design,
         ProductionKind::ColonyShip,
         sourceId);
+    const auto due=fleet_report_delivery_turn(state,destination.owner,destination.position,state.turn+1,destination.id);
+    if(!local && sourceReported && due>state.turn+1) {
+        oldSource.pendingCommands.clear();
+        state.pendingFleetLossContacts.push_back({std::move(oldSource),due});
+    }
     return true;
 }
 
@@ -2575,6 +2589,16 @@ TurnResult TurnProcessor::process_with_events(
                     } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>
                         || std::is_same_v<T, SetFleetMineralCargoOrder>
                         || std::is_same_v<T, TransferCargoOrder>) {
+                        const auto local=[&](FleetId id) {
+                            const auto* f=find_service_fleet(next,id);
+                            return !id || (f && f->owner==submission.player && communication_delay_turns(next,submission.player,f->position)==0);
+                        };
+                        if constexpr(std::is_same_v<T,TransferCargoOrder>) {
+                            const auto* a=find_service_fleet(next,concreteOrder.source.fleet);
+                            const auto* b=find_service_fleet(next,concreteOrder.destination.fleet);
+                            const bool base=(a && mobile_base_hulls(next,*a)) || (b && mobile_base_hulls(next,*b));
+                            if(!base && (!local(concreteOrder.source.fleet) || !local(concreteOrder.destination.fleet)))return;
+                        } else if(!local(concreteOrder.fleet))return;
                         if constexpr (std::is_same_v<T, TransferCargoOrder>) {
                             const auto involvesBase = [&](FleetId id) {
                                 const auto* f = find_service_fleet(next, id);

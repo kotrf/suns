@@ -1,3 +1,4 @@
+#include "suns/orbital_habitats.hpp"
 #include "suns/strategic_operations.hpp"
 #include "suns/communications.hpp"
 
@@ -16,7 +17,7 @@ struct Receiver {
 std::vector<Receiver> receivers(const GameState& state,std::uint64_t turn)
 {
     std::vector<Receiver> result;
-    for(const auto& p:state.planets) if(p.owner && p.population && p.radar!=PlanetaryRadarLevel::None)
+    for(const auto& p:state.planets) if(p.owner && total_colony_population(p) && p.radar!=PlanetaryRadarLevel::None)
         if(const auto* star=find_star(state,p.star)) result.push_back({p.owner,star->position,0,p.id,
             2*planetary_radar_range(p.radar)*(1-sensor_interference(state,p.owner,star->position,turn)),0});
     for(const auto& f:state.fleets) if(fleet_has_scanner(state,f)) result.push_back({f.owner,f.position,f.id,0,

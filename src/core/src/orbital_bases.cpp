@@ -251,12 +251,19 @@ void plan_orbital_bases(const PlayerView& view, PlayerOrders& orders, ComputerSt
         return std::binary_search(b.acceptedItems.begin(),b.acceptedItems.end(),intent.item)
             && std::none_of(b.queue.begin(),b.queue.end(),[&](auto job){return job.id==intent.item;});
     });
+    int plannedProtection=20; // The new AI constructor's Bulk screen.
+    for(const auto& f:s.fleets) if(f.owner==view.player && f.outpost==OutpostKind::None
+        && fleet_construction_kit(s,f)==OutpostKind::OrbitalShipyard)
+        plannedProtection=std::max(plannedProtection,int(orbital_screen(s,f)));
     const Planet* target=nullptr;
     for (const auto& p:s.planets) if (!p.owner && survey_level(s,view.player,p.star)>=SurveyLevel::OrbitalSurvey
         && !orbital_base_at(s,p.id) && !find_orbital_station_at_planet(s,p.id)
         && known_planet_habitability(s,view.player,p.id).value_or(1)<=0) {
         const auto* star=find_star(s,p.star);
-        if (star && (!target || p.id<target->id)) target=&p;
+        const auto* owner=find_player(s,view.player);
+        const bool safe=star && owner && (owner->race.radiationImmune
+            || int(orbital_background(*star))-plannedProtection<=owner->race.habitableRadiation.maximum);
+        if (safe && (!target || p.id<target->id)) target=&p;
     }
     bool existing=false;
     for (const auto& f:s.fleets) if (f.owner==view.player && fleet_construction_kit(s,f)==OutpostKind::OrbitalShipyard) {

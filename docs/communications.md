@@ -196,3 +196,12 @@ and can wait/retry without headquarters contact. Stop and replacement remain
 subject to delivery. Transit reports and fleet telemetry remain separate immutable
 received facts; position extrapolation stops at an unconfirmed gate hop. See
 [gate route rules](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).
+
+## Audit corrections (save v100 build)
+
+When no homeworld-rooted field survives but an owned colony remains, the slow
+fallback uses its physical endpoint and distance / 150 ly per year (minimum one
+year); it no longer grants a flat one-year link across the galaxy. Orbital-only
+populated colonies participate in command emissions and signal interception.
+Both connectivity passes use a frontier traversal with results independent of
+fleet storage order. Incoming instant commands do not require outgoing TX.

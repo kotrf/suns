@@ -1,5 +1,31 @@
 # Project status and development handoff
 
+## Current work — complete main audit corrections
+
+Branch `codex/audit-corrections` starts from main `c161b0e` (merged #235).
+The user authorized all 12 reproduced correctness fixes and three measured
+performance corrections. [Original audit and correction matrix](audits/2026-10-27-main-code-audit.md).
+Main remains save v98 / orders v40; this branch uses save v100 / orders v40.
+CCON stores dated defense/war-damage evidence alongside immutable colony packets.
+Development save v99 from separate PR #234 is explicitly rejected rather than
+silently dropping its ORLC missions. That PR needs format reconciliation on rebase.
+#63 remains frozen; empty-colony factory policy is outside these proven defects.
+
+Validation: GCC14.2 / Qt6.12 Debug full application/test build succeeded;
+final offscreen CTest **92/92** passed (58.82s), `git diff --check` clean.
+Two new suites cover core/save and real Qt controls; existing sample/legacy-save
+fixtures were updated for received merge contacts and trailing extensions.
+A separate150-boundary Medium/288 campaign with5AI saves, loads, reserializes
+and continues from loaded state every year: all150 cycles succeeded; bytes are
+stable after the initial legacy telemetry-stack normalization.
+Measured CPU: route warning W1 1379→32ms; reversed128-node communication queries
+1106→45ms; probe1000/full notebook target selection430→0.8ms.
+A later faster full manifest forwards/coalesces its merge confirmation so an
+absorbed source cannot coexist with its newly received combined manifest.
+Unknown source ships never create phantom missing contacts.
+Linux/offscreen validation only; no native chooser, user disk, other OS or
+sanitizer acceptance is claimed. Ready for review, no automatic merge.
+
 ## Current work — Medium-map UI preview performance
 
 Branch `codex/ui-preview-performance` starts from main `6d04c44`, merged #233,

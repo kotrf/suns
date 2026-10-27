@@ -13,13 +13,15 @@ void clear_route(Fleet& f)
     f.destination.reset(); f.targetFleet = 0; f.arrivalAction.reset();
     f.waypointQueue.clear(); f.routeTemplate.clear(); f.repeatOrders = false; f.task = FleetTask::None;
 }
-double leg_cost(const GameState& s, Fleet f, Position start, Position end, std::uint8_t warp)
+double leg_cost(const GameState& s, Fleet& f, Position start, Position end, std::uint8_t warp)
 {
+    const auto position=f.position;const auto oldWarp=f.warp;
     f.position = start; f.warp = warp;
     const auto distance = distance_between(start, end), step = warp_distance(warp);
     const auto years = std::floor(distance / step);
-    return years * fleet_segment_fuel_bounds(s, f, step).consumedMaximum
+    const auto result = years * fleet_segment_fuel_bounds(s, f, step).consumedMaximum
         + fleet_segment_fuel_bounds(s, f, std::max(0.0, distance - years * step)).consumedMaximum;
+    f.position=position;f.warp=oldWarp;return result;
 }
 std::optional<std::uint8_t> flight_warp(const GameState& s, const Fleet& f, Position target, bool returning)
 {
@@ -27,11 +29,12 @@ std::optional<std::uint8_t> flight_warp(const GameState& s, const Fleet& f, Posi
     for (const auto& stack : fleet_ship_stacks(f)) if (const auto* d = find_ship_design(s, stack.design))
         cap = std::min(cap, ship_design_cruise_warp(*d));
     std::optional<std::uint8_t> best; double bestFuel = std::numeric_limits<double>::infinity();
+    auto check=f;
     for (std::uint8_t warp = 1; warp <= cap; ++warp) {
-        auto check = f; check.warp = warp;
+        check.warp = warp;
         if (!fleet_warp_valid(s, check, warp) || fleet_overdrive_damage_rate(s, check, warp) > 0) continue;
-        const auto fuel = leg_cost(s, f, f.position, target, warp);
-        const auto home = !returning && f.probe.program.returnHome ? leg_cost(s, f, target, f.probe.origin, warp) : 0.0;
+        const auto fuel = leg_cost(s, check, f.position, target, warp);
+        const auto home = !returning && f.probe.program.returnHome ? leg_cost(s, check, target, f.probe.origin, warp) : 0.0;
         if (fuel + home + (returning ? 0.0 : f.probe.program.fuelReserve) > f.fuel + 1e-6) continue;
         if (f.probe.program.flight == ProbeFlightMode::SafeCruise || fuel < bestFuel - 1e-6) { best = warp; bestFuel = fuel; }
     }
@@ -162,11 +165,18 @@ void advance_survey_probes(GameState& s)
         bool unfinished = false;
         // Stellar coordinates are public chart data. No planet, other fleet,
         // pending survey, mineral, object or station state enters this choice.
-        for (const auto& star : s.stars) {
+        std::vector<const StarSystem*> candidates;
+        for (const auto& star:s.stars) candidates.push_back(&star);
+        std::sort(candidates.begin(),candidates.end(),[&](auto a,auto b) {
+            const auto da=distance_between(f.position,a->position),db=distance_between(f.position,b->position);
+            return da<db || (da==db && a->id<b->id);
+        });
+        for (const auto* candidate : candidates) {
+            const auto& star=*candidate;
             if (distance_between(star.position, m.program.center) > m.program.radius || probe_survey_level(f, star.id) >= m.program.depth) continue;
             unfinished = true; const auto warp = flight_warp(s, f, star.position, false); if (!warp) continue;
             const auto distance = distance_between(f.position, star.position);
-            if (!best || distance < bestDistance || (distance == bestDistance && star.id < best->id)) { best = &star; bestDistance = distance; bestWarp = *warp; }
+            if (!best || distance < bestDistance || (distance == bestDistance && star.id < best->id)) { best = &star; bestDistance = distance; bestWarp = *warp; break; }
         }
         if (!best) { return_or_hold(s, f, unfinished); continue; }
         clear_route(f); m.target = best->id; f.warp = bestWarp;
