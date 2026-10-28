@@ -388,6 +388,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Supply fuel to outpost", int(FleetArrivalActionKind::SupplyOutpost));
     actionCombo->addItem("Recover scientific specimen", int(FleetArrivalActionKind::RecoverSample));
     actionCombo->addItem("Stargate hop (use Add gate step…)",int(FleetArrivalActionKind::TransitStargate));
+    actionCombo->addItem("Mineral load policy (edit in Logistics)",int(FleetArrivalActionKind::LoadMinerals));
     if (auto* model=qobject_cast<QStandardItemModel*>(actionCombo->model()))
         model->item(actionCombo->count()-1)->setEnabled(false);
     const auto workTip = [&](FleetArrivalActionKind kind, const QString& text) {

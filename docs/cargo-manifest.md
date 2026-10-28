@@ -74,3 +74,9 @@ physical hold, surface stockpiles, cargo mass and arrival validation. Definition
 and roster edits are HQ intent; old telemetry is not a transfer permission or
 a promise of stock. Passenger evacuation remains an ordinary physical cargo
 operation; automatic emergency diversion is a later network policy.
+
+A transport line may leave a configured source reserve and hold its loading
+waypoint until a selected-mineral departure minimum is aboard. Partial loads
+remain real cargo across retries, stop/resume and save/load. Other passengers
+and cargo still occupy the shared hold; an impossible minimum waits instead of
+discarding them or silently shrinking the order. See the transport-line rules.

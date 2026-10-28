@@ -1116,7 +1116,8 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
                     if (!star) { valid=false; break; }
                     fleet.position=star->position; // No fuel or future depot credit for the hop.
                 }
-                if (waypoint.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable)
+                if (waypoint.arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable
+                    || waypoint.arrivalAction.kind==FleetArrivalActionKind::LoadMinerals)
                     fleet.minerals.ironium+=std::max(0.0,fleet_cargo_capacity(view.state,fleet)-fleet_cargo_used(view.state,fleet));
             }
         }

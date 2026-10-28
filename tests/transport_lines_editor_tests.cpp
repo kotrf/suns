@@ -63,6 +63,60 @@ void persistence(const QString& path) {
     {QFile f(path);assert(f.open(QIODevice::WriteOnly));f.write(bad);}
     assert(!read_save_game_file(path,loaded,error));
 }
+void load_policy_persistence(const QString& path) {
+    auto s=transport_world(900);s.fleets.resize(1);s.fleets[0].position={900,0};s.fleets[0].electronics.mode=EmissionMode::Passive;
+    s.planets[1].minerals.ironium=130;acknowledge(s);
+    auto d=line_spec();d.sourceReserve=100;d.departureMinimum=80;
+    assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));
+    QString error;SaveGameData loaded;
+    assert(write_save_game_file(path,host(s),error));assert(read_save_game_file(path,loaded,error));
+    const auto& pending=loaded.state.fleets[0].pendingCommands.front().program.arrivalAction;
+    assert(pending.kind==FleetArrivalActionKind::LoadMinerals && pending.mineralReserve==100 && pending.mineralMinimum==80);
+    const auto due=s.fleets[0].pendingCommands.front().deliveryTurn;
+    while(s.turn<=due)tick(s);
+    assert(s.fleets[0].minerals.ironium==30 && s.fleets[0].arrivalAction);
+    assert(write_save_game_file(path,host(s),error));assert(read_save_game_file(path,loaded,error));s=std::move(loaded.state);
+    assert(s.fleets[0].arrivalAction->mineralMinimum==80 && s.players[0].transportLines[0].spec.sourceReserve==100);
+    assert(write_save_game_file(path+".old-view",make_player_turn(host(s),1),error));
+    auto hidden=s;hidden.planets[1].minerals.ironium+=500;hidden.fleets[0].minerals.ironium=79;
+    assert(write_save_game_file(path+".hidden",make_player_turn(host(hidden),1),error));
+    assert(raw_file(path+".old-view")==raw_file(path+".hidden"));
+    s.fleets[0].electronics.mode=EmissionMode::Standard;
+    for(int i=0;i<8;++i)tick(s);
+    const auto view=make_player_view(s,1);
+    assert(view.state.fleets[0].arrivalAction && view.state.fleets[0].arrivalAction->mineralMinimum==80);
+    assert(same_position(view.state.fleets[0].position,{900,0}));
+    const auto& line=s.players[0].transportLines[0];
+    assert(transport_assignment_status(view,line,line.assignments[0]).find("Waiting at source")!=std::string::npos);
+    assert(write_save_game_file(path,make_player_turn(host(s),1),error));assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets[0].arrivalAction->mineralReserve==100);
+    MainWindow w;MainWindowTestAccess::set(w,s);assert(w.selectFleetForRouteProgram(1));
+    assert(w.selectedFleetRouteProgramRows()[0].arrivalAction.contains("leave 100 kt"));
+    assert(w.selectedFleetRouteProgramForecast().contains("Load policy waiting"));
+    auto control=s;s.planets[1].minerals.ironium+=50;control.planets[1].minerals.ironium+=50;
+    tick(s);tick(control);assert(s.fleets[0].minerals.ironium==80 && s.planets[1].minerals.ironium==100);
+    assert(same_position(*s.fleets[0].destination,{0,0}));
+    TurnOrderFileData packet;packet.campaignId=55;packet.turn=s.turn;packet.turnToken=77;packet.orders={1,{SetTransportLineOrder{d}}};packet.descriptions={"Reserve and wait"};
+    assert(write_turn_order_file(path+".orders",packet,error));TurnOrderFileData parsed;
+    assert(read_turn_order_file(path+".orders",parsed,error));
+    const auto& spec=std::get<SetTransportLineOrder>(parsed.orders.orders[0]).value;
+    assert(spec.sourceReserve==100 && spec.departureMinimum==80);
+}
+void legacy_v102_line(const QString& path) {
+    auto s=transport_world();assert(set_transport_line(s,1,{line_spec()}));QString error;SaveGameData loaded;
+    assert(write_save_game_file(path,host(s),error));auto raw=raw_file(path);QByteArray marker;
+    {QDataStream out(&marker,QIODevice::WriteOnly);out<<quint32{0x4c494e45};}
+    const auto at=raw.lastIndexOf(marker);assert(at>0);quint32 size{};qint64 policyAt{};
+    {QDataStream in(raw);assert(in.device()->seek(at+4));in>>size;
+        quint32 players{},id{},last{},lines{},line{},source{},destination{};quint64 revision{};QString name;quint8 warp{},cargo{},active{};
+        in>>players>>id>>last>>lines;assert(players==1 && lines==1);
+        in>>line>>revision>>name>>source>>destination>>warp>>cargo>>active;policyAt=in.device()->pos();}
+    raw.remove(policyAt,8); // v102 LINE has no reserve/minimum after the active flag.
+    {QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{102};assert(out.device()->seek(at+4));out<<quint32(size-8);}
+    {QFile file(path);assert(file.open(QIODevice::WriteOnly));file.write(raw);}
+    assert(read_save_game_file(path,loaded,error));
+    const auto& d=loaded.state.players[0].transportLines[0].spec;assert(!d.sourceReserve && !d.departureMinimum);
+}
 void manual_route_editor_override() {
     MainWindow w;MainWindowTestAccess::set(w,transport_world());MainWindowTestAccess::draft(w);
     const auto rows=w.selectedFleetRouteProgramRows();assert(rows.size()==2);
@@ -77,17 +131,19 @@ void manual_route_editor_override() {
 void controls() {
     MainWindow w;MainWindowTestAccess::set(w,transport_world());w.installTransportLines();
     w.findChild<QLineEdit*>("transportLineName")->setText("Ore shuttle");
+    w.findChild<QSpinBox*>("transportLineReserve")->setValue(10);
+    w.findChild<QSpinBox*>("transportLineMinimum")->setValue(40);
     auto* source=w.findChild<QComboBox*>("transportLineSource");source->setCurrentIndex(source->findData(2u));
     auto* target=w.findChild<QComboBox*>("transportLineDestination");target->setCurrentIndex(target->findData(1u));
     w.findChild<QPushButton*>("transportLineSave")->click();
     assert(MainWindowTestAccess::pending(w).orders.size()==1);
-    const auto& define=std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders[0]);assert(define.value.id==1 && define.value.source==2);
+    const auto& define=std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders[0]);assert(define.value.id==1 && define.value.source==2 && define.value.sourceReserve==10 && define.value.departureMinimum==40);
     w.findChild<QPushButton*>("transportLineAssign")->click();
     assert(std::get<AssignTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).line==1);
     assert(w.findChild<QListWidget*>("transportLineRoster")->count()==1);
     const auto route=pending_transport_route(transport_world(),MainWindowTestAccess::pending(w),1);
     assert(route && route->repeatOrders && route->queuedWaypoints.size()==1);
-    assert(route->arrivalAction.kind==FleetArrivalActionKind::LoadAllAvailable);
+    assert(route->arrivalAction.kind==FleetArrivalActionKind::LoadMinerals && route->arrivalAction.mineralMinimum==40);
     w.findChild<QSpinBox*>("transportLineWarp")->setValue(6);w.findChild<QPushButton*>("transportLineSave")->click();
     assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).value.revision==2);
     w.findChild<QPushButton*>("transportLinePause")->click();
@@ -97,4 +153,4 @@ void controls() {
     w.findChild<QPushButton*>("transportLineDelete")->click();
     assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).remove);
 }
-int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());persistence(dir.filePath("lines.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}
+int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}

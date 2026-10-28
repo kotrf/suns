@@ -19,6 +19,7 @@ void dispatch(GameState& s, PlayerId player, const TransportLine& line, FleetId 
 }
 bool transport_line_spec_valid(const TransportLineSpec& d) {
     return d.id && d.revision && !d.name.empty() && d.name.size()<=64 && d.source && d.destination
+        && d.sourceReserve<=1000000000 && d.departureMinimum<=1000000000
         && d.source!=d.destination && d.warp>=1 && d.warp<=kMaxWarp && d.cargo<=TransportCargo::Germanium;
 }
 std::string transport_line_error(const PlayerView& view,const TransportLineSpec& d) {
@@ -39,7 +40,10 @@ FleetRouteProgram transport_line_program(const TransportLine& line) {
     if(!line.spec.active){p.clearRoute=true;return p;}
     const auto cargo=line.spec.cargo==TransportCargo::Ironium?FleetCargoKind::Ironium:
         line.spec.cargo==TransportCargo::Boranium?FleetCargoKind::Boranium:FleetCargoKind::Germanium;
-    p.arrivalAction.kind=FleetArrivalActionKind::LoadAllAvailable;p.arrivalAction.cargo=cargo;
+    p.arrivalAction.kind=line.spec.sourceReserve || line.spec.departureMinimum
+        ? FleetArrivalActionKind::LoadMinerals : FleetArrivalActionKind::LoadAllAvailable;
+    p.arrivalAction.cargo=cargo;p.arrivalAction.mineralReserve=line.spec.sourceReserve;
+    p.arrivalAction.mineralMinimum=line.spec.departureMinimum;
     FleetArrivalAction unload;unload.kind=FleetArrivalActionKind::UnloadAll;unload.cargo=cargo;
     p.queuedWaypoints={{line.destinationPosition,line.spec.warp,unload}};p.repeatOrders=true;
     return p;
@@ -149,6 +153,14 @@ std::string transport_assignment_status(const PlayerView& view,const TransportLi
     if(!matches)return "Sent programme not confirmed (or overridden aboard)";
     if(f->damagePercent>=100)return "Reported disabled by damage";
     const auto reason=transport_line_error(view,line.spec);if(!reason.empty())return reason;
+    if(f->arrivalAction && f->arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
+        && same_position(f->position,line.sourcePosition)) {
+        const auto amount=line.spec.cargo==TransportCargo::Ironium?f->minerals.ironium:
+            line.spec.cargo==TransportCargo::Boranium?f->minerals.boranium:f->minerals.germanium;
+        if(amount+std::max(0.0,fleet_cargo_capacity(view.state,*f)-fleet_cargo_used(view.state,*f))+1e-6<line.spec.departureMinimum)
+            return "Waiting: reported shared hold cannot fit the departure minimum";
+        return "Waiting at source for departure minimum; loaded cargo retained; source reserve enforced on site";
+    }
     const auto* source=find_planet(view.state,line.spec.source);
     if(source && source->owner==view.player) {
         const auto stock=line.spec.cargo==TransportCargo::Ironium?source->minerals.ironium:

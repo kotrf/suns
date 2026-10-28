@@ -1,6 +1,33 @@
 # Project status and development handoff
 
-## Current work — transport lines (#53)
+## Current work — transport-line load policies (#53)
+
+The user authorized merging reviewed #237 and continuing #53. PR #237 merged as
+`4fb67cf`; checked head `2fa89b7` passed CI 94/94 (81.23 s). Branch
+`codex/transport-line-load-policies` starts there: main save v102 / orders v42,
+branch v103 / v43. #53 stays open; #63 remains frozen.
+
+Two zero-default whole-kt policies: preserve a source reserve and optionally
+wait for a departure minimum of the selected I/B/G aboard. Physical loading
+keeps partial cargo, respects shared capacity and source ownership, and retries
+locally without annual HQ control. Stop/edit/resume retain real cargo and use
+ordinary delivery. An impossible current hold does not silently lower the goal.
+Received telemetry/status and conditional forecasts expose the waiting state;
+geometric projection cannot assume that an unseen future loading attempt met
+its threshold. Policy payloads travel in existing physical/received/in-flight
+route structures, with versioned catalog/order fields and v102 migration.
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+Linux/offscreen CTest **94/94** passed (65.65 s); `git diff --check` clean.
+Expanded transport core/Qt/save suites cover source floors, gradual unattended
+loading/departure, capacity blockage, capture, stop/resume, delayed payloads,
+received waiting status and conditional forecast, stale geometry, hidden export
+invariance, physical/received/in-flight save state, v102 migration and new PBEM
+policy fields. No manual campaign balance, other-platform or sanitizer acceptance
+is claimed. No automatic merge of this follow-up.
+[Rules and remaining #53](transport-lines.md).
+
+## Merged implementation — transport lines (#237, historical branch checkpoint)
 
 Branch `codex/transport-lines` starts from main `c957b12` (merged #234).
 The user selected #53 on 28 October; the previous roadmap postponement is

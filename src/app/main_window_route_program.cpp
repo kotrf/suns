@@ -107,6 +107,9 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
     switch (action.kind) {
     case FleetArrivalActionKind::None:
         return "no action";
+    case FleetArrivalActionKind::LoadMinerals:
+        return QString("Load %1; leave %2 kt; departure minimum %3 kt (0 = no wait)")
+            .arg(cargoName()).arg(action.mineralReserve).arg(action.mineralMinimum);
     case FleetArrivalActionKind::LoadAllAvailable:
         return action.cargo == FleetCargoKind::Colonists
             ? QString("Load all %1, leave %2 — dynamic")
@@ -391,6 +394,14 @@ QString routeForecast(
                 }
             }
         }
+        if(leg.arrivalAction.kind==FleetArrivalActionKind::LoadMinerals && after->arrivalAction
+            && after->arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
+            && same_position(after->position,leg.destination)) {
+            lines << QString("%1. Load policy waiting (received-stock forecast): leave %2 kt at source; depart with at least %3 kt. "
+                "Partial cargo remains aboard; retry annually. Future supplies are not promised; later ETA is unknown.")
+                .arg(qulonglong(legIndex+1)).arg(leg.arrivalAction.mineralReserve).arg(leg.arrivalAction.mineralMinimum);
+            break;
+        }
         // Activation can consume multiple already-reached No action points,
         // including the receiving-system point immediately following a hop.
         std::size_t skipped=0;
@@ -424,6 +435,7 @@ QString routeForecast(
             case FleetArrivalActionKind::None:
                 if (leg.targetFleet != 0) outcome = "; moving-target rendezvous completed";
                 break;
+            case FleetArrivalActionKind::LoadMinerals:
             case FleetArrivalActionKind::LoadAllAvailable:
                 if (leg.arrivalAction.cargo == FleetCargoKind::Xenocrystal) {
                     outcome = QString("; projected xenocrystals aboard: %1 (received surface-stock estimate)").arg(after->xenocrystal);
@@ -504,7 +516,8 @@ QString routeForecast(
                          .arg(navigationCertainty)
                          .arg(outcome);
 
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadMinerals
+                || leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
                 || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
                 || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {
                 dependsOnDynamicResult = true;
@@ -1412,8 +1425,8 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
             if (answer != QMessageBox::Yes) return false;
         }
     }
-    if (action.kind == FleetArrivalActionKind::TransitStargate) {
-        if (leg.arrivalAction.kind != FleetArrivalActionKind::TransitStargate) return false;
+    if (action.kind == FleetArrivalActionKind::TransitStargate || action.kind == FleetArrivalActionKind::LoadMinerals) {
+        if (leg.arrivalAction.kind != action.kind) return false;
         action = leg.arrivalAction;
     }
     leg.arrivalAction = action;
