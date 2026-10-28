@@ -146,7 +146,7 @@ void conditions_are_frozen() {
  assert(!read_save_game_file(path,loaded,error));
  {QDataStream out(&bytes,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{99};}
  assert(file.open(QIODevice::WriteOnly));file.write(bytes);file.close();
- assert(!read_save_game_file(path,loaded,error)); // Never silently discard development ORLC retirement intent.
+ assert(!read_save_game_file(path,loaded,error)); // A forged v99 header cannot discard or reinterpret the combined extension tails.
 }
 void delayed_founding() {
  auto s=test::remote_receiver_fixture();s.players[0].race.environmentBased=false;

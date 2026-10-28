@@ -164,7 +164,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::EngineeringDismantled: subject=QString("%1: engineering project dismantled").arg(event_planet_name(state,event)); break;
     case GameEventKind::OutpostDeployed: subject = QString("%1: outpost deployed").arg(fleetName); break;
     case GameEventKind::OutpostDeploymentFailed: subject = QString("%1: deployment rejected").arg(fleetName); break;
-    case GameEventKind::OrbitalBaseStatus: subject = QString("%1: orbital life support / refit; %2 residents lost").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
+    case GameEventKind::OrbitalBaseStatus: subject = event.quantity>=4
+        ? QString("%1: %2").arg(fleetName,event.quantity==5?"base dismantled; colony station queued":"base dismantled; orbit freed")
+        : QString("%1: orbital life support / refit; %2 residents lost").arg(fleetName).arg(qulonglong(event.deliveredColonists)); break;
     case GameEventKind::OutpostFuelExhausted: subject = QString("%1: outpost fuel exhausted").arg(fleetName); break;
     case GameEventKind::StargateTransit: subject = QString("%1 transited to %2").arg(fleetName, planetName); break;
     case GameEventKind::StargateTransitFailed: subject = QString("%1: stargate transit rejected").arg(fleetName); break;
@@ -539,7 +541,12 @@ QString event_text(const GameState& state, const GameEvent& event)
         }
         text=QString("Year %1 • %2 at %3.\n%4").arg(qulonglong(event.observedTurn)).arg(project,event_planet_name(state,event),detail);
     } else if (event.kind == GameEventKind::OrbitalBaseStatus) {
-        text=QString("Year %1 • %2. %3\nResidents lost during the observed year: %4. Radiation protection and emergency life-support reserves are separate; deliver supplies, refit protection or evacuate.")
+        if (event.quantity==4 || event.quantity==5) {
+            text=QString("Year %1 • %2 permanently dismantled after evacuation. Recovered I/B/G %3/%4/%5 kt, all remaining stocks and fuel transferred to the recovery transport. %6")
+                .arg(qulonglong(event.observedTurn)).arg(fleetName)
+                .arg(event.deliveredMinerals.ironium).arg(event.deliveredMinerals.boranium).arg(event.deliveredMinerals.germanium)
+                .arg(event.quantity==5?"A full-price colony station project was queued; services await normal construction.":"The orbital station slot is free.");
+        } else text=QString("Year %1 • %2. %3\nResidents lost during the observed year: %4. Radiation protection and emergency life-support reserves are separate; deliver supplies, refit protection or evacuate.")
             .arg(qulonglong(event.observedTurn)).arg(fleetName)
             .arg(event.quantity==3 ? "Paid base refit completed." : event.quantity==2 ? "Base evacuated / empty." : event.quantity==1 ? "Life support supplied." : "Life support unavailable: using reserves or suffering attrition.")
             .arg(qulonglong(event.deliveredColonists));

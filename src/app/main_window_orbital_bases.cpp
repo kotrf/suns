@@ -4,6 +4,7 @@
 #include "suns/deep_space.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/stations.hpp"
 #include <QComboBox>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -54,12 +55,27 @@ void MainWindow::installOrbitalBases()
     auto* keep=amount("orbitalBaseKeepFuel","Keep donor fuel, mg"); keep->setValue(100);
     auto* deliver=button("orbitalBaseDeliver","Transport → base: deliver people / minerals / fuel");
     auto* evacuate=button("orbitalBaseEvacuate","Base → transport: evacuate / collect");
+    auto* retirementHint=new QLabel("Retirement waits for zero residents, no specimens/xenocrystal and no ship/refit jobs. "
+        "All remaining stocks and fuel plus recovered I/B/G go to the selected transport; it must have room. "
+        "Recovery is 25% of the current fitted hull and paid assembly, reduced by damage and rounded down. "
+        "Rebuilding dismantles the base and queues a full-price ordinary station at your populated colony. "
+        "There are no station services during rebuilding; the surface pays its normal production/mineral bill.",body);
+    retirementHint->setWordWrap(true); layout->addWidget(retirementHint);
+    auto* dismantle=button("orbitalBaseDismantle","Evacuate, then dismantle permanently into selected transport");
+    auto* stationHulls=combo("orbitalBaseStationHull");
+    for (const auto h : {OrbitalStationHullType::OrbitalDock,OrbitalStationHullType::Starbase,OrbitalStationHullType::Fortress}) {
+        const auto& spec=station_hull_spec(h);
+        stationHulls->addItem(QString("%1 (empty fit, yard + refueling): %2 work; I/B/G %3/%4/%5")
+            .arg(spec.name).arg(spec.cost).arg(spec.minerals.ironium).arg(spec.minerals.boranium).arg(spec.minerals.germanium),int(h));
+    }
+    auto* rebuild=button("orbitalBaseRebuildStation","Evacuate, then replace with selected colony station project");
+    auto* cancelRetirement=button("orbitalBaseCancelRetirement","Cancel pending retirement (no completed demolition can be undone)");
     auto* scroll=new QScrollArea(dock); scroll->setWidgetResizable(true); scroll->setWidget(body); dock->setWidget(scroll);
     addDockWidget(Qt::RightDockWidgetArea,dock); dock->hide(); menuBar()->addAction(dock->toggleViewAction());
     const auto knownWorld=[this] { return make_player_view(state_,pendingOrders_.player).state; };
     const auto update=[=,this] {
         auto known=knownWorld(); const auto* f=find_service_fleet(known,bases->currentData().toUInt());
-        for (auto* button : {approach,deploy,pause,resume,build,refit,cancel,deliver,evacuate}) button->setEnabled(f!=nullptr);
+        for (auto* button : {approach,deploy,pause,resume,build,refit,cancel,deliver,evacuate,dismantle,rebuild,cancelRetirement}) button->setEnabled(f!=nullptr);
         queue->clear(); if (!f) { status->setText("No received constructor or orbital base. Build one in Ship Designer."); return; }
         const auto& b=f->orbitalBase;
         const auto background=f->outpost==OutpostKind::OrbitalShipyard ? b.background : [&] {
@@ -83,6 +99,14 @@ void MainWindow::installOrbitalBases()
                 apply_orbital_base_command(known,intent,*command.orbitalBase);
         for (const auto& order:pendingOrders_.orders) if (const auto* o=std::get_if<OrbitalBaseOrder>(&order); o && o->fleet==f->id)
             apply_orbital_base_command(known,intent,o->command);
+        const auto recovered=orbital_base_recovery(known,*f);
+        status->setText(status->text()+QString("\nRecovery forecast from received fit/stages/damage: I/B/G %1/%2/%3 kt, plus remaining stocks and fuel.")
+            .arg(recovered.ironium).arg(recovered.boranium).arg(recovered.germanium));
+        if (intent.orbitalBase.retirement) {
+            const auto error=orbital_retirement_error(known,intent,*intent.orbitalBase.retirement);
+            status->setText(status->text()+QString("\nRetirement (received + sent/local intent): %1")
+                .arg(error.empty()?"Ready according to received information; execution rechecks on site.":QString::fromStdString(error)));
+        }
         for (const auto& item:intent.orbitalBase.queue) {
             const auto* d=find_ship_design(known,item.design); if (!d) continue;
             const auto m=ship_design_mineral_cost(*d);
@@ -93,11 +117,18 @@ void MainWindow::installOrbitalBases()
         }
         const bool anchored=f->outpost==OutpostKind::OrbitalShipyard;
         approach->setEnabled(!anchored); deploy->setEnabled(!anchored && planets->count());
-        build->setEnabled(anchored && designs->count()); refit->setEnabled(anchored && designs->count());
+        build->setEnabled(anchored && !intent.orbitalBase.retirement && designs->count()); refit->setEnabled(build->isEnabled());
         pause->setEnabled(anchored); resume->setEnabled(anchored);
         const auto* client=find_service_fleet(known,clients->currentData().toUInt());
         const bool local=anchored && client && same_position(client->position,f->position);
         deliver->setEnabled(local); evacuate->setEnabled(local);
+        dismantle->setEnabled(local && !intent.orbitalBase.retirement);
+        const auto* colony=find_planet(known,b.planet);
+        const StationLoadout station{OrbitalStationHullType(stationHulls->currentData().toInt()),{},true,true};
+        rebuild->setEnabled(dismantle->isEnabled() && colony && colony->owner==pendingOrders_.player && colony->population
+            && station_loadout_available(known,pendingOrders_.player,station));
+        cancelRetirement->setEnabled(anchored && intent.orbitalBase.retirement.has_value());
+        cancelRetirement->setProperty("retirementId",qulonglong(intent.orbitalBase.retirement?intent.orbitalBase.retirement->item:0));
     };
     const auto refresh=[=,this] {
         const auto known=knownWorld();
@@ -116,7 +147,8 @@ void MainWindow::installOrbitalBases()
     };
     auto send=[=,this](OrbitalBaseCommand c) {
         if (!bases->currentData().toUInt() || !orbital_base_command_valid(c)) return;
-        if(c.action==OrbitalBaseAction::QueueShip || c.action==OrbitalBaseAction::Refit) {
+        if(c.action==OrbitalBaseAction::QueueShip || c.action==OrbitalBaseAction::Refit
+            || c.action==OrbitalBaseAction::Decommission || c.action==OrbitalBaseAction::RebuildStation) {
             const auto known=knownWorld();const auto* base=find_service_fleet(known,bases->currentData().toUInt());
             auto latest=std::max<std::uint64_t>(state_.turn<<32,base?base->orbitalBase.lastItemId:0);
             for(const auto& actual:state_.fleets)if(base && actual.id==base->id && actual.owner==pendingOrders_.player)
@@ -136,6 +168,17 @@ void MainWindow::installOrbitalBases()
     connect(build,&QPushButton::clicked,this,[=] { send({OrbitalBaseAction::QueueShip,0,designs->currentData().toUInt()}); });
     connect(refit,&QPushButton::clicked,this,[=] { send({OrbitalBaseAction::Refit,0,designs->currentData().toUInt()}); });
     connect(cancel,&QPushButton::clicked,this,[=] { if(queue->currentRow()>=0)send({OrbitalBaseAction::Cancel,0,0,queue->currentItem()->data(Qt::UserRole).toULongLong()}); });
+    auto retire=[=](bool replacement) {
+        OrbitalBaseCommand c; c.action=replacement?OrbitalBaseAction::RebuildStation:OrbitalBaseAction::Decommission;
+        c.item=1; c.receiver=clients->currentData().toUInt(); // send assigns the actual stable request ID.
+        if (replacement) c.station=StationLoadout{OrbitalStationHullType(stationHulls->currentData().toInt()),{},true,true};
+        send(c);
+    };
+    connect(dismantle,&QPushButton::clicked,this,[=] { retire(false); });
+    connect(rebuild,&QPushButton::clicked,this,[=] { retire(true); });
+    connect(cancelRetirement,&QPushButton::clicked,this,[=] {
+        send({OrbitalBaseAction::CancelRetirement,0,0,cancelRetirement->property("retirementId").toULongLong()});
+    });
     auto transfer=[=,this](bool toBase) {
         const auto a=bases->currentData().toUInt(),b=clients->currentData().toUInt(); if(!a || !b)return;
         const auto from=toBase?b:a,to=toBase?a:b;
@@ -147,6 +190,7 @@ void MainWindow::installOrbitalBases()
     connect(deliver,&QPushButton::clicked,this,[=] { transfer(true); }); connect(evacuate,&QPushButton::clicked,this,[=] { transfer(false); });
     connect(bases,&QComboBox::currentIndexChanged,this,[=](int){refresh();});
     connect(planets,&QComboBox::currentIndexChanged,this,[=](int){update();}); connect(clients,&QComboBox::currentIndexChanged,this,[=](int){update();});
+    connect(stationHulls,&QComboBox::currentIndexChanged,this,[=](int){update();});
     connect(this,&MainWindow::routeProgramContextChanged,this,refresh); refresh();
 }
 } // namespace suns

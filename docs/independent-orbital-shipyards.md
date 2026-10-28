@@ -32,8 +32,8 @@ Surface ownership, population, mining and engineering are separate. Founding a
 friendly surface colony later preserves the base, its workers, investment and
 stocks. It continues to use its own queue, rather than granting the surface an
 extra copy of its production. It is not a Starbase/Fortress support service for
-planetary engineering. Converting it into a normal colony station, decommissioning,
-station capture and larger armed orbital hulls are future work; the initial
+planetary engineering. Safe retirement and replacement with a colony station are
+described below. Station capture and larger armed orbital hulls remain future work; the initial
 unarmed Expedition Base can be escorted and fitted with ordinary armor/shields.
 
 ## Initial balance
@@ -110,6 +110,77 @@ Refuel arrival action can also draw finite fuel above the base's configured
 reserve. Ordinary Supply outpost can deliver tanker fuel. No colonized-surface
 infinite refueling service is created.
 
+## Retirement and colony station rebuilding (#54 / #61)
+
+The next slice was approved on 27 October 2026 (Europe/Moscow) and starts from
+merged #233, main `6d04c44` (save v98 / orders v40).
+Both operations are ordinary delayed `OrbitalBaseOrder` commands. They are
+explicit owner decisions; the AI does not automatically dismantle its bases.
+
+- **Decommission** designates an owned physical recovery transport. On receipt,
+  the base stops assembly/ship/refit work and waits for all residents to be
+  evacuated, all specimens/xenocrystal to be unloaded, and all queued jobs to be
+  cancelled. Paid work in cancelled jobs is lost under the existing rules.
+  Life support and radiation still apply while residents remain. Construction
+  Pause does not cancel retirement; use the explicit Cancel retirement command.
+- Recovery requires the designated transport to be physically co-located,
+  mobile, owned and below 100% damage, with enough shared hold and tank space
+  for **all** remaining I/B/G, fuel and recovered materials. No partial transfer,
+  population deletion, specimen destruction, overflow discard, surface dumping
+  or abstract treasury refund occurs. If the transport leaves, is lost, fills
+  up or lacks tank room, retirement keeps waiting. A 100%-damaged base cannot
+  use its receiving collar.
+- The material return is `floor((current fitted hull bill + paid assembly bill)
+  * 0.25 * (1 - damagePercent/100))` for each I/B/G resource, in whole kt.
+  Assembly contributes exactly 20/10/20 per completed stage. Upkeep, past refits,
+  cancelled jobs, production work and original fuel are not refunded; remaining
+  physical fuel and mineral stocks are transferred in full. The old paid hull
+  is consumed once, including its kit, screens, engines and other fittings.
+- **Rebuild as colony station** additionally requires your populated surface
+  colony, the selected station's ordinary technology/access, and no other
+  station project. It performs the same safe recovery, removes the old base,
+  and appends one **full-price normal station project** to the colony queue.
+  Colony production and surface minerals pay the existing bill, starting no
+  earlier than the following production phase. There is no station service or
+  orbital blocking hull during construction. This is replacement construction,
+  rather than free conversion of a transport hull into a Fortress. The UI offers
+  empty Dock/Starbase/Fortress fits with shipyard and refueling; ordinary station
+  refits remain available after completion. Existing queue cancellation, capture,
+  technology and mineral rules apply to the new project.
+
+Retirement resolves after movement/combat, ordinary base cargo/fuel exchanges
+and repair, in FleetId order. All prerequisites are rechecked together before
+any recovery or project insertion. A blocked rebuild never falls back to plain
+scrapping. The single shared orbital slot is released only on actual removal;
+a replacement project prevents another constructor from deploying there.
+
+Requests use stable nonzero IDs and durable receipts. Cancel retirement targets
+the same ID and leaves a tombstone even if it overtakes the original request;
+replayed packets cannot revive cancelled retirement or recover a second hull.
+A new explicit request needs a new ID. Completed demolition cannot be undone.
+
+The recovery transport physically receives the completion report and any held
+base reports. Silent/passive reception does not force it to transmit. Already
+sent packets keep their original source/date; held packets await the transport's
+normal transmission or friendly-orbit sharing. Headquarters retains the last
+confirmed base contact until the dismantling report arrives. A later faster
+full manifest from the recovery transport also forwards that confirmation. If
+the transport merges into another fleet, the confirmation follows that manifest
+lineage too. A newer delivered colony/survey snapshot showing a normal station
+in the same orbital slot also confirms that the old base is gone. The old
+contact is removed durably; losing that station later cannot resurrect it. This
+does not accelerate the separate recovery/cargo report. Hidden construction or
+loss cannot confirm anything before its snapshot is delivered.
+The retained host archive preserves the physical retirement
+request separately from the old received telemetry; it is not player evidence.
+No combat casualty or wreck is invented for deliberate retirement. Received UI shows the evidence
+age, recovery forecast, received mission/stop reason and separately labelled
+sent/local intent. Forecasts use received fitting/stages/damage and stocks;
+hidden evacuation, capacity changes or demolition do not rewrite old exports.
+
+Capture, reactivation of abandoned enemy bases, larger armed constructor hulls,
+and automatic rescue/resupply policies remain separate future work.
+
 ## Radiation
 
 The first fixed orbital background is determined by the star's public class:
@@ -167,7 +238,14 @@ multi-base rescue/resupply network or automatically refit radiation screens.
 
 ## Persistence and acceptance
 
-Current formats are **save v98 / orders v40**. Save v97 introduced the bounded
+Current branch formats are **save v101 / orders v41**, integrating main
+`7e2e769` after #236 (save v100 / orders v40). The writer preserves the v100
+CCON conditions tail, then appends bounded ORLC retirement state for physical,
+received, in-flight and retained contacts. Development v99 from the original
+#234 branch reads ORLC without CCON; main v100 reads CCON without ORLC. Both
+load without discarding their evidence/intent. v98 loads with neither tail and
+no retirement mission. Orders v41 adds retirement/rebuilding payloads.
+The original founding formats are save v98 / orders v40. Save v97 introduced the bounded
 ORBI tail for physical, confirmed, in-flight and
 retained-loss base states, independent command payloads and private new-ship
 provenance. Save v98 appends the controller's pending orbital-build intentions;

@@ -858,29 +858,39 @@ void publish_fleet_telemetry(GameState& state, std::uint64_t observationTurn)
         record_report_transmission(state,fleet.owner,fleet.position,observationTurn,fleet.id);
         const auto snapshot = authoritative_snapshot(state, fleet, observationTurn);
         const auto delay = communication_delay_turns(state, fleet.owner, fleet.position, observationTurn);
-        // A full manifest also carries confirmation of the merges that made
+        // A full manifest also carries confirmation of the operations that made
         // it. A later transmission may overtake the original slow report (for
         // example after a gate hop). Follow the entire absorbed lineage, even
         // through an edge whose report already arrives sooner. Report order
         // must not leave an ancestor's old manifest alongside the new one.
         for (auto& player : state.players) if (player.id == fleet.owner) {
-            std::unordered_map<FleetId, std::vector<PendingPlayerReport*>> merges;
-            for (auto& report : player.pendingPlayerReports)
-                if (report.kind == PlayerReportKind::FleetsMerged && report.observedTurn <= observationTurn)
-                    merges[report.fleet].push_back(&report);
-            if (!merges.contains(fleet.id)) continue;
+            using Confirmation = std::pair<PendingPlayerReport*, FleetId>;
+            std::unordered_map<FleetId, std::vector<Confirmation>> confirmations;
+            for (auto& report : player.pendingPlayerReports) {
+                if (report.observedTurn > observationTurn) continue;
+                if (report.kind == PlayerReportKind::FleetsMerged)
+                    confirmations[report.fleet].push_back({&report, report.quantity});
+                else if (report.kind == PlayerReportKind::OrbitalBaseStatus && (report.quantity == 4 || report.quantity == 5)) {
+                    const auto loss = std::find_if(state.pendingFleetLossContacts.begin(), state.pendingFleetLossContacts.end(), [&](const auto& loss) {
+                        return loss.lastContact.owner == player.id && loss.lastContact.id == report.fleet;
+                    });
+                    if (loss != state.pendingFleetLossContacts.end() && loss->lastContact.orbitalBase.retirement)
+                        confirmations[loss->lastContact.orbitalBase.retirement->receiver].push_back({&report, report.fleet});
+                }
+            }
+            if (!confirmations.contains(fleet.id)) continue;
             std::vector<FleetId> lineage{fleet.id};
             std::unordered_set<FleetId> visited{fleet.id};
             for (std::size_t i = 0; i < lineage.size(); ++i) {
-                const auto edges = merges.find(lineage[i]);
-                if (edges == merges.end()) continue;
-                for (auto* report : edges->second) {
-                    if (visited.insert(report->quantity).second) lineage.push_back(report->quantity);
+                const auto edges = confirmations.find(lineage[i]);
+                if (edges == confirmations.end()) continue;
+                for (const auto& [report, source] : edges->second) {
+                    if (visited.insert(source).second) lineage.push_back(source);
                     if (observationTurn + delay >= report->deliveryTurn) continue;
                     report->deliveryTurn = observationTurn + delay;
                     report->transmissionFleet = 0;
                     for (auto& missing : state.pendingFleetLossContacts)
-                        if (missing.lastContact.owner == fleet.owner && missing.lastContact.id == report->quantity)
+                        if (missing.lastContact.owner == fleet.owner && missing.lastContact.id == source)
                             missing.deliveryTurn = std::min(missing.deliveryTurn, report->deliveryTurn);
                 }
             }
@@ -913,6 +923,14 @@ std::uint64_t fleet_report_delivery_turn(const GameState& state, PlayerId owner,
     return turn+communication_delay_turns(state,owner,position,turn);
 }
 
+void transfer_fleet_report_outbox(GameState& state, PlayerId player, FleetId source, FleetId receiver)
+{
+    visit_fleet_report_outbox(state, [&](PlayerId owner, auto& report) {
+        if (owner == player && report.deliveryTurn == kAwaitingTransmission && report.transmissionFleet == source)
+            report.transmissionFleet = receiver;
+    });
+}
+
 void dispatch_fleet_report_outbox(GameState& state)
 {
     visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
@@ -936,6 +954,10 @@ void dispatch_fleet_report_outbox(GameState& state)
                 for(auto& loss:state.pendingStationContacts) if(loss.deliveryTurn==kAwaitingTransmission && loss.lastContact.owner==owner)
                     if(std::any_of(report.battle->units.begin(),report.battle->units.end(),[&](const auto& u){return u.owner==owner && u.station==loss.lastContact.id;})) loss.deliveryTurn=report.deliveryTurn;
             }
+            if (report.kind == PlayerReportKind::OrbitalBaseStatus && (report.quantity == 4 || report.quantity == 5))
+                for (auto& loss : state.pendingFleetLossContacts)
+                    if (loss.deliveryTurn == kAwaitingTransmission && loss.lastContact.owner == owner
+                        && loss.lastContact.id == report.fleet) loss.deliveryTurn = report.deliveryTurn;
         }
     });
 }

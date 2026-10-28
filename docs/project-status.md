@@ -1,6 +1,55 @@
 # Project status and development handoff
 
-## Current work — complete main audit corrections
+## Current work — orbital base retirement and colony rebuilding (#54 / #61)
+
+PR #234 / branch `codex/orbital-base-lifecycle` originally started at `6d04c44`
+(#233), and now integrates fresh main `7e2e769` (merged #236). The #236
+reviewed head `95c3bf8` passed GitHub CI. Main is save v100 / orders v40; this branch
+uses save v101 / orders v41. The combined writer appends CCON then ORLC;
+v100 retains colony conditions, development v99 retains retirement state.
+#54/#61 remain open, #63 stays frozen.
+
+The user selected base lifecycle as the next slice. Safe delayed retirement
+waits for evacuation and real recovery transport capacity, conserves remaining
+stocks/fuel, and recovers 25% of the current fitted hull/paid assembly mineral
+bill reduced by damage. Colony rebuilding queues a full-price ordinary station
+only after actual retirement; no services are granted while it builds. Stable
+request/cancel receipts and delayed completion knowledge survive save/load and
+PBEM. Station capture and automatic destructive AI policies remain future work.
+[Detailed rules](independent-orbital-shipyards.md#retirement-and-colony-station-rebuilding-54--61).
+
+Integration follow-up: v99/v100 migration fixtures exercise physical, received
+and in-flight retirement state, delayed cancellation and exact CCON evidence.
+A reproduced faster-recovery-manifest defect is corrected: confirmations
+follow the transport and its merged successors, while old UI/export contacts
+keep their received telemetry. The archived physical request is persisted by
+existing ORLC; no extra command fields or snapshot exposure are introduced.
+
+Review follow-up — 28 October, `bcc1155`: reproduced the P2 through an actual
+paid rebuild, a departing onboard transport route and restored scanner mesh.
+The T7 station survey overtakes the T8 retirement report; pre-fix player-turn
+write succeeds but read rejects the conflicting orbital occupants. Delivered
+newer station evidence now removes the old base loss contact durably, without
+changing the separate recovery report or reading physical station truth. The
+regression includes hidden-construction export invariance, host save/load,
+player-turn roundtrip and a subsequent delivered station loss without revival.
+Save v101 / orders v41 are unchanged.
+
+Current integrated validation: GCC 14.2 / Qt 6.12.0 Debug full application/test
+build succeeded; post-review offscreen CTest **92/92** passed (60.36 s),
+and `git diff --check` is clean.
+New scenarios cover same-year real evacuation/recovery, shared-hold/tank guards,
+precious cargo and queued-job blockers, one-time damage-adjusted recovery,
+delayed/overtaking cancellation, full normal station production/mineral payment,
+34-year command delay, silent report handover, immutable player exports,
+physical/received/in-transit retirement snapshots, retained dismantled contacts,
+v100/v99/v98/v97/v96 migration, malformed/missing ORLC/CCON tails and PBEM
+payloads. The station-cost
+control includes ordinary population mining rather than assuming fixed stocks.
+Validation is Linux/offscreen Qt; no manual balance, cross-platform or sanitizer
+acceptance is claimed. Prepared for review; no merge or issue closure performed.
+
+## Merged implementation — main audit corrections (#236, historical branch checkpoint)
 
 Branch `codex/audit-corrections` starts from main `c161b0e` (merged #235).
 The user authorized all 12 reproduced correctness fixes and three measured
@@ -35,7 +84,7 @@ Save v100 / orders v40 are unchanged.
 Linux/offscreen validation only; no native chooser, user disk, other OS or
 sanitizer acceptance is claimed. Ready for review, no automatic merge.
 
-## Current work — Medium-map UI preview performance
+## Merged implementation — Medium-map UI preview performance (#235)
 
 Branch `codex/ui-preview-performance` starts from main `6d04c44`, merged #233,
 save v98 / orders v40. The independent retirement PR #234 remains separate;
@@ -63,6 +112,7 @@ four isolated 288/1000-system control/fixed runs saved and loaded successfully.
 Native file-dialog behavior, the player's exact campaign and other platforms
 remain unverified; no fix for the reported save freeze is claimed. Ready for
 review without automatic merge.
+
 
 ## Merged implementation — independent orbital founding (#233, historical branch checkpoint)
 

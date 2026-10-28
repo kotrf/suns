@@ -211,3 +211,17 @@ merge lineage, including A→B→C. If a later faster transmission overtakes the
 original reports, all ancestor loss contacts expire with the new combined
 manifest. Forwarding is independent of report storage order, traverses already
 faster confirmations, and excludes merges observed after that snapshot.
+
+The orbital-lifecycle integration (save v101) extends the same confirmation
+lineage to dismantled bases. Their archived physical retirement request names
+the recovery transport, while the old received contact remains unchanged. A
+faster full manifest from that transport or its merged successor forwards the
+retirement report too; old base stocks cannot coexist with their received
+recovered cargo. ORLC preserves this witness through host save/load.
+
+Review follow-up for #234: a newer delivered owner station snapshot also
+confirms replacement of an older independent-base contact on that planet.
+Survey delivery removes the superseded loss contact, using only its received
+telemetry and the snapshot's station evidence date. The cargo/recovery report
+keeps its own delivery date. This knowledge survives save/load and a subsequent
+station loss; hidden construction/loss does not change prior observations.

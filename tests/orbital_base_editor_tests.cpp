@@ -30,6 +30,10 @@ struct MainWindowTestAccess {
         w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.fleet=1;w.selection_.star=2;w.rebuildScene();
     }
     static void deliverLaunch(MainWindow& w) { orbital_test::acknowledge(w.state_);w.rebuildScene(); }
+    static void colony(MainWindow& w) {
+        w.state_.planets[1].owner=1;w.state_.planets[1].population=10000;
+        w.rebuildScene();
+    }
     static void transport(MainWindow& w) {
         auto& s=w.state_;auto f=s.fleets[0];f.id=2;f.design=202;f.ships={{202,1}};f.outpost=OutpostKind::None;f.orbitalBase={};f.name="Supply transport";
         f.telemetry={};s.fleets.push_back(f);s.nextFleetId=3;orbital_test::acknowledge(s);w.rebuildScene();
@@ -59,6 +63,24 @@ int main(int argc,char** argv) {
     w.findChild<QPushButton*>("orbitalBaseEvacuate")->click();
     const auto cargo=std::get<TransferCargoOrder>(MainWindowTestAccess::orders(w).back());
     assert(cargo.source.fleet==1 && cargo.destination.fleet==2 && cargo.colonists==1000);
+    MainWindowTestAccess::clear(w);
+    auto* dismantle=w.findChild<QPushButton*>("orbitalBaseDismantle");
+    auto* replace=w.findChild<QPushButton*>("orbitalBaseRebuildStation");
+    auto* cancelRetirement=w.findChild<QPushButton*>("orbitalBaseCancelRetirement");
+    assert(dismantle && dismantle->isEnabled() && replace && !replace->isEnabled());
+    dismantle->click();
+    const auto retire=std::get<OrbitalBaseOrder>(MainWindowTestAccess::orders(w).back()).command;
+    assert(retire.action==OrbitalBaseAction::Decommission && retire.receiver==2 && retire.item);
+    assert(cancelRetirement->isEnabled() && status->text().contains("Evacuate all residents"));
+    assert(!w.findChild<QPushButton*>("orbitalBaseBuild")->isEnabled());
+    cancelRetirement->click();
+    const auto cancelled=std::get<OrbitalBaseOrder>(MainWindowTestAccess::orders(w).back()).command;
+    assert(cancelled.action==OrbitalBaseAction::CancelRetirement && cancelled.item==retire.item);
+    assert(dismantle->isEnabled());
+    MainWindowTestAccess::clear(w);MainWindowTestAccess::colony(w);assert(replace->isEnabled());
+    replace->click();
+    const auto rebuild=std::get<OrbitalBaseOrder>(MainWindowTestAccess::orders(w).back()).command;
+    assert(rebuild.action==OrbitalBaseAction::RebuildStation && rebuild.station && rebuild.receiver==2);
     MainWindow remote;MainWindowTestAccess::remoteLaunch(remote);attachRouteProgramDock(remote);
     assert(remote.availableOwnedFleetsForRouteProgram()==std::vector<FleetId>{1});
     assert(remote.availableFleetTargetsForRouteProgram().empty());
