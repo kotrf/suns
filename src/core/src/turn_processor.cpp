@@ -1,3 +1,4 @@
+#include "suns/transport_lines.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
@@ -2199,9 +2200,14 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
     bool projection = false)
 {
     bool handled = true;
+    if(const auto fleet=transport_manual_override(order))release_transport_assignment(state,player,*fleet);
     std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, MoveFleetOrder>) {
+        if constexpr (std::is_same_v<T, SetTransportLineOrder>) {
+            (void)set_transport_line(state, player, value);
+        } else if constexpr (std::is_same_v<T, AssignTransportLineOrder>) {
+            (void)assign_transport_line(state, player, value);
+        } else if constexpr (std::is_same_v<T, MoveFleetOrder>) {
             (void)submit_fleet_route_command(
                 state,
                 player,

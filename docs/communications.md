@@ -225,3 +225,8 @@ Survey delivery removes the superseded loss contact, using only its received
 telemetry and the snapshot's station evidence date. The cargo/recovery report
 keeps its own delivery date. This knowledge survives save/load and a subsequent
 station loss; hidden construction/loss does not change prior observations.
+
+Transport-line command batching (#53) preserves stable issue order for packets
+with the same issue year and arrival year. A later Resume/route in that batch
+is not suppressed by its earlier Stop. Stop still discards older/overtaken
+packets, including future arrivals already cancelled by its existing barrier.

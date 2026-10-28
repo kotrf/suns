@@ -787,21 +787,26 @@ void deliver_due_fleet_commands(GameState& state)
             });
 
         std::optional<std::uint64_t> stoppedThrough;
+        std::uint64_t stoppedDelivery{};
         std::size_t processed = 0;
         for (const auto& pending : fleet.pendingCommands) {
             if (pending.deliveryTurn > state.turn) break;
             ++processed;
-            if (stoppedThrough && pending.issuedTurn <= *stoppedThrough) continue;
+            // Equal-year, equal-arrival packets retain stable issue order:
+            // a later Resume/route in that batch must survive its earlier Stop.
+            // Older/overtaken packets still cannot revive a stopped programme.
+            if (stoppedThrough && (pending.issuedTurn < *stoppedThrough
+                || (pending.issuedTurn == *stoppedThrough && pending.deliveryTurn != stoppedDelivery))) continue;
             if (pending.orbitalBase) {
                 apply_orbital_base_command(state, fleet, *pending.orbitalBase);
             }
             else if (pending.visitor) {
                 apply_visitor_command(state, fleet, *pending.visitor);
-                if (!pending.visitor->track.id) stoppedThrough = pending.issuedTurn;
+                if (!pending.visitor->track.id) { stoppedThrough = pending.issuedTurn; stoppedDelivery = pending.deliveryTurn; }
             }
             else if (pending.probe) {
                 apply_probe_command(state, fleet, *pending.probe);
-                if (pending.probe->action == ProbeAction::Stop) stoppedThrough = pending.issuedTurn;
+                if (pending.probe->action == ProbeAction::Stop) { stoppedThrough = pending.issuedTurn; stoppedDelivery = pending.deliveryTurn; }
             }
             else if (pending.mobileBase) {
                 if (mobile_base_dock(state, fleet)) fleet.mobileBase = *pending.mobileBase;
@@ -813,7 +818,7 @@ void deliver_due_fleet_commands(GameState& state)
             else if (pending.task) apply_task_program(state, fleet, *pending.task);
             else {
                 apply_route_program(state, fleet, pending.program);
-                if (pending.program.clearRoute) stoppedThrough = pending.issuedTurn;
+                if (pending.program.clearRoute) { stoppedThrough = pending.issuedTurn; stoppedDelivery = pending.deliveryTurn; }
             }
         }
         fleet.pendingCommands.erase(fleet.pendingCommands.begin(), fleet.pendingCommands.begin() + processed);

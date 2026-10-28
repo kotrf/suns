@@ -65,3 +65,12 @@ and finite deposits use delivered, dated evidence.
 ## Orbital habitat integration (#56)
 
 Orbital habitats add a separate population-only endpoint and an Orbital colonists arrival policy. Existing Colonists/All policies retain their surface meaning. Exact transfers conserve real people and respect shared hold/mass, orbital capacity and current received evidence. Emergency evacuation can remove the last orbital resident after station loss; local surface/orbit shuttles need support. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.
+
+## Shared transport lines (#53)
+
+[Transport lines](transport-lines.md) dispatch ordinary repeating mineral
+Load All / Unload programmes to several paid freighters. They reuse the same
+physical hold, surface stockpiles, cargo mass and arrival validation. Definitions
+and roster edits are HQ intent; old telemetry is not a transfer permission or
+a promise of stock. Passenger evacuation remains an ordinary physical cargo
+operation; automatic emergency diversion is a later network policy.

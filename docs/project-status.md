@@ -1,6 +1,36 @@
 # Project status and development handoff
 
-## Current work — orbital base retirement and colony rebuilding (#54 / #61)
+## Current work — transport lines (#53)
+
+Branch `codex/transport-lines` starts from main `c957b12` (merged #234).
+The user selected #53 on 28 October; the previous roadmap postponement is
+superseded by this request. Main is save v101 / orders v41; branch v102 / v42.
+
+The first slice adds an owner-private stable/revisioned catalog of named two-stop
+I/B/G shuttle lines and multiple assigned paid fleets. Create/edit/pause/resume/
+delete/release use ordinary orders and delayed repeating Load All / Unload / Stop
+programmes. Once dispatched, movement runs without the catalog or further HQ
+commands. Existing cargo, mass, fuel/refuelling, combat and ownership rules apply.
+The Logistics dock separates roster/draft intent from received programme status,
+evidence age, target, hold and stocks; map overlay shows registered definitions.
+Draft line commands participate in route preview and manual overrides preserve
+command order. Bounded LINE and new order tags support save/load and PBEM.
+
+[Rules, constraints and remaining scope](transport-lines.md). No automatic AI
+staffing, new throughput attribution, emergency evacuation, depot/fleet stops or
+expanded exotic/engineering mechanics are included. #53 remains open.
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+final Linux/offscreen CTest **94/94** passed (65.41 s), `git diff --check` clean.
+Two new suites cover autonomous multi-fleet finite/conserved freight, delayed
+edit/pause/resume, same-dispatch Stop/Resume, manual override and draft route
+editing, received-only validation/export invariance, actual Qt controls/map
+overlay, v101 migration, bounded/truncated/duplicate LINE data and v42 PBEM
+orders (including rejection under forged old envelopes). No manual campaign
+balance, native-platform or sanitizer validation is claimed. Prepared for review;
+no PR merge or issue closure.
+
+## Merged implementation — orbital base retirement and colony rebuilding (#234, historical branch checkpoint)
 
 PR #234 / branch `codex/orbital-base-lifecycle` originally started at `6d04c44`
 (#233), and now integrates fresh main `7e2e769` (merged #236). The #236

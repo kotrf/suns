@@ -200,6 +200,7 @@ public:
     void installOutposts();
     void installMobileBases();
     void installOrbitalBases();
+    void installTransportLines();
     void installPlanetaryEngineering();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 

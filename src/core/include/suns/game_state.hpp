@@ -1292,6 +1292,27 @@ struct ComputerState {
     bool operator==(const ComputerState&) const = default;
 };
 
+using TransportLineId = std::uint32_t;
+enum class TransportCargo : std::uint8_t { Ironium, Boranium, Germanium };
+struct TransportLineSpec {
+    TransportLineId id{};
+    std::uint64_t revision{1};
+    std::string name;
+    PlanetId source{}, destination{};
+    std::uint8_t warp{5};
+    TransportCargo cargo{TransportCargo::Ironium};
+    bool active{true};
+};
+struct TransportAssignment {
+    FleetId fleet{};
+    std::uint64_t issuedTurn{};
+};
+struct TransportLine {
+    TransportLineSpec spec;
+    Position sourcePosition, destinationPosition; // Frozen received coordinates at authoring.
+    std::vector<TransportAssignment> assignments; // HQ intent, not onboard acknowledgement.
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -1325,6 +1346,8 @@ struct Player {
     std::vector<StrategicIntel> strategicIntel;
     std::vector<StrategicIntel> pendingStrategicIntel;
     std::vector<FieldScienceRecord> fieldScience;
+    TransportLineId lastTransportLineId{}; // Never reuse a deleted owner-local identity.
+    std::vector<TransportLine> transportLines;
     PlayerController controller{PlayerController::Human};
     ComputerState computer;
     std::vector<VisitorObservation> visitorKnowledge;

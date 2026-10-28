@@ -1,3 +1,5 @@
+#include "suns/transport_lines.hpp"
+#include <set>
 #include "save_game.hpp"
 #include "suns/campaign.hpp"
 #include "suns/computer_player.hpp"
@@ -37,11 +39,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 101;
+constexpr quint32 kSaveFormatVersion = 102;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 41;
+constexpr quint32 kTurnOrderFormatVersion = 42;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -2351,6 +2353,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "orbital_habitats_save.inc"
 #include "orbital_bases_save.inc"
 #include "colony_conditions_save.inc"
+#include "transport_lines_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -2613,6 +2616,14 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << quint8{31} << quint32(concrete.colony); writeEnum(stream, concrete.action); stream << quint8(concrete.active);
         } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
             stream << quint8{26} << quint32(concrete.source) << quint32(concrete.destination) << concrete.amount << concrete.sourceReserve;
+        } else if constexpr (std::is_same_v<T, SetTransportLineOrder>) {
+            if(concrete.remove ? !concrete.value.id || !concrete.value.revision : !transport_line_spec_valid(concrete.value)) {
+                stream.setStatus(QDataStream::WriteFailed);return;
+            }
+            stream<<quint8{35}<<quint8(concrete.remove);writeTransportSpec(stream,concrete.value);
+        } else if constexpr (std::is_same_v<T, AssignTransportLineOrder>) {
+            if(!concrete.line || !concrete.fleet){stream.setStatus(QDataStream::WriteFailed);return;}
+            stream<<quint8{36}<<quint32(concrete.line)<<quint32(concrete.fleet)<<quint8(concrete.remove);
         } else if constexpr (std::is_same_v<T, OrbitalBaseOrder>) {
             stream << quint8{34} << quint32(concrete.fleet); writeOrbitalCommand(stream,concrete.command);
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
@@ -2640,6 +2651,18 @@ bool readOrder(QDataStream& stream, Order& order)
     if (stream.status() != QDataStream::Ok) return false;
 
     switch (tag) {
+    case 35: {
+        if(gReadSaveFormatVersion<102){markCorrupt(stream);return false;}
+        SetTransportLineOrder value;quint8 remove{};stream>>remove;value.remove=remove;readTransportSpec(stream,value.value);
+        if(remove>1 || (value.remove ? !value.value.id || !value.value.revision : !transport_line_spec_valid(value.value)))markCorrupt(stream);
+        order=value;return stream.status()==QDataStream::Ok;
+    }
+    case 36: {
+        if(gReadSaveFormatVersion<102){markCorrupt(stream);return false;}
+        AssignTransportLineOrder value;quint8 remove{};stream>>value.line>>value.fleet>>remove;value.remove=remove;
+        if(remove>1 || !value.line || !value.fleet)markCorrupt(stream);
+        order=value;return stream.status()==QDataStream::Ok;
+    }
     case 0: {
         MoveFleetOrder value;
         quint32 fleet{};
@@ -3228,6 +3251,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeOrbitalBases(stream,data.state);
     writeColonyConditions(stream,data.state);
     writeOrbitalLifecycle(stream,data.state);
+    writeTransportLines(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3355,6 +3379,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if(version>=97) readOrbitalBases(stream,loaded.state);
     if(version>=100) readColonyConditions(stream,loaded.state);
     if(version==99 || version>=101) readOrbitalLifecycle(stream,loaded.state);
+    if(version>=102) readTransportLines(stream,loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);
@@ -3549,7 +3574,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
