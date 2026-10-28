@@ -43,6 +43,7 @@ int main(int argc, char* argv[])
     window.installOutposts();
     window.installMobileBases();
     window.installOrbitalBases();
+    window.installTransportLines();
     window.installPlanetaryEngineering();
     window.installPanelLayoutFixes();
     window.installStrategicOperations();

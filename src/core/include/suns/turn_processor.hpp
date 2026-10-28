@@ -193,6 +193,16 @@ struct SetProbeProgramOrder { FleetId fleet{}; ProbeAction action{ProbeAction::C
 
 struct EncounterVisitorOrder { FleetId fleet{}; VisitorId visitor{}; std::uint8_t warp{8}; }; // visitor=0 cancels.
 
+struct SetTransportLineOrder {
+    TransportLineSpec value;
+    bool remove{};
+};
+struct AssignTransportLineOrder {
+    TransportLineId line{};
+    FleetId fleet{};
+    bool remove{};
+};
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -228,7 +238,9 @@ using Order = std::variant<
     SetResonanceLaboratoryOrder,
     SetProbeProgramOrder,
     EncounterVisitorOrder,
-    OrbitalBaseOrder>;
+    OrbitalBaseOrder,
+    SetTransportLineOrder,
+    AssignTransportLineOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

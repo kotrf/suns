@@ -691,6 +691,13 @@ void MainWindow::rebuildScene()
     addBackgroundStars(scene_, state_.galaxySeed);
 
     auto playerView=make_player_view(state_,pendingOrders_.player).state;
+    if(!property("hideTransportLines").toBool())for(const auto& line:playerView.players.front().transportLines) {
+        QPen pen(line.spec.active?QColor(70,190,190,120):QColor(130,130,130,90));
+        pen.setStyle(Qt::DashLine);pen.setWidthF(1.3);pen.setCosmetic(true);
+        auto* edge=scene_->addLine(line.sourcePosition.x,line.sourcePosition.y,line.destinationPosition.x,line.destinationPosition.y,pen);
+        edge->setZValue(-25);edge->setData(0,"transportLine");
+        edge->setToolTip(QString("Transport line #%1: %2 • HQ definition, not a travel restriction").arg(line.spec.id).arg(QString::fromStdString(line.spec.name)));
+    }
     auto displayFleets=playerView.fleets;
     const auto& contactKnowledge=playerView.players.front().enemyContacts;
     const auto& sensorKnowledge=playerView.players.front().sensorStatus;

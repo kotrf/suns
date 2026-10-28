@@ -1,3 +1,4 @@
+#include "suns/transport_lines.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
 #include "suns/deep_space.hpp"
@@ -131,8 +132,11 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
 
 MoveFleetOrder* pendingMove(PlayerOrders& pending, FleetId fleet)
 {
-    for (auto& order : pending.orders) {
-        if (auto* move = std::get_if<MoveFleetOrder>(&order); move && move->fleet == fleet) return move;
+    bool transportAfter = false;
+    for (auto it = pending.orders.rbegin(); it != pending.orders.rend(); ++it) {
+        transportAfter |= std::holds_alternative<SetTransportLineOrder>(*it) || std::holds_alternative<AssignTransportLineOrder>(*it);
+        if (auto* move = std::get_if<MoveFleetOrder>(&*it); move && move->fleet == fleet)
+            return transportAfter ? nullptr : move;
     }
     return nullptr;
 }
@@ -147,6 +151,7 @@ const MoveFleetOrder* pendingMove(const PlayerOrders& pending, FleetId fleet)
 
 std::optional<MoveFleetOrder> effectiveRoute(const GameState& state, const PlayerOrders& pending, const Fleet& fleet)
 {
+    if (const auto route = pending_transport_route(state,pending,fleet.id)) return route;
     if (const auto* move = pendingMove(pending, fleet.id)) return *move;
     // The owner's latest sent navigation intent outranks older telemetry,
     // whether that snapshot shows an idle fleet or a still-active old route.
