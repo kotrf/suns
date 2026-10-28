@@ -216,6 +216,70 @@ void retirement_confirmation_follows_cargo(const QString& p) {
         assert(read_save_game_file(p,loaded,error));assert(loaded.state.fleets.size()==1);
     }
 }
+void colony_station_report_overtakes_retirement(const QString& p) {
+    auto s=world(900);deploy(s);recovery_transport(s);
+    base(s).colonists=0;base(s).fuel=20;
+    auto& colony=s.planets[1];colony.owner=1;colony.population=1000000;colony.industry=1000;
+    colony.environment=s.planets[0].environment;colony.habitability=100;colony.minerals={10000,10000,10000};
+    auto& transport=s.fleets[1];transport.fuel=500;
+    transport.destination=transport.position;transport.warp=5;
+    transport.waypointQueue={{{1400,0},5,{}}};
+    set_survey_level(s,1,2,SurveyLevel::DeepSurvey,s.turn);acknowledge(s);
+    // The command is already received aboard. Arrival at the recovery orbit
+    // consumes this year's leg; the onboard route departs in following years.
+    apply_orbital_base_command(s,base(s),retirement(true));tick(s);
+    assert(!orbital_base_at(s,2) && s.pendingFleetLossContacts.size()==1);
+    const auto retirementDue=s.pendingFleetLossContacts.front().deliveryTurn;
+    while(s.turn<6 || !find_orbital_station_at_planet(s,2)) {
+        assert(s.turn<retirementDue);tick(s);
+    }
+    const auto before=make_player_view(s,1).state;
+    assert(orbital_base_at(before,2) && !find_orbital_station_at_planet(before,2));
+    QString error;SaveGameData loaded;
+    assert(write_save_game_file(p,make_player_turn(data(s),1),error));
+    const auto oldExport=bytes(p);
+    auto hidden=s;hidden.orbitalStations.clear();
+    assert(write_save_game_file(p,make_player_turn(data(hidden),1),error));
+    assert(bytes(p)==oldExport); // Hidden construction alone is not confirmation.
+    assert(write_save_game_file(p,data(s),error));assert(read_save_game_file(p,loaded,error));
+    s=std::move(loaded.state);
+    // Reconnect the colony using ordinary fitted scanners, without reaching
+    // the departed transport. Its manifest cannot confirm the dismantling yet.
+    s.shipDesigns.push_back({203,1,"Relay scout",ShipHullType::StarsScout,{C::QuickJump5,C::RhinoScanner}});
+    s.nextShipDesignId=204;
+    for(int i=1;i<=12;++i) {
+        Fleet relay;relay.id=s.nextFleetId++;relay.owner=1;relay.design=203;relay.ships={{203,1}};
+        relay.position={75.0*i,0};relay.fuel=100;s.fleets.push_back(relay);
+    }
+    assert(communication_delay_turns(s,1,{900,0})==0);
+    assert(communication_delay_turns(s,1,s.fleets.front().position)>0);
+    tick(s);assert(s.turn<retirementDue);
+    const auto received=make_player_view(s,1).state;
+    assert(find_orbital_station_at_planet(received,2));
+    // Exercise the actual player-turn writer/reader before testing absence, so
+    // the pre-fix failure demonstrates the forbidden exported orbit directly.
+    assert(write_save_game_file(p,make_player_turn(data(s),1),error));
+    if(!read_save_game_file(p,loaded,error)) {std::cerr<<error.toStdString()<<"\n";assert(false);}
+    assert(!orbital_base_at(received,2) && !orbital_base_at(loaded.state,2));
+    assert(find_orbital_station_at_planet(loaded.state,2));
+    assert(s.pendingFleetLossContacts.empty());
+    const auto report=std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),
+        [](const auto& r){return r.kind==PlayerReportKind::OrbitalBaseStatus && r.quantity==5;});
+    assert(report!=s.players[0].pendingPlayerReports.end() && report->deliveryTurn>s.turn);
+    // Received replacement is durable knowledge, not a temporary UI filter.
+    // Save/reload before the original cargo report, then receive an empty orbit.
+    assert(write_save_game_file(p,data(s),error));assert(read_save_game_file(p,loaded,error));
+    s=std::move(loaded.state);assert(s.pendingFleetLossContacts.empty());
+    s.orbitalStations.clear();++s.turn;
+    queue_survey_report(s,1,2,0,{900,0},s.turn,SurveyLevel::DeepSurvey);
+    (void)deliver_due_survey_reports(s);
+    const auto lost=make_player_view(s,1).state;
+    assert(!find_orbital_station_at_planet(lost,2) && !orbital_base_at(lost,2));
+    assert(std::any_of(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),
+        [](const auto& r){return r.kind==PlayerReportKind::OrbitalBaseStatus && r.quantity==5;}));
+    assert(write_save_game_file(p,make_player_turn(data(s),1),error));
+    assert(read_save_game_file(p,loaded,error));assert(!orbital_base_at(loaded.state,2));
+}
 void lifecycle_persistence_and_player_exports(const QString& p) {
     auto s=world(5000);deploy(s);recovery_transport(s);base(s).fuel=20;acknowledge(s);
     const auto request=retirement(true);
@@ -281,4 +345,4 @@ void lifecycle_persistence_and_player_exports(const QString& p) {
 }
 
 }
-int main(int argc,char** argv){QCoreApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());retirement_confirmation_follows_cargo(dir.filePath("recovery-confirmation.suns"));parallel_branch_migrations(dir.filePath("parallel.suns"));lifecycle_persistence_and_player_exports(dir.filePath("lifecycle.suns"));roundtrip(dir.filePath("roundtrip.suns"));ai_intent_survives_reload(dir.filePath("ai.suns"));migration_and_corruption(dir.filePath("migration.suns"));hidden_exports_and_inflight(dir.filePath("remote.suns"));}
+int main(int argc,char** argv){QCoreApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());colony_station_report_overtakes_retirement(dir.filePath("station-overtakes.suns"));retirement_confirmation_follows_cargo(dir.filePath("recovery-confirmation.suns"));parallel_branch_migrations(dir.filePath("parallel.suns"));lifecycle_persistence_and_player_exports(dir.filePath("lifecycle.suns"));roundtrip(dir.filePath("roundtrip.suns"));ai_intent_survives_reload(dir.filePath("ai.suns"));migration_and_corruption(dir.filePath("migration.suns"));hidden_exports_and_inflight(dir.filePath("remote.suns"));}

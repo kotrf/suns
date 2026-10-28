@@ -25,9 +25,19 @@ follow the transport and its merged successors, while old UI/export contacts
 keep their received telemetry. The archived physical request is persisted by
 existing ORLC; no extra command fields or snapshot exposure are introduced.
 
+Review follow-up — 28 October, `bcc1155`: reproduced the P2 through an actual
+paid rebuild, a departing onboard transport route and restored scanner mesh.
+The T7 station survey overtakes the T8 retirement report; pre-fix player-turn
+write succeeds but read rejects the conflicting orbital occupants. Delivered
+newer station evidence now removes the old base loss contact durably, without
+changing the separate recovery report or reading physical station truth. The
+regression includes hidden-construction export invariance, host save/load,
+player-turn roundtrip and a subsequent delivered station loss without revival.
+Save v101 / orders v41 are unchanged.
+
 Current integrated validation: GCC 14.2 / Qt 6.12.0 Debug full application/test
-build succeeded; offscreen CTest **92/92** passed (59.96 s), focused core/save/Qt
-suites **8/8** passed (1.98 s), and `git diff --check` is clean.
+build succeeded; post-review offscreen CTest **92/92** passed (60.36 s),
+and `git diff --check` is clean.
 New scenarios cover same-year real evacuation/recovery, shared-hold/tank guards,
 precious cargo and queued-job blockers, one-time damage-adjusted recovery,
 delayed/overtaking cancellation, full normal station production/mineral payment,

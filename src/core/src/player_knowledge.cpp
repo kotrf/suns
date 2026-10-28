@@ -517,6 +517,22 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                     && report.observedTurn >= knowledge->observedTurn)
                     knowledge->observedOwner = report.observedOwner;
             }
+            if (updated != player.surveyKnowledge.end() && updated->observedOwner == player.id
+                && updated->planetSnapshot && updated->planetSnapshot->habitat) {
+                const auto& habitat = *updated->planetSnapshot->habitat;
+                if (habitat.station && habitat.station->owner == player.id) {
+                    // A newer received station proves replacement of the old
+                    // anchored base in this planet's single orbital slot.
+                    // Retire the contact durably, even if the station is later
+                    // lost. The recovery/cargo report keeps its own delivery date.
+                    std::erase_if(state.pendingFleetLossContacts, [&](const auto& loss) {
+                        const auto& known = loss.lastContact.telemetry;
+                        return loss.lastContact.owner == player.id && known.outpost == OutpostKind::OrbitalShipyard
+                            && known.orbitalBase.planet == habitat.station->planet
+                            && habitat.stationEvidenceTime / 3 > known.observedTurn;
+                    });
+                }
+            }
             if (report.level <= previousLevel) continue;
 
             const auto* planet = find_planet_at_star(state, report.star);

@@ -166,7 +166,12 @@ normal transmission or friendly-orbit sharing. Headquarters retains the last
 confirmed base contact until the dismantling report arrives. A later faster
 full manifest from the recovery transport also forwards that confirmation. If
 the transport merges into another fleet, the confirmation follows that manifest
-lineage too. The retained host archive preserves the physical retirement
+lineage too. A newer delivered colony/survey snapshot showing a normal station
+in the same orbital slot also confirms that the old base is gone. The old
+contact is removed durably; losing that station later cannot resurrect it. This
+does not accelerate the separate recovery/cargo report. Hidden construction or
+loss cannot confirm anything before its snapshot is delivered.
+The retained host archive preserves the physical retirement
 request separately from the old received telemetry; it is not player evidence.
 No combat casualty or wreck is invented for deliberate retirement. Received UI shows the evidence
 age, recovery forecast, received mission/stop reason and separately labelled
