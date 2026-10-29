@@ -123,4 +123,93 @@ void received_validation() {
     wrong=line_spec();wrong.id=2;wrong.warp=11;assert(!set_transport_line(s,1,{wrong}));
     auto copy=s;copy.players.push_back({2,"Other"});assert(!assign_transport_line(copy,2,{1,1}));
 }
-int main(){reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}
+
+std::vector<Order> line_orders(const ComputerTurnPlan& plan) {
+    std::vector<Order> result;for(const auto& o:plan.orders.orders)
+        if(std::holds_alternative<SetTransportLineOrder>(o) || std::holds_alternative<AssignTransportLineOrder>(o))result.push_back(o);
+    return result;
+}
+void computer_supplies_and_conserves() {
+    auto s=computer_transport_world();auto baseline=s;
+    const auto plan=plan_computer_turn(make_player_view(s,1));const auto orders=line_orders(plan);
+    assert(orders.size()==2);
+    const auto& spec=std::get<SetTransportLineOrder>(orders[0]).value;
+    assert(spec.source==2 && spec.destination==1 && spec.sourceReserve==200 && spec.departureMinimum==50);
+    const auto fleet=std::get<AssignTransportLineOrder>(orders[1]).fleet;
+    assert(fleet==1 && spec.cargo==TransportCargo::Ironium);
+    s=resolve_controlled_campaign_turn(s,{}).state;tick(baseline);
+    assert(s.players[0].transportLines.size()==1);
+    for(int i=0;i<10;++i) {
+        assert(line_orders(plan_computer_turn(make_player_view(s,1))).empty());
+        s=resolve_controlled_campaign_turn(s,{}).state;tick(baseline);
+        assert(s.players[0].transportLines.size()==1 && s.players[0].transportLines[0].assignments.size()==1);
+        assert(s.fleets[0].minerals.ironium>=0 && fleet_cargo_used(s,s.fleets[0])<=fleet_cargo_capacity(s,s.fleets[0]));
+    }
+    // Normal production may consume delivered minerals; conserved comparison
+    // uses only the line orders to isolate freight from the AI economy.
+    auto freight=computer_transport_world(),control=freight;
+    tick(freight,orders);tick(control);
+    assert(freight.fleets[0].fuel<fleet_fuel_capacity(freight,freight.fleets[0]));
+    for(int i=0;i<12;++i){tick(freight);tick(control);assert(std::abs(ironium(freight)-ironium(control))<1e-6);}
+    assert(freight.planets[0].minerals.ironium>=800 && freight.planets[1].minerals.ironium==200);
+}
+void computer_delayed_intent_and_reservation() {
+    auto s=computer_transport_world(5100);s.fleets[0].position={5100,0};
+    for(auto& d:s.shipDesigns)if(d.id==202)d.components={C::FuelMizer,C::FuelMizer};acknowledge(s);
+    const auto plan=plan_computer_turn(make_player_view(s,1));const auto orders=line_orders(plan);
+    assert(orders.size()==2);tick(s,orders);s.players[0].computer=plan.nextState;
+    const auto due=s.fleets[0].pendingCommands.front().deliveryTurn;assert(due>s.turn+20);
+    int assignments=1;
+    while(s.turn<due) {
+        const auto next=plan_computer_turn(make_player_view(s,1));const auto extra=line_orders(next);
+        assignments+=std::count_if(extra.begin(),extra.end(),[](const auto& o){return std::holds_alternative<AssignTransportLineOrder>(o);});
+        assert(extra.empty());
+        assert(std::none_of(next.orders.orders.begin(),next.orders.orders.end(),[](const auto& o){
+            const auto manual=transport_manual_override(o);return manual && *manual==1;
+        }));
+        assert(std::none_of(next.nextState.fleetGoals.begin(),next.nextState.fleetGoals.end(),[](auto g){return g.fleet==1;}));
+        tick(s);s.players[0].computer=next.nextState;
+    }
+    assert(assignments==1 && s.fleets[0].repeatOrders && s.players[0].transportLines.size()==1);
+    auto view=make_player_view(s,1);
+    // Received enemy ownership engages military planning, but a freight roster
+    // cannot silently become a gathered/merged/colonist-loaded assault fleet.
+    view.state.planets[0].owner=2;
+    for(auto& k:view.state.players[0].surveyKnowledge)if(k.star==1)k.observedOwner=2;
+    const auto war=plan_computer_turn(view);
+    for(const auto& o:war.orders.orders)std::visit([](const auto& order){
+        using T=std::decay_t<decltype(order)>;
+        if constexpr(std::is_same_v<T,MergeFleetsOrder>)assert(order.source!=1 && order.destination!=1);
+        else if constexpr(requires {order.fleet;})assert(order.fleet!=1);
+    },o);
+}
+void computer_received_only_and_guards() {
+    auto s=computer_transport_world();const auto view=make_player_view(s,1);
+    const auto check=[&](const PlayerView& changed){assert(line_orders(plan_computer_turn(changed)).empty());};
+    auto changed=view;changed.state.orbitalStations.clear();check(changed);
+    changed=view;for(auto& p:changed.state.planets)p.minerals={};check(changed);
+    changed=view;for(auto& f:changed.state.fleets){f.fuel=0;f.telemetry.fuel=0;f.position={2000,0};f.telemetry.position=f.position;}
+    const auto slow=line_orders(plan_computer_turn(changed));assert(slow.size()==2);
+    assert(std::get<SetTransportLineOrder>(slow[0]).value.warp==1); // Quick Jump's real fuel-free speed, no invented fuel.
+    changed=view;for(auto& f:changed.state.fleets)f.damagePercent=1;check(changed);
+    changed=view;for(auto& f:changed.state.fleets){f.colonists=1;f.telemetry.colonists=1;}check(changed);
+    changed=view;for(auto& f:changed.state.fleets){f.design=201;f.ships={{201,1}};}check(changed); // Scouts are not requisitioned.
+    auto received=plan_computer_turn(view);const auto expected=line_orders(received);assert(expected.size()==2);
+    auto shuffled=view;std::reverse(shuffled.state.planets.begin(),shuffled.state.planets.end());std::reverse(shuffled.state.fleets.begin(),shuffled.state.fleets.end());
+    const auto replay=line_orders(plan_computer_turn(shuffled));assert(replay.size()==2);
+    assert(std::get<AssignTransportLineOrder>(replay[1]).fleet==std::get<AssignTransportLineOrder>(expected[1]).fleet);
+    assert(std::get<SetTransportLineOrder>(replay[0]).value.source==std::get<SetTransportLineOrder>(expected[0]).value.source);
+    // Hidden supplies, capture, loss of a depot and fuel/cargo cannot change
+    // the received-only plan or its decision journal.
+    s.planets[1].owner=2;s.planets[1].minerals={};s.orbitalStations.clear();
+    for(auto& f:s.fleets){f.fuel=0;f.minerals={500,0,0};f.position={9999,0};}
+    const auto hidden=plan_computer_turn(make_player_view(s,1));
+    assert(received.nextState==hidden.nextState);
+    const auto actual=line_orders(hidden);assert(actual.size()==expected.size());
+    const auto& a=std::get<SetTransportLineOrder>(actual[0]).value;const auto& b=std::get<SetTransportLineOrder>(expected[0]).value;
+    assert(a.name==b.name && a.source==b.source && a.destination==b.destination && a.warp==b.warp && a.cargo==b.cargo);
+    // A paused roster remains intent and does not provoke a replacement route.
+    tick(s,expected);auto paused=s.players[0].transportLines.front().spec;++paused.revision;paused.active=false;
+    assert(set_transport_line(s,1,{paused}));check(make_player_view(s,1));
+}
+int main(){computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}

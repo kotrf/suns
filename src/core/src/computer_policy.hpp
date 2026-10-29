@@ -5,6 +5,9 @@
 namespace suns::computer_detail {
 bool idle(const Fleet&);
 bool confirmed_idle(const Fleet&, std::uint64_t issuedTurn);
+double leg_fuel(const GameState&, const Fleet&, Position);
+bool transport_reserved(const PlayerView&, const ComputerTurnPlan&, FleetId);
+void plan_transport_lines(const PlayerView&, ComputerTurnPlan&, std::string&);
 const Planet* colony_at(const GameState&, PlayerId, Position);
 std::optional<std::uint8_t> route_warp(const GameState&, Fleet, const std::vector<Position>&);
 std::uint64_t review_turn(const GameState&, const Fleet&);
