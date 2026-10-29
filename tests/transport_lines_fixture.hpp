@@ -25,3 +25,11 @@ inline GameState computer_transport_world(double distance=40) {
     for(const auto& p:s.planets)queue_survey_report(s,1,p.star,0,{0,0},s.turn,SurveyLevel::GeologicalSurvey);
     (void)deliver_due_survey_reports(s);acknowledge(s);return s;
 }
+inline GameState stock_target_world() {
+    auto s=transport_world();s.fleets.resize(1);s.fleets[0].position={40,0};
+    for(auto& p:s.planets){p.observedConcentration=MineralCargo{};p.industry=0;p.mines=0;p.minerals={};}
+    s.planets[0].industry=kFactoryCost;s.planets[0].minerals={70,100,100};s.planets[1].minerals.ironium=80;
+    s.players[0].surveyKnowledge.clear();s.players[0].pendingSurveyReports.clear();
+    for(const auto& p:s.planets)queue_survey_report(s,1,p.star,0,{0,0},s.turn,SurveyLevel::GeologicalSurvey);
+    (void)deliver_due_survey_reports(s);acknowledge(s);return s;
+}

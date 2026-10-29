@@ -35,6 +35,8 @@ void MainWindow::installTransportLines() {
     auto* warp=new QSpinBox(body);warp->setObjectName("transportLineWarp");warp->setRange(1,10);warp->setValue(5);form->addRow("Warp",warp);
     auto* reserve=new QSpinBox(body);reserve->setObjectName("transportLineReserve");reserve->setRange(0,1000000000);form->addRow("Leave at source, kt",reserve);
     auto* minimum=new QSpinBox(body);minimum->setObjectName("transportLineMinimum");minimum->setRange(0,1000000000);form->addRow("Depart with at least, kt (0 = no wait)",minimum);
+    auto* target=new QSpinBox(body);target->setObjectName("transportLineTarget");target->setRange(0,1000000000);form->addRow("Destination stock target, kt (0 = unload all)",target);
+    target->setToolTip("Top up the owned destination to this stock on arrival. Keep surplus aboard and retry annually as stocks are used; return after the selected cargo is empty. Target changes and Stop use normal command delay.");
     auto* save=button("transportLineSave","Create / update line and dispatch to its roster");
     auto* pause=button("transportLinePause","Pause / resume line (delayed fleet commands)");
     auto* remove=button("transportLineDelete","Delete line and send Stop to its roster");
@@ -78,6 +80,7 @@ void MainWindow::installTransportLines() {
         if(!line){status->setText("New owner-local line. Definitions and roster changes below include local draft intent; fleet status always uses received telemetry.");return;}
         name->setText(QString::fromStdString(line->spec.name));warp->setValue(line->spec.warp);cargo->setCurrentIndex(int(line->spec.cargo));
         reserve->setValue(line->spec.sourceReserve);minimum->setValue(line->spec.departureMinimum);
+        target->setValue(line->spec.destinationTarget);
         auto endpoint=[&](QComboBox* c,PlanetId id){auto i=c->findData(id);if(i<0){c->addItem(QString("Last defined planet #%1 (currently unavailable)").arg(id),id);i=c->count()-1;}c->setCurrentIndex(i);};
         endpoint(source,line->spec.source);endpoint(destination,line->spec.destination);
         status->setText(QString("HQ definition v%1: %2. Roster is received + local intent, not acknowledgement.\n%3\n"
@@ -93,6 +96,7 @@ void MainWindow::installTransportLines() {
             .arg(m.delivered.ironium).arg(m.delivered.boranium).arg(m.delivered.germanium)
             .arg(years?QString::number(mineral_cargo_mass(m.delivered)/years,'f',1):"unavailable")
             .arg(line->spec.warp).arg(m.nominalRoundTripYears);
+        if(line->spec.destinationTarget)text+=QString("HQ destination target: %1 kt. Surplus waits aboard; future consumption is not promised. Target limits this unloader, not all colony supplies.\n").arg(line->spec.destinationTarget);
         if(m.contacts)text+=QString("Received programme snapshots: %1 contacts; %2 en-route programmes, %3 loading/waiting; shared hold %4/%5 kt (%6%). "
             "Telemetry years %7–%8 (ages %9–%10). This is reported hold occupancy, not time utilization.\n")
             .arg(qulonglong(m.contacts)).arg(qulonglong(m.moving)).arg(qulonglong(m.waiting)).arg(m.cargoUsed).arg(m.cargoCapacity)
@@ -139,6 +143,7 @@ void MainWindow::installTransportLines() {
         d.name=name->text().trimmed().toStdString();d.source=source->currentData().toUInt();d.destination=destination->currentData().toUInt();
         d.warp=warp->value();d.cargo=TransportCargo(cargo->currentIndex());
         d.sourceReserve=reserve->value();d.departureMinimum=minimum->value();
+        d.destinationTarget=target->value();
         const auto error=transport_line_error(received(),d);if(!error.empty()){status->setText(QString::fromStdString(error));return;}
         send(SetTransportLineOrder{d},"Define transport line "+QString::fromStdString(d.name));lines->setCurrentIndex(lines->findData(d.id));
     });

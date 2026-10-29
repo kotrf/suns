@@ -92,5 +92,6 @@ priority. Catalog intent protects an assigned fleet from other planners while
 commands/reports are in flight; old idle telemetry never triggers a resend.
 No new ship creation or hidden annual stock dispatcher is introduced.
 See [policy, limits and deferred scope](transport-lines.md#computer-player-supply-lines).
-Save v103 / orders v43 are unchanged. Network evacuation automation is frozen
+The initial AI slice used save v103 / orders v43. Destination-target support
+uses the shared v105/v45 programme format; this heuristic keeps its zero target and full-unload default and gains no new automatic policy. Network evacuation automation is frozen
 pending actual play; existing manual population cargo is unchanged.

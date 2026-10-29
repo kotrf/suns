@@ -21,7 +21,7 @@ void dispatch(GameState& s, PlayerId player, const TransportLine& line, FleetId 
 }
 bool transport_line_spec_valid(const TransportLineSpec& d) {
     return d.id && d.revision && !d.name.empty() && d.name.size()<=64 && d.source && d.destination
-        && d.sourceReserve<=1000000000 && d.departureMinimum<=1000000000
+        && d.sourceReserve<=1000000000 && d.departureMinimum<=1000000000 && d.destinationTarget<=1000000000
         && d.source!=d.destination && d.warp>=1 && d.warp<=kMaxWarp && d.cargo<=TransportCargo::Germanium;
 }
 std::string transport_line_error(const PlayerView& view,const TransportLineSpec& d) {
@@ -48,6 +48,7 @@ FleetRouteProgram transport_line_program(const TransportLine& line) {
     p.arrivalAction.mineralMinimum=line.spec.departureMinimum;
     FleetArrivalAction unload;unload.kind=FleetArrivalActionKind::UnloadTransportLine;unload.cargo=cargo;
     unload.transportLine=line.spec.id;unload.transportRevision=line.spec.revision;unload.transportDestination=line.spec.destination;
+    unload.destinationTarget=line.spec.destinationTarget;
     p.queuedWaypoints={{line.destinationPosition,line.spec.warp,unload}};p.repeatOrders=true;
     return p;
 }
@@ -152,6 +153,7 @@ bool programme_matches(const TransportLine& line,const FleetTelemetry& t) {
         || route[0].warp!=p.warp || route[0].arrivalAction!=p.arrivalAction
         || !same_position(route[1].destination,line.destinationPosition) || route[1].warp!=line.spec.warp)return false;
     if(route[1].arrivalAction==p.queuedWaypoints[0].arrivalAction)return true;
+    if(line.spec.destinationTarget)return false;
     // Existing v102/v103 programmes keep flying without an undelivered upgrade.
     auto legacy=p.queuedWaypoints[0].arrivalAction;legacy.kind=FleetArrivalActionKind::UnloadAll;
     legacy.transportLine=0;legacy.transportRevision=0;legacy.transportDestination=0;
@@ -202,6 +204,8 @@ TransportLineMetrics transport_line_metrics(const PlayerView& view,const Transpo
         if(t.destination && !same_position(t.position,*t.destination))++m.moving;
         else if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
             && same_position(t.position,line.sourcePosition))++m.waiting;
+        else if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
+            && t.arrivalAction->destinationTarget && same_position(t.position,line.destinationPosition))++m.waiting;
         m.cargoUsed+=fleet_cargo_used(view.state,*f);m.cargoCapacity+=fleet_cargo_capacity(view.state,*f);
     }
     return m;
@@ -217,6 +221,10 @@ std::string transport_assignment_status(const PlayerView& view,const TransportLi
     const auto reason=transport_line_error(view,line.spec);if(!reason.empty())return reason;
     if(t.fuel<=0 && t.destination && !same_position(t.position,*t.destination))
         return "Reported empty fuel tank; drift or fitted fuel-free travel may continue; later refuelling is unconfirmed";
+    if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
+        && t.arrivalAction->destinationTarget && same_position(t.position,line.destinationPosition))
+        return "Waiting at destination for demand; target "+std::to_string(t.arrivalAction->destinationTarget)
+            +" kt; surplus retained aboard; future consumption is unknown";
     if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
         && same_position(t.position,line.sourcePosition)) {
         const auto amount=line.spec.cargo==TransportCargo::Ironium?t.minerals.ironium:

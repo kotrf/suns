@@ -2,7 +2,7 @@
 void writeTransportSpec(QDataStream& out,const TransportLineSpec& d) {
     out<<quint32(d.id)<<quint64(d.revision);writeString(out,d.name);
     out<<quint32(d.source)<<quint32(d.destination)<<quint8(d.warp)<<quint8(d.cargo)<<quint8(d.active)
-        <<quint32(d.sourceReserve)<<quint32(d.departureMinimum);
+        <<quint32(d.sourceReserve)<<quint32(d.departureMinimum)<<quint32(d.destinationTarget);
 }
 void readTransportSpec(QDataStream& in,TransportLineSpec& d) {
     quint64 revision{};quint8 cargo{},active{};
@@ -10,6 +10,7 @@ void readTransportSpec(QDataStream& in,TransportLineSpec& d) {
     in>>d.source>>d.destination>>d.warp>>cargo>>active;d.cargo=TransportCargo(cargo);d.active=active;
     d.sourceReserve=d.departureMinimum=0;
     if(gReadSaveFormatVersion>=103)in>>d.sourceReserve>>d.departureMinimum;
+    d.destinationTarget=0;if(gReadSaveFormatVersion>=105)in>>d.destinationTarget;
     if(cargo>quint8(TransportCargo::Germanium) || active>1 || d.name.size()>64)markCorrupt(in);
 }
 void writeTransportLines(QDataStream& stream,const GameState& state) {

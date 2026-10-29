@@ -27,6 +27,16 @@ struct MainWindowTestAccess {
 }
 QByteArray raw_file(const QString& path){QFile f(path);assert(f.open(QIODevice::ReadOnly));return f.readAll();}
 SaveGameData host(GameState s){SaveGameData d;d.state=std::move(s);d.mode=SessionMode::Host;d.campaignId=55;d.turnToken=66;d.playerTokens={{1,77}};d.pendingOrders.player=1;return d;}
+QByteArray without_target_catalog(QByteArray raw) {
+    QByteArray marker;{QDataStream out(&marker,QIODevice::WriteOnly);out<<quint32{0x4c494e45};}
+    const auto at=raw.lastIndexOf(marker);assert(at>0);quint32 size{};qint64 targetAt{};
+    {QDataStream in(raw);assert(in.device()->seek(at+4));in>>size;
+        quint32 players{},owner{},last{},lines{},id{},source{},destination{},reserve{},minimum{};quint64 revision{};QString name;quint8 warp{},cargo{},active{};
+        in>>players>>owner>>last>>lines;assert(players==1 && lines==1);
+        in>>id>>revision>>name>>source>>destination>>warp>>cargo>>active>>reserve>>minimum;targetAt=in.device()->pos();}
+    raw.remove(targetAt,4);{QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(at+4));out<<quint32(size-4);}
+    return raw;
+}
 void persistence(const QString& path) {
     auto s=transport_world(900);s.fleets[0].position={900,0};acknowledge(s);
     assert(set_transport_line(s,1,{line_spec()}));assert(assign_transport_line(s,1,{1,1}));
@@ -113,8 +123,8 @@ void legacy_v102_line(const QString& path) {
         quint32 players{},id{},last{},lines{},line{},source{},destination{};quint64 revision{};QString name;quint8 warp{},cargo{},active{};
         in>>players>>id>>last>>lines;assert(players==1 && lines==1);
         in>>line>>revision>>name>>source>>destination>>warp>>cargo>>active;policyAt=in.device()->pos();}
-    raw.remove(policyAt,8);raw.resize(at+size); // Remove policy fields and the later TLST extension for a genuine v102 layout.
-    {QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{102};assert(out.device()->seek(at+4));out<<quint32(size-8);}
+    raw.remove(policyAt,12);raw.resize(at+size-4); // v102 omits all three policy fields and TLST.
+    {QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{102};assert(out.device()->seek(at+4));out<<quint32(size-12);}
     {QFile file(path);assert(file.open(QIODevice::WriteOnly));file.write(raw);}
     assert(read_save_game_file(path,loaded,error));
     const auto& d=loaded.state.players[0].transportLines[0].spec;assert(!d.sourceReserve && !d.departureMinimum);
@@ -218,11 +228,76 @@ void statistics_programme_orders_and_v103(const QString& path) {
         const auto legacy=[](FleetArrivalAction& a){if(a.kind==FleetArrivalActionKind::UnloadTransportLine){a.kind=FleetArrivalActionKind::UnloadAll;a.transportLine=0;a.transportRevision=0;a.transportDestination=0;}};
         for(auto& w:f.waypointQueue)legacy(w.arrivalAction);for(auto& w:f.routeTemplate)legacy(w.arrivalAction);
     }
-    assert(write_save_game_file(path,host(old),error));auto raw=raw_file(path);QByteArray marker;{QDataStream out(&marker,QIODevice::WriteOnly);out<<quint32{0x544c5354};}
+    assert(write_save_game_file(path,host(old),error));auto raw=without_target_catalog(raw_file(path));QByteArray marker;{QDataStream out(&marker,QIODevice::WriteOnly);out<<quint32{0x544c5354};}
     const auto at=raw.lastIndexOf(marker);assert(at>0);raw.resize(at);{QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{103};}
     {QFile f(path);assert(f.open(QIODevice::WriteOnly));f.write(raw);}assert(read_save_game_file(path,loaded,error));
     assert(loaded.state.players[0].transportReceipts.empty());
     tick(loaded.state);assert(transport_assignment_status(make_player_view(loaded.state,1),loaded.state.players[0].transportLines[0],loaded.state.players[0].transportLines[0].assignments[0]).find("Legacy")!=std::string::npos);
+}
+void destination_target_persistence_and_ui(const QString& path) {
+    auto s=stock_target_world();auto d=line_spec();d.destinationTarget=100;
+    assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));for(int i=0;i<3;++i)tick(s);
+    assert(s.fleets[0].minerals.ironium==50 && s.fleets[0].arrivalAction->destinationTarget==100);
+    QString error;SaveGameData loaded;auto saved=host(s);auto edit=d;++edit.revision;edit.destinationTarget=150;
+    saved.pendingOrders.orders={SetTransportLineOrder{edit}};saved.pendingDescriptions={"Change received destination target"};
+    assert(write_save_game_file(path,saved,error));assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets[0].arrivalAction->destinationTarget==100 && loaded.state.fleets[0].minerals.ironium==50);
+    assert(std::get<SetTransportLineOrder>(loaded.pendingOrders.orders[0]).value.destinationTarget==150);
+    auto control=s,restored=loaded.state;tick(control,{QueueProductionOrder{1,ProductionKind::Factory}});tick(restored,{QueueProductionOrder{1,ProductionKind::Factory}});
+    tick(control);tick(restored);assert(control.fleets[0].minerals.ironium==48 && restored.fleets[0].minerals.ironium==48);
+    assert(control.players[0].transportReceipts.size()==restored.players[0].transportReceipts.size());
+    MainWindow w;MainWindowTestAccess::set(w,s);w.installTransportLines();
+    w.findChild<QDockWidget*>("transportLinesDock")->show();
+    auto* selection=w.findChild<QComboBox*>("transportLineSelection");selection->setCurrentIndex(selection->findData(1u));
+    auto* target=w.findChild<QSpinBox*>("transportLineTarget");assert(target && target->value()==100);
+    assert(w.findChild<QListWidget*>("transportLineRoster")->item(0)->text().contains("Waiting at destination"));
+    assert(w.selectFleetForRouteProgram(1));assert(w.selectedFleetRouteProgramForecast().contains("Destination target waiting"));
+    target->setValue(150);w.findChild<QPushButton*>("transportLineSave")->click();
+    assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).value.destinationTarget==150);
+    assert(pending_transport_route(s,MainWindowTestAccess::pending(w),1)->queuedWaypoints[0].arrivalAction.destinationTarget==150);
+    assert(w.selectedFleetRouteProgramForecast().contains("150 kt"));
+}
+void destination_target_remote_orders(const QString& path) {
+    auto s=computer_transport_world(5100);s.players[0].controller=PlayerController::Human;s.fleets.resize(1);
+    for(auto& p:s.planets)p.observedConcentration=MineralCargo{};s.planets[1].minerals.ironium=100;
+    auto d=line_spec();d.source=1;d.destination=2;d.destinationTarget=100;assert(set_transport_line(s,1,{d}));
+    const auto programme=transport_line_program(s.players[0].transportLines[0]);auto& f=s.fleets[0];
+    f.position={5100,0};f.destination=f.position;f.arrivalAction=programme.queuedWaypoints[0].arrivalAction;f.minerals.ironium=50;
+    f.repeatOrders=true;f.routeTemplate={{programme.destination,programme.warp,programme.arrivalAction},programme.queuedWaypoints[0]};
+    s.players[0].transportLines[0].assignments={{1,s.turn}};acknowledge(s);tick(s);
+    ++d.revision;d.destinationTarget=200;assert(set_transport_line(s,1,{d}));
+    QString error;SaveGameData loaded;assert(write_save_game_file(path,host(s),error));assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets[0].arrivalAction->destinationTarget==100);
+    assert(loaded.state.fleets[0].pendingCommands.back().program.queuedWaypoints[0].arrivalAction.destinationTarget==200);
+    assert(write_save_game_file(path+".known",make_player_turn(host(s),1),error));
+    auto hidden=s;hidden.planets[1].minerals.ironium=0;hidden.fleets[0].minerals.ironium=0;hidden.fleets[0].arrivalAction->destinationTarget=999;
+    assert(write_save_game_file(path+".hidden",make_player_turn(host(hidden),1),error));assert(raw_file(path+".known")==raw_file(path+".hidden"));
+    auto control=s,restored=loaded.state;const auto due=s.fleets[0].pendingCommands.back().deliveryTurn;
+    while(control.turn<=due){tick(control);tick(restored);assert(control.fleets[0].minerals.ironium==restored.fleets[0].minerals.ironium);}
+    assert(restored.fleets[0].routeTemplate[1].arrivalAction.destinationTarget==200);
+    const auto updated=transport_line_program(s.players[0].transportLines[0]);
+    TurnOrderFileData packet;packet.campaignId=55;packet.turn=s.turn;packet.turnToken=77;
+    packet.orders={1,{SetTransportLineOrder{d},MoveFleetOrder{1,updated.destination,updated.warp,updated.arrivalAction,updated.queuedWaypoints,true}}};packet.descriptions={"Target 200","Frozen target programme"};
+    assert(write_turn_order_file(path+".orders",packet,error));TurnOrderFileData read;assert(read_turn_order_file(path+".orders",read,error));
+    assert(std::get<SetTransportLineOrder>(read.orders.orders[0]).value.destinationTarget==200);
+    assert(std::get<MoveFleetOrder>(read.orders.orders[1]).queuedWaypoints[0].arrivalAction.destinationTarget==200);
+    auto old=raw_file(path+".orders");{QDataStream out(&old,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{44};}
+    {QFile file(path+".old-orders");assert(file.open(QIODevice::WriteOnly));file.write(old);}assert(!read_turn_order_file(path+".old-orders",read,error));
+    auto trailing=raw_file(path+".orders");trailing.append(char(0));{QFile file(path+".trailing");assert(file.open(QIODevice::WriteOnly));file.write(trailing);}
+    assert(!read_turn_order_file(path+".trailing",read,error));
+}
+void destination_target_v104(const QString& path) {
+    auto s=stock_target_world();assert(set_transport_line(s,1,{line_spec()}) && assign_transport_line(s,1,{1,1}));
+    QString error;assert(write_save_game_file(path,host(s),error));auto raw=raw_file(path);
+    QByteArray modern;{QDataStream out(&modern,QIODevice::WriteOnly);out<<quint8(FleetArrivalActionKind::UnloadTransportLine)<<quint64{1}
+        <<quint8(FleetCargoKind::Ironium)<<quint32{0}<<quint8{0}<<quint32{1}<<quint64{1}<<quint32{1}<<quint32{0};}
+    auto legacy=modern;legacy.chop(4);assert(raw.count(modern)>=2);raw.replace(modern,legacy);
+    raw=without_target_catalog(raw);{QDataStream out(&raw,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{104};}
+    {QFile file(path);assert(file.open(QIODevice::WriteOnly));file.write(raw);}SaveGameData loaded;assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.players[0].transportLines[0].spec.destinationTarget==0);
+    assert(loaded.state.fleets[0].routeTemplate[1].arrivalAction.destinationTarget==0);
+    for(int i=0;i<3;++i)tick(loaded.state);
+    assert(loaded.state.planets[0].minerals.ironium==150 && loaded.state.fleets[0].minerals.ironium==0);
 }
 void controls() {
     MainWindow w;MainWindowTestAccess::set(w,transport_world());w.installTransportLines();
@@ -249,4 +324,4 @@ void controls() {
     w.findChild<QPushButton*>("transportLineDelete")->click();
     assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).remove);
 }
-int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());received_statistics_roundtrip(dir.filePath("statistics.suns"));statistics_programme_orders_and_v103(dir.filePath("statistics-orders.suns"));persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}
+int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());destination_target_persistence_and_ui(dir.filePath("target.suns"));destination_target_remote_orders(dir.filePath("target-remote.suns"));destination_target_v104(dir.filePath("target-v104.suns"));received_statistics_roundtrip(dir.filePath("statistics.suns"));statistics_programme_orders_and_v103(dir.filePath("statistics-orders.suns"));persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}

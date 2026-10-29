@@ -886,6 +886,12 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     }
     case FleetArrivalActionKind::UnloadTransportLine:
     case FleetArrivalActionKind::UnloadAll: {
+        const bool targeted=action.kind==FleetArrivalActionKind::UnloadTransportLine && action.destinationTarget;
+        const auto waitForDemand=[&] {
+            const auto amount=action.cargo==FleetCargoKind::Ironium?fleet.minerals.ironium:
+                action.cargo==FleetCargoKind::Boranium?fleet.minerals.boranium:fleet.minerals.germanium;
+            if(targeted && amount>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}
+        };
         if(action.cargo==FleetCargoKind::OrbitalColonists) {
             auto* colony=friendly_colony_at_fleet(state,fleet);
             if(!colony || !habitat_completed(*colony) || hostile_station_blocks_landing(state,fleet,*colony)) return false;
@@ -916,25 +922,26 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
             return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
         });
-        if (surface == state.planets.end()) return false;
+        if (surface == state.planets.end()) {waitForDemand();return false;}
+        if(targeted && (surface->owner!=fleet.owner || surface->id!=action.transportDestination)) {
+            waitForDemand();return false;
+        }
         MineralCargo delivered;
+        const auto unloadMineral=[&](double& aboard,double& stock,double& manifest) {
+            manifest=targeted?std::min(aboard,std::max(0.0,double(action.destinationTarget)-stock)):aboard;
+            stock+=manifest;aboard-=manifest;
+        };
         switch (action.cargo) {
         case FleetCargoKind::OrbitalColonists: break;
         case FleetCargoKind::Colonists: break;
         case FleetCargoKind::Ironium:
-            delivered.ironium = fleet.minerals.ironium;
-            surface->minerals.ironium += fleet.minerals.ironium;
-            fleet.minerals.ironium = 0.0;
+            unloadMineral(fleet.minerals.ironium,surface->minerals.ironium,delivered.ironium);
             break;
         case FleetCargoKind::Boranium:
-            delivered.boranium = fleet.minerals.boranium;
-            surface->minerals.boranium += fleet.minerals.boranium;
-            fleet.minerals.boranium = 0.0;
+            unloadMineral(fleet.minerals.boranium,surface->minerals.boranium,delivered.boranium);
             break;
         case FleetCargoKind::Germanium:
-            delivered.germanium = fleet.minerals.germanium;
-            surface->minerals.germanium += fleet.minerals.germanium;
-            fleet.minerals.germanium = 0.0;
+            unloadMineral(fleet.minerals.germanium,surface->minerals.germanium,delivered.germanium);
             break;
         case FleetCargoKind::All:
             delivered = fleet.minerals;
@@ -968,7 +975,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
                 }
             }
         }
-        return false;
+        waitForDemand();return false;
     }
     case FleetArrivalActionKind::Refuel: {
         auto* colony = friendly_colony_at_fleet(state, fleet);
@@ -1401,9 +1408,10 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
         return true;
     }
 
-    // A policy load holds this waypoint and retries on site next year. Do not
-    // advance the queued unload or spam arrival briefings while waiting.
-    if(fleet.arrivalAction && fleet.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals)return false;
+    // Policy loading or destination top-up holds this waypoint and retries next
+    // year. Do not advance the programme or spam arrival briefings while waiting.
+    if(fleet.arrivalAction && (fleet.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
+        || fleet.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine))return false;
     activate_next_waypoint(state, fleet);
     if (!fleet.destination && fleet.waypointQueue.empty() && fleet.repeatOrders) {
         fleet.waypointQueue = fleet.routeTemplate;
