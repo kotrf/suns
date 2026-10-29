@@ -1,6 +1,34 @@
 # Project status and development handoff
 
-## Current work — transport-line load policies (#53)
+## Current work — computer-player transport lines (#53)
+
+Checked 29 October 2026 (Europe/Moscow): #238 merged as `830bcd1`; main and
+branch `codex/transport-lines-ai` use save v103 / orders v43. The user requested
+continuing #53 and froze network evacuation automation until more actual play.
+#53 remains open; #63 remains frozen last. No evacuation automation is added.
+
+The AI can create one two-colony I/B/G supply line per turn with an existing
+empty idle freighter. Received surplus/shortage, real fitted cargo and fuel,
+received depots, source reserve and onboard departure minimum determine the
+ordinary delayed orders. HQ catalog intent reserves a fleet during stale
+telemetry and after save/load; other planners cannot requisition it silently.
+No extra memory/format fields or free production are introduced. Automatic
+ship construction, mining-cache service, demand retasking, interruption recovery
+and statistics remain future #53 work. [Rules and limits](transport-lines.md).
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+Linux/offscreen CTest **94/94 passed (69.71 s)**; `git diff --check` clean.
+Expanded core/Qt/save suites cover actual AI dispatch and unattended physical
+delivery/conservation/source reserve, fitted fuel use and fuel-free fallback,
+deterministic reordered inputs, received-stock/depot/cargo/damage guards,
+hidden-world planning invariance, one assignment through a 34-year command
+delay, protection against military reassignment, paused intent, and real host
+save/load/controller continuation through delayed delivery. Existing LINE,
+route-policy, Qt controls, migrations and PBEM suites also pass. No manual
+campaign balance, cross-platform or sanitizer acceptance is claimed. Prepared
+for review; no automatic merge or issue closure.
+
+## Merged implementation — transport-line load policies (#238, historical branch checkpoint)
 
 The user authorized merging reviewed #237 and continuing #53. PR #237 merged as
 `4fb67cf`; checked head `2fa89b7` passed CI 94/94 (81.23 s). Branch
@@ -24,7 +52,7 @@ loading/departure, capacity blockage, capture, stop/resume, delayed payloads,
 received waiting status and conditional forecast, stale geometry, hidden export
 invariance, physical/received/in-flight save state, v102 migration and new PBEM
 policy fields. No manual campaign balance, other-platform or sanitizer acceptance
-is claimed. No automatic merge of this follow-up.
+is claimed. This follow-up is now merged as noted above.
 [Rules and remaining #53](transport-lines.md).
 
 ## Merged implementation — transport lines (#237, historical branch checkpoint)

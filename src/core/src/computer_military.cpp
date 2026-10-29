@@ -184,7 +184,8 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         if (owner && *owner != 0 && *owner != view.player
             && system_intel_age(state, view.player, planet.star).value_or(1000) <= 30) enemies.push_back(&planet);
     }
-    for (const auto& f : state.fleets) if (f.owner == view.player && f.outpost == OutpostKind::None && military_fleet(state, f)) fleets.push_back(&f);
+    for (const auto& f : state.fleets) if (f.owner == view.player && f.outpost == OutpostKind::None
+        && !transport_reserved(view, plan, f.id) && military_fleet(state, f)) fleets.push_back(&f);
     const auto byId = [](auto a, auto b) { return a->id < b->id; };
     std::sort(colonies.begin(), colonies.end(), byId); std::sort(enemies.begin(), enemies.end(), byId);
     std::sort(fleets.begin(), fleets.end(), byId);

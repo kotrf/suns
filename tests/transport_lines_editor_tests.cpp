@@ -117,6 +117,36 @@ void legacy_v102_line(const QString& path) {
     assert(read_save_game_file(path,loaded,error));
     const auto& d=loaded.state.players[0].transportLines[0].spec;assert(!d.sourceReserve && !d.departureMinimum);
 }
+void computer_line_persistence(const QString& path) {
+    auto s=computer_transport_world(5100);s.fleets[0].position={5100,0};
+    for(auto& d:s.shipDesigns)if(d.id==202)d.components={C::FuelMizer,C::FuelMizer};acknowledge(s);
+    Player human;human.id=2;human.name="Human observer";s.players.push_back(human);
+    s=resolve_controlled_campaign_turn(s,{{2,{}}}).state;
+    assert(s.players[0].transportLines.size()==1 && !s.fleets[0].pendingCommands.empty());
+    auto save=host(s);save.pendingOrders={2,{}};save.playerTokens={{2,77}};
+    QString error;SaveGameData loaded;
+    assert(write_save_game_file(path,save,error));assert(read_save_game_file(path,loaded,error));
+    assert(loaded.state.players[0].computer==s.players[0].computer);
+    assert(loaded.state.players[0].lastTransportLineId==1);
+    auto control=s,restored=loaded.state;
+    const auto due=s.fleets[0].pendingCommands.front().deliveryTurn;
+    assert(due>s.turn+20);
+    while(control.turn<=due+8) {
+        for(const auto* state:{&control,&restored}) {
+            const auto plan=plan_computer_turn(make_player_view(*state,1));
+            assert(std::none_of(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& o){
+                return std::holds_alternative<SetTransportLineOrder>(o) || std::holds_alternative<AssignTransportLineOrder>(o);
+            }));
+        }
+        control=resolve_controlled_campaign_turn(control,{{2,{}}}).state;
+        restored=resolve_controlled_campaign_turn(restored,{{2,{}}}).state;
+        assert(control.players[0].computer==restored.players[0].computer);
+        assert(same_position(control.fleets[0].position,restored.fleets[0].position));
+        assert(control.fleets[0].fuel==restored.fleets[0].fuel && control.fleets[0].minerals.ironium==restored.fleets[0].minerals.ironium);
+        assert(restored.players[0].transportLines.size()==1 && restored.players[0].transportLines[0].assignments.size()==1);
+    }
+    assert(restored.fleets[0].repeatOrders);
+}
 void manual_route_editor_override() {
     MainWindow w;MainWindowTestAccess::set(w,transport_world());MainWindowTestAccess::draft(w);
     const auto rows=w.selectedFleetRouteProgramRows();assert(rows.size()==2);
@@ -153,4 +183,4 @@ void controls() {
     w.findChild<QPushButton*>("transportLineDelete")->click();
     assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).remove);
 }
-int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}
+int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}

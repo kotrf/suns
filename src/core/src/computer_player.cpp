@@ -381,7 +381,8 @@ void plan_exotic_materials(const PlayerView& view, ComputerTurnPlan& plan, std::
             [&](const auto& f) { return f.id == g.fleet && f.owner == view.player; });
     });
     for (const auto& f : s.fleets) {
-        if (f.owner != view.player || f.outpost != OutpostKind::None || mobile_base_hulls(s, f) || military_fleet(s, f)) continue;
+        if (f.owner != view.player || f.outpost != OutpostKind::None || mobile_base_hulls(s, f)
+            || transport_reserved(view, plan, f.id) || military_fleet(s, f)) continue;
         auto goal = std::find_if(goals.begin(), goals.end(), [&](const auto& g) { return g.fleet == f.id; });
         if (goal != goals.end() && goal->kind < ComputerFleetGoalKind::ExoticMining) continue;
         if (!f.telemetry.observedTurn || f.telemetry.destination || f.telemetry.targetFleet) continue;
@@ -540,7 +541,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
     });
 
     for (const auto* original : fleets) {
-        if (military_fleet(state, *original)) continue;
+        if (transport_reserved(view, plan, original->id) || military_fleet(state, *original)) continue;
         auto fleet = *original;
         const auto existing = std::find_if(goals.begin(), goals.end(), [&](const auto& g) { return g.fleet == fleet.id; });
         if (existing != goals.end() && existing->kind >= ComputerFleetGoalKind::ExoticMining) continue;
@@ -981,6 +982,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
         }
     }
     plan_military(view, plan, reason);
+    plan_transport_lines(view, plan, reason);
     plan_gate_construction(view, plan, reason);
     // A paid dedicated probe uses ordinary programme and construction orders.
     bool hasProbe = false;
@@ -1041,7 +1043,8 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
         if(!p.habitat.population || (p.habitat.service!=HabitatService::Reserve && p.habitat.service!=HabitatService::Failing)) continue;
         const auto* at=find_star(view.state,p.star); if(!at)continue;
         for(const auto& f:view.state.fleets) {
-            if(f.owner!=view.player || !idle(f) || !same_position(f.position,at->position))continue;
+            if(f.owner!=view.player || transport_reserved(view,plan,f.id)
+                || !idle(f) || !same_position(f.position,at->position))continue;
             const bool reserved=std::any_of(plan.orders.orders.begin(),plan.orders.orders.end(),[&](const auto& o){return std::visit([&](const auto& v){
                 if constexpr(requires { v.fleet; }) return v.fleet==f.id;
                 else if constexpr(std::is_same_v<std::decay_t<decltype(v)>,TransferCargoOrder>) return v.source.fleet==f.id || v.destination.fleet==f.id;

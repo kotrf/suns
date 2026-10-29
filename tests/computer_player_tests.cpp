@@ -63,6 +63,14 @@ void same_plan(const ComputerTurnPlan& a, const ComputerTurnPlan& b)
                 assert(order.destination == other.destination && order.source == other.source);
             else if constexpr (std::is_same_v<T, SetFleetTaskOrder>)
                 assert(order.fleet == other.fleet && order.task == other.task);
+            else if constexpr (std::is_same_v<T, SetTransportLineOrder>) {
+                const auto& a=order.value; const auto& b=other.value;
+                assert(order.remove==other.remove && a.id==b.id && a.revision==b.revision
+                    && a.name==b.name && a.source==b.source && a.destination==b.destination
+                    && a.warp==b.warp && a.cargo==b.cargo && a.active==b.active
+                    && a.sourceReserve==b.sourceReserve && a.departureMinimum==b.departureMinimum);
+            } else if constexpr (std::is_same_v<T, AssignTransportLineOrder>)
+                assert(order.line==other.line && order.fleet==other.fleet && order.remove==other.remove);
             else if constexpr (std::is_same_v<T, QueueStationOrder>)
                 assert(order.colony == other.colony && order.construction.refitStation == other.construction.refitStation
                     && order.construction.loadout.hull == other.construction.loadout.hull

@@ -1,7 +1,8 @@
 # Transport lines — first #53 slice
 
 The first slice was merged in #237, main `4fb67cf`, save v102 / orders v42.
-The load-policy follow-up starts from that main and uses **save v103 / orders v43**.
+The load-policy follow-up merged in #238, main `830bcd1`, **save v103 / orders v43**.
+The computer-player follow-up starts there and keeps those formats.
 
 ## Playable loop
 
@@ -99,9 +100,46 @@ catalog or old exported player evidence. Host-only pending command results are
 not status evidence. Normal Freight messages and receipt-year History keep
 recording real deliveries; this slice does not attribute totals to line IDs.
 
-Computer empires retain their existing ordinary freight planner. This slice
-adds no automatic staffing of the new shared catalog; a computer-issued line
-order goes through the same validation/commands as a human-issued order.
+## Computer-player supply lines
+
+Computer empires can create the same catalog entries through ordinary
+SetTransportLineOrder / AssignTransportLineOrder. One existing empty, undamaged,
+idle freighter can be assigned per planning year; no free ships or cargo are
+created. The first policy serves populated owned colonies with received refuel
+depots at both ends. It chooses a received source with at least 300 kt and a
+destination below 100 kt of I/B/G; the programme leaves 200 kt at source and
+waits for 50 kt aboard. These are AI heuristics, not new loading limits for
+human-authored lines. Minimum destination stock, then approach plus round-trip
+distance and stable endpoint/cargo/fleet IDs break ties deterministically.
+
+Candidate ships must have at least 50 kt of fitted hold. Scouts, colonizers,
+miners, probes, constructors, mobile bases, bombers/armed ships, loaded ships
+and fleets with existing missions or current orders are not requisitioned.
+Military planning has first choice of unassigned ships; a catalog roster or
+new assignment then reserves the ship against military, exotic-material,
+expansion and habitat cargo planners, including while old idle telemetry persists.
+Paused/missing roster entries remain intent. The AI does not silently release
+them, resume paused lines, reassign lost transports or infer command failure
+from a missing acknowledgement.
+
+Warp selection budgets actual received fuel for the initial approach and a
+full fitted hold for every leg. A complete direct cycle must fit the fitted
+tank; both endpoints need received refuelling service. Received medium damage
+and engine overdrive reject unsafe direct paths. No imaginary bypass stops,
+future cargo unloading, scoop generation or future source production are
+credited. Existing fuel-free engine speeds remain usable when fuel is absent.
+Physical fuel, stocks, ownership, equipment and service are still
+checked by the ordinary processor; stale evidence cannot grant supplies.
+
+At most eight catalog entries are created by this conservative policy (all
+existing entries count), with one intended supplier per destination/mineral.
+The stored catalog is durable dispatch intent, so an old remote idle snapshot
+does not cause annual duplicate definitions or assignments. It survives host
+save/load without another memory field. Results use normal telemetry and
+Freight/History reports; AI reasoning names the chosen line and thresholds.
+Automatic transport construction, staffing existing empty definitions, mining
+cache/depot/base endpoints, changed-demand retasking and interruption recovery
+remain later work. This adds no automatic population evacuation.
 
 ## Persistence and boundary
 
@@ -120,9 +158,10 @@ received system coordinates and Warp 1–10. Malformed collection counts,
 revisions, duplicate roster identities and truncated tails are rejected.
 
 Remaining #53: multi-stop lines, destination stock targets, richer wait/refuel/service
-policies, fleet-base/depot stops, automatic staffing/resupply and honest AI use
-of the shared catalog, per-line throughput/utilization/history, interruption
-briefings, and explicit emergency diversion/evacuation. Colonists stay physical
+policies, fleet-base/depot stops, broader automatic staffing/resupply,
+per-line throughput/utilization/history and interruption briefings.
+**Automatic emergency diversion/population evacuation is frozen by user decision
+of 29 October 2026, pending more actual play; it is not the next slice.** Colonists stay physical
 cargo under the existing manual/ordinary-route rules. #53 remains open; this
 slice does not expand frozen #63 or decide station capture/irreversible #56.
 
@@ -140,3 +179,13 @@ loading, impossible holds, competing fleets, capture, cancellation, preserved
 partial cargo, stale geometry/conditional forecasts, delayed policy packets,
 received/physical save state and genuine v102 zero-policy migration.
 No manual campaign balance, cross-platform or sanitizer acceptance is claimed.
+
+Computer-policy follow-up: full application/test build and Linux/offscreen
+CTest **94/94 passed (69.71 s)**; `git diff --check` clean. New cases exercise
+ordinary AI creation/dispatch, real unattended delivery and conservation,
+source floors, fitted fuel use and fuel-free slowdown, guards and deterministic
+input reordering, hidden stock/ownership/depot/fuel/cargo planning invariance,
+exactly one assignment through a 34-year command delay, military reservation,
+paused intent, and host save/load with identical controller/fleet continuation.
+Existing Qt, migration and PBEM payload/export tests remain passing; no new
+format or computer-specific privileged packet is introduced.

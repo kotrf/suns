@@ -79,3 +79,18 @@ colony and launch a bounded survey programme from current received telemetry.
 Dedicated probes are excluded from generic expansion routing. Programmes use
 received HQ evidence and independent onboard observations; the AI receives no
 hidden mission state. See [the first slice](autonomous-survey-probes.md).
+
+## Transport-line catalog (#53)
+
+Computer empires can assign an available paid empty freighter to an ordinary
+two-colony mineral shuttle using only PlayerView. Received stock thresholds
+(source 300 kt, destination below 100 kt) choose demand; source reserve 200 kt
+and departure minimum 50 kt compile into the same delayed onboard programme
+as human-authored lines. Both ends need received depots, fitted fuel must fund
+the fully loaded direct cycle, and existing civilian/military missions take
+priority. Catalog intent protects an assigned fleet from other planners while
+commands/reports are in flight; old idle telemetry never triggers a resend.
+No new ship creation or hidden annual stock dispatcher is introduced.
+See [policy, limits and deferred scope](transport-lines.md#computer-player-supply-lines).
+Save v103 / orders v43 are unchanged. Network evacuation automation is frozen
+pending actual play; existing manual population cargo is unchanged.
