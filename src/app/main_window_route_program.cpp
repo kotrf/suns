@@ -116,6 +116,7 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
                   .arg(cargoName())
                   .arg(static_cast<qulonglong>(action.reservePopulation))
             : QString("Load all available %1 — dynamic").arg(cargoName());
+    case FleetArrivalActionKind::UnloadTransportLine:
     case FleetArrivalActionKind::UnloadAll:
         return QString("Unload all %1 — dynamic").arg(cargoName());
     case FleetArrivalActionKind::Refuel:
@@ -453,6 +454,7 @@ QString routeForecast(
                     outcome = QString("; projected mineral cargo aboard: %1").arg(amount, 0, 'f', 1);
                 }
                 break;
+            case FleetArrivalActionKind::UnloadTransportLine:
             case FleetArrivalActionKind::UnloadAll:
                 if(leg.arrivalAction.cargo==FleetCargoKind::OrbitalColonists) {
                     outcome=QString("; projected orbital delivery, limited by received habitat capacity; colonists remaining aboard: %1").arg(qulonglong(after->colonists));
@@ -1425,7 +1427,8 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
             if (answer != QMessageBox::Yes) return false;
         }
     }
-    if (action.kind == FleetArrivalActionKind::TransitStargate || action.kind == FleetArrivalActionKind::LoadMinerals) {
+    if (action.kind == FleetArrivalActionKind::TransitStargate || action.kind == FleetArrivalActionKind::LoadMinerals
+        || action.kind == FleetArrivalActionKind::UnloadTransportLine) {
         if (leg.arrivalAction.kind != action.kind) return false;
         action = leg.arrivalAction;
     }

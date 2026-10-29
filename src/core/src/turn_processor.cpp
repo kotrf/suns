@@ -884,6 +884,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         if(action.kind==FleetArrivalActionKind::LoadMinerals && *destination+1e-6<action.mineralMinimum)waitForMinimum();
         return false;
     }
+    case FleetArrivalActionKind::UnloadTransportLine:
     case FleetArrivalActionKind::UnloadAll: {
         if(action.cargo==FleetCargoKind::OrbitalColonists) {
             auto* colony=friendly_colony_at_fleet(state,fleet);
@@ -954,8 +955,19 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
             if (amount) queue_player_report(state, fleet.owner, PlayerReportKind::XenocrystalAcquired, fleet.position,
                 state.turn + 1, surface->star, surface->id, fleet.id, 0, ProductionKind::Research, amount);
         }
-        if (surface->owner == fleet.owner)
+        if (surface->owner == fleet.owner) {
             record_freight_delivery(freight, *surface, delivered);
+            if(action.kind==FleetArrivalActionKind::UnloadTransportLine && transport_unload_valid(action)
+                && surface->id==action.transportDestination && mineral_cargo_mass(delivered)>0) {
+                queue_player_report(state,fleet.owner,PlayerReportKind::TransportLineDelivery,fleet.position,
+                    state.turn+1,surface->star,surface->id,fleet.id,0,ProductionKind::ColonyShip,0,
+                    ResearchField::Electronics,0,delivered);
+                for(auto& p:state.players)if(p.id==fleet.owner) {
+                    auto& report=p.pendingPlayerReports.back();
+                    report.transportLine=action.transportLine;report.transportRevision=action.transportRevision;
+                }
+            }
+        }
         return false;
     }
     case FleetArrivalActionKind::Refuel: {

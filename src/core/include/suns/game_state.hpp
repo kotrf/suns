@@ -863,6 +863,7 @@ enum class PlayerReportKind {
     XenocrystalDepleted,
     ResonanceProjectStatus,
     OrbitalBaseStatus,
+    TransportLineDelivery,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -982,6 +983,8 @@ struct PendingPlayerReport {
     std::optional<ObjectObservation> objectObservation;
     std::optional<MediumObservation> mediumObservation;
     std::uint64_t scientificDataId{}; // Per-recipient durable identity, independent of delivery routing/date.
+    std::uint32_t transportLine{}; // TransportLineDelivery only: frozen onboard attribution.
+    std::uint64_t transportRevision{};
 };
 
 struct TechnologyState {
@@ -1313,6 +1316,14 @@ struct TransportLine {
     Position sourcePosition, destinationPosition; // Frozen received coordinates at authoring.
     std::vector<TransportAssignment> assignments; // HQ intent, not onboard acknowledgement.
 };
+struct TransportLineReceipt {
+    TransportLineId line{};
+    std::uint64_t revision{};
+    FleetId fleet{};
+    PlanetId planet{};
+    std::uint64_t observedTurn{}, receivedTurn{};
+    MineralCargo minerals;
+};
 
 struct Player {
     PlayerId id{};
@@ -1349,6 +1360,8 @@ struct Player {
     std::vector<FieldScienceRecord> fieldScience;
     TransportLineId lastTransportLineId{}; // Never reuse a deleted owner-local identity.
     std::vector<TransportLine> transportLines;
+    std::vector<TransportLineReceipt> transportReceipts; // Received observations, never host delivery truth.
+    std::uint64_t transportReceiptsTruncatedThrough{}; // Whole oldest year removed at the bounded history limit.
     PlayerController controller{PlayerController::Human};
     ComputerState computer;
     std::vector<VisitorObservation> visitorKnowledge;
@@ -1411,6 +1424,7 @@ enum class FleetArrivalActionKind {
     RecoverSample,
     TransitStargate,
     LoadMinerals, // Source reserve plus optional onboard departure minimum.
+    UnloadTransportLine, // Ordinary mineral unload with frozen receipt attribution.
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1457,6 +1471,9 @@ struct FleetArrivalAction {
     PlanetId gateSource{}, gateDestination{}; // TransitStargate: approach source, then wait/retry locally.
     bool gateResonant{};
     std::uint32_t mineralReserve{}, mineralMinimum{}; // LoadMinerals only, whole kt.
+    TransportLineId transportLine{}; // UnloadTransportLine only.
+    std::uint64_t transportRevision{};
+    PlanetId transportDestination{};
     bool operator==(const FleetArrivalAction&) const = default;
 };
 
@@ -1465,6 +1482,14 @@ struct FleetArrivalAction {
     if(a.kind!=FleetArrivalActionKind::LoadMinerals)return !a.mineralReserve && !a.mineralMinimum;
     return (a.cargo==FleetCargoKind::Ironium || a.cargo==FleetCargoKind::Boranium || a.cargo==FleetCargoKind::Germanium)
         && a.mineralReserve<=1000000000 && a.mineralMinimum<=1000000000;
+}
+
+[[nodiscard]] constexpr bool transport_unload_valid(const FleetArrivalAction& a)
+{
+    if(a.kind!=FleetArrivalActionKind::UnloadTransportLine)
+        return !a.transportLine && !a.transportRevision && !a.transportDestination;
+    return a.transportLine && a.transportRevision && a.transportDestination
+        && (a.cargo==FleetCargoKind::Ironium || a.cargo==FleetCargoKind::Boranium || a.cargo==FleetCargoKind::Germanium);
 }
 
 struct FleetWaypoint {

@@ -8,6 +8,7 @@
 #include "suns/interstellar_medium.hpp"
 
 #include "suns/communications.hpp"
+#include "suns/transport_lines.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
 
@@ -86,6 +87,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::GroundDefenseWon: return GameEventKind::GroundDefenseWon;
     case PlayerReportKind::ColonyLost: return GameEventKind::ColonyLost;
     case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
+    case PlayerReportKind::TransportLineDelivery: return GameEventKind::FreightDelivered;
     case PlayerReportKind::EnemyFleetDetected: return GameEventKind::EnemyFleetDetected;
     case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
     case PlayerReportKind::FleetMobilityRestored: return GameEventKind::FleetMobilityRestored;
@@ -578,6 +580,7 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
     deliver_reconnaissance(state);
     std::vector<GameEvent> events;
     for (auto& player : state.players) {
+        prune_transport_receipts(player,state.turn);
         std::stable_sort(player.pendingPlayerReports.begin(), player.pendingPlayerReports.end(),
             [](const PendingPlayerReport& lhs, const PendingPlayerReport& rhs) {
                 if (lhs.deliveryTurn != rhs.deliveryTurn) return lhs.deliveryTurn < rhs.deliveryTurn;
@@ -589,6 +592,10 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
 
         for (const auto& report : player.pendingPlayerReports) {
             if (report.deliveryTurn > state.turn) break;
+            if(report.kind==PlayerReportKind::TransportLineDelivery) {
+                receive_transport_receipt(player,report,state.turn);
+                continue; // The ordinary colony manifest remains the single Freight/History economic event.
+            }
             if(report.kind==PlayerReportKind::ScientificData) {
                 const auto id=report.scientificDataId?report.scientificDataId:scientific_data_id(report,player.id);
                 const auto at=std::lower_bound(player.receivedScientificData.begin(),player.receivedScientificData.end(),id);

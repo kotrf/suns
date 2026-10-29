@@ -250,6 +250,7 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
                   .arg(cargo())
                   .arg(static_cast<qulonglong>(action.reservePopulation))
             : QString("load all available %1").arg(cargo());
+    case FleetArrivalActionKind::UnloadTransportLine:
     case FleetArrivalActionKind::UnloadAll:
         return QString("unload all %1").arg(cargo());
     case FleetArrivalActionKind::Refuel:

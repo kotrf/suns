@@ -73,10 +73,16 @@ Load All / Unload programmes to several paid freighters. They reuse the same
 physical hold, surface stockpiles, cargo mass and arrival validation. Definitions
 and roster edits are HQ intent; old telemetry is not a transfer permission or
 a promise of stock. Passenger evacuation remains an ordinary physical cargo
-operation; automatic emergency diversion is a later network policy.
+operation; automatic emergency diversion is frozen pending more actual play.
 
 A transport line may leave a configured source reserve and hold its loading
 waypoint until a selected-mineral departure minimum is aboard. Partial loads
 remain real cargo across retries, stop/resume and save/load. Other passengers
 and cargo still occupy the shared hold; an impossible minimum waits instead of
 discarding them or silently shrinking the order. See the transport-line rules.
+
+Attributed UnloadTransportLine actions use exactly the same physical unloading
+rules. A delayed line receipt records only positive selected-mineral delivery
+at the frozen owned destination. Received diagnostics neither transfer cargo
+nor add a second economic Freight/History event. Ordinary manual unloads and
+old untagged programmes are not guessed into a line's volume.
