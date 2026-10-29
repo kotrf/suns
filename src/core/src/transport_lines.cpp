@@ -3,6 +3,8 @@
 #include "suns/mobile_base.hpp"
 #include <algorithm>
 #include <limits>
+#include <cmath>
+#include <tuple>
 
 namespace suns {
 namespace {
@@ -44,7 +46,8 @@ FleetRouteProgram transport_line_program(const TransportLine& line) {
         ? FleetArrivalActionKind::LoadMinerals : FleetArrivalActionKind::LoadAllAvailable;
     p.arrivalAction.cargo=cargo;p.arrivalAction.mineralReserve=line.spec.sourceReserve;
     p.arrivalAction.mineralMinimum=line.spec.departureMinimum;
-    FleetArrivalAction unload;unload.kind=FleetArrivalActionKind::UnloadAll;unload.cargo=cargo;
+    FleetArrivalAction unload;unload.kind=FleetArrivalActionKind::UnloadTransportLine;unload.cargo=cargo;
+    unload.transportLine=line.spec.id;unload.transportRevision=line.spec.revision;unload.transportDestination=line.spec.destination;
     p.queuedWaypoints={{line.destinationPosition,line.spec.warp,unload}};p.repeatOrders=true;
     return p;
 }
@@ -139,24 +142,85 @@ bool assign_transport_line(GameState& s,PlayerId id,const AssignTransportLineOrd
     it->assignments.push_back({order.fleet,s.turn});
     dispatch(s,id,*it,order.fleet);return true;
 }
+namespace {
+auto receipt_key(const TransportLineReceipt& r) {
+    return std::tuple{r.observedTurn,r.line,r.revision,r.fleet,r.planet};
+}
+bool programme_matches(const TransportLine& line,const FleetTelemetry& t) {
+    const auto p=transport_line_program(line);const auto& route=t.routeTemplate;
+    if(!t.repeatOrders || route.size()!=2 || !same_position(route[0].destination,p.destination)
+        || route[0].warp!=p.warp || route[0].arrivalAction!=p.arrivalAction
+        || !same_position(route[1].destination,line.destinationPosition) || route[1].warp!=line.spec.warp)return false;
+    if(route[1].arrivalAction==p.queuedWaypoints[0].arrivalAction)return true;
+    // Existing v102/v103 programmes keep flying without an undelivered upgrade.
+    auto legacy=p.queuedWaypoints[0].arrivalAction;legacy.kind=FleetArrivalActionKind::UnloadAll;
+    legacy.transportLine=0;legacy.transportRevision=0;legacy.transportDestination=0;
+    return route[1].arrivalAction==legacy;
+}
+}
+std::uint64_t transport_statistics_start(const Player& p,std::uint64_t turn) {
+    (void)p;return turn>=kTransportStatisticsYears?turn-kTransportStatisticsYears+1:1;
+}
+bool transport_receipt_valid(const TransportLineReceipt& r,std::uint64_t turn) {
+    const auto& m=r.minerals;
+    return r.line && r.revision && r.fleet && r.planet && r.observedTurn && r.observedTurn<=r.receivedTurn
+        && r.receivedTurn<=turn && std::isfinite(m.ironium) && std::isfinite(m.boranium) && std::isfinite(m.germanium)
+        && m.ironium>=0 && m.boranium>=0 && m.germanium>=0 && mineral_cargo_mass(m)>0
+        && (int(m.ironium>0)+int(m.boranium>0)+int(m.germanium>0)==1);
+}
+void prune_transport_receipts(Player& p,std::uint64_t turn) {
+    (void)turn;
+    std::erase_if(p.transportReceipts,[&](const auto& r){return r.observedTurn<=p.transportReceiptsTruncatedThrough;});
+}
+void receive_transport_receipt(Player& p,const PendingPlayerReport& report,std::uint64_t turn) {
+    if(report.kind!=PlayerReportKind::TransportLineDelivery || report.deliveryTurn>turn)return;
+    TransportLineReceipt r{report.transportLine,report.transportRevision,report.fleet,report.planet,
+        report.observedTurn,turn,report.deliveredMinerals};
+    if(!transport_receipt_valid(r,turn) || r.line>p.lastTransportLineId || r.observedTurn<=p.transportReceiptsTruncatedThrough)return;
+    prune_transport_receipts(p,turn);auto& entries=p.transportReceipts;
+    const auto at=std::lower_bound(entries.begin(),entries.end(),r,[](const auto& a,const auto& b){return receipt_key(a)<receipt_key(b);});
+    if(at!=entries.end() && receipt_key(*at)==receipt_key(r))return;
+    entries.insert(at,r);
+    if(entries.size()>kMaximumTransportReceipts) {
+        p.transportReceiptsTruncatedThrough=entries.front().observedTurn;
+        prune_transport_receipts(p,turn); // Drop the whole oldest year; never advertise a partial year as complete coverage.
+    }
+}
+TransportLineMetrics transport_line_metrics(const PlayerView& view,const TransportLine& line) {
+    TransportLineMetrics m;const auto& player=view.state.players.front();
+    m.startTurn=transport_statistics_start(player,view.state.turn);m.endTurn=view.state.turn;
+    for(const auto& r:player.transportReceipts)if(r.line==line.spec.id && r.receivedTurn>=m.startTurn && r.receivedTurn<=m.endTurn) {
+        ++m.deliveries;m.delivered.ironium+=r.minerals.ironium;m.delivered.boranium+=r.minerals.boranium;m.delivered.germanium+=r.minerals.germanium;
+    }
+    m.nominalRoundTripYears=2*std::ceil(distance_between(line.sourcePosition,line.destinationPosition)/warp_distance(line.spec.warp));
+    for(const auto& a:line.assignments) {
+        const auto* f=find_service_fleet(view.state,a.fleet);
+        if(!f || f->telemetry.observedTurn<=a.issuedTurn || !line.spec.active || !programme_matches(line,f->telemetry)) {++m.unconfirmed;continue;}
+        const auto& t=f->telemetry;++m.contacts;
+        if(!m.oldestTelemetry || t.observedTurn<m.oldestTelemetry)m.oldestTelemetry=t.observedTurn;
+        m.newestTelemetry=std::max(m.newestTelemetry,t.observedTurn);
+        if(t.destination && !same_position(t.position,*t.destination))++m.moving;
+        else if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
+            && same_position(t.position,line.sourcePosition))++m.waiting;
+        m.cargoUsed+=fleet_cargo_used(view.state,*f);m.cargoCapacity+=fleet_cargo_capacity(view.state,*f);
+    }
+    return m;
+}
 std::string transport_assignment_status(const PlayerView& view,const TransportLine& line,const TransportAssignment& a) {
     const auto* f=find_service_fleet(view.state,a.fleet);
-    if(!f)return "No received fleet contact";
-    if(f->telemetry.observedTurn<=a.issuedTurn)return "Awaiting telemetry after dispatch";
-    if(!line.spec.active)return !f->destination && !f->repeatOrders?"Stop confirmed":"Stop sent; old programme still reported";
-    const auto program=transport_line_program(line);
-    const auto& route=f->routeTemplate;
-    const bool matches=f->repeatOrders && route.size()==2 && same_position(route[0].destination,program.destination)
-        && route[0].warp==program.warp && route[0].arrivalAction==program.arrivalAction
-        && same_position(route[1].destination,line.destinationPosition) && route[1].warp==line.spec.warp
-        && route[1].arrivalAction==program.queuedWaypoints[0].arrivalAction;
-    if(!matches)return "Sent programme not confirmed (or overridden aboard)";
-    if(f->damagePercent>=100)return "Reported disabled by damage";
+    if(!f)return "No received fleet contact; loss or command failure is not confirmed";
+    const auto& t=f->telemetry;
+    if(t.observedTurn<=a.issuedTurn)return "Awaiting telemetry after dispatch";
+    if(!line.spec.active)return !t.destination && !t.repeatOrders?"Stop confirmed":"Stop sent; old programme still reported";
+    if(!programme_matches(line,t))return "Sent programme not confirmed (or overridden aboard)";
+    if(t.damagePercent>=100)return "Reported disabled by damage";
     const auto reason=transport_line_error(view,line.spec);if(!reason.empty())return reason;
-    if(f->arrivalAction && f->arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
-        && same_position(f->position,line.sourcePosition)) {
-        const auto amount=line.spec.cargo==TransportCargo::Ironium?f->minerals.ironium:
-            line.spec.cargo==TransportCargo::Boranium?f->minerals.boranium:f->minerals.germanium;
+    if(t.fuel<=0 && t.destination && !same_position(t.position,*t.destination))
+        return "Reported empty fuel tank; drift or fitted fuel-free travel may continue; later refuelling is unconfirmed";
+    if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
+        && same_position(t.position,line.sourcePosition)) {
+        const auto amount=line.spec.cargo==TransportCargo::Ironium?t.minerals.ironium:
+            line.spec.cargo==TransportCargo::Boranium?t.minerals.boranium:t.minerals.germanium;
         if(amount+std::max(0.0,fleet_cargo_capacity(view.state,*f)-fleet_cargo_used(view.state,*f))+1e-6<line.spec.departureMinimum)
             return "Waiting: reported shared hold cannot fit the departure minimum";
         return "Waiting at source for departure minimum; loaded cargo retained; source reserve enforced on site";
@@ -165,8 +229,12 @@ std::string transport_assignment_status(const PlayerView& view,const TransportLi
     if(source && source->owner==view.player) {
         const auto stock=line.spec.cargo==TransportCargo::Ironium?source->minerals.ironium:
             line.spec.cargo==TransportCargo::Boranium?source->minerals.boranium:source->minerals.germanium;
-        if(stock<=0)return "Programme confirmed; last received source stock empty (cycles continue)";
+        if(stock<=line.spec.sourceReserve)return line.spec.departureMinimum
+            ?"Received source stock at/below reserve; loading may wait; future supply is unknown"
+            :"Programme confirmed; received source stock at/below reserve (empty cycles continue)";
     }
+    if(t.routeTemplate[1].arrivalAction.kind==FleetArrivalActionKind::UnloadAll)
+        return "Legacy repeating programme confirmed; no line receipts until an explicit edit/reassignment is received";
     return source && !source->owner?"Programme confirmed; mining cache is checked physically on arrival":
         "Repeating programme confirmed; normal fuel, service and combat apply";
 }

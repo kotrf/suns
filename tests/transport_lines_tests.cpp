@@ -212,4 +212,80 @@ void computer_received_only_and_guards() {
     tick(s,expected);auto paused=s.players[0].transportLines.front().spec;++paused.revision;paused.active=false;
     assert(set_transport_line(s,1,{paused}));check(make_player_view(s,1));
 }
-int main(){computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}
+void attributed_delivery_and_reorganization() {
+    for(const int merge:{0,1,2}) {
+        auto s=transport_world();s.fleets.resize(1);s.fleets[0].position={40,0};s.fleets[0].ships={{202,2}};acknowledge(s);
+        assert(set_transport_line(s,1,{line_spec()}) && assign_transport_line(s,1,{1,1}));tick(s);
+        assert(s.fleets[0].minerals.ironium==1000);
+        // Normal reorganization requires an idle fleet; Stop preserves cargo.
+        tick(s,{MoveFleetOrder{1,s.fleets[0].position,5,{}, {},false,0,true},SplitFleetOrder{1,{{202,1}}}});
+        assert(s.fleets.size()==2);const auto child=s.fleets.back().id;
+        assert(s.players[0].transportReceipts.empty() && !s.fleets.back().repeatOrders);
+        if(merge==1)tick(s,{MergeFleetsOrder{1,child}});
+        if(merge==2)tick(s,{MoveFleetOrder{child,s.fleets[0].position,5,{FleetArrivalActionKind::MergeWithFleet},{},false,1}});
+        assert(assign_transport_line(s,1,{1,1}));if(!merge)assert(assign_transport_line(s,1,{1,child}));
+        for(int i=0;i<4;++i)tick(s);
+        const auto view=make_player_view(s,1);const auto m=transport_line_metrics(view,s.players[0].transportLines[0]);
+        assert(m.delivered.ironium==1000 && m.deliveries==(merge?1:2));
+        assert(m.nominalRoundTripYears==4);
+        for(const auto& r:s.players[0].transportReceipts)assert(r.line==1 && r.revision==1 && r.planet==1);
+        // An ordinary manual delivery is not attributed by fleet roster/name.
+        s.fleets[0].minerals.ironium=17;s.fleets[0].position={0,0};
+        tick(s,{TransferCargoOrder{{0,1},{1,0},0,{17,0,0}}});
+        assert(transport_line_metrics(make_player_view(s,1),s.players[0].transportLines[0]).delivered.ironium==1000);
+    }
+    for(int blocked:{0,1,2}) {
+        auto s=computer_transport_world();s.players[0].controller=PlayerController::Human;
+        auto d=line_spec();d.source=1;d.destination=2;assert(set_transport_line(s,1,{d}));
+        auto unload=transport_line_program(s.players[0].transportLines[0]).queuedWaypoints[0].arrivalAction;
+        if(blocked==0)s.planets[1].owner=0;
+        if(blocked==1)s.planets[1].owner=2;
+        if(blocked==2)unload.transportDestination=1;
+        s.fleets[0].position={40,0};s.fleets[0].destination=s.fleets[0].position;s.fleets[0].arrivalAction=unload;s.fleets[0].minerals.ironium=17;
+        tick(s);assert(s.players[0].transportReceipts.empty());
+        if(blocked==1)assert(s.fleets[0].minerals.ironium==17); // Enemy stock cannot receive a credited delivery.
+    }
+}
+void delayed_receipt_and_revision() {
+    auto s=computer_transport_world(5100);s.players[0].controller=PlayerController::Human;s.fleets.resize(1);
+    auto d=line_spec();d.source=1;d.destination=2;
+    assert(set_transport_line(s,1,{d}));
+    const auto unload=transport_line_program(s.players[0].transportLines[0]).queuedWaypoints[0].arrivalAction;
+    s.fleets[0].position={5100,0};s.fleets[0].destination=s.fleets[0].position;s.fleets[0].arrivalAction=unload;
+    s.fleets[0].minerals.ironium=70;acknowledge(s);auto control=s;control.fleets[0].minerals={};tick(control);tick(s);
+    assert(std::abs(s.planets[1].minerals.ironium-control.planets[1].minerals.ironium-70)<1e-6 && s.players[0].transportReceipts.empty());
+    const auto packet=*std::find_if(s.players[0].pendingPlayerReports.begin(),s.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::TransportLineDelivery;});
+    assert(packet.deliveryTurn>s.turn+20 && packet.transportRevision==1);
+    ++d.revision;d.name="Renamed after delivery";d.cargo=TransportCargo::Boranium;assert(set_transport_line(s,1,{d}));
+    while(s.turn<packet.deliveryTurn){assert(s.players[0].transportReceipts.empty());tick(s);}
+    auto m=transport_line_metrics(make_player_view(s,1),s.players[0].transportLines[0]);
+    assert(m.deliveries==1 && m.delivered.ironium==70 && m.delivered.boranium==0);
+    assert(s.players[0].transportReceipts[0].revision==1 && s.players[0].transportReceipts[0].observedTurn==2);
+    auto duplicate=packet;duplicate.deliveryTurn=s.turn;s.players[0].pendingPlayerReports.push_back(duplicate);
+    (void)deliver_due_player_reports(s);assert(s.players[0].transportReceipts.size()==1);
+    s.turn+=kTransportStatisticsYears;
+    s.players[0].pendingPlayerReports.push_back(duplicate);(void)deliver_due_player_reports(s);
+    assert(s.players[0].transportReceipts.size()==1); // Replays never refresh the original receipt date.
+    m=transport_line_metrics(make_player_view(s,1),s.players[0].transportLines[0]);assert(m.deliveries==0);
+}
+void bounded_receipts_and_received_status() {
+    Player p;p.id=1;p.lastTransportLineId=1;
+    PendingPlayerReport r;r.kind=PlayerReportKind::TransportLineDelivery;r.transportLine=1;r.transportRevision=1;
+    r.observedTurn=2;r.deliveryTurn=2;r.planet=1;r.deliveredMinerals={1,0,0};
+    for(std::size_t i=0;i<=kMaximumTransportReceipts;++i){r.fleet=FleetId(i+1);receive_transport_receipt(p,r,3);}
+    assert(p.transportReceipts.empty() && p.transportReceiptsTruncatedThrough==2);
+    receive_transport_receipt(p,r,4);assert(p.transportReceipts.empty());
+    r.observedTurn=3;r.deliveryTurn=3;receive_transport_receipt(p,r,4);assert(p.transportReceipts.size()==1);
+    auto s=transport_world();s.fleets[0].position={40,0};acknowledge(s);auto d=line_spec();d.departureMinimum=1300;
+    assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));tick(s);
+    auto view=make_player_view(s,1);const auto& line=view.state.players[0].transportLines[0];
+    assert(transport_assignment_status(view,line,line.assignments[0]).find("cannot fit")!=std::string::npos);
+    const auto before=transport_line_metrics(view,line);assert(before.contacts==1 && before.waiting==1);
+    // A hypothetical projected dot is not a new snapshot and cannot alter status or utilization.
+    view.state.fleets[0].position={0,0};view.state.fleets[0].destination=Position{0,0};
+    assert(transport_assignment_status(view,line,line.assignments[0]).find("cannot fit")!=std::string::npos);
+    assert(transport_line_metrics(view,line).waiting==before.waiting);
+    auto invalid=transport_line_program(line);invalid.queuedWaypoints[0].arrivalAction.transportLine=0;
+    assert(!fleet_route_tasks_valid(invalid));
+}
+int main(){attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}

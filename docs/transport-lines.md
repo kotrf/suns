@@ -2,7 +2,8 @@
 
 The first slice was merged in #237, main `4fb67cf`, save v102 / orders v42.
 The load-policy follow-up merged in #238, main `830bcd1`, **save v103 / orders v43**.
-The computer-player follow-up starts there and keeps those formats.
+The computer-player follow-up merged in #239, main `db1204d`, with those formats.
+The statistics follow-up starts there and uses **save v104 / orders v44**.
 
 ## Playable loop
 
@@ -98,7 +99,61 @@ last in the command sequence, rather than modifying an older superseded draft.
 Physical hidden captures, construction, losses and stocks cannot rewrite the
 catalog or old exported player evidence. Host-only pending command results are
 not status evidence. Normal Freight messages and receipt-year History keep
-recording real deliveries; this slice does not attribute totals to line IDs.
+recording real deliveries. The statistics follow-up adds line attribution
+without another economic delivery event.
+
+## Received statistics and interruption diagnostics
+
+Newly dispatched programmes use UnloadTransportLine: ordinary selected-mineral
+Unload All plus frozen owner-local line ID, revision and destination ID. Only a
+positive physical unload at that exact owned destination produces a line
+receipt. Unowned/enemy/wrong endpoints and empty cycles cannot create credited
+volume. The mechanism does not require the current HQ roster/catalog to match:
+an older programme can still deliver after an edit, pause, release or deletion.
+Reorganization keeps its existing idle-only rules: Stop before a normal split
+or merge, with real cargo conserved; split children have no programme until
+explicitly assigned. Arrival merges retain their normal destination programme.
+Attribution follows the
+executing action rather than inferring a line from names or current fleet IDs.
+Existing cargo, payment, ownership and phase behavior are unchanged.
+
+The receipt uses the ordinary report routing/outbox/delay. It freezes fleet,
+planet, line/revision, mineral manifest and observation year; receipt year is
+set only when delivered. Logistics shows I/B/G totals and unload count received
+in the last 20 calendar receipt years, plus received mean kt/year over that
+window. This is reported flow into HQ knowledge, not guaranteed current route
+throughput: a batch of late reports can spike it, reports in transit are absent,
+and no receipt does not prove that no delivery happened. Both dates and the
+old programme revision are visible for recent receipts. Changes of mineral or
+endpoints do not relabel prior manifests as the current cargo.
+
+Receipt identity is (observation year, line, revision, fleet, destination).
+Repeated packets neither add volume nor refresh the first receipt date, even
+after the displayed window expires or after save/load. Up to 4096 receipts per
+owner are retained, ordered by observation identity. At the bound the whole
+oldest observation year is discarded and a durable watermark rejects replay
+or delayed observations through that year. The UI exposes this omission and
+labels volumes a retained lower bound; it never silently presents complete
+coverage. Deleting a line does not reuse IDs or reattribute its late packets.
+This bounded diagnostic history is separate from the ordinary colony economic
+ledger and does not create a second Freight/History event.
+
+The calculated round trip is twice `ceil(distance / Warp distance)`, a
+flight-only lower bound excluding loading/waiting/service, fuel shortage and
+future interruptions. Confirmed matching post-dispatch programme telemetry
+supplies reported shared-hold occupancy, en-route programmes and source loading
+waits, with oldest/newest evidence years and ages. Hold occupancy is not a time
+utilization percentage. Unconfirmed, paused and missing roster entries do not
+become zero-load confirmed ships. Source/destination report dates accompany
+received colony stocks; uncolonized caches are not invented as known empty.
+
+Roster reasons distinguish awaiting/mismatched programme evidence, delayed
+Stop acknowledgement, received ownership blocks, disabling damage, empty tank
+(with possible drift/fuel-free flight), impossible shared hold, departure-minimum
+waiting and source stock at/below its reserve. All use delivered evidence.
+Last target/status uses actual telemetry, not a geometrically projected dot.
+No yearly hidden-state poll, automatic dispatch, new AI policy, future-stock
+promise or automatic evacuation is introduced.
 
 ## Computer-player supply lines
 
@@ -148,10 +203,16 @@ nonreused-ID high-water mark, frozen received endpoint coordinates and roster
 issue dates. Physical, received and in-flight route programmes keep their
 existing representation. Save v101 loads with an empty catalog and preserves
 its ordinary fleet programmes; earlier migration paths remain. Orders v42 introduced SetTransportLineOrder and AssignTransportLineOrder.
-Save v103 / orders v43 append reserve/minimum to the versioned LINE/definition
+Save v103 / orders v43 appended reserve/minimum to the versioned LINE/definition
 payload and add a conditional payload only for LoadMinerals. Older arrival
 actions keep their layouts. A genuine v102 catalog migrates to zero/zero,
-preserving its old programmes. Player exports contain only their own catalog.
+preserving its old programmes. Player exports contain only their own catalog
+and received statistics. Save v104 appends bounded **TLST** after LINE and
+conditional line-report/action payloads; orders v44 carries the new unload
+action. Existing actions keep their binary layout. Genuine v103 saves start
+with no invented statistics; old Unload All programmes continue unchanged and
+are recognized as legacy telemetry. An explicit line edit/reassignment sends
+the attributed programme through normal delayed communication.
 
 Limits are 128 lines/owner, 256 assigned IDs/line, 64 UTF-8 bytes/name, distinct
 received system coordinates and Warp 1–10. Malformed collection counts,
@@ -159,7 +220,10 @@ revisions, duplicate roster identities and truncated tails are rejected.
 
 Remaining #53: multi-stop lines, destination stock targets, richer wait/refuel/service
 policies, fleet-base/depot stops, broader automatic staffing/resupply,
-per-line throughput/utilization/history and interruption briefings.
+observed cycle duration, deeper time utilization/operational history and
+interruption briefings.
+Further automatic AI staffing/construction is deferred in favor of these
+player-facing features; the first received statistics/diagnostics are above.
 **Automatic emergency diversion/population evacuation is frozen by user decision
 of 29 October 2026, pending more actual play; it is not the next slice.** Colonists stay physical
 cargo under the existing manual/ordinary-route rules. #53 remains open; this
@@ -189,3 +253,16 @@ exactly one assignment through a 34-year command delay, military reservation,
 paused intent, and host save/load with identical controller/fleet continuation.
 Existing Qt, migration and PBEM payload/export tests remain passing; no new
 format or computer-specific privileged packet is introduced.
+
+Statistics follow-up: full GCC 14.2 / Qt 6.12.0 Debug application/test build
+succeeded; Linux/offscreen CTest **94/94 passed (82.09 s)** and clean
+`git diff --check`. New scenarios cover actual attributed unloads, ordinary
+manual unload exclusion, neutral/enemy/wrong destinations, Stop/split and both
+merge paths followed by explicit assignment, old-revision reports arriving
+after a 34-year delay, replay/save/load/window-expiry deduplication, bounded
+history watermark, received status invariant under projected positions,
+hidden-world byte-identical player exports, real Qt metrics/history controls,
+pending/delivered receipt persistence, PBEM action payload and forged v43
+rejection, and genuine v103 legacy programme loading. Existing migrations,
+controls, forecasts and other suites pass. No manual campaign balance,
+cross-platform or sanitizer acceptance is claimed.

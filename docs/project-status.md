@@ -1,6 +1,40 @@
 # Project status and development handoff
 
-## Current work — computer-player transport lines (#53)
+## Current work — transport-line statistics and interruptions (#53)
+
+Checked 29 October 2026 (Europe/Moscow): #239 is merged as `db1204d`, CI green;
+main save v103 / orders v43. Branch `codex/transport-line-statistics` starts
+there and uses **save v104 / orders v44**. The user prioritized player-facing
+logistics statistics/diagnostics, then destination targets and depot/station
+service. Further AI automation is deferred; network evacuation stays frozen
+pending actual play. #53 remains open, #63 remains frozen last.
+
+Frozen line/revision/destination attribution in ordinary mineral unload actions
+produces delayed immutable receipts only for actual successful owned-destination
+unloads. The owner-private bounded received ledger feeds Logistics volume/rate
+in the last 20 receipt years, bounded receipt history with both dates, calculated
+flight-only round-trip lower bounds, dated hold occupancy and received causes
+of interruptions. Geometry does not substitute for new telemetry. Ordinary
+colony Freight/History remains the only economic delivery event. Existing
+v103 programmes keep running without automatic remote upgrades; explicit
+edit/reassignment enables attribution. [Rules and boundaries](transport-lines.md).
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+Linux/offscreen CTest **94/94 passed (82.09 s)**; `git diff --check` clean.
+Expanded core/Qt/save suites cover actual attributed unloads, neutral/enemy/
+wrong-destination guards, conserved cargo after Stop/split and both merge
+paths followed by reassignment, old-revision reports delayed 34 years,
+deduplication across replay/save/load/window expiry, bounded history/replay
+watermark, received-only status despite projected geometry, hidden-event byte
+invariance of player exports, real Logistics metrics/receipt controls, pending
+and delivered receipt persistence, new action PBEM roundtrip/forged old-envelope
+rejection and genuine v103 programme migration. Ordinary route/fleet and all
+other suites pass. No manual campaign balance, cross-platform or sanitizer
+acceptance is claimed. Actual cycle-duration/time-utilization analytics remain
+future work; estimates and snapshots are labelled. Prepared for review; no
+automatic merge or issue closure.
+
+## Merged implementation — computer-player transport lines (#239, historical branch checkpoint)
 
 Checked 29 October 2026 (Europe/Moscow): #238 merged as `830bcd1`; main and
 branch `codex/transport-lines-ai` use save v103 / orders v43. The user requested

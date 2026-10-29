@@ -51,3 +51,45 @@ void readTransportLines(QDataStream& stream,GameState& state) {
     }
     if(in.status()!=QDataStream::Ok || !in.atEnd())markCorrupt(stream);
 }
+
+// Save v104: bounded owner-private received delivery observations. Physical
+// attribution travels with the ordinary versioned arrival action/report.
+void writeTransportStatistics(QDataStream& stream,const GameState& state) {
+    QByteArray bytes;QDataStream out(&bytes,QIODevice::WriteOnly);out.setVersion(stream.version());
+    out<<quint32(state.players.size());
+    for(const auto& p:state.players) {
+        if(p.transportReceipts.size()>kMaximumTransportReceipts){stream.setStatus(QDataStream::WriteFailed);return;}
+        out<<quint32(p.id)<<quint64(p.transportReceiptsTruncatedThrough)<<quint32(p.transportReceipts.size());
+        for(const auto& r:p.transportReceipts) {
+            out<<quint32(r.line)<<quint64(r.revision)<<quint32(r.fleet)<<quint32(r.planet)
+                <<quint64(r.observedTurn)<<quint64(r.receivedTurn);writeMinerals(out,r.minerals);
+        }
+    }
+    if(out.status()!=QDataStream::Ok || bytes.size()>16*1024*1024){stream.setStatus(QDataStream::WriteFailed);return;}
+    stream<<quint32(0x544c5354)<<quint32(bytes.size());stream.writeRawData(bytes.data(),bytes.size());
+}
+void readTransportStatistics(QDataStream& stream,GameState& state) {
+    quint32 magic{},size{},players{};stream>>magic>>size;
+    if(magic!=0x544c5354 || size>16*1024*1024){markCorrupt(stream);return;}
+    QByteArray bytes(size,'\0');if(stream.readRawData(bytes.data(),size)!=int(size)){markCorrupt(stream);return;}
+    QDataStream in(bytes);in.setVersion(stream.version());
+    if(!readCount(in,players) || players!=state.players.size()){markCorrupt(stream);return;}
+    const auto key=[](const auto& r){return std::tuple{r.observedTurn,r.line,r.revision,r.fleet,r.planet};};
+    for(auto& p:state.players) {
+        quint32 id{},count{};quint64 truncated{};in>>id>>truncated;p.transportReceiptsTruncatedThrough=truncated;
+        if(id!=p.id || p.transportReceiptsTruncatedThrough>state.turn || !readCount(in,count) || count>kMaximumTransportReceipts){markCorrupt(stream);return;}
+        for(const auto& r:p.pendingPlayerReports)if(r.kind==PlayerReportKind::TransportLineDelivery
+            && (r.transportLine>p.lastTransportLineId || r.observedTurn>state.turn || r.deliveryTurn<r.observedTurn)) {
+            markCorrupt(stream);return;
+        }
+        for(quint32 i=0;i<count;++i) {
+            TransportLineReceipt r;quint64 revision{},observed{},received{};in>>r.line>>revision>>r.fleet>>r.planet>>observed>>received;
+            r.revision=revision;r.observedTurn=observed;r.receivedTurn=received;readMinerals(in,r.minerals);
+            if(!transport_receipt_valid(r,state.turn) || r.line>p.lastTransportLineId
+                || r.observedTurn<=p.transportReceiptsTruncatedThrough
+                || (!p.transportReceipts.empty() && key(p.transportReceipts.back())>=key(r))){markCorrupt(stream);return;}
+            p.transportReceipts.push_back(r);
+        }
+    }
+    if(in.status()!=QDataStream::Ok || !in.atEnd())markCorrupt(stream);
+}

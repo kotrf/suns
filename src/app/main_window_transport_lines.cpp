@@ -42,6 +42,8 @@ void MainWindow::installTransportLines() {
     auto* assign=button("transportLineAssign","Assign selected fleet and send programme");
     auto* release=button("transportLineRelease","Release selected fleet and send Stop");
     auto* status=new QLabel(body);status->setObjectName("transportLineStatus");status->setWordWrap(true);layout->addWidget(status);
+    auto* metrics=new QLabel(body);metrics->setObjectName("transportLineMetrics");metrics->setWordWrap(true);layout->addWidget(metrics);
+    auto* receipts=new QListWidget(body);receipts->setObjectName("transportLineReceipts");layout->addWidget(receipts);
     auto* roster=new QListWidget(body);roster->setObjectName("transportLineRoster");layout->addWidget(roster);
     auto* overlay=new QCheckBox("Show registered transport lines on map",body);overlay->setChecked(true);layout->addWidget(overlay);
     auto* scroll=new QScrollArea(dock);scroll->setWidgetResizable(true);scroll->setWidget(body);dock->setWidget(scroll);addDockWidget(Qt::RightDockWidgetArea,dock);dock->hide();menuBar()->addAction(dock->toggleViewAction());
@@ -72,21 +74,55 @@ void MainWindow::installTransportLines() {
             if(line)for(const auto& a:line->assignments)if(fleets->findData(a.fleet)<0)fleets->addItem(QString("Roster #%1 — no received contact").arg(a.fleet),a.fleet);
         });
         roster->clear();pause->setEnabled(bool(line));remove->setEnabled(bool(line));assign->setEnabled(bool(line)&&fleets->count());release->setEnabled(bool(line)&&fleets->count());
+        metrics->clear();receipts->clear();
         if(!line){status->setText("New owner-local line. Definitions and roster changes below include local draft intent; fleet status always uses received telemetry.");return;}
         name->setText(QString::fromStdString(line->spec.name));warp->setValue(line->spec.warp);cargo->setCurrentIndex(int(line->spec.cargo));
         reserve->setValue(line->spec.sourceReserve);minimum->setValue(line->spec.departureMinimum);
         auto endpoint=[&](QComboBox* c,PlanetId id){auto i=c->findData(id);if(i<0){c->addItem(QString("Last defined planet #%1 (currently unavailable)").arg(id),id);i=c->count()-1;}c->setCurrentIndex(i);};
         endpoint(source,line->spec.source);endpoint(destination,line->spec.destination);
         status->setText(QString("HQ definition v%1: %2. Roster is received + local intent, not acknowledgement.\n%3\n"
-            "Native Freight/History reports record delivered volumes; aggregate per-line throughput is a later stage.")
+            "Statistics below use delivered line receipts; older programmes need an explicit edit/reassignment for attribution.")
             .arg(qulonglong(line->spec.revision)).arg(line->spec.active?"active":"Stop requested")
             .arg(QString::fromStdString(transport_line_error(view,line->spec))));
+        const auto m=transport_line_metrics(view,*line);
+        const auto years=m.endTurn>=m.startTurn?m.endTurn-m.startTurn+1:0;
+        QString text=QString("Received deliveries, receipt years %1–%2: %3 unloads; I/B/G %4 / %5 / %6 kt.\n"
+            "Received mean: %7 kt/year. Reports still in transit are absent; no receipt does not prove no deliveries.\n"
+            "Calculated flight-only round trip at Warp %8: at least %9 years; loading, waiting, service and fuel limits add time.\n")
+            .arg(qulonglong(m.startTurn)).arg(qulonglong(m.endTurn)).arg(qulonglong(m.deliveries))
+            .arg(m.delivered.ironium).arg(m.delivered.boranium).arg(m.delivered.germanium)
+            .arg(years?QString::number(mineral_cargo_mass(m.delivered)/years,'f',1):"unavailable")
+            .arg(line->spec.warp).arg(m.nominalRoundTripYears);
+        if(m.contacts)text+=QString("Received programme snapshots: %1 contacts; %2 en-route programmes, %3 loading/waiting; shared hold %4/%5 kt (%6%). "
+            "Telemetry years %7–%8 (ages %9–%10). This is reported hold occupancy, not time utilization.\n")
+            .arg(qulonglong(m.contacts)).arg(qulonglong(m.moving)).arg(qulonglong(m.waiting)).arg(m.cargoUsed).arg(m.cargoCapacity)
+            .arg(m.cargoCapacity?100*m.cargoUsed/m.cargoCapacity:0,0,'f',1)
+            .arg(qulonglong(m.oldestTelemetry)).arg(qulonglong(m.newestTelemetry))
+            .arg(qulonglong(view.state.turn-m.newestTelemetry)).arg(qulonglong(view.state.turn-m.oldestTelemetry));
+        else text+="Reported hold occupancy unavailable: no post-dispatch matching programme telemetry.\n";
+        text+=QString("Unconfirmed/paused/missing roster entries: %1.\n").arg(qulonglong(m.unconfirmed));
+        const auto& evidence=view.state.players.front();
+        for(const auto endpoint:{line->spec.source,line->spec.destination}) {
+            const auto* planet=find_planet(view.state,endpoint);if(!planet)continue;
+            const auto k=std::find_if(evidence.surveyKnowledge.begin(),evidence.surveyKnowledge.end(),[&](const auto& k){return k.star==planet->star;});
+            if(k!=evidence.surveyKnowledge.end())text+=QString("%1 evidence: year %2, age %3; %4\n")
+                .arg(endpoint==line->spec.source?"Source":"Destination").arg(qulonglong(k->observedTurn)).arg(qulonglong(view.state.turn-k->observedTurn))
+                .arg(planet->owner==view.player?QString("received I/B/G %1 / %2 / %3 kt").arg(planet->minerals.ironium).arg(planet->minerals.boranium).arg(planet->minerals.germanium)
+                    :"no owned surface-stock telemetry; cache/ownership is checked physically on arrival");
+        }
+        if(evidence.transportReceiptsTruncatedThrough)
+            text+=QString("Receipt storage limit omits observations through year %1; displayed volumes are a retained lower bound.\n").arg(qulonglong(evidence.transportReceiptsTruncatedThrough));
+        metrics->setText(text);
+        for(auto i=evidence.transportReceipts.rbegin();i!=evidence.transportReceipts.rend() && receipts->count()<8;++i)
+            if(i->line==line->spec.id && i->receivedTurn>=m.startTurn)receipts->addItem(QString("Observed %1; received %2: fleet #%3 → planet #%4, programme v%5, I/B/G %6 / %7 / %8 kt")
+                .arg(qulonglong(i->observedTurn)).arg(qulonglong(i->receivedTurn)).arg(i->fleet).arg(i->planet).arg(qulonglong(i->revision))
+                .arg(i->minerals.ironium).arg(i->minerals.boranium).arg(i->minerals.germanium));
         for(const auto& a:line->assignments) {
             const auto* f=find_service_fleet(view.state,a.fleet);
             QString text=QString("Fleet #%1: %2").arg(a.fleet).arg(QString::fromStdString(transport_assignment_status(view,*line,a)));
             if(f)text+=QString("\nTelemetry year %1, age %2; last target (%3, %4); fuel %5; hold %6/%7 kt; I/B/G %8/%9/%10")
                 .arg(qulonglong(f->telemetry.observedTurn)).arg(qulonglong(fleet_telemetry_age(view.state,*f)))
-                .arg(f->destination?f->destination->x:f->position.x).arg(f->destination?f->destination->y:f->position.y)
+                .arg(f->telemetry.destination?f->telemetry.destination->x:f->telemetry.position.x).arg(f->telemetry.destination?f->telemetry.destination->y:f->telemetry.position.y)
                 .arg(f->fuel).arg(fleet_cargo_used(view.state,*f)).arg(fleet_cargo_capacity(view.state,*f))
                 .arg(f->minerals.ironium).arg(f->minerals.boranium).arg(f->minerals.germanium);
             roster->addItem(text);

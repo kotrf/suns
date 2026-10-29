@@ -39,11 +39,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 103;
+constexpr quint32 kSaveFormatVersion = 104;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 43;
+constexpr quint32 kTurnOrderFormatVersion = 44;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -221,7 +221,7 @@ void readColonyPlan(QDataStream& stream, std::optional<ProductionTemplate>& valu
 
 void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 {
-    if (!mineral_load_policy_valid(value)) { stream.setStatus(QDataStream::WriteFailed); return; }
+    if (!mineral_load_policy_valid(value) || !transport_unload_valid(value)) { stream.setStatus(QDataStream::WriteFailed); return; }
     if (value.colonyPlan && value.kind != FleetArrivalActionKind::Colonize) { stream.setStatus(QDataStream::WriteFailed); return; }
     writeEnum(stream, value.kind);
     stream << static_cast<quint64>(value.reservePopulation);
@@ -238,11 +238,12 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
         stream << quint32(value.gateSource) << quint32(value.gateDestination) << value.gateResonant;
     } else if (value.gateSource || value.gateDestination || value.gateResonant) stream.setStatus(QDataStream::WriteFailed);
     if(value.kind==FleetArrivalActionKind::LoadMinerals)stream<<quint32(value.mineralReserve)<<quint32(value.mineralMinimum);
+    if(value.kind==FleetArrivalActionKind::UnloadTransportLine)stream<<quint32(value.transportLine)<<quint64(value.transportRevision)<<quint32(value.transportDestination);
 }
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
 {
-    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 103 ? FleetArrivalActionKind::LoadMinerals : gReadSaveFormatVersion >= 96 ? FleetArrivalActionKind::TransitStargate : gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
+    if (!readEnum(stream, value.kind, static_cast<quint8>(gReadSaveFormatVersion >= 104 ? FleetArrivalActionKind::UnloadTransportLine : gReadSaveFormatVersion >= 103 ? FleetArrivalActionKind::LoadMinerals : gReadSaveFormatVersion >= 96 ? FleetArrivalActionKind::TransitStargate : gReadSaveFormatVersion >= 86 ? FleetArrivalActionKind::RecoverSample : gReadSaveFormatVersion >= 82
         ? FleetArrivalActionKind::SupplyOutpost : gReadSaveFormatVersion >= 74
         ? FleetArrivalActionKind::RecoverWreckage : gReadSaveFormatVersion >= 54
         ? FleetArrivalActionKind::EnterWormhole : FleetArrivalActionKind::MergeWithFleet))) return;
@@ -270,7 +271,9 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
     }
     value.mineralReserve=value.mineralMinimum=0;
     if(value.kind==FleetArrivalActionKind::LoadMinerals)stream>>value.mineralReserve>>value.mineralMinimum;
-    if(!mineral_load_policy_valid(value))markCorrupt(stream);
+    value.transportLine=0;value.transportRevision=0;value.transportDestination=0;
+    if(value.kind==FleetArrivalActionKind::UnloadTransportLine) {quint64 revision{};stream>>value.transportLine>>revision>>value.transportDestination;value.transportRevision=revision;}
+    if(!mineral_load_policy_valid(value) || !transport_unload_valid(value))markCorrupt(stream);
 }
 
 void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)
@@ -1548,6 +1551,8 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint32>(report.contactOwner);
         if (report.kind == PlayerReportKind::SpaceBattle) writeBattle(stream, report.battle);
         if (hasLossPayload(report.kind)) writeLosses(stream, report.losses);
+        if(report.kind==PlayerReportKind::TransportLineDelivery)stream<<quint32(report.transportLine)<<quint64(report.transportRevision);
+        else if(report.transportLine || report.transportRevision)stream.setStatus(QDataStream::WriteFailed);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -1668,7 +1673,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -1738,6 +1743,11 @@ void readPlayer(QDataStream& stream, Player& value)
         if (gReadSaveFormatVersion >= 64 && hasLossPayload(report.kind)) {
             readLosses(stream, report.losses);
             if (!lossesMatchReport(report.losses, report.kind)) markCorrupt(stream);
+        }
+        if(report.kind==PlayerReportKind::TransportLineDelivery) {
+            quint64 revision{};stream>>report.transportLine>>revision;report.transportRevision=revision;
+            const TransportLineReceipt r{report.transportLine,report.transportRevision,report.fleet,report.planet,report.observedTurn,report.observedTurn,report.deliveredMinerals};
+            if(!transport_receipt_valid(r,report.observedTurn))markCorrupt(stream);
         }
         value.pendingPlayerReports.push_back(report);
     }
@@ -3257,6 +3267,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeColonyConditions(stream,data.state);
     writeOrbitalLifecycle(stream,data.state);
     writeTransportLines(stream,data.state);
+    writeTransportStatistics(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3385,6 +3396,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if(version>=100) readColonyConditions(stream,loaded.state);
     if(version==99 || version>=101) readOrbitalLifecycle(stream,loaded.state);
     if(version>=102) readTransportLines(stream,loaded.state);
+    if(version>=104) readTransportStatistics(stream,loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);
@@ -3579,7 +3591,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

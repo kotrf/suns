@@ -237,3 +237,11 @@ stock. Geometric stale-telemetry projection stops at a minimum-load waypoint,
 as it does for an unconfirmed gate outcome; receiving an unchanged old snapshot
 does not prove that the ship loaded enough and departed. Radar position evidence
 remains independent of full cargo/programme telemetry.
+
+Transport-line receipts (save v104 / orders v44) freeze line/revision,
+destination, fleet, manifest and observation year at an actual unload. They
+use ordinary report delay/outboxes and enter the private statistics ledger
+only on receipt. Replays preserve the first receipt date; the displayed
+20-year window uses receipt years so long-distance reports still appear.
+Logistics uses received telemetry/stock evidence and labels calculated flight
+time separately. Hidden unloads/capture/damage cannot refresh its old snapshots.
