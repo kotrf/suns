@@ -242,6 +242,8 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
     switch (action.kind) {
     case FleetArrivalActionKind::None:
         return "none";
+    case FleetArrivalActionKind::LoadMinerals:
+        return QString("load minerals; keep %1 kt; minimum aboard %2 kt").arg(action.mineralReserve).arg(action.mineralMinimum);
     case FleetArrivalActionKind::LoadAllAvailable:
         return action.cargo == FleetCargoKind::Colonists
             ? QString("load all %1, leave %2")

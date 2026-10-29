@@ -1302,6 +1302,7 @@ struct TransportLineSpec {
     std::uint8_t warp{5};
     TransportCargo cargo{TransportCargo::Ironium};
     bool active{true};
+    std::uint32_t sourceReserve{}, departureMinimum{}; // Whole kt of the selected mineral.
 };
 struct TransportAssignment {
     FleetId fleet{};
@@ -1409,6 +1410,7 @@ enum class FleetArrivalActionKind {
     SupplyOutpost,
     RecoverSample,
     TransitStargate,
+    LoadMinerals, // Source reserve plus optional onboard departure minimum.
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1454,8 +1456,16 @@ struct FleetArrivalAction {
     double reserveFuel{}; // SupplyOutpost only, in mg. Older action payloads stay unchanged.
     PlanetId gateSource{}, gateDestination{}; // TransitStargate: approach source, then wait/retry locally.
     bool gateResonant{};
+    std::uint32_t mineralReserve{}, mineralMinimum{}; // LoadMinerals only, whole kt.
     bool operator==(const FleetArrivalAction&) const = default;
 };
+
+[[nodiscard]] constexpr bool mineral_load_policy_valid(const FleetArrivalAction& a)
+{
+    if(a.kind!=FleetArrivalActionKind::LoadMinerals)return !a.mineralReserve && !a.mineralMinimum;
+    return (a.cargo==FleetCargoKind::Ironium || a.cargo==FleetCargoKind::Boranium || a.cargo==FleetCargoKind::Germanium)
+        && a.mineralReserve<=1000000000 && a.mineralMinimum<=1000000000;
+}
 
 struct FleetWaypoint {
     Position destination;

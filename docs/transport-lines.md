@@ -1,7 +1,7 @@
 # Transport lines — first #53 slice
 
-Selected on 28 October 2026. Starts from main `c957b12`, merged #234,
-save v101 / orders v41. This branch uses **save v102 / orders v42**.
+The first slice was merged in #237, main `4fb67cf`, save v102 / orders v42.
+The load-policy follow-up starts from that main and uses **save v103 / orders v43**.
 
 ## Playable loop
 
@@ -36,8 +36,8 @@ and even absence of the HQ catalog. There is no annual host-side route planner
 or secret stock check. Loading, movement, shared holds/gross mass, engine fuel,
 coasting, ordinary refuelling, damage, battle, ownership and unloading use the
 existing turn phases and arrival actions. Competing transports load in normal
-deterministic fleet order. A depleted source yields an empty trip; there is no
-new wait-until-full policy. A captured enemy endpoint cannot surrender stocks
+deterministic fleet order. With zero departure minimum a depleted source yields an empty trip. A positive
+minimum holds the source waypoint until the selected cargo threshold is met. A captured enemy endpoint cannot surrender stocks
 to the old owner; the ordinary arrival action fails and the programme continues.
 Fuel shortages use existing slow/coasting/stall behavior, with no free rescue.
 
@@ -50,6 +50,32 @@ as owner-authored intent until explicitly released. No physical loss is inferred
 from hidden host state. Ordinary split/merge programme and cargo rules apply;
 no automatic reassignment to another fleet is invented.
 
+## Source reserve and departure minimum
+
+Both values are whole kt of the selected mineral, default zero, bounded at
+1,000,000,000. Source reserve limits this loader to `max(0, physical stock -
+reserve)`; it neither creates missing stock nor locks minerals against factory
+work, other consumers or differently configured lines. Transfer still uses the
+real shared hold, and actual fractional stock/cargo stays fractional.
+
+A positive departure minimum compares against the selected mineral already
+aboard, including cargo loaded on earlier attempts. The ship loads what fits,
+keeps partial cargo and retries this waypoint once each year without new HQ
+orders. It advances to unload only after the minimum is aboard. Zero means no
+waiting. There is no new idle fuel charge, maintenance discount or free supply.
+
+A minimum that cannot fit because of other cargo or the fitted hold does not
+get silently reduced. Waiting continues until the player changes the programme
+or physically frees space. A captured source cannot supply the old owner; any
+existing cargo is preserved. Once its already-carried selected mineral meets
+the minimum, it can depart without extracting anything else there.
+
+Pause/stop, edits and manual routes use normal delayed commands while waiting;
+partial cargo survives cancellation and resume. Policy fields are frozen in
+the dispatched route, so editing the HQ definition never changes a distant
+ship before receipt. A nonzero reserve or minimum uses the new LoadMinerals
+arrival action; zero/zero retains ordinary Load All and its prior behavior.
+
 ## Knowledge, forecasts and interface
 
 Definitions/roster edits are HQ intent and local drafts, not acknowledgements.
@@ -57,7 +83,12 @@ Only received fleet telemetry confirms the actual repeating programme. The
 Logistics panel shows evidence year/age, last reported target, fuel, hold,
 minerals and mismatches with the dispatched programme. It labels received
 empty source stocks; unowned mining caches are checked physically on arrival
-and are not claimed to be known empty. Missing contacts remain roster entries
+and are not claimed to be known empty. Received telemetry distinguishes waiting
+for a minimum from a reported hold that cannot fit it. Geometry cannot assume
+a future loading threshold was fulfilled: the map projection stops at that
+source waypoint until received telemetry/radar supplies new evidence. Route
+forecasts label a received-stock wait and leave later ETA unknown rather than
+promising future supplies. Missing contacts remain roster entries
 that can be released, including after their loss is received.
 
 Draft definitions/assignments participate in shared command projections and
@@ -78,15 +109,17 @@ Bounded **LINE** follows existing CCON/ORLC. It stores only each owner's catalog
 nonreused-ID high-water mark, frozen received endpoint coordinates and roster
 issue dates. Physical, received and in-flight route programmes keep their
 existing representation. Save v101 loads with an empty catalog and preserves
-its ordinary fleet programmes; earlier migration paths remain. Orders v42 add
-SetTransportLineOrder and AssignTransportLineOrder; older envelope tags are
-unchanged. Player exports contain only their own catalog.
+its ordinary fleet programmes; earlier migration paths remain. Orders v42 introduced SetTransportLineOrder and AssignTransportLineOrder.
+Save v103 / orders v43 append reserve/minimum to the versioned LINE/definition
+payload and add a conditional payload only for LoadMinerals. Older arrival
+actions keep their layouts. A genuine v102 catalog migrates to zero/zero,
+preserving its old programmes. Player exports contain only their own catalog.
 
 Limits are 128 lines/owner, 256 assigned IDs/line, 64 UTF-8 bytes/name, distinct
 received system coordinates and Warp 1–10. Malformed collection counts,
 revisions, duplicate roster identities and truncated tails are rejected.
 
-Remaining #53: multi-stop lines, minimum-stock/load targets, wait/refuel/service
+Remaining #53: multi-stop lines, destination stock targets, richer wait/refuel/service
 policies, fleet-base/depot stops, automatic staffing/resupply and honest AI use
 of the shared catalog, per-line throughput/utilization/history, interruption
 briefings, and explicit emergency diversion/evacuation. Colonists stay physical
@@ -96,10 +129,14 @@ slice does not expand frozen #63 or decide station capture/irreversible #56.
 ## Verification
 
 Full GCC 14.2 / Qt 6.12.0 Debug application/test build; Linux/offscreen CTest
-**94/94 passed (65.41 s)** and clean `git diff --check`. New core and actual Qt/
+**94/94 passed (65.65 s)** and clean `git diff --check`. New core and actual Qt/
 save suites verify multi-fleet resource conservation over 20 unattended years,
 continued operation without the HQ catalog, delayed commands, same-batch
 Pause/Resume, deletion identities, manual override/route-editor precedence,
 hidden ownership/stock invariance, player isolation, host continuation, v101
 migration, bounded malformed/duplicate/truncated data and PBEM order tags.
+The policy follow-up also covers source reserve floors, gradual unattended
+loading, impossible holds, competing fleets, capture, cancellation, preserved
+partial cargo, stale geometry/conditional forecasts, delayed policy packets,
+received/physical save state and genuine v102 zero-policy migration.
 No manual campaign balance, cross-platform or sanitizer acceptance is claimed.

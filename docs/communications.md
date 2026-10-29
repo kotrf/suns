@@ -230,3 +230,10 @@ Transport-line command batching (#53) preserves stable issue order for packets
 with the same issue year and arrival year. A later Resume/route in that batch
 is not suppressed by its earlier Stop. Stop still discards older/overtaken
 packets, including future arrivals already cancelled by its existing barrier.
+
+Transport-line load policies travel as frozen arrival actions (save v103 /
+orders v43). A waiting ship retries locally without HQ knowledge of hidden
+stock. Geometric stale-telemetry projection stops at a minimum-load waypoint,
+as it does for an unconfirmed gate outcome; receiving an unchanged old snapshot
+does not prove that the ship loaded enough and departed. Radar position evidence
+remains independent of full cargo/programme telemetry.

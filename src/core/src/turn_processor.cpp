@@ -823,7 +823,15 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         return false; // Persistent work handled before this switch.
     case FleetArrivalActionKind::None:
         return false;
+    case FleetArrivalActionKind::LoadMinerals:
     case FleetArrivalActionKind::LoadAllAvailable: {
+        const auto waitForMinimum = [&] {
+            if(action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum) {
+                const auto aboard=action.cargo==FleetCargoKind::Ironium?fleet.minerals.ironium:
+                    action.cargo==FleetCargoKind::Boranium?fleet.minerals.boranium:fleet.minerals.germanium;
+                if(aboard+1e-6<action.mineralMinimum){fleet.arrivalAction=action;fleet.destination=fleet.position;}
+            }
+        };
         const auto capacity = fleet_cargo_capacity(state, fleet);
         const auto freeSpace = std::max(0.0, capacity - fleet_cargo_used(state, fleet));
         if (action.cargo == FleetCargoKind::Colonists || action.cargo==FleetCargoKind::OrbitalColonists) {
@@ -846,7 +854,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
             return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
         });
-        if (surface == state.planets.end()) return false;
+        if (surface == state.planets.end()) { waitForMinimum(); return false; }
         if (action.cargo == FleetCargoKind::Xenocrystal) {
             const auto known = known_xenocrystal(state, fleet.owner, surface->id);
             if (!known) return false;
@@ -869,9 +877,11 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         case FleetCargoKind::Xenocrystal: break;
         }
         if (!source || !destination) return false;
-        const auto load = std::min(*source, freeSpace);
+        const auto reserve=action.kind==FleetArrivalActionKind::LoadMinerals?double(action.mineralReserve):0.0;
+        const auto load = std::min(std::max(0.0,*source-reserve), freeSpace);
         *source -= load;
         *destination += load;
+        if(action.kind==FleetArrivalActionKind::LoadMinerals && *destination+1e-6<action.mineralMinimum)waitForMinimum();
         return false;
     }
     case FleetArrivalActionKind::UnloadAll: {
@@ -1379,6 +1389,9 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
         return true;
     }
 
+    // A policy load holds this waypoint and retries on site next year. Do not
+    // advance the queued unload or spam arrival briefings while waiting.
+    if(fleet.arrivalAction && fleet.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals)return false;
     activate_next_waypoint(state, fleet);
     if (!fleet.destination && fleet.waypointQueue.empty() && fleet.repeatOrders) {
         fleet.waypointQueue = fleet.routeTemplate;

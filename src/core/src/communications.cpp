@@ -142,7 +142,8 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::TransitStargate) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::LoadMinerals) return false;
+        if (!mineral_load_policy_valid(action)) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
             || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
         if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
@@ -359,21 +360,27 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     return result;
 }
 
+bool projection_needs_arrival_outcome(const FleetArrivalAction& action)
+{
+    return action.kind==FleetArrivalActionKind::TransitStargate
+        || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum);
+}
+
 void activate_next_predicted_waypoint(
     Position position,
     std::optional<Position>& destination,
     std::uint8_t& warp,
     std::vector<FleetWaypoint>& queue,
     bool repeatOrders,
-    const std::vector<FleetWaypoint>& routeTemplate, bool& gatePending)
+    const std::vector<FleetWaypoint>& routeTemplate, bool& outcomePending)
 {
     if (!destination && queue.empty() && repeatOrders) queue = routeTemplate;
     while (!destination && !queue.empty()) {
         const auto waypoint = queue.front();
         queue.erase(queue.begin());
         warp = waypoint.warp;
-        gatePending = waypoint.arrivalAction.kind == FleetArrivalActionKind::TransitStargate;
-        if (gatePending || !same_position(position, waypoint.destination)) {
+        outcomePending = projection_needs_arrival_outcome(waypoint.arrivalAction);
+        if (outcomePending || !same_position(position, waypoint.destination)) {
             destination = waypoint.destination;
             return;
         }
@@ -388,12 +395,12 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
     auto destination = telemetry.destination;
     auto warp = telemetry.warp;
     auto queue = telemetry.waypointQueue;
-    bool gatePending = telemetry.arrivalAction && telemetry.arrivalAction->kind == FleetArrivalActionKind::TransitStargate;
+    bool outcomePending = telemetry.arrivalAction && projection_needs_arrival_outcome(*telemetry.arrivalAction);
 
     for (std::uint64_t turn = 0; turn < age; ++turn) {
         if (!destination) {
             activate_next_predicted_waypoint(
-                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, gatePending);
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, outcomePending);
             if (!destination) break;
         }
 
@@ -401,19 +408,19 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
         const auto maximumDistance = warp_distance(warp);
         if (remaining <= epsilon || maximumDistance <= epsilon) {
             position = *destination;
-            if (gatePending) break; // A geometric dot cannot confirm a gate outcome.
+            if (outcomePending) break; // Geometry cannot confirm gate transit or fulfillment of a load threshold.
             destination.reset();
             activate_next_predicted_waypoint(
-                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, gatePending);
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, outcomePending);
             continue;
         }
 
         if (maximumDistance >= remaining - epsilon) {
             position = *destination;
-            if (gatePending) break; // A geometric dot cannot confirm a gate outcome.
+            if (outcomePending) break; // Geometry cannot confirm gate transit or fulfillment of a load threshold.
             destination.reset();
             activate_next_predicted_waypoint(
-                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, gatePending);
+                position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, outcomePending);
         } else {
             const auto fraction = maximumDistance / remaining;
             position.x += (destination->x - position.x) * fraction;

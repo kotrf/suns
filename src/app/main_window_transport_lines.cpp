@@ -24,7 +24,7 @@ void MainWindow::installTransportLines() {
     auto* body=new QWidget(dock);auto* layout=new QVBoxLayout(body);auto* form=new QFormLayout;
     auto* hint=new QLabel("Define a mineral shuttle, assign freighters, then submit the turn. Each receives an ordinary repeating "
         "Load All → Unload route through delayed communications. Edits restart at the source when received; pause/delete/release send a Stop. "
-        "Empty sources still cycle. Normal shared holds, fuel, refuelling, capture and combat apply. No future deliveries are assumed.",body);
+        "A zero departure minimum allows empty cycles; a positive minimum waits and tops up locally. Normal shared holds, fuel, refuelling, capture and combat apply. No future deliveries are assumed.",body);
     hint->setWordWrap(true);layout->addWidget(hint);layout->addLayout(form);
     auto combo=[&](const char* id,const char* text){auto* c=new QComboBox(body);c->setObjectName(id);form->addRow(text,c);return c;};
     auto button=[&](const char* id,const char* text){auto* b=new QPushButton(text,body);b->setObjectName(id);layout->addWidget(b);return b;};
@@ -33,6 +33,8 @@ void MainWindow::installTransportLines() {
     auto* source=combo("transportLineSource","Load at");auto* destination=combo("transportLineDestination","Unload at");
     auto* cargo=combo("transportLineCargo","Mineral");cargo->addItems({"Ironium","Boranium","Germanium"});
     auto* warp=new QSpinBox(body);warp->setObjectName("transportLineWarp");warp->setRange(1,10);warp->setValue(5);form->addRow("Warp",warp);
+    auto* reserve=new QSpinBox(body);reserve->setObjectName("transportLineReserve");reserve->setRange(0,1000000000);form->addRow("Leave at source, kt",reserve);
+    auto* minimum=new QSpinBox(body);minimum->setObjectName("transportLineMinimum");minimum->setRange(0,1000000000);form->addRow("Depart with at least, kt (0 = no wait)",minimum);
     auto* save=button("transportLineSave","Create / update line and dispatch to its roster");
     auto* pause=button("transportLinePause","Pause / resume line (delayed fleet commands)");
     auto* remove=button("transportLineDelete","Delete line and send Stop to its roster");
@@ -72,6 +74,7 @@ void MainWindow::installTransportLines() {
         roster->clear();pause->setEnabled(bool(line));remove->setEnabled(bool(line));assign->setEnabled(bool(line)&&fleets->count());release->setEnabled(bool(line)&&fleets->count());
         if(!line){status->setText("New owner-local line. Definitions and roster changes below include local draft intent; fleet status always uses received telemetry.");return;}
         name->setText(QString::fromStdString(line->spec.name));warp->setValue(line->spec.warp);cargo->setCurrentIndex(int(line->spec.cargo));
+        reserve->setValue(line->spec.sourceReserve);minimum->setValue(line->spec.departureMinimum);
         auto endpoint=[&](QComboBox* c,PlanetId id){auto i=c->findData(id);if(i<0){c->addItem(QString("Last defined planet #%1 (currently unavailable)").arg(id),id);i=c->count()-1;}c->setCurrentIndex(i);};
         endpoint(source,line->spec.source);endpoint(destination,line->spec.destination);
         status->setText(QString("HQ definition v%1: %2. Roster is received + local intent, not acknowledgement.\n%3\n"
@@ -99,6 +102,7 @@ void MainWindow::installTransportLines() {
         d.id=old?d.id:p.lastTransportLineId+1;d.revision=old?d.revision+1:1;
         d.name=name->text().trimmed().toStdString();d.source=source->currentData().toUInt();d.destination=destination->currentData().toUInt();
         d.warp=warp->value();d.cargo=TransportCargo(cargo->currentIndex());
+        d.sourceReserve=reserve->value();d.departureMinimum=minimum->value();
         const auto error=transport_line_error(received(),d);if(!error.empty()){status->setText(QString::fromStdString(error));return;}
         send(SetTransportLineOrder{d},"Define transport line "+QString::fromStdString(d.name));lines->setCurrentIndex(lines->findData(d.id));
     });
