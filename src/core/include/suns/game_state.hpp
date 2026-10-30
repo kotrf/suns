@@ -1306,6 +1306,7 @@ struct TransportLineSpec {
     TransportCargo cargo{TransportCargo::Ironium};
     bool active{true};
     std::uint32_t sourceReserve{}, departureMinimum{}; // Whole kt of the selected mineral.
+    std::uint32_t destinationTarget{}; // Whole kt; zero unloads all, otherwise hold surplus for local demand.
 };
 struct TransportAssignment {
     FleetId fleet{};
@@ -1474,6 +1475,7 @@ struct FleetArrivalAction {
     TransportLineId transportLine{}; // UnloadTransportLine only.
     std::uint64_t transportRevision{};
     PlanetId transportDestination{};
+    std::uint32_t destinationTarget{}; // UnloadTransportLine only; zero preserves complete unloading.
     bool operator==(const FleetArrivalAction&) const = default;
 };
 
@@ -1487,8 +1489,8 @@ struct FleetArrivalAction {
 [[nodiscard]] constexpr bool transport_unload_valid(const FleetArrivalAction& a)
 {
     if(a.kind!=FleetArrivalActionKind::UnloadTransportLine)
-        return !a.transportLine && !a.transportRevision && !a.transportDestination;
-    return a.transportLine && a.transportRevision && a.transportDestination
+        return !a.transportLine && !a.transportRevision && !a.transportDestination && !a.destinationTarget;
+    return a.transportLine && a.transportRevision && a.transportDestination && a.destinationTarget<=1000000000
         && (a.cargo==FleetCargoKind::Ironium || a.cargo==FleetCargoKind::Boranium || a.cargo==FleetCargoKind::Germanium);
 }
 

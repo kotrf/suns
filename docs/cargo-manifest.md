@@ -86,3 +86,10 @@ rules. A delayed line receipt records only positive selected-mineral delivery
 at the frozen owned destination. Received diagnostics neither transfer cargo
 nor add a second economic Freight/History event. Ordinary manual unloads and
 old untagged programmes are not guessed into a line's volume.
+
+A positive transport-line destination target transfers only the real deficit
+of the selected mineral, retaining surplus in the shared hold for later local
+demand. Zero remains full unloading. Neutral/enemy/wrong destinations cannot
+receive targeted cargo. Waiting adds no new resources or movement fuel; real
+production consumption triggers subsequent annual top-ups, with ordinary
+delayed orders required to change/stop the programme.

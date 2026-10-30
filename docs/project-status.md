@@ -1,6 +1,41 @@
 # Project status and development handoff
 
-## Current work — transport-line statistics and interruptions (#53)
+## Current work — destination stock targets (#53)
+
+Checked 29 October 2026 (Europe/Moscow): #240 merged as `0b67ec1`, CI green;
+main save v104 / orders v44. Branch `codex/transport-line-stock-targets` starts
+there and uses **save v105 / orders v45**. The user requested the next player
+logistics slice. Further AI automation is deferred; network evacuation and
+#63 remain frozen. #53 stays open.
+
+An optional whole-kt destination target freezes into ordinary attributed
+unload actions. Zero preserves full unloading. Positive targets unload only
+the actual deficit at the exact owned destination, retain excess physical
+cargo and retry annually without HQ orders. The programme returns to its
+source once the selected cargo is empty. Capture/neutral/wrong destinations
+block rather than dump that held cargo. Existing source floors/minimum loads,
+shared holds, mass, fuel, combat and delayed Stop/edit/resume remain ordinary.
+Only positive actual partial unloads create Freight/line receipts. Received
+waiting status and a conditional forecast do not promise future consumption;
+geometric prediction cannot assume the policy completed. UI edits are normal
+orders. Versioned fields default to zero for older catalogues/programmes.
+[Rules and remaining scope](transport-lines.md).
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build succeeded;
+Linux/offscreen CTest **94/94 passed (80.45 s)**; `git diff --check` clean.
+Expanded core/Qt/save suites cover a multi-year autonomous target cycle with
+actual paid factory consumption and conserved minerals, continued work without
+the HQ catalog, competing/fractional unloads and other cargo, idle fuel and
+positive-receipt-only behavior, capture/neutral ownership blockers, pause/resume retaining
+cargo, a target edit arriving after 34 years, stale-geometry freezing, invalid
+targets, actual Logistics editing and draft/received-stock forecasts, partial
+waiting and in-flight target persistence, hidden-event player-export invariance,
+PBEM fields/old-envelope/trailing-byte rejection and genuine v104 full-unload
+migration (plus existing v103/v102 fixtures). Other cargo, route, controller and
+save suites pass. No manual campaign balance, cross-platform or sanitizer
+acceptance is claimed. Prepared for review; no automatic merge/issue closure.
+
+## Merged implementation — transport-line statistics and interruptions (#240, historical branch checkpoint)
 
 Checked 29 October 2026 (Europe/Moscow): #239 is merged as `db1204d`, CI green;
 main save v103 / orders v43. Branch `codex/transport-line-statistics` starts

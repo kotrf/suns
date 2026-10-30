@@ -288,4 +288,73 @@ void bounded_receipts_and_received_status() {
     auto invalid=transport_line_program(line);invalid.queuedWaypoints[0].arrivalAction.transportLine=0;
     assert(!fleet_route_tasks_valid(invalid));
 }
-int main(){attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}
+void destination_target_demand_cycle() {
+    auto s=stock_target_world();auto d=line_spec();d.destinationTarget=100;
+    assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));
+    const auto initial=ironium(s);const auto initialIndustry=s.planets[0].industry;
+    for(int i=0;i<3;++i){tick(s);assert(std::abs(ironium(s)-initial)<1e-6);}
+    assert(s.planets[0].minerals.ironium==100 && s.fleets[0].minerals.ironium==50);
+    assert(s.fleets[0].arrivalAction && s.fleets[0].arrivalAction->destinationTarget==100);
+    const auto fuel=s.fleets[0].fuel;const auto received=s.players[0].transportReceipts.size();
+    for(int i=0;i<3;++i)tick(s);
+    assert(s.fleets[0].fuel==fuel && s.players[0].transportReceipts.size()==received);
+    // Real production consumes the target stock after arrival actions. The
+    // next annual visit, without another HQ order, supplies exactly its deficit.
+    auto noHQ=s;noHQ.players[0].transportLines.clear();
+    tick(s,{QueueProductionOrder{1,ProductionKind::Factory}});tick(noHQ,{QueueProductionOrder{1,ProductionKind::Factory}});
+    assert(s.planets[0].industry==initialIndustry+1 && s.planets[0].minerals.ironium==98 && s.fleets[0].minerals.ironium==50);
+    tick(s);tick(noHQ);assert(s.planets[0].minerals.ironium==100 && s.fleets[0].minerals.ironium==48);
+    assert(noHQ.planets[0].minerals.ironium==s.planets[0].minerals.ironium && noHQ.fleets[0].minerals.ironium==s.fleets[0].minerals.ironium);
+    tick(s,{QueueProductionBatchOrder{1,ProductionKind::Factory,24}});
+    for(int i=0;i<30 && (s.planets[0].industry<initialIndustry+25 || s.fleets[0].minerals.ironium>0);++i) {
+        tick(s);assert(std::abs(ironium(s)-(initial-2*(s.planets[0].industry-initialIndustry)))<1e-6);
+    }
+    assert(s.planets[0].industry==initialIndustry+25 && s.fleets[0].minerals.ironium==0);
+    assert(s.fleets[0].destination && same_position(*s.fleets[0].destination,{40,0}));
+    assert(transport_line_metrics(make_player_view(s,1),s.players[0].transportLines[0]).delivered.ironium==80);
+}
+void competing_targets_and_cancel() {
+    auto s=stock_target_world();s.planets[0].minerals.ironium=70.25;
+    auto d=line_spec();d.destinationTarget=100;assert(set_transport_line(s,1,{d}));
+    auto f=s.fleets[0];f.id=s.nextFleetId++;s.fleets.push_back(f);
+    const auto programme=transport_line_program(s.players[0].transportLines[0]);
+    for(auto& ship:s.fleets){ship.position={0,0};ship.destination=ship.position;ship.arrivalAction=programme.queuedWaypoints[0].arrivalAction;ship.minerals.ironium=80.25;ship.minerals.boranium=5;}
+    const auto total=ironium(s);tick(s);
+    assert(s.planets[0].minerals.ironium==100 && s.fleets[0].minerals.ironium==50.5 && s.fleets[1].minerals.ironium==80.25);
+    assert(std::abs(ironium(s)-total)<1e-6 && s.players[0].transportReceipts.size()==1 && s.fleets[0].minerals.boranium==5);
+    for(int i=0;i<10;++i)tick(s);
+    assert(s.planets[0].minerals.ironium==100 && std::abs(ironium(s)-total)<1e-6);
+    for(const auto newOwner:{PlayerId{0},PlayerId{2}}) {
+        auto captured=s;captured.planets[0].owner=newOwner;tick(captured);
+        assert(captured.fleets[0].minerals.ironium==50.5 && captured.fleets[0].arrivalAction);
+        assert(captured.players[0].transportReceipts.size()==1); // Do not drop surplus onto a neutral/enemy surface.
+    }
+    auto local=stock_target_world();assert(set_transport_line(local,1,{d}) && assign_transport_line(local,1,{1,1}));
+    for(int i=0;i<3;++i)tick(local);
+    ++d.revision;d.active=false;assert(set_transport_line(local,1,{d}));
+    tick(local);assert(local.fleets[0].minerals.ironium==50 && !local.fleets[0].repeatOrders && !local.fleets[0].destination);
+    ++d.revision;d.active=true;d.destinationTarget=150;assert(set_transport_line(local,1,{d}));
+    for(int i=0;i<7;++i)tick(local);
+    assert(local.planets[0].minerals.ironium==150 && local.fleets[0].minerals.ironium==0);
+}
+void delayed_target_edit_and_geometry() {
+    auto s=computer_transport_world(5100);s.players[0].controller=PlayerController::Human;s.fleets.resize(1);
+    for(auto& p:s.planets)p.observedConcentration=MineralCargo{};
+    s.planets[1].minerals.ironium=100;auto d=line_spec();d.source=1;d.destination=2;d.destinationTarget=100;
+    assert(set_transport_line(s,1,{d}));const auto programme=transport_line_program(s.players[0].transportLines[0]);
+    auto& f=s.fleets[0];f.position={5100,0};f.destination=f.position;f.arrivalAction=programme.queuedWaypoints[0].arrivalAction;
+    f.minerals.ironium=50;f.repeatOrders=true;f.routeTemplate={{programme.destination,programme.warp,programme.arrivalAction},programme.queuedWaypoints[0]};
+    s.players[0].transportLines[0].assignments={{1,s.turn}};acknowledge(s);tick(s);
+    ++d.revision;d.destinationTarget=200;assert(set_transport_line(s,1,{d}));
+    const auto due=s.fleets[0].pendingCommands.back().deliveryTurn;assert(due>s.turn+20);
+    while(s.turn<due){assert(s.fleets[0].arrivalAction && s.fleets[0].arrivalAction->destinationTarget==100);tick(s);}
+    assert(s.fleets[0].routeTemplate[1].arrivalAction.destinationTarget==200 && s.fleets[0].minerals.ironium==50);
+    auto stale=computer_transport_world(5100);stale.players[0].controller=PlayerController::Human;
+    auto& ship=stale.fleets[0];ship.position={5100,0};ship.destination=ship.position;ship.arrivalAction=programme.queuedWaypoints[0].arrivalAction;
+    ship.repeatOrders=true;ship.routeTemplate={{programme.destination,programme.warp,programme.arrivalAction},programme.queuedWaypoints[0]};
+    acknowledge(stale);stale.turn+=10;
+    assert(same_position(make_player_view(stale,1).state.fleets[0].position,{5100,0}));
+    auto invalid=programme;invalid.queuedWaypoints[0].arrivalAction.destinationTarget=1000000001;
+    assert(!fleet_route_tasks_valid(invalid));
+}
+int main(){destination_target_demand_cycle();competing_targets_and_cancel();delayed_target_edit_and_geometry();attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}

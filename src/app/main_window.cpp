@@ -251,6 +251,8 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
                   .arg(static_cast<qulonglong>(action.reservePopulation))
             : QString("load all available %1").arg(cargo());
     case FleetArrivalActionKind::UnloadTransportLine:
+        if(action.destinationTarget)return QString("top up %1 to %2 kt; keep surplus aboard").arg(cargo()).arg(action.destinationTarget);
+        [[fallthrough]];
     case FleetArrivalActionKind::UnloadAll:
         return QString("unload all %1").arg(cargo());
     case FleetArrivalActionKind::Refuel:

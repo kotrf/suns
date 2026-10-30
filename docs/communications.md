@@ -245,3 +245,10 @@ only on receipt. Replays preserve the first receipt date; the displayed
 20-year window uses receipt years so long-distance reports still appear.
 Logistics uses received telemetry/stock evidence and labels calculated flight
 time separately. Hidden unloads/capture/damage cannot refresh its old snapshots.
+
+Destination stock targets (save v105 / orders v45) are frozen in the received
+onboard unload programme. The ship may observe actual stocks only on site and
+retry locally while headquarters still has old evidence. A changed target/Stop
+arrives with normal delay; geometry cannot presume that future consumption
+cleared a waiting unload. UI forecasts label conditional received-stock
+outcomes and never turn an in-flight edit into a physical transfer permission.

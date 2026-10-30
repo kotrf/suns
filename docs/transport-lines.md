@@ -3,7 +3,8 @@
 The first slice was merged in #237, main `4fb67cf`, save v102 / orders v42.
 The load-policy follow-up merged in #238, main `830bcd1`, **save v103 / orders v43**.
 The computer-player follow-up merged in #239, main `db1204d`, with those formats.
-The statistics follow-up starts there and uses **save v104 / orders v44**.
+The statistics follow-up merged in #240, main `0b67ec1`, **save v104 / orders v44**.
+The destination-target follow-up starts there and uses **save v105 / orders v45**.
 
 ## Playable loop
 
@@ -40,7 +41,9 @@ coasting, ordinary refuelling, damage, battle, ownership and unloading use the
 existing turn phases and arrival actions. Competing transports load in normal
 deterministic fleet order. With zero departure minimum a depleted source yields an empty trip. A positive
 minimum holds the source waypoint until the selected cargo threshold is met. A captured enemy endpoint cannot surrender stocks
-to the old owner; the ordinary arrival action fails and the programme continues.
+to the old owner; ordinary untargeted arrival fails and continues. A positive
+destination target instead holds remaining cargo at a blocked destination until
+new orders or restored ownership permit it.
 Fuel shortages use existing slow/coasting/stall behavior, with no free rescue.
 
 Manual navigation, stationary work, probe/visitor orders, colonization and gate
@@ -77,6 +80,51 @@ partial cargo survives cancellation and resume. Policy fields are frozen in
 the dispatched route, so editing the HQ definition never changes a distant
 ship before receipt. A nonzero reserve or minimum uses the new LoadMinerals
 arrival action; zero/zero retains ordinary Load All and its prior behavior.
+
+## Destination stock target
+
+Destination target is an optional whole-kt quantity of the selected I/B/G,
+bounded at 1,000,000,000. Zero preserves the previous full-unload programme.
+A positive value transfers `min(aboard, max(0, target - actual surface stock))`
+at the frozen owned destination. Partial/fractional quantities use existing
+physical mineral arithmetic without rounding or discarding cargo. Other
+minerals, colonists, specimens and exotic cargo are untouched.
+
+For example, destination stock 70 kt, target 100 kt and cargo 80 kt unloads
+30 kt and leaves 50 kt aboard. With no demand the ship waits without generating
+empty delivery/arrival messages or consuming new movement fuel. After a real
+factory consumes 2 kt, the next arrival phase tops up exactly 2 kt. It repeats
+locally without HQ control or contact, then returns to the source once that
+selected cargo is empty. Normal source reserve, departure minimum and shared
+hold rules apply on the next loading visit. Unrelated cargo does not need to
+be emptied to finish the selected-mineral stop.
+
+This is a per-unloader stock ceiling at its existing arrival phase, not a
+reservation, empire-wide stock cap or guarantee of a minimum at year's end.
+Production consumes supplies later in the turn; mining and other valid cargo
+orders may add supplies. Several loaders with the same target inspect stocks
+in the usual deterministic fleet order and cannot collectively unload past
+that target in that phase. Differently configured lines/other consumers follow
+their own ordinary rules. There is no annual HQ stock dispatcher, remote stock
+oracle, extra equipment, free supply or new construction/operation price.
+
+A neutral/enemy/wrong destination cannot accept a targeted unload: remaining
+cargo stays aboard and the action remains waiting. Battles, damage, docking
+and ordinary refuelling retain their phases. Stop, line pause/deletion,
+manual override, edits and resume retain cargo and use normal physical command
+delay. Edits/resume still restart the line at its source when delivered; an old
+programme keeps its old target until then. A large target may need many trips;
+a small target can tie a freighter up as a local supply buffer. No automatic
+return with excess, demand retasking or emergency diversion is invented.
+
+Logistics exposes the target, received waiting state, age and retained shared
+hold occupancy. Geometric projection stops at a targeted unload outcome until
+new evidence. The route forecast uses received stock and valid pending orders;
+if cargo remains it labels destination-target waiting and leaves later ETA
+unknown. It cannot promise future production, consumption or unloading from
+stale telemetry. Partial unloads create their own positive immutable receipts,
+so unload count is not the number of completed round trips. Existing delayed
+statistics and deduplication are unchanged.
 
 ## Knowledge, forecasts and interface
 
@@ -212,13 +260,17 @@ conditional line-report/action payloads; orders v44 carries the new unload
 action. Existing actions keep their binary layout. Genuine v103 saves start
 with no invented statistics; old Unload All programmes continue unchanged and
 are recognized as legacy telemetry. An explicit line edit/reassignment sends
-the attributed programme through normal delayed communication.
+the attributed programme through normal delayed communication. Save v105 /
+orders v45 add a destination target to versioned LINE/definition and attributed
+unload payloads. Genuine v104 programs default to zero and keep full unloading;
+v103/v102 migrations remain. PBEM rejects trailing bytes as well as malformed
+or forged old payloads instead of silently ignoring an appended target.
 
 Limits are 128 lines/owner, 256 assigned IDs/line, 64 UTF-8 bytes/name, distinct
 received system coordinates and Warp 1–10. Malformed collection counts,
 revisions, duplicate roster identities and truncated tails are rejected.
 
-Remaining #53: multi-stop lines, destination stock targets, richer wait/refuel/service
+Remaining #53: multi-stop lines, richer wait/refuel/service
 policies, fleet-base/depot stops, broader automatic staffing/resupply,
 observed cycle duration, deeper time utilization/operational history and
 interruption briefings.
@@ -266,3 +318,15 @@ pending/delivered receipt persistence, PBEM action payload and forged v43
 rejection, and genuine v103 legacy programme loading. Existing migrations,
 controls, forecasts and other suites pass. No manual campaign balance,
 cross-platform or sanitizer acceptance is claimed.
+
+Destination-target follow-up: full GCC 14.2 / Qt 6.12.0 Debug application/test
+build succeeded; Linux/offscreen CTest **94/94 passed (80.45 s)** and clean
+`git diff --check`. New scenarios cover actual factory consumption, unattended
+multi-year top-ups with/without an HQ catalog, mineral conservation, competing
+fractional unloads and unrelated cargo, no empty receipt/movement-fuel churn,
+capture/neutral blockers, pause/resume, 34-year delayed edits, stale projection,
+invalid targets, real Qt controls and draft/conditional forecasts, partial and
+in-flight save/load, hidden-event byte-identical player exports, PBEM targets,
+forged old envelopes/trailing bytes and genuine v104 zero-target continuation.
+Existing v103/v102 and older migration/cargo/route/controller suites pass.
+No manual campaign balance, cross-platform or sanitizer acceptance is claimed.

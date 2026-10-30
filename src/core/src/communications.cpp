@@ -363,7 +363,8 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
 bool projection_needs_arrival_outcome(const FleetArrivalAction& action)
 {
     return action.kind==FleetArrivalActionKind::TransitStargate
-        || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum);
+        || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum)
+        || (action.kind==FleetArrivalActionKind::UnloadTransportLine && action.destinationTarget);
 }
 
 void activate_next_predicted_waypoint(
@@ -408,7 +409,7 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
         const auto maximumDistance = warp_distance(warp);
         if (remaining <= epsilon || maximumDistance <= epsilon) {
             position = *destination;
-            if (outcomePending) break; // Geometry cannot confirm gate transit or fulfillment of a load threshold.
+            if (outcomePending) break; // Geometry cannot confirm gate transit or fulfillment of a cargo policy.
             destination.reset();
             activate_next_predicted_waypoint(
                 position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, outcomePending);
@@ -417,7 +418,7 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 
         if (maximumDistance >= remaining - epsilon) {
             position = *destination;
-            if (outcomePending) break; // Geometry cannot confirm gate transit or fulfillment of a load threshold.
+            if (outcomePending) break; // Geometry cannot confirm gate transit or fulfillment of a cargo policy.
             destination.reset();
             activate_next_predicted_waypoint(
                 position, destination, warp, queue, telemetry.repeatOrders, telemetry.routeTemplate, outcomePending);
