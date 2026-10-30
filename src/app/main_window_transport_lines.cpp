@@ -2,6 +2,7 @@
 #include "suns/transport_lines.hpp"
 #include "suns/communications.hpp"
 #include "suns/mobile_base.hpp"
+#include "suns/deep_space.hpp"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDockWidget>
@@ -24,7 +25,7 @@ void MainWindow::installTransportLines() {
     auto* body=new QWidget(dock);auto* layout=new QVBoxLayout(body);auto* form=new QFormLayout;
     auto* hint=new QLabel("Define a mineral shuttle, assign freighters, then submit the turn. Each receives an ordinary repeating "
         "Load All → Unload route through delayed communications. Edits restart at the source when received; pause/delete/release send a Stop. "
-        "A zero departure minimum allows empty cycles; a positive minimum waits and tops up locally. Normal shared holds, fuel, refuelling, capture and combat apply. No future deliveries are assumed.",body);
+        "A zero departure minimum allows empty cycles; a positive minimum waits and tops up locally. Normal shared holds, fuel, refuelling, capture and combat apply. No future deliveries are assumed. Stationary installations accept mineral deliveries within their shared hold; surplus waits aboard. Fuel delivery remains a separate route action.",body);
     hint->setWordWrap(true);layout->addWidget(hint);layout->addLayout(form);
     auto combo=[&](const char* id,const char* text){auto* c=new QComboBox(body);c->setObjectName(id);form->addRow(text,c);return c;};
     auto button=[&](const char* id,const char* text){auto* b=new QPushButton(text,body);b->setObjectName(id);layout->addWidget(b);return b;};
@@ -71,7 +72,12 @@ void MainWindow::installTransportLines() {
         const auto line=selected();
         auto fill=[&](QComboBox* c,auto populate){const auto old=c->currentData();const QSignalBlocker block(c);c->clear();populate();const auto i=c->findData(old);if(i>=0)c->setCurrentIndex(i);};
         fill(source,[&]{for(const auto& planet:view.state.planets)if((planet.owner==view.player || (!planet.owner && survey_level(view.state,view.player,planet.star)>=SurveyLevel::GeologicalSurvey)))source->addItem(QString::fromStdString(planet.name),planet.id);});
-        fill(destination,[&]{for(const auto& planet:view.state.planets)if(planet.owner==view.player)destination->addItem(QString::fromStdString(planet.name),planet.id);});
+        fill(destination,[&]{
+            for(const auto& planet:view.state.planets)if(planet.owner==view.player)destination->addItem(QString::fromStdString(planet.name),planet.id);
+            for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost!=OutpostKind::None)
+                destination->addItem(QString("%1 #%2 — %3").arg(QString::fromStdString(outpost_kind_name(f.outpost))).arg(f.id)
+                    .arg(QString::fromStdString(f.name)),QVariant::fromValue(-qlonglong(f.id)));
+        });
         fill(fleets,[&]{for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost==OutpostKind::None && fleet_cargo_capacity(view.state,f)>0)fleets->addItem(QString("#%1 %2").arg(f.id).arg(QString::fromStdString(f.name)),f.id);
             if(line)for(const auto& a:line->assignments)if(fleets->findData(a.fleet)<0)fleets->addItem(QString("Roster #%1 — no received contact").arg(a.fleet),a.fleet);
         });
@@ -82,7 +88,12 @@ void MainWindow::installTransportLines() {
         reserve->setValue(line->spec.sourceReserve);minimum->setValue(line->spec.departureMinimum);
         target->setValue(line->spec.destinationTarget);
         auto endpoint=[&](QComboBox* c,PlanetId id){auto i=c->findData(id);if(i<0){c->addItem(QString("Last defined planet #%1 (currently unavailable)").arg(id),id);i=c->count()-1;}c->setCurrentIndex(i);};
-        endpoint(source,line->spec.source);endpoint(destination,line->spec.destination);
+        endpoint(source,line->spec.source);
+        if(line->spec.destinationFleet) {
+            const auto key=QVariant::fromValue(-qlonglong(line->spec.destinationFleet));auto i=destination->findData(key);
+            if(i<0){destination->addItem(QString("Installation #%1 (no received contact)").arg(line->spec.destinationFleet),key);i=destination->count()-1;}
+            destination->setCurrentIndex(i);
+        } else endpoint(destination,line->spec.destination);
         status->setText(QString("HQ definition v%1: %2. Roster is received + local intent, not acknowledgement.\n%3\n"
             "Statistics below use delivered line receipts; older programmes need an explicit edit/reassignment for attribution.")
             .arg(qulonglong(line->spec.revision)).arg(line->spec.active?"active":"Stop requested")
@@ -114,12 +125,18 @@ void MainWindow::installTransportLines() {
                 .arg(planet->owner==view.player?QString("received I/B/G %1 / %2 / %3 kt").arg(planet->minerals.ironium).arg(planet->minerals.boranium).arg(planet->minerals.germanium)
                     :"no owned surface-stock telemetry; cache/ownership is checked physically on arrival");
         }
+        if(line->spec.destinationFleet) {
+            const auto* f=find_service_fleet(view.state,line->spec.destinationFleet);
+            if(f)text+=QString("Installation #%1: received year %2, I/B/G %3 / %4 / %5 kt; shared hold %6/%7 kt. Arrival checks actual ownership and free capacity.\n")
+                .arg(f->id).arg(qulonglong(f->telemetry.observedTurn)).arg(f->minerals.ironium).arg(f->minerals.boranium).arg(f->minerals.germanium)
+                .arg(fleet_cargo_used(view.state,*f)).arg(fleet_cargo_capacity(view.state,*f));
+        }
         if(evidence.transportReceiptsTruncatedThrough)
             text+=QString("Receipt storage limit omits observations through year %1; displayed volumes are a retained lower bound.\n").arg(qulonglong(evidence.transportReceiptsTruncatedThrough));
         metrics->setText(text);
         for(auto i=evidence.transportReceipts.rbegin();i!=evidence.transportReceipts.rend() && receipts->count()<8;++i)
-            if(i->line==line->spec.id && i->receivedTurn>=m.startTurn)receipts->addItem(QString("Observed %1; received %2: fleet #%3 → planet #%4, programme v%5, I/B/G %6 / %7 / %8 kt")
-                .arg(qulonglong(i->observedTurn)).arg(qulonglong(i->receivedTurn)).arg(i->fleet).arg(i->planet).arg(qulonglong(i->revision))
+            if(i->line==line->spec.id && i->receivedTurn>=m.startTurn)receipts->addItem(QString("Observed %1; received %2: fleet #%3 → %4, programme v%5, I/B/G %6 / %7 / %8 kt")
+                .arg(qulonglong(i->observedTurn)).arg(qulonglong(i->receivedTurn)).arg(i->fleet).arg(i->destinationFleet?QString("installation #%1").arg(i->destinationFleet):QString("planet #%1").arg(i->planet)).arg(qulonglong(i->revision))
                 .arg(i->minerals.ironium).arg(i->minerals.boranium).arg(i->minerals.germanium));
         for(const auto& a:line->assignments) {
             const auto* f=find_service_fleet(view.state,a.fleet);
@@ -140,7 +157,9 @@ void MainWindow::installTransportLines() {
         if(!old && p.lastTransportLineId==std::numeric_limits<TransportLineId>::max())return;
         if(!old && p.transportLines.size()>=kMaximumTransportLines){status->setText("Maximum 128 lines per empire");return;}
         d.id=old?d.id:p.lastTransportLineId+1;d.revision=old?d.revision+1:1;
-        d.name=name->text().trimmed().toStdString();d.source=source->currentData().toUInt();d.destination=destination->currentData().toUInt();
+        d.name=name->text().trimmed().toStdString();d.source=source->currentData().toUInt();
+        const auto endpoint=destination->currentData().toLongLong();
+        d.destination=endpoint>0?PlanetId(endpoint):0;d.destinationFleet=endpoint<0?FleetId(-endpoint):0;
         d.warp=warp->value();d.cargo=TransportCargo(cargo->currentIndex());
         d.sourceReserve=reserve->value();d.departureMinimum=minimum->value();
         d.destinationTarget=target->value();

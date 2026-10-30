@@ -1,6 +1,30 @@
 # Project status and development handoff
 
-## Current work — destination stock targets (#53)
+## Current work — addressed mineral supply to stationary installations (#53)
+
+Checked 30 October 2026 (Europe/Moscow): #241 merged as `7292305`, main CI
+94/94; main save v105 / orders v45. Branch `codex/transport-line-outpost-supply`
+adds mineral delivery endpoints for exact owned stationary depots, relays and
+independent orbital shipyards, with received-only authoring/status, capacity
+limits, target stock, retained surplus and delayed receipts. Branch save v106 /
+orders v46; ordinary planetary payload layouts and old migrations remain.
+Further AI automation is deferred; network evacuation and #63 stay frozen.
+#53 remains open. Detailed contract and boundaries: [transport lines](transport-lines.md).
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug application/test build passed;
+Linux/offscreen CTest **94/94 passed (40.05 s)**; `git diff --check` clean.
+Expanded existing transport suites exercise real depot and independent-yard
+delivery, finite/fractional shared capacity, target demand, conservation and
+continued operation without HQ, missing/foreign/moved/disabled receivers,
+received-only authoring/export, pause after endpoint loss, actual Qt endpoint
+selection, held and in-flight programmes, delivered and pending delayed receipts,
+PBEM roundtrip/forged old envelope rejection and v105 planetary migration.
+Existing v104/v103/v102 and other suites pass. Prepared for review; this branch
+is not merged and #53 is not closed. No manual campaign balance, cross-platform
+or sanitizer acceptance is claimed.
+
+
+## Merged implementation — destination stock targets (#241, historical branch checkpoint)
 
 Checked 29 October 2026 (Europe/Moscow): #240 merged as `0b67ec1`, CI green;
 main save v104 / orders v44. Branch `codex/transport-line-stock-targets` starts

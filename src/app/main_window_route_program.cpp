@@ -117,6 +117,8 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
                   .arg(static_cast<qulonglong>(action.reservePopulation))
             : QString("Load all available %1 — dynamic").arg(cargoName());
     case FleetArrivalActionKind::UnloadTransportLine:
+        if(action.transportDestinationFleet)return QString("Supply %1 to installation #%2; target %3 kt (0 = unload within capacity); retry with surplus aboard")
+            .arg(cargoName()).arg(action.transportDestinationFleet).arg(action.destinationTarget);
         if(action.destinationTarget)return QString("Top up %1 to %2 kt; keep surplus aboard and retry annually").arg(cargoName()).arg(action.destinationTarget);
         [[fallthrough]];
     case FleetArrivalActionKind::UnloadAll:
@@ -405,11 +407,11 @@ QString routeForecast(
                 .arg(qulonglong(legIndex+1)).arg(leg.arrivalAction.mineralReserve).arg(leg.arrivalAction.mineralMinimum);
             break;
         }
-        if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && leg.arrivalAction.destinationTarget
+        if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet)
             && after->arrivalAction && after->arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
             && same_position(after->position,leg.destination)) {
-            lines << QString("%1. Destination target waiting (received-stock forecast): top up to %2 kt. "
-                "Surplus remains aboard; retry annually. Future consumption is not promised; later ETA is unknown.")
+            lines << QString("%1. Destination target waiting (received-stock forecast): stock target %2 kt (0 = unload within capacity). "
+                "Surplus remains aboard; retry annually. Future demand, capacity and ownership are unconfirmed; later ETA is unknown.")
                 .arg(qulonglong(legIndex+1)).arg(leg.arrivalAction.destinationTarget);
             break;
         }
@@ -466,8 +468,8 @@ QString routeForecast(
                 break;
             case FleetArrivalActionKind::UnloadTransportLine:
             case FleetArrivalActionKind::UnloadAll:
-                if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && leg.arrivalAction.destinationTarget) {
-                    outcome=QString("; projected top-up to %1 kt using received stock; onward travel depends on actual demand and retained cargo")
+                if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet)) {
+                    outcome=QString("; projected delivery, target %1 kt (0 = unload within capacity), using received stock; onward travel depends on actual capacity/demand and retained cargo")
                         .arg(leg.arrivalAction.destinationTarget);
                     break;
                 }
@@ -534,7 +536,7 @@ QString routeForecast(
                          .arg(outcome);
 
             if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadMinerals
-                || (leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && leg.arrivalAction.destinationTarget)
+                || (leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet))
                 || leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
                 || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
                 || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {

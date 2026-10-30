@@ -357,4 +357,61 @@ void delayed_target_edit_and_geometry() {
     auto invalid=programme;invalid.queuedWaypoints[0].arrivalAction.destinationTarget=1000000001;
     assert(!fleet_route_tasks_valid(invalid));
 }
-int main(){destination_target_demand_cycle();competing_targets_and_cancel();delayed_target_edit_and_geometry();attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}
+void installation_capacity_receipts_and_autonomy() {
+    auto s=installation_transport_world();auto d=installation_line();d.destinationTarget=100;
+    auto baseline=s;assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));
+    auto control=s;control.players[0].transportLines.clear();
+    for(int year=0;year<5;++year){tick(s);tick(control);tick(baseline);}
+    assert(s.fleets[1].minerals.ironium==100 && s.fleets[0].minerals.ironium>0);
+    assert(std::abs(ironium(s)-ironium(baseline))<1e-6);
+    assert(s.fleets[0].minerals.ironium==control.fleets[0].minerals.ironium && s.fleets[1].minerals.ironium==control.fleets[1].minerals.ironium);
+    assert(s.fleets[0].arrivalAction && s.fleets[0].arrivalAction->transportDestinationFleet==3);
+    const auto fuel=s.fleets[0].fuel;tick(s);assert(s.fleets[0].fuel==fuel);
+    assert(!s.players[0].transportReceipts.empty());
+    const auto& receipt=s.players[0].transportReceipts.front();assert(!receipt.planet && receipt.destinationFleet==3 && receipt.minerals.ironium==100);
+    // Real local consumption releases exactly that capacity/target deficit.
+    s.fleets[1].minerals.ironium-=2;tick(s);assert(s.fleets[1].minerals.ironium==100);
+    // Even a zero-target programme must preserve cargo when the shared hold fills.
+    auto limited=installation_transport_world();limited.fleets[1].minerals.boranium=fleet_cargo_capacity(limited,limited.fleets[1])-7.5;
+    assert(set_transport_line(limited,1,{installation_line()}) && assign_transport_line(limited,1,{1,1}));
+    for(int i=0;i<5;++i)tick(limited);
+    assert(limited.fleets[1].minerals.ironium==7.5 && limited.fleets[0].arrivalAction);
+    assert(fleet_cargo_used(limited,limited.fleets[1])<=fleet_cargo_capacity(limited,limited.fleets[1])+1e-6);
+}
+void installation_identity_blockers_and_knowledge() {
+    for(int blocked=0;blocked<4;++blocked) {
+        auto s=installation_transport_world();assert(set_transport_line(s,1,{installation_line()}) && assign_transport_line(s,1,{1,1}));
+        auto wrong=s.fleets[1];wrong.id=4;s.nextFleetId=5;s.fleets.push_back(wrong);
+        if(blocked==0)s.fleets[1].owner=2;
+        if(blocked==1)s.fleets.erase(s.fleets.begin()+1);
+        if(blocked==2)s.fleets[1].position={60,60};
+        if(blocked==3)s.fleets[1].damagePercent=100;
+        for(int i=0;i<5;++i)tick(s);
+        assert(s.fleets.front().minerals.ironium>0 && s.fleets.front().arrivalAction);
+        assert(s.players[0].transportReceipts.empty());
+        for(const auto& f:s.fleets)if(f.id!=1)assert(f.minerals.ironium==0);
+        // Hidden capture/removal never rewrites the authored definition.
+        assert(s.players[0].transportLines[0].spec.destinationFleet==3);
+        auto pause=installation_line();++pause.revision;pause.active=false;
+        assert(set_transport_line(s,1,{pause}));
+    }
+    auto s=installation_transport_world();auto view=make_player_view(s,1);assert(transport_line_error(view,installation_line()).empty());
+    s.fleets[1].damagePercent=100;s.fleets[1].minerals.ironium=999;s.fleets[1].position={80,80};
+    assert(transport_line_error(make_player_view(s,1),installation_line()).empty());
+    auto invalid=installation_line();invalid.destination=1;assert(!transport_line_spec_valid(invalid));
+    invalid=installation_line();invalid.destinationFleet=1;assert(!transport_line_error(view,invalid).empty());
+    auto program=transport_line_program({installation_line(),{40,0},{20,20},{}});
+    assert(fleet_route_tasks_valid(program));program.queuedWaypoints[0].arrivalAction.transportDestination=1;
+    assert(!fleet_route_tasks_valid(program));
+}
+void independent_yard_mineral_supply() {
+    auto s=world();deploy(s);recovery_transport(s);auto& transport=s.fleets.back();
+    transport.position={0,0};transport.fuel=1000;s.planets[0].minerals={1000,1000,1000};
+    acknowledge(s);auto d=line_spec();d.source=1;d.destination=0;d.destinationFleet=1;
+    assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,2}));
+    const auto before=base(s).minerals.ironium;
+    for(int i=0;i<5;++i)tick(s);
+    assert(base(s).minerals.ironium>before);
+    assert(std::any_of(s.players[0].transportReceipts.begin(),s.players[0].transportReceipts.end(),[](const auto& r){return r.destinationFleet==1;}));
+}
+int main(){installation_capacity_receipts_and_autonomy();installation_identity_blockers_and_knowledge();independent_yard_mineral_supply();destination_target_demand_cycle();competing_targets_and_cancel();delayed_target_edit_and_geometry();attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}

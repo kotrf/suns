@@ -4,7 +4,8 @@ The first slice was merged in #237, main `4fb67cf`, save v102 / orders v42.
 The load-policy follow-up merged in #238, main `830bcd1`, **save v103 / orders v43**.
 The computer-player follow-up merged in #239, main `db1204d`, with those formats.
 The statistics follow-up merged in #240, main `0b67ec1`, **save v104 / orders v44**.
-The destination-target follow-up starts there and uses **save v105 / orders v45**.
+The destination-target follow-up merged in #241, main `7292305`, **save v105 / orders v45**.
+The stationary-installation delivery follow-up starts there: **save v106 / orders v46**.
 
 ## Playable loop
 
@@ -125,6 +126,42 @@ unknown. It cannot promise future production, consumption or unloading from
 stale telemetry. Partial unloads create their own positive immutable receipts,
 so unload count is not the number of completed round trips. Existing delayed
 statistics and deduplication are unchanged.
+
+## Addressed mineral deliveries to stationary installations
+
+The destination selector also offers owned deployed depots, relays and independent
+orbital shipyards from received fleet telemetry. Source remains an owned colony
+or surveyed uncolonized mining site. Colony stations use their colony's existing
+surface endpoint. Mobile bases, installation sources, fuel-cargo lines and
+multiple stops remain later work; ordinary SupplyOutpost fuel actions still work.
+
+A line freezes the exact installation FleetId and received coordinates into its
+ordinary unload action. The freighter never pursues an unknown new position,
+substitutes another co-located depot or dumps to a planet underneath. Physical
+arrival requires that exact owned anchored installation at the waypoint, with
+less than 100% damage. Shared free cargo capacity includes every existing cargo.
+Only the selected I/B/G transfers; no minerals, hardware or operating fuel appear.
+
+The stock target has the same meaning as for colonies; zero unloads as much as
+fits. Any remainder waits aboard and retries locally each year, also at target
+zero. Missing, foreign, moved, disabled or full installations retain the cargo.
+Stop/pause/edit use ordinary command delivery. A known line can be paused even
+if its endpoint contact has since disappeared. Return starts after the selected
+cargo is empty. This is finite local supply, not an HQ stock oracle or an
+emergency rerouting policy.
+
+Actual positive deliveries produce delayed line receipts naming the installation;
+there is no fictitious colony Freight/History entry. Logistics shows received
+stock, shared hold, evidence age and waiting. Route forecasts use the same
+received state and label later capacity/demand as conditional. Geometry cannot
+silently mark a waiting unload complete. No automatic AI policy is expanded.
+
+Save v106 / orders v46 append FleetIds only to definitions/actions whose planet
+ID is zero, and to installation receipt/report payloads. Exactly one destination
+identity is required. Ordinary planetary payloads keep their previous layout;
+v105 and older supported migrations default to planetary endpoints. Forged old
+envelopes cannot accept installation payloads. Physical, received, draft and
+in-flight definitions and receipts all preserve the exact receiver.
 
 ## Knowledge, forecasts and interface
 
@@ -271,7 +308,7 @@ received system coordinates and Warp 1–10. Malformed collection counts,
 revisions, duplicate roster identities and truncated tails are rejected.
 
 Remaining #53: multi-stop lines, richer wait/refuel/service
-policies, fleet-base/depot stops, broader automatic staffing/resupply,
+policies, mobile-base stops and installation sources, fuel lines, broader automatic staffing/resupply,
 observed cycle duration, deeper time utilization/operational history and
 interruption briefings.
 Further automatic AI staffing/construction is deferred in favor of these
@@ -330,3 +367,14 @@ in-flight save/load, hidden-event byte-identical player exports, PBEM targets,
 forged old envelopes/trailing bytes and genuine v104 zero-target continuation.
 Existing v103/v102 and older migration/cargo/route/controller suites pass.
 No manual campaign balance, cross-platform or sanitizer acceptance is claimed.
+
+
+Stationary-installation delivery follow-up: GCC 14.2 / Qt 6.12.0 full Debug
+application/test build succeeded; offscreen CTest **94/94 passed (40.05 s)**.
+Existing core/Qt/save suites cover depot/independent-yard delivery, physical
+shared capacity and fractional cargo, target waiting/conservation/no HQ,
+identity/ownership/loss/disabled blockers, received-only state/export, real UI
+selection, physical/draft/in-flight programmes, received and pending far-away
+receipts, PBEM and old-envelope rejection, and v105 planetary continuation.
+Older migration and other suites pass. Prepared for review, not merged; no
+manual campaign/balance or other-platform/sanitizer acceptance is claimed.

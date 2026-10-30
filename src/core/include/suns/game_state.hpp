@@ -985,6 +985,7 @@ struct PendingPlayerReport {
     std::uint64_t scientificDataId{}; // Per-recipient durable identity, independent of delivery routing/date.
     std::uint32_t transportLine{}; // TransportLineDelivery only: frozen onboard attribution.
     std::uint64_t transportRevision{};
+    FleetId transportDestinationFleet{}; // TransportLineDelivery to a stationary installation.
 };
 
 struct TechnologyState {
@@ -1307,6 +1308,7 @@ struct TransportLineSpec {
     bool active{true};
     std::uint32_t sourceReserve{}, departureMinimum{}; // Whole kt of the selected mineral.
     std::uint32_t destinationTarget{}; // Whole kt; zero unloads all, otherwise hold surplus for local demand.
+    FleetId destinationFleet{}; // Alternative to destination planet: exact stationary installation.
 };
 struct TransportAssignment {
     FleetId fleet{};
@@ -1324,6 +1326,7 @@ struct TransportLineReceipt {
     PlanetId planet{};
     std::uint64_t observedTurn{}, receivedTurn{};
     MineralCargo minerals;
+    FleetId destinationFleet{}; // Exactly one of planet/destinationFleet identifies the receiver.
 };
 
 struct Player {
@@ -1476,6 +1479,7 @@ struct FleetArrivalAction {
     std::uint64_t transportRevision{};
     PlanetId transportDestination{};
     std::uint32_t destinationTarget{}; // UnloadTransportLine only; zero preserves complete unloading.
+    FleetId transportDestinationFleet{}; // Exact anchored receiver, alternative to transportDestination.
     bool operator==(const FleetArrivalAction&) const = default;
 };
 
@@ -1489,8 +1493,8 @@ struct FleetArrivalAction {
 [[nodiscard]] constexpr bool transport_unload_valid(const FleetArrivalAction& a)
 {
     if(a.kind!=FleetArrivalActionKind::UnloadTransportLine)
-        return !a.transportLine && !a.transportRevision && !a.transportDestination && !a.destinationTarget;
-    return a.transportLine && a.transportRevision && a.transportDestination && a.destinationTarget<=1000000000
+        return !a.transportLine && !a.transportRevision && !a.transportDestination && !a.destinationTarget && !a.transportDestinationFleet;
+    return a.transportLine && a.transportRevision && (bool(a.transportDestination)!=bool(a.transportDestinationFleet)) && a.destinationTarget<=1000000000
         && (a.cargo==FleetCargoKind::Ironium || a.cargo==FleetCargoKind::Boranium || a.cargo==FleetCargoKind::Germanium);
 }
 

@@ -33,3 +33,18 @@ inline GameState stock_target_world() {
     for(const auto& p:s.planets)queue_survey_report(s,1,p.star,0,{0,0},s.turn,SurveyLevel::GeologicalSurvey);
     (void)deliver_due_survey_reports(s);acknowledge(s);return s;
 }
+// A real paid constructor fitted as a deployed depot; its shared hold is finite.
+inline GameState installation_transport_world() {
+    auto s=transport_world();s.fleets.resize(1);s.fleets[0].position={40,0};
+    auto design=s.shipDesigns.back();design.id=203;design.name="Depot constructor";
+    design.components.push_back(C::FuelDepotKit);
+    s.shipDesigns.push_back(design);s.nextShipDesignId=204;
+    Fleet depot;depot.id=3;depot.owner=1;depot.name="Frontier depot";depot.design=203;depot.ships={{203,1}};
+    depot.position={20,20};depot.outpost=OutpostKind::FuelDepot;depot.fuel=1000;
+    s.fleets.push_back(depot);s.nextFleetId=4;
+    for(auto& p:s.planets){p.industry=0;p.mines=0;p.productionQueue.clear();}
+    acknowledge(s);return s;
+}
+inline TransportLineSpec installation_line() {
+    auto d=line_spec();d.destination=0;d.destinationFleet=3;d.name="Depot mineral supply";return d;
+}
