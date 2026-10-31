@@ -27,6 +27,7 @@
 #include <QStatusBar>
 
 #include <algorithm>
+#include <cmath>
 #include <iterator>
 #include <utility>
 
@@ -73,7 +74,7 @@ QString waypointName(const GameState& state, Position position, FleetId targetFl
     if (const auto* star = findStarAtPosition(state, position)) {
         return QString::fromStdString(star->name);
     }
-    return QString("(%1, %2)").arg(position.x, 0, 'f', 0).arg(position.y, 0, 'f', 0);
+    return QString("(%1, %2)").arg(position.x, 0, 'f', 1).arg(position.y, 0, 'f', 1);
 }
 
 QString gateDestinationName(const GameState& state, PlanetId id)
@@ -694,13 +695,16 @@ QString MainWindow::selectedFleetRouteProgramForecast() const
 }
 
 QString MainWindow::selectedFleetWaypointFuelWarning(
-    std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action) const
+    std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
+    std::optional<Position> coordinateDestination) const
 {
-    const auto key = QString("%1:%2:%3:%4:%5:%6:%7:%8")
+    const auto key = QString("%1:%2:%3:%4:%5:%6:%7:%8:%9:%10")
         .arg(planningRevision_).arg(selectedFleetForRouteProgram())
         .arg(selection_.star.value_or(0)).arg(warp).arg(targetFleet)
         .arg(static_cast<int>(action.kind)).arg(action.reservePopulation)
-        .arg(static_cast<int>(action.cargo));
+        .arg(static_cast<int>(action.cargo))
+        .arg(coordinateDestination ? QString::number(coordinateDestination->x, 'g', 17) : QString{})
+        .arg(coordinateDestination ? QString::number(coordinateDestination->y, 'g', 17) : QString{});
     if (key == waypointFuelKey_) return waypointFuelWarning_;
     waypointFuelKey_ = key;
     waypointFuelWarning_.clear();
@@ -713,6 +717,8 @@ QString MainWindow::selectedFleetWaypointFuelWarning(
         if (!target || targetFleet == fleet.id) return {};
         destination = target->position;
         if (target->owner != fleet.owner) targetFleet = 0;
+    } else if (coordinateDestination) {
+        destination = *coordinateDestination;
     } else {
         const auto* star = selectedStar();
         if (!star) return {};
@@ -952,7 +958,7 @@ bool MainWindow::beginRouteProgramMapTargetPick()
     routeProgramMapTargetPickActive_ = true;
     if (view_ && view_->viewport()) view_->viewport()->setCursor(Qt::CrossCursor);
     emit routeProgramMapTargetPickChanged(true);
-    statusBar()->showMessage("Route target mode: click a star or another fleet; Esc cancels");
+    statusBar()->showMessage("Route target mode: click a point, star or another fleet; Esc cancels");
     return true;
 }
 
@@ -1091,6 +1097,30 @@ void MainWindow::openStargateRouteDialog()
     if (dialog.exec()==QDialog::Accepted && source->currentData()!=destination->currentData())
         appendStargateRouteStep(source->currentData().toUInt(),destination->currentData().toUInt(),
             selectedFleetSuggestedWarpForRouteProgram(),resonant->isChecked());
+}
+
+bool MainWindow::appendCoordinateWaypoint(Position destination, std::uint8_t warp, FleetArrivalAction arrivalAction)
+{
+    if (!std::isfinite(destination.x) || !std::isfinite(destination.y)) return false;
+    switch (arrivalAction.kind) {
+    case FleetArrivalActionKind::LoadAllAvailable:
+    case FleetArrivalActionKind::UnloadAll:
+    case FleetArrivalActionKind::Refuel:
+    case FleetArrivalActionKind::Colonize:
+    case FleetArrivalActionKind::RemoteMining:
+    case FleetArrivalActionKind::BombardColony:
+    case FleetArrivalActionKind::TransitStargate:
+    case FleetArrivalActionKind::LoadMinerals:
+    case FleetArrivalActionKind::UnloadTransportLine:
+    case FleetArrivalActionKind::UnloadTransportStop:
+        statusBar()->showMessage("Choose a system destination for this arrival action", 4000);
+        return false;
+    case FleetArrivalActionKind::MergeWithFleet:
+        statusBar()->showMessage("Merge with fleet requires a moving fleet target", 4000);
+        return false;
+    default: break;
+    }
+    return appendRouteWaypoint(destination, 0, warp, arrivalAction);
 }
 
 bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction, bool compareRoutes)

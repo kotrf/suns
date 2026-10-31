@@ -90,7 +90,8 @@ public:
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] QString selectedFleetRouteProgramForecast() const;
     [[nodiscard]] QString selectedFleetWaypointFuelWarning(
-        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action) const;
+        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
+        std::optional<Position> coordinateDestination = std::nullopt) const;
     [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
@@ -103,6 +104,7 @@ public:
     bool selectFleetForRouteProgram(FleetId fleet);
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction, bool compareRoutes = false);
+    bool appendCoordinateWaypoint(Position destination, std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool startSelectedFleetWorkHere(FleetArrivalAction arrivalAction);
     void openStargateRouteDialog();
     bool appendStargateRouteStep(PlanetId source, PlanetId destination, std::uint8_t warp, bool resonant = false);
@@ -211,6 +213,7 @@ signals:
     // Editor context updates immediately, even while map redraw is deferred.
     void routeProgramContextChanged(bool resetDrafts = false);
     void routeProgramMapTargetPicked(int kind, std::uint32_t id);
+    void routeProgramMapPositionPicked(double x, double y);
     void routeProgramQuickTargetRequested(int kind, std::uint32_t id);
     void routeProgramMapTargetPickChanged(bool active);
 
