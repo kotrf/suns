@@ -4,6 +4,7 @@
 #include "suns/campaign.hpp"
 #include "galaxy_setup_widget.hpp"
 #include "map_marker_items.hpp"
+#include "toolbar_icons.hpp"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -40,6 +41,7 @@
 #include <QStyle>
 #include <QStyleOptionProgressBar>
 #include <QTimer>
+#include <QTextBrowser>
 #include <QToolBar>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -169,14 +171,24 @@ void MainWindow::installUiPolish()
                     empireLayout->addWidget(empireLabel_);
                     sideLayout->addWidget(empireGroup);
 
-                    // Orders stay near the top and use a warm accent so the
-                    // player always knows where to look before ending a turn.
-                    auto* ordersGroup = makeGroup("Orders this turn", "ordersGroup", commandPanel);
-                    auto* ordersLayout = new QVBoxLayout(ordersGroup);
-                    ordersLabel_->show();
                     endTurnButton_->hide();
-                    ordersLayout->addWidget(ordersLabel_);
-                    sideLayout->addWidget(ordersGroup);
+                    auto* ordersWindow = new QDialog(this);
+                    ordersWindow->setObjectName("turnOrdersDialog");
+                    ordersWindow->setWindowTitle("Orders this turn");
+                    ordersWindow->setStyleSheet("QDialog#turnOrdersDialog { background: #0d141d; }");
+                    ordersWindow->resize(760, 520);
+                    auto* ordersLayout = new QVBoxLayout(ordersWindow);
+                    ordersLabel_->setParent(ordersWindow);
+                    ordersLabel_->hide();
+                    auto* ordersBrowser = new QTextBrowser(ordersWindow);
+                    ordersBrowser->setObjectName("turnOrdersSummary");
+                    ordersBrowser->setStyleSheet("QTextBrowser { background: #101925; border: 1px solid #2a4056; }");
+                    ordersBrowser->setHtml(ordersLabel_->text());
+                    ordersBrowser->setProperty("ordersMarkup", ordersLabel_->text());
+                    ordersLayout->addWidget(ordersBrowser, 1);
+                    auto* closeOrders = new QDialogButtonBox(QDialogButtonBox::Close, ordersWindow);
+                    connect(closeOrders, &QDialogButtonBox::rejected, ordersWindow, &QDialog::close);
+                    ordersLayout->addWidget(closeOrders);
 
                     auto* planetGroup = makeGroup("Selected system / planet", "planetGroup", commandPanel);
                     auto* planetLayout = new QVBoxLayout(planetGroup);
@@ -692,6 +704,16 @@ void MainWindow::installUiPolish()
     historyToolAction->setObjectName("openEmpireHistoryToolAction");
     historyToolAction->setToolTip("Open empire history and graphs in a separate window");
     connect(historyToolAction, &QAction::triggered, this, [this] { openEmpireHistory(); });
+    auto* ordersAction = dialogToolbar->addAction("Orders");
+    ordersAction->setObjectName("openTurnOrdersAction");
+    ordersAction->setToolTip("Review all orders queued for this turn across your empire");
+    connect(ordersAction, &QAction::triggered, this, [this] {
+        if (auto* dialog = findChild<QDialog*>("turnOrdersDialog")) {
+            dialog->show();
+            dialog->raise();
+            dialog->activateWindow();
+        }
+    });
 
     dialogToolbar->addSeparator();
 
@@ -712,6 +734,13 @@ void MainWindow::installUiPolish()
     auto* splitToolAction = dialogToolbar->addAction("Split");
     splitToolAction->setToolTip("Split ships from the selected fleet");
     connect(splitToolAction, &QAction::triggered, this, [this] { openSplitFleetDialog(); });
+    dialogToolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    dialogToolbar->setIconSize(QSize(18, 18));
+    const std::array tools{endTurnAction, designerToolAction, researchToolAction, templatesToolAction,
+        historyToolAction, ordersAction, summaryToolAction, cargoToolAction, mergeToolAction, splitToolAction};
+    const std::array glyphs{ToolbarGlyph::EndTurn, ToolbarGlyph::Designer, ToolbarGlyph::Research, ToolbarGlyph::Plans,
+        ToolbarGlyph::History, ToolbarGlyph::Orders, ToolbarGlyph::Fleets, ToolbarGlyph::Cargo, ToolbarGlyph::Merge, ToolbarGlyph::Split};
+    for (std::size_t i = 0; i < tools.size(); ++i) tools[i]->setIcon(toolbarIcon(glyphs[i]));
 
     auto* mapToolbar = addToolBar("Map view");
     mapToolbar->setObjectName("mapViewToolbar");
@@ -740,6 +769,12 @@ void MainWindow::installUiPolish()
     sensorRangesAction->setToolTip("Show active ship scanners (blue) and planetary radar (green); use the arrow for passive and emission ranges");
     connect(sensorRangesAction, &QAction::toggled, sensorRangesCheck_, &QCheckBox::setChecked);
     connect(sensorRangesCheck_, &QCheckBox::toggled, sensorRangesAction, &QAction::setChecked);
+    mapToolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    mapToolbar->setIconSize(QSize(18, 18));
+    zoomOut->setIcon(toolbarIcon(ToolbarGlyph::ZoomOut));
+    zoomIn->setIcon(toolbarIcon(ToolbarGlyph::ZoomIn));
+    fit->setIcon(toolbarIcon(ToolbarGlyph::Fit));
+    sensorRangesAction->setIcon(toolbarIcon(ToolbarGlyph::Sensors));
     auto* sensorRangesMenu = new QMenu(mapToolbar);
     auto* extraRangesAction = sensorRangesMenu->addAction("Passive and emission ranges");
     extraRangesAction->setObjectName("showPassiveEmissionRangesAction");
@@ -812,7 +847,8 @@ void MainWindow::installUiPolish()
                     const auto potential = terraforming_potential(environmentState, pendingOrders_.player, *environmentPlanet);
                     const auto current = player_planet_habitability(environmentState, pendingOrders_.player, *environmentPlanet, state_.turn);
                     const auto maximum = player_planet_habitability(environmentState, pendingOrders_.player, potential, state_.turn);
-                    label->setText(QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum));
+                    label->setText(current >= 100 ? QString("Hab %1%").arg(current)
+                        : QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum));
                     if(environmentPlanet->engineering.kind!=PlanetaryEngineeringKind::None) label->setText(label->text()
                         + QString(" • %1: %2%, %3").arg(QString::fromStdString(engineering_name(environmentPlanet->engineering.kind)))
                             .arg(environmentPlanet->engineering.work*100/engineering_work(environmentPlanet->engineering.kind))

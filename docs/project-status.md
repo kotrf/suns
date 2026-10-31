@@ -1,6 +1,47 @@
 # Project status and development handoff
 
-## Current checkpoint — scanner overlays and Minerals layout
+## Current work — accumulated UI feedback in PR #244
+
+Base main remains `bdaac4b` after merged #243; [PR #244](https://github.com/kotrf/suns/pull/244)
+is open on `codex/map-ranges-and-mineral-layout`. Save v107 / orders v47 remain
+unchanged. The original active-only sensor defaults and measured Minerals
+height are retained. This follow-up implements the user's accumulated notes:
+
+- Fleet emissions moves below the route editor inside its scroll area; its
+  controls fit the narrow column. The fixed fleet header stays above the scroll.
+- Hab 100% omits the redundant terraforming suffix. Lower habitability retains
+  the potential, and engineering status remains visible.
+- Turn Messages uses a dark, hover-highlighted splitter handle.
+- Orders this turn is an independent scrollable reader opened through View and
+  the Orders toolbar action. Live updates preserve reading position. The
+  original full empire scope is retained and the dock summary is removed.
+- Toolbars have recognisable scalable line icons with text and tooltips.
+- Cargo's right-hand sliders can return previously planned colonists/minerals.
+  Mixed directions are emitted as ordinary nonnegative transfers in a feasible
+  order; final stocks and shared capacity are validated with the common command
+  projection. Invalid partial swaps are disabled. Cancel preserves prior intent.
+  Compact System Status/Minerals and colony/empire output use accepted cargo
+  intent immediately, retaining received state and normal End Turn resolution.
+
+Validation: full GCC14.2/Qt6.12 Debug build and **94/94 offscreen CTest passed
+(39.62 s)**. Expanded Qt regressions cover loading 2500, full return, simultaneous
+colonist return/mineral load, mineral return and Cancel; host state stays
+unchanged during planning. The final expanded Qt check also compares the real
+End Turn manifests, mineral conservation after mining and population after growth. They also cover Hab 100%/lower Hab, scrollable fleet
+emissions, a 150-order reader with retained scroll position, menu access and
+reopening one window. Normal/small workspace captures and the cargo/Orders
+windows were visually checked. Diff check is clean. This records local checks;
+new GitHub CI or merge is not claimed.
+
+The user accepted **population-operated factories and mines as in Stars!**:
+independent racial settings of 5–25 each per 10,000 residents; excess buildings
+remain idle. At 10/10, 25,000 residents support 25 factories and 25 mines together.
+They explicitly requested these UI fixes first. Workforce economics is the next
+implementation stage, not included in #244. Station fitting was found and judged
+clear; no extra station-fit screen is requested. Further #53 remains frozen
+until gameplay experience; AI expansion, evacuation and #63 remain deferred.
+
+## Earlier checkpoint — scanner overlays and Minerals layout
 
 Checked 31 October 2026: #243 is merged as main `bdaac4b`, save v107 /
 orders v47. The user froze all further #53 development until more gameplay

@@ -33,6 +33,8 @@
 #include <QGraphicsTextItem>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
+#include <QTextBrowser>
+#include <QScrollBar>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -1026,7 +1028,7 @@ void MainWindow::updateControls()
     std::size_t colonies = 0;
     std::uint64_t population = 0;
     std::uint32_t output = 0;
-    const auto receivedEconomy=make_player_view(state_,pendingOrders_.player).state;
+    const auto receivedEconomy = projected_cargo_order_state(received, pendingOrders_);
     for (const auto& candidate : receivedEconomy.planets) {
         if (candidate.owner == pendingOrders_.player) {
             ++colonies;
@@ -1176,7 +1178,7 @@ void MainWindow::updateControls()
             // Compare intentions with the same received baseline. Physical
             // population may have changed while this report was in transit.
             const auto& receivedPlanet = *find_planet(received, planet->id);
-            const auto plannedCargo = projected_cargo_order_state(received, pendingOrders_);
+            const auto& plannedCargo = receivedEconomy;
             const auto predictedPlanet = std::find_if(plannedCargo.planets.begin(),
                 plannedCargo.planets.end(), [planet](const Planet& candidate) {
                     return candidate.id == planet->id;
@@ -1395,6 +1397,13 @@ void MainWindow::updateControls()
         for (auto& description : safeDescriptions) description = description.toHtmlEscaped();
         ordersLabel_->setText(QString("<b>Orders this turn (%1):</b><br>%2")
             .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(safeDescriptions.join("<br>")));
+    }
+    if (auto* browser = findChild<QTextBrowser*>("turnOrdersSummary");
+        browser && browser->property("ordersMarkup").toString() != ordersLabel_->text()) {
+        const auto position = browser->verticalScrollBar()->value();
+        browser->setHtml(ordersLabel_->text());
+        browser->setProperty("ordersMarkup", ordersLabel_->text());
+        browser->verticalScrollBar()->setValue(position);
     }
 
     QStringList readiness;
