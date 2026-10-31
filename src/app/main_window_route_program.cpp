@@ -116,6 +116,8 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
                   .arg(cargoName())
                   .arg(static_cast<qulonglong>(action.reservePopulation))
             : QString("Load all available %1 — dynamic").arg(cargoName());
+    case FleetArrivalActionKind::UnloadTransportStop:
+        return QString("Deliver %1 up to target %2 kt (0 = all); carry surplus to next stop").arg(cargoName()).arg(action.destinationTarget);
     case FleetArrivalActionKind::UnloadTransportLine:
         if(action.transportDestinationFleet)return QString("Supply %1 to installation #%2; target %3 kt (0 = unload within capacity); retry with surplus aboard")
             .arg(cargoName()).arg(action.transportDestinationFleet).arg(action.destinationTarget);
@@ -407,6 +409,10 @@ QString routeForecast(
                 .arg(qulonglong(legIndex+1)).arg(leg.arrivalAction.mineralReserve).arg(leg.arrivalAction.mineralMinimum);
             break;
         }
+        if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportStop && after->arrivalAction
+            && after->arrivalAction->kind==FleetArrivalActionKind::UnloadTransportStop && same_position(after->position,leg.destination)) {
+            lines << QString("%1. Delivery visit blocked (received-state forecast); recipient ownership/availability is conditional. Cargo retained; later ETA unknown.").arg(qulonglong(legIndex+1));break;
+        }
         if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet)
             && after->arrivalAction && after->arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
             && same_position(after->position,leg.destination)) {
@@ -466,6 +472,8 @@ QString routeForecast(
                     outcome = QString("; projected mineral cargo aboard: %1").arg(amount, 0, 'f', 1);
                 }
                 break;
+            case FleetArrivalActionKind::UnloadTransportStop:
+                outcome="; one bounded delivery visit using received stocks/capacity; carry surplus onward, recipient availability remains conditional";break;
             case FleetArrivalActionKind::UnloadTransportLine:
             case FleetArrivalActionKind::UnloadAll:
                 if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet)) {
@@ -535,7 +543,8 @@ QString routeForecast(
                          .arg(navigationCertainty)
                          .arg(outcome);
 
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::LoadMinerals
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::UnloadTransportStop
+                || leg.arrivalAction.kind == FleetArrivalActionKind::LoadMinerals
                 || (leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet))
                 || leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
                 || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
@@ -1446,7 +1455,7 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         }
     }
     if (action.kind == FleetArrivalActionKind::TransitStargate || action.kind == FleetArrivalActionKind::LoadMinerals
-        || action.kind == FleetArrivalActionKind::UnloadTransportLine) {
+        || action.kind == FleetArrivalActionKind::UnloadTransportLine || action.kind == FleetArrivalActionKind::UnloadTransportStop) {
         if (leg.arrivalAction.kind != action.kind) return false;
         action = leg.arrivalAction;
     }

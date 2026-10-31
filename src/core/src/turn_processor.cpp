@@ -884,11 +884,14 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         if(action.kind==FleetArrivalActionKind::LoadMinerals && *destination+1e-6<action.mineralMinimum)waitForMinimum();
         return false;
     }
+    case FleetArrivalActionKind::UnloadTransportStop:
     case FleetArrivalActionKind::UnloadTransportLine:
     case FleetArrivalActionKind::UnloadAll: {
+        const bool visit=action.kind==FleetArrivalActionKind::UnloadTransportStop;
+        const bool attributed=visit || action.kind==FleetArrivalActionKind::UnloadTransportLine;
         // The exact installation identity is frozen aboard. Never fall back to
         // another depot or the surface if the intended receiver is unavailable.
-        if(action.kind==FleetArrivalActionKind::UnloadTransportLine && action.transportDestinationFleet) {
+        if(attributed && action.transportDestinationFleet) {
             auto receiver=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const Fleet& f){
                 return f.id==action.transportDestinationFleet && f.id!=fleet.id && f.owner==fleet.owner
                     && f.outpost!=OutpostKind::None && f.damagePercent<100 && same_position(f.position,fleet.position);
@@ -914,14 +917,14 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
                     }
                 }
             }
-            if(*aboard>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}
+            if(*aboard>0 && (!visit || receiver==state.fleets.end())){fleet.arrivalAction=action;fleet.destination=fleet.position;}
             return false;
         }
-        const bool targeted=action.kind==FleetArrivalActionKind::UnloadTransportLine && action.destinationTarget;
+        const bool targeted=attributed && action.destinationTarget;
         const auto waitForDemand=[&] {
             const auto amount=action.cargo==FleetCargoKind::Ironium?fleet.minerals.ironium:
                 action.cargo==FleetCargoKind::Boranium?fleet.minerals.boranium:fleet.minerals.germanium;
-            if(targeted && amount>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}
+            if(targeted && !visit && amount>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}
         };
         if(action.cargo==FleetCargoKind::OrbitalColonists) {
             auto* colony=friendly_colony_at_fleet(state,fleet);
@@ -953,6 +956,11 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         auto surface = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
             return (planet.owner == 0 || planet.owner == fleet.owner) && fleet_at_planet(state, fleet, planet);
         });
+        if(visit && (surface==state.planets.end() || surface->owner!=fleet.owner || surface->id!=action.transportDestination)) {
+            const auto aboard=action.cargo==FleetCargoKind::Ironium?fleet.minerals.ironium:
+                action.cargo==FleetCargoKind::Boranium?fleet.minerals.boranium:fleet.minerals.germanium;
+            if(aboard>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}return false;
+        }
         if (surface == state.planets.end()) {waitForDemand();return false;}
         if(targeted && (surface->owner!=fleet.owner || surface->id!=action.transportDestination)) {
             waitForDemand();return false;
@@ -995,7 +1003,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
         }
         if (surface->owner == fleet.owner) {
             record_freight_delivery(freight, *surface, delivered);
-            if(action.kind==FleetArrivalActionKind::UnloadTransportLine && transport_unload_valid(action)
+            if(attributed && transport_unload_valid(action)
                 && surface->id==action.transportDestination && mineral_cargo_mass(delivered)>0) {
                 queue_player_report(state,fleet.owner,PlayerReportKind::TransportLineDelivery,fleet.position,
                     state.turn+1,surface->star,surface->id,fleet.id,0,ProductionKind::ColonyShip,0,
@@ -1442,7 +1450,8 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     // Policy loading or destination top-up holds this waypoint and retries next
     // year. Do not advance the programme or spam arrival briefings while waiting.
     if(fleet.arrivalAction && (fleet.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
-        || fleet.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine))return false;
+        || fleet.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
+        || fleet.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportStop))return false;
     activate_next_waypoint(state, fleet);
     if (!fleet.destination && fleet.waypointQueue.empty() && fleet.repeatOrders) {
         fleet.waypointQueue = fleet.routeTemplate;

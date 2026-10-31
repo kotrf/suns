@@ -142,7 +142,7 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::UnloadTransportLine) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::UnloadTransportStop) return false;
         if (!mineral_load_policy_valid(action) || !transport_unload_valid(action)) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
             || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
@@ -364,6 +364,7 @@ bool projection_needs_arrival_outcome(const FleetArrivalAction& action)
 {
     return action.kind==FleetArrivalActionKind::TransitStargate
         || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum)
+        || action.kind==FleetArrivalActionKind::UnloadTransportStop
         || (action.kind==FleetArrivalActionKind::UnloadTransportLine && (action.destinationTarget || action.transportDestinationFleet));
 }
 

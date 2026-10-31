@@ -250,6 +250,8 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
                   .arg(cargo())
                   .arg(static_cast<qulonglong>(action.reservePopulation))
             : QString("load all available %1").arg(cargo());
+    case FleetArrivalActionKind::UnloadTransportStop:
+        return QString("deliver %1 up to %2 kt (0 = all); carry surplus onward").arg(cargo()).arg(action.destinationTarget);
     case FleetArrivalActionKind::UnloadTransportLine:
         if(action.transportDestinationFleet)return QString("supply installation #%1; keep surplus aboard").arg(action.transportDestinationFleet);
         if(action.destinationTarget)return QString("top up %1 to %2 kt; keep surplus aboard").arg(cargo()).arg(action.destinationTarget);
@@ -702,7 +704,15 @@ void MainWindow::rebuildScene()
         pen.setStyle(Qt::DashLine);pen.setWidthF(1.3);pen.setCosmetic(true);
         auto* edge=scene_->addLine(line.sourcePosition.x,line.sourcePosition.y,line.destinationPosition.x,line.destinationPosition.y,pen);
         edge->setZValue(-25);edge->setData(0,"transportLine");
-        edge->setToolTip(QString("Transport line #%1: %2 • HQ definition, not a travel restriction").arg(line.spec.id).arg(QString::fromStdString(line.spec.name)));
+        const auto tooltip=QString("Transport line #%1: %2 • HQ definition, not a travel restriction").arg(line.spec.id).arg(QString::fromStdString(line.spec.name));
+        edge->setToolTip(tooltip);
+        if(!line.deliveryPositions.empty()) {
+            auto previous=line.destinationPosition;auto positions=line.deliveryPositions;positions.push_back(line.sourcePosition);
+            for(auto position:positions) {
+                auto* segment=scene_->addLine(previous.x,previous.y,position.x,position.y,pen);
+                segment->setZValue(-25);segment->setData(0,"transportLine");segment->setToolTip(tooltip);previous=position;
+            }
+        }
     }
     auto displayFleets=playerView.fleets;
     const auto& contactKnowledge=playerView.players.front().enemyContacts;

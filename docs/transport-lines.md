@@ -5,7 +5,8 @@ The load-policy follow-up merged in #238, main `830bcd1`, **save v103 / orders v
 The computer-player follow-up merged in #239, main `db1204d`, with those formats.
 The statistics follow-up merged in #240, main `0b67ec1`, **save v104 / orders v44**.
 The destination-target follow-up merged in #241, main `7292305`, **save v105 / orders v45**.
-The stationary-installation delivery follow-up starts there: **save v106 / orders v46**.
+The stationary-installation delivery follow-up merged in #242, main `1d17369`: **save v106 / orders v46**.
+The multi-stop follow-up starts there: **save v107 / orders v47**.
 
 ## Playable loop
 
@@ -163,6 +164,44 @@ v105 and older supported migrations default to planetary endpoints. Forged old
 envelopes cannot accept installation payloads. Physical, received, draft and
 in-flight definitions and receipts all preserve the exact receiver.
 
+## Ordered multi-stop supply
+
+A line may add up to 15 recipients after its primary recipient: one loading
+source and 2–16 ordered delivery stops, one selected I/B/G and a shared Warp.
+Each additional recipient is an owned colony or received stationary installation
+with its own whole-kt stock target. All endpoint identities/received coordinates
+must be distinct. Logistics can add, update, remove and reorder the extra stops;
+Save dispatches edits to the roster. The map shows the whole registered cycle.
+
+Multi-stop programmes perform one bounded delivery per visit. At a positive
+target they unload the actual deficit; zero unloads all available selected cargo
+(within an installation's free shared hold) and may leave later stops empty.
+Surplus continues to later recipients and back to the source, without discarding
+cargo or waiting for future demand at a satisfied/full stop. A missing, foreign,
+moved, disabled or wrong receiver retains nonempty cargo and blocks that stop
+until the player changes the programme or normal conditions recover. Empty
+ships can continue. Fleet and source reserve/minimum, capacity, fuel, combat,
+repair, communication delay and attribution keep their ordinary rules.
+
+The existing single-recipient programme keeps its original target-waiting
+behavior. Switching between these forms is an explicit delayed revision.
+The existing AI supplier guard includes every recipient in an authored line,
+including paused or unassigned intent; it must not create duplicate supplies.
+There is no new automatic staffing/retasking, population evacuation, fuel
+cargo, mobile endpoint or abstract reservation. Onboard operation needs neither
+annual HQ instructions nor the HQ catalog. Statistics count actual attributed
+unloads across recipients; deliveries are not round trips. Nominal travel time
+sums each segment, including the return, and stays a calculated lower bound.
+
+Save v107 adds a bounded sparse TLMS extension for extra endpoint definitions
+and frozen received positions; the older LINE/TLST payloads keep their layouts.
+A distinct delivery-visit arrival tag and orders v47 definition tag reject old
+forged envelopes. Physical/received/pending route programmes carry ordinary
+versioned actions; current definitions never rewrite an undelivered old route.
+Genuine v106 and previous supported routes load without extra recipients.
+Forecasts use received state and mark later outcomes conditional; geometric
+projection cannot silently assume a blocked delivery completed.
+
 ## Knowledge, forecasts and interface
 
 Definitions/roster edits are HQ intent and local drafts, not acknowledgements.
@@ -307,7 +346,7 @@ Limits are 128 lines/owner, 256 assigned IDs/line, 64 UTF-8 bytes/name, distinct
 received system coordinates and Warp 1–10. Malformed collection counts,
 revisions, duplicate roster identities and truncated tails are rejected.
 
-Remaining #53: multi-stop lines, richer wait/refuel/service
+Remaining #53: mixed-action/multiple-source routes, richer wait/refuel/service
 policies, mobile-base stops and installation sources, fuel lines, broader automatic staffing/resupply,
 observed cycle duration, deeper time utilization/operational history and
 interruption briefings.
@@ -378,3 +417,14 @@ selection, physical/draft/in-flight programmes, received and pending far-away
 receipts, PBEM and old-envelope rejection, and v105 planetary continuation.
 Older migration and other suites pass. Prepared for review, not merged; no
 manual campaign/balance or other-platform/sanitizer acceptance is claimed.
+
+
+Multi-stop follow-up: full GCC 14.2 / Qt 6.12.0 Debug build passed; offscreen
+Linux CTest **94/94 passed (38.40 s)**, diff check clean. Expanded existing
+transport core/Qt/save suites cover ordered distribution/conservation/autonomy,
+full intermediate holds, hostile/neutral blockers, delayed edits, moving/waiting
+evidence, AI intent guards, actual editor controls and closed map overlay,
+physical/draft/in-flight programmes, host continuation, PBEM and forged old
+envelopes, malformed/truncated TLMS, hidden remote-input export invariance,
+genuine v106 continuation and the existing older migration suites. Prepared
+for review; no manual campaign balance, other-platform or sanitizer acceptance.
