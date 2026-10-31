@@ -1,6 +1,45 @@
 # Project status and development handoff
 
-## Current work — addressed mineral supply to stationary installations (#53)
+## Current work — ordered multi-stop mineral lines (#53)
+
+Starts from merged #242, main `1d17369`, save v106 / orders v46, green main CI.
+Branch `codex/transport-line-multi-stop` adds up to 15 extra recipients after
+the primary recipient, per-stop stock targets, ordered delivery visits with
+physical surplus carried onward, and a return to the ordinary loading source.
+Missing/foreign recipients block delivery; full installations accept what fits
+and let the remainder continue. Two-stop demand-waiting semantics stay unchanged.
+Received coordinates, ordinary delayed commands, bounded sparse TLMS catalog
+extension and versioned delivery visits preserve fair knowledge and PBEM.
+Branch save v107 / orders v47. Full GCC 14.2 / Qt 6.12.0 Debug application/test
+build passed; offscreen Linux CTest **94/94 passed (39.75 s)**; diff check clean.
+Expanded existing core/Qt/save suites cover autonomous distribution and conserved
+surplus, full intermediate installations, foreign/neutral blockers and delayed
+edits, received moving/waiting status, AI respect for extra-recipient intent,
+real add/update/save controls and full map cycle, draft/physical/in-flight
+payloads, save continuation, PBEM/forged old envelopes, malformed/truncated TLMS,
+received-only remote exports and genuine v106 continuation plus older migrations.
+Prepared for review, not merged; #53 stays open. No manual campaign balance,
+cross-platform or sanitizer acceptance is claimed.
+
+
+### Review follow-up — reset stop drafts on Open/load
+
+The [P2 review finding](https://github.com/kotrf/suns/pull/243#discussion_r4431611639)
+was reproduced through real Qt file loading: an unsaved 90 kt stop persisted
+after loading the same line ID with a saved 40 kt target. Loading now invalidates
+the optional draft selection and refreshes even a hidden Logistics dock from
+new intent. New-line ID zero is covered; ordinary non-reset polling preserves
+unsubmitted edits. The actual restored selector ID is used after rebuilding the
+line list, including fallback to New line.
+
+The expanded existing Qt suite failed before the fix, then passed after it.
+It exercises visible/hidden docks, older same-campaign saves, a different
+campaign, Host-to-PlayerTurn loading, renaming and actual roster dispatch after
+load, and new-line draft reset/polling. Full GCC14.2/Qt6.12.0 Debug rebuild and
+94/94 offscreen CTest passed (39.75 s); diff check clean. Formats remain v107/v47.
+This fixes the reported P2; it does not claim a new independent review or merge.
+
+## Merged implementation — stationary-installation supply (#242)
 
 Checked 30 October 2026 (Europe/Moscow): #241 merged as `7292305`, main CI
 94/94; main save v105 / orders v45. Branch `codex/transport-line-outpost-supply`
@@ -19,8 +58,8 @@ continued operation without HQ, missing/foreign/moved/disabled receivers,
 received-only authoring/export, pause after endpoint loss, actual Qt endpoint
 selection, held and in-flight programmes, delivered and pending delayed receipts,
 PBEM roundtrip/forged old envelope rejection and v105 planetary migration.
-Existing v104/v103/v102 and other suites pass. Prepared for review; this branch
-is not merged and #53 is not closed. No manual campaign balance, cross-platform
+Existing v104/v103/v102 and other suites pass. Merged as main `1d17369` on 31 October 2026; main CI is green.
+#53 is not closed. No manual campaign balance, cross-platform
 or sanitizer acceptance is claimed.
 
 

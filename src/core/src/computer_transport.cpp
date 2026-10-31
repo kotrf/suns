@@ -116,7 +116,9 @@ void plan_transport_lines(const PlayerView& view, ComputerTurnPlan& plan, std::s
                 // One intended supplier per destination/mineral, including
                 // paused or missing contacts: these are not failed deliveries.
                 if (std::any_of(player.transportLines.begin(), player.transportLines.end(), [&](const auto& l) {
-                    return l.spec.destination == destination->id && l.spec.cargo == cargo;
+                    return l.spec.cargo == cargo && (l.spec.destination == destination->id
+                        || std::any_of(l.spec.deliveries.begin(), l.spec.deliveries.end(),
+                            [&](const auto& stop) { return stop.planet == destination->id; }));
                 })) continue;
                 const Score score{stock(*destination, cargo), distance_between(fleet.position, from->position)
                     + 2 * distance_between(from->position, to->position), source->id, destination->id, cargo, fleet.id};

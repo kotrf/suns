@@ -414,4 +414,64 @@ void independent_yard_mineral_supply() {
     assert(base(s).minerals.ironium>before);
     assert(std::any_of(s.players[0].transportReceipts.begin(),s.players[0].transportReceipts.end(),[](const auto& r){return r.destinationFleet==1;}));
 }
-int main(){installation_capacity_receipts_and_autonomy();installation_identity_blockers_and_knowledge();independent_yard_mineral_supply();destination_target_demand_cycle();competing_targets_and_cancel();delayed_target_edit_and_geometry();attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}
+void multi_stop_distribution_and_autonomy() {
+    auto s=multi_transport_world();assert(set_transport_line(s,1,{multi_line()}) && assign_transport_line(s,1,{1,1}));
+    auto noHQ=s;noHQ.players[0].transportLines.clear();const auto total=ironium(s);
+    for(int i=0;i<20;++i) {
+        tick(s);tick(noHQ);assert(std::abs(ironium(s)-total)<1e-6);
+        assert(same_position(s.fleets[0].position,noHQ.fleets[0].position) && s.fleets[0].fuel==noHQ.fleets[0].fuel);
+        assert(s.fleets[0].minerals.ironium==noHQ.fleets[0].minerals.ironium);
+    }
+    assert(s.planets[1].minerals.ironium==50 && s.planets[2].minerals.ironium==40);
+    assert(s.fleets[0].routeTemplate.size()==3 && s.fleets[0].routeTemplate[1].arrivalAction.kind==FleetArrivalActionKind::UnloadTransportStop);
+    assert(s.players[0].transportReceipts.size()==2);
+    assert(s.players[0].transportReceipts[0].planet==2 && s.players[0].transportReceipts[1].planet==3);
+    assert(s.fleets[0].minerals.ironium==100); // Retained physical surplus cycles back to the source.
+    auto invalid=multi_line();invalid.deliveries={{2,0,10}};assert(!transport_line_spec_valid(invalid));
+    invalid=multi_line();invalid.deliveries.resize(16,{3,0,10});auto rejected=multi_transport_world();assert(!set_transport_line(rejected,1,{invalid}));
+}
+void multi_stop_installation_capacity_and_blockers() {
+    auto s=installation_transport_world();auto d=installation_line();d.destinationTarget=100;d.deliveries={{1,0,150}};
+    // A full first receiver must not prevent a later colony receiving cargo.
+    s.fleets[1].minerals.boranium=fleet_cargo_capacity(s,s.fleets[1]);acknowledge(s);
+    assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));
+    for(int i=0;i<10;++i)tick(s);
+    assert(s.fleets[1].minerals.ironium==0 && s.planets[0].minerals.ironium>=150);
+    for(int blocked=0;blocked<2;++blocked) {
+        auto world=multi_transport_world();assert(set_transport_line(world,1,{multi_line()}) && assign_transport_line(world,1,{1,1}));
+        if(blocked==0)world.planets[1].owner=2;else world.planets[1].owner=0;
+        for(int i=0;i<8;++i)tick(world);
+        assert(world.planets[1].minerals.ironium==0 && world.planets[2].minerals.ironium==10);
+        assert(world.fleets[0].arrivalAction && world.fleets[0].arrivalAction->kind==FleetArrivalActionKind::UnloadTransportStop);
+        assert(world.fleets[0].minerals.ironium==180);
+        auto stop=multi_line();++stop.revision;stop.active=false;assert(set_transport_line(world,1,{stop}));
+        tick(world);assert(!world.fleets[0].repeatOrders && world.fleets[0].minerals.ironium==180);
+    }
+}
+void multi_stop_delayed_edit_and_received_status() {
+    auto s=multi_transport_world();s.fleets[0].position={5100,0};acknowledge(s);
+    auto d=multi_line();assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));
+    const auto due=s.fleets[0].pendingCommands.back().deliveryTurn;assert(due>s.turn+20);
+    while(s.turn<due){assert(!s.fleets[0].repeatOrders);tick(s);}
+    assert(s.fleets[0].routeTemplate.size()==3 && s.fleets[0].routeTemplate[2].arrivalAction.destinationTarget==40);
+    ++d.revision;d.deliveries[0].target=70;assert(set_transport_line(s,1,{d}));
+    const auto editDue=s.fleets[0].pendingCommands.back().deliveryTurn;
+    while(s.turn<editDue){assert(s.fleets[0].routeTemplate[2].arrivalAction.destinationTarget==40);tick(s);}
+    assert(s.fleets[0].routeTemplate[2].arrivalAction.destinationTarget==70);
+    auto moving=multi_transport_world();assert(set_transport_line(moving,1,{multi_line()}) && assign_transport_line(moving,1,{1,1}));tick(moving);acknowledge(moving);
+    const auto view=make_player_view(moving,1);const auto& line=view.state.players[0].transportLines[0];
+    assert(transport_assignment_status(view,line,line.assignments[0]).find("blocked")==std::string::npos);
+}
+void computer_respects_extra_recipient_intent() {
+    auto s=multi_transport_world();s.players[0].controller=PlayerController::Computer;
+    s.planets[0].minerals.ironium=1000;
+    s.players[0].surveyKnowledge.clear();s.players[0].pendingSurveyReports.clear();
+    for(const auto& p:s.planets)queue_survey_report(s,1,p.star,0,{0,0},s.turn,SurveyLevel::GeologicalSurvey);
+    (void)deliver_due_survey_reports(s);acknowledge(s);
+    const auto hasLine=[](const auto& plan){return std::any_of(plan.orders.orders.begin(),plan.orders.orders.end(),[](const auto& o){return std::holds_alternative<SetTransportLineOrder>(o);});};
+    assert(hasLine(plan_computer_turn(make_player_view(s,1))));
+    auto line=multi_line();line.destination=3;line.deliveries={{2,0,40}};
+    assert(set_transport_line(s,1,{line}));
+    assert(!hasLine(plan_computer_turn(make_player_view(s,1))));
+}
+int main(){computer_respects_extra_recipient_intent();multi_stop_distribution_and_autonomy();multi_stop_installation_capacity_and_blockers();multi_stop_delayed_edit_and_received_status();installation_capacity_receipts_and_autonomy();installation_identity_blockers_and_knowledge();independent_yard_mineral_supply();destination_target_demand_cycle();competing_targets_and_cancel();delayed_target_edit_and_geometry();attributed_delivery_and_reorganization();delayed_receipt_and_revision();bounded_receipts_and_received_status();computer_supplies_and_conserves();computer_delayed_intent_and_reservation();computer_received_only_and_guards();reserve_and_local_wait();hold_limit_capture_and_cancel();reserve_only_and_competition();autonomous_and_conserved();delayed_update_stop_and_manual();draft_order_precedence();pause_resume_same_dispatch();received_validation();std::cout<<"Transport line core tests passed\n";}

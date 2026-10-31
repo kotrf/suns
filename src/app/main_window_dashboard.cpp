@@ -104,6 +104,8 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::None: return "none";
     case FleetArrivalActionKind::LoadMinerals: return QString("load %1; source reserve %2 kt; depart >= %3 kt").arg(cargo()).arg(action.mineralReserve).arg(action.mineralMinimum);
     case FleetArrivalActionKind::LoadAllAvailable: return QString("load all %1").arg(cargo());
+    case FleetArrivalActionKind::UnloadTransportStop:
+        return QString("deliver %1 up to %2 kt (0 = all); carry surplus onward").arg(cargo()).arg(action.destinationTarget);
     case FleetArrivalActionKind::UnloadTransportLine:
         if(action.transportDestinationFleet)return QString("supply installation #%1; keep surplus aboard").arg(action.transportDestinationFleet);
         if(action.destinationTarget)return QString("top up %1 to %2 kt; keep surplus aboard").arg(cargo()).arg(action.destinationTarget);

@@ -100,3 +100,57 @@ void readTransportStatistics(QDataStream& stream,GameState& state) {
     }
     if(in.status()!=QDataStream::Ok || !in.atEnd())markCorrupt(stream);
 }
+
+// Save v107: sparse, bounded extension; existing LINE and two-stop payloads
+// remain unchanged, including genuine v106 planetary and installation routes.
+void writeDeliveryStops(QDataStream& out,const std::vector<TransportDeliveryStop>& stops) {
+    if(stops.empty() || stops.size()>15){out.setStatus(QDataStream::WriteFailed);return;}
+    out<<quint32(stops.size());
+    for(const auto& stop:stops)out<<quint32(stop.planet)<<quint32(stop.fleet)<<quint32(stop.target);
+}
+void readDeliveryStops(QDataStream& in,std::vector<TransportDeliveryStop>& stops) {
+    quint32 count{};if(!readCount(in,count) || !count || count>15){markCorrupt(in);return;}
+    for(quint32 i=0;i<count;++i){TransportDeliveryStop stop;in>>stop.planet>>stop.fleet>>stop.target;stops.push_back(stop);}
+}
+void writeTransportVisits(QDataStream& stream,const GameState& state) {
+    QByteArray bytes;QDataStream out(&bytes,QIODevice::WriteOnly);out.setVersion(stream.version());
+    out<<quint32(state.players.size());
+    for(const auto& p:state.players) {
+        quint32 count=0;for(const auto& line:p.transportLines)count+=!line.spec.deliveries.empty();
+        out<<quint32(p.id)<<count;
+        for(const auto& line:p.transportLines)if(!line.spec.deliveries.empty()) {
+            if(!transport_line_spec_valid(line.spec) || line.deliveryPositions.size()!=line.spec.deliveries.size()){
+                stream.setStatus(QDataStream::WriteFailed);return;}
+            out<<quint32(line.spec.id);writeDeliveryStops(out,line.spec.deliveries);
+            for(auto position:line.deliveryPositions)writePosition(out,position);
+        }
+    }
+    if(out.status()!=QDataStream::Ok || bytes.size()>16*1024*1024){stream.setStatus(QDataStream::WriteFailed);return;}
+    stream<<quint32(0x544c4d53)<<quint32(bytes.size());stream.writeRawData(bytes.data(),bytes.size());
+}
+void readTransportVisits(QDataStream& stream,GameState& state) {
+    quint32 magic{},size{},players{};stream>>magic>>size;
+    if(magic!=0x544c4d53 || size>16*1024*1024){markCorrupt(stream);return;}
+    QByteArray bytes(size,'\0');if(stream.readRawData(bytes.data(),size)!=int(size)){markCorrupt(stream);return;}
+    QDataStream in(bytes);in.setVersion(stream.version());
+    if(!readCount(in,players) || players!=state.players.size()){markCorrupt(stream);return;}
+    for(auto& p:state.players) {
+        quint32 id{},count{};in>>id;
+        if(id!=p.id || !readCount(in,count) || count>p.transportLines.size()){markCorrupt(stream);return;}
+        std::set<TransportLineId> ids;
+        for(quint32 i=0;i<count;++i) {
+            TransportLineId lineId{};in>>lineId;
+            auto at=std::find_if(p.transportLines.begin(),p.transportLines.end(),[&](const auto& l){return l.spec.id==lineId;});
+            if(at==p.transportLines.end() || !ids.insert(lineId).second){markCorrupt(stream);return;}
+            readDeliveryStops(in,at->spec.deliveries);
+            if(!transport_line_spec_valid(at->spec)){markCorrupt(stream);return;}
+            std::vector<Position> previous{at->sourcePosition,at->destinationPosition};
+            for(std::size_t j=0;j<at->spec.deliveries.size();++j) {
+                Position position;readPosition(in,position);
+                if(std::any_of(previous.begin(),previous.end(),[&](auto p){return same_position(p,position);})){markCorrupt(stream);return;}
+                previous.push_back(position);at->deliveryPositions.push_back(position);
+            }
+        }
+    }
+    if(in.status()!=QDataStream::Ok || !in.atEnd())markCorrupt(stream);
+}

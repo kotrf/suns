@@ -17,6 +17,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 #include <limits>
+#include <memory>
 
 namespace suns {
 void MainWindow::installTransportLines() {
@@ -38,6 +39,47 @@ void MainWindow::installTransportLines() {
     auto* minimum=new QSpinBox(body);minimum->setObjectName("transportLineMinimum");minimum->setRange(0,1000000000);form->addRow("Depart with at least, kt (0 = no wait)",minimum);
     auto* target=new QSpinBox(body);target->setObjectName("transportLineTarget");target->setRange(0,1000000000);form->addRow("Destination stock target, kt (0 = unload all)",target);
     target->setToolTip("Top up the owned destination to this stock on arrival. Keep surplus aboard and retry annually as stocks are used; return after the selected cargo is empty. Target changes and Stop use normal command delay.");
+    auto* extraDestination=combo("transportLineExtraDestination","Next recipient");
+    auto* extraTarget=new QSpinBox(body);extraTarget->setObjectName("transportLineExtraTarget");extraTarget->setRange(0,1000000000);form->addRow("Next recipient stock target, kt",extraTarget);
+    auto* stops=new QListWidget(body);stops->setObjectName("transportLineStops");layout->addWidget(stops);
+    auto* stopHint=new QLabel("With extra recipients: visit in this order, deliver up to each target, carry surplus onward and return to source. 0 unloads all and can leave later stops empty. A missing/foreign recipient blocks delivery. Save the line to dispatch edits.",body);stopHint->setWordWrap(true);layout->addWidget(stopHint);
+    auto* addStop=button("transportLineAddStop","Add next recipient");
+    auto* updateStop=button("transportLineUpdateStop","Update selected extra recipient");
+    auto* removeStop=button("transportLineRemoveStop","Remove selected extra recipient");
+    auto* upStop=button("transportLineStopUp","Move selected recipient up");
+    auto* downStop=button("transportLineStopDown","Move selected recipient down");
+    // An unset selection also invalidates a draft for New line (ID zero).
+    struct StopDraft {std::optional<TransportLineId> selected;std::vector<TransportDeliveryStop> values;};
+    auto draft=std::make_shared<StopDraft>();
+    const auto paintStops=[=] {
+        const auto selected=stops->currentRow();stops->clear();
+        for(const auto& stop:draft->values) {
+            const auto key=stop.fleet?QVariant::fromValue(-qlonglong(stop.fleet)):QVariant(stop.planet);
+            const auto i=extraDestination->findData(key);
+            const auto label=i>=0?extraDestination->itemText(i):QString("%1 #%2 (no received contact)").arg(stop.fleet?"Installation":"Planet").arg(stop.fleet?stop.fleet:stop.planet);
+            stops->addItem(QString("%1. %2 — target %3 kt (0 = all)").arg(stops->count()+2).arg(label).arg(stop.target));
+        }
+        if(selected>=0 && stops->count())stops->setCurrentRow(std::min(selected,stops->count()-1));
+    };
+    connect(stops,&QListWidget::currentRowChanged,this,[=](int i){
+        if(i<0 || std::size_t(i)>=draft->values.size())return;
+        const auto& stop=draft->values[i];extraTarget->setValue(stop.target);
+        const auto key=stop.fleet?QVariant::fromValue(-qlonglong(stop.fleet)):QVariant(stop.planet);
+        const auto at=extraDestination->findData(key);if(at>=0)extraDestination->setCurrentIndex(at);
+    });
+    connect(updateStop,&QPushButton::clicked,this,[=]{
+        const auto i=stops->currentRow();const auto key=extraDestination->currentData().toLongLong();
+        if(i<0 || std::size_t(i)>=draft->values.size() || !key)return;
+        draft->values[i]={key>0?PlanetId(key):0,key<0?FleetId(-key):0,std::uint32_t(extraTarget->value())};paintStops();
+    });
+    connect(addStop,&QPushButton::clicked,this,[=]{
+        if(draft->values.size()>=15 || !extraDestination->count())return;
+        const auto key=extraDestination->currentData().toLongLong();if(!key)return;
+        draft->values.push_back({key>0?PlanetId(key):0,key<0?FleetId(-key):0,std::uint32_t(extraTarget->value())});paintStops();
+    });
+    connect(removeStop,&QPushButton::clicked,this,[=]{const auto i=stops->currentRow();if(i>=0 && std::size_t(i)<draft->values.size()){draft->values.erase(draft->values.begin()+i);paintStops();}});
+    const auto reorder=[=](int delta){const auto i=stops->currentRow();const auto j=i+delta;if(i>=0 && j>=0 && std::size_t(j)<draft->values.size()){std::swap(draft->values[i],draft->values[j]);paintStops();stops->setCurrentRow(j);}};
+    connect(upStop,&QPushButton::clicked,this,[=]{reorder(-1);});connect(downStop,&QPushButton::clicked,this,[=]{reorder(1);});
     auto* save=button("transportLineSave","Create / update line and dispatch to its roster");
     auto* pause=button("transportLinePause","Pause / resume line (delayed fleet commands)");
     auto* remove=button("transportLineDelete","Delete line and send Stop to its roster");
@@ -78,6 +120,10 @@ void MainWindow::installTransportLines() {
                 destination->addItem(QString("%1 #%2 — %3").arg(QString::fromStdString(outpost_kind_name(f.outpost))).arg(f.id)
                     .arg(QString::fromStdString(f.name)),QVariant::fromValue(-qlonglong(f.id)));
         });
+        fill(extraDestination,[&]{for(int i=0;i<destination->count();++i)extraDestination->addItem(destination->itemText(i),destination->itemData(i));});
+        const auto selectedId=lines->currentData().toUInt();
+        if(draft->selected!=selectedId){draft->selected=selectedId;draft->values=line?line->spec.deliveries:std::vector<TransportDeliveryStop>{};}
+        paintStops();
         fill(fleets,[&]{for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost==OutpostKind::None && fleet_cargo_capacity(view.state,f)>0)fleets->addItem(QString("#%1 %2").arg(f.id).arg(QString::fromStdString(f.name)),f.id);
             if(line)for(const auto& a:line->assignments)if(fleets->findData(a.fleet)<0)fleets->addItem(QString("Roster #%1 — no received contact").arg(a.fleet),a.fleet);
         });
@@ -107,7 +153,8 @@ void MainWindow::installTransportLines() {
             .arg(m.delivered.ironium).arg(m.delivered.boranium).arg(m.delivered.germanium)
             .arg(years?QString::number(mineral_cargo_mass(m.delivered)/years,'f',1):"unavailable")
             .arg(line->spec.warp).arg(m.nominalRoundTripYears);
-        if(line->spec.destinationTarget)text+=QString("HQ destination target: %1 kt. Surplus waits aboard; future consumption is not promised. Target limits this unloader, not all colony supplies.\n").arg(line->spec.destinationTarget);
+        if(!line->spec.deliveries.empty())text+=QString("Multi-stop service: %1 recipients, one bounded delivery visit each; surplus travels onward.\n").arg(qulonglong(line->spec.deliveries.size()+1));
+        else if(line->spec.destinationTarget)text+=QString("HQ destination target: %1 kt. Surplus waits aboard; future consumption is not promised. Target limits this unloader, not all colony supplies.\n").arg(line->spec.destinationTarget);
         if(m.contacts)text+=QString("Received programme snapshots: %1 contacts; %2 en-route programmes, %3 loading/waiting; shared hold %4/%5 kt (%6%). "
             "Telemetry years %7–%8 (ages %9–%10). This is reported hold occupancy, not time utilization.\n")
             .arg(qulonglong(m.contacts)).arg(qulonglong(m.moving)).arg(qulonglong(m.waiting)).arg(m.cargoUsed).arg(m.cargoCapacity)
@@ -124,6 +171,18 @@ void MainWindow::installTransportLines() {
                 .arg(endpoint==line->spec.source?"Source":"Destination").arg(qulonglong(k->observedTurn)).arg(qulonglong(view.state.turn-k->observedTurn))
                 .arg(planet->owner==view.player?QString("received I/B/G %1 / %2 / %3 kt").arg(planet->minerals.ironium).arg(planet->minerals.boranium).arg(planet->minerals.germanium)
                     :"no owned surface-stock telemetry; cache/ownership is checked physically on arrival");
+        }
+        for(const auto& stop:line->spec.deliveries) {
+            if(stop.fleet) {
+                const auto* f=find_service_fleet(view.state,stop.fleet);
+                if(f)text+=QString("Extra installation #%1 evidence: year %2, I/B/G %3 / %4 / %5 kt; hold %6/%7 kt.\n")
+                    .arg(f->id).arg(qulonglong(f->telemetry.observedTurn)).arg(f->minerals.ironium).arg(f->minerals.boranium).arg(f->minerals.germanium)
+                    .arg(fleet_cargo_used(view.state,*f)).arg(fleet_cargo_capacity(view.state,*f));
+            } else if(const auto* planet=find_planet(view.state,stop.planet)) {
+                const auto k=std::find_if(evidence.surveyKnowledge.begin(),evidence.surveyKnowledge.end(),[&](const auto& k){return k.star==planet->star;});
+                if(k!=evidence.surveyKnowledge.end())text+=QString("Extra planet #%1 evidence: year %2, age %3; ownership/stock checked on arrival.\n")
+                    .arg(planet->id).arg(qulonglong(k->observedTurn)).arg(qulonglong(view.state.turn-k->observedTurn));
+            }
         }
         if(line->spec.destinationFleet) {
             const auto* f=find_service_fleet(view.state,line->spec.destinationFleet);
@@ -162,7 +221,7 @@ void MainWindow::installTransportLines() {
         d.destination=endpoint>0?PlanetId(endpoint):0;d.destinationFleet=endpoint<0?FleetId(-endpoint):0;
         d.warp=warp->value();d.cargo=TransportCargo(cargo->currentIndex());
         d.sourceReserve=reserve->value();d.departureMinimum=minimum->value();
-        d.destinationTarget=target->value();
+        d.destinationTarget=target->value();d.deliveries=draft->values;
         const auto error=transport_line_error(received(),d);if(!error.empty()){status->setText(QString::fromStdString(error));return;}
         send(SetTransportLineOrder{d},"Define transport line "+QString::fromStdString(d.name));lines->setCurrentIndex(lines->findData(d.id));
     });
@@ -171,7 +230,11 @@ void MainWindow::installTransportLines() {
     connect(assign,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt()},"Assign transport to line");});
     connect(release,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt(),true},"Release transport and send Stop");});
     connect(overlay,&QCheckBox::toggled,this,[this](bool on){setProperty("hideTransportLines",!on);rebuildScene();});
-    connect(this,&MainWindow::routeProgramContextChanged,this,[=]{if(dock->isVisible())refresh();});
+    connect(this,&MainWindow::routeProgramContextChanged,this,[=](bool resetDrafts){
+        if(resetDrafts)draft->selected.reset();
+        // A loaded campaign/PlayerTurn must replace even a hidden dock's draft.
+        if(resetDrafts || dock->isVisible())refresh();
+    });
     connect(dock,&QDockWidget::visibilityChanged,this,[=](bool visible){if(visible)refresh();});refresh();
 }
 }

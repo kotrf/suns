@@ -48,3 +48,16 @@ inline GameState installation_transport_world() {
 inline TransportLineSpec installation_line() {
     auto d=line_spec();d.destination=0;d.destinationFleet=3;d.name="Depot mineral supply";return d;
 }
+inline GameState multi_transport_world() {
+    auto s=computer_transport_world();s.players[0].controller=PlayerController::Human;s.fleets.resize(1);
+    auto star=s.stars[1];star.id=3;star.position={80,0};star.name="Third stop";s.stars.push_back(star);
+    auto planet=s.planets[0];planet.id=3;planet.star=3;planet.homeworld=false;planet.name="Third recipient";s.planets.push_back(planet);
+    for(auto& p:s.planets){p.mines=0;p.industry=0;p.observedConcentration=MineralCargo{};p.productionQueue.clear();p.minerals={0,100,100};}
+    s.planets[0].minerals.ironium=180;s.planets[2].minerals.ironium=10;s.fleets[0].position={0,0};
+    s.players[0].surveyKnowledge.clear();s.players[0].pendingSurveyReports.clear();
+    for(const auto& p:s.planets)queue_survey_report(s,1,p.star,0,{0,0},s.turn,SurveyLevel::GeologicalSurvey);
+    (void)deliver_due_survey_reports(s);acknowledge(s);return s;
+}
+inline TransportLineSpec multi_line() {
+    auto d=line_spec();d.source=1;d.destination=2;d.destinationTarget=50;d.deliveries={{3,0,40}};d.name="Three-stop supply";return d;
+}

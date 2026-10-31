@@ -1298,6 +1298,12 @@ struct ComputerState {
 
 using TransportLineId = std::uint32_t;
 enum class TransportCargo : std::uint8_t { Ironium, Boranium, Germanium };
+struct TransportDeliveryStop {
+    PlanetId planet{};
+    FleetId fleet{};
+    std::uint32_t target{};
+    bool operator==(const TransportDeliveryStop&) const = default;
+};
 struct TransportLineSpec {
     TransportLineId id{};
     std::uint64_t revision{1};
@@ -1309,6 +1315,7 @@ struct TransportLineSpec {
     std::uint32_t sourceReserve{}, departureMinimum{}; // Whole kt of the selected mineral.
     std::uint32_t destinationTarget{}; // Whole kt; zero unloads all, otherwise hold surplus for local demand.
     FleetId destinationFleet{}; // Alternative to destination planet: exact stationary installation.
+    std::vector<TransportDeliveryStop> deliveries; // Up to 15 recipients after the primary stop.
 };
 struct TransportAssignment {
     FleetId fleet{};
@@ -1318,6 +1325,7 @@ struct TransportLine {
     TransportLineSpec spec;
     Position sourcePosition, destinationPosition; // Frozen received coordinates at authoring.
     std::vector<TransportAssignment> assignments; // HQ intent, not onboard acknowledgement.
+    std::vector<Position> deliveryPositions; // Received coordinates frozen with the definition.
 };
 struct TransportLineReceipt {
     TransportLineId line{};
@@ -1429,6 +1437,7 @@ enum class FleetArrivalActionKind {
     TransitStargate,
     LoadMinerals, // Source reserve plus optional onboard departure minimum.
     UnloadTransportLine, // Ordinary mineral unload with frozen receipt attribution.
+    UnloadTransportStop, // Multi-stop visit: one bounded delivery, retain surplus for later stops.
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1492,7 +1501,7 @@ struct FleetArrivalAction {
 
 [[nodiscard]] constexpr bool transport_unload_valid(const FleetArrivalAction& a)
 {
-    if(a.kind!=FleetArrivalActionKind::UnloadTransportLine)
+    if(a.kind!=FleetArrivalActionKind::UnloadTransportLine && a.kind!=FleetArrivalActionKind::UnloadTransportStop)
         return !a.transportLine && !a.transportRevision && !a.transportDestination && !a.destinationTarget && !a.transportDestinationFleet;
     return a.transportLine && a.transportRevision && (bool(a.transportDestination)!=bool(a.transportDestinationFleet)) && a.destinationTarget<=1000000000
         && (a.cargo==FleetCargoKind::Ironium || a.cargo==FleetCargoKind::Boranium || a.cargo==FleetCargoKind::Germanium);
