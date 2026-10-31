@@ -324,4 +324,59 @@ void controls() {
     w.findChild<QPushButton*>("transportLineDelete")->click();
     assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).remove);
 }
-int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());destination_target_persistence_and_ui(dir.filePath("target.suns"));destination_target_remote_orders(dir.filePath("target-remote.suns"));destination_target_v104(dir.filePath("target-v104.suns"));received_statistics_roundtrip(dir.filePath("statistics.suns"));statistics_programme_orders_and_v103(dir.filePath("statistics-orders.suns"));persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}
+void installation_controls_and_persistence(const QString& path) {
+    auto s=installation_transport_world();MainWindow w;MainWindowTestAccess::set(w,s);w.installTransportLines();
+    auto* destination=w.findChild<QComboBox*>("transportLineDestination");
+    const auto at=destination->findData(QVariant::fromValue(-qlonglong(3)));assert(at>=0);destination->setCurrentIndex(at);
+    auto* source=w.findChild<QComboBox*>("transportLineSource");source->setCurrentIndex(source->findData(2u));
+    w.findChild<QLineEdit*>("transportLineName")->setText("Depot supply");
+    w.findChild<QPushButton*>("transportLineSave")->click();
+    const auto& pending=MainWindowTestAccess::pending(w);assert(pending.orders.size()==1);
+    const auto& spec=std::get<SetTransportLineOrder>(pending.orders[0]).value;assert(!spec.destination && spec.destinationFleet==3);
+    assert(set_transport_line(s,1,{spec}) && assign_transport_line(s,1,{1,1}));
+    // Exercise held cargo, received receipts and the actual versioned action.
+    for(int i=0;i<8;++i)tick(s);assert(!s.players[0].transportReceipts.empty());
+    auto save=host(s);save.pendingOrders.orders=pending.orders;save.pendingDescriptions={"Depot supply"};
+    QString error;SaveGameData loaded;assert(write_save_game_file(path,save,error));if(!read_save_game_file(path,loaded,error)){std::cerr<<error.toStdString()<<"\n";std::abort();}
+    assert(loaded.state.players[0].transportLines[0].spec.destinationFleet==3);
+    assert(loaded.state.players[0].transportReceipts[0].destinationFleet==3);
+    assert(loaded.state.fleets[0].routeTemplate[1].arrivalAction.transportDestinationFleet==3);
+    assert(std::get<SetTransportLineOrder>(loaded.pendingOrders.orders[0]).value.destinationFleet==3);
+    auto remote=installation_transport_world();remote.fleets[0].position={5100,0};remote.fleets[1].position={5100,20};acknowledge(remote);
+    assert(set_transport_line(remote,1,{installation_line()}) && assign_transport_line(remote,1,{1,1}));
+    assert(!remote.fleets[0].pendingCommands.empty());
+    assert(write_save_game_file(path,host(remote),error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets[0].pendingCommands.back().program.queuedWaypoints[0].arrivalAction.transportDestinationFleet==3);
+    const auto exported=make_player_turn(host(remote),1);assert(write_save_game_file(path+".before",exported,error));
+    remote.fleets[1].minerals.ironium=999;remote.fleets[1].damagePercent=100;
+    assert(write_save_game_file(path+".after",make_player_turn(host(remote),1),error));
+    assert(raw_file(path+".before")==raw_file(path+".after"));
+    TurnOrderFileData packet;packet.campaignId=55;packet.turn=s.turn;packet.turnToken=77;
+    const auto program=transport_line_program(s.players[0].transportLines[0]);
+    packet.orders={1,{SetTransportLineOrder{spec},MoveFleetOrder{1,program.destination,program.warp,program.arrivalAction,program.queuedWaypoints,true}}};
+    packet.descriptions={"Define","Dispatch"};assert(write_turn_order_file(path+".orders",packet,error));TurnOrderFileData read;
+    assert(read_turn_order_file(path+".orders",read,error));
+    assert(std::get<MoveFleetOrder>(read.orders.orders[1]).queuedWaypoints[0].arrivalAction.transportDestinationFleet==3);
+    auto old=raw_file(path+".orders");{QDataStream out(&old,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{45};}
+    {QFile f(path+".old");assert(f.open(QIODevice::WriteOnly));f.write(old);}assert(!read_turn_order_file(path+".old",read,error));
+    // An actual far-away unload queues a receipt before HQ learns the delivery.
+    auto receiptWorld=installation_transport_world();receiptWorld.fleets[1].position={5100,20};acknowledge(receiptWorld);
+    assert(set_transport_line(receiptWorld,1,{installation_line()}));
+    const auto farProgram=transport_line_program(receiptWorld.players[0].transportLines[0]);
+    auto& donor=receiptWorld.fleets[0];donor.position=receiptWorld.fleets[1].position;
+    donor.destination=donor.position;donor.arrivalAction=farProgram.queuedWaypoints[0].arrivalAction;donor.minerals.ironium=10;
+    tick(receiptWorld);
+    assert(receiptWorld.players[0].transportReceipts.empty());
+    const auto pendingReceipt=std::find_if(receiptWorld.players[0].pendingPlayerReports.begin(),receiptWorld.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::TransportLineDelivery;});
+    assert(pendingReceipt!=receiptWorld.players[0].pendingPlayerReports.end() && pendingReceipt->transportDestinationFleet==3);
+    assert(write_save_game_file(path,host(receiptWorld),error) && read_save_game_file(path,loaded,error));
+    const auto restoredReceipt=std::find_if(loaded.state.players[0].pendingPlayerReports.begin(),loaded.state.players[0].pendingPlayerReports.end(),[](const auto& r){return r.kind==PlayerReportKind::TransportLineDelivery;});
+    assert(restoredReceipt!=loaded.state.players[0].pendingPlayerReports.end() && restoredReceipt->transportDestinationFleet==3);
+    // Planet-only v105 layouts are unchanged; genuine old catalog/actions default to no installation.
+    auto planet=transport_world();assert(set_transport_line(planet,1,{line_spec()}) && assign_transport_line(planet,1,{1,1}));
+    assert(write_save_game_file(path,host(planet),error));old=raw_file(path);
+    {QDataStream out(&old,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32{105};}
+    {QFile f(path);assert(f.open(QIODevice::WriteOnly));f.write(old);}assert(read_save_game_file(path,loaded,error));
+    assert(!loaded.state.players[0].transportLines[0].spec.destinationFleet && !loaded.state.fleets[0].routeTemplate[1].arrivalAction.transportDestinationFleet);
+}
+int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());installation_controls_and_persistence(dir.filePath("installation.suns"));destination_target_persistence_and_ui(dir.filePath("target.suns"));destination_target_remote_orders(dir.filePath("target-remote.suns"));destination_target_v104(dir.filePath("target-v104.suns"));received_statistics_roundtrip(dir.filePath("statistics.suns"));statistics_programme_orders_and_v103(dir.filePath("statistics-orders.suns"));persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}

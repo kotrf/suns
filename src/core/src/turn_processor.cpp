@@ -886,6 +886,37 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     }
     case FleetArrivalActionKind::UnloadTransportLine:
     case FleetArrivalActionKind::UnloadAll: {
+        // The exact installation identity is frozen aboard. Never fall back to
+        // another depot or the surface if the intended receiver is unavailable.
+        if(action.kind==FleetArrivalActionKind::UnloadTransportLine && action.transportDestinationFleet) {
+            auto receiver=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const Fleet& f){
+                return f.id==action.transportDestinationFleet && f.id!=fleet.id && f.owner==fleet.owner
+                    && f.outpost!=OutpostKind::None && f.damagePercent<100 && same_position(f.position,fleet.position);
+            });
+            double* aboard=action.cargo==FleetCargoKind::Ironium?&fleet.minerals.ironium:
+                action.cargo==FleetCargoKind::Boranium?&fleet.minerals.boranium:&fleet.minerals.germanium;
+            if(receiver!=state.fleets.end()) {
+                auto& stock=action.cargo==FleetCargoKind::Ironium?receiver->minerals.ironium:
+                    action.cargo==FleetCargoKind::Boranium?receiver->minerals.boranium:receiver->minerals.germanium;
+                const auto free=std::max(0.0,fleet_cargo_capacity(state,*receiver)-fleet_cargo_used(state,*receiver));
+                const auto amount=std::min({*aboard,free,action.destinationTarget?
+                    std::max(0.0,double(action.destinationTarget)-stock):*aboard});
+                if(amount>0) {
+                    *aboard-=amount;stock+=amount;
+                    MineralCargo delivered;
+                    (action.cargo==FleetCargoKind::Ironium?delivered.ironium:
+                        action.cargo==FleetCargoKind::Boranium?delivered.boranium:delivered.germanium)=amount;
+                    queue_player_report(state,fleet.owner,PlayerReportKind::TransportLineDelivery,fleet.position,
+                        state.turn+1,0,0,fleet.id,0,ProductionKind::ColonyShip,0,ResearchField::Electronics,0,delivered);
+                    for(auto& player:state.players)if(player.id==fleet.owner) {
+                        auto& report=player.pendingPlayerReports.back();report.transportLine=action.transportLine;
+                        report.transportRevision=action.transportRevision;report.transportDestinationFleet=receiver->id;
+                    }
+                }
+            }
+            if(*aboard>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}
+            return false;
+        }
         const bool targeted=action.kind==FleetArrivalActionKind::UnloadTransportLine && action.destinationTarget;
         const auto waitForDemand=[&] {
             const auto amount=action.cargo==FleetCargoKind::Ironium?fleet.minerals.ironium:

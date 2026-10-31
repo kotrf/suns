@@ -20,21 +20,25 @@ void dispatch(GameState& s, PlayerId player, const TransportLine& line, FleetId 
 }
 }
 bool transport_line_spec_valid(const TransportLineSpec& d) {
-    return d.id && d.revision && !d.name.empty() && d.name.size()<=64 && d.source && d.destination
+    return d.id && d.revision && !d.name.empty() && d.name.size()<=64 && d.source && (bool(d.destination)!=bool(d.destinationFleet))
         && d.sourceReserve<=1000000000 && d.departureMinimum<=1000000000 && d.destinationTarget<=1000000000
-        && d.source!=d.destination && d.warp>=1 && d.warp<=kMaxWarp && d.cargo<=TransportCargo::Germanium;
+        && (d.destinationFleet || d.source!=d.destination) && d.warp>=1 && d.warp<=kMaxWarp && d.cargo<=TransportCargo::Germanium;
 }
 std::string transport_line_error(const PlayerView& view,const TransportLineSpec& d) {
     if(!transport_line_spec_valid(d))return "Name, distinct endpoints, mineral and Warp 1–10 are required";
     const auto* from=find_planet(view.state,d.source);const auto* to=find_planet(view.state,d.destination);
-    if(!from || !to)return "Both endpoints need received planetary surveys";
-    const auto* a=find_star(view.state,from->star);const auto* b=find_star(view.state,to->star);
-    if(!a || !b || same_position(a->position,b->position))return "Endpoints need distinct received system coordinates";
+    const auto* installation=d.destinationFleet?find_service_fleet(view.state,d.destinationFleet):nullptr;
+    if(!from || (!to && !installation))return "Both endpoints need received surveys or installation telemetry";
+    const auto* a=find_star(view.state,from->star);const auto* b=to?find_star(view.state,to->star):nullptr;
+    if(!a || (!b && !installation) || same_position(a->position,installation?installation->position:b->position))
+        return "Endpoints need distinct received coordinates";
+    if(installation && (installation->owner!=view.player || installation->outpost==OutpostKind::None))
+        return "The received destination must be your stationary installation";
     if(!d.active)return {};
     if(from->owner && from->owner!=view.player)return "The received source belongs to another empire";
     if(!from->owner && survey_level(view.state,view.player,from->star)<SurveyLevel::GeologicalSurvey)
         return "An uncolonized mining source needs a delivered Geological Survey";
-    if(to->owner!=view.player)return "The received destination must be your colony";
+    if(to && to->owner!=view.player)return "The received destination must be your colony";
     return {};
 }
 FleetRouteProgram transport_line_program(const TransportLine& line) {
@@ -48,7 +52,7 @@ FleetRouteProgram transport_line_program(const TransportLine& line) {
     p.arrivalAction.mineralMinimum=line.spec.departureMinimum;
     FleetArrivalAction unload;unload.kind=FleetArrivalActionKind::UnloadTransportLine;unload.cargo=cargo;
     unload.transportLine=line.spec.id;unload.transportRevision=line.spec.revision;unload.transportDestination=line.spec.destination;
-    unload.destinationTarget=line.spec.destinationTarget;
+    unload.destinationTarget=line.spec.destinationTarget;unload.transportDestinationFleet=line.spec.destinationFleet;
     p.queuedWaypoints={{line.destinationPosition,line.spec.warp,unload}};p.repeatOrders=true;
     return p;
 }
@@ -111,15 +115,24 @@ bool set_transport_line(GameState& s,PlayerId id,const SetTransportLineOrder& or
         }
     } else if(order.remove || !d.id || d.id<=p->lastTransportLineId || d.revision!=1
         || p->transportLines.size()>=kMaximumTransportLines)return false;
+    // A missing received endpoint must not prevent stopping a known line.
+    if(it!=p->transportLines.end() && !d.active && transport_line_spec_valid(d)
+        && d.source==it->spec.source && d.destination==it->spec.destination && d.destinationFleet==it->spec.destinationFleet) {
+        it->spec=d;
+        for(auto& assignment:it->assignments){assignment.issuedTurn=s.turn;dispatch(s,id,*it,assignment.fleet);}
+        return true;
+    }
     const auto view=make_player_view(s,id);
     if(!transport_line_error(view,d).empty())return false;
     const auto* from=find_planet(view.state,d.source);const auto* to=find_planet(view.state,d.destination);
-    const auto* a=find_star(view.state,from->star);const auto* b=find_star(view.state,to->star);
-    if(!a || !b)return false;
+    const auto* a=from?find_star(view.state,from->star):nullptr;const auto* b=to?find_star(view.state,to->star):nullptr;
+    const auto* installation=d.destinationFleet?find_service_fleet(view.state,d.destinationFleet):nullptr;
+    if(!a || (!b && !installation))return false;
+    const auto destination=installation?installation->position:b->position;
     if(it==p->transportLines.end()) {
-        p->lastTransportLineId=d.id;p->transportLines.push_back({d,a->position,b->position,{}});return true;
+        p->lastTransportLineId=d.id;p->transportLines.push_back({d,a->position,destination,{}});return true;
     }
-    it->spec=d;it->sourcePosition=a->position;it->destinationPosition=b->position;
+    it->spec=d;it->sourcePosition=a->position;it->destinationPosition=destination;
     for(auto& assignment:it->assignments) {
         assignment.issuedTurn=s.turn;dispatch(s,id,*it,assignment.fleet);
     }
@@ -145,7 +158,7 @@ bool assign_transport_line(GameState& s,PlayerId id,const AssignTransportLineOrd
 }
 namespace {
 auto receipt_key(const TransportLineReceipt& r) {
-    return std::tuple{r.observedTurn,r.line,r.revision,r.fleet,r.planet};
+    return std::tuple{r.observedTurn,r.line,r.revision,r.fleet,r.planet,r.destinationFleet};
 }
 bool programme_matches(const TransportLine& line,const FleetTelemetry& t) {
     const auto p=transport_line_program(line);const auto& route=t.routeTemplate;
@@ -153,7 +166,7 @@ bool programme_matches(const TransportLine& line,const FleetTelemetry& t) {
         || route[0].warp!=p.warp || route[0].arrivalAction!=p.arrivalAction
         || !same_position(route[1].destination,line.destinationPosition) || route[1].warp!=line.spec.warp)return false;
     if(route[1].arrivalAction==p.queuedWaypoints[0].arrivalAction)return true;
-    if(line.spec.destinationTarget)return false;
+    if(line.spec.destinationTarget || line.spec.destinationFleet)return false;
     // Existing v102/v103 programmes keep flying without an undelivered upgrade.
     auto legacy=p.queuedWaypoints[0].arrivalAction;legacy.kind=FleetArrivalActionKind::UnloadAll;
     legacy.transportLine=0;legacy.transportRevision=0;legacy.transportDestination=0;
@@ -165,7 +178,7 @@ std::uint64_t transport_statistics_start(const Player& p,std::uint64_t turn) {
 }
 bool transport_receipt_valid(const TransportLineReceipt& r,std::uint64_t turn) {
     const auto& m=r.minerals;
-    return r.line && r.revision && r.fleet && r.planet && r.observedTurn && r.observedTurn<=r.receivedTurn
+    return r.line && r.revision && r.fleet && (bool(r.planet)!=bool(r.destinationFleet)) && r.observedTurn && r.observedTurn<=r.receivedTurn
         && r.receivedTurn<=turn && std::isfinite(m.ironium) && std::isfinite(m.boranium) && std::isfinite(m.germanium)
         && m.ironium>=0 && m.boranium>=0 && m.germanium>=0 && mineral_cargo_mass(m)>0
         && (int(m.ironium>0)+int(m.boranium>0)+int(m.germanium>0)==1);
@@ -177,7 +190,7 @@ void prune_transport_receipts(Player& p,std::uint64_t turn) {
 void receive_transport_receipt(Player& p,const PendingPlayerReport& report,std::uint64_t turn) {
     if(report.kind!=PlayerReportKind::TransportLineDelivery || report.deliveryTurn>turn)return;
     TransportLineReceipt r{report.transportLine,report.transportRevision,report.fleet,report.planet,
-        report.observedTurn,turn,report.deliveredMinerals};
+        report.observedTurn,turn,report.deliveredMinerals,report.transportDestinationFleet};
     if(!transport_receipt_valid(r,turn) || r.line>p.lastTransportLineId || r.observedTurn<=p.transportReceiptsTruncatedThrough)return;
     prune_transport_receipts(p,turn);auto& entries=p.transportReceipts;
     const auto at=std::lower_bound(entries.begin(),entries.end(),r,[](const auto& a,const auto& b){return receipt_key(a)<receipt_key(b);});
@@ -205,7 +218,7 @@ TransportLineMetrics transport_line_metrics(const PlayerView& view,const Transpo
         else if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
             && same_position(t.position,line.sourcePosition))++m.waiting;
         else if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
-            && t.arrivalAction->destinationTarget && same_position(t.position,line.destinationPosition))++m.waiting;
+            && (t.arrivalAction->destinationTarget || t.arrivalAction->transportDestinationFleet) && same_position(t.position,line.destinationPosition))++m.waiting;
         m.cargoUsed+=fleet_cargo_used(view.state,*f);m.cargoCapacity+=fleet_cargo_capacity(view.state,*f);
     }
     return m;
@@ -221,6 +234,9 @@ std::string transport_assignment_status(const PlayerView& view,const TransportLi
     const auto reason=transport_line_error(view,line.spec);if(!reason.empty())return reason;
     if(t.fuel<=0 && t.destination && !same_position(t.position,*t.destination))
         return "Reported empty fuel tank; drift or fitted fuel-free travel may continue; later refuelling is unconfirmed";
+    if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
+        && t.arrivalAction->transportDestinationFleet && same_position(t.position,line.destinationPosition))
+        return "Waiting at installation: cargo retained; capacity, ownership and target checked locally; future service is unconfirmed";
     if(t.arrivalAction && t.arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
         && t.arrivalAction->destinationTarget && same_position(t.position,line.destinationPosition))
         return "Waiting at destination for demand; target "+std::to_string(t.arrivalAction->destinationTarget)

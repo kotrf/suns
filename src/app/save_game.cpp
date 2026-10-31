@@ -39,11 +39,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 105;
+constexpr quint32 kSaveFormatVersion = 106;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 45;
+constexpr quint32 kTurnOrderFormatVersion = 46;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -238,7 +238,10 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
         stream << quint32(value.gateSource) << quint32(value.gateDestination) << value.gateResonant;
     } else if (value.gateSource || value.gateDestination || value.gateResonant) stream.setStatus(QDataStream::WriteFailed);
     if(value.kind==FleetArrivalActionKind::LoadMinerals)stream<<quint32(value.mineralReserve)<<quint32(value.mineralMinimum);
-    if(value.kind==FleetArrivalActionKind::UnloadTransportLine)stream<<quint32(value.transportLine)<<quint64(value.transportRevision)<<quint32(value.transportDestination)<<quint32(value.destinationTarget);
+    if(value.kind==FleetArrivalActionKind::UnloadTransportLine) {
+        stream<<quint32(value.transportLine)<<quint64(value.transportRevision)<<quint32(value.transportDestination)<<quint32(value.destinationTarget);
+        if(!value.transportDestination)stream<<quint32(value.transportDestinationFleet);
+    }
 }
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
@@ -271,9 +274,10 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
     }
     value.mineralReserve=value.mineralMinimum=0;
     if(value.kind==FleetArrivalActionKind::LoadMinerals)stream>>value.mineralReserve>>value.mineralMinimum;
-    value.transportLine=0;value.transportRevision=0;value.transportDestination=0;value.destinationTarget=0;
+    value.transportLine=0;value.transportRevision=0;value.transportDestination=0;value.destinationTarget=0;value.transportDestinationFleet=0;
     if(value.kind==FleetArrivalActionKind::UnloadTransportLine) {quint64 revision{};stream>>value.transportLine>>revision>>value.transportDestination;value.transportRevision=revision;
-        if(gReadSaveFormatVersion>=105)stream>>value.destinationTarget;}
+        if(gReadSaveFormatVersion>=105)stream>>value.destinationTarget;
+        if(gReadSaveFormatVersion>=106 && !value.transportDestination)stream>>value.transportDestinationFleet;}
     if(!mineral_load_policy_valid(value) || !transport_unload_valid(value))markCorrupt(stream);
 }
 
@@ -1552,8 +1556,12 @@ void writePlayer(QDataStream& stream, const Player& value)
         stream << static_cast<quint32>(report.contactOwner);
         if (report.kind == PlayerReportKind::SpaceBattle) writeBattle(stream, report.battle);
         if (hasLossPayload(report.kind)) writeLosses(stream, report.losses);
-        if(report.kind==PlayerReportKind::TransportLineDelivery)stream<<quint32(report.transportLine)<<quint64(report.transportRevision);
-        else if(report.transportLine || report.transportRevision)stream.setStatus(QDataStream::WriteFailed);
+        if(report.kind==PlayerReportKind::TransportLineDelivery) {
+            stream<<quint32(report.transportLine)<<quint64(report.transportRevision);
+            if(report.planet && report.transportDestinationFleet)stream.setStatus(QDataStream::WriteFailed);
+            if(!report.planet)stream<<quint32(report.transportDestinationFleet);
+        }
+        else if(report.transportLine || report.transportRevision || report.transportDestinationFleet)stream.setStatus(QDataStream::WriteFailed);
     }
     stream << value.race.radiationTolerance
            << static_cast<quint8>(value.race.radiationImmune ? 1 : 0);
@@ -1747,7 +1755,8 @@ void readPlayer(QDataStream& stream, Player& value)
         }
         if(report.kind==PlayerReportKind::TransportLineDelivery) {
             quint64 revision{};stream>>report.transportLine>>revision;report.transportRevision=revision;
-            const TransportLineReceipt r{report.transportLine,report.transportRevision,report.fleet,report.planet,report.observedTurn,report.observedTurn,report.deliveredMinerals};
+            if(gReadSaveFormatVersion>=106 && !report.planet)stream>>report.transportDestinationFleet;
+            const TransportLineReceipt r{report.transportLine,report.transportRevision,report.fleet,report.planet,report.observedTurn,report.observedTurn,report.deliveredMinerals,report.transportDestinationFleet};
             if(!transport_receipt_valid(r,report.observedTurn))markCorrupt(stream);
         }
         value.pendingPlayerReports.push_back(report);
@@ -3592,7 +3601,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

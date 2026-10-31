@@ -364,7 +364,7 @@ bool projection_needs_arrival_outcome(const FleetArrivalAction& action)
 {
     return action.kind==FleetArrivalActionKind::TransitStargate
         || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum)
-        || (action.kind==FleetArrivalActionKind::UnloadTransportLine && action.destinationTarget);
+        || (action.kind==FleetArrivalActionKind::UnloadTransportLine && (action.destinationTarget || action.transportDestinationFleet));
 }
 
 void activate_next_predicted_waypoint(
