@@ -38,7 +38,22 @@ reveal remote surface stock. Use on-arrival cargo orders for remote fleets.
 
 The player-facing **Transfer cargo** dialog builds on those rules with explicit source and destination endpoints. At a selected system it lists the planetary surface and every co-located friendly fleet. An enemy colony is destination-only and is highlighted as such. The source is excluded from the destination list. A single atomic order may move Colonists, Ironium, Boranium and Germanium planet → fleet, fleet → planet or fleet → fleet. Sliders and exact numeric fields show the source remainder, destination result, shared hold usage and gross mass live. Each slider's scale is based on the destination's free hold after other selected transfers, independently of source stock. The handle stops at the available source amount even when the track extends farther; exact fields enforce that same limit. For unloading to a surface, the scale uses the source fleet's hold capacity and the handle is limited by its actual cargo. These limits update together. Transfer cargo replaces the separate Load to capacity and Unload colonists buttons. Peaceful population transfer requires a friendly colony, and loading from one always leaves at least one colonist behind. Unloading population onto an enemy colony starts a ground invasion; minerals cannot be included in that atomic invasion order. Minerals may be deposited on or collected from an uncolonized surface stockpile.
 
-Transfers remain orders resolved at End Turn. Opening the dialog again previews earlier queued local cargo orders, so several deliberate transfers at the same system form a predictable sequence without mutating simulation state from the UI.
+The destination sliders show complete stock including earlier accepted transfers.
+Dragging below that stock returns cargo to the left container; signed exact
+amounts permit the same operation. Each cargo type can have its own direction,
+so returning colonists while loading minerals is supported. The editor emits
+ordinary nonnegative transfer orders, tries a feasible sequence, and enables
+Apply only when the shared command-phase projection reaches both displayed
+manifests. A simultaneous swap that cannot fit in either sequential order is
+rejected rather than partly applied.
+
+Accepted local transfers immediately update the current-turn plan in cargo,
+System Status/Minerals, colony output and the empire summary. Received population
+remains available in detailed information; the compact Population line marks a
+changed value as after cargo. Reopening includes accepted transfers, and Cancel
+leaves them unchanged. Physical transfers remain ordinary orders resolved at
+End Turn; opening or accepting the editor does not advance population growth,
+mining, movement or the underlying simulation state.
 
 Waypoint programs add dynamic `LoadAllAvailable` and `UnloadAll` policies for each individual cargo type. Mineral policies transfer to or from the planet's surface stockpile, including an uncolonized world being worked by remote miners. Loading colonists requires a friendly colony and retains the configured population reserve. Unloading colonists at an enemy colony commits everyone selected by the policy to ground combat. `UnloadAll` with all cargo unloads minerals only if that invasion captures the colony; after a defeat they remain aboard. The amount is resolved on every actual arrival, so the same policy is safe in a repeating transport loop.
 

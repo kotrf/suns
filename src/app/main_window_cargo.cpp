@@ -185,6 +185,7 @@ void MainWindow::openCargoManifestDialog()
 
     QDialog dialog(this);
     dialog.setObjectName("cargoTransferDialog");
+    dialog.setStyleSheet("QDialog#cargoTransferDialog { background: #0d141d; }");
     dialog.setWindowTitle(QString("Transfer cargo — %1").arg(QString::fromStdString(star->name)));
     dialog.setMinimumWidth(920);
 
@@ -192,7 +193,7 @@ void MainWindow::openCargoManifestDialog()
     auto* introduction = new QLabel(
         "Left: choose the source and the amount to send. Right: choose the destination and "
         "see its complete projected manifest, including previously queued loads. "
-        "The same sliders can be adjusted on either side; cargo is not physically moved until End Turn.",
+        "Adjust either side to load or return cargo. Changes appear immediately in your current-turn plan.",
         &dialog);
     introduction->setWordWrap(true);
     layout->addWidget(introduction);
@@ -256,7 +257,7 @@ void MainWindow::openCargoManifestDialog()
 
     auto* transferGrid = new QGridLayout;
     transferGrid->addWidget(new QLabel("Cargo", &dialog), 0, 0);
-    transferGrid->addWidget(new QLabel("Amount", &dialog), 0, 1);
+    transferGrid->addWidget(new QLabel("Amount (negative returns)", &dialog), 0, 1);
     transferGrid->addWidget(new QLabel("Exact", &dialog), 0, 2);
 
     auto* colonistSlider = new QSlider(Qt::Horizontal, &dialog);
@@ -334,181 +335,167 @@ void MainWindow::openCargoManifestDialog()
         };
     };
 
+    std::vector<TransferCargoOrder> draftTransfers;
     const auto refresh = [&] {
         if (sourceCombo->currentIndex() < 0 || destinationCombo->currentIndex() < 0) return;
         const auto sourceIndex = sourceCombo->currentData().toInt();
         const auto destinationIndex = destinationCombo->currentData().toInt();
         const auto& source = endpoints[static_cast<std::size_t>(sourceIndex)];
         const auto& destination = endpoints[static_cast<std::size_t>(destinationIndex)];
-        const bool invasion = destination.planet
-            && destination.planet->owner != 0
+        const bool invasion = destination.planet && destination.planet->owner != 0
             && destination.planet->owner != pendingOrders_.player;
-
-        // Every cargo type shares the same hold. Its right edge is the amount
-        // that fits after existing cargo and the other selected transfers.
-        const auto freeHold = destination.fleet
-            ? std::max(0.0, fleet_cargo_capacity(planned, *destination.fleet)
-                - fleet_cargo_used(planned, *destination.fleet))
-            : std::numeric_limits<double>::infinity();
-        const auto sliderHold = destination.fleet ? freeHold
-            : source.fleet?fleet_cargo_capacity(planned,*source.fleet):colonist_cargo_mass(kOrbitalPopulationCapacity);
-        auto availableColonists = endpointColonists(source);
-        if (source.planet && !source.endpoint.orbital && !source.planet->habitat.population && !destination.endpoint.orbital) {
-            availableColonists = source.planet->owner == pendingOrders_.player && availableColonists > 0
-                ? availableColonists - 1 : 0;
-        }
-        if (destination.planet && destination.planet->owner == 0) availableColonists = 0;
-        const bool orbital=source.endpoint.orbital || destination.endpoint.orbital;
-        const auto orbitalRoom=destination.endpoint.orbital?kOrbitalPopulationCapacity-destination.planet->habitat.population:std::numeric_limits<std::uint64_t>::max();
-        const auto colonistRoom = std::max(0.0, freeHold - mineral_cargo_mass(transferMinerals()));
-        const auto colonistMaximum = static_cast<int>(std::min({
-            static_cast<double>(std::min(availableColonists,orbitalRoom)),
-            std::floor(colonistRoom * kColonistsPerCargoUnit + kEpsilon),
-            static_cast<double>(std::numeric_limits<int>::max())}));
-        const auto colonistScale = static_cast<int>(std::min(
-            std::floor(std::max(0.0, sliderHold - mineral_cargo_mass(transferMinerals()))
-                * kColonistsPerCargoUnit + kEpsilon),
-            static_cast<double>(std::numeric_limits<int>::max())));
+        const bool orbital = source.endpoint.orbital || destination.endpoint.orbital;
+        const auto mass = [](const MineralCargo& m) { return m.ironium + m.boranium + m.germanium; };
+        const auto room = [&](const CargoEndpointView& endpoint) {
+            return endpoint.fleet ? std::max(0.0, fleet_cargo_capacity(planned, *endpoint.fleet)
+                - fleet_cargo_used(planned, *endpoint.fleet)) : std::numeric_limits<double>::infinity();
+        };
+        const auto peopleAvailable = [&](const CargoEndpointView& from, const CargoEndpointView& to) {
+            auto people = endpointColonists(from);
+            if (from.planet) {
+                if (from.planet->owner != pendingOrders_.player) return std::uint64_t{0};
+                if (!from.endpoint.orbital && !from.planet->habitat.population && !to.endpoint.orbital && people) --people;
+            }
+            if (to.planet && !to.planet->owner) return std::uint64_t{0};
+            if (to.endpoint.orbital) people = std::min(people, kOrbitalPopulationCapacity - to.planet->habitat.population);
+            return people;
+        };
+        const auto peopleLimit = [](std::uint64_t available, double hold) {
+            return static_cast<int>(std::min({double(available),
+                std::floor(std::max(0.0, hold) * kColonistsPerCargoUnit + kEpsilon),
+                double(std::numeric_limits<int>::max())}));
+        };
+        const double sourceRoom = room(source), destinationRoom = room(destination);
+        const auto mineralDelta = mass(transferMinerals());
+        const int forwardPeople = peopleLimit(peopleAvailable(source, destination), destinationRoom - mineralDelta);
+        const int backPeople = invasion ? 0 : peopleLimit(peopleAvailable(destination, source), sourceRoom + mineralDelta);
         {
-            const QSignalBlocker blockSlider(colonistSlider), blockSpin(colonistSpin);
-            colonistSpin->setRange(0, colonistMaximum);
-            colonistSlider->setRange(0, colonistScale);
+            const QSignalBlocker sliderBlock(colonistSlider), spinBlock(colonistSpin);
+            colonistSpin->setRange(-backPeople, forwardPeople);
+            const auto holdScale = destination.fleet ? destinationRoom
+                : source.fleet ? fleet_cargo_capacity(planned, *source.fleet) : colonist_cargo_mass(kOrbitalPopulationCapacity);
+            const int forwardScale = std::max(forwardPeople, peopleLimit(std::numeric_limits<std::uint64_t>::max(), holdScale - mineralDelta));
+            colonistSlider->setRange(-backPeople, forwardScale);
             colonistSlider->setValue(colonistSpin->value());
-            colonistSlider->setToolTip(QString("Hold scale: %1 people; available to transfer: %2 people")
-                .arg(colonistScale).arg(colonistMaximum));
+            colonistSlider->setToolTip("Positive loads the destination; negative returns colonists to the source.");
         }
-        const auto availableMinerals = (invasion || orbital) ? MineralCargo{} : endpointMinerals(source);
         for (int index = 0; index < 3; ++index) {
             const auto selected = transferMinerals();
-            const auto otherCargo = colonist_cargo_mass(static_cast<std::uint64_t>(colonistSpin->value()))
-                + mineral_cargo_mass(selected) - mineralValue(selected, index);
-            const auto maximum = sliderMaximum(std::min(
-                std::max(0.0, mineralValue(availableMinerals, index)), std::max(0.0, freeHold - otherCargo)));
+            const double otherCargo = double(colonistSpin->value()) / kColonistsPerCargoUnit
+                + mass(selected) - mineralValue(selected, index);
+            const int forward = invasion || orbital ? 0 : sliderMaximum(std::min(
+                mineralValue(endpointMinerals(source), index), std::max(0.0, destinationRoom - otherCargo)));
+            const int back = invasion || orbital ? 0 : sliderMaximum(std::min(
+                mineralValue(endpointMinerals(destination), index), std::max(0.0, sourceRoom + otherCargo)));
             const auto& control = mineralControls[index];
-            const QSignalBlocker blockSlider(control.slider), blockSpin(control.spin);
-            control.spin->setRange(0.0, static_cast<double>(maximum) / kMineralScale);
-            control.slider->setRange(
-                0,
-                invasion ? 0 : sliderMaximum(std::max(0.0, sliderHold - otherCargo)));
-            control.slider->setValue(static_cast<int>(std::lround(control.spin->value() * kMineralScale)));
+            const QSignalBlocker sliderBlock(control.slider), spinBlock(control.spin);
+            control.spin->setRange(-double(back) / kMineralScale, double(forward) / kMineralScale);
+            const auto holdScale = destination.fleet ? destinationRoom
+                : source.fleet ? fleet_cargo_capacity(planned, *source.fleet) : colonist_cargo_mass(kOrbitalPopulationCapacity);
+            control.slider->setRange(-back, invasion || orbital ? 0
+                : std::max(forward, sliderMaximum(std::max(0.0, holdScale - otherCargo))));
+            control.slider->setValue(int(std::lround(control.spin->value() * kMineralScale)));
             control.slider->setEnabled(!invasion && !orbital);
             control.spin->setEnabled(!invasion && !orbital);
-            control.slider->setToolTip(QString("Hold scale: %1 kt; available to transfer: %2 kt")
-                .arg(static_cast<double>(control.slider->maximum()) / kMineralScale, 0, 'f', 2)
-                .arg(control.spin->maximum(), 0, 'f', 2));
+            control.slider->setToolTip("Positive loads the destination; negative returns minerals to the source.");
         }
-        // Destination-side sliders show the *entire* resulting cargo,
-        // rather than resetting to zero whenever the dialog is reopened.
-        // For a full 2500-person ship its handle stays at the far right.
-        const auto destinationPeople = endpointColonists(destination);
-        const auto displayedPeople = std::min<std::uint64_t>(
-            std::numeric_limits<int>::max(), destinationPeople);
-        const auto peopleMax = static_cast<int>(std::min<std::uint64_t>(
-            std::numeric_limits<int>::max(), destinationPeople
-                + static_cast<std::uint64_t>(colonistMaximum)));
+        const auto colonists = std::int64_t(colonistSpin->value());
+        const auto minerals = transferMinerals();
+        const auto sourcePeople = endpointColonists(source), destinationPeople = endpointColonists(destination);
+        const auto sourceStock = endpointMinerals(source), destinationStock = endpointMinerals(destination);
+        const auto peopleAfter = [](std::uint64_t before, std::int64_t delta) {
+            return delta >= 0 ? before + std::uint64_t(delta) : before - std::uint64_t(-delta);
+        };
+        const auto sourceAfterPeople = peopleAfter(sourcePeople, -colonists);
+        const auto destinationAfterPeople = peopleAfter(destinationPeople, colonists);
+        const MineralCargo sourceAfterStock{sourceStock.ironium - minerals.ironium,
+            sourceStock.boranium - minerals.boranium, sourceStock.germanium - minerals.germanium};
+        const MineralCargo destinationAfterStock{destinationStock.ironium + minerals.ironium,
+            destinationStock.boranium + minerals.boranium, destinationStock.germanium + minerals.germanium};
+        const auto boundedPeople = [](std::uint64_t n) { return int(std::min<std::uint64_t>(n, std::numeric_limits<int>::max())); };
         {
             const QSignalBlocker blocker(receivedColonists);
-            receivedColonists->setRange(0, peopleMax);
-            receivedColonists->setValue(static_cast<int>(std::min<std::uint64_t>(
-                peopleMax, displayedPeople + static_cast<std::uint64_t>(colonistSpin->value()))));
-            receivedColonists->setToolTip(QString("Destination stock after queued transfers: %1 people")
-                .arg(static_cast<qulonglong>(destinationPeople + colonistSpin->value())));
+            receivedColonists->setRange(boundedPeople(destinationPeople - backPeople), boundedPeople(destinationPeople + forwardPeople));
+            receivedColonists->setValue(boundedPeople(destinationAfterPeople));
+            receivedColonists->setToolTip("Destination population after this transfer; drag left to return colonists.");
         }
         for (int index = 0; index < 3; ++index) {
-            const auto before = mineralValue(endpointMinerals(destination), index);
-            const auto after = before + mineralControls[index].spin->value();
-            const auto totalMax = sliderMaximum(before + mineralControls[index].spin->maximum());
+            const double before = mineralValue(destinationStock, index);
+            const auto& control = mineralControls[index];
             const QSignalBlocker blocker(receivedMinerals[index]);
-            receivedMinerals[index]->setRange(0, totalMax);
-            receivedMinerals[index]->setValue(sliderMaximum(after));
-            receivedMinerals[index]->setToolTip(QString("Destination stock: %1 kt").arg(after, 0, 'f', 2));
+            receivedMinerals[index]->setRange(sliderMaximum(before + control.spin->minimum()),
+                sliderMaximum(before + control.spin->maximum()));
+            receivedMinerals[index]->setValue(sliderMaximum(before + control.spin->value()));
+            receivedMinerals[index]->setEnabled(!invasion && !orbital);
+            receivedMinerals[index]->setToolTip("Destination stock after this transfer; drag left to return minerals.");
         }
-        const auto colonists = static_cast<std::uint64_t>(colonistSpin->value());
-        const auto minerals = transferMinerals();
-
-        const auto sourceCurrentColonists = endpointColonists(source);
-        const auto sourceCurrentMinerals = endpointMinerals(source);
-        MineralCargo sourceRemainder{
-            sourceCurrentMinerals.ironium - minerals.ironium,
-            sourceCurrentMinerals.boranium - minerals.boranium,
-            sourceCurrentMinerals.germanium - minerals.germanium,
-        };
-        const auto destinationCurrentColonists = endpointColonists(destination);
-        const auto destinationCurrentMinerals = endpointMinerals(destination);
-        MineralCargo destinationResult{
-            destinationCurrentMinerals.ironium + minerals.ironium,
-            destinationCurrentMinerals.boranium + minerals.boranium,
-            destinationCurrentMinerals.germanium + minerals.germanium,
-        };
-
-        sourceBefore->setText(QString("<b>Current source (including queued orders):</b> %1")
-            .arg(cargoValues(sourceCurrentColonists, sourceCurrentMinerals)));
-        destinationBefore->setText(QString("<b>Current destination (including queued orders):</b> %1")
-            .arg(cargoValues(destinationCurrentColonists, destinationCurrentMinerals)));
-        sourceAfter->setText(QString("<b>Source after this order:</b> %1 — %2")
-            .arg(source.name)
-            .arg(cargoValues(sourceCurrentColonists - colonists, sourceRemainder)));
+        sourceBefore->setText(QString("<b>Current source (including queued orders):</b> %1").arg(cargoValues(sourcePeople, sourceStock)));
+        destinationBefore->setText(QString("<b>Current destination (including queued orders):</b> %1").arg(cargoValues(destinationPeople, destinationStock)));
+        sourceAfter->setText(QString("<b>Source after this transfer:</b> %1 — %2").arg(source.name).arg(cargoValues(sourceAfterPeople, sourceAfterStock)));
         if (invasion) {
-            const auto chance = ground_invasion_success_chance(
-                colonists, destinationCurrentColonists) * 100.0;
             destinationAfter->setText(QString(
                 "<b>Ground invasion:</b> %1 attackers vs %2 defenders — estimated success chance %3%. "
                 "If orbit is clear, the selected landing force is committed and the winner keeps its survivors. "
                 "Any hostile station blocks landing, even without weapons; colonists remain aboard.")
-                .arg(static_cast<qulonglong>(colonists))
-                .arg(static_cast<qulonglong>(destinationCurrentColonists))
-                .arg(chance, 0, 'f', 1));
-        } else {
-            destinationAfter->setText(QString("<b>Destination after this order:</b> %1 — %2")
-                .arg(destination.name)
-                .arg(cargoValues(destinationCurrentColonists + colonists, destinationResult)));
-        }
+                .arg(qulonglong(colonists)).arg(qulonglong(destinationPeople))
+                .arg(ground_invasion_success_chance(std::uint64_t(colonists), destinationPeople) * 100.0, 0, 'f', 1));
+        } else destinationAfter->setText(QString("<b>Destination after this transfer:</b> %1 — %2")
+            .arg(destination.name).arg(cargoValues(destinationAfterPeople, destinationAfterStock)));
 
-        bool capacityValid = true;
+        const auto addedMass = double(colonists) / kColonistsPerCargoUnit + mass(minerals);
+        bool capacityValid = sourceRoom + addedMass >= -kEpsilon && destinationRoom - addedMass >= -kEpsilon;
         if (destination.fleet) {
-            const auto added = colonist_cargo_mass(colonists) + mineral_cargo_mass(minerals);
-            const auto used = fleet_cargo_used(planned, *destination.fleet) + added;
-            const auto capacity = fleet_cargo_capacity(planned, *destination.fleet);
-            const auto grossMass = fleet_gross_mass(planned, *destination.fleet) + added;
-            capacityValid = used <= capacity + kEpsilon;
             capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2 kt • gross mass %3 kt")
-                .arg(used, 0, 'f', 2)
-                .arg(capacity, 0, 'f', 2)
-                .arg(grossMass, 0, 'f', 2));
-        } else {
-            capacitySummary->setText(destination.endpoint.orbital
-                ?QString("<b>Orbital housing:</b> %1 / %2 residents after transfer").arg(qulonglong(destinationCurrentColonists+colonists)).arg(qulonglong(kOrbitalPopulationCapacity))
-                :"<b>Destination hold:</b> planetary surface has no cargo-capacity limit.");
-        }
+                .arg(fleet_cargo_used(planned, *destination.fleet) + addedMass, 0, 'f', 2)
+                .arg(fleet_cargo_capacity(planned, *destination.fleet), 0, 'f', 2)
+                .arg(fleet_gross_mass(planned, *destination.fleet) + addedMass, 0, 'f', 2));
+        } else capacitySummary->setText(destination.endpoint.orbital
+            ? QString("<b>Orbital housing:</b> %1 / %2 residents after transfer").arg(qulonglong(destinationAfterPeople)).arg(qulonglong(kOrbitalPopulationCapacity))
+            : "<b>Destination hold:</b> planetary surface has no cargo-capacity limit.");
 
-        const bool distinct = sourceIndex != destinationIndex;
-        const bool hasCargo = colonists > 0 || mineral_cargo_mass(minerals) > kEpsilon;
-        auto validationState=planned;
-        const PlayerOrders validationOrders{pendingOrders_.player,{TransferCargoOrder{source.endpoint,destination.endpoint,colonists,minerals}}};
-        const auto validated=projected_cargo_order_state(validationState,validationOrders);
-        const auto* targetPlanet=destination.planet?find_planet(validated,destination.planet->id):nullptr;
-        const auto* sourcePlanet=source.planet?find_planet(validated,source.planet->id):nullptr;
-        const bool orbitalValid=!orbital || (colonists>0 && ((destination.endpoint.orbital && targetPlanet && targetPlanet->habitat.population==destinationCurrentColonists+colonists)
-            || (source.endpoint.orbital && sourcePlanet && sourcePlanet->habitat.population+colonists==sourceCurrentColonists)));
-        const bool valid = orbitalValid && distinct && hasCargo && capacityValid
-            && (!invasion || (colonists > 0 && mineral_cargo_mass(minerals) <= kEpsilon));
-        acceptButton->setEnabled(valid);
-        acceptButton->setText(invasion ? "Queue invasion" : "Queue transfer");
-        if (!distinct) {
-            validation->setText("<span style='color:#e4b77d'><b>Choose two different endpoints.</b></span>");
-        } else if (!hasCargo) {
-            validation->setText("Choose at least one cargo amount to transfer.");
-        } else if (invasion && colonists == 0) {
-            validation->setText("<span style='color:#e08d7c'><b>An invasion requires colonists.</b></span>");
-        } else if (invasion && mineral_cargo_mass(minerals) > kEpsilon) {
-            validation->setText("<span style='color:#e08d7c'><b>Minerals cannot be transferred during an invasion.</b></span>");
-        } else if (!capacityValid) {
-            validation->setText("<span style='color:#e08d7c'><b>The destination fleet would exceed its shared cargo capacity.</b></span>");
-        } else if (invasion) {
-            validation->setText("<span style='color:#e08d7c'><b>This order starts ground combat against the colony.</b></span>");
-        } else {
-            validation->setText("<span style='color:#85d5a5'><b>Transfer is valid.</b></span>");
+        draftTransfers.clear();
+        const MineralCargo forwardMinerals{std::max(0.0, minerals.ironium), std::max(0.0, minerals.boranium), std::max(0.0, minerals.germanium)};
+        const MineralCargo backMinerals{std::max(0.0, -minerals.ironium), std::max(0.0, -minerals.boranium), std::max(0.0, -minerals.germanium)};
+        if (colonists < 0 || mass(backMinerals) > kEpsilon)
+            draftTransfers.push_back({destination.endpoint, source.endpoint, std::uint64_t(std::max<std::int64_t>(0, -colonists)), backMinerals});
+        if (colonists > 0 || mass(forwardMinerals) > kEpsilon)
+            draftTransfers.push_back({source.endpoint, destination.endpoint, std::uint64_t(std::max<std::int64_t>(0, colonists)), forwardMinerals});
+        const auto matchesPlan = [&] {
+            PlayerOrders orders{pendingOrders_.player, {}};
+            for (const auto& transfer : draftTransfers) orders.orders.push_back(transfer);
+            const auto validated = projected_cargo_order_state(planned, orders);
+            const auto matches = [&](const CargoEndpointView& endpoint, std::uint64_t people, const MineralCargo& stock) {
+                CargoEndpointView actual{endpoint.endpoint};
+                if (endpoint.fleet) {
+                    const auto fleet = std::find_if(validated.fleets.begin(), validated.fleets.end(),
+                        [&](const auto& f) { return f.id == endpoint.fleet->id; });
+                    if (fleet != validated.fleets.end()) actual.fleet = &*fleet;
+                }
+                else actual.planet = find_planet(validated, endpoint.planet->id);
+                if (!actual.fleet && !actual.planet) return false;
+                const auto actualStock = endpointMinerals(actual);
+                return endpointColonists(actual) == people && std::abs(actualStock.ironium - stock.ironium) < kEpsilon
+                    && std::abs(actualStock.boranium - stock.boranium) < kEpsilon
+                    && std::abs(actualStock.germanium - stock.germanium) < kEpsilon;
+            };
+            return matches(source, sourceAfterPeople, sourceAfterStock) && matches(destination, destinationAfterPeople, destinationAfterStock);
+        };
+        bool validProjection = invasion || matchesPlan();
+        if (!validProjection && draftTransfers.size() == 2) {
+            std::reverse(draftTransfers.begin(), draftTransfers.end());
+            validProjection = matchesPlan();
         }
+        const bool hasCargo = !draftTransfers.empty();
+        const bool distinct = sourceIndex != destinationIndex;
+        const bool valid = distinct && hasCargo && capacityValid && validProjection
+            && (!invasion || (colonists > 0 && mass(minerals) <= kEpsilon));
+        acceptButton->setEnabled(valid);
+        acceptButton->setText(invasion ? "Queue invasion" : "Apply transfer");
+        if (!distinct) validation->setText("Choose two different endpoints.");
+        else if (!hasCargo) validation->setText("Choose at least one cargo amount to transfer.");
+        else if (!capacityValid || !validProjection) validation->setText("This transfer cannot be completed with the current stocks, capacity and services.");
+        else if (invasion) validation->setText("This order starts ground combat against the colony.");
+        else validation->setText("Transfer is valid. Both manifests will update in your current-turn plan.");
     };
 
     const auto configureSource = [&] {
@@ -549,15 +536,15 @@ void MainWindow::openCargoManifestDialog()
             refresh();
         });
     }
-    // Adjusting the destination slider changes the requested extra load;
-    // the already queued manifest remains the immutable baseline.
+    // Signed deltas let either container return already queued cargo without
+    // editing the physical state or requiring a turn to pass.
     connect(receivedColonists, &QSlider::valueChanged, &dialog, [=](int amount) {
         const auto destinationIndex = destinationCombo->currentData().toInt();
         if (destinationIndex < 0) return;
         const auto current = endpointColonists(endpoints[static_cast<std::size_t>(destinationIndex)]);
         const auto delta = static_cast<std::int64_t>(amount) - static_cast<std::int64_t>(current);
         colonistSpin->setValue(static_cast<int>(std::clamp<std::int64_t>(
-            delta, 0, colonistSpin->maximum())));
+            delta, colonistSpin->minimum(), colonistSpin->maximum())));
     });
     for (int index = 0; index < 3; ++index) {
         connect(receivedMinerals[index], &QSlider::valueChanged, &dialog, [=](int amount) {
@@ -565,7 +552,7 @@ void MainWindow::openCargoManifestDialog()
             if (destinationIndex < 0) return;
             const auto before = mineralValue(
                 endpointMinerals(endpoints[static_cast<std::size_t>(destinationIndex)]), index);
-            const auto request = std::max(0.0, static_cast<double>(amount) / kMineralScale - before);
+            const auto request = static_cast<double>(amount) / kMineralScale - before;
             mineralControls[index].spin->setValue(request);
         });
     }
@@ -580,19 +567,19 @@ void MainWindow::openCargoManifestDialog()
     configureSource();
     if (dialog.exec() != QDialog::Accepted) return;
 
-    const auto& source = endpoints[static_cast<std::size_t>(sourceCombo->currentData().toInt())];
-    const auto& destination = endpoints[static_cast<std::size_t>(destinationCombo->currentData().toInt())];
-    const auto colonists = static_cast<std::uint64_t>(colonistSpin->value());
-    const auto minerals = transferMinerals();
-    appendPendingOrder(
-        TransferCargoOrder{source.endpoint, destination.endpoint, colonists, minerals},
-        QString("Transfer cargo from %1 to %2 — colonists %3, I %4, B %5, G %6")
-            .arg(source.name)
-            .arg(destination.name)
-            .arg(static_cast<qulonglong>(colonists))
-            .arg(minerals.ironium, 0, 'f', 2)
-            .arg(minerals.boranium, 0, 'f', 2)
-            .arg(minerals.germanium, 0, 'f', 2));
+    for (const auto& transfer : draftTransfers) {
+        const auto endpointName = [&](const CargoTransferEndpoint& endpoint) {
+            const auto found = std::find_if(endpoints.begin(), endpoints.end(), [&](const auto& view) {
+                return view.endpoint.planet == endpoint.planet && view.endpoint.fleet == endpoint.fleet
+                    && view.endpoint.orbital == endpoint.orbital;
+            });
+            return found == endpoints.end() ? QString{} : found->name;
+        };
+        appendPendingOrder(transfer, QString("Transfer cargo from %1 to %2 — colonists %3, I %4, B %5, G %6")
+            .arg(endpointName(transfer.source)).arg(endpointName(transfer.destination))
+            .arg(qulonglong(transfer.colonists)).arg(transfer.minerals.ironium, 0, 'f', 2)
+            .arg(transfer.minerals.boranium, 0, 'f', 2).arg(transfer.minerals.germanium, 0, 'f', 2));
+    }
 }
 
 } // namespace suns

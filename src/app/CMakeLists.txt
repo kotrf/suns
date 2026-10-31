@@ -44,6 +44,8 @@ add_library(suns_app_ui STATIC
     main_window_orbital_bases.cpp
     main_window_planetary_engineering.cpp
     main_window_ui.cpp
+    toolbar_icons.cpp
+    toolbar_icons.hpp
     main_window_route_program.cpp
     route_program_dock.cpp
     route_program_dock.hpp

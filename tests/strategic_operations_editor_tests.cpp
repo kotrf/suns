@@ -22,6 +22,8 @@
 #include <QFile>
 #include <QDataStream>
 #include <QListWidget>
+#include <QScrollArea>
+#include <QGroupBox>
 #include <QTextBrowser>
 #include <QStyle>
 #include <QStyleOptionButton>
@@ -187,6 +189,12 @@ int main(int argc,char** argv)
     auto* setMode = window.findChild<QPushButton*>("setFleetEmissionMode");
     auto* stop = window.findChild<QPushButton*>("routeStopButton");
     assert(action && add && mode && setMode && stop);
+    auto* ordersScroll = window.findChild<QScrollArea*>("fleetOrdersScrollArea");
+    auto* emissions = window.findChild<QGroupBox*>("strategicOperationsGroup");
+    assert(ordersScroll && emissions && ordersScroll->widget()->isAncestorOf(emissions));
+    ordersScroll->ensureWidgetVisible(setMode);
+    settle();
+    assert(ordersScroll->viewport()->rect().contains(setMode->mapTo(ordersScroll->viewport(), setMode->rect().center())));
     for (auto kind : {FleetArrivalActionKind::LayMinefields,FleetArrivalActionKind::SweepMinefields,
              FleetArrivalActionKind::BombardColony,FleetArrivalActionKind::FieldResearch,FleetArrivalActionKind::RecoverWreckage})
         assert(action->findData(int(kind))>=0);
