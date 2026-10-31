@@ -48,7 +48,8 @@ void MainWindow::installTransportLines() {
     auto* removeStop=button("transportLineRemoveStop","Remove selected extra recipient");
     auto* upStop=button("transportLineStopUp","Move selected recipient up");
     auto* downStop=button("transportLineStopDown","Move selected recipient down");
-    struct StopDraft {TransportLineId selected{};std::vector<TransportDeliveryStop> values;};
+    // An unset selection also invalidates a draft for New line (ID zero).
+    struct StopDraft {std::optional<TransportLineId> selected;std::vector<TransportDeliveryStop> values;};
     auto draft=std::make_shared<StopDraft>();
     const auto paintStops=[=] {
         const auto selected=stops->currentRow();stops->clear();
@@ -120,7 +121,8 @@ void MainWindow::installTransportLines() {
                     .arg(QString::fromStdString(f.name)),QVariant::fromValue(-qlonglong(f.id)));
         });
         fill(extraDestination,[&]{for(int i=0;i<destination->count();++i)extraDestination->addItem(destination->itemText(i),destination->itemData(i));});
-        if(draft->selected!=id){draft->selected=id;draft->values=line?line->spec.deliveries:std::vector<TransportDeliveryStop>{};}
+        const auto selectedId=lines->currentData().toUInt();
+        if(draft->selected!=selectedId){draft->selected=selectedId;draft->values=line?line->spec.deliveries:std::vector<TransportDeliveryStop>{};}
         paintStops();
         fill(fleets,[&]{for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost==OutpostKind::None && fleet_cargo_capacity(view.state,f)>0)fleets->addItem(QString("#%1 %2").arg(f.id).arg(QString::fromStdString(f.name)),f.id);
             if(line)for(const auto& a:line->assignments)if(fleets->findData(a.fleet)<0)fleets->addItem(QString("Roster #%1 — no received contact").arg(a.fleet),a.fleet);
@@ -228,7 +230,11 @@ void MainWindow::installTransportLines() {
     connect(assign,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt()},"Assign transport to line");});
     connect(release,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt(),true},"Release transport and send Stop");});
     connect(overlay,&QCheckBox::toggled,this,[this](bool on){setProperty("hideTransportLines",!on);rebuildScene();});
-    connect(this,&MainWindow::routeProgramContextChanged,this,[=]{if(dock->isVisible())refresh();});
+    connect(this,&MainWindow::routeProgramContextChanged,this,[=](bool resetDrafts){
+        if(resetDrafts)draft->selected.reset();
+        // A loaded campaign/PlayerTurn must replace even a hidden dock's draft.
+        if(resetDrafts || dock->isVisible())refresh();
+    });
     connect(dock,&QDockWidget::visibilityChanged,this,[=](bool visible){if(visible)refresh();});refresh();
 }
 }

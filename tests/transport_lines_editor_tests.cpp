@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QDataStream>
 #include <QTemporaryDir>
+#include <QSettings>
 #include <cassert>
 #include <iostream>
 using namespace suns;
@@ -21,6 +22,9 @@ namespace suns {
 struct MainWindowTestAccess {
     static void set(MainWindow& w,GameState s){w.state_=std::move(s);w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.rebuildScene();}
     static const auto& pending(MainWindow& w){return w.pendingOrders_;}
+    static const auto& state(MainWindow& w){return w.state_;}
+    static bool load(MainWindow& w,const QString& path){return w.loadGameFromPath(path);}
+    static void refresh(MainWindow& w){emit w.routeProgramContextChanged(false);}
     static void draft(MainWindow& w){w.pendingOrders_.orders={MoveFleetOrder{1,{10,0},5},SetTransportLineOrder{line_spec()},AssignTransportLineOrder{1,1}};w.pendingDescriptions_={"Move","Define","Assign"};w.selectFleetForRouteProgram(1);w.rebuildScene();}
     static int overlays(MainWindow& w){int count=0;for(const auto* i:w.scene_->items())count+=i->data(0).toString()=="transportLine";return count;}
 };
@@ -439,4 +443,53 @@ void multi_stop_controls_and_roundtrip(const QString& path) {
     {QFile file(path);assert(file.open(QIODevice::WriteOnly));file.write(old);}assert(read_save_game_file(path,loaded,error));
     assert(loaded.state.players[0].transportLines[0].spec.deliveries.empty() && loaded.state.players[0].transportLines[0].spec.destinationFleet==3);
 }
-int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());multi_stop_controls_and_roundtrip(dir.filePath("multi.suns"));installation_controls_and_persistence(dir.filePath("installation.suns"));destination_target_persistence_and_ui(dir.filePath("target.suns"));destination_target_remote_orders(dir.filePath("target-remote.suns"));destination_target_v104(dir.filePath("target-v104.suns"));received_statistics_roundtrip(dir.filePath("statistics.suns"));statistics_programme_orders_and_v103(dir.filePath("statistics-orders.suns"));persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}
+void reload_resets_stop_drafts(const QString& path) {
+    const auto savedLine=[](std::uint32_t target){
+        auto state=multi_transport_world();auto line=multi_line();line.deliveries[0].target=target;
+        assert(set_transport_line(state,1,{line}) && assign_transport_line(state,1,{1,1}));return host(state);
+    };
+    auto latest=savedLine(70),earlier=savedLine(40),other=savedLine(25);other.campaignId=56;
+    auto player=make_player_turn(earlier,1);QString error;
+    assert(write_save_game_file(path+".latest",latest,error));
+    assert(write_save_game_file(path+".earlier",earlier,error));
+    assert(write_save_game_file(path+".other",other,error));
+    assert(write_save_game_file(path+".player",player,error));
+    const std::pair<QString,std::uint32_t> loads[]={{path+".earlier",40},{path+".other",25},{path+".player",40}};
+    for(bool hidden:{false,true})for(const auto& [file,target]:loads) {
+        MainWindow w;assert(MainWindowTestAccess::load(w,path+".latest"));w.installTransportLines();w.show();
+        auto* dock=w.findChild<QDockWidget*>("transportLinesDock");dock->show();QApplication::processEvents();
+        auto* selection=w.findChild<QComboBox*>("transportLineSelection");selection->setCurrentIndex(selection->findData(1u));
+        auto* stops=w.findChild<QListWidget*>("transportLineStops");assert(stops->count()==1 && stops->item(0)->text().contains("70 kt"));
+        stops->setCurrentRow(0);w.findChild<QSpinBox*>("transportLineExtraTarget")->setValue(90);
+        w.findChild<QPushButton*>("transportLineUpdateStop")->click();
+        MainWindowTestAccess::refresh(w);assert(stops->item(0)->text().contains("90 kt")); // Ordinary polling keeps a live draft.
+        if(hidden)dock->hide();assert(dock->isVisible()!=hidden);
+        assert(MainWindowTestAccess::load(w,file));
+        // Reset must apply even before a hidden dock is opened again.
+        assert(stops->count()==1 && stops->item(0)->text().contains(QString("%1 kt").arg(target)));
+        dock->show();QApplication::processEvents();
+        w.findChild<QLineEdit*>("transportLineName")->setText("Renamed after load");
+        w.findChild<QPushButton*>("transportLineSave")->click();
+        const auto& orders=MainWindowTestAccess::pending(w);assert(orders.orders.size()==1);
+        const auto& line=std::get<SetTransportLineOrder>(orders.orders[0]).value;
+        assert(line.id==1 && line.deliveries.size()==1 && line.deliveries[0].target==target);
+        const auto& roster=MainWindowTestAccess::state(w).players[0].transportLines[0];
+        assert(roster.assignments.size()==1 && roster.assignments[0].fleet==1);
+        auto resolved=TurnProcessor{}.process(MainWindowTestAccess::state(w),{orders});
+        assert(resolved.fleets[0].routeTemplate[2].arrivalAction.destinationTarget==target);
+    }
+    // New-line ID zero also needs invalidation across a campaign reset.
+    auto empty=host(multi_transport_world());empty.campaignId=57;
+    assert(write_save_game_file(path+".empty",empty,error));
+    MainWindow w;assert(MainWindowTestAccess::load(w,path+".latest"));w.installTransportLines();w.show();
+    auto* dock=w.findChild<QDockWidget*>("transportLinesDock");dock->show();QApplication::processEvents();
+    auto* selection=w.findChild<QComboBox*>("transportLineSelection");selection->setCurrentIndex(selection->findData(0u));
+    auto* extra=w.findChild<QComboBox*>("transportLineExtraDestination");extra->setCurrentIndex(extra->findData(3u));
+    w.findChild<QSpinBox*>("transportLineExtraTarget")->setValue(90);w.findChild<QPushButton*>("transportLineAddStop")->click();
+    auto* stops=w.findChild<QListWidget*>("transportLineStops");assert(stops->count()==1);dock->hide();
+    assert(MainWindowTestAccess::load(w,path+".empty"));assert(stops->count()==0);
+    dock->show();QApplication::processEvents();assert(stops->count()==0);
+    w.findChild<QPushButton*>("transportLineAddStop")->click();assert(stops->count()==1);
+    MainWindowTestAccess::refresh(w);assert(stops->count()==1);
+}
+int main(int argc,char** argv){QApplication app(argc,argv);QTemporaryDir dir;assert(dir.isValid());QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,dir.path());reload_resets_stop_drafts(dir.filePath("reload.suns"));multi_stop_controls_and_roundtrip(dir.filePath("multi.suns"));installation_controls_and_persistence(dir.filePath("installation.suns"));destination_target_persistence_and_ui(dir.filePath("target.suns"));destination_target_remote_orders(dir.filePath("target-remote.suns"));destination_target_v104(dir.filePath("target-v104.suns"));received_statistics_roundtrip(dir.filePath("statistics.suns"));statistics_programme_orders_and_v103(dir.filePath("statistics-orders.suns"));persistence(dir.filePath("lines.suns"));load_policy_persistence(dir.filePath("policy.suns"));legacy_v102_line(dir.filePath("legacy102.suns"));computer_line_persistence(dir.filePath("computer.suns"));controls();manual_route_editor_override();std::cout<<"Transport line UI/save tests passed\n";}

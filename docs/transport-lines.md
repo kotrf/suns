@@ -226,6 +226,13 @@ not status evidence. Normal Freight messages and receipt-year History keep
 recording real deliveries. The statistics follow-up adds line attribution
 without another economic delivery event.
 
+Opening a save or PlayerTurn resets the local extra-stop draft from that file's
+intent, even when Logistics is hidden or the same line ID exists in both games.
+The New line (ID zero) draft is reset too. Ordinary polling preserves unsubmitted
+edits; a rename after loading cannot send an older game's stop list to the roster.
+This behavior is covered by a real Qt Open/load regression that fails before
+the reset fix and passes afterward; save/order formats stay v107/v47.
+
 ## Received statistics and interruption diagnostics
 
 Newly dispatched programmes use UnloadTransportLine: ordinary selected-mineral

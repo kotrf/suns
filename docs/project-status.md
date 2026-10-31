@@ -11,7 +11,7 @@ and let the remainder continue. Two-stop demand-waiting semantics stay unchanged
 Received coordinates, ordinary delayed commands, bounded sparse TLMS catalog
 extension and versioned delivery visits preserve fair knowledge and PBEM.
 Branch save v107 / orders v47. Full GCC 14.2 / Qt 6.12.0 Debug application/test
-build passed; offscreen Linux CTest **94/94 passed (38.40 s)**; diff check clean.
+build passed; offscreen Linux CTest **94/94 passed (39.75 s)**; diff check clean.
 Expanded existing core/Qt/save suites cover autonomous distribution and conserved
 surplus, full intermediate installations, foreign/neutral blockers and delayed
 edits, received moving/waiting status, AI respect for extra-recipient intent,
@@ -21,6 +21,23 @@ received-only remote exports and genuine v106 continuation plus older migrations
 Prepared for review, not merged; #53 stays open. No manual campaign balance,
 cross-platform or sanitizer acceptance is claimed.
 
+
+### Review follow-up — reset stop drafts on Open/load
+
+The [P2 review finding](https://github.com/kotrf/suns/pull/243#discussion_r4431611639)
+was reproduced through real Qt file loading: an unsaved 90 kt stop persisted
+after loading the same line ID with a saved 40 kt target. Loading now invalidates
+the optional draft selection and refreshes even a hidden Logistics dock from
+new intent. New-line ID zero is covered; ordinary non-reset polling preserves
+unsubmitted edits. The actual restored selector ID is used after rebuilding the
+line list, including fallback to New line.
+
+The expanded existing Qt suite failed before the fix, then passed after it.
+It exercises visible/hidden docks, older same-campaign saves, a different
+campaign, Host-to-PlayerTurn loading, renaming and actual roster dispatch after
+load, and new-line draft reset/polling. Full GCC14.2/Qt6.12.0 Debug rebuild and
+94/94 offscreen CTest passed (39.75 s); diff check clean. Formats remain v107/v47.
+This fixes the reported P2; it does not claim a new independent review or merge.
 
 ## Merged implementation — stationary-installation supply (#242)
 
