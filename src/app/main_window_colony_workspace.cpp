@@ -23,6 +23,18 @@
 namespace suns {
 namespace {
 
+void fitMineralRows(QTreeWidget* table)
+{
+    table->ensurePolished();
+    table->header()->ensurePolished();
+    int height = 2 * table->frameWidth();
+    if (!table->header()->isHidden()) height += table->header()->sizeHint().height();
+    for (int row = 0; row < table->topLevelItemCount(); ++row)
+        height += table->sizeHintForRow(row);
+    if (table->minimumHeight() != height || table->maximumHeight() != height)
+        table->setFixedHeight(height);
+}
+
 QDialog* detailsWindow(MainWindow* window, QWidget* content, const QString& title, const char* name)
 {
     auto* dialog = new QDialog(window);
@@ -114,7 +126,6 @@ void MainWindow::installColonyWorkspace()
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    table->setFixedHeight(92);
     table->header()->setSectionResizeMode(QHeaderView::Stretch);
     table->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     table->setUniformRowHeights(true);
@@ -125,6 +136,7 @@ void MainWindow::installColonyWorkspace()
         item->setText(0, names[row]);
         item->setForeground(0, colors[row]);
     }
+    fitMineralRows(table);
     mineralLayout->addWidget(table);
     statusLayout->addWidget(minerals);
     statusLayout->addStretch();
@@ -214,8 +226,11 @@ void MainWindow::refreshColonyWorkspace()
     auto* table = findChild<QTreeWidget*>("colonyMineralsTable");
     if (!status || !table) return;
     const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto planned = projected_cargo_order_state(received, pendingOrders_);
     const auto* star = selectedStar();
-    const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
+    const auto* observed = star ? find_planet_at_star(received, star->id) : nullptr;
+    const auto* planet = observed && observed->owner == pendingOrders_.player
+        ? find_planet(planned, observed->id) : observed;
     const bool own = star && planet && planet->owner == pendingOrders_.player
         && is_surveyed(received, pendingOrders_.player, star->id);
     QStringList lines;
@@ -233,7 +248,9 @@ void MainWindow::refreshColonyWorkspace()
             lines << ownership + (habitability ? QString(" • Hab %1%2%").arg(
                 survey_level(received, pendingOrders_.player, star->id) == SurveyLevel::BasicScan ? "~" : "").arg(*habitability) : "");
             if (own) {
-                lines << QString("Population: %1 / %2").arg(planet->population).arg(population_capacity(received, *planet, received.turn));
+                lines << QString("Population: %1 / %2%3").arg(planet->population)
+                    .arg(population_capacity(planned, *planet, received.turn))
+                    .arg(planet->population != observed->population ? " (after cargo)" : "");
                 if(habitat_completed(*planet)) lines << QString("Orbit: %1 / %2; reserve %3 years").arg(qulonglong(planet->habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity)).arg(planet->habitat.reserveYears);
                 lines << QString("Planetary radar: %1 (%2 ly)")
                     .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
@@ -252,7 +269,7 @@ void MainWindow::refreshColonyWorkspace()
                     lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
                         .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
                         .arg((damage.contamination+1)/2);
-                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(received,*planet))
+                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(planned,*planet))
                     .arg(find_orbital_station_at_planet(received, planet->id) ? "station" : "no station");
             }
             if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(received,pendingOrders_.player,planet->id)) {
@@ -267,7 +284,7 @@ void MainWindow::refreshColonyWorkspace()
         }
     }
     status->setText(lines.join("<br>"));
-    const auto mining = own ? projected_mineral_mining(received, *planet) : MineralCargo{};
+    const auto mining = own ? projected_mineral_mining(planned, *planet) : MineralCargo{};
     const bool geology = planet && planet_geology_known(received, pendingOrders_.player, planet->id);
     const auto concentration = geology ? planet_mineral_concentration(received, *planet) : MineralCargo{};
     const auto values = [](const MineralCargo& minerals) { return std::array{minerals.ironium, minerals.boranium, minerals.germanium}; };
@@ -283,6 +300,7 @@ void MainWindow::refreshColonyWorkspace()
             item->setToolTip(column, QString("%1 • Stock: %2 kt • Mining: %3 kt/year • Concentration: %4")
                 .arg(item->text(0), item->text(1), item->text(2), item->text(3)));
     }
+    fitMineralRows(table);
 }
 
 } // namespace suns

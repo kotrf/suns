@@ -33,6 +33,8 @@
 #include <QGraphicsTextItem>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsView>
+#include <QTextBrowser>
+#include <QScrollBar>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -350,7 +352,9 @@ void addSensorRange(
     Position center,
     double range,
     const QColor& outline,
-    const QColor& fill)
+    const QColor& fill,
+    const char* kind,
+    const QString& label)
 {
     if (range <= 0.0) return;
 
@@ -366,6 +370,9 @@ void addSensorRange(
         pen,
         QBrush(fill));
     circle->setZValue(-60.0);
+    circle->setAcceptedMouseButtons(Qt::NoButton);
+    circle->setData(0, kind);
+    circle->setToolTip(QString("%1: %2 ly").arg(label).arg(range, 0, 'f', 1));
 }
 
 void addBackgroundStars(QGraphicsScene* scene, std::uint64_t galaxySeed)
@@ -719,6 +726,8 @@ void MainWindow::rebuildScene()
     const auto& sensorKnowledge=playerView.players.front().sensorStatus;
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
+        const auto* extraRanges = findChild<QAction*>("showPassiveEmissionRangesAction");
+        const bool showExtraRanges = extraRanges && extraRanges->isChecked();
         for (const auto& planet : state_.planets) {
             if (planet.owner != pendingOrders_.player
                 || planet.radar == PlanetaryRadarLevel::None) continue;
@@ -728,7 +737,8 @@ void MainWindow::rebuildScene()
                 const auto actual = status == sensorKnowledge.end() ? nominal
                     : nominal * (1 - status->interferencePercent / 100.0);
                 addSensorRange(scene_, sourceStar->position, actual,
-                    QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
+                    QColor(100, 220, 155, 105), QColor(100, 220, 155, 12),
+                    "planetaryRadarRange", "Planetary radar");
             }
         }
         for (const auto& fleet : displayFleets) {
@@ -737,13 +747,16 @@ void MainWindow::rebuildScene()
             const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.fleet==fleet.id;});
             const auto range=fleet_active_sensors(visibleFleet,state_.turn)
                 ? (status==sensorKnowledge.end()?fleet_sensor_range(state_,visibleFleet):status->nominalRange*(1-status->interferencePercent/100.0)) : 0;
-            if(status!=sensorKnowledge.end()) {
-                addSensorRange(scene_,visibleFleet.position,status->passiveRange,QColor(185,160,90,75),QColor(185,160,90,4));
-                addSensorRange(scene_,visibleFleet.position,status->emissionRange,QColor(175,135,210,55),QColor(175,135,210,2));
+            if(showExtraRanges && status!=sensorKnowledge.end()) {
+                addSensorRange(scene_,visibleFleet.position,status->passiveRange,QColor(185,160,90,75),QColor(185,160,90,4),
+                    "passiveHullRange", "Passive hull detection baseline (motion and cloak affect detection)");
+                addSensorRange(scene_,visibleFleet.position,status->emissionRange,QColor(175,135,210,55),QColor(175,135,210,2),
+                    "emissionReceptionRange", "Reception of other ships' emissions");
             }
             if (range > 0.0) {
                 addSensorRange(scene_, visibleFleet.position, range,
-                    QColor(90, 165, 255, 115), QColor(90, 165, 255, 10));
+                    QColor(90, 165, 255, 115), QColor(90, 165, 255, 10),
+                    "activeScannerRange", "Active ship scanner");
             }
         }
     }
@@ -1015,7 +1028,7 @@ void MainWindow::updateControls()
     std::size_t colonies = 0;
     std::uint64_t population = 0;
     std::uint32_t output = 0;
-    const auto receivedEconomy=make_player_view(state_,pendingOrders_.player).state;
+    const auto receivedEconomy = projected_cargo_order_state(received, pendingOrders_);
     for (const auto& candidate : receivedEconomy.planets) {
         if (candidate.owner == pendingOrders_.player) {
             ++colonies;
@@ -1165,7 +1178,7 @@ void MainWindow::updateControls()
             // Compare intentions with the same received baseline. Physical
             // population may have changed while this report was in transit.
             const auto& receivedPlanet = *find_planet(received, planet->id);
-            const auto plannedCargo = projected_cargo_order_state(received, pendingOrders_);
+            const auto& plannedCargo = receivedEconomy;
             const auto predictedPlanet = std::find_if(plannedCargo.planets.begin(),
                 plannedCargo.planets.end(), [planet](const Planet& candidate) {
                     return candidate.id == planet->id;
@@ -1384,6 +1397,13 @@ void MainWindow::updateControls()
         for (auto& description : safeDescriptions) description = description.toHtmlEscaped();
         ordersLabel_->setText(QString("<b>Orders this turn (%1):</b><br>%2")
             .arg(static_cast<qulonglong>(pendingOrders_.orders.size())).arg(safeDescriptions.join("<br>")));
+    }
+    if (auto* browser = findChild<QTextBrowser*>("turnOrdersSummary");
+        browser && browser->property("ordersMarkup").toString() != ordersLabel_->text()) {
+        const auto position = browser->verticalScrollBar()->value();
+        browser->setHtml(ordersLabel_->text());
+        browser->setProperty("ordersMarkup", ordersLabel_->text());
+        browser->verticalScrollBar()->setValue(position);
     }
 
     QStringList readiness;

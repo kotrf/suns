@@ -1,6 +1,74 @@
 # Project status and development handoff
 
-## Current work — ordered multi-stop mineral lines (#53)
+## Current work — accumulated UI feedback in PR #244
+
+Base main remains `bdaac4b` after merged #243; [PR #244](https://github.com/kotrf/suns/pull/244)
+is open on `codex/map-ranges-and-mineral-layout`. Save v107 / orders v47 remain
+unchanged. The original active-only sensor defaults and measured Minerals
+height are retained. This follow-up implements the user's accumulated notes:
+
+- Fleet emissions moves below the route editor inside its scroll area; its
+  controls fit the narrow column. The fixed fleet header stays above the scroll.
+- Hab 100% omits the redundant terraforming suffix. Lower habitability retains
+  the potential, and engineering status remains visible.
+- Turn Messages uses a dark, hover-highlighted splitter handle.
+- Orders this turn is an independent scrollable reader opened through View and
+  the Orders toolbar action. Live updates preserve reading position. The
+  original full empire scope is retained and the dock summary is removed.
+- Toolbars have recognisable scalable line icons with text and tooltips.
+- Cargo's right-hand sliders can return previously planned colonists/minerals.
+  Mixed directions are emitted as ordinary nonnegative transfers in a feasible
+  order; final stocks and shared capacity are validated with the common command
+  projection. Invalid partial swaps are disabled. Cancel preserves prior intent.
+  Compact System Status/Minerals and colony/empire output use accepted cargo
+  intent immediately, retaining received state and normal End Turn resolution.
+
+Validation: full GCC14.2/Qt6.12 Debug build and **94/94 offscreen CTest passed
+(39.62 s)**. Expanded Qt regressions cover loading 2500, full return, simultaneous
+colonist return/mineral load, mineral return and Cancel; host state stays
+unchanged during planning. The final expanded Qt check also compares the real
+End Turn manifests, mineral conservation after mining and population after growth. They also cover Hab 100%/lower Hab, scrollable fleet
+emissions, a 150-order reader with retained scroll position, menu access and
+reopening one window. Normal/small workspace captures and the cargo/Orders
+windows were visually checked. Diff check is clean. This records local checks;
+new GitHub CI or merge is not claimed.
+
+The user accepted **population-operated factories and mines as in Stars!**:
+independent racial settings of 5–25 each per 10,000 residents; excess buildings
+remain idle. At 10/10, 25,000 residents support 25 factories and 25 mines together.
+They explicitly requested these UI fixes first. Workforce economics is the next
+implementation stage, not included in #244. Station fitting was found and judged
+clear; no extra station-fit screen is requested. Further #53 remains frozen
+until gameplay experience; AI expansion, evacuation and #63 remain deferred.
+
+## Earlier checkpoint — scanner overlays and Minerals layout
+
+Checked 31 October 2026: #243 is merged as main `bdaac4b`, save v107 /
+orders v47. The user froze all further #53 development until more gameplay
+experience, superseding the earlier transport roadmap. Implemented lines stay
+available. AI expansion is deferred; evacuation and #63 remain frozen. Remaining
+#61/#56 scope is being discussed; no next implementation slice has been chosen.
+
+Branch `codex/map-ranges-and-mineral-layout` addresses the player's screenshots:
+Sensors defaults to one active ship scanner circle (blue) plus planetary radar
+(green). A split-button menu optionally adds the passive hull baseline (gold)
+and reception of other ships' emissions (violet); switching Sensors off hides
+all ranges. Circle tooltips identify their meaning and radius. Detection rules,
+received sensor measurements and save/order formats are unchanged.
+
+The Minerals table now measures its header, three rows and frame using the live
+font/style instead of a fixed 92 px height. The existing colony refresh updates
+that height after font/style changes, keeping Germanium fully visible.
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug build passed; Linux/offscreen CTest
+**94/94 passed (40.00 s)**. The added row-visibility regression failed before the
+fix and passes with 11/14/18 pt fonts plus item padding. Map coverage verifies
+default/optional/master-off overlays and passive scanner mode. Existing small
+and normal window layouts pass; a captured 1366×900 layout was visually checked.
+`git diff --check` clean. Prepared for review; no merge or new remote CI result
+is claimed.
+
+## Historical pre-merge checkpoint — ordered multi-stop mineral lines (#53)
 
 Starts from merged #242, main `1d17369`, save v106 / orders v46, green main CI.
 Branch `codex/transport-line-multi-stop` adds up to 15 extra recipients after

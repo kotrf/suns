@@ -817,6 +817,9 @@ void MainWindow::installTurnMessages()
 
     auto* reader = new QSplitter(Qt::Horizontal, content);
     reader->setObjectName("turnMessageReader");
+    reader->setHandleWidth(6);
+    reader->setStyleSheet("QSplitter#turnMessageReader::handle { background: #1b2c3b; }"
+        "QSplitter#turnMessageReader::handle:hover { background: #3d6583; }");
     reader->addWidget(turnMessagesList_);
     reader->addWidget(turnMessageBody_);
     reader->setStretchFactor(0, 0);

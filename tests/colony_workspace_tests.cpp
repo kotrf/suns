@@ -1,9 +1,12 @@
 #include "main_window.hpp"
 #include "route_program_dock.hpp"
+#include "suns/communications.hpp"
 
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QDockWidget>
 #include <QEventLoop>
 #include <QGraphicsView>
@@ -12,14 +15,18 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenuBar>
+#include <QMenu>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolBar>
+#include <QTextBrowser>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -66,6 +73,53 @@ struct MainWindowTestAccess {
         w.refreshColonyWorkspace();
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void localCargo(MainWindow& w)
+    {
+        setup(w);
+        auto& fleet = w.state_.fleets.front();
+        fleet.design = kColonyShipDesignId;
+        fleet.ships = {{kColonyShipDesignId, 5}};
+        fleet.role = FleetRole::ColonyShip;
+        fleet.telemetry = {};
+        fleet.telemetry = confirmed_fleet_telemetry(w.state_, fleet);
+        w.rebuildScene();
+    }
+    static void verifyCargo(const MainWindow& w, std::uint64_t population, std::uint64_t aboard, double iron)
+    {
+        assert(w.state_.turn == 1 && w.state_.planets.front().population == 25000);
+        assert(w.state_.fleets.front().colonists == 0 && w.state_.planets.front().minerals.ironium == 123);
+        const auto planned = projected_cargo_order_state(make_player_view(w.state_, 1).state, w.pendingOrders_);
+        assert(planned.planets.front().population == population && planned.fleets.front().colonists == aboard);
+        assert(planned.planets.front().minerals.ironium == iron);
+        auto physical = w.state_;
+        physical.planets.front().productionQueue.clear();
+        auto afterCargo = physical.planets.front();
+        afterCargo.population = population;
+        const auto resolved = TurnProcessor{}.process(physical, {w.pendingOrders_});
+        assert(resolved.fleets.front().colonists == aboard);
+        assert(resolved.planets.front().population == population + projected_population_growth(physical, afterCargo, physical.turn));
+        assert(std::abs(resolved.planets.front().minerals.ironium - iron
+            - projected_mineral_mining(physical, physical.planets.front()).ironium) < 0.000001);
+    }
+    static void manyOrders(MainWindow& w)
+    {
+        setup(w);
+        for (int i = 1; i <= 150; ++i) {
+            w.pendingOrders_.orders.push_back(SetFleetColonistsOrder{1, 1, 0});
+            w.pendingDescriptions_ << QString("Order %1 — an empire-wide command with a long description for another system").arg(i);
+        }
+        w.rebuildScene();
+    }
+    static void environment(MainWindow& w, int temperature)
+    {
+        setup(w);
+        w.state_.players.front().race.environmentBased = true;
+        w.state_.planets.front().environment = {std::uint8_t(temperature), 50, 20};
+        w.state_.planets.front().naturalEnvironment = w.state_.planets.front().environment;
+        w.state_.players.front().surveyKnowledge.clear();
+        set_survey_level(w.state_, 1, 1, SurveyLevel::DeepSurvey, w.state_.turn);
+        w.rebuildScene();
+    }
 };
 } // namespace suns
 
@@ -108,6 +162,7 @@ static void installWorkspace(suns::MainWindow& window)
     window.installEmpireHistory();
     window.installWormholes();
     window.installPanelLayoutFixes();
+    window.installStrategicOperations();
 }
 
 int main(int argc, char** argv)
@@ -184,6 +239,118 @@ int main(int argc, char** argv)
         auto* mode = window.findChild<QComboBox*>("mapDisplayModeCombo");
         assert(fullyVisible(mode, &window) && mode->width() >= 100);
     }
+    // A visible table can still clip its last row when its pixel height is fixed.
+    // Cover larger fonts and item padding rather than just the outer dock bounds.
+    const auto originalFont = minerals->font();
+    const auto originalStyle = minerals->styleSheet();
+    window.resize(1366, 900);
+    window.resetPanelLayout();
+    for (int points : {11, 14, 18}) {
+        auto font = originalFont;
+        font.setPointSize(points);
+        minerals->setFont(font);
+        minerals->setStyleSheet("QTreeWidget::item { padding-top: 4px; padding-bottom: 4px; }");
+        settle();
+        for (int row = 0; row < 3; ++row) {
+            const auto rect = minerals->visualItemRect(minerals->topLevelItem(row));
+            assert(rect.isValid() && rect.top() >= 0 && rect.bottom() < minerals->viewport()->height());
+        }
+        assert(fullyVisible(minerals, overview));
+    }
+    minerals->setFont(originalFont);
+    minerals->setStyleSheet(originalStyle);
+    settle();
+
+    MainWindowTestAccess::environment(window, 50);
+    settle();
+    auto* terraforming = window.findChild<QLabel*>("planetTerraformingPotential");
+    assert(terraforming && terraforming->text() == "Hab 100%");
+    MainWindowTestAccess::environment(window, 65);
+    settle();
+    assert(terraforming->text().contains("with terraforming"));
+
+    // A full ship can return its queued colonists through the receiving slider,
+    // including a mixed return/load. Both the main status and mineral stock must
+    // agree with the cargo containers without resolving a year.
+    MainWindowTestAccess::localCargo(window);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        dialog->findChild<QSpinBox*>("cargoColonistSpin")->setValue(2500);
+        auto* apply = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        assert(apply->isEnabled());
+        apply->click();
+    });
+    window.openCargoManifestDialog();
+    settle();
+    assert(status->text().contains("Population: 22500 /"));
+    MainWindowTestAccess::verifyCargo(window, 22500, 2500, 123);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* people = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        assert(people->value() == 2500 && people->minimum() == 0);
+        people->setValue(0);
+        assert(dialog->findChild<QSpinBox*>("cargoColonistSpin")->value() == -2500);
+        dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0")->setValue(3);
+        if (app.arguments().contains("--capture")) dialog->grab().save("/tmp/suns-cargo-return.png");
+        auto* apply = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        assert(apply->isEnabled());
+        apply->click();
+    });
+    window.openCargoManifestDialog();
+    settle();
+    assert(status->text().contains("Population: 25000 /"));
+    assert(minerals->topLevelItem(0)->text(1) == "120.0");
+    MainWindowTestAccess::verifyCargo(window, 25000, 0, 120);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* iron = dialog->findChild<QSlider*>("cargoDestinationMineralSlider0");
+        assert(iron->value() == 300);
+        iron->setValue(0);
+        auto* apply = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        assert(apply->isEnabled());
+        apply->click();
+    });
+    window.openCargoManifestDialog();
+    settle();
+    assert(minerals->topLevelItem(0)->text(1) == "123.0");
+    MainWindowTestAccess::verifyCargo(window, 25000, 0, 123);
+    const auto acceptedCount = MainWindowTestAccess::orders(window).orders.size();
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        dialog->findChild<QSpinBox*>("cargoColonistSpin")->setValue(500);
+        dialog->reject();
+    });
+    window.openCargoManifestDialog();
+    assert(MainWindowTestAccess::orders(window).orders.size() == acceptedCount);
+    MainWindowTestAccess::verifyCargo(window, 25000, 0, 123);
+
+    MainWindowTestAccess::manyOrders(window);
+    auto* ordersAction = window.findChild<QAction*>("openTurnOrdersAction");
+    auto* ordersWindow = window.findChild<QDialog*>("turnOrdersDialog");
+    auto* ordersSummary = window.findChild<QTextBrowser*>("turnOrdersSummary");
+    auto* viewMenu = window.findChild<QMenu*>("sunsViewMenu");
+    assert(ordersAction && ordersWindow && ordersSummary && viewMenu);
+    assert(viewMenu->actions().contains(ordersAction));
+    assert(!details->isAncestorOf(ordersSummary) && !ordersWindow->isVisible());
+    ordersAction->trigger();
+    settle();
+    assert(ordersWindow->isVisible() && ordersSummary->isVisible() && ordersSummary->toPlainText().contains("Order 150"));
+    if (app.arguments().contains("--capture")) ordersWindow->grab().save("/tmp/suns-turn-orders.png");
+    assert(ordersSummary->verticalScrollBar()->maximum() > 0);
+    ordersSummary->verticalScrollBar()->setValue(ordersSummary->verticalScrollBar()->maximum());
+    const auto ordersPosition = ordersSummary->verticalScrollBar()->value();
+    settle();
+    assert(ordersSummary->verticalScrollBar()->value() == ordersPosition);
+    ordersWindow->close();
+    ordersAction->trigger();
+    settle();
+    assert(window.findChildren<QDialog*>("turnOrdersDialog").size() == 1);
+    ordersWindow->close();
+    MainWindowTestAccess::setup(window);
     window.findChild<QAction*>("openResearchToolAction")->trigger();
     settle();
     assert(fullyVisible(queue, production) && fullyVisible(minerals, overview));

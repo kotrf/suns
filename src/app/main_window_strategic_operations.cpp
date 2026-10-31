@@ -14,6 +14,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStyle>
@@ -56,7 +57,8 @@ protected:
 
 void MainWindow::installStrategicOperations()
 {
-    auto* root = findChild<QWidget*>("fleetOperationsPanel");
+    auto* scroll = findChild<QScrollArea*>("fleetOrdersScrollArea");
+    auto* root = scroll ? scroll->widget() : nullptr;
     auto* layout = root ? qobject_cast<QVBoxLayout*>(root->layout()) : nullptr;
     if (!layout || findChild<QGroupBox*>("strategicOperationsGroup")) return;
     auto* group = new QGroupBox("Fleet emissions", root);
@@ -76,7 +78,12 @@ void MainWindow::installStrategicOperations()
     arrival->setToolTip("Radio silence: return to Standard on arrival at any route waypoint, including intermediate waypoints. The return is permanent until another emission order.");
     auto* setMode = new QPushButton("Set", group); setMode->setObjectName("setFleetEmissionMode");
     row->addWidget(mode,1); row->addWidget(years); row->addWidget(setMode); body->addLayout(row);
-    row=new QHBoxLayout; row->addWidget(interval); row->addWidget(scan); row->addWidget(arrival); body->addLayout(row);
+    row = new QHBoxLayout;
+    row->addWidget(new QLabel("Communication window", group));
+    row->addWidget(interval);
+    body->addLayout(row);
+    body->addWidget(scan);
+    body->addWidget(arrival);
     auto* contacts=new QPushButton("Intelligence…",group); contacts->setObjectName("openReconnaissance"); body->addWidget(contacts);
     connect(contacts,&QPushButton::clicked,this,&MainWindow::openReconnaissance);
     auto* deception = new FleetCheckBox("Broadcast decoy signatures (jammer)",group);
@@ -86,7 +93,7 @@ void MainWindow::installStrategicOperations()
     summary->setWordWrap(true); summary->setTextFormat(Qt::PlainText); body->addWidget(summary);
 
     mode->setToolTip("Choose a mode, then press Set to queue an emission order. Standard: active scans, jamming and transmissions. Passive: receive commands and listen, with no automatic long-range transmissions. Radio silence: the same listening posture with scheduled transmission/scan windows and wake-up. All modes receive commands with normal propagation delay and share full status locally with a friendly populated colony in orbit; the colony forwards it over its own link. Other radars can still detect silent hulls.");
-    layout->insertWidget(1,group);
+    layout->insertWidget(layout->count() - 1, group);
     connect(setMode,&QPushButton::clicked,this,[this,mode,years,deception,interval,scan,arrival] {
         const auto* fleet = selectedFleet(); if (!fleet || fleet->owner != pendingOrders_.player) return;
         ElectronicsProgram e{EmissionMode(mode->currentIndex()), mode->currentIndex() == 2 ? state_.turn + years->value() : 0};

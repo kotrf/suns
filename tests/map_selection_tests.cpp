@@ -11,6 +11,7 @@
 #include <QGraphicsView>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsLineItem>
+#include <QGraphicsEllipseItem>
 #include <QMouseEvent>
 #include <QMenu>
 #include <QPainterPath>
@@ -67,6 +68,13 @@ struct MainWindowTestAccess {
         window.rebuildScene();
     }
     static void labels(MainWindow& window) { window.refreshMapLabels(); }
+    static void passiveScanner(MainWindow& window)
+    {
+        auto& fleet = window.state_.fleets.front();
+        fleet.electronics.mode = EmissionMode::Passive;
+        fleet.telemetry.electronics = fleet.electronics;
+        window.rebuildScene();
+    }
     static void dense(MainWindow& window)
     {
         setup(window);
@@ -116,6 +124,19 @@ static void enlargeMarkers(suns::MainWindow& window)
     }
 }
 
+static int sensorRanges(suns::MainWindow& window, const char* kind)
+{
+    int count = 0;
+    for (auto* item : window.routeProgramScene()->items()) {
+        if (item->data(0).toString() != kind) continue;
+        assert(dynamic_cast<QGraphicsEllipseItem*>(item));
+        assert(!item->toolTip().isEmpty());
+        assert(item->acceptedMouseButtons() == Qt::NoButton);
+        ++count;
+    }
+    return count;
+}
+
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
@@ -138,6 +159,29 @@ int main(int argc, char** argv)
     window.show();
     QApplication::processEvents();
     auto* view = MainWindowTestAccess::view(window);
+
+    auto* sensors = window.findChild<QAction*>("showSensorRangesAction");
+    auto* extraRanges = window.findChild<QAction*>("showPassiveEmissionRangesAction");
+    assert(sensors && sensors->isChecked() && extraRanges && !extraRanges->isChecked());
+    assert(sensorRanges(window, "activeScannerRange") == 1);
+    assert(sensorRanges(window, "planetaryRadarRange") == 1);
+    assert(sensorRanges(window, "passiveHullRange") == 0);
+    assert(sensorRanges(window, "emissionReceptionRange") == 0);
+    extraRanges->trigger();
+    assert(sensorRanges(window, "passiveHullRange") == 1);
+    assert(sensorRanges(window, "emissionReceptionRange") == 1);
+    sensors->trigger();
+    for (const auto* kind : {"activeScannerRange", "planetaryRadarRange", "passiveHullRange", "emissionReceptionRange"})
+        assert(sensorRanges(window, kind) == 0);
+    sensors->trigger();
+    MainWindowTestAccess::passiveScanner(window);
+    assert(sensorRanges(window, "activeScannerRange") == 0);
+    assert(sensorRanges(window, "planetaryRadarRange") == 1);
+    assert(sensorRanges(window, "passiveHullRange") == 1);
+    assert(sensorRanges(window, "emissionReceptionRange") == 1);
+    extraRanges->trigger();
+    assert(sensorRanges(window, "passiveHullRange") == 0);
+    assert(sensorRanges(window, "emissionReceptionRange") == 0);
 
     for (const auto zoom : {0.5, 1.0, 2.5}) {
         MainWindowTestAccess::setup(window);

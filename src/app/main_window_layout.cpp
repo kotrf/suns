@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "toolbar_icons.hpp"
 
 #include <QAction>
 #include <QDockWidget>
@@ -89,6 +90,7 @@ void MainWindow::installPanelLayoutFixes()
     }
 
     auto* panels = viewMenu(menuBar());
+    if (auto* orders = findChild<QAction*>("openTurnOrdersAction")) panels->addAction(orders);
     auto* research = panels->addAction("Empire research…");
     research->setObjectName("openResearchAction");
     research->setToolTip("Open research allocation and technology plan in a separate window");
@@ -100,6 +102,7 @@ void MainWindow::installPanelLayoutFixes()
     panels->addSeparator();
     auto* expand = panels->addAction("Fullscreen map");
     expand->setObjectName("expandMapAction");
+    expand->setIcon(toolbarIcon(ToolbarGlyph::Fullscreen));
     expand->setCheckable(true);
     expand->setShortcut(Qt::Key_F11);
     expand->setToolTip("Show the map fullscreen; F11 or Esc restores the panels");
