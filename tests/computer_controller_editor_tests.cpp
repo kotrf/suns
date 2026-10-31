@@ -56,7 +56,12 @@ void create_campaign(MainWindow& window, bool remoteHuman)
         assert(dialog && dialog->objectName() == "newCampaignDialog");
         auto* count = dialog->findChild<QSpinBox*>("campaignEmpireCount");
         auto* table = dialog->findChild<QTableWidget*>("campaignEmpiresTable");
-        assert(count && table && table->columnCount() == 9);
+        assert(count && table && table->columnCount() == 11);
+        auto* factories = qobject_cast<QSpinBox*>(table->cellWidget(1, 9));
+        auto* mines = qobject_cast<QSpinBox*>(table->cellWidget(1, 10));
+        assert(factories && mines && factories->minimum() == 5 && factories->maximum() == 25);
+        assert(factories->value() == 10 && mines->value() == 10);
+        factories->setValue(5); mines->setValue(25);
         auto* trait = qobject_cast<QComboBox*>(table->cellWidget(1, 8));
         assert(trait && trait->count() == 2);
         trait->setCurrentIndex(trait->findData(int(PrimaryRaceTrait::StargateSpecialist)));
@@ -192,6 +197,7 @@ int main(int argc, char** argv)
     assert(host.state.players[0].controller == PlayerController::Human);
     assert(host.state.players[1].controller == PlayerController::Computer);
     assert(host.state.players[1].race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
+    assert(host.state.players[1].race.factoriesPerTenThousand == 5 && host.state.players[1].race.minesPerTenThousand == 25);
     assert(host.state.players[2].controller == PlayerController::Human);
     assert(host.playerTokens.size() == 2 && host.playerTokens.contains(3) && !host.playerTokens.contains(2));
     assert(MainWindowTestAccess::turnButton(window)->text().contains("0/1 human orders"));
@@ -291,6 +297,7 @@ int main(int argc, char** argv)
     assert(host.state.turn == 1 && host.state.players[1].controller == PlayerController::Computer);
     assert(host.state.players[1].race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
     assert(host.state.players[2].controller == PlayerController::Human && !host.state.players[1].computer.initialized);
+    assert(host.state.players[1].race.factoriesPerTenThousand == 5 && host.state.players[1].race.minesPerTenThousand == 25);
 
     create_campaign(window, false);
     assert(MainWindowTestAccess::turnButton(window)->text().contains("computer empires"));

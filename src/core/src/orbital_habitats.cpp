@@ -37,7 +37,7 @@ std::uint32_t service_orbital_habitat(const GameState& state, Planet& p, bool su
     if (h.servicedTurn == year) return h.productionPaid;
     h.servicedTurn = year; h.productionPaid = 0; h.populationLost = 0;
     if (!h.population) { h.service = HabitatService::Empty; p.engineering.operational=false; return 0; }
-    const auto potential = std::uint64_t(p.industry)
+    const auto potential = std::uint64_t(colony_workforce(state, p).operatingFactories)
         + total_colony_population(p) / kPopulationPerProductionUnit;
     const auto affordable = [&] { return p.minerals.ironium >= 1 && p.minerals.boranium >= 1 && p.minerals.germanium >= 1; };
     const auto pay = [&] {
@@ -82,7 +82,7 @@ std::uint32_t net_colony_output(const GameState& state,const Planet& planet)
 {
     auto forecast=after_ordinary_mining(state,planet);
     const auto paid=service_orbital_habitat(state,forecast,engineering_station_available(state,forecast));
-    const auto gross=colony_output(forecast);
+    const auto gross=colony_output(state, forecast);
     return gross-std::min(gross,paid);
 }
 void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>& incoming,const std::optional<PlanetSurveySnapshot>& previous)

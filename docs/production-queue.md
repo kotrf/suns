@@ -2,6 +2,13 @@
 
 Each friendly colony exposes its complete production plan as an ordered four-column list: position, item, remaining production and forecast completion. Above it, the dock shows the colony stock, next-turn extraction and the total I/B/G bill for the visible queue. Selecting a row shows that item's bill and any shortfall against current stock. The forecast mirrors turn order: colony mining occurs first, the empire research percentage is deducted from current output, completed factories and mines affect later estimates, and population grows at the end of the turn.
 
+Factory output is limited to the factories the current surface population can
+operate under its owner's racial rate; extra installed factories remain idle.
+Mining uses the independent mine-operation rate. Limits are recalculated in the
+shared resolver as population grows or falls, so forecasts include later
+reactivation. The System panel shows active/built counts and population limits;
+see [race operation settings](race-profile.md#factory-and-mine-operation).
+
 **Move up** and **Move down** append a typed `ReorderProductionQueueOrder`. Indices apply to the queue as already modified by earlier pending queue and reorder orders, so the displayed plan is the same order the turn processor will resolve. Invalid or stale indices are rejected atomically.
 
 **Remove**, or **Delete** while the queue has focus, cancels the selected item.

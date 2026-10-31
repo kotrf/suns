@@ -262,7 +262,7 @@ void verify_receiver_reserve_matches_research_forecast()
         {ProductionKind::Factory, kFactoryCost}};
     auto& technology = state.players.front().technology;
     technology.researchAllocationPercent = 100;
-    assert(colony_output(colony) == 6);
+    assert(colony_output(state, colony) == 6);
     assert(colony_research_allocation(state, colony, 6) == 5);
     assert(colony_research_allocation(state, colony, 1) == 0);
     assert(colony_research_allocation(state, colony, 0) == 0);

@@ -100,25 +100,26 @@ int main()
     assert(close(afterMineOperates.planets.front().minerals.germanium,
         stockBeforeNextTurn.germanium + nextTurnMining.germanium));
 
-    // Production points may finish while construction waits for material.
+    // Previously completed work can still wait for material after residents leave.
+    // Zero population must not supply new factory work.
     auto starved = state;
     starved.planets.front().population = 0;
     starved.planets.front().industry = 6;
     starved.planets.front().minerals = {};
-    starved.planets.front().productionQueue.clear();
-    const auto blocked = processor.process(starved, {buildFactory});
+    starved.planets.front().productionQueue = {{suns::ProductionKind::Factory, 0}};
+    const auto blocked = processor.process(starved, {});
     assert(blocked.planets.front().industry == starved.planets.front().industry);
     assert(blocked.planets.front().productionQueue.size() == 1);
     assert(blocked.planets.front().productionQueue.front().remainingCost == 0);
 
     // Mines obey the same atomic mineral gate. With zero population there is no
-    // incidental mining, so this fixture precisely tests the I1/B2/G1 bill.
+    // incidental mining. Pre-completed work precisely tests the I1/B2/G1 bill.
     auto mineStarved = suns::make_demo_game();
     mineStarved.planets.front().population = 0;
     mineStarved.planets.front().industry = 5;
     mineStarved.planets.front().minerals = {};
-    mineStarved.planets.front().productionQueue.clear();
-    const auto blockedMine = processor.process(mineStarved, {buildMine});
+    mineStarved.planets.front().productionQueue = {{suns::ProductionKind::Mine, 0}};
+    const auto blockedMine = processor.process(mineStarved, {});
     assert(blockedMine.planets.front().mines == 0);
     assert(blockedMine.planets.front().productionQueue.size() == 1);
     assert(blockedMine.planets.front().productionQueue.front().kind == suns::ProductionKind::Mine);

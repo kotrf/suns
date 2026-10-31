@@ -17,6 +17,8 @@ struct EmpireSetup {
     bool basicRemoteMining{};
     PlayerController controller{PlayerController::Human};
     PrimaryRaceTrait primaryTrait{PrimaryRaceTrait::Generalist};
+    std::uint8_t factoriesPerTenThousand{kDefaultWorkforceRate};
+    std::uint8_t minesPerTenThousand{kDefaultWorkforceRate};
 };
 struct ResearchUnlock {
     ResearchField field;

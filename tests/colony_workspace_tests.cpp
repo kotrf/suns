@@ -76,6 +76,10 @@ struct MainWindowTestAccess {
     static void localCargo(MainWindow& w)
     {
         setup(w);
+        w.state_.planets.front().industry = 100;
+        w.state_.planets.front().mines = 100;
+        w.state_.players.front().surveyKnowledge.clear();
+        set_survey_level(w.state_, 1, 1, SurveyLevel::DeepSurvey, w.state_.turn);
         auto& fleet = w.state_.fleets.front();
         fleet.design = kColonyShipDesignId;
         fleet.ships = {{kColonyShipDesignId, 5}};
@@ -284,6 +288,9 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     settle();
     assert(status->text().contains("Population: 22500 /"));
+    assert(status->text().contains("Factories: 22 active / 100 built (max 22)"));
+    assert(status->text().contains("Mines: 22 active / 100 built (max 22)"));
+    if (app.arguments().contains("--capture")) window.grab().save("/tmp/suns-workforce-planning.png");
     MainWindowTestAccess::verifyCargo(window, 22500, 2500, 123);
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -301,6 +308,8 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     settle();
     assert(status->text().contains("Population: 25000 /"));
+    assert(status->text().contains("Factories: 25 active / 100 built (max 25)"));
+    assert(status->text().contains("Mines: 25 active / 100 built (max 25)"));
     assert(minerals->topLevelItem(0)->text(1) == "120.0");
     MainWindowTestAccess::verifyCargo(window, 25000, 0, 120);
     QTimer::singleShot(0, [&] {

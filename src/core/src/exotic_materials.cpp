@@ -134,7 +134,17 @@ std::uint32_t colony_xenocrystal_mining_rate(const GameState& s, const Planet& p
     const auto known = known_xenocrystal(s, p.owner, p.id);
     if (!p.owner || !p.population || !exotic_mining_available(s, p.owner)
         || !known || !known->depositSurveyed || !known->site.original) return 0;
-    return std::min(kXenocrystalPerPlanetYear, p.mines / 25);
+    return std::min(kXenocrystalPerPlanetYear, colony_workforce(s, p).operatingMines / 25);
+}
+namespace {
+std::uint32_t received_operating_mines(const GameState& s, const XenocrystalObservation::Colony& observation)
+{
+    Planet colony;
+    colony.owner = observation.owner;
+    colony.population = observation.population;
+    colony.mines = observation.mines;
+    return colony_workforce(s, colony).operatingMines;
+}
 }
 std::string known_colony_xenocrystal_block(const GameState& s, PlayerId owner, const Planet& p)
 {
@@ -145,7 +155,7 @@ std::string known_colony_xenocrystal_block(const GameState& s, PlayerId owner, c
     if (!known->colony || known->colony->owner != owner) return "Awaiting private colony mining report";
     if (!known->colony->population) return "No received population";
     if (!exotic_mining_available(s, owner)) return "Requires Construction 8 and Electronics 8";
-    if (known->colony->mines < 25) return "Requires 25 operating mines per unit/year";
+    if (received_operating_mines(s, *known->colony) < 25) return "Requires 25 operating mines per unit/year";
     if (!known->site.remaining) return "Known deposit exhausted";
     if (p.xenocrystal.surface >= kMaximumXenocrystal) return "Received surface cache full";
     return {};
@@ -154,7 +164,7 @@ std::uint32_t known_colony_xenocrystal_rate(const GameState& s, PlayerId owner, 
 {
     if (!known_colony_xenocrystal_block(s, owner, p).empty()) return 0;
     const auto known = *known_xenocrystal(s, owner, p.id);
-    return std::min({kXenocrystalPerPlanetYear, known.colony->mines / 25,
+    return std::min({kXenocrystalPerPlanetYear, received_operating_mines(s, *known.colony) / 25,
         known.site.remaining, kMaximumXenocrystal - p.xenocrystal.surface});
 }
 void mine_xenocrystals(GameState& s)

@@ -1,6 +1,49 @@
 # Project status and development handoff
 
-## Current work — accumulated UI feedback in PR #244
+## Current work — population-operated factories and mines
+
+Checked 31 October 2026: #244 is merged as main `72009d4`, save v107 / orders
+v47. Branch `codex/population-operated-industry` implements the accepted next
+step: separate racial operation rates, each 5–25 per 10,000 surface residents,
+defaulting to 10/10 and exposed for every human/computer empire in New campaign.
+Working buildings are `min(installed, floor(population × rate / 10000))`.
+At 25,000 residents and 10/10, 25 factories and 25 mines operate simultaneously;
+a current-turn load of 2500 leaves 22 of each working. Excess buildings remain
+installed and reactivate after growth or unloading. Capture uses the new owner's
+rates. Orbital residents retain orbital output without staffing surface assets.
+
+Factory output, research, ordinary and xenocrystal extraction, upkeep budgets,
+forecasts and history use the shared workforce calculation. Existing computer
+development/reconstruction avoids spending on buildings beyond received limits
+and resumes useful construction after received population growth. This adapts
+existing rules; further AI automation and #53 remain deferred/frozen.
+
+System Status and selected-system details show active/built counts, with
+population limits and rate tooltips. Mining details explain idle marginal mines.
+The already merged cargo-plan projection updates these counts immediately.
+Manual excess construction remains allowed; build prices and existing population
+resource/baseline-mining contributions retain their rules.
+
+Branch save **v108 / orders v47**: fixed-size, count/ID/range-validated WFRK
+extension persists rates. Old saves migrate to 10/10 while retaining buildings
+and past history. A v107 fixture is byte-checked against the former writer's
+SHA256, then loaded and continued. PlayerTurn retains the owner's rates and
+withholds foreign settings; normal PBEM orders remain unchanged.
+
+Validation: full GCC14.2 / Qt6.12 Debug build; Linux/offscreen CTest **96/96
+passed (38.70 s)**; diff check clean. Dedicated core/save suites cover independent
+rates, proportional rounding, loss/reactivation/capture, shared mining/production,
+current cargo plans, growing and declining production forecasts versus real
+turns, AI limit/resumption, extreme integer bounds, valid host/PlayerTurn/PBEM
+round trips, real v107 migration/continuation, foreign export invariance and
+malformed/truncated rates/IDs/counts. Existing fixtures that relied on unstaffed
+factories now provide workforce or already-completed work; installation costs,
+queue order, science and communication assertions remain covered. Core/Qt tests
+also check xenocrystal dormancy, New campaign settings, reload/restart retention
+and live 22/100 to 25/100 counts when reversing cargo. UI captures were visually
+checked. Prepared for review; no merge or new remote CI result is claimed.
+
+## Historical pre-merge checkpoint — accumulated UI feedback in PR #244
 
 Base main remains `bdaac4b` after merged #243; [PR #244](https://github.com/kotrf/suns/pull/244)
 is open on `codex/map-ranges-and-mineral-layout`. Save v107 / orders v47 remain

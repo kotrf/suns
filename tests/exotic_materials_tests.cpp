@@ -421,7 +421,12 @@ void colonization_and_capture_do_not_double_the_annual_extraction()
     assert(founded.planets[1].owner == 1 && founded.planets[1].mines == 25);
     assert(founded.planets[1].xenocrystal.remaining == 26 && founded.planets[1].xenocrystal.surface == 6);
     auto operated = next(founded);
-    assert(operated.planets[1].xenocrystal.remaining == 25 && operated.planets[1].xenocrystal.surface == 7);
+    assert(operated.planets[1].xenocrystal.remaining == 26 && operated.planets[1].xenocrystal.surface == 6);
+    assert(!colony_workforce(operated, operated.planets[1]).operatingMines);
+    operated.planets[1].population = 25000;
+    set_survey_level(operated, 1, operated.planets[1].star, SurveyLevel::DeepSurvey, operated.turn);
+    auto staffed = next(operated);
+    assert(staffed.planets[1].xenocrystal.remaining == 25 && staffed.planets[1].xenocrystal.surface == 7);
     auto captured = colony_mining_fixture(); captured.players.push_back({2, "Invader"});
     captured.players.back().technology.levels.fill(16); captured.planets[0].population = 1;
     captured.planets[0].mines = 25; captured.orbitalStations.clear();
@@ -430,13 +435,14 @@ void colonization_and_capture_do_not_double_the_annual_extraction()
     troops.colonists = 1000; troops.destination = troops.position;
     troops.arrivalAction = FleetArrivalAction{FleetArrivalActionKind::UnloadAll, 1, FleetCargoKind::Colonists};
     captured = TurnProcessor{}.process(captured, {});
-    assert(captured.planets[0].owner == 2 && captured.planets[0].xenocrystal.remaining == 29 && captured.planets[0].xenocrystal.surface == 1);
-    auto withoutStudy = TurnProcessor{}.process(captured, {});
-    assert(withoutStudy.planets[0].xenocrystal.remaining == 29); // Old owner's study does not authorize the invader.
+    assert(captured.planets[0].owner == 2 && captured.planets[0].xenocrystal.remaining == 30 && captured.planets[0].xenocrystal.surface == 0);
+    captured.planets[0].population = 100000;
     captured.planets[0].mines = 100;
+    auto withoutStudy = TurnProcessor{}.process(captured, {});
+    assert(withoutStudy.planets[0].xenocrystal.remaining == 30); // Old owner's study does not authorize the invader.
     set_survey_level(captured, 2, 1, SurveyLevel::DeepSurvey, captured.turn);
     auto informed = TurnProcessor{}.process(captured, {});
-    assert(informed.planets[0].xenocrystal.remaining == 25 && informed.planets[0].xenocrystal.surface == 5);
+    assert(informed.planets[0].xenocrystal.remaining == 26 && informed.planets[0].xenocrystal.surface == 4);
     auto own = colony_mining_fixture(); own.planets[0].mines = 25; add_miner(own, 8);
     own.fleets.back().position = own.stars[0].position;
     mine_xenocrystals(own); assert(own.planets[0].xenocrystal.surface == 1); // Robots cannot add another four on an owned world.

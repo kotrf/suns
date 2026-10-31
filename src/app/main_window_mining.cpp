@@ -38,7 +38,7 @@ void MainWindow::installMiningInfrastructure()
         productionGroup);
     queueMineButton->setObjectName("queueMineButton");
     queueMineButton->setToolTip(
-        "Build permanent extraction infrastructure. One Mine costs I 1 / B 2 / G 1 and adds 0.75 extraction units every turn.");
+        "One Mine costs I 1 / B 2 / G 1. A staffed mine adds 0.75 extraction units per turn; excess mines wait for population.");
 
     const int factoryIndex = productionLayout->indexOf(buildFactoryButton_);
     const int insertAt = factoryIndex >= 0 ? factoryIndex + 1 : productionLayout->count();
@@ -58,9 +58,10 @@ void MainWindow::installMiningInfrastructure()
         if (shuttingDown_) return;
 
         const auto* star = selectedStar();
-        const auto* planet = selectedPlanet();
+        const auto planned = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+        const auto* planet = star ? find_planet_at_star(planned, star->id) : nullptr;
         const bool friendlyColony = star
-            && is_surveyed(state_, pendingOrders_.player, star->id)
+            && is_surveyed(planned, pendingOrders_.player, star->id)
             && planet
             && planet->owner == pendingOrders_.player;
 
@@ -71,19 +72,22 @@ void MainWindow::installMiningInfrastructure()
             return;
         }
 
-        const auto currentMining = projected_mineral_mining(state_, *planet);
+        const auto currentMining = projected_mineral_mining(planned, *planet);
         Planet withAnotherMine = *planet;
         ++withAnotherMine.mines;
-        const auto nextMining = projected_mineral_mining(state_, withAnotherMine);
+        const auto nextMining = projected_mineral_mining(planned, withAnotherMine);
+        const auto workforce = colony_workforce(planned, *planet);
 
         miningSummary->setText(
-            QString("Mines <b>%1</b> • current extraction I %2 / B %3 / G %4<br>"
-                    "<span style='color:#a9bdd0'>Next Mine: %5</span>")
-                .arg(planet->mines)
+            QString("Mines <b>%1 active / %2 built</b> • population limit %3<br>"
+                    "Current extraction I %4 / B %5 / G %6<br>"
+                    "<span style='color:#a9bdd0'>Next Mine: %7%8</span>")
+                .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit)
                 .arg(currentMining.ironium, 0, 'f', 2)
                 .arg(currentMining.boranium, 0, 'f', 2)
                 .arg(currentMining.germanium, 0, 'f', 2)
-                .arg(miningDeltaText(currentMining, nextMining)));
+                .arg(miningDeltaText(currentMining, nextMining))
+                .arg(planet->mines >= workforce.mineLimit ? " — idle until population grows" : ""));
     };
 
     auto* refreshTimer = new QTimer(this);

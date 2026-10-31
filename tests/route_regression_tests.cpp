@@ -10,7 +10,7 @@ int main()
     auto state = make_demo_game();
     assert(state.planets[0].population == 1'000'000);
     assert(population_capacity(state.planets[0]) == 2'500'000);
-    assert(colony_output(state.planets[0]) == 6);
+    assert(colony_output(state, state.planets[0]) == 6);
     assert(projected_population_growth(state.planets[0]) == 60'000);
     assert(std::abs(colonist_cargo_mass(1) - 0.01) < 1e-12);
     assert(colonist_cargo_mass(100) == 1.0);

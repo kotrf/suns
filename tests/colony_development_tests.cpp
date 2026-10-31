@@ -23,9 +23,9 @@ GameState fixture(bool nearHome = false)
     Fleet ship;
     ship.id = 2; ship.owner = 1; ship.design = kColonyShipDesignId;
     ship.role = FleetRole::ColonyShip;
-    ship.ships = {{kColonyShipDesignId, 1}};
+    ship.ships = {{kColonyShipDesignId, 5}};
     ship.position = state.stars[1].position;
-    ship.warp = 5; ship.fuel = 300; ship.colonists = 100;
+    ship.warp = 5; ship.fuel = fleet_fuel_capacity(state, ship); ship.colonists = 2500;
     ship.electronics.mode = EmissionMode::Passive;
     state.fleets.push_back(ship);
     set_survey_level(state, 1, target.star, SurveyLevel::GeologicalSurvey, state.turn);

@@ -14,7 +14,7 @@ GameState colony()
     auto s=make_demo_game(); s.fleets.clear(); s.wormholeRules.spawnChancePerTurn=0;
     s.players.front().technology.researchActive=false;
     s.players.front().technology.researchAllocationPercent=0;
-    auto& p=s.planets.front(); p.population=100000; p.industry=1000;
+    auto& p=s.planets.front(); p.population=1000000; p.industry=1000; // Fully staffed fitting fixture.
     p.minerals={10000,10000,10000}; p.mines=0; p.productionQueue.clear();
     return s;
 }

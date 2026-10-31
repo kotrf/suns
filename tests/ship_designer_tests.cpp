@@ -393,7 +393,7 @@ void verify_same_turn_designs_in_multiplayer()
     using namespace suns;
     auto state = generate_campaign(GalaxyConfig{}, {{"One", RacePreset::Terran}, {"Two", RacePreset::Terran}});
     for (auto& planet : state.planets) if (planet.owner) {
-        planet.population = 0; // no mining: exact mineral accounting
+        planet.population = 100'000; // Staff the shipbuilding factories.
         planet.industry = 100;
         planet.minerals = {100, 100, 100};
     }
@@ -422,9 +422,12 @@ void verify_same_turn_designs_in_multiplayer()
             [&](const Planet& p) { return p.owner == orders.player; });
         const auto cost = ship_design_mineral_cost(*design);
         assert(colony->productionQueue.empty());
-        assert(colony->minerals.ironium == 100 - cost.ironium);
-        assert(colony->minerals.boranium == 100 - cost.boranium);
-        assert(colony->minerals.germanium == 100 - cost.germanium);
+        const auto initialColony = std::find_if(state.planets.begin(), state.planets.end(),
+            [&](const Planet& p) { return p.owner == orders.player; });
+        const auto mined = projected_mineral_mining(state, *initialColony);
+        assert(std::abs(colony->minerals.ironium - (100 + mined.ironium - cost.ironium)) < 1e-6);
+        assert(std::abs(colony->minerals.boranium - (100 + mined.boranium - cost.boranium)) < 1e-6);
+        assert(std::abs(colony->minerals.germanium - (100 + mined.germanium - cost.germanium)) < 1e-6);
         assert(!resolve_ship_design_order(result, orders.player, {colony->id, design->id, "Missing"}));
     }
     // An invalid creation must not make its queue order build some other design.

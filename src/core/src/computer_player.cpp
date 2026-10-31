@@ -855,16 +855,20 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             build(ProductionKind::CleanupContamination,std::min(3U,cleanup_units_available(*colony)));
             continue;
         }
+        const auto workforce = colony_workforce(state, *colony);
         bool reconstructing=false;
         for(auto kind:{ProductionKind::ReconstructFactory,ProductionKind::ReconstructMine})
             if(const auto remaining=reconstruction_available(*colony,kind); remaining && canAfford(kind)) {
-                build(kind,std::uint32_t(std::min<std::uint64_t>(remaining,3))); reconstructing=true; break;
+                const auto installed = kind == ProductionKind::ReconstructFactory ? colony->industry : colony->mines;
+                const auto limit = kind == ProductionKind::ReconstructFactory ? workforce.factoryLimit : workforce.mineLimit;
+                if (installed >= limit) continue;
+                build(kind,std::uint32_t(std::min<std::uint64_t>({remaining, 3, limit - installed}))); reconstructing=true; break;
             }
         if(reconstructing) continue;
         const auto exotic = known_xenocrystal(state, view.player, colony->id);
         const bool rareDeposit = exotic_mining_available(state, view.player) && exotic && exotic->depositSurveyed
             && exotic->site.remaining && exotic->colony && exotic->colony->owner == view.player && exotic->colony->population;
-        const auto minesWanted = std::max(rareDeposit ? 25u : 2u, colony->industry / 2);
+        const auto minesWanted = std::min(workforce.mineLimit, std::max(rareDeposit ? 25u : 2u, colony->industry / 2));
         const bool lowStock = std::min({colony->minerals.ironium, colony->minerals.boranium, colony->minerals.germanium}) < 15;
         if (colony->mines < minesWanted && (colony->mines < 2 || lowStock) && canAfford(ProductionKind::Mine)) {
             build(ProductionKind::Mine); continue;
@@ -883,7 +887,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             plan.orders.orders.push_back(QueueShipDesignOrder{colony->id, ship->id, ship->id == 0 ? ship->name : std::string{}});
             if (ship_design_can_colonize(*ship)) ++settlers; else ++scouts;
             explain(reason, "Build " + ship->name + " at colony " + std::to_string(colony->id));
-        } else if (colony->industry < 24 && canAfford(ProductionKind::Factory)) {
+        } else if (colony->industry < std::min(24u, workforce.factoryLimit) && canAfford(ProductionKind::Factory)) {
             build(ProductionKind::Factory);
         } else if (colony->mines < minesWanted && canAfford(ProductionKind::Mine)) {
             build(ProductionKind::Mine);
@@ -953,7 +957,7 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& view)
     // improves materially. Construction and operation use ordinary rules.
     for(const auto& p:view.state.planets) {
         if(p.owner!=view.player || !p.population || p.engineering.kind!=PlanetaryEngineeringKind::None
-            || !p.productionQueue.empty() || colony_output(p)<kEngineeringWorkPerYear
+            || !p.productionQueue.empty() || colony_output(view.state,p)<kEngineeringWorkPerYear
             || !engineering_station_available(view.state,p)) continue;
         auto best=PlanetaryEngineeringKind::None; std::uint8_t strength=0;
         const int baseline=player_planet_habitability(view.state,view.player,p,view.state.turn);

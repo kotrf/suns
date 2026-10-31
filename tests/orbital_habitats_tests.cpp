@@ -64,11 +64,11 @@ void construction_is_paid_unique_and_persistent()
 void maintenance_reserve_growth_and_recovery()
 {
     auto s=fixture();finish(s);auto& p=s.planets[0];p.habitat.population=200000;
-    const auto before=p.minerals;const auto output=colony_output(p);
+    const auto before=p.minerals;const auto output=colony_output(s, p);
     const auto resolved=resolve_colony_production(s,p,true);
     assert(p.habitat.service==HabitatService::Normal && p.habitat.productionPaid==2);
     assert(p.minerals.ironium==before.ironium-1 && resolved.researchPoints==0);
-    assert(projected_orbital_growth(p)==9000 && colony_output(p)==output);
+    assert(projected_orbital_growth(p)==9000 && colony_output(s, p)==output);
     (void)resolve_colony_production(s,p,true);assert(p.minerals.ironium==before.ironium-1);
     p.habitat.population=2000000;assert(projected_orbital_growth(p)==0);
     p.habitat.population=200000;
@@ -97,11 +97,11 @@ void orbital_output_is_counted_once_and_upkeep_precedes_research()
     const auto extraction=projected_mineral_mining(s,p);
     const auto before=p.minerals;
     const auto produced=resolve_colony_production(s,p,true);
-    assert(colony_output(p)==5 && p.habitat.productionPaid==2 && produced.researchPoints==3);
+    assert(colony_output(s, p)==5 && p.habitat.productionPaid==2 && produced.researchPoints==3);
     assert(p.minerals.ironium==before.ironium-1 && projected_mineral_mining(s,p).ironium==extraction.ironium);
     ++s.turn;p.population=0;p.habitat.population=500000;p.minerals={100,100,100};
     (void)resolve_colony_production(s,p,true);
-    assert(p.habitat.service==HabitatService::Reserve && !p.habitat.productionPaid && !colony_output(p));
+    assert(p.habitat.service==HabitatService::Reserve && !p.habitat.productionPaid && !colony_output(s, p));
     assert(p.minerals.ironium==100 && !projected_mineral_mining(s,p).ironium);
 }
 void annual_helpers_match_mining_before_maintenance()
@@ -155,7 +155,7 @@ void cargo_is_atomic_and_routes_can_evacuate_without_station()
     p.population=0;p.habitat.population=1000;set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
     auto result=TurnProcessor{}.process(s,{{1,{MoveFleetOrder{f.id,f.position,1,{FleetArrivalActionKind::LoadAllAvailable,0,FleetCargoKind::OrbitalColonists}}}}});
     assert(result.fleets[0].colonists==1000 && result.planets[0].habitat.population==0);
-    assert(result.planets[0].engineering.work==4800 && colony_output(result.planets[0])==0);
+    assert(result.planets[0].engineering.work==4800 && colony_output(result, result.planets[0])==0);
     auto delivered=fixture();finish(delivered);auto& receiver=delivered.planets[0];receiver.habitat.population=kOrbitalPopulationCapacity-50;
     delivered.fleets[0].colonists=100;
     const PlayerOrders unload{1,{MoveFleetOrder{1,delivered.fleets[0].position,1,{FleetArrivalActionKind::UnloadAll,0,FleetCargoKind::OrbitalColonists}}}};

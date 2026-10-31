@@ -16,7 +16,7 @@ GameState fixture()
     auto& colony = state.planets.front();
     colony.environment = {24, 50, 20};
     colony.industry = 12;
-    colony.population = 1000;
+    colony.population = 100'000; // Staff the fixture's factories.
     colony.minerals = {1000, 1000, 1000};
     colony.mines = 0;
     for (auto& star : state.stars) star.variability = {};

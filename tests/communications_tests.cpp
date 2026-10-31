@@ -27,7 +27,7 @@ void colony_radar_bootstraps_detection_and_links()
     state.fleets.clear();
     auto& outpost = state.planets[1];
     outpost.owner = 1;
-    outpost.population = 100;
+    outpost.population = 1000; // One working factory builds the receiver.
     outpost.industry = 1;
     outpost.radar = PlanetaryRadarLevel::None;
     outpost.homeworld = false;
@@ -61,6 +61,7 @@ void colony_radar_bootstraps_detection_and_links()
     isolated.stars[1].position = {220, 0};
     assert(communication_delay_turns(isolated, 1, {220, 0}) > 0);
     isolated.planets[1].industry = 50;
+    isolated.planets[1].population = 50'000;
     isolated.planets[1].minerals = {20, 20, 20};
     isolated.players.front().technology.researchAllocationPercent = 0; // Upgrade is ordinary paid production.
     const auto upgraded = TurnProcessor{}.process(isolated,

@@ -39,7 +39,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 107;
+constexpr quint32 kSaveFormatVersion = 108;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2379,6 +2379,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "orbital_bases_save.inc"
 #include "colony_conditions_save.inc"
 #include "transport_lines_save.inc"
+#include "workforce_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -3231,6 +3232,10 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
         return false;
     }
     for (const auto& player : data.state.players) {
+        if (!workforceRatesValid(player.race)) {
+            errorMessage = "Factory and mine operation must be between 5 and 25 per 10,000 colonists.";
+            return false;
+        }
         if (!computer_state_valid(player, data.state.turn)) {
             errorMessage = "Invalid empire controller or computer decision history.";
             return false;
@@ -3283,6 +3288,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeTransportLines(stream,data.state);
     writeTransportStatistics(stream,data.state);
     writeTransportVisits(stream,data.state);
+    writeWorkforce(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3413,6 +3419,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if(version>=102) readTransportLines(stream,loaded.state);
     if(version>=104) readTransportStatistics(stream,loaded.state);
     if(version>=107) readTransportVisits(stream,loaded.state);
+    if(version>=108) readWorkforce(stream,loaded.state);
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn
         && (loaded.state.mediumObserver!=loaded.pendingOrders.player || !loaded.state.interstellarClouds.empty())) markCorrupt(stream);

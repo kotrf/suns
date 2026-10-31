@@ -13,7 +13,7 @@ Planet& establish_test_colony(GameState& state)
 {
     auto& colony = state.planets.at(1);
     colony.owner = 1;
-    colony.population = 1000;
+    colony.population = 50'000; // Staff all 50 factories used for this queue-order test.
     colony.industry = 50;
     colony.minerals = {100.0, 100.0, 100.0};
     colony.productionQueue.clear();

@@ -21,7 +21,8 @@ GameState fixture()
     s.players[0].race=race_preset(RacePreset::Terran); s.players[0].technology.levels.fill(14);
     s.players[0].technology.researchActive=false;
     auto& p=s.planets[0]; p.environment={40,50,20}; p.naturalEnvironment=p.environment;
-    p.population=100000; p.industry=1000; p.mines=0; p.minerals={10000,10000,10000}; p.productionQueue.clear();
+    // Keep the high-output engineering fixture fully staffed.
+    p.population=1000000; p.industry=1000; p.mines=0; p.minerals={10000,10000,10000}; p.productionQueue.clear();
     s.orbitalStations[0].hull=OrbitalStationHullType::Starbase;
     for(auto& star:s.stars)star.variability={};
     return s;
@@ -186,6 +187,7 @@ void magnetic_projects_are_paid_finite_and_reversible()
 {
     for(const auto kind:{E::ArtificialMagnetosphere,E::AdaptiveMagnetosphere}) {
         auto s=fixture();s.players[0].technology.levels.fill(18);
+        s.players[0].race.habitableRadiation={0,100}; // Sustained workforce for the finite-project test.
         s.players[0].objectKnowledge={{7,{411,7},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::CompactRemnant,s.turn,s.turn}};
         auto& p=s.planets[0];p.environment.radiation=70;p.naturalEnvironment=p.environment;
         const auto natural=*p.naturalEnvironment;const auto minerals=p.minerals;

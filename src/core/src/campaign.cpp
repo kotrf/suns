@@ -348,6 +348,11 @@ std::int32_t player_planet_habitability(
 
 GameState generate_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
 {
+    for (const auto& setup : empires) {
+        if (setup.factoriesPerTenThousand < kMinWorkforceRate || setup.factoriesPerTenThousand > kMaxWorkforceRate
+            || setup.minesPerTenThousand < kMinWorkforceRate || setup.minesPerTenThousand > kMaxWorkforceRate)
+            throw std::invalid_argument("Factory and mine operation must be between 5 and 25 per 10,000 colonists");
+    }
     if (empires.empty() || empires.size() > 8 || empires.size() > config.starCount)
         throw std::invalid_argument("A campaign needs 1–8 empires and at least one system per empire");
     auto state = generate_game(config);
@@ -399,6 +404,8 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         player.race.hullAccess = empires[i].hullAccess;
         player.race.advancedRemoteMining = empires[i].advancedRemoteMining;
         player.race.basicRemoteMining = empires[i].basicRemoteMining;
+        player.race.factoriesPerTenThousand = empires[i].factoriesPerTenThousand;
+        player.race.minesPerTenThousand = empires[i].minesPerTenThousand;
         player.technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 1;
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),

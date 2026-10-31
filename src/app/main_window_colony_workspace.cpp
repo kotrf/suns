@@ -233,6 +233,7 @@ void MainWindow::refreshColonyWorkspace()
         ? find_planet(planned, observed->id) : observed;
     const bool own = star && planet && planet->owner == pendingOrders_.player
         && is_surveyed(received, pendingOrders_.player, star->id);
+    if (!own) status->setToolTip({});
     QStringList lines;
     if (!star) lines << "<b>No system selected</b>" << "Select a system on the map.";
     else {
@@ -256,7 +257,15 @@ void MainWindow::refreshColonyWorkspace()
                     .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
                          planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
                     .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
-                lines << QString("Factories: %1 • Mines: %2").arg(planet->industry).arg(planet->mines);
+                const auto workforce = colony_workforce(planned, *planet);
+                lines << QString("Factories: %1 active / %2 built (max %3)")
+                    .arg(workforce.operatingFactories).arg(planet->industry).arg(workforce.factoryLimit);
+                lines << QString("Mines: %1 active / %2 built (max %3)")
+                    .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit);
+                const auto* empire = find_player(received, pendingOrders_.player);
+                status->setToolTip(QString("Population operates factories and mines independently. Per 10,000 surface colonists: %1 factories and %2 mines. Excess buildings remain idle.")
+                    .arg(empire ? empire->race.factoriesPerTenThousand : kDefaultWorkforceRate)
+                    .arg(empire ? empire->race.minesPerTenThousand : kDefaultWorkforceRate));
                 const auto& damage=planet->warDamage;
                 if(planet->aftermathKnownLocally && damage.lastBombardmentTurn) {
                     lines << QString("War ruins: %1 factories / %2 mines • last bombardment year %3")

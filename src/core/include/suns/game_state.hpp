@@ -44,6 +44,10 @@ inline constexpr double kColonistsPerCargoUnit = 1'000'000.0 / kColonistMassKg;
 inline constexpr std::uint64_t kInitialHomePopulation = 1'000'000;
 inline constexpr std::uint64_t kPopulationPerHabitability = 25'000;
 inline constexpr std::uint64_t kPopulationPerProductionUnit = 500'000;
+inline constexpr std::uint64_t kPopulationPerWorkforceGroup = 10'000;
+inline constexpr std::uint8_t kMinWorkforceRate = 5;
+inline constexpr std::uint8_t kMaxWorkforceRate = 25;
+inline constexpr std::uint8_t kDefaultWorkforceRate = 10;
 inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
 inline constexpr std::uint32_t kFirstResearchLevelCost = 18;
@@ -1029,6 +1033,8 @@ struct RaceProfile {
     bool advancedRemoteMining{};
     bool basicRemoteMining{};
     bool legacyBiologyAdaptation{}; // Preserve pre-terraforming saves without changing their colonies.
+    std::uint8_t factoriesPerTenThousand{kDefaultWorkforceRate};
+    std::uint8_t minesPerTenThousand{kDefaultWorkforceRate};
 };
 
 struct ColonyTurnStatistics {
@@ -2008,7 +2014,14 @@ void refresh_sensor_intel(GameState& state);
 [[nodiscard]] std::int64_t projected_population_growth(const Planet& planet);
 [[nodiscard]] std::int64_t projected_population_growth(
     const GameState& state, const Planet& planet, std::uint64_t turn);
-[[nodiscard]] std::uint32_t colony_output(const Planet& planet);
+struct ColonyWorkforce {
+    std::uint32_t factoryLimit{}, mineLimit{};
+    std::uint32_t operatingFactories{}, operatingMines{};
+};
+// Surface residents support the two installation types independently. Limits
+// are proportional to the exact population, rounded down to whole buildings.
+[[nodiscard]] ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet);
+[[nodiscard]] std::uint32_t colony_output(const GameState& state, const Planet& planet);
 [[nodiscard]] int stellar_habitability_bias(StarClass stellarClass);
 [[nodiscard]] bool star_is_variable(const StarSystem& star);
 [[nodiscard]] double stellar_luminosity(const StarSystem& star, std::uint64_t turn);
