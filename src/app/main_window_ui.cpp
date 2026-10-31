@@ -737,9 +737,19 @@ void MainWindow::installUiPolish()
     sensorRangesAction->setObjectName("showSensorRangesAction");
     sensorRangesAction->setCheckable(true);
     sensorRangesAction->setChecked(sensorRangesCheck_->isChecked());
-    sensorRangesAction->setToolTip("Show or hide colony and fleet sensor coverage on the map");
+    sensorRangesAction->setToolTip("Show active ship scanners (blue) and planetary radar (green); use the arrow for passive and emission ranges");
     connect(sensorRangesAction, &QAction::toggled, sensorRangesCheck_, &QCheckBox::setChecked);
     connect(sensorRangesCheck_, &QCheckBox::toggled, sensorRangesAction, &QAction::setChecked);
+    auto* sensorRangesMenu = new QMenu(mapToolbar);
+    auto* extraRangesAction = sensorRangesMenu->addAction("Passive and emission ranges");
+    extraRangesAction->setObjectName("showPassiveEmissionRangesAction");
+    extraRangesAction->setCheckable(true);
+    extraRangesAction->setToolTip("Also show passive hull detection (gold) and reception of other ships' emissions (violet)");
+    connect(extraRangesAction, &QAction::toggled, this, [this] { rebuildScene(); });
+    if (auto* button = qobject_cast<QToolButton*>(mapToolbar->widgetForAction(sensorRangesAction))) {
+        button->setMenu(sensorRangesMenu);
+        button->setPopupMode(QToolButton::MenuButtonPopup);
+    }
 
     // Stars! style selection range stays in one fixed status-bar location.
     auto* selectionDistance = new QLabel(statusBar());

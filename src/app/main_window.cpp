@@ -350,7 +350,9 @@ void addSensorRange(
     Position center,
     double range,
     const QColor& outline,
-    const QColor& fill)
+    const QColor& fill,
+    const char* kind,
+    const QString& label)
 {
     if (range <= 0.0) return;
 
@@ -366,6 +368,9 @@ void addSensorRange(
         pen,
         QBrush(fill));
     circle->setZValue(-60.0);
+    circle->setAcceptedMouseButtons(Qt::NoButton);
+    circle->setData(0, kind);
+    circle->setToolTip(QString("%1: %2 ly").arg(label).arg(range, 0, 'f', 1));
 }
 
 void addBackgroundStars(QGraphicsScene* scene, std::uint64_t galaxySeed)
@@ -719,6 +724,8 @@ void MainWindow::rebuildScene()
     const auto& sensorKnowledge=playerView.players.front().sensorStatus;
     std::sort(displayFleets.begin(), displayFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     if (showSensorRanges_) {
+        const auto* extraRanges = findChild<QAction*>("showPassiveEmissionRangesAction");
+        const bool showExtraRanges = extraRanges && extraRanges->isChecked();
         for (const auto& planet : state_.planets) {
             if (planet.owner != pendingOrders_.player
                 || planet.radar == PlanetaryRadarLevel::None) continue;
@@ -728,7 +735,8 @@ void MainWindow::rebuildScene()
                 const auto actual = status == sensorKnowledge.end() ? nominal
                     : nominal * (1 - status->interferencePercent / 100.0);
                 addSensorRange(scene_, sourceStar->position, actual,
-                    QColor(100, 220, 155, 105), QColor(100, 220, 155, 12));
+                    QColor(100, 220, 155, 105), QColor(100, 220, 155, 12),
+                    "planetaryRadarRange", "Planetary radar");
             }
         }
         for (const auto& fleet : displayFleets) {
@@ -737,13 +745,16 @@ void MainWindow::rebuildScene()
             const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.fleet==fleet.id;});
             const auto range=fleet_active_sensors(visibleFleet,state_.turn)
                 ? (status==sensorKnowledge.end()?fleet_sensor_range(state_,visibleFleet):status->nominalRange*(1-status->interferencePercent/100.0)) : 0;
-            if(status!=sensorKnowledge.end()) {
-                addSensorRange(scene_,visibleFleet.position,status->passiveRange,QColor(185,160,90,75),QColor(185,160,90,4));
-                addSensorRange(scene_,visibleFleet.position,status->emissionRange,QColor(175,135,210,55),QColor(175,135,210,2));
+            if(showExtraRanges && status!=sensorKnowledge.end()) {
+                addSensorRange(scene_,visibleFleet.position,status->passiveRange,QColor(185,160,90,75),QColor(185,160,90,4),
+                    "passiveHullRange", "Passive hull detection baseline (motion and cloak affect detection)");
+                addSensorRange(scene_,visibleFleet.position,status->emissionRange,QColor(175,135,210,55),QColor(175,135,210,2),
+                    "emissionReceptionRange", "Reception of other ships' emissions");
             }
             if (range > 0.0) {
                 addSensorRange(scene_, visibleFleet.position, range,
-                    QColor(90, 165, 255, 115), QColor(90, 165, 255, 10));
+                    QColor(90, 165, 255, 115), QColor(90, 165, 255, 10),
+                    "activeScannerRange", "Active ship scanner");
             }
         }
     }

@@ -184,6 +184,27 @@ int main(int argc, char** argv)
         auto* mode = window.findChild<QComboBox*>("mapDisplayModeCombo");
         assert(fullyVisible(mode, &window) && mode->width() >= 100);
     }
+    // A visible table can still clip its last row when its pixel height is fixed.
+    // Cover larger fonts and item padding rather than just the outer dock bounds.
+    const auto originalFont = minerals->font();
+    const auto originalStyle = minerals->styleSheet();
+    window.resize(1366, 900);
+    window.resetPanelLayout();
+    for (int points : {11, 14, 18}) {
+        auto font = originalFont;
+        font.setPointSize(points);
+        minerals->setFont(font);
+        minerals->setStyleSheet("QTreeWidget::item { padding-top: 4px; padding-bottom: 4px; }");
+        settle();
+        for (int row = 0; row < 3; ++row) {
+            const auto rect = minerals->visualItemRect(minerals->topLevelItem(row));
+            assert(rect.isValid() && rect.top() >= 0 && rect.bottom() < minerals->viewport()->height());
+        }
+        assert(fullyVisible(minerals, overview));
+    }
+    minerals->setFont(originalFont);
+    minerals->setStyleSheet(originalStyle);
+    settle();
     window.findChild<QAction*>("openResearchToolAction")->trigger();
     settle();
     assert(fullyVisible(queue, production) && fullyVisible(minerals, overview));

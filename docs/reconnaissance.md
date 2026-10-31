@@ -63,10 +63,13 @@ The same strength adds 1–2 years of communication delay at the source.
 Observers report measured nominal/effective active range, passive baseline and
 emission reception range through the same delivery policy. Sensor interference
 and clearance events are transition-based. A remote UI uses received measurements,
-not current hidden jammer components. Blue/green ranges show active coverage,
-gold the passive hull baseline, and violet emission reception. Passive hull
-reach also depends on target motion and cloak; the overlay is a baseline rather
-than guaranteed detection.
+not current hidden jammer components. By default the Sensors overlay shows only
+active ship scanners (blue) and planetary radar (green). The arrow beside Sensors
+opens the optional **Passive and emission ranges** overlay: gold is the passive
+hull baseline, violet is reception of other ships' emissions, not the distance
+at which the displayed ship broadcasts. Switching Sensors off hides all ranges.
+Passive hull reach also depends on target motion and cloak; the overlay is a
+baseline rather than guaranteed detection. Range tooltips identify each circle.
 
 Colonies and scanner ships can intercept transmitting enemies beyond reflected
 hull range. Emissions remain unidentified 20 ly cells with 15 ly uncertainty:

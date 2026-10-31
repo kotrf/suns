@@ -1,6 +1,33 @@
 # Project status and development handoff
 
-## Current work — ordered multi-stop mineral lines (#53)
+## Current checkpoint — scanner overlays and Minerals layout
+
+Checked 31 October 2026: #243 is merged as main `bdaac4b`, save v107 /
+orders v47. The user froze all further #53 development until more gameplay
+experience, superseding the earlier transport roadmap. Implemented lines stay
+available. AI expansion is deferred; evacuation and #63 remain frozen. Remaining
+#61/#56 scope is being discussed; no next implementation slice has been chosen.
+
+Branch `codex/map-ranges-and-mineral-layout` addresses the player's screenshots:
+Sensors defaults to one active ship scanner circle (blue) plus planetary radar
+(green). A split-button menu optionally adds the passive hull baseline (gold)
+and reception of other ships' emissions (violet); switching Sensors off hides
+all ranges. Circle tooltips identify their meaning and radius. Detection rules,
+received sensor measurements and save/order formats are unchanged.
+
+The Minerals table now measures its header, three rows and frame using the live
+font/style instead of a fixed 92 px height. The existing colony refresh updates
+that height after font/style changes, keeping Germanium fully visible.
+
+Validation: full GCC 14.2 / Qt 6.12.0 Debug build passed; Linux/offscreen CTest
+**94/94 passed (40.00 s)**. The added row-visibility regression failed before the
+fix and passes with 11/14/18 pt fonts plus item padding. Map coverage verifies
+default/optional/master-off overlays and passive scanner mode. Existing small
+and normal window layouts pass; a captured 1366×900 layout was visually checked.
+`git diff --check` clean. Prepared for review; no merge or new remote CI result
+is claimed.
+
+## Historical pre-merge checkpoint — ordered multi-stop mineral lines (#53)
 
 Starts from merged #242, main `1d17369`, save v106 / orders v46, green main CI.
 Branch `codex/transport-line-multi-stop` adds up to 15 extra recipients after

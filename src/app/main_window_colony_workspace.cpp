@@ -23,6 +23,18 @@
 namespace suns {
 namespace {
 
+void fitMineralRows(QTreeWidget* table)
+{
+    table->ensurePolished();
+    table->header()->ensurePolished();
+    int height = 2 * table->frameWidth();
+    if (!table->header()->isHidden()) height += table->header()->sizeHint().height();
+    for (int row = 0; row < table->topLevelItemCount(); ++row)
+        height += table->sizeHintForRow(row);
+    if (table->minimumHeight() != height || table->maximumHeight() != height)
+        table->setFixedHeight(height);
+}
+
 QDialog* detailsWindow(MainWindow* window, QWidget* content, const QString& title, const char* name)
 {
     auto* dialog = new QDialog(window);
@@ -114,7 +126,6 @@ void MainWindow::installColonyWorkspace()
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    table->setFixedHeight(92);
     table->header()->setSectionResizeMode(QHeaderView::Stretch);
     table->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     table->setUniformRowHeights(true);
@@ -125,6 +136,7 @@ void MainWindow::installColonyWorkspace()
         item->setText(0, names[row]);
         item->setForeground(0, colors[row]);
     }
+    fitMineralRows(table);
     mineralLayout->addWidget(table);
     statusLayout->addWidget(minerals);
     statusLayout->addStretch();
@@ -283,6 +295,7 @@ void MainWindow::refreshColonyWorkspace()
             item->setToolTip(column, QString("%1 • Stock: %2 kt • Mining: %3 kt/year • Concentration: %4")
                 .arg(item->text(0), item->text(1), item->text(2), item->text(3)));
     }
+    fitMineralRows(table);
 }
 
 } // namespace suns
