@@ -40,6 +40,10 @@ and [113 additional reference modules](stars-equipment.md). Search, category and
 armament quantities appear in the design summary. Combat-related cards distinguish
 reference ratings from currently operational logistics capabilities.
 
+The component list takes the catalog panel's additional vertical space when the
+window grows. The selected component description keeps its preferred height and
+scrolls for longer text, so blank description space does not displace list rows.
+
 Suns! support equipment includes Field Repair Bay, Relay Array and Anomaly
 Detector. The following prototype equipment is retained for existing legacy
 empires; Colony Module, Fuel Tank, Cargo Pod and Antimatter Generator have
