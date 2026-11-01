@@ -282,6 +282,21 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
     return "none";
 }
 
+GameState receivedFleetPlanningState(const GameState& state, PlayerId player)
+{
+    auto received = make_player_view(state, player).state;
+    // Outgoing commands are the owner's already sent intent, not fresh
+    // observations. Keep them before projecting Split/Merge, as the route
+    // forecast does, without restoring physical manifests or reports.
+    for (auto& fleet : received.fleets) {
+        if (fleet.owner != player) continue;
+        if (const auto* original = findFleet(state, fleet.id);
+            original && original->owner == player)
+            fleet.pendingCommands = original->pendingCommands;
+    }
+    return received;
+}
+
 GameState movementPhasePreviewState(
     const GameState& state,
     const PlayerOrders& pending,
@@ -293,14 +308,15 @@ GameState movementPhasePreviewState(
     // avoids unrelated actions.
     // The processor still applies turn-start onboard fuel generation, exactly
     // as it will before the real orders and movement phase.
-    GameState preview = make_player_view(state, pending.player).state;
+    GameState preview = receivedFleetPlanningState(state, pending.player);
     preview.pendingMobileBaseTransfers.clear();
     project_interstellar_medium(preview,pending.player);
     // A local cargo preview must not turn a remote site's physical stock or
     // undelivered deployment into planning knowledge, or run its work orders.
     for (auto& fleet : preview.fleets) {
         if (fleet.owner==pending.player) {
-            const auto known=fleet_player_view(state,fleet);
+            auto known=fleet_player_view(state,fleet);
+            known.pendingCommands = fleet.pendingCommands;
             if (fleet.outpost!=OutpostKind::None || known.outpost!=OutpostKind::None
                 || mobile_base_hulls(preview,fleet)>0 || mobile_base_hulls(preview,known)>0) fleet=known;
             fleet.mobileBase.enabled=false;
@@ -633,7 +649,7 @@ std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
 const GameState& MainWindow::fleetPlanningState() const
 {
     if (!fleetPlanningState_ || fleetPlanningRevision_ != planningRevision_) {
-        fleetPlanningState_ = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+        fleetPlanningState_ = projected_cargo_order_state(receivedFleetPlanningState(state_, pendingOrders_.player), pendingOrders_);
         for (auto& fleet : fleetPlanningState_->fleets) {
             if (fleet.owner != pendingOrders_.player || fleet_telemetry_age(*fleetPlanningState_, fleet) != 0
                 || !fleet_has_instant_link(*fleetPlanningState_, fleet)) continue;

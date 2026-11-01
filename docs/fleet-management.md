@@ -33,6 +33,15 @@ End Turn and can immediately receive a name, cargo/fuel and a route. Rename is
 also reflected in the orbital picker immediately. The physical world is changed
 only when the orders resolve.
 
+Reorganisation also retains the owner's already sent commands before applying
+the preview. A remote fleet waiting for an old command is still busy even when
+its last telemetry is stationary: Split is blocked, and neither end of an idle
+Merge may have commands in flight. This overlays outgoing intent only; it does
+not refresh position, composition or telemetry dates. The host uses the same
+busy condition when binding detachment references, so a rejected split cannot
+shift references belonging to a later valid split. Generic PlayerView/report
+sanitisation and the player-turn export contract are unchanged.
+
 A detachment's planning ID comes from the player's received view, never the
 host's hidden allocation counter. During resolution the host binds successful
 split references to actual fleet IDs within each player's submission, including

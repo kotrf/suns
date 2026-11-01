@@ -2569,8 +2569,18 @@ TurnResult TurnProcessor::process_with_events(
     for (const auto& submission : submitted_orders) {
         std::vector<PlannedSplitReference> splits;
         if (find_player(current, submission.player)
-            && std::any_of(submission.orders.begin(), submission.orders.end(), [](const auto& o) { return std::holds_alternative<SplitFleetOrder>(o); }))
-            (void)project_order_boundary(make_player_view(current, submission.player).state, submission, &splits);
+            && std::any_of(submission.orders.begin(), submission.orders.end(), [](const auto& o) { return std::holds_alternative<SplitFleetOrder>(o); })) {
+            auto received = make_player_view(current, submission.player).state;
+            // Match the owner's planning boundary: a known command in flight
+            // prevents a phantom split from consuming a detachment reference.
+            for (auto& fleet : received.fleets) {
+                if (fleet.owner != submission.player) continue;
+                if (const auto* original = find_service_fleet(current, fleet.id);
+                    original && original->owner == submission.player)
+                    fleet.pendingCommands = original->pendingCommands;
+            }
+            (void)project_order_boundary(received, submission, &splits);
+        }
         std::map<FleetId, FleetId> aliases;
         for (std::size_t index = 0; index < submission.orders.size(); ++index) {
             auto order = submission.orders[index];

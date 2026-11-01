@@ -119,6 +119,28 @@ int main()
     const auto failed = TurnProcessor{}.process(state, {impossible});
     assert(failed.fleets.size() == 1 && fleet(failed, 1).name == state.fleets[0].name);
 
+    // An already sent command blocks reorganisation. A rejected split must
+    // not consume a planning ID and redirect a later valid detachment's name.
+    state = pair();
+    for (auto& f : state.fleets) f.ships = {{kScoutDesignId,2}};
+    state.fleets[0].position = {5000,0};
+    state.fleets[0].telemetry.position = {5000,0};
+    state.fleets[0].telemetry.observedTurn = state.turn;
+    state.fleets[0].telemetry.ships = {{kScoutDesignId,2}};
+    auto hidden = state.fleets[0]; hidden.id = 99; hidden.owner = 2; hidden.position = {10000,10000};
+    state.fleets.push_back(hidden); state.nextFleetId = 100;
+    state = TurnProcessor{}.process(state,{{1,{MoveFleetOrder{1,{5025,0},5}}}});
+    assert(state.turn == 2 && fleet(state,1).pendingCommands.size() == 1);
+    assert(fleet(state,1).pendingCommands.front().deliveryTurn == 35 && !fleet(state,1).destination);
+    const auto clientChild = make_player_view(state,1).state.nextFleetId;
+    assert(clientChild == 3);
+    const PlayerOrders reorganise{1,{SplitFleetOrder{1,{{kScoutDesignId,1}}},
+        SplitFleetOrder{2,{{kScoutDesignId,1}}},RenameFleetOrder{clientChild,"Actual detachment"}}};
+    const auto reorganised = TurnProcessor{}.process(state,{reorganise});
+    assert(fleet_ship_count(fleet(reorganised,1)) == 2 && fleet_ship_count(fleet(reorganised,2)) == 1);
+    assert(fleet(reorganised,100).name == "Actual detachment");
+    assert(fleet(reorganised,1).pendingCommands.size() == 1);
+
     // A tanker can follow an ordinary fleet and deliver fuel without merging.
     state = pair(); state.fleets[0].position = {25, 0}; state.fleets[1].fuel = 0;
     FleetArrivalAction supply; supply.kind = FleetArrivalActionKind::SupplyOutpost; supply.reserveFuel = 50;

@@ -1,6 +1,42 @@
 # Project status and development handoff
 
-## Current work — fleet planning and ordinary fuel exchange
+## Current work — PR #249 review: commands already in flight
+
+Checked 1 November 2026: review of `0e8c251` against coordinate base `a06f298`
+identified one P2 ([thread](https://github.com/kotrf/suns/pull/249#discussion_r4435207719)).
+The received view cleared already sent commands, so an apparently idle remote
+fleet could acquire a phantom Split in the UI while the physical host rejected
+it. Both the real Split dialog and detachment-reference regressions reproduced
+the problem before the fix.
+
+The fleet and disposable movement previews now retain the owner's already sent
+command intent before projecting reorganisation, matching the existing route
+forecast. Split and both ends of idle Merge remain busy while that command is
+in flight. The host's temporary-ID calculation applies the same condition, so
+an invalid earlier Split cannot consume the reference intended for a later
+valid detachment. Reports, physical manifests and telemetry dates are not
+restored, and generic PlayerView/player-turn sanitisation stays unchanged.
+
+Validation: complete GCC14.2 / Qt6.12 Debug build and **96/96 Linux/offscreen
+CTest passed (35.30 s)**. Real Move -> year 2 -> command due in year 35 keeps
+Split/Merge blocked without new orders or fleets, including after save/reload;
+a busy source is excluded from merging into an idle destination. Loaded older
+invalid Split plus a valid Split preserves composition/IDs/names in both
+previews and in physical resolution with a hidden global allocator. Existing
+fuel/rendezvous, route, communications and knowledge suites also pass; diff
+check is clean. The focused suites failed on the pre-fix code and pass now.
+
+The former head's [GitHub CI run](https://github.com/kotrf/suns/actions/runs/41295280523)
+was independently checked: checkout `0e8c251`, Qt6.12.0, completed linux job,
+96/96 CTest in 80.42 s. That result belongs to the former head; no new remote
+CI result is claimed for this follow-up. Save/orders remain v107/v47.
+
+#249 still depends on open #247: merge #247 first, then retarget #249 to main.
+Separate #245 is updated at `770d358` (mining-before-cargo fix, 96/96); #248
+includes it at `ab1f5ee` (98/98) and must target main after #245 merges. Main
+remains `23d6b0f`. The user merges PRs; #53 and prior deferrals stay frozen.
+
+## Earlier checkpoint — fleet planning and ordinary fuel exchange
 
 Checked 1 November 2026: main `23d6b0f` contains merged #244/#246. Branch
 `codex/fleet-planning-and-fuel` builds on open coordinate-waypoint #247, with

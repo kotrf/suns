@@ -13,6 +13,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QProgressBar>
@@ -40,6 +41,7 @@ struct MainWindowTestAccess {
     static const PlayerOrders& orders(MainWindow& w) { return w.pendingOrders_; }
     static const GameState& raw(MainWindow& w) { return w.state_; }
     static const GameState& plan(MainWindow& w) { return w.fleetPlanningState(); }
+    static const GameState& movementPlan(MainWindow& w) { return w.movementPlanningPreview(); }
     static SaveGameData snapshot(MainWindow& w) { return w.campaignSnapshot(); }
     static bool load(MainWindow& w, const QString& path) { return w.loadGameFromPath(path); }
     static void advance(MainWindow& w) { w.endTurn(); }
@@ -66,6 +68,33 @@ struct MainWindowTestAccess {
         deliverySetup(w);
         for (auto& f : w.state_.fleets) f.position = {10, 10};
         w.rebuildScene(); emit w.routeProgramContextChanged(true);
+    }
+    static void remoteCommandSetup(MainWindow& w)
+    {
+        w.state_ = make_demo_game();
+        auto& f = w.state_.fleets.front();
+        f.position = {5000,0}; f.ships = {{kScoutDesignId,2}};
+        f.telemetry.position = f.position; f.telemetry.ships = f.ships;
+        w.pendingOrders_ = {1,{MoveFleetOrder{1,{5025,0},5}}};
+        w.pendingDescriptions_ = {"Send remote course"}; w.selection_.fleet = 1;
+        w.endTurn(); // Real issue/propagation, not a synthetic busy flag.
+        assert(w.state_.turn == 2 && w.state_.fleets.front().pendingCommands.size() == 1);
+        assert(w.state_.fleets.front().pendingCommands.front().deliveryTurn == 35);
+        assert(!w.state_.fleets.front().destination);
+    }
+    static void addIdlePartner(MainWindow& w)
+    {
+        auto partner = w.state_.fleets.front(); partner.id = 2; partner.name = "Idle partner";
+        partner.pendingCommands.clear(); w.state_.fleets.push_back(partner); w.state_.nextFleetId = 3;
+        w.selection_.fleet = 2; w.rebuildScene();
+    }
+    static void oldReorganisationOrders(MainWindow& w)
+    {
+        // An older client/save may already contain the invalid Split. It must
+        // not shift the valid second split in either disposable preview.
+        w.pendingOrders_ = {1,{SplitFleetOrder{1,{{kScoutDesignId,1}}},
+            SplitFleetOrder{2,{{kScoutDesignId,1}}},RenameFleetOrder{3,"Valid child"}}};
+        w.pendingDescriptions_ = {"Busy split","Idle split","Rename child"}; w.rebuildScene();
     }
 };
 }
@@ -183,4 +212,36 @@ int main(int argc, char** argv)
     fuel(window, 40);
     assert(near(fleet(MainWindowTestAccess::plan(window), 1).fuel, 160));
     assert(near(fleet(MainWindowTestAccess::plan(window), 2).fuel, 40));
+
+    MainWindowTestAccess::remoteCommandSetup(window);
+    const auto blocked = [&](bool split, const QString& reason) {
+        const auto count = MainWindowTestAccess::orders(window).orders.size();
+        QTimer::singleShot(0,[&] {
+            auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            assert(message && message->text().contains(reason));
+            message->accept();
+        });
+        if (split) window.openSplitFleetDialog(); else window.openMergeFleetsDialog();
+        assert(MainWindowTestAccess::orders(window).orders.size() == count);
+    };
+    blocked(true,"commands in flight");
+    blocked(false,"commands in flight");
+    assert(window.availableOwnedFleetsForRouteProgram().size() == 1);
+    const auto& known = fleet(MainWindowTestAccess::plan(window),1);
+    assert(known.pendingCommands.size() == 1 && known.pendingCommands.front().deliveryTurn == 35);
+    assert(known.telemetry.observedTurn == 1 && known.position == Position(5000,0));
+    assert(!known.destination && fleet_ship_count(known) == 2);
+    const auto remoteSave = settings.filePath("remote-command.suns");
+    assert(write_save_game_file(remoteSave,MainWindowTestAccess::snapshot(window),error));
+    assert(MainWindowTestAccess::load(window,remoteSave));
+    blocked(true,"commands in flight");
+    assert(MainWindowTestAccess::plan(window).fleets.size() == 1);
+    MainWindowTestAccess::addIdlePartner(window);
+    blocked(false,"No other stationary"); // A busy source cannot be merged into an idle destination.
+    assert(MainWindowTestAccess::plan(window).fleets.size() == 2);
+    MainWindowTestAccess::oldReorganisationOrders(window);
+    for (const auto* preview : {&MainWindowTestAccess::plan(window),&MainWindowTestAccess::movementPlan(window)}) {
+        assert(preview->fleets.size() == 3 && fleet_ship_count(fleet(*preview,1)) == 2);
+        assert(fleet(*preview,3).name == "Valid child" && fleet_ship_count(fleet(*preview,3)) == 1);
+    }
 }
