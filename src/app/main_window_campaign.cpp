@@ -1,5 +1,7 @@
 #include "main_window.hpp"
 #include "galaxy_setup_widget.hpp"
+#include "race_file.hpp"
+#include "race_setup_widget.hpp"
 
 #include <QApplication>
 #include <QClipboard>
@@ -9,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -114,10 +117,104 @@ void MainWindow::newCampaign()
         });
         table.setRowHidden(row, row >= count.value());
     }
+    const auto raceAtRow = [&table](int row) {
+        return EmpireSetup{table.item(row, 0)->text().trimmed().toUtf8().toStdString(),
+            static_cast<RacePreset>(qobject_cast<QComboBox*>(table.cellWidget(row, 1))->currentIndex()),
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->isChecked(),
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->isChecked(),
+            qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->isChecked(),
+            static_cast<HullAccess>(qobject_cast<QComboBox*>(table.cellWidget(row, 5))->currentIndex()),
+            qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 1,
+            qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 2,
+            static_cast<PlayerController>(qobject_cast<QComboBox*>(table.cellWidget(row, 7))->currentIndex()),
+            static_cast<PrimaryRaceTrait>(qobject_cast<QComboBox*>(table.cellWidget(row, 8))->currentData().toInt()),
+            static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->value()),
+            static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->value())};
+    };
+    const auto applyRace = [&table](int row, const EmpireSetup& setup) {
+        table.item(row, 0)->setText(QString::fromStdString(setup.name));
+        qobject_cast<QComboBox*>(table.cellWidget(row, 1))->setCurrentIndex(int(setup.race));
+        qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->setChecked(setup.improvedFuelEfficiency);
+        qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->setChecked(setup.noRamScoopEngines);
+        qobject_cast<QComboBox*>(table.cellWidget(row, 5))->setCurrentIndex(int(setup.hullAccess));
+        qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->setChecked(
+            setup.settlerEngineAccess || setup.hullAccess == HullAccess::HyperExpansion);
+        qobject_cast<QComboBox*>(table.cellWidget(row, 6))->setCurrentIndex(
+            setup.advancedRemoteMining ? 1 : setup.basicRemoteMining ? 2 : 0);
+        auto* trait = qobject_cast<QComboBox*>(table.cellWidget(row, 8));
+        trait->setCurrentIndex(trait->findData(int(setup.primaryTrait)));
+        qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->setValue(setup.factoriesPerTenThousand);
+        qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->setValue(setup.minesPerTenThousand);
+    };
     connect(&count, &QSpinBox::valueChanged, &dialog, [&](int value) {
         for (int row = 0; row < 8; ++row) table.setRowHidden(row, row >= value);
     });
     layout->addWidget(&table);
+    auto* raceFiles = new QHBoxLayout;
+    raceFiles->addWidget(new QLabel("Race files for:", &dialog));
+    QComboBox raceSlot(&dialog); raceSlot.setObjectName("campaignRaceSlot");
+    raceFiles->addWidget(&raceSlot, 1);
+    const auto refreshSlots = [&] {
+        const auto previous = std::clamp(raceSlot.currentIndex(), 0, count.value() - 1);
+        const QSignalBlocker block(&raceSlot);
+        raceSlot.clear();
+        for (int row = 0; row < count.value(); ++row)
+            raceSlot.addItem(QString("Player %1 — %2").arg(row + 1).arg(table.item(row, 0)->text()));
+        raceSlot.setCurrentIndex(previous);
+    };
+    refreshSlots();
+    connect(&count, &QSpinBox::valueChanged, &dialog, refreshSlots);
+    connect(&table, &QTableWidget::itemChanged, &dialog, refreshSlots);
+    connect(&raceSlot, &QComboBox::currentIndexChanged, &dialog, [&](int row) { table.setCurrentCell(row, 0); });
+    connect(&table, &QTableWidget::currentCellChanged, &dialog, [&](int row, int, int, int) {
+        if (row >= 0 && row < count.value()) raceSlot.setCurrentIndex(row);
+    });
+    table.setSelectionBehavior(QAbstractItemView::SelectRows);
+    table.setCurrentCell(0, 0);
+    auto* loadRace = new QPushButton("Load player race…", &dialog);
+    loadRace->setObjectName("campaignLoadRaceButton");
+    loadRace->setToolTip("Load a player's .sunsrace file into the chosen slot and set its Control to Human");
+    auto* editRace = new QPushButton("Edit race…", &dialog); editRace->setObjectName("campaignEditRaceButton");
+    auto* saveRace = new QPushButton("Save race…", &dialog); saveRace->setObjectName("campaignSaveRaceButton");
+    raceFiles->addWidget(loadRace); raceFiles->addWidget(editRace); raceFiles->addWidget(saveRace);
+    layout->addLayout(raceFiles);
+    connect(loadRace, &QPushButton::clicked, &dialog, [&] {
+        const auto row = raceSlot.currentIndex();
+        const auto path = QFileDialog::getOpenFileName(&dialog, "Load player race", {},
+            "Suns! races (*.sunsrace);;All files (*)");
+        if (path.isEmpty()) return;
+        EmpireSetup setup; QString error;
+        if (!read_race_file(path, setup, error)) { QMessageBox::warning(&dialog, "Load race failed", error); return; }
+        applyRace(row, setup);
+        qobject_cast<QComboBox*>(table.cellWidget(row, 7))->setCurrentIndex(int(PlayerController::Human));
+    });
+    connect(saveRace, &QPushButton::clicked, &dialog, [&] {
+        const auto setup = raceAtRow(raceSlot.currentIndex());
+        if (const auto error = race_setup_error(setup); !error.isEmpty()) {
+            QMessageBox::warning(&dialog, "Race settings", error); return;
+        }
+        auto path = QFileDialog::getSaveFileName(&dialog, "Save player race", "race.sunsrace", "Suns! races (*.sunsrace)");
+        if (path.isEmpty()) return;
+        if (QFileInfo(path).suffix().isEmpty()) path += ".sunsrace";
+        QString error;
+        if (!write_race_file(path, setup, error)) QMessageBox::warning(&dialog, "Save race failed", error);
+    });
+    connect(editRace, &QPushButton::clicked, &dialog, [&] {
+        const auto row = raceSlot.currentIndex();
+        QDialog edit(&dialog); edit.setObjectName("campaignRaceEditorDialog"); edit.setWindowTitle("Edit player race");
+        auto* editLayout = new QVBoxLayout(&edit);
+        RaceSetupWidget editor(&edit); editor.setSetup(raceAtRow(row)); editLayout->addWidget(&editor);
+        QDialogButtonBox editButtons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &edit);
+        connect(&editButtons, &QDialogButtonBox::accepted, &edit, [&] {
+            if (const auto error = race_setup_error(editor.setup()); !error.isEmpty()) {
+                QMessageBox::warning(&edit, "Race settings", error); return;
+            }
+            edit.accept();
+        });
+        connect(&editButtons, &QDialogButtonBox::rejected, &edit, &QDialog::reject);
+        editLayout->addWidget(&editButtons); edit.resize(740, 520);
+        if (edit.exec() == QDialog::Accepted) applyRace(row, editor.setup());
+    });
     QDialogButtonBox buttons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(&buttons, &QDialogButtonBox::accepted, &dialog, [&] {
         bool ok{};
@@ -128,9 +225,8 @@ void MainWindow::newCampaign()
             return;
         }
         for (int row = 0; row < count.value(); ++row) {
-            const auto name = table.item(row, 0)->text().trimmed().toUtf8();
-            if (name.isEmpty() || name.size() > 80) {
-                QMessageBox::warning(&dialog, "Empire name", "Names must contain 1–80 UTF-8 bytes."); return;
+            if (const auto error = race_setup_error(raceAtRow(row)); !error.isEmpty()) {
+                QMessageBox::warning(&dialog, "Race settings", QString("Player %1: %2").arg(row + 1).arg(error)); return;
             }
         }
         dialog.accept();
@@ -140,21 +236,7 @@ void MainWindow::newCampaign()
     dialog.resize(1380, 640);
     if (dialog.exec() != QDialog::Accepted) return;
     empireSetups_.clear();
-    for (int row = 0; row < count.value(); ++row) {
-        const auto* race = qobject_cast<QComboBox*>(table.cellWidget(row, 1));
-        empireSetups_.push_back({table.item(row, 0)->text().trimmed().toStdString(),
-            static_cast<RacePreset>(race->currentIndex()),
-            qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->isChecked(),
-            qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->isChecked(),
-            qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->isChecked(),
-            static_cast<HullAccess>(qobject_cast<QComboBox*>(table.cellWidget(row, 5))->currentIndex()),
-            qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 1,
-            qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 2,
-            static_cast<PlayerController>(qobject_cast<QComboBox*>(table.cellWidget(row, 7))->currentIndex()),
-            static_cast<PrimaryRaceTrait>(qobject_cast<QComboBox*>(table.cellWidget(row, 8))->currentData().toInt()),
-            static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->value()),
-            static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->value())});
-    }
+    for (int row = 0; row < count.value(); ++row) empireSetups_.push_back(raceAtRow(row));
     seedEdit_->setText(seed.text());
     newGalaxy(galaxy.config(seed.text().toULongLong()));
 }

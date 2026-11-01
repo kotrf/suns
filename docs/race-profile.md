@@ -16,6 +16,48 @@ and empire settings. Three presets are playable:
 | Cryophile | 0–40 | 15–65 | 0–40 | Cold and lower-gravity worlds |
 | Radiotroph | 55–85 | 50–80 | immune | Narrow hot/heavy environments; safe hazardous-drive transport |
 
+## Portable race files
+
+**File → Race designer…** provides an independent form for every participant.
+It shares its controls with **New campaign → Edit race…**. A `.sunsrace` saved
+with **Save race…** can be sent to the host, loaded into one selected campaign
+slot, and reused in another game. It carries all supported `EmpireSetup` race
+settings, including factory/mine operation rates, while leaving control mode
+and campaign identity to the host. Importing a player race sets its slot to Human.
+Generation, save/load and restart retain the same racial rules.
+
+The file is UTF-8 JSON with a separate schema version. A complete v1 example is:
+
+```json
+{
+  "format": "suns-race",
+  "version": 1,
+  "name": "Explorers",
+  "environment": "terran",
+  "primary_trait": "generalist",
+  "fuel_efficiency": false,
+  "no_ram_scoops": false,
+  "settler_engines": false,
+  "hull_family": "standard",
+  "remote_mining": "standard",
+  "factories_per_10000": 10,
+  "mines_per_10000": 10
+}
+```
+
+Environment keys are `terran`, `cryophile`, `radiotroph`; traits are `generalist`
+and `stargate-specialist`. Hull keys are `standard`, `inner-strength`,
+`super-stealth`, `war-monger`, `space-demolition`, `hyper-expansion`. Mining is
+`standard`, `advanced` or `basic`. The operation rates are whole numbers 5–25.
+Names use 1–80 UTF-8 bytes, without control characters. Hyper Expansion includes
+Settler engine access under the existing campaign rules.
+
+The reader accepts at most 64 KiB and requires every v1 field with its exact
+type and a supported value. Unknown versions/fields, missing fields and damaged
+JSON fail without changing the editor or campaign row. Saves are atomic and
+validate before opening the destination. No game-state, seed, technology or
+turn-token payload can enter the host through this schema.
+
 ## Factory and mine operation
 
 Each race has independent `factoriesPerTenThousand` and `minesPerTenThousand`

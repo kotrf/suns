@@ -1,6 +1,36 @@
 # Project status and development handoff
 
-## Current work — population-operated factories and mines
+## Current work — independently prepared player races
+
+Checked 1 November 2026 (Europe/Moscow): main is `23d6b0f` after merged #246,
+save v107 / orders v47. Population-operated industry #245 and coordinate
+waypoints #247 remain separate open PRs. User selected pre-game race-file
+exchange as the next step toward playing a human PBEM campaign.
+
+Branch `codex/player-race-files` builds on #245 and retains save v108 / orders
+v47. File → Race designer saves/loads a participant's `.sunsrace` without
+changing the active campaign. New campaign imports into an explicit player
+slot, switches that slot to Human, and offers Edit/Save with the same form.
+Every supported race setting, including both workforce rates, survives the
+file-to-campaign path and subsequent reload/restart/player-turn export.
+
+The independent JSON schema v1 is bounded to 64 KiB and validates exact field
+types, enums and ranges. It carries no controller, campaign/player identity,
+world state, technologies or credentials. Failed import/cancel preserves the
+current race and atomic writes preserve existing files on failure. See
+[race files](race-profile.md#portable-race-files) and
+[participant workflow](multiplayer-turn-exchange.md#prepare-each-players-race).
+
+Validation: full GCC14.2 / Qt6.12 Debug build; **98/98 Linux/offscreen CTest
+passed (78.11 s)**. New suites cover every supported race-file choice,
+malformed/missing/oversized data, exact field types/rates, unchanged output on
+failure, the actual File menu/editor/save/load/cancel path, two imported Human
+slots, per-slot editing/export, unchanged active-game bytes, reload/restart and
+the remote player's own race in a PlayerTurn. The two themed dialogs were
+visually checked; diff check is clean. Prepared for review, not merged; no new
+GitHub CI result is claimed. Merge the #245 dependency first.
+
+## Ready for review — population-operated factories and mines
 
 Checked 31 October 2026: #244 is merged as main `72009d4`, save v107 / orders
 v47. Branch `codex/population-operated-industry` implements the accepted next

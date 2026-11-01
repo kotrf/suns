@@ -112,6 +112,10 @@ bool MainWindow::installSaveMenuBootstrap()
         auto* campaignAction = fileMenu->addAction("New campaign (races / multiplayer)…");
         campaignAction->setObjectName("newCampaignAction");
         connect(campaignAction, &QAction::triggered, this, &MainWindow::newCampaign);
+        auto* raceAction = fileMenu->addAction("Race designer…");
+        raceAction->setObjectName("openRaceDesignerAction");
+        raceAction->setToolTip("Prepare your race independently and save a .sunsrace file for the campaign host");
+        connect(raceAction, &QAction::triggered, this, &MainWindow::openRaceDesigner);
         auto* playerTurnsAction = fileMenu->addAction("Export player turns…");
         playerTurnsAction->setObjectName("exportPlayerTurnsAction");
         connect(playerTurnsAction, &QAction::triggered, this, &MainWindow::exportPlayerTurns);
