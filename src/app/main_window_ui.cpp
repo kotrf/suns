@@ -940,6 +940,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                 queueMapSelectionRebuild();
                 return true;
             }
+            if (routeProgramMapTargetPickActive_ && mouse->button() == Qt::LeftButton) {
+                const auto position = view_->mapToScene(mouse->position().toPoint());
+                cancelRouteProgramMapTargetPick();
+                emit routeProgramMapPositionPicked(position.x(), position.y());
+                statusBar()->showMessage("Waypoint coordinates selected; press Add waypoint to confirm");
+                return true;
+            }
         }
     }
     if (!shuttingDown_ && view_ && watched == view_->viewport() && event->type() == QEvent::Resize)

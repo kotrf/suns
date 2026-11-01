@@ -79,6 +79,7 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
 
     // Route-program dock API. Kept outside the main map implementation so the
     // increasingly rich fleet-program UI can evolve independently.
@@ -90,7 +91,8 @@ public:
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
     [[nodiscard]] QString selectedFleetRouteProgramForecast() const;
     [[nodiscard]] QString selectedFleetWaypointFuelWarning(
-        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action) const;
+        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
+        std::optional<Position> coordinateDestination = std::nullopt) const;
     [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
@@ -103,6 +105,7 @@ public:
     bool selectFleetForRouteProgram(FleetId fleet);
     [[nodiscard]] QGraphicsScene* routeProgramScene() const { return scene_; }
     bool appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalAction arrivalAction, bool compareRoutes = false);
+    bool appendCoordinateWaypoint(Position destination, std::uint8_t warp, FleetArrivalAction arrivalAction);
     bool startSelectedFleetWorkHere(FleetArrivalAction arrivalAction);
     void openStargateRouteDialog();
     bool appendStargateRouteStep(PlanetId source, PlanetId destination, std::uint8_t warp, bool resonant = false);
@@ -211,6 +214,7 @@ signals:
     // Editor context updates immediately, even while map redraw is deferred.
     void routeProgramContextChanged(bool resetDrafts = false);
     void routeProgramMapTargetPicked(int kind, std::uint32_t id);
+    void routeProgramMapPositionPicked(double x, double y);
     void routeProgramQuickTargetRequested(int kind, std::uint32_t id);
     void routeProgramMapTargetPickChanged(bool active);
 
@@ -229,6 +233,7 @@ private:
     void refreshMapLabels();
     void updateControls();
     [[nodiscard]] const GameState& movementPlanningPreview() const;
+    [[nodiscard]] const GameState& fleetPlanningState() const;
     void refreshShipDesignChoices();
     void openShipDesigner();
     void openEmpireHistory();
@@ -299,6 +304,7 @@ private:
     [[nodiscard]] const Planet* selectedPlanet() const;
     [[nodiscard]] const Fleet* selectedFleet() const;
     [[nodiscard]] const StarSystem* selectedFleetCargoStar(QString* unavailableReason = nullptr) const;
+    [[nodiscard]] std::optional<Position> selectedFleetCargoLocation(QString* unavailableReason = nullptr) const;
     void refreshCargoTransferControls();
     [[nodiscard]] std::optional<Fleet> selectedFleetPlanningView() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
@@ -331,6 +337,8 @@ private:
     mutable std::uint64_t movementPreviewRevision_{std::uint64_t(-1)};
     mutable PlayerId movementPreviewPlayer_{};
     mutable std::optional<GameState> movementPreview_;
+    mutable std::uint64_t fleetPlanningRevision_{std::uint64_t(-1)};
+    mutable std::optional<GameState> fleetPlanningState_;
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
     mutable FleetId routeEtaFleet_{};
     mutable std::vector<RouteProgramLegForecast> routeLegForecasts_;

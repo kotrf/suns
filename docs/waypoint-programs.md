@@ -82,21 +82,31 @@ immediately. The draft becomes an order only when Add is clicked; existing
 route rows retain their own actions. Starting or loading a game clears drafts,
 so reused fleet IDs cannot inherit settings from the previous game.
 
-## Choosing a moving fleet target
+## Choosing waypoint destinations
 
 The source fleet and map target have separate roles while plotting a route.
-After selecting the source fleet, **Pick target on map** temporarily arms the
-galaxy map. Clicking a star captures a fixed destination; clicking another
+After selecting the source fleet, **New waypoint** leaves route-leg editing and
+arms the galaxy map. **Pick target on map** also arms it while adding a waypoint.
+Clicking empty space captures a fixed coordinate destination, shown in
+**Destination**; no star or other object is required. Choose Warp and an arrival
+action, then press **Add waypoint** to confirm. Picking alone does not send an
+order. Coordinate destinations use the ordinary route, fuel forecast and delayed
+command rules, and can be mixed with system and fleet waypoints. Arrival actions
+that require a world or a moving fleet still require that type of target.
+
+Clicking a star captures a fixed system destination; clicking another
 friendly fleet captures its stable FleetId as a moving destination and selects
 the Merge action by default. An enemy fleet is marked red and uses its currently
 observed position as a fixed destination with No action rather than the friendly
 Merge action. The player may change a friendly fleet's action to No action to
-follow/rendezvous without merging. The source fleet remains selected throughout.
+follow/rendezvous without merging, or Transfer fuel to deliver fuel while
+keeping a specified donor reserve. The source fleet remains selected throughout.
 Pressing Esc, closing the Fleet dock, changing the source fleet, or
 ending/loading a game cancels target-picking mode.
 
 Selecting a system also fills one **Destination** combo with the system itself
-and every other visible fleet currently in its orbit. Enemy entries are labeled
+and every other visible fleet currently in its orbit, plus all received friendly
+fleets elsewhere with their locations. Enemy entries are labeled
 and drawn in red. This is the precise path when several markers overlap: choose
 the intended system or fleet, adjust Warp and the arrival action, then press Add.
 

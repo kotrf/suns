@@ -93,12 +93,9 @@ bool transfer_mobile_base_fuel(GameState& state, PlayerId player, const Transfer
     if (!from || !to || from == to || from->owner != player || to->owner != player
         || !same_position(from->position, to->position) || !std::isfinite(order.amount) || order.amount <= 0
         || !std::isfinite(order.sourceReserve) || order.sourceReserve < 0) return false;
-    bool base = false;
     for (const auto* fleet : {from, to}) if (mobile_base_hulls(state, *fleet)) {
-        base = true;
         if (!mobile_base_service_error(state, *fleet, serviceTurn).empty()) return false;
     }
-    if (!base) return false;
     const auto reserve = std::max(order.sourceReserve, mobile_base_dock(state, *from) ? from->mobileBase.fuelReserve : 0.0);
     const auto amount = std::min({order.amount, std::max(0.0, from->fuel - reserve),
         std::max(0.0, fleet_fuel_capacity(state, *to) - to->fuel)});

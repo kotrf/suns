@@ -1,6 +1,16 @@
 # Project status and development handoff
 
-## Current work — PR #245 review: mining before cargo
+## Current work — integrate all four open PRs
+
+On 1 November 2026 the user explicitly authorised merging #245, #247, #248
+and #249. Their original heads have green CI; main starts at `23d6b0f`.
+The local rehearsal combines the reviewed code before GitHub merges. Merge
+order is #247 -> retarget #249 to main -> #249 -> #245 -> retarget #248 to main
+-> #248. Intermediate dependency branches must not receive the dependent PR.
+Source hunks merged automatically; documentation records are being reconciled.
+Full integration checks are pending. The combined format will be v108/v47.
+
+## Reviewed dependency — PR #245 mining before cargo
 
 Checked 1 November 2026: the review of #245 head `fb0d5ce` identified one P2
 ([thread](https://github.com/kotrf/suns/pull/245#discussion_r4433394858)).
@@ -77,7 +87,88 @@ also check xenocrystal dormancy, New campaign settings, reload/restart retention
 and live 22/100 to 25/100 counts when reversing cargo. UI captures were visually
 checked. Prepared for review; no merge or new remote CI result is claimed.
 
-## Historical pre-merge checkpoint — accumulated UI feedback in PR #244
+## Reviewed dependency — PR #249 commands already in flight
+
+Checked 1 November 2026: review of `0e8c251` against coordinate base `a06f298`
+identified one P2 ([thread](https://github.com/kotrf/suns/pull/249#discussion_r4435207719)).
+The received view cleared already sent commands, so an apparently idle remote
+fleet could acquire a phantom Split in the UI while the physical host rejected
+it. Both the real Split dialog and detachment-reference regressions reproduced
+the problem before the fix.
+
+The fleet and disposable movement previews now retain the owner's already sent
+command intent before projecting reorganisation, matching the existing route
+forecast. Split and both ends of idle Merge remain busy while that command is
+in flight. The host's temporary-ID calculation applies the same condition, so
+an invalid earlier Split cannot consume the reference intended for a later
+valid detachment. Reports, physical manifests and telemetry dates are not
+restored, and generic PlayerView/player-turn sanitisation stays unchanged.
+
+Validation: complete GCC14.2 / Qt6.12 Debug build and **96/96 Linux/offscreen
+CTest passed (35.30 s)**. Real Move -> year 2 -> command due in year 35 keeps
+Split/Merge blocked without new orders or fleets, including after save/reload;
+a busy source is excluded from merging into an idle destination. Loaded older
+invalid Split plus a valid Split preserves composition/IDs/names in both
+previews and in physical resolution with a hidden global allocator. Existing
+fuel/rendezvous, route, communications and knowledge suites also pass; diff
+check is clean. The focused suites failed on the pre-fix code and pass now.
+
+The former head's [GitHub CI run](https://github.com/kotrf/suns/actions/runs/41295280523)
+was independently checked: checkout `0e8c251`, Qt6.12.0, completed linux job,
+96/96 CTest in 80.42 s. That result belongs to the former head; no new remote
+CI result is claimed for this follow-up. Save/orders remain v107/v47.
+
+#249 still depends on open #247: merge #247 first, then retarget #249 to main.
+Separate #245 is updated at `770d358` (mining-before-cargo fix, 96/96); #248
+includes it at `ab1f5ee` (98/98) and must target main after #245 merges. Main
+remains `23d6b0f`. The user merges PRs; #53 and prior deferrals stay frozen.
+
+## Earlier checkpoint — fleet planning and ordinary fuel exchange
+
+Checked 1 November 2026: main `23d6b0f` contains merged #244/#246. Branch
+`codex/fleet-planning-and-fuel` builds on open coordinate-waypoint #247, with
+save v107 / orders v47 unchanged. It addresses the user's fleet gameplay report:
+
+- Selected fleet, map markers/orbital picker, source selector and fleet summary
+  share the valid command-boundary projection. Split exposes both detachments
+  immediately; pending names are consistent everywhere. A new detachment can
+  be renamed, loaded/refuelled and assigned a route before End Turn.
+- Detachment references are derived from PlayerView. The host binds each
+  successful projected split to its private allocation within that player's
+  submission, including nested splits and later source/target references.
+  Hidden fleet IDs and simultaneous foreign splits cannot redirect orders;
+  failed ancestors invalidate subsequent references.
+- Cargo adds reversible Fuel controls for two ordinary friendly fleets at the
+  same received position, including deep space under a current live link.
+  Both projected tanks update immediately. Donor stock and receiver capacity
+  bound the amount; fuel remains separate from hold capacity. Physical exchange
+  executes before movement, allowing same-year departure. Expedition bases keep
+  their dedicated docking/service phase. A queued gate hop does not change the
+  received orbit at which Cargo opens.
+- Destination includes all received friendly fleets, with locations. Transfer
+  fuel to fleet / outpost follows a friendly FleetId and transfers on contact,
+  keeping a donor reserve and leaving both fleets intact. Merge remains a
+  separate action. Fixed-coordinate outpost supply retains its previous rules.
+- Destination's size policy keeps long names from widening the narrow Fleet
+  panel. Scene teardown no longer refreshes panels after state members die.
+
+Validation: full GCC14.2 / Qt6.12 Debug build; **96/96 Linux/offscreen CTest
+passed (35.55 s)**. New core/Qt suites cover actual Split/Rename dialogs and
+orbital clicks, detachment route/forecast, ordinary fuel conservation, capacity,
+reserve, invalid amounts/ownership/location, deep-space exchange and funded
+same-year departure, return via the receiving slider, Cancel, moving-target
+fuel delivery without merge, hidden allocation changes, simultaneous players
+in both submission orders, failed nested splits, save/reload and actual PBEM
+order-file round trips. Existing gate/received-station invariance and compact
+Fleet layout checks also pass. Fuel dialog and 1000 px Fleet captures inspected;
+diff check clean. Local checks do not claim a new GitHub CI result or merge.
+
+Separate open work remains #245 (population operation, v108/v47) and #248
+(independent race files, based on #245; merge #245 then retarget #248 to main).
+For this fleet change, merge #247 first and retarget its dependent PR to main
+before merging. The user merges PRs. Further #53/AI/evacuation/#63 remain deferred.
+
+## Earlier checkpoint — accumulated UI feedback in PR #244
 
 Base main remains `bdaac4b` after merged #243; [PR #244](https://github.com/kotrf/suns/pull/244)
 is open on `codex/map-ranges-and-mineral-layout`. Save v107 / orders v47 remain

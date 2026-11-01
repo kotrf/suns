@@ -152,7 +152,8 @@ bool route_tasks_valid(const FleetRouteProgram& program)
         } else if (action.gateSource || action.gateDestination || action.gateResonant) return false;
         if (target != 0) {
             return action.kind == FleetArrivalActionKind::None
-                || action.kind == FleetArrivalActionKind::MergeWithFleet;
+                || action.kind == FleetArrivalActionKind::MergeWithFleet
+                || action.kind == FleetArrivalActionKind::SupplyOutpost;
         }
         return action.kind != FleetArrivalActionKind::MergeWithFleet;
     };

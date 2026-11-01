@@ -3,6 +3,7 @@
 #include "main_window.hpp"
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
+#include "suns/mobile_base.hpp"
 
 #include <QAction>
 #include <QComboBox>
@@ -81,14 +82,24 @@ QString cargoValues(std::uint64_t colonists, const MineralCargo& minerals)
 
 } // namespace
 
-const StarSystem* MainWindow::selectedFleetCargoStar(QString* unavailableReason) const
+std::optional<Position> MainWindow::selectedFleetCargoLocation(QString* unavailableReason) const
 {
-    const auto unavailable = [unavailableReason](const QString& reason) -> const StarSystem* {
+    const auto unavailable = [unavailableReason](const QString& reason) -> std::optional<Position> {
         if (unavailableReason) *unavailableReason = reason;
-        return nullptr;
+        return std::nullopt;
     };
     const auto* fleet = selectedFleet();
     if (!fleet) return unavailable("Select a friendly fleet to transfer cargo.");
+    // Anchor this editor to the currently received location. A queued gate
+    // jump may already move the command-boundary projection elsewhere; its
+    // endpoints must not silently replace the orbit where Cargo was opened.
+    std::optional<Fleet> received;
+    for (const auto& original : state_.fleets) if (original.id == fleet->id
+        && original.owner == pendingOrders_.player && !unreported_orbital_ship(state_, original)) {
+        received = fleet_player_view(state_, original);
+        fleet = &*received;
+        break;
+    }
     const auto age = fleet_telemetry_age(state_, *fleet);
     // Radar can locate a silent hull without receiving its current manifest.
     // Never inspect remote truth to choose or populate a cargo endpoint.
@@ -100,35 +111,45 @@ const StarSystem* MainWindow::selectedFleetCargoStar(QString* unavailableReason)
             "Cargo transfer needs a confirmed current orbit. Last telemetry is %1 turn(s) old; "
             "the displayed position is an estimate.").arg(static_cast<qulonglong>(age)));
     }
-    const bool currentFleet = std::any_of(state_.fleets.begin(), state_.fleets.end(),
-        [fleet](const Fleet& candidate) { return &candidate == fleet; });
-    if (!currentFleet || !fleet_has_instant_link(state_, *fleet))
+    if (!fleet_has_instant_link(fleetPlanningState(), *fleet))
         return unavailable("Cargo transfer needs a live link at the fleet's current orbit. "
             "Remote fleets can use on-arrival cargo orders.");
-    const auto visible = fleet_player_view(state_, *fleet);
-    const auto star = std::find_if(state_.stars.begin(), state_.stars.end(),
-        [&](const StarSystem& candidate) { return same_position(candidate.position, visible.position); });
-    if (star == state_.stars.end())
-        return unavailable("Cargo transfer is available when the selected fleet is at a star system.");
+    const auto& planned = fleetPlanningState();
+    const bool system = std::any_of(planned.stars.begin(), planned.stars.end(),
+        [&](const auto& star) { return same_position(star.position, fleet->position); });
+    const bool partner = std::any_of(planned.fleets.begin(), planned.fleets.end(), [&](const auto& other) {
+        return other.id != fleet->id && other.owner == fleet->owner && same_position(other.position, fleet->position)
+            && fleet_telemetry_age(planned, other) == 0 && fleet_has_instant_link(planned, other);
+    });
+    if (!system && !partner) return unavailable("Cargo transfer needs a system or another friendly fleet at this position.");
     if (unavailableReason) unavailableReason->clear();
-    return &*star;
+    return fleet->position;
+}
+
+const StarSystem* MainWindow::selectedFleetCargoStar(QString* unavailableReason) const
+{
+    const auto position = selectedFleetCargoLocation(unavailableReason);
+    if (!position) return nullptr;
+    const auto star = std::find_if(state_.stars.begin(), state_.stars.end(),
+        [&](const auto& candidate) { return same_position(candidate.position, *position); });
+    return star == state_.stars.end() ? nullptr : &*star;
 }
 
 void MainWindow::refreshCargoTransferControls()
 {
     QString reason;
-    const auto* star = selectedFleetCargoStar(&reason);
-    const auto tooltip = star
-        ? QString("Transfer cargo at %1 for the selected fleet. No separate system selection is needed.")
-            .arg(QString::fromStdString(star->name))
+    const auto position = selectedFleetCargoLocation(&reason);
+    const auto tooltip = position
+        ? QString("Transfer cargo or fleet-to-fleet fuel at %1. Choose two fleets for fuel.")
+            .arg(fleetLocationName(*position))
         : reason;
     if (auto* button = findChild<QPushButton*>("fleetTransferCargoButton")) {
-        button->setEnabled(star != nullptr);
+        button->setEnabled(position.has_value());
         button->setToolTip(tooltip);
     }
     for (const auto* name : {"fleetTransferCargoAction", "fleetTransferCargoToolAction"}) {
         if (auto* action = findChild<QAction*>(name)) {
-            action->setEnabled(star != nullptr);
+            action->setEnabled(position.has_value());
             action->setToolTip(tooltip);
         }
     }
@@ -137,8 +158,8 @@ void MainWindow::refreshCargoTransferControls()
 void MainWindow::openCargoManifestDialog()
 {
     QString unavailableReason;
-    const auto* cargoStar = selectedFleetCargoStar(&unavailableReason);
-    if (!cargoStar) {
+    const auto position = selectedFleetCargoLocation(&unavailableReason);
+    if (!position) {
         statusBar()->showMessage(unavailableReason, 7000);
         return;
     }
@@ -147,13 +168,14 @@ void MainWindow::openCargoManifestDialog()
     // Exact command-boundary projection. Replaying End Turn here would also
     // grow population, mine ore, run combat, and move ships. Repeated dialog
     // openings must not advance the world or alter a single colonist.
-    GameState planned = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+    GameState planned = fleetPlanningState();
 
-    const auto* star = find_star(planned, cargoStar->id);
-    if (!star) return;
+    const auto foundStar = std::find_if(planned.stars.begin(), planned.stars.end(),
+        [&](const auto& candidate) { return same_position(candidate.position, *position); });
+    const auto* star = foundStar == planned.stars.end() ? nullptr : &*foundStar;
 
     std::vector<CargoEndpointView> endpoints;
-    if (const auto* planet = find_planet_at_star(planned, star->id); planet) {
+    if (const auto* planet = star ? find_planet_at_star(planned, star->id) : nullptr; planet) {
         const auto prefix = planet->owner != 0 && planet->owner != pendingOrders_.player
             ? QString("Enemy colony")
             : QString("Planetary surface");
@@ -164,10 +186,10 @@ void MainWindow::openCargoManifestDialog()
             QString("%1 — %2").arg(prefix, QString::fromStdString(planet->name)),
         });
     }
-    if(const auto* p=find_planet_at_star(planned,star->id);p && p->owner==pendingOrders_.player && habitat_completed(*p))
+    if(const auto* p=star ? find_planet_at_star(planned,star->id) : nullptr;p && p->owner==pendingOrders_.player && habitat_completed(*p))
         endpoints.push_back({{p->id,0,true},p,nullptr,QString("Orbital settlement — %1").arg(QString::fromStdString(p->name))});
     for (const auto& fleet : planned.fleets) {
-        if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, star->position)
+        if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, *position)
             || fleet_telemetry_age(planned, fleet) != 0 || !fleet_has_instant_link(planned, fleet)) continue;
         endpoints.push_back({
             {0, fleet.id},
@@ -186,14 +208,15 @@ void MainWindow::openCargoManifestDialog()
     QDialog dialog(this);
     dialog.setObjectName("cargoTransferDialog");
     dialog.setStyleSheet("QDialog#cargoTransferDialog { background: #0d141d; }");
-    dialog.setWindowTitle(QString("Transfer cargo — %1").arg(QString::fromStdString(star->name)));
+    dialog.setWindowTitle(QString("Transfer cargo — %1").arg(star ? QString::fromStdString(star->name) : fleetLocationName(*position)));
     dialog.setMinimumWidth(920);
 
     auto* layout = new QVBoxLayout(&dialog);
     auto* introduction = new QLabel(
         "Left: choose the source and the amount to send. Right: choose the destination and "
         "see its complete projected manifest, including previously queued loads. "
-        "Adjust either side to load or return cargo. Changes appear immediately in your current-turn plan.",
+        "Adjust either side to load or return cargo. Choose two fleets to transfer fuel between their tanks. "
+        "Changes appear immediately in your current-turn plan.",
         &dialog);
     introduction->setWordWrap(true);
     layout->addWidget(introduction);
@@ -285,6 +308,12 @@ void MainWindow::openCargoManifestDialog()
         transferGrid->addWidget(spin, index + 2, 2);
         mineralControls.push_back({slider, spin});
     }
+    auto* fuelSlider = new QSlider(Qt::Horizontal, &dialog);
+    auto* fuelSpin = new QDoubleSpinBox(&dialog);
+    fuelSlider->setObjectName("cargoFuelSlider"); fuelSpin->setObjectName("cargoFuelSpin");
+    fuelSpin->setDecimals(2); fuelSpin->setSingleStep(1.0); fuelSpin->setSuffix(" mg");
+    transferGrid->addWidget(new QLabel("Fuel", &dialog), 5, 0);
+    transferGrid->addWidget(fuelSlider, 5, 1); transferGrid->addWidget(fuelSpin, 5, 2);
     sourceLayout->addLayout(transferGrid);
     auto* receivingGrid = new QGridLayout;
     receivingGrid->addWidget(new QLabel("Cargo after order", destinationGroup), 0, 0);
@@ -301,6 +330,10 @@ void MainWindow::openCargoManifestDialog()
         receivingGrid->addWidget(slider, index + 2, 1);
         receivedMinerals.push_back(slider);
     }
+    auto* receivedFuel = new QSlider(Qt::Horizontal, destinationGroup);
+    receivedFuel->setObjectName("cargoDestinationFuelSlider");
+    receivingGrid->addWidget(new QLabel("Fuel", destinationGroup), 5, 0);
+    receivingGrid->addWidget(receivedFuel, 5, 1);
     destinationLayout->addLayout(receivingGrid);
 
     auto* sourceBefore = new QLabel(&dialog);
@@ -336,6 +369,7 @@ void MainWindow::openCargoManifestDialog()
     };
 
     std::vector<TransferCargoOrder> draftTransfers;
+    std::optional<TransferFleetFuelOrder> draftFuel;
     const auto refresh = [&] {
         if (sourceCombo->currentIndex() < 0 || destinationCombo->currentIndex() < 0) return;
         const auto sourceIndex = sourceCombo->currentData().toInt();
@@ -345,6 +379,27 @@ void MainWindow::openCargoManifestDialog()
         const bool invasion = destination.planet && destination.planet->owner != 0
             && destination.planet->owner != pendingOrders_.player;
         const bool orbital = source.endpoint.orbital || destination.endpoint.orbital;
+        const bool fuelAvailable = source.fleet && destination.fleet
+            && !mobile_base_hulls(planned, *source.fleet) && !mobile_base_hulls(planned, *destination.fleet);
+        {
+            const QSignalBlocker sliderBlock(fuelSlider), spinBlock(fuelSpin), receivedBlock(receivedFuel);
+            const auto forward = fuelAvailable ? std::min(source.fleet->fuel,
+                std::max(0.0, fleet_fuel_capacity(planned, *destination.fleet) - destination.fleet->fuel)) : 0.0;
+            const auto back = fuelAvailable ? std::min(destination.fleet->fuel,
+                std::max(0.0, fleet_fuel_capacity(planned, *source.fleet) - source.fleet->fuel)) : 0.0;
+            fuelSpin->setRange(-back, forward);
+            fuelSlider->setRange(-sliderMaximum(back), sliderMaximum(forward));
+            fuelSlider->setValue(fuelSpin->value() < 0 ? -sliderMaximum(-fuelSpin->value()) : sliderMaximum(fuelSpin->value()));
+            const auto before = destination.fleet ? destination.fleet->fuel : 0.0;
+            receivedFuel->setRange(sliderMaximum(before - back), sliderMaximum(before + forward));
+            receivedFuel->setValue(sliderMaximum(before + fuelSpin->value()));
+            for (auto* control : std::vector<QWidget*>{fuelSlider, fuelSpin, receivedFuel}) {
+                control->setEnabled(fuelAvailable);
+                control->setToolTip(fuelAvailable ? "Transfer fuel between the selected fleets. Negative returns fuel; tank space limits the amount."
+                    : "Choose two ordinary friendly fleets for fuel. Mobile bases use their dedicated service panel.");
+            }
+        }
+        const auto fuelDelta = fuelSpin->value();
         const auto mass = [](const MineralCargo& m) { return m.ironium + m.boranium + m.germanium; };
         const auto room = [&](const CargoEndpointView& endpoint) {
             return endpoint.fleet ? std::max(0.0, fleet_cargo_capacity(planned, *endpoint.fleet)
@@ -432,6 +487,11 @@ void MainWindow::openCargoManifestDialog()
         sourceBefore->setText(QString("<b>Current source (including queued orders):</b> %1").arg(cargoValues(sourcePeople, sourceStock)));
         destinationBefore->setText(QString("<b>Current destination (including queued orders):</b> %1").arg(cargoValues(destinationPeople, destinationStock)));
         sourceAfter->setText(QString("<b>Source after this transfer:</b> %1 — %2").arg(source.name).arg(cargoValues(sourceAfterPeople, sourceAfterStock)));
+        if (source.fleet) {
+            sourceBefore->setText(sourceBefore->text() + QString(" • fuel %1 mg").arg(source.fleet->fuel, 0, 'f', 2));
+            sourceAfter->setText(sourceAfter->text() + QString(" • fuel %1 / %2 mg")
+                .arg(source.fleet->fuel - fuelDelta, 0, 'f', 2).arg(fleet_fuel_capacity(planned, *source.fleet), 0, 'f', 2));
+        }
         if (invasion) {
             destinationAfter->setText(QString(
                 "<b>Ground invasion:</b> %1 attackers vs %2 defenders — estimated success chance %3%. "
@@ -441,6 +501,11 @@ void MainWindow::openCargoManifestDialog()
                 .arg(ground_invasion_success_chance(std::uint64_t(colonists), destinationPeople) * 100.0, 0, 'f', 1));
         } else destinationAfter->setText(QString("<b>Destination after this transfer:</b> %1 — %2")
             .arg(destination.name).arg(cargoValues(destinationAfterPeople, destinationAfterStock)));
+        if (destination.fleet) {
+            destinationBefore->setText(destinationBefore->text() + QString(" • fuel %1 mg").arg(destination.fleet->fuel, 0, 'f', 2));
+            destinationAfter->setText(destinationAfter->text() + QString(" • fuel %1 / %2 mg")
+                .arg(destination.fleet->fuel + fuelDelta, 0, 'f', 2).arg(fleet_fuel_capacity(planned, *destination.fleet), 0, 'f', 2));
+        }
 
         const auto addedMass = double(colonists) / kColonistsPerCargoUnit + mass(minerals);
         bool capacityValid = sourceRoom + addedMass >= -kEpsilon && destinationRoom - addedMass >= -kEpsilon;
@@ -460,9 +525,14 @@ void MainWindow::openCargoManifestDialog()
             draftTransfers.push_back({destination.endpoint, source.endpoint, std::uint64_t(std::max<std::int64_t>(0, -colonists)), backMinerals});
         if (colonists > 0 || mass(forwardMinerals) > kEpsilon)
             draftTransfers.push_back({source.endpoint, destination.endpoint, std::uint64_t(std::max<std::int64_t>(0, colonists)), forwardMinerals});
+        draftFuel.reset();
+        if (fuelAvailable && std::abs(fuelDelta) > kEpsilon)
+            draftFuel = TransferFleetFuelOrder{fuelDelta > 0 ? source.fleet->id : destination.fleet->id,
+                fuelDelta > 0 ? destination.fleet->id : source.fleet->id, std::abs(fuelDelta), 0};
         const auto matchesPlan = [&] {
             PlayerOrders orders{pendingOrders_.player, {}};
             for (const auto& transfer : draftTransfers) orders.orders.push_back(transfer);
+            if (draftFuel) orders.orders.push_back(*draftFuel);
             const auto validated = projected_cargo_order_state(planned, orders);
             const auto matches = [&](const CargoEndpointView& endpoint, std::uint64_t people, const MineralCargo& stock) {
                 CargoEndpointView actual{endpoint.endpoint};
@@ -474,7 +544,9 @@ void MainWindow::openCargoManifestDialog()
                 else actual.planet = find_planet(validated, endpoint.planet->id);
                 if (!actual.fleet && !actual.planet) return false;
                 const auto actualStock = endpointMinerals(actual);
-                return endpointColonists(actual) == people && std::abs(actualStock.ironium - stock.ironium) < kEpsilon
+                const auto expectedFuel = endpoint.fleet ? endpoint.fleet->fuel + (endpoint.fleet->id == destination.endpoint.fleet ? fuelDelta : -fuelDelta) : 0.0;
+                return (!actual.fleet || std::abs(actual.fleet->fuel - expectedFuel) < kEpsilon)
+                    && endpointColonists(actual) == people && std::abs(actualStock.ironium - stock.ironium) < kEpsilon
                     && std::abs(actualStock.boranium - stock.boranium) < kEpsilon
                     && std::abs(actualStock.germanium - stock.germanium) < kEpsilon;
             };
@@ -485,20 +557,21 @@ void MainWindow::openCargoManifestDialog()
             std::reverse(draftTransfers.begin(), draftTransfers.end());
             validProjection = matchesPlan();
         }
-        const bool hasCargo = !draftTransfers.empty();
+        const bool hasCargo = !draftTransfers.empty() || draftFuel.has_value();
         const bool distinct = sourceIndex != destinationIndex;
         const bool valid = distinct && hasCargo && capacityValid && validProjection
             && (!invasion || (colonists > 0 && mass(minerals) <= kEpsilon));
         acceptButton->setEnabled(valid);
         acceptButton->setText(invasion ? "Queue invasion" : "Apply transfer");
         if (!distinct) validation->setText("Choose two different endpoints.");
-        else if (!hasCargo) validation->setText("Choose at least one cargo amount to transfer.");
+        else if (!hasCargo) validation->setText("Choose cargo or fuel to transfer.");
         else if (!capacityValid || !validProjection) validation->setText("This transfer cannot be completed with the current stocks, capacity and services.");
         else if (invasion) validation->setText("This order starts ground combat against the colony.");
         else validation->setText("Transfer is valid. Both manifests will update in your current-turn plan.");
     };
 
     const auto configureSource = [&] {
+        { const QSignalBlocker spinBlock(fuelSpin), sliderBlock(fuelSlider); fuelSpin->setValue(0); fuelSlider->setValue(0); }
         {
             const QSignalBlocker blockSlider(colonistSlider);
             const QSignalBlocker blockSpin(colonistSpin);
@@ -518,6 +591,12 @@ void MainWindow::openCargoManifestDialog()
         const QSignalBlocker blocker(colonistSpin);
         colonistSpin->setValue(value);
         refresh();
+    });
+    connect(fuelSlider, &QSlider::valueChanged, &dialog, [&](int value) { fuelSpin->setValue(double(value) / kMineralScale); });
+    connect(fuelSpin, &QDoubleSpinBox::valueChanged, &dialog, [&](double) { refresh(); });
+    connect(receivedFuel, &QSlider::valueChanged, &dialog, [&](int value) {
+        const auto& destination = endpoints[std::size_t(destinationCombo->currentData().toInt())];
+        if (destination.fleet) fuelSpin->setValue(double(value) / kMineralScale - destination.fleet->fuel);
     });
     connect(colonistSpin, &QSpinBox::valueChanged, &dialog, [=](int value) {
         const QSignalBlocker blocker(colonistSlider);
@@ -580,6 +659,8 @@ void MainWindow::openCargoManifestDialog()
             .arg(qulonglong(transfer.colonists)).arg(transfer.minerals.ironium, 0, 'f', 2)
             .arg(transfer.minerals.boranium, 0, 'f', 2).arg(transfer.minerals.germanium, 0, 'f', 2));
     }
+    if (draftFuel) appendPendingOrder(*draftFuel, QString("Transfer %1 mg fuel from fleet %2 to fleet %3")
+        .arg(draftFuel->amount, 0, 'f', 2).arg(draftFuel->source).arg(draftFuel->destination));
 }
 
 } // namespace suns

@@ -609,6 +609,11 @@ int main(int argc, char* argv[])
     assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
     assert(warp->property("fuelLimited").toBool());
     assert(warp->toolTip().contains("Fuel shortage"));
+    // Coordinate preview must use its own destination, including in the
+    // cache, rather than forecasting the still-selected distant star.
+    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{50, 0.01}).isEmpty());
+    assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{100, 30}).isEmpty());
+    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{50, 0.01}).isEmpty());
     warp->setValue(1);
     assert(window.selectedFleetWaypointFuelWarning(1, 0, {}).isEmpty());
     assert(!warp->property("fuelLimited").toBool());

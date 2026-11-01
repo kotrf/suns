@@ -14,9 +14,14 @@
 #include <QGraphicsEllipseItem>
 #include <QMouseEvent>
 #include <QMenu>
+#include <QKeyEvent>
+#include <QLabel>
 #include <QPainterPath>
+#include <QProgressBar>
+#include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTreeWidget>
 
 #include <cassert>
 
@@ -86,6 +91,8 @@ struct MainWindowTestAccess {
     static StarId selectedStar(MainWindow& window) { return window.selection_.star.value_or(0); }
     static QGraphicsView* view(MainWindow& window) { return window.view_; }
     static const PlayerOrders& orders(MainWindow& window) { return window.pendingOrders_; }
+    static const GameState& state(MainWindow& window) { return window.state_; }
+    static void advance(MainWindow& window) { window.endTurn(); }
     static int selectionKind(MainWindow& window) { return window.currentDistanceSelectionKind_; }
     static void habitability(MainWindow& window, int hiddenHab)
     {
@@ -154,6 +161,8 @@ int main(int argc, char** argv)
     window.installDeferredMapSelectionHandler();
     attachRouteProgramDock(window);
     window.installUiPolish();
+    window.installFleetReadabilityPolish();
+    window.installFleetOperationsPanel();
     MainWindowTestAccess::setup(window);
     window.resize(1300, 840);
     window.show();
@@ -234,6 +243,114 @@ int main(int argc, char** argv)
         assert(appended.queuedWaypoints.size() == 1);
         assert(same_position(appended.queuedWaypoints.back().destination, {-65, -55}));
     }
+    // New waypoint arms the real map, including empty space. Picking is only
+    // a draft: the existing source/system, world and orders remain unchanged
+    // until Add, and the click must be transformed through the current zoom.
+    auto* newWaypoint = window.findChild<QPushButton*>("routeNewWaypointButton");
+    auto* addWaypoint = window.findChild<QPushButton*>("routeAddButton");
+    auto* destination = window.findChild<QComboBox*>("routeDestinationCombo");
+    auto* warp = window.findChild<QProgressBar*>("routeWarpSelector");
+    auto* routeTree = window.findChild<QTreeWidget*>("routeProgramQueue");
+    assert(newWaypoint && addWaypoint && destination && warp && routeTree);
+    for (const auto zoom : {0.5, 1.0, 2.5}) {
+        MainWindowTestAccess::setup(window);
+        view->resetTransform();
+        view->scale(zoom, zoom);
+        view->centerOn(0, 0);
+        const QPointF point{23.4, -25.8};
+        const auto expected = view->mapToScene(view->mapFromScene(point));
+        click(window, point, Qt::LeftButton); // ordinary empty clicks do not plot
+        assert(MainWindowTestAccess::orders(window).orders.empty());
+        newWaypoint->click();
+        assert(window.routeProgramMapTargetPickActive());
+        assert(view->viewport()->cursor().shape() == Qt::CrossCursor);
+        warp->setValue(5);
+        click(window, point, Qt::LeftButton);
+        assert(!window.routeProgramMapTargetPickActive());
+        assert(window.selectedFleetForRouteProgram() == 1);
+        assert(MainWindowTestAccess::selectedStar(window) == 1);
+        assert(MainWindowTestAccess::orders(window).orders.empty());
+        assert(!MainWindowTestAccess::state(window).fleets.front().destination);
+        assert(destination->currentData().toInt() == 4);
+        assert(destination->currentText().contains("Coordinates"));
+        assert(addWaypoint->isEnabled());
+        if (zoom == 1.0 && app.arguments().contains("--capture"))
+            window.grab().save("/tmp/suns-coordinate-waypoint-draft.png");
+        addWaypoint->click();
+        auto route = std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front());
+        assert(same_position(route.destination, {expected.x(), expected.y()}));
+        assert(route.targetFleet == 0 && route.warp == 5);
+        assert(route.arrivalAction.kind == FleetArrivalActionKind::None);
+        assert(routeTree->selectedItems().size() == 1);
+
+        // Leaving leg editing starts another pick and preserves the first leg.
+        newWaypoint->click();
+        assert(window.routeProgramMapTargetPickActive());
+        warp->setValue(4);
+        const QPointF second{-25, 21};
+        const auto next = view->mapToScene(view->mapFromScene(second));
+        click(window, second, Qt::LeftButton);
+        addWaypoint->click();
+        route = std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front());
+        assert(route.warp == 5 && route.queuedWaypoints.size() == 1);
+        assert(same_position(route.queuedWaypoints.front().destination, {next.x(), next.y()}));
+        assert(route.queuedWaypoints.front().warp == 4);
+        assert(route.queuedWaypoints.front().targetFleet == 0);
+        if (zoom == 1.0 && app.arguments().contains("--capture"))
+            window.grab().save("/tmp/suns-coordinate-waypoint-route.png");
+
+        const auto previousDestination = destination->currentText();
+        newWaypoint->click();
+        QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+        QApplication::sendEvent(view->viewport(), &escape);
+        assert(!window.routeProgramMapTargetPickActive());
+        assert(destination->currentText() == previousDestination);
+        assert(MainWindowTestAccess::orders(window).orders.size() == 1);
+    }
+
+    // Each source retains its coordinate draft. Changing source cancels a
+    // pending pick; a new game clears drafts even if FleetIds are reused.
+    MainWindowTestAccess::orbits(window);
+    view->resetTransform();
+    view->centerOn(0, 0);
+    newWaypoint->click();
+    click(window, {-30, 27}, Qt::LeftButton);
+    const auto firstDraft = destination->currentText();
+    newWaypoint->click();
+    assert(window.routeProgramMapTargetPickActive());
+    assert(window.selectFleetForRouteProgram(2));
+    assert(!window.routeProgramMapTargetPickActive());
+    assert(destination->currentData().toInt() != 4);
+    newWaypoint->click();
+    click(window, {41, -32}, Qt::LeftButton);
+    const auto secondDraft = destination->currentText();
+    assert(firstDraft != secondDraft);
+    assert(window.selectFleetForRouteProgram(1));
+    assert(destination->currentText() == firstDraft);
+    assert(window.selectFleetForRouteProgram(2));
+    assert(destination->currentText() == secondDraft);
+    newWaypoint->click();
+    MainWindowTestAccess::setup(window);
+    assert(!window.routeProgramMapTargetPickActive());
+    assert(destination->currentData().toInt() != 4);
+
+    // A map-chosen coordinate is an ordinary move, executed by the real turn.
+    MainWindowTestAccess::setup(window);
+    view->resetTransform();
+    view->centerOn(0, 0);
+    newWaypoint->click();
+    warp->setValue(5);
+    assert(!window.appendCoordinateWaypoint({15, 12}, 5, {FleetArrivalActionKind::Colonize}));
+    assert(!window.appendCoordinateWaypoint({15, 12}, 5, {FleetArrivalActionKind::MergeWithFleet}));
+    assert(MainWindowTestAccess::orders(window).orders.empty());
+    const auto arrival = view->mapToScene(view->mapFromScene(QPointF{15, 12}));
+    click(window, {15, 12}, Qt::LeftButton);
+    addWaypoint->click();
+    MainWindowTestAccess::advance(window);
+    assert(same_position(MainWindowTestAccess::state(window).fleets.front().position,
+        {arrival.x(), arrival.y()}));
+    assert(!MainWindowTestAccess::state(window).fleets.front().destination);
+
     // Fleet selection still resolves its own visible marker, not the nearby
     // colony, and survives the deferred redraw through the normal state API.
     MainWindowTestAccess::deepFleet(window);

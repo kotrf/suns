@@ -69,7 +69,7 @@ void MainWindow::openRenameFleetDialog()
 void MainWindow::openMergeFleetsDialog()
 {
     const auto* selected=selectedFleet();
-    const auto received=make_player_view(state_,pendingOrders_.player).state;
+    const auto& received = fleetPlanningState();
     const auto found=std::find_if(received.fleets.begin(),received.fleets.end(),[&](const auto& f){return selected && f.id==selected->id;});
     const auto* destination=found==received.fleets.end()?nullptr:&*found;
     if (!destination) {
