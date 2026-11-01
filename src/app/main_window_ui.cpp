@@ -847,8 +847,9 @@ void MainWindow::installUiPolish()
                     const auto potential = terraforming_potential(environmentState, pendingOrders_.player, *environmentPlanet);
                     const auto current = player_planet_habitability(environmentState, pendingOrders_.player, *environmentPlanet, state_.turn);
                     const auto maximum = player_planet_habitability(environmentState, pendingOrders_.player, potential, state_.turn);
-                    label->setText(current >= 100 ? QString("Hab %1%").arg(current)
-                        : QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum));
+                    label->setText(maximum > current
+                        ? QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum)
+                        : QString("Hab %1%").arg(current));
                     if(environmentPlanet->engineering.kind!=PlanetaryEngineeringKind::None) label->setText(label->text()
                         + QString(" • %1: %2%, %3").arg(QString::fromStdString(engineering_name(environmentPlanet->engineering.kind)))
                             .arg(environmentPlanet->engineering.work*100/engineering_work(environmentPlanet->engineering.kind))
