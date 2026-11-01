@@ -1480,7 +1480,7 @@ struct FleetArrivalAction {
     WormholeEndpointId wormholeEndpoint{};
     // Frozen at order creation; later template edits never change a voyage.
     std::optional<ProductionTemplate> colonyPlan;
-    double reserveFuel{}; // SupplyOutpost only, in mg. Older action payloads stay unchanged.
+    double reserveFuel{}; // SupplyOutpost: fuel delivery to a fleet target or a fixed outpost, in mg.
     PlanetId gateSource{}, gateDestination{}; // TransitStargate: approach source, then wait/retry locally.
     bool gateResonant{};
     std::uint32_t mineralReserve{}, mineralMinimum{}; // LoadMinerals only, whole kt.

@@ -162,7 +162,7 @@ void MainWindow::refreshFleetSummary()
     table->setSortingEnabled(false);
     table->clear();
 
-    auto contacts = state_.fleets;
+    auto contacts = fleetPlanningState().fleets;
     const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     contacts.insert(contacts.end(), missing.begin(), missing.end());
     std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.id < b.id; });

@@ -285,7 +285,12 @@ QString routeForecast(
     bool fuelShortageSeen = false;
 
     for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
+        std::optional<GameState> splitPreview;
         const auto* beforeFleet = findFleet(simulated, fleetId);
+        if (!beforeFleet && firstTurn) {
+            splitPreview = projected_cargo_order_state(simulated, pending);
+            beforeFleet = findFleet(*splitPreview, fleetId);
+        }
         if (!beforeFleet) {
             lines << "Fleet no longer exists in the projected state.";
             break;
@@ -834,11 +839,12 @@ std::vector<FleetId> MainWindow::availableFleetTargetsForRouteProgram() const
 std::vector<FleetId> MainWindow::availableOwnedFleetsForRouteProgram() const
 {
     std::vector<FleetId> fleets;
-    for (const auto& fleet : state_.fleets) {
-        if (fleet.owner == pendingOrders_.player && !unreported_orbital_ship(state_,fleet)) fleets.push_back(fleet.id);
+    for (const auto& fleet : fleetPlanningState().fleets) {
+        if (fleet.owner == pendingOrders_.player) fleets.push_back(fleet.id);
     }
     for (const auto& contact : missing_fleet_contacts(state_, pendingOrders_.player)) fleets.push_back(contact.id);
     std::sort(fleets.begin(), fleets.end());
+    fleets.erase(std::unique(fleets.begin(), fleets.end()), fleets.end());
     return fleets;
 }
 
@@ -848,7 +854,7 @@ std::vector<FleetId> MainWindow::ownedFleetsAtSelectedSystem() const
     if (!star) return {};
     std::vector<FleetId> fleets;
     for (const auto id : availableOwnedFleetsForRouteProgram()) {
-        const auto* fleet = findFleet(state_, id);
+        const auto* fleet = findFleet(fleetPlanningState(), id);
         if (fleet && same_position(fleet_player_view(state_, *fleet).position, star->position))
             fleets.push_back(id);
     }
@@ -857,7 +863,7 @@ std::vector<FleetId> MainWindow::ownedFleetsAtSelectedSystem() const
 
 QString MainWindow::fleetSourceNameForRouteProgram(FleetId id) const
 {
-    const auto* fleet = findFleet(state_, id);
+    const auto* fleet = findFleet(fleetPlanningState(), id);
     if (!fleet || unreported_orbital_ship(state_,*fleet)) return fleetTargetNameForRouteProgram(id);
     auto name = fleetTargetNameForRouteProgram(id);
     for (const auto& order : pendingOrders_.orders) {
@@ -886,7 +892,7 @@ QString MainWindow::selectedSystemFleetHeading() const
 
 std::optional<Fleet> MainWindow::knownFleetTarget(FleetId id) const
 {
-    if(const auto* f=findFleet(state_,id); f && f->owner==pendingOrders_.player && !unreported_orbital_ship(state_,*f)) return fleet_player_view(state_,*f);
+    if(const auto* f=findFleet(fleetPlanningState(),id); f && f->owner==pendingOrders_.player) return *f;
     for(const auto& f:missing_fleet_contacts(state_,pendingOrders_.player)) if(f.id==id) return f;
     for(const auto& c:known_enemy_contacts(state_,pendingOrders_.player))
         if(c.fleet==id && !c.lost && c.quality!=ContactQuality::Probable) return recon_contact_fleet(c,state_.turn);
@@ -906,10 +912,9 @@ QString MainWindow::fleetTargetNameForRouteProgram(FleetId fleetId) const
 std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedSystem() const
 {
     const auto* star = selectedStar();
-    if (!star) return {};
 
     std::vector<RouteProgramTargetOption> targets;
-    targets.push_back({
+    if (star) targets.push_back({
         QString("System — %1").arg(QString::fromStdString(star->name)),
         1,
         star->id,
@@ -917,14 +922,16 @@ std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedS
     });
 
     const auto source = selectedFleetForRouteProgram();
-    for (const auto& fleet : make_player_view(state_,pendingOrders_.player).state.fleets) {
+    for (const auto& fleet : fleetPlanningState().fleets) {
         if (fleet.id == source) continue;
         const auto& visible = fleet;
-        if (!same_position(visible.position, star->position)) continue;
+        const bool local = star && same_position(visible.position, star->position);
         const bool enemy = fleet.owner != pendingOrders_.player;
+        if (!local && enemy) continue;
         targets.push_back({
             QString(enemy ? "Enemy fleet — %1" : "Fleet — %1")
-                .arg(QString::fromStdString(visible.name)),
+                .arg(QString::fromStdString(visible.name))
+                + (local ? QString{} : " — " + fleetLocationName(visible.position)),
             enemy ? 3 : 2,
             fleet.id,
             enemy,
@@ -935,7 +942,7 @@ std::vector<RouteProgramTargetOption> MainWindow::routeProgramTargetsAtSelectedS
 
 bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
 {
-    const auto* fleet = findFleet(state_, fleetId);
+    const auto* fleet = findFleet(fleetPlanningState(), fleetId);
     const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
     const bool ownContact = std::any_of(missing.begin(), missing.end(), [=](const auto& contact) { return contact.id == fleetId; });
     if (fleet && unreported_orbital_ship(state_,*fleet)) return false;
@@ -1267,8 +1274,9 @@ bool MainWindow::appendFleetTargetWaypoint(
             target->position, 0, warp, arrivalAction);
     }
     if (arrivalAction.kind != FleetArrivalActionKind::None
-        && arrivalAction.kind != FleetArrivalActionKind::MergeWithFleet) {
-        statusBar()->showMessage("A moving fleet target supports No action or Merge with fleet", 3000);
+        && arrivalAction.kind != FleetArrivalActionKind::MergeWithFleet
+        && arrivalAction.kind != FleetArrivalActionKind::SupplyOutpost) {
+        statusBar()->showMessage("A fleet target supports No action, Merge or Transfer fuel", 3000);
         return false;
     }
     return appendRouteWaypoint(target->position, target->id, warp, arrivalAction);
@@ -1430,8 +1438,9 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
     }
     if (leg.targetFleet != 0) {
         if (action.kind != FleetArrivalActionKind::None
-            && action.kind != FleetArrivalActionKind::MergeWithFleet) {
-            statusBar()->showMessage("Fleet targets support only No action or Merge", 4000);
+            && action.kind != FleetArrivalActionKind::MergeWithFleet
+            && action.kind != FleetArrivalActionKind::SupplyOutpost) {
+            statusBar()->showMessage("Fleet targets support No action, Merge or Transfer fuel", 4000);
             return false;
         }
     } else if (action.kind == FleetArrivalActionKind::MergeWithFleet) {

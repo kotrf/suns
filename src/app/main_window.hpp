@@ -79,6 +79,7 @@ class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    ~MainWindow() override;
 
     // Route-program dock API. Kept outside the main map implementation so the
     // increasingly rich fleet-program UI can evolve independently.
@@ -232,6 +233,7 @@ private:
     void refreshMapLabels();
     void updateControls();
     [[nodiscard]] const GameState& movementPlanningPreview() const;
+    [[nodiscard]] const GameState& fleetPlanningState() const;
     void refreshShipDesignChoices();
     void openShipDesigner();
     void openEmpireHistory();
@@ -302,6 +304,7 @@ private:
     [[nodiscard]] const Planet* selectedPlanet() const;
     [[nodiscard]] const Fleet* selectedFleet() const;
     [[nodiscard]] const StarSystem* selectedFleetCargoStar(QString* unavailableReason = nullptr) const;
+    [[nodiscard]] std::optional<Position> selectedFleetCargoLocation(QString* unavailableReason = nullptr) const;
     void refreshCargoTransferControls();
     [[nodiscard]] std::optional<Fleet> selectedFleetPlanningView() const;
     [[nodiscard]] const Fleet* selectedColonyShipAtSelectedStar() const;
@@ -334,6 +337,8 @@ private:
     mutable std::uint64_t movementPreviewRevision_{std::uint64_t(-1)};
     mutable PlayerId movementPreviewPlayer_{};
     mutable std::optional<GameState> movementPreview_;
+    mutable std::uint64_t fleetPlanningRevision_{std::uint64_t(-1)};
+    mutable std::optional<GameState> fleetPlanningState_;
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
     mutable FleetId routeEtaFleet_{};
     mutable std::vector<RouteProgramLegForecast> routeLegForecasts_;
