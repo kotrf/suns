@@ -1030,6 +1030,7 @@ void MainWindow::rebuildScene()
     applyMapDisplayMode();
     refreshMapLabels();
     updateControls();
+    refreshProductionQueue();
     emit routeProgramContextChanged();
 }
 
@@ -1469,6 +1470,7 @@ void MainWindow::updateControls()
         : QString("End Turn %1").arg(qulonglong(state_.turn)));
     endTurnButton_->setToolTip(readiness.join("\n"));
     refreshResearchPanel();
+    emit controlsChanged();
 }
 
 void MainWindow::appendPendingOrder(Order order, const QString& description)

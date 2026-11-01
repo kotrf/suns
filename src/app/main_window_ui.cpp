@@ -880,9 +880,10 @@ void MainWindow::installUiPolish()
     };
     updateCommandContext();
     auto* contextTimer = new QTimer(this);
-    contextTimer->setInterval(120);
+    contextTimer->setSingleShot(true);
+    contextTimer->setInterval(0);
     connect(contextTimer, &QTimer::timeout, this, updateCommandContext);
-    contextTimer->start();
+    connect(this, &MainWindow::controlsChanged, contextTimer, [contextTimer] { contextTimer->start(); });
 }
 
 void MainWindow::zoomMap(double factor)
