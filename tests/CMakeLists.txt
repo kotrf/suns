@@ -171,6 +171,10 @@ target_link_libraries(suns_fleet_management_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_fleet_management_tests COMMAND suns_fleet_management_tests)
 
+add_executable(suns_fleet_planning_tests fleet_planning_tests.cpp)
+target_link_libraries(suns_fleet_planning_tests PRIVATE Suns::Core)
+add_test(NAME suns_fleet_planning_tests COMMAND suns_fleet_planning_tests)
+
 add_executable(suns_moving_fleet_target_tests
     moving_fleet_target_tests.cpp
 )
@@ -236,6 +240,11 @@ target_link_libraries(suns_precursor_artifact_tests PRIVATE Suns::Core)
 add_test(NAME suns_precursor_artifact_tests COMMAND suns_precursor_artifact_tests)
 
 if(SUNS_BUILD_APP)
+    add_executable(suns_fleet_planning_editor_tests fleet_planning_editor_tests.cpp)
+    target_link_libraries(suns_fleet_planning_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_fleet_planning_editor_tests COMMAND suns_fleet_planning_editor_tests)
+    set_tests_properties(suns_fleet_planning_editor_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     add_executable(suns_race_file_tests race_file_tests.cpp)
     target_link_libraries(suns_race_file_tests PRIVATE suns_app_ui)
     add_test(NAME suns_race_file_tests COMMAND suns_race_file_tests)

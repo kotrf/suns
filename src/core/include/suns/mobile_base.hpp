@@ -15,6 +15,8 @@ inline constexpr MineralCargo kWorkshopMineralsPerKt{0.1, 0.05, 0.05};
 [[nodiscard]] bool submit_mobile_base_command(GameState&, PlayerId, FleetId, const MobileBaseProgram&);
 // Called once after movement/combat and normal onboard repair. FleetId order
 // breaks ties between bases; each base's persistent list orders its clients.
+// Transfers between any co-located owned fleets. Mobile bases retain their
+// service/docking restrictions and configured donor reserve.
 [[nodiscard]] bool transfer_mobile_base_fuel(GameState&, PlayerId, const struct TransferFleetFuelOrder&, std::uint64_t);
 void service_mobile_bases(GameState&, std::uint64_t serviceTurn);
 } // namespace suns

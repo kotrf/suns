@@ -53,3 +53,16 @@ does not continue toward a stale coordinate.
 The first slice deliberately accepts friendly targets only. Hostile contacts,
 visibility loss and encounter resolution beyond a friendly rendezvous depend on
 the combat and contact model rather than being approximated here.
+
+## Fuel on arrival
+
+The route Destination selector includes all received friendly fleets, including
+those away from the selected system. Choose a fleet, then **Transfer fuel to
+fleet / outpost** instead of the default Merge, and set **Keep tanker fuel**.
+Navigation tracks the moving FleetId and uses the same continuous rendezvous
+rules. On actual contact, fuel moves up to the receiver's free tank capacity
+while retaining the donor reserve. Both fleets survive; the donor's next leg
+begins on the following turn. Stock, ownership, co-location and any expedition
+base docking constraints are checked physically on arrival. A lost target uses
+the existing target-lost behavior. Fixed-coordinate supply still services an
+owned outpost as before.

@@ -34,6 +34,20 @@ their tooltip; direct calls show a status message instead of a modal prompt.
 An old or predicted orbit does not permit immediate dockside transfers or
 reveal remote surface stock. Use on-arrival cargo orders for remote fleets.
 
+Two co-located friendly fleets with current telemetry and a live link can also
+exchange in open space. Select them as FROM and TO in Cargo. The **Fuel** row
+transfers tank fuel in either direction, bounded by donor stock and receiver
+tank space; the right slider can return an earlier planned transfer. Fuel uses
+the separate tank rather than cargo-hold space. Both tanks update in the plan,
+Cancel preserves prior intent, and the ordinary `TransferFleetFuelOrder`
+executes before movement so the receiver can depart that year. Expedition bases
+retain their dedicated docking/service panel and its post-movement rules.
+
+For a remote rendezvous, choose the friendly fleet in route Destination and
+**Transfer fuel to fleet / outpost**, then set the donor reserve. The route
+follows the actual target and transfers available fuel when they meet, without
+merging. See [Moving fleet targets](moving-fleet-targets.md).
+
 `SetFleetMineralCargoOrder` sets the desired mineral manifest for a fleet docked at a friendly colony. The turn processor transfers only the delta between colony stores and the fleet, rejects negative manifests, rejects unavailable minerals and rejects any target manifest that would overflow the shared hold.
 
 The player-facing **Transfer cargo** dialog builds on those rules with explicit source and destination endpoints. At a selected system it lists the planetary surface and every co-located friendly fleet. An enemy colony is destination-only and is highlighted as such. The source is excluded from the destination list. A single atomic order may move Colonists, Ironium, Boranium and Germanium planet → fleet, fleet → planet or fleet → fleet. Sliders and exact numeric fields show the source remainder, destination result, shared hold usage and gross mass live. Each slider's scale is based on the destination's free hold after other selected transfers, independently of source stock. The handle stops at the available source amount even when the track extends farther; exact fields enforce that same limit. For unloading to a surface, the scale uses the source fleet's hold capacity and the handle is limited by its actual cargo. These limits update together. Transfer cargo replaces the separate Load to capacity and Unload colonists buttons. Peaceful population transfer requires a friendly colony, and loading from one always leaves at least one colonist behind. Unloading population onto an enemy colony starts a ground invasion; minerals cannot be included in that atomic invasion order. Minerals may be deposited on or collected from an uncolonized surface stockpile.

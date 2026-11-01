@@ -27,6 +27,28 @@ Both fleets must be stationary and idle, with no waypoint program, persistent ta
 
 Fuel is divided in proportion to fuel capacity. Colonists and minerals are divided in proportion to cargo capacity. This deterministic rule keeps both resulting fleets within their physical capacities whenever the original fleet was valid.
 
+The command-boundary preview now drives the selected composition, map rings,
+fleet picker and summary together. A planned detachment is selectable before
+End Turn and can immediately receive a name, cargo/fuel and a route. Rename is
+also reflected in the orbital picker immediately. The physical world is changed
+only when the orders resolve.
+
+Reorganisation also retains the owner's already sent commands before applying
+the preview. A remote fleet waiting for an old command is still busy even when
+its last telemetry is stationary: Split is blocked, and neither end of an idle
+Merge may have commands in flight. This overlays outgoing intent only; it does
+not refresh position, composition or telemetry dates. The host uses the same
+busy condition when binding detachment references, so a rejected split cannot
+shift references belonging to a later valid split. Generic PlayerView/report
+sanitisation and the player-turn export contract are unchanged.
+
+A detachment's planning ID comes from the player's received view, never the
+host's hidden allocation counter. During resolution the host binds successful
+split references to actual fleet IDs within each player's submission, including
+nested splits and later source/target references. Failed splits invalidate their
+descendants. This uses existing order payloads and survives save/reload and
+PBEM order files; it does not expose other empires' fleet births.
+
 ## Rename order
 
 `RenameFleetOrder{fleet, name}` changes an owned fleet's display name. Blank,

@@ -645,7 +645,9 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     componentDetails_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     componentDetails_->setMargin(6);
     detailsScroll->setWidget(componentDetails_);
-    catalogLayout->addWidget(detailsScroll, 1);
+    // Extra height belongs to the catalog; descriptions retain their preferred
+    // height and remain scrollable when the selected component has more text.
+    catalogLayout->addWidget(detailsScroll);
     fitButton_ = new QPushButton("Fit selected →", catalogGroup);
     fitButton_->setObjectName("fitSelectedComponent");
     fitButton_->setEnabled(false);
