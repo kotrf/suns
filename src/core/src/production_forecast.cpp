@@ -11,7 +11,8 @@ namespace suns {
 
 std::vector<ProductionCompletionEstimate> forecast_production_queue(
     const GameState& state, const Planet& planet,
-    const std::vector<ProductionItem>& queue, std::uint32_t maximumTurns)
+    const std::vector<ProductionItem>& queue, std::uint32_t maximumTurns,
+    std::optional<MineralCargo> firstTurnMining)
 {
     std::vector<ProductionCompletionEstimate> result(queue.size());
     if (queue.empty()) return result;
@@ -30,7 +31,11 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
     for (std::uint32_t offset = 1; offset <= maximumTurns && !simulated.productionQueue.empty(); ++offset) {
         simulationState.turn = state.turn + offset - 1;
         decay_planet_contamination(simulated);
-        const auto mined = projected_mineral_mining(simulationState, simulated);
+        // Cargo changes production staffing this year, but ordinary mining
+        // has already used the pre-order population. Later years use the
+        // evolving post-cargo population and completed infrastructure.
+        const auto mined = offset == 1 && firstTurnMining ? *firstTurnMining
+            : projected_mineral_mining(simulationState, simulated);
         simulated.minerals.ironium += mined.ironium;
         simulated.minerals.boranium += mined.boranium;
         simulated.minerals.germanium += mined.germanium;

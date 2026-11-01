@@ -278,7 +278,8 @@ void MainWindow::refreshColonyWorkspace()
                     lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
                         .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
                         .arg((damage.contamination+1)/2);
-                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(planned,*planet))
+                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(planned,*planet,
+                    projected_mineral_mining(received, *observed)))
                     .arg(find_orbital_station_at_planet(received, planet->id) ? "station" : "no station");
             }
             if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(received,pendingOrders_.player,planet->id)) {
@@ -293,7 +294,7 @@ void MainWindow::refreshColonyWorkspace()
         }
     }
     status->setText(lines.join("<br>"));
-    const auto mining = own ? projected_mineral_mining(planned, *planet) : MineralCargo{};
+    const auto mining = own ? projected_mineral_mining(received, *observed) : MineralCargo{};
     const bool geology = planet && planet_geology_known(received, pendingOrders_.player, planet->id);
     const auto concentration = geology ? planet_mineral_concentration(received, *planet) : MineralCargo{};
     const auto values = [](const MineralCargo& minerals) { return std::array{minerals.ironium, minerals.boranium, minerals.germanium}; };
@@ -306,7 +307,7 @@ void MainWindow::refreshColonyWorkspace()
         item->setText(2, own ? QString::number(extraction[row], 'f', 1) : "—");
         item->setText(3, geology ? QString::number(conc[row], 'f', 0) + "%" : "?");
         for (int column = 0; column < 4; ++column)
-            item->setToolTip(column, QString("%1 • Stock: %2 kt • Mining: %3 kt/year • Concentration: %4")
+            item->setToolTip(column, QString("%1 • Stock: %2 kt • Current-year mining before cargo: %3 kt • Concentration: %4")
                 .arg(item->text(0), item->text(1), item->text(2), item->text(3)));
     }
     fitMineralRows(table);

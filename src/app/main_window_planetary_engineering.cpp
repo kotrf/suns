@@ -62,6 +62,10 @@ void MainWindow::installPlanetaryEngineering()
         ? planned_production_state(projected_cargo_order_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_),pendingOrders_):GameState{}; };
     const auto update=[=,this] {
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
+        const auto received = find_player(state_,pendingOrders_.player)
+            ? make_player_view(state_,pendingOrders_.player).state : GameState{};
+        const auto* beforeCargo = p ? find_planet(received,p->id) : nullptr;
+        const auto firstTurnMining = beforeCargo ? projected_mineral_mining(received,*beforeCargo) : MineralCargo{};
         const bool owned=p && p->owner==pendingOrders_.player;
         const bool existing=p && p->engineering.kind!=PlanetaryEngineeringKind::None;
         const auto kind=existing?p->engineering.kind:PlanetaryEngineeringKind(project->currentData().toInt());
@@ -104,7 +108,7 @@ void MainWindow::installPlanetaryEngineering()
                 .arg(p->minerals.ironium,0,'f',1).arg(p->minerals.boranium,0,'f',1).arg(p->minerals.germanium,0,'f',1);
             if(!planetary_engineering_available(known,p->owner,kind) && !complete) text+=kind==PlanetaryEngineeringKind::OrbitalHabitat?"\nRequires Construction 18, Energy 16 and Biology 14.":kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"\nRequires Energy 18, Construction 18 and delivered completed Compact remnant field research.":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"\nRequires Energy 16 and Construction 16.":"\nRequires Energy 14 and Construction 14.";
             if(existing && !complete && engineering_scheduled(*p)) {
-                const auto forecast=forecast_production_queue(known,*p,p->productionQueue,128);
+                const auto forecast=forecast_production_queue(known,*p,p->productionQueue,128,firstTurnMining);
                 const auto item=std::find_if(p->productionQueue.begin(),p->productionQueue.end(),[](const auto& q){return engineering_kind(q.kind);});
                 const auto index=std::size_t(item-p->productionQueue.begin());
                 text+=forecast[index].completionTurn?QString("\nEstimated completion: year %1, using current supplies and technology.").arg(qulonglong(*forecast[index].completionTurn))
@@ -118,8 +122,8 @@ void MainWindow::installPlanetaryEngineering()
                 :"No received orbital evidence.";
         }
         if(kind==PlanetaryEngineeringKind::OrbitalHabitat && owned) {
-            const auto potential=std::uint64_t(p->industry)+total_colony_population(*p)/kPopulationPerProductionUnit;
-            const auto mined=projected_mineral_mining(known,*p);
+            const auto potential=std::uint64_t(colony_workforce(known,*p).operatingFactories)+total_colony_population(*p)/kPopulationPerProductionUnit;
+            const auto mined=firstTurnMining;
             const MineralCargo supplied{p->minerals.ironium+mined.ironium,p->minerals.boranium+mined.boranium,p->minerals.germanium+mined.germanium};
             const auto cause=!engineering_station_available(known,*p)?"Supporting Starbase/Fortress shipyard unavailable"
                 :!engineering_operation_available(known,*p)?"Operating technology unavailable"
@@ -132,7 +136,7 @@ void MainWindow::installPlanetaryEngineering()
                 text+=QString(" Station evidence: year %1 (also incorporates received battle reports).").arg(qulonglong(record.planetSnapshot->habitat->stationEvidenceTime/3));
             text+=QString("\nSurface: %1 / %2 residents. Orbit: %3 / %4 residents; projected growth +%5/year.\n%6. Emergency reserve: %7 years. Last annual loss: %8 residents.\nOccupied upkeep: 2 production + I/B/G 1/1/1 per year, before research. Recharging one reserve year costs the same extra. Empty structures have no upkeep.\n4800 work, at most 80/year; I/B/G 480/240/480. First reserve of three years is included. Evacuate before dismantling; no automatic migration.")
                 .arg(qulonglong(p->population)).arg(qulonglong(population_capacity(known,*p,known.turn)))
-                .arg(qulonglong(p->habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity)).arg(qlonglong(projected_orbital_growth(known,*p)))
+                .arg(qulonglong(p->habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity)).arg(qlonglong(projected_orbital_growth(known,*p,firstTurnMining)))
                 .arg(QString::fromStdString(habitat_service_name(p->habitat.service))).arg(p->habitat.reserveYears).arg(qulonglong(p->habitat.populationLost));
         }
         status->setText(text);

@@ -58,7 +58,8 @@ void MainWindow::installMiningInfrastructure()
         if (shuttingDown_) return;
 
         const auto* star = selectedStar();
-        const auto planned = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+        const auto received = make_player_view(state_, pendingOrders_.player).state;
+        const auto planned = projected_cargo_order_state(received, pendingOrders_);
         const auto* planet = star ? find_planet_at_star(planned, star->id) : nullptr;
         const bool friendlyColony = star
             && is_surveyed(planned, pendingOrders_.player, star->id)
@@ -72,7 +73,9 @@ void MainWindow::installMiningInfrastructure()
             return;
         }
 
-        const auto currentMining = projected_mineral_mining(planned, *planet);
+        const auto* beforeCargo = find_planet(received, planet->id);
+        const auto currentMining = projected_mineral_mining(received, *beforeCargo);
+        const auto plannedMining = projected_mineral_mining(planned, *planet);
         Planet withAnotherMine = *planet;
         ++withAnotherMine.mines;
         const auto nextMining = projected_mineral_mining(planned, withAnotherMine);
@@ -80,13 +83,13 @@ void MainWindow::installMiningInfrastructure()
 
         miningSummary->setText(
             QString("Mines <b>%1 active / %2 built</b> • population limit %3<br>"
-                    "Current extraction I %4 / B %5 / G %6<br>"
+                    "Current-year extraction (before cargo) I %4 / B %5 / G %6<br>"
                     "<span style='color:#a9bdd0'>Next Mine: %7%8</span>")
                 .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit)
                 .arg(currentMining.ironium, 0, 'f', 2)
                 .arg(currentMining.boranium, 0, 'f', 2)
                 .arg(currentMining.germanium, 0, 'f', 2)
-                .arg(miningDeltaText(currentMining, nextMining))
+                .arg(miningDeltaText(plannedMining, nextMining))
                 .arg(planet->mines >= workforce.mineLimit ? " — idle until population grows" : ""));
     };
 

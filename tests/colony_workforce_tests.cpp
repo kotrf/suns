@@ -13,8 +13,84 @@
 
 using namespace suns;
 
+static void cargo_mining_forecast(bool unloading, std::uint32_t quantity)
+{
+    auto state = make_demo_game();
+    state.players.front().technology.researchActive = false;
+    auto& world = state.planets.front();
+    world.population = unloading ? 500 : 100500;
+    world.industry = world.mines = 100;
+    world.observedConcentration = MineralCargo{100,100,100};
+    world.minerals = {0,100,100};
+    world.productionQueue = {{ProductionKind::Factory,kFactoryCost,0,ProductionAutomation::None,quantity}};
+    auto& design = state.shipDesigns.front();
+    design.hull = ShipHullType::SuperFreighter;
+    design.components = {ShipComponentType::FusionDrive}; design.placements.clear();
+    auto& transport = state.fleets.front();
+    transport.colonists = unloading ? 100000 : 0;
+    transport.telemetry = {};
+    transport.telemetry = confirmed_fleet_telemetry(state,transport);
+    assert(fleet_cargo_capacity(state,transport) >= 1000);
+    set_survey_level(state,1,world.star,SurveyLevel::DeepSurvey,state.turn);
+    const PlayerOrders orders{1,{TransferCargoOrder{unloading ? CargoTransferEndpoint{0,1} : CargoTransferEndpoint{1,0},
+        unloading ? CargoTransferEndpoint{1,0} : CargoTransferEndpoint{0,1},100000,{}}}};
+    const auto received = make_player_view(state,1).state;
+    const auto beforeMining = projected_mineral_mining(received,received.planets.front());
+    const auto planned = planned_production_state(projected_cargo_order_state(received,orders),orders);
+    const auto& afterCargo = planned.planets.front();
+    assert(afterCargo.population == (unloading ? 100500U : 500U));
+    assert(colony_workforce(planned,afterCargo).operatingMines == (unloading ? 100U : 0U));
+    assert(std::abs(projected_mineral_mining(planned,afterCargo).ironium - beforeMining.ironium) > 75);
+    const auto forecast = forecast_production_queue(planned,afterCargo,afterCargo.productionQueue,128,beforeMining);
+    assert(forecast.front().completionTurn);
+    auto actual = TurnProcessor{}.process(state,{orders});
+    // This year's extraction was earned by the original residents, while
+    // production already uses the new residents. Neither case can finish yet.
+    assert(actual.planets.front().industry == 100);
+    assert(std::abs(actual.planets.front().minerals.ironium - beforeMining.ironium) < 1e-8);
+    assert(actual.planets.front().productionWaitingForMinerals == unloading);
+    while (!actual.planets.front().productionQueue.empty() && actual.turn <= state.turn + 128)
+        actual = TurnProcessor{}.process(actual,{});
+    assert(actual.planets.front().industry == 100 + quantity);
+    assert(actual.turn == *forecast.front().completionTurn);
+    if (unloading) assert(actual.turn == 3); // The reported P2 was incorrectly Turn 2.
+    assert(state.planets.front().population == (unloading ? 500U : 100500U));
+}
+
+static void cargo_mining_upkeep(std::uint64_t beforePopulation)
+{
+    auto state = make_demo_game();
+    state.players.front().technology.levels.fill(20);
+    auto& p = state.planets.front();
+    p.population = beforePopulation; p.industry = p.mines = 100;
+    p.observedConcentration = MineralCargo{2,2,2}; p.minerals = {};
+    p.productionQueue.clear();
+    p.engineering.kind = PlanetaryEngineeringKind::OrbitalHabitat;
+    p.engineering.work = engineering_work(p.engineering.kind); p.engineering.operational = true;
+    p.habitat.population = 100000; p.habitat.service = HabitatService::Normal; p.habitat.reserveYears = 0;
+    state.orbitalStations.front().hull = OrbitalStationHullType::Starbase;
+    auto& design = state.shipDesigns.front(); design.hull = ShipHullType::SuperFreighter;
+    design.components = {ShipComponentType::FusionDrive}; design.placements.clear();
+    auto& f = state.fleets.front(); f.colonists = 100000;
+    f.telemetry = {}; f.telemetry = confirmed_fleet_telemetry(state,f);
+    set_survey_level(state,1,1,SurveyLevel::DeepSurvey,state.turn);
+    const PlayerOrders orders{1,{TransferCargoOrder{{0,1},{1,0},100000,{}}}};
+    const auto received = make_player_view(state,1).state;
+    const auto mining = projected_mineral_mining(received,received.planets.front());
+    const auto planned = projected_cargo_order_state(received,orders);
+    const auto output = net_colony_output(planned,planned.planets.front(),mining);
+    const auto growth = projected_orbital_growth(planned,planned.planets.front(),mining);
+    const auto actual = TurnProcessor{}.process(state,{orders});
+    assert(actual.planets.front().habitat.service == HabitatService::Failing);
+    assert(actual.planets.front().habitat.population == 90000 && growth == 0);
+    assert(output == 100 && output == colony_output(actual,actual.planets.front()));
+}
+
 int main()
 {
+    for (const bool unloading : {false,true}) for (const auto quantity : {1U,10U})
+        cargo_mining_forecast(unloading,quantity);
+    for (const auto population : {0U,500U}) cargo_mining_upkeep(population);
     auto state = make_demo_game();
     auto& planet = state.planets.front();
     planet.population = 25'000;

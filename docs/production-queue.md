@@ -9,6 +9,15 @@ shared resolver as population grows or falls, so forecasts include later
 reactivation. The System panel shows active/built counts and population limits;
 see [race operation settings](race-profile.md#factory-and-mine-operation).
 
+Ordinary mining precedes cargo orders in the physical turn. A post-cargo plan
+therefore supplies the queue forecast with the received pre-cargo extraction
+for its first year, while factories immediately use post-cargo staffing. Later
+years recalculate mining from simulated population and completed mines; the
+initial extraction is not frozen for the whole forecast. The same first-year
+amount funds orbital upkeep and its output/growth estimates. Mining labels and
+the Minerals table show current-year extraction before cargo, independently of
+the immediately updated active/built counts and cargo-adjusted stocks.
+
 **Move up** and **Move down** append a typed `ReorderProductionQueueOrder`. Indices apply to the queue as already modified by earlier pending queue and reorder orders, so the displayed plan is the same order the turn processor will resolve. Invalid or stale indices are rejected atomically.
 
 **Remove**, or **Delete** while the queue has focus, cancels the selected item.

@@ -1,6 +1,40 @@
 # Project status and development handoff
 
-## Current work — population-operated factories and mines
+## Current work — PR #245 review: mining before cargo
+
+Checked 1 November 2026: the review of #245 head `fb0d5ce` identified one P2
+([thread](https://github.com/kotrf/suns/pull/245#discussion_r4433394858)).
+Post-cargo population was funding current-year mining, although ordinary
+extraction physically runs before cargo orders. With 500 residents, 100 mines
+and a 100,000-person unload, this promised a factory on Turn 2 rather than the
+actual Turn 3.
+
+The queue forecast now accepts received pre-order extraction for its first year
+while retaining post-cargo production staffing and stocks. Later years derive
+mining from evolving population and completed infrastructure. Production,
+engineering and resonance forecasts use the same first-year input. Current-year
+mining in the Minerals table and mining details uses pre-cargo residents;
+active/built counts and marginal future mine benefit still reflect the accepted
+cargo plan. Output, research and orbital-growth estimates use that same mineral
+budget for upkeep; zero extraction is an explicit valid input. No physical turn
+phase, save payload or order format changed: this branch stays v108/v47.
+
+Validation: full GCC14.2 / Qt6.12 Debug build and **96/96 Linux/offscreen CTest
+passed (36.08 s)**, plus the final expanded workforce suite. Regressions compare
+forecast/UI with real TurnProcessor for loading and unloading across staffing
+thresholds, one factory and a batch of ten, future reactivation, orbital upkeep
+with zero/low starting extraction, and unchanged planning state. The reported
+case shows 1.000667 I and Turn 3 in both preview and resolution. The regression
+fails with the former forecast calculation; the themed UI capture was inspected
+and diff check is clean. Local checks do not claim a new GitHub CI result or a
+merge.
+
+Main remains `23d6b0f` after #244/#246. #248 (race files) depends on #245 and
+will receive this fix in its existing branch; merge #245 then retarget #248 to
+main. Separate coordinate #247 and fleet/fuel #249 remain open; #249 depends on
+#247. The user merges PRs. #53 and the previous deferred directions stay frozen.
+
+## Earlier checkpoint — population-operated factories and mines
 
 Checked 31 October 2026: #244 is merged as main `72009d4`, save v107 / orders
 v47. Branch `codex/population-operated-industry` implements the accepted next

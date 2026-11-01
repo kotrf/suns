@@ -218,7 +218,8 @@ QString MainWindow::selectedPlanetPanelSummary() const
         lines << QString("Active / built — Factories %1 / %2 • Mines %3 / %4 • Output %5 / turn")
                      .arg(workforce.operatingFactories).arg(planet->industry)
                      .arg(workforce.operatingMines).arg(planet->mines)
-                     .arg(net_colony_output(planned, afterCargo ? *afterCargo : *planet));
+                     .arg(net_colony_output(planned, afterCargo ? *afterCargo : *planet,
+                         projected_mineral_mining(received, *planet)));
         lines << QString("Defenses %1 / %2 • bombardment protection: population %3%, installations %4%")
             .arg(planet->defenses).arg(kMaximumColonyDefenses)
             .arg(colony_defense_coverage(*planet)*100,0,'f',1).arg(colony_defense_coverage(*planet)*50,0,'f',1);
