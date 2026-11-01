@@ -271,7 +271,7 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
     case FleetArrivalActionKind::RecoverWreckage: return "recover wreckage";
     case FleetArrivalActionKind::RecoverSample: return "recover scientific specimen";
     case FleetArrivalActionKind::DeployOutpost: return "deploy permanent outpost";
-    case FleetArrivalActionKind::SupplyOutpost: return QString("supply outpost fuel; keep %1 mg").arg(action.reserveFuel);
+    case FleetArrivalActionKind::SupplyOutpost: return QString("transfer fuel; keep %1 mg").arg(action.reserveFuel);
     case FleetArrivalActionKind::RemoteMining:
         return "begin remote mining";
     case FleetArrivalActionKind::EnterWormhole:
@@ -293,7 +293,7 @@ GameState movementPhasePreviewState(
     // avoids unrelated actions.
     // The processor still applies turn-start onboard fuel generation, exactly
     // as it will before the real orders and movement phase.
-    GameState preview = state;
+    GameState preview = make_player_view(state, pending.player).state;
     preview.pendingMobileBaseTransfers.clear();
     project_interstellar_medium(preview,pending.player);
     // A local cargo preview must not turn a remote site's physical stock or
@@ -315,6 +315,7 @@ GameState movementPhasePreviewState(
         if (std::holds_alternative<SetFleetColonistsOrder>(order)
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)
+            || std::holds_alternative<TransferFleetFuelOrder>(order)
             || std::holds_alternative<RefuelFleetOrder>(order)
             || std::holds_alternative<MergeFleetsOrder>(order)
             || std::holds_alternative<SplitFleetOrder>(order)
@@ -418,6 +419,14 @@ QString componentSummary(const ShipDesign* design)
 }
 
 } // namespace
+
+MainWindow::~MainWindow()
+{
+    shuttingDown_ = true;
+    // Qt destroys child widgets after C++ members. Scene teardown must not
+    // refresh panels that read the already destroyed planning/game state.
+    if (scene_) scene_->blockSignals(true);
+}
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -601,12 +610,8 @@ const Planet* MainWindow::selectedPlanet() const
 const Fleet* MainWindow::selectedFleet() const
 {
     if (!selection_.fleet) return nullptr;
-    for (const auto& transit : state_.wormholeTransits) if (transit.lastContact.id == *selection_.fleet
-        && transit.lastContact.owner == pendingOrders_.player
-        && transit.status != WormholeTransitStatus::PresumedLost
-        && transit.status != WormholeTransitStatus::EmergenceConfirmed) return &transit.lastContact;
-    const auto* fleet = findFleet(state_, *selection_.fleet);
-    if (fleet && fleet->owner == pendingOrders_.player && !unreported_orbital_ship(state_,*fleet)) return fleet;
+    const auto* fleet = findFleet(fleetPlanningState(), *selection_.fleet);
+    if (fleet && fleet->owner == pendingOrders_.player) return fleet;
     return nullptr;
 }
 
@@ -622,11 +627,24 @@ std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
 {
     const auto* fleet = selectedFleet();
     if (!fleet) return std::nullopt;
-    auto visible = fleet_player_view(state_, *fleet);
-    if (!fleet_has_instant_link(state_, *fleet) || fleet_telemetry_age(state_, *fleet) != 0) return visible;
-    const auto& preview = movementPlanningPreview();
-    if (const auto* planned = findFleet(preview, fleet->id)) visible = *planned;
-    return visible;
+    return *fleet;
+}
+
+const GameState& MainWindow::fleetPlanningState() const
+{
+    if (!fleetPlanningState_ || fleetPlanningRevision_ != planningRevision_) {
+        fleetPlanningState_ = projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+        for (auto& fleet : fleetPlanningState_->fleets) {
+            if (fleet.owner != pendingOrders_.player || fleet_telemetry_age(*fleetPlanningState_, fleet) != 0
+                || !fleet_has_instant_link(*fleetPlanningState_, fleet)) continue;
+            // Current local manifests include accepted intent. Re-readers must
+            // not replace the projected hold/tank with its pre-order snapshot.
+            fleet.telemetry = {};
+            fleet.telemetry = confirmed_fleet_telemetry(*fleetPlanningState_, fleet);
+        }
+        fleetPlanningRevision_ = planningRevision_;
+    }
+    return *fleetPlanningState_;
 }
 
 const GameState& MainWindow::movementPlanningPreview() const
@@ -690,10 +708,11 @@ void MainWindow::rebuildScene()
     const auto selectionToRestore = selection_.star;
 
     if (!selectedFleet()) {
-        const auto fallback = std::find_if(state_.fleets.begin(), state_.fleets.end(), [this](const Fleet& fleet) {
-            return fleet.owner == pendingOrders_.player && !unreported_orbital_ship(state_,fleet);
+        const auto& planned = fleetPlanningState();
+        const auto fallback = std::find_if(planned.fleets.begin(), planned.fleets.end(), [this](const Fleet& fleet) {
+            return fleet.owner == pendingOrders_.player;
         });
-        selection_.fleet = fallback == state_.fleets.end()
+        selection_.fleet = fallback == planned.fleets.end()
             ? std::optional<FleetId>{}
             : std::optional<FleetId>{fallback->id};
         warpControlFleetId_.reset();
@@ -705,7 +724,7 @@ void MainWindow::rebuildScene()
     selection_.star = selectionToRestore;
     addBackgroundStars(scene_, state_.galaxySeed);
 
-    auto playerView=make_player_view(state_,pendingOrders_.player).state;
+    const auto& playerView = fleetPlanningState();
     if(!property("hideTransportLines").toBool())for(const auto& line:playerView.players.front().transportLines) {
         QPen pen(line.spec.active?QColor(70,190,190,120):QColor(130,130,130,90));
         pen.setStyle(Qt::DashLine);pen.setWidthF(1.3);pen.setCosmetic(true);
@@ -768,7 +787,7 @@ void MainWindow::rebuildScene()
         const auto routeStart = fleetMapPosition(state_, fleet);
         QPointF routeEnd(routeDestination.x, routeDestination.y);
         if (visibleFleet.targetFleet != 0) {
-            if (const auto* target = findFleet(state_, visibleFleet.targetFleet)) {
+            if (const auto* target = findFleet(playerView, visibleFleet.targetFleet)) {
                 routeDestination = fleet_player_view(state_, *target).position;
                 routeEnd = fleetMapPosition(state_, *target);
             }
@@ -798,14 +817,14 @@ void MainWindow::rebuildScene()
         std::visit([&](const auto& concreteOrder) {
             using T = std::decay_t<decltype(concreteOrder)>;
             if constexpr (std::is_same_v<T, MoveFleetOrder>) {
-                const auto* fleet = findFleet(state_, concreteOrder.fleet);
+                const auto* fleet = findFleet(playerView, concreteOrder.fleet);
                 if (!fleet) return;
                 const auto visibleFleet = fleet_player_view(state_, *fleet);
                 auto routeDestination = concreteOrder.destination;
                 const auto routeStart = fleetMapPosition(state_, *fleet);
                 QPointF routeEnd(routeDestination.x, routeDestination.y);
                 if (concreteOrder.targetFleet != 0) {
-                    if (const auto* target = findFleet(state_, concreteOrder.targetFleet)) {
+                    if (const auto* target = findFleet(playerView, concreteOrder.targetFleet)) {
                         routeDestination = fleet_player_view(state_, *target).position;
                         routeEnd = fleetMapPosition(state_, *target);
                     }

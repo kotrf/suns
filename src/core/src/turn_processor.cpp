@@ -1595,6 +1595,11 @@ bool resolve_fleet_target_arrival(
         if (merge_rendezvous_fleet(state, fleet, *target)) consumedFleets.push_back(fleet.id);
         return true;
     }
+    if (action.kind == FleetArrivalActionKind::SupplyOutpost) {
+        (void)transfer_mobile_base_fuel(state, fleet.owner,
+            TransferFleetFuelOrder{fleet.id, target->id, std::numeric_limits<double>::max(), action.reserveFuel}, state.turn + 1);
+        fleet.arrivalAction.reset();
+    }
 
     (void)finish_fleet_arrival(state, fleet, consumedFleets, freight);
     return true;
@@ -2336,6 +2341,13 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
             (void)submit_fleet_task_command(state, player, value.fleet, value.task);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
             (void)submit_electronics_command(state, player, value.fleet, value.program);
+        } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
+            const auto found = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const auto& f) {
+                return f.id == value.fleet && f.owner == player;
+            });
+            const bool visible = std::any_of(value.name.begin(), value.name.end(),
+                [](unsigned char c) { return !std::isspace(c); });
+            if (found != state.fleets.end() && visible && value.name.size() <= 80) found->name = value.name;
         } else if constexpr (std::is_same_v<T, MergeFleetsOrder>) {
             const auto receivedTurn = projection ? std::min(projected_manifest_date(state, player, value.source),
                 projected_manifest_date(state, player, value.destination)) : 0;
@@ -2362,16 +2374,26 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
 
 } // namespace
 
+namespace {
+struct PlannedSplitReference { std::size_t order{}; FleetId fleet{}; };
+
 // UI/AI callers supply a PlayerView: command validation must not inspect host truth.
-GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending)
+GameState project_order_boundary(const GameState& current, const PlayerOrders& pending,
+    std::vector<PlannedSplitReference>* splits = nullptr)
 {
     GameState projected = current;
     for (auto& p : projected.planets)
         p.xenocrystal = known_xenocrystal(current, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
-    for (const auto& order : pending.orders) {
-        if (apply_fleet_command_order(projected, pending.player, order, gated, true)) continue;
+    for (std::size_t index = 0; index < pending.orders.size(); ++index) {
+        const auto& order = pending.orders[index];
+        const auto nextFleet = projected.nextFleetId;
+        if (apply_fleet_command_order(projected, pending.player, order, gated, true)) {
+            if (splits && std::holds_alternative<SplitFleetOrder>(order) && projected.nextFleetId != nextFleet)
+                splits->push_back({index, nextFleet});
+            continue;
+        }
         if (const auto* gate = std::get_if<GateFleetOrder>(&order)) {
             if (!gated.contains(gate->fleet) && preview_stargate_transfer(projected, pending.player, *gate))
                 gated.insert(gate->fleet);
@@ -2388,6 +2410,12 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
                 (void)preview_xenocrystal_transfer(projected, pending.player, *crystal, &pending);
         } else if (const auto* process = std::get_if<ProcessScienceSampleOrder>(&order)) {
             (void)process_science_sample(projected, pending.player, *process);
+        } else if (const auto* fuel = std::get_if<TransferFleetFuelOrder>(&order)) {
+            const auto* from = find_service_fleet(projected, fuel->source);
+            const auto* to = find_service_fleet(projected, fuel->destination);
+            if (from && to && !mobile_base_hulls(projected, *from) && !mobile_base_hulls(projected, *to)
+                && fleet_has_instant_link(projected, *from) && fleet_has_instant_link(projected, *to))
+                (void)transfer_mobile_base_fuel(projected, pending.player, *fuel, projected.turn);
         } else if (std::holds_alternative<SetFleetColonistsOrder>(order)
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)) {
@@ -2395,6 +2423,50 @@ GameState projected_cargo_order_state(const GameState& current, const PlayerOrde
         }
     }
     return projected;
+}
+
+// A detachment's planning ID comes from the player's received view. Bind it
+// to the actual allocated ID only within this submission; hidden fleets and
+// another player's simultaneous splits must never change subsequent intent.
+bool remap_fleet_references(Order& order, const std::map<FleetId, FleetId>& aliases)
+{
+    bool valid = true;
+    const auto remap = [&](FleetId& id) {
+        if (const auto found = aliases.find(id); found != aliases.end()) {
+            id = found->second;
+            if (!id) valid = false;
+        }
+    };
+    const auto action = [&](FleetArrivalAction& value) { remap(value.transportDestinationFleet); };
+    std::visit([&](auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (requires { value.fleet; }) remap(value.fleet);
+        if constexpr (std::is_same_v<T, SplitFleetOrder>) remap(value.source);
+        if constexpr (std::is_same_v<T, MergeFleetsOrder> || std::is_same_v<T, TransferFleetFuelOrder>) {
+            remap(value.source); remap(value.destination);
+        }
+        if constexpr (std::is_same_v<T, TransferCargoOrder> || std::is_same_v<T, TransferXenocrystalOrder>
+            || std::is_same_v<T, TransferScienceSampleOrder>) {
+            remap(value.source.fleet); remap(value.destination.fleet);
+        }
+        if constexpr (std::is_same_v<T, MoveFleetOrder>) {
+            remap(value.targetFleet); action(value.arrivalAction);
+            for (auto& leg : value.queuedWaypoints) { remap(leg.targetFleet); action(leg.arrivalAction); }
+        }
+        if constexpr (std::is_same_v<T, SetMobileBaseOrder>) for (auto& id : value.program.clients) remap(id);
+        if constexpr (std::is_same_v<T, OrbitalBaseOrder>) remap(value.command.receiver);
+        if constexpr (std::is_same_v<T, SetTransportLineOrder>) {
+            remap(value.value.destinationFleet);
+            for (auto& stop : value.value.deliveries) remap(stop.fleet);
+        }
+    }, order);
+    return valid;
+}
+} // namespace
+
+GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending)
+{
+    return project_order_boundary(current, pending);
 }
 
 GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending)
@@ -2495,8 +2567,30 @@ TurnResult TurnProcessor::process_with_events(
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
-        for (const auto& order : submission.orders) {
-            if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn)) continue;
+        std::vector<PlannedSplitReference> splits;
+        if (find_player(current, submission.player)
+            && std::any_of(submission.orders.begin(), submission.orders.end(), [](const auto& o) { return std::holds_alternative<SplitFleetOrder>(o); }))
+            (void)project_order_boundary(make_player_view(current, submission.player).state, submission, &splits);
+        std::map<FleetId, FleetId> aliases;
+        for (std::size_t index = 0; index < submission.orders.size(); ++index) {
+            auto order = submission.orders[index];
+            if (!remap_fleet_references(order, aliases)) {
+                // A failed parent's nested split cannot leave an unbound ID
+                // that later happens to name an unrelated physical fleet.
+                if (std::holds_alternative<SplitFleetOrder>(order)) {
+                    const auto reference = std::find_if(splits.begin(), splits.end(), [&](const auto& split) { return split.order == index; });
+                    if (reference != splits.end()) aliases[reference->fleet] = 0;
+                }
+                continue;
+            }
+            const auto allocated = next.nextFleetId;
+            if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn)) {
+                if (std::holds_alternative<SplitFleetOrder>(order)) {
+                    const auto reference = std::find_if(splits.begin(), splits.end(), [&](const auto& split) { return split.order == index; });
+                    if (reference != splits.end()) aliases[reference->fleet] = next.nextFleetId != allocated ? allocated : 0;
+                }
+                continue;
+            }
             std::visit(
                 [&](const auto& concreteOrder) {
                     using T = std::decay_t<decltype(concreteOrder)>;
@@ -2692,18 +2786,12 @@ TurnResult TurnProcessor::process_with_events(
                             } else apply_cargo_order(next, submission.player, order, freight);
                         } else apply_cargo_order(next, submission.player, order, freight);
                     } else if constexpr (std::is_same_v<T, TransferFleetFuelOrder>) {
-                        acceptTransfer(submission.player,concreteOrder.source,concreteOrder.destination,0,{},concreteOrder.amount,concreteOrder.sourceReserve,true);
-                    } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
-                        const auto fleet = std::find_if(next.fleets.begin(), next.fleets.end(),
-                            [&](const Fleet& candidate) {
-                                return candidate.id == concreteOrder.fleet
-                                    && candidate.owner == submission.player;
-                            });
-                        const bool hasVisibleCharacter = std::any_of(
-                            concreteOrder.name.begin(), concreteOrder.name.end(),
-                            [](unsigned char value) { return !std::isspace(value); });
-                        if (fleet != next.fleets.end() && hasVisibleCharacter
-                            && concreteOrder.name.size() <= 80) fleet->name = concreteOrder.name;
+                        const auto* from = find_service_fleet(next, concreteOrder.source);
+                        const auto* to = find_service_fleet(next, concreteOrder.destination);
+                        if (from && to && !mobile_base_hulls(next, *from) && !mobile_base_hulls(next, *to)) {
+                            if (fleet_has_instant_link(next, *from) && fleet_has_instant_link(next, *to))
+                                (void)transfer_mobile_base_fuel(next, submission.player, concreteOrder, next.turn);
+                        } else acceptTransfer(submission.player,concreteOrder.source,concreteOrder.destination,0,{},concreteOrder.amount,concreteOrder.sourceReserve,true);
                     }
                 },
                 order);

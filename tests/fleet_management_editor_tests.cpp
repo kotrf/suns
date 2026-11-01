@@ -19,6 +19,7 @@ struct MainWindowTestAccess {
         colony.design = kColonyShipDesignId;
         colony.role = FleetRole::ColonyShip;
         colony.ships = {{kColonyShipDesignId, 1}};
+        colony.telemetry = {}; // This fixture changed the copied scout's actual fitting.
         colony.colonists = 1000;
         window.state_.fleets.push_back(colony);
         window.state_.nextFleetId = 3;

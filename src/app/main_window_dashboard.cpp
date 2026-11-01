@@ -120,7 +120,7 @@ QString arrivalName(const FleetArrivalAction& action)
     case FleetArrivalActionKind::RecoverWreckage: return "recover wreckage";
     case FleetArrivalActionKind::RecoverSample: return "recover scientific specimen";
     case FleetArrivalActionKind::DeployOutpost: return "deploy permanent outpost";
-    case FleetArrivalActionKind::SupplyOutpost: return QString("supply outpost fuel; keep %1 mg").arg(action.reserveFuel);
+    case FleetArrivalActionKind::SupplyOutpost: return QString("transfer fuel; keep %1 mg").arg(action.reserveFuel);
     case FleetArrivalActionKind::RemoteMining: return "remote mining";
     case FleetArrivalActionKind::MergeWithFleet: return "merge with fleet";
     }

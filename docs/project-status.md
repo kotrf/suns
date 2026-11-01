@@ -1,6 +1,51 @@
 # Project status and development handoff
 
-## Current work — accumulated UI feedback in PR #244
+## Current work — fleet planning and ordinary fuel exchange
+
+Checked 1 November 2026: main `23d6b0f` contains merged #244/#246. Branch
+`codex/fleet-planning-and-fuel` builds on open coordinate-waypoint #247, with
+save v107 / orders v47 unchanged. It addresses the user's fleet gameplay report:
+
+- Selected fleet, map markers/orbital picker, source selector and fleet summary
+  share the valid command-boundary projection. Split exposes both detachments
+  immediately; pending names are consistent everywhere. A new detachment can
+  be renamed, loaded/refuelled and assigned a route before End Turn.
+- Detachment references are derived from PlayerView. The host binds each
+  successful projected split to its private allocation within that player's
+  submission, including nested splits and later source/target references.
+  Hidden fleet IDs and simultaneous foreign splits cannot redirect orders;
+  failed ancestors invalidate subsequent references.
+- Cargo adds reversible Fuel controls for two ordinary friendly fleets at the
+  same received position, including deep space under a current live link.
+  Both projected tanks update immediately. Donor stock and receiver capacity
+  bound the amount; fuel remains separate from hold capacity. Physical exchange
+  executes before movement, allowing same-year departure. Expedition bases keep
+  their dedicated docking/service phase. A queued gate hop does not change the
+  received orbit at which Cargo opens.
+- Destination includes all received friendly fleets, with locations. Transfer
+  fuel to fleet / outpost follows a friendly FleetId and transfers on contact,
+  keeping a donor reserve and leaving both fleets intact. Merge remains a
+  separate action. Fixed-coordinate outpost supply retains its previous rules.
+- Destination's size policy keeps long names from widening the narrow Fleet
+  panel. Scene teardown no longer refreshes panels after state members die.
+
+Validation: full GCC14.2 / Qt6.12 Debug build; **96/96 Linux/offscreen CTest
+passed (35.55 s)**. New core/Qt suites cover actual Split/Rename dialogs and
+orbital clicks, detachment route/forecast, ordinary fuel conservation, capacity,
+reserve, invalid amounts/ownership/location, deep-space exchange and funded
+same-year departure, return via the receiving slider, Cancel, moving-target
+fuel delivery without merge, hidden allocation changes, simultaneous players
+in both submission orders, failed nested splits, save/reload and actual PBEM
+order-file round trips. Existing gate/received-station invariance and compact
+Fleet layout checks also pass. Fuel dialog and 1000 px Fleet captures inspected;
+diff check clean. Local checks do not claim a new GitHub CI result or merge.
+
+Separate open work remains #245 (population operation, v108/v47) and #248
+(independent race files, based on #245; merge #245 then retarget #248 to main).
+For this fleet change, merge #247 first and retarget its dependent PR to main
+before merging. The user merges PRs. Further #53/AI/evacuation/#63 remain deferred.
+
+## Earlier checkpoint — accumulated UI feedback in PR #244
 
 Base main remains `bdaac4b` after merged #243; [PR #244](https://github.com/kotrf/suns/pull/244)
 is open on `codex/map-ranges-and-mineral-layout`. Save v107 / orders v47 remain

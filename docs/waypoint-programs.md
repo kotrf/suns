@@ -99,12 +99,14 @@ friendly fleet captures its stable FleetId as a moving destination and selects
 the Merge action by default. An enemy fleet is marked red and uses its currently
 observed position as a fixed destination with No action rather than the friendly
 Merge action. The player may change a friendly fleet's action to No action to
-follow/rendezvous without merging. The source fleet remains selected throughout.
+follow/rendezvous without merging, or Transfer fuel to deliver fuel while
+keeping a specified donor reserve. The source fleet remains selected throughout.
 Pressing Esc, closing the Fleet dock, changing the source fleet, or
 ending/loading a game cancels target-picking mode.
 
 Selecting a system also fills one **Destination** combo with the system itself
-and every other visible fleet currently in its orbit. Enemy entries are labeled
+and every other visible fleet currently in its orbit, plus all received friendly
+fleets elsewhere with their locations. Enemy entries are labeled
 and drawn in red. This is the precise path when several markers overlap: choose
 the intended system or fleet, adjust Warp and the arrival action, then press Add.
 

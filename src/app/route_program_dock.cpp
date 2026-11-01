@@ -375,8 +375,11 @@ void attachRouteProgramDock(MainWindow& window)
     targetFleetCombo->hide();
     auto* destinationCombo = new QComboBox(waypointGroup);
     destinationCombo->setObjectName("routeDestinationCombo");
+    destinationCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    destinationCombo->setMinimumContentsLength(12);
+    destinationCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     destinationCombo->setToolTip(
-        "The selected system, its visible fleets, or coordinates chosen with New waypoint; enemy fleets are red");
+        "Choose the system, any friendly fleet, or map coordinates. Enemy fleet positions are red.");
     auto* actionCombo = new QComboBox(waypointGroup);
     actionCombo->setObjectName("routeArrivalActionCombo");
     actionCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -395,7 +398,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Recover wreckage (persistent)", static_cast<int>(FleetArrivalActionKind::RecoverWreckage));
     actionCombo->addItem("Refuel at depot", int(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Deploy outpost (permanent)", int(FleetArrivalActionKind::DeployOutpost));
-    actionCombo->addItem("Supply fuel to outpost", int(FleetArrivalActionKind::SupplyOutpost));
+    actionCombo->addItem("Transfer fuel to fleet / outpost", int(FleetArrivalActionKind::SupplyOutpost));
     actionCombo->addItem("Recover scientific specimen", int(FleetArrivalActionKind::RecoverSample));
     actionCombo->addItem("Stargate hop (use Add gate step…)",int(FleetArrivalActionKind::TransitStargate));
     actionCombo->addItem("Mineral load policy (edit in Logistics)",int(FleetArrivalActionKind::LoadMinerals));
@@ -412,7 +415,7 @@ void attachRouteProgramDock(MainWindow& window)
     workTip(FleetArrivalActionKind::FieldResearch, "Requires a scanner and active sensors when collecting data. One study per empire/objective: star Energy 12; deep planet Biology 12 (artifact site 32); wormhole Propulsion 24. Rewards wait for report delivery. The order does not change emissions.");
     workTip(FleetArrivalActionKind::RecoverWreckage, "Requires a scanner, cargo space and reported wreckage within 10 ly. Recovers one nearest specimen per year; only unfamiliar technology yields science. Targets can expire before arrival.");
     workTip(FleetArrivalActionKind::DeployOutpost, "One ship with one paid kit, no colonists, at least 5 ly from stars and 1 ly from another installation. Permanent; last waypoint only, no repeat.");
-    workTip(FleetArrivalActionKind::SupplyOutpost, "Transfer actual fuel to an owned outpost at these coordinates, retaining the specified reserve. Receiver capacity and stock can change before arrival.");
+    workTip(FleetArrivalActionKind::SupplyOutpost, "Choose a friendly fleet in Destination to follow it and transfer fuel on arrival, keeping the specified donor reserve. At a coordinate waypoint, supplies an owned outpost. Actual fuel and tank space are checked on arrival.");
     auto* cargoCombo = new QComboBox(waypointGroup);
     cargoCombo->setObjectName("routeCargoCombo");
     cargoCombo->addItem("Orbital colonists",static_cast<int>(FleetCargoKind::OrbitalColonists));
