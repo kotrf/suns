@@ -6,6 +6,7 @@
 #include "remote_receiver_fixture.hpp"
 
 #include <QApplication>
+#include <QPushButton>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QLineEdit>
@@ -63,6 +64,25 @@ struct MainWindowTestAccess {
         window.pendingDescriptions_.clear();
         window.refreshResearchPanel();
     }
+    static GameState plannedLevels(MainWindow& window)
+    {
+        window.state_ = make_demo_game();
+        auto& tech = window.state_.players.front().technology;
+        tech.levels.fill(1);
+        tech.levels[static_cast<std::size_t>(ResearchField::Energy)] = 3;
+        tech.levels[static_cast<std::size_t>(ResearchField::Propulsion)] = 4;
+        tech.focus = ResearchField::Energy;
+        tech.researchActive = true;
+        tech.researchAllocationPercent = 100;
+        tech.progress[static_cast<std::size_t>(ResearchField::Energy)] = research_level_cost(ResearchField::Energy, 4) - 1;
+        tech.queuedFocuses = {ResearchField::Propulsion, ResearchField::Energy};
+        window.pendingOrders_ = {1, {}};
+        window.pendingDescriptions_.clear();
+        window.rebuildScene();
+        return window.state_;
+    }
+    static void removeResearch(MainWindow& window) { window.removeSelectedResearchPlanItem(); }
+    static void moveResearch(MainWindow& window) { window.moveSelectedResearchPlanItem(-1); }
 };
 } // namespace suns
 
@@ -72,6 +92,45 @@ int main(int argc, char** argv)
     using namespace suns;
     MainWindow window;
     MainWindowTestAccess::setup(window);
+    {
+        MainWindow levelsWindow;
+        levelsWindow.installResearch();
+        const auto initial = MainWindowTestAccess::plannedLevels(levelsWindow);
+        auto* fields = levelsWindow.findChild<QComboBox*>("researchAddCombo");
+        auto* add = levelsWindow.findChild<QPushButton*>("researchAddButton");
+        auto* queue = levelsWindow.findChild<QTreeWidget*>("researchPlanTree");
+        const auto energy = fields->findData(int(ResearchField::Energy));
+        fields->setCurrentIndex(energy);
+        // Current L3, two Energy steps already planned: append reaches L6.
+        assert(fields->currentText().contains("L3") && fields->currentText().contains("L6"));
+        add->click();
+        assert(queue->topLevelItem(3)->text(2) == "L5 → L6");
+        assert(fields->currentText().contains("L7"));
+        MainWindowTestAccess::removeResearch(levelsWindow);
+        assert(queue->topLevelItemCount() == 3 && fields->currentText().contains("L6"));
+        queue->setCurrentItem(queue->topLevelItem(1));
+        MainWindowTestAccess::moveResearch(levelsWindow);
+        assert(queue->topLevelItem(0)->text(1) == "Propulsion");
+        assert(fields->currentData().toInt() == int(ResearchField::Energy) && fields->currentText().contains("L6"));
+        // A physical research completion changes the current level while the
+        // next append still accounts for the remaining Energy step.
+        const auto completed = TurnProcessor{}.process(initial, {});
+        assert(completed.players.front().technology.levels[0] == 4);
+        MainWindowTestAccess::loadResearch(levelsWindow, completed);
+        assert(fields->currentText().contains("L4") && fields->currentText().contains("L6"));
+        MainWindowTestAccess::loadResearch(levelsWindow, initial);
+        assert(fields->currentText().contains("L3") && fields->currentText().contains("L6"));
+        auto capped = completed;
+        capped.players.front().technology.levels[0] = 255;
+        capped.players.front().technology.researchActive = false;
+        capped.players.front().technology.queuedFocuses.clear();
+        MainWindowTestAccess::loadResearch(levelsWindow, capped);
+        assert(!add->isEnabled());
+        add->click();
+        assert(queue->topLevelItemCount() == 0);
+        fields->setCurrentIndex(fields->findData(int(ResearchField::Propulsion)));
+        assert(add->isEnabled());
+    }
     auto* catalog = window.findChild<QTreeWidget*>("technologyCatalog");
     auto* plan = window.findChild<QTreeWidget*>("researchPlanTree");
     assert(catalog && plan);

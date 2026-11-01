@@ -1,5 +1,45 @@
 # Project status and development handoff
 
+## UI readability #252 — Research, Hab and selected routes, 2 November 2026
+
+The user continued the agreed mini-idea order after merged #251. Baseline main
+`20eed22` has confirmed CI run 41335589634, linux job 124934616373: **100/100
+CTest, 84.55 s**, Qt6.12.0; checkout SHA and log independently checked. #250 is
+closed; Add/change-driven refresh and the preceding four-PR integration are in
+main. Save v108/orders v47 unchanged.
+
+Branch `codex/research-hab-route-polish`, [#252](https://github.com/kotrf/suns/issues/252):
+
+- Research displays six separate current levels with large bold numbers. Every
+  Add choice names its current level and the appended step's target after the
+  active/queued plan. For current Energy L3 with two Energy steps already in
+  the plan, the choice targets L6; adding/removing advances/restores that target.
+  Field IDs, current combo selection and normal order submission are retained;
+  a field whose maximum level is reached/planned cannot append an invalid step.
+- Hab shows the terraforming comparison only if potential Hab is strictly
+  higher. Equal values at any percentage show current Hab alone; received
+  evidence, engineering suffixes and technology tooltips retain their rules.
+- The selected-route overlay uses a thin cosmetic pen, matching ordinary map
+  routes; zoom no longer expands its thickness. Waypoints and movement orders
+  retain their existing behavior.
+
+Full GCC14.2/Qt6.12 Debug build and **100/100 Linux/offscreen CTest passed
+(36.53 s)**. Both initial new Research/Hab regressions failed on the old UI.
+Research coverage includes append/remove/reorder, a physical level completion,
+refresh after restoring earlier state, and the maximum-level boundary without
+blocking other fields. Hab covers 100%, actual below-100 improvement with
+available technology, and below-100 equality without it. The prior positive
+fixture now explicitly grants terraforming technology instead of asserting an
+unchanged comparison. Existing knowledge/engineering, production, routes,
+save/PBEM and layout checks pass. Themed Research and route images at 0.6×,
+1.6×/4× zoom were captured; layout/line thickness inspected, diff check clean.
+
+The slice is ready for review; new PR/head/CI are tracked in GitHub #252.
+No new merge or remote CI success is claimed. Next are Ship Designer, station
+icon and new actions; Scrap Fleet's partial-return rule is recorded, exact
+recovery percentages undecided. #53/#63 and evacuation remain frozen; further
+AI development is deferred.
+
 ## UI playtest #250 — Add reliability and change-driven refresh, 1 November 2026
 
 The user selected mini-ideas 8/9 first, followed by Research/Hab/thin-route

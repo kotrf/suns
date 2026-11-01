@@ -182,7 +182,8 @@ void drawRouteOverlay(MainWindow& window, std::optional<Position> coordinateDraf
     if (points.size() < 2) return;
 
     QPen pen(QColor(110, 190, 255, 175));
-    pen.setWidthF(1.6);
+    pen.setWidthF(0.8);
+    pen.setCosmetic(true);
     pen.setStyle(Qt::DashDotLine);
 
     for (std::size_t index = 1; index < points.size(); ++index) {

@@ -144,10 +144,11 @@ struct MainWindowTestAccess {
         }
         w.rebuildScene();
     }
-    static void environment(MainWindow& w, int temperature)
+    static void environment(MainWindow& w, int temperature, bool terraformable = true)
     {
         setup(w);
         w.state_.players.front().race.environmentBased = true;
+        w.state_.players.front().technology.levels.fill(terraformable ? 1 : 0);
         w.state_.planets.front().environment = {std::uint8_t(temperature), 50, 20};
         w.state_.planets.front().naturalEnvironment = w.state_.planets.front().environment;
         w.state_.players.front().surveyKnowledge.clear();
@@ -302,6 +303,10 @@ int main(int argc, char** argv)
     MainWindowTestAccess::environment(window, 65);
     settle();
     assert(terraforming->text().contains("with terraforming"));
+    MainWindowTestAccess::environment(window, 65, false);
+    settle();
+    assert(terraforming->text().startsWith("Hab ") && terraforming->text().endsWith("%"));
+    assert(terraforming->text() != "Hab 100%" && !terraforming->text().contains("with terraforming"));
 
     // A full ship can return its queued colonists through the receiving slider,
     // including a mixed return/load. Both the main status and mineral stock must
