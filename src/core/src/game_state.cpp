@@ -1807,12 +1807,31 @@ std::int64_t projected_population_growth(
     return static_cast<std::int64_t>(std::min(growth, headroom));
 }
 
-std::uint32_t colony_output(const Planet& planet)
+ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet)
+{
+    if (!planet.owner) return {};
+    const auto* player = find_player(state, planet.owner);
+    const auto limit = [&](std::uint8_t rate) {
+        const auto bounded = std::clamp(rate, kMinWorkforceRate, kMaxWorkforceRate);
+        // Divide first to avoid overflowing even for the largest stored population.
+        const auto count = planet.population / kPopulationPerWorkforceGroup * bounded
+            + planet.population % kPopulationPerWorkforceGroup * bounded / kPopulationPerWorkforceGroup;
+        return static_cast<std::uint32_t>(std::min<std::uint64_t>(count, std::numeric_limits<std::uint32_t>::max()));
+    };
+    const auto factories = limit(player ? player->race.factoriesPerTenThousand : kDefaultWorkforceRate);
+    const auto mines = limit(player ? player->race.minesPerTenThousand : kDefaultWorkforceRate);
+    return {factories, mines, std::min(planet.industry, factories), std::min(planet.mines, mines)};
+}
+
+std::uint32_t colony_output(const GameState& state, const Planet& planet)
 {
     if (planet.owner == 0 || (planet.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !total_colony_population(planet))) return 0;
     const auto orbital=habitat_completed(planet) && planet.engineering.operational
         && planet.habitat.service==HabitatService::Normal?planet.habitat.population:0;
-    return planet.industry + static_cast<std::uint32_t>((planet.population+orbital) / kPopulationPerProductionUnit);
+    const auto populationOutput = planet.population / kPopulationPerProductionUnit + orbital / kPopulationPerProductionUnit
+        + (planet.population % kPopulationPerProductionUnit + orbital % kPopulationPerProductionUnit) / kPopulationPerProductionUnit;
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(std::numeric_limits<std::uint32_t>::max(),
+        colony_workforce(state, planet).operatingFactories + populationOutput));
 }
 
 int stellar_habitability_bias(StarClass stellarClass)
@@ -1838,12 +1857,12 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     for (const auto& planet : state.planets) {
         if (planet.owner != playerId) continue;
         result.colonyHistory.push_back({planet.id, total_colony_population(planet), planet.industry,
-            planet.mines, colony_output(planet), planet.minerals});
+            planet.mines, colony_output(state, planet), planet.minerals});
         ++result.colonies;
         result.population += total_colony_population(planet);
         result.factories += planet.industry;
         result.mines += planet.mines;
-        result.productionOutput += colony_output(planet);
+        result.productionOutput += colony_output(state, planet);
         result.minerals.ironium += planet.minerals.ironium;
         result.minerals.boranium += planet.minerals.boranium;
         result.minerals.germanium += planet.minerals.germanium;

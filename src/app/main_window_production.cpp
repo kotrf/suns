@@ -263,7 +263,10 @@ void MainWindow::refreshProductionQueue()
     }
 
     productionQueuePlanet_ = planet->id;
-    const auto forecastState = planned_production_state(projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_), pendingOrders_);
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto forecastState = planned_production_state(projected_cargo_order_state(received, pendingOrders_), pendingOrders_);
+    const auto* beforeCargo = find_planet(received, planet->id);
+    const auto firstTurnMining = beforeCargo ? projected_mineral_mining(received, *beforeCargo) : MineralCargo{};
     const auto projectedPlanet = std::find_if(forecastState.planets.begin(), forecastState.planets.end(),
         [planet](const auto& candidate) { return candidate.id == planet->id; });
     const auto queue = projectedPlanet->productionQueue;
@@ -309,11 +312,11 @@ void MainWindow::refreshProductionQueue()
         batchAdd->setToolTip(available ? "Remove up to 10 contamination for 6 resources and B/G 1/1 kt per unit. Natural decay: 2/year; surplus work retires without further charge."
             : "No unreserved contamination remains on this colony.");
     } else batchAdd->setToolTip({});
-    const auto forecast = forecast_production_queue(forecastState, *projectedPlanet, queue);
+    const auto forecast = forecast_production_queue(forecastState, *projectedPlanet, queue, 10000, firstTurnMining);
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
         ? forecastPlayer->technology.researchAllocationPercent
         : 0;
-    const auto output = net_colony_output(forecastState,*projectedPlanet);
+    const auto output = net_colony_output(forecastState,*projectedPlanet,firstTurnMining);
     const auto guaranteedResearch = static_cast<std::uint32_t>(
         static_cast<std::uint64_t>(output) * allocationPercent / 100U);
     productionQueueSummary_->setText(
@@ -337,8 +340,8 @@ void MainWindow::refreshProductionQueue()
         total.germanium += cost.germanium * units;
     }
     productionQueueSummary_->setText(productionQueueSummary_->text()
-        + QString("<br>Stock: %1<br>Mining/turn: %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion.")
-            .arg(mineralAmounts(planet->minerals), mineralAmounts(projected_mineral_mining(state_, *planet)), mineralAmounts(total)));
+        + QString("<br>Stock: %1<br>Current-year mining (before cargo): %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion.")
+            .arg(mineralAmounts(projectedPlanet->minerals), mineralAmounts(firstTurnMining), mineralAmounts(total)));
     const auto ruinedFactories=reconstruction_remaining(*planet,ProductionKind::ReconstructFactory);
     const auto ruinedMines=reconstruction_remaining(*planet,ProductionKind::ReconstructMine);
     if(ruinedFactories || ruinedMines || planet->warDamage.factoriesReconstructed || planet->warDamage.minesReconstructed)

@@ -31,7 +31,7 @@ struct MainWindowTestAccess {
         w.state_.turn=turn;
         w.state_.players[0].technology.levels.fill(14); w.state_.players[0].technology.researchActive=research;
         w.state_.players[0].technology.researchAllocationPercent=allocation;
-        w.state_.planets[0].population=100000;
+        w.state_.planets[0].population=1000000;
         w.state_.planets[0].environment={40,50,20}; w.state_.planets[0].industry=1000;
         w.state_.planets[0].minerals={1000,1000,1000};
         w.state_.orbitalStations[0].hull=OrbitalStationHullType::Starbase;
@@ -165,6 +165,7 @@ void magnetic_ui_persistence_and_private_evidence(MainWindow& w)
 {
     MainWindowTestAccess::setup(w,10);
     auto s=MainWindowTestAccess::state(w);s.players[0].technology.levels.fill(18);
+    s.players[0].race.habitableRadiation={0,100}; // Keep this long-duration UI fixture populated.
     s.unknownObjects={{7,{411,7},UnknownObjectKind::CompactRemnant}};s.nextUnknownObjectId=8;
     s.planets[0].environment.radiation=70;s.planets[0].naturalEnvironment=s.planets[0].environment;
     set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);
@@ -271,7 +272,7 @@ void all_environment_widgets_wait_for_engineering_reports()
         assert(received.tooltip.contains(QString("habitability %1%").arg(hab)));
         assert(received.dashboard.contains(QString("Habitability <b>%1%</b>").arg(hab)));
         assert(received.workspace.contains(QString("Hab %1%").arg(hab)));
-        assert(received.workspace.contains(QString("Population: 100000 / %1").arg(std::uint64_t(hab)*kPopulationPerHabitability)));
+        assert(received.workspace.contains(QString("Population: 1000000 / %1").arg(std::uint64_t(hab)*kPopulationPerHabitability)));
         assert(received.markerImage!=baseline.markerImage && received.markerShape!=baseline.markerShape);
     }
 }

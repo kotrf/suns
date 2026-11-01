@@ -233,6 +233,7 @@ void MainWindow::refreshColonyWorkspace()
         ? find_planet(planned, observed->id) : observed;
     const bool own = star && planet && planet->owner == pendingOrders_.player
         && is_surveyed(received, pendingOrders_.player, star->id);
+    if (!own) status->setToolTip({});
     QStringList lines;
     if (!star) lines << "<b>No system selected</b>" << "Select a system on the map.";
     else {
@@ -256,7 +257,15 @@ void MainWindow::refreshColonyWorkspace()
                     .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
                          planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
                     .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
-                lines << QString("Factories: %1 • Mines: %2").arg(planet->industry).arg(planet->mines);
+                const auto workforce = colony_workforce(planned, *planet);
+                lines << QString("Factories: %1 active / %2 built (max %3)")
+                    .arg(workforce.operatingFactories).arg(planet->industry).arg(workforce.factoryLimit);
+                lines << QString("Mines: %1 active / %2 built (max %3)")
+                    .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit);
+                const auto* empire = find_player(received, pendingOrders_.player);
+                status->setToolTip(QString("Population operates factories and mines independently. Per 10,000 surface colonists: %1 factories and %2 mines. Excess buildings remain idle.")
+                    .arg(empire ? empire->race.factoriesPerTenThousand : kDefaultWorkforceRate)
+                    .arg(empire ? empire->race.minesPerTenThousand : kDefaultWorkforceRate));
                 const auto& damage=planet->warDamage;
                 if(planet->aftermathKnownLocally && damage.lastBombardmentTurn) {
                     lines << QString("War ruins: %1 factories / %2 mines • last bombardment year %3")
@@ -269,7 +278,8 @@ void MainWindow::refreshColonyWorkspace()
                     lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
                         .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
                         .arg((damage.contamination+1)/2);
-                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(planned,*planet))
+                lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(planned,*planet,
+                    projected_mineral_mining(received, *observed)))
                     .arg(find_orbital_station_at_planet(received, planet->id) ? "station" : "no station");
             }
             if(!own || !planet->aftermathKnownLocally) if(const auto a=known_planet_aftermath(received,pendingOrders_.player,planet->id)) {
@@ -284,7 +294,7 @@ void MainWindow::refreshColonyWorkspace()
         }
     }
     status->setText(lines.join("<br>"));
-    const auto mining = own ? projected_mineral_mining(planned, *planet) : MineralCargo{};
+    const auto mining = own ? projected_mineral_mining(received, *observed) : MineralCargo{};
     const bool geology = planet && planet_geology_known(received, pendingOrders_.player, planet->id);
     const auto concentration = geology ? planet_mineral_concentration(received, *planet) : MineralCargo{};
     const auto values = [](const MineralCargo& minerals) { return std::array{minerals.ironium, minerals.boranium, minerals.germanium}; };
@@ -297,7 +307,7 @@ void MainWindow::refreshColonyWorkspace()
         item->setText(2, own ? QString::number(extraction[row], 'f', 1) : "—");
         item->setText(3, geology ? QString::number(conc[row], 'f', 0) + "%" : "?");
         for (int column = 0; column < 4; ++column)
-            item->setToolTip(column, QString("%1 • Stock: %2 kt • Mining: %3 kt/year • Concentration: %4")
+            item->setToolTip(column, QString("%1 • Stock: %2 kt • Current-year mining before cargo: %3 kt • Concentration: %4")
                 .arg(item->text(0), item->text(1), item->text(2), item->text(3)));
     }
     fitMineralRows(table);

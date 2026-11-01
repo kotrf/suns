@@ -268,7 +268,8 @@ bool MainWindow::loadGameFromPath(const QString& path)
                 player.race.settlerEngineAccess, player.race.hullAccess,
                 player.race.advancedRemoteMining, player.race.basicRemoteMining, player.controller,
                 player.race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
-                    ? PrimaryRaceTrait::StargateSpecialist : PrimaryRaceTrait::Generalist});
+                    ? PrimaryRaceTrait::StargateSpecialist : PrimaryRaceTrait::Generalist,
+                player.race.factoriesPerTenThousand, player.race.minesPerTenThousand});
         }
     }
     campaignId_ = loaded.campaignId;

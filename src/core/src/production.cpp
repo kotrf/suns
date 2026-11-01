@@ -160,7 +160,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     if (planet.owner == 0) return result;
     const auto* player = find_player(state, planet.owner);
     const auto upkeep=service_orbital_habitat(state,planet,result.engineeringSupport);
-    const auto gross=colony_output(planet);
+    const auto gross=colony_output(state, planet);
     const auto output=gross-std::min(gross,upkeep);
     const bool researchActive = player && player->technology.researchActive;
     const auto allocated = colony_research_allocation(state, planet, output);

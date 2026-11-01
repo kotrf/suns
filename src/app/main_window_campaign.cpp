@@ -54,15 +54,17 @@ void MainWindow::newCampaign()
         "Terrans: temperate worlds. Cryophiles: cold, lower-gravity worlds. "
         "Radiotrophs: narrow hot/heavy worlds, immune to radiation. "
         "Biology and the corresponding physical science unlock paid terraforming in the production queue.\n"
+        "Factories and mines have independent operating limits per 10,000 surface colonists; excess buildings remain idle.\n"
         "Primary trait: Generalist uses finite unloaded gates. Stargate Specialist transports cargo and colonists, "
         "researches Network Gates and eventually Infinity/Infinity. Both endpoints require paid construction; "
         "frontier travel still needs engines.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    QTableWidget table(8, 9, &dialog);
+    QTableWidget table(8, 11, &dialog);
     table.setObjectName("campaignEmpiresTable");
-    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait"});
-    table.horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k"});
+    table.horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    table.horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int row = 0; row < 8; ++row) {
         table.setItem(row, 0, new QTableWidgetItem(QString("Empire %1").arg(row + 1)));
         auto* race = new QComboBox(&table);
@@ -98,6 +100,14 @@ void MainWindow::newCampaign()
         trait->setToolTip("Specialist: cargo/colonists through gates; Energy/Electronics 14 unlock 750 ly / 1200 kt. "
             "Energy/Electronics 24 and Construction 16 unlock Infinity/Infinity on Fortresses. No free gates or technology.");
         table.setCellWidget(row, 8, trait);
+        for (int column : {9, 10}) {
+            auto* operation = new QSpinBox(&table);
+            operation->setObjectName(QString(column == 9 ? "campaignFactoryOperation%1" : "campaignMineOperation%1").arg(row));
+            operation->setRange(kMinWorkforceRate, kMaxWorkforceRate);
+            operation->setValue(kDefaultWorkforceRate);
+            operation->setToolTip("Operating installations per 10,000 surface colonists. Factory and mine limits are independent; excess buildings remain idle.");
+            table.setCellWidget(row, column, operation);
+        }
         connect(hullAccess, &QComboBox::currentIndexChanged, &table, [&table, row](int index) {
             if (index == static_cast<int>(HullAccess::HyperExpansion))
                 qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->setChecked(true);
@@ -141,7 +151,9 @@ void MainWindow::newCampaign()
             qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 1,
             qobject_cast<QComboBox*>(table.cellWidget(row, 6))->currentIndex() == 2,
             static_cast<PlayerController>(qobject_cast<QComboBox*>(table.cellWidget(row, 7))->currentIndex()),
-            static_cast<PrimaryRaceTrait>(qobject_cast<QComboBox*>(table.cellWidget(row, 8))->currentData().toInt())});
+            static_cast<PrimaryRaceTrait>(qobject_cast<QComboBox*>(table.cellWidget(row, 8))->currentData().toInt()),
+            static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->value()),
+            static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->value())});
     }
     seedEdit_->setText(seed.text());
     newGalaxy(galaxy.config(seed.text().toULongLong()));

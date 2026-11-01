@@ -198,7 +198,10 @@ void MainWindow::refreshExoticMaterialControls()
             .arg(p->resonanceLab.invested.ironium).arg(p->resonanceLab.invested.boranium).arg(p->resonanceLab.invested.germanium)
             .arg(QString::fromStdString(resonance_block(known, *p)));
         if (resonance_scheduled(*p)) {
-            const auto forecast = forecast_production_queue(known, *p, p->productionQueue, 128);
+            const auto received = make_player_view(state_,pendingOrders_.player).state;
+            const auto* beforeCargo = find_planet(received,p->id);
+            const auto firstTurnMining = beforeCargo ? projected_mineral_mining(received,*beforeCargo) : MineralCargo{};
+            const auto forecast = forecast_production_queue(known, *p, p->productionQueue, 128, firstTurnMining);
             for (std::size_t i = 0; i < p->productionQueue.size(); ++i) if (p->productionQueue[i].kind == ProductionKind::ResonanceLaboratory)
                 details += forecast[i].completionTurn ? QString(" Forecast completion: year %1.").arg(qulonglong(*forecast[i].completionTurn)) : " Completion not forecast with received supplies.";
         }

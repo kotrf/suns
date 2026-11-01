@@ -73,9 +73,43 @@ struct MainWindowTestAccess {
         w.refreshColonyWorkspace();
     }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void miningCargo(MainWindow& w, bool unloading)
+    {
+        w.state_ = make_demo_game();
+        w.state_.players.front().technology.researchActive = false;
+        auto& p = w.state_.planets.front();
+        p.population = unloading ? 500 : 100500;
+        p.industry = p.mines = 100; p.minerals = {0,100,100};
+        p.observedConcentration = MineralCargo{100,100,100};
+        p.productionQueue = {{ProductionKind::Factory,kFactoryCost}};
+        auto& design = w.state_.shipDesigns.front();
+        design.hull = ShipHullType::SuperFreighter;
+        design.components = {ShipComponentType::FusionDrive}; design.placements.clear();
+        auto& f = w.state_.fleets.front(); f.colonists = unloading ? 100000 : 0;
+        f.telemetry = {}; f.telemetry = confirmed_fleet_telemetry(w.state_,f);
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
+        w.pendingOrders_ = {1,{TransferCargoOrder{unloading ? CargoTransferEndpoint{0,1} : CargoTransferEndpoint{1,0},
+            unloading ? CargoTransferEndpoint{1,0} : CargoTransferEndpoint{0,1},100000,{}}}};
+        w.pendingDescriptions_ = {"Move colonists"}; w.selection_.star = 1; w.selection_.fleet = 1;
+        w.rebuildScene(); w.refreshProductionQueue(); w.refreshColonyWorkspace();
+    }
+    static std::uint64_t physicalCompletion(const MainWindow& w)
+    {
+        auto actual = TurnProcessor{}.process(w.state_,{w.pendingOrders_});
+        assert(actual.planets.front().industry == 100);
+        assert(actual.planets.front().productionWaitingForMinerals == (w.state_.planets.front().population == 500));
+        for (int i=0; i<128 && !actual.planets.front().productionQueue.empty(); ++i)
+            actual = TurnProcessor{}.process(actual,{});
+        assert(actual.planets.front().industry == 101);
+        return actual.turn;
+    }
     static void localCargo(MainWindow& w)
     {
         setup(w);
+        w.state_.planets.front().industry = 100;
+        w.state_.planets.front().mines = 100;
+        w.state_.players.front().surveyKnowledge.clear();
+        set_survey_level(w.state_, 1, 1, SurveyLevel::DeepSurvey, w.state_.turn);
         auto& fleet = w.state_.fleets.front();
         fleet.design = kColonyShipDesignId;
         fleet.ships = {{kColonyShipDesignId, 5}};
@@ -284,6 +318,9 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     settle();
     assert(status->text().contains("Population: 22500 /"));
+    assert(status->text().contains("Factories: 22 active / 100 built (max 22)"));
+    assert(status->text().contains("Mines: 22 active / 100 built (max 22)"));
+    if (app.arguments().contains("--capture")) window.grab().save("/tmp/suns-workforce-planning.png");
     MainWindowTestAccess::verifyCargo(window, 22500, 2500, 123);
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -301,6 +338,8 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     settle();
     assert(status->text().contains("Population: 25000 /"));
+    assert(status->text().contains("Factories: 25 active / 100 built (max 25)"));
+    assert(status->text().contains("Mines: 25 active / 100 built (max 25)"));
     assert(minerals->topLevelItem(0)->text(1) == "120.0");
     MainWindowTestAccess::verifyCargo(window, 25000, 0, 120);
     QTimer::singleShot(0, [&] {
@@ -327,6 +366,27 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     assert(MainWindowTestAccess::orders(window).orders.size() == acceptedCount);
     MainWindowTestAccess::verifyCargo(window, 25000, 0, 123);
+
+    // Workforce after cargo is current intent, but this year's extraction is
+    // fixed before cargo. Compare the displayed ETA with actual annual turns
+    // in both directions across the mine/factory staffing threshold.
+    for (const bool unloading : {true,false}) {
+        MainWindowTestAccess::miningCargo(window,unloading);
+        settle();
+        const auto expected = MainWindowTestAccess::physicalCompletion(window);
+        assert(queue->topLevelItemCount() == 1);
+        assert(queue->topLevelItem(0)->text(3) == QString("Turn %1 (+%2)").arg(expected).arg(expected-1));
+        assert(minerals->topLevelItem(0)->text(2) == (unloading ? "1.0" : "76.1"));
+        assert(minerals->topLevelItem(0)->toolTip(2).contains("before cargo"));
+        auto* mining = window.findChild<QLabel*>("miningInfrastructureSummary");
+        assert(mining && mining->text().contains(unloading ? "before cargo) I 1.00" : "before cargo) I 76.13"));
+        assert(status->text().contains(unloading ? "Mines: 100 active / 100 built" : "Mines: 0 active / 100 built"));
+        assert(status->text().contains(unloading ? "Population: 100500 /" : "Population: 500 /"));
+        if (unloading) {
+            assert(expected == 3);
+            if (app.arguments().contains("--capture")) window.grab().save("/tmp/suns-workforce-mining-phase.png");
+        }
+    }
 
     MainWindowTestAccess::manyOrders(window);
     auto* ordersAction = window.findChild<QAction*>("openTurnOrdersAction");

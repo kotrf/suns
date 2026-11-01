@@ -1,6 +1,93 @@
 # Project status and development handoff
 
-## Current work — PR #249 review: commands already in flight
+## Current work — integrate all four open PRs
+
+On 1 November 2026 the user explicitly authorised merging #245, #247, #248
+and #249. Their original heads have green CI; main starts at `23d6b0f`.
+The local rehearsal combines the reviewed code before GitHub merges. Merge
+order is #247 -> retarget #249 to main -> #249 -> #245 -> retarget #248 to main
+-> #248. Intermediate dependency branches must not receive the dependent PR.
+Source hunks merged automatically; documentation records are being reconciled.
+Full integration checks are pending. The combined format will be v108/v47.
+
+## Reviewed dependency — PR #245 mining before cargo
+
+Checked 1 November 2026: the review of #245 head `fb0d5ce` identified one P2
+([thread](https://github.com/kotrf/suns/pull/245#discussion_r4433394858)).
+Post-cargo population was funding current-year mining, although ordinary
+extraction physically runs before cargo orders. With 500 residents, 100 mines
+and a 100,000-person unload, this promised a factory on Turn 2 rather than the
+actual Turn 3.
+
+The queue forecast now accepts received pre-order extraction for its first year
+while retaining post-cargo production staffing and stocks. Later years derive
+mining from evolving population and completed infrastructure. Production,
+engineering and resonance forecasts use the same first-year input. Current-year
+mining in the Minerals table and mining details uses pre-cargo residents;
+active/built counts and marginal future mine benefit still reflect the accepted
+cargo plan. Output, research and orbital-growth estimates use that same mineral
+budget for upkeep; zero extraction is an explicit valid input. No physical turn
+phase, save payload or order format changed: this branch stays v108/v47.
+
+Validation: full GCC14.2 / Qt6.12 Debug build and **96/96 Linux/offscreen CTest
+passed (36.08 s)**, plus the final expanded workforce suite. Regressions compare
+forecast/UI with real TurnProcessor for loading and unloading across staffing
+thresholds, one factory and a batch of ten, future reactivation, orbital upkeep
+with zero/low starting extraction, and unchanged planning state. The reported
+case shows 1.000667 I and Turn 3 in both preview and resolution. The regression
+fails with the former forecast calculation; the themed UI capture was inspected
+and diff check is clean. Local checks do not claim a new GitHub CI result or a
+merge.
+
+Main remains `23d6b0f` after #244/#246. #248 (race files) depends on #245 and
+will receive this fix in its existing branch; merge #245 then retarget #248 to
+main. Separate coordinate #247 and fleet/fuel #249 remain open; #249 depends on
+#247. The user merges PRs. #53 and the previous deferred directions stay frozen.
+
+## Earlier checkpoint — population-operated factories and mines
+
+Checked 31 October 2026: #244 is merged as main `72009d4`, save v107 / orders
+v47. Branch `codex/population-operated-industry` implements the accepted next
+step: separate racial operation rates, each 5–25 per 10,000 surface residents,
+defaulting to 10/10 and exposed for every human/computer empire in New campaign.
+Working buildings are `min(installed, floor(population × rate / 10000))`.
+At 25,000 residents and 10/10, 25 factories and 25 mines operate simultaneously;
+a current-turn load of 2500 leaves 22 of each working. Excess buildings remain
+installed and reactivate after growth or unloading. Capture uses the new owner's
+rates. Orbital residents retain orbital output without staffing surface assets.
+
+Factory output, research, ordinary and xenocrystal extraction, upkeep budgets,
+forecasts and history use the shared workforce calculation. Existing computer
+development/reconstruction avoids spending on buildings beyond received limits
+and resumes useful construction after received population growth. This adapts
+existing rules; further AI automation and #53 remain deferred/frozen.
+
+System Status and selected-system details show active/built counts, with
+population limits and rate tooltips. Mining details explain idle marginal mines.
+The already merged cargo-plan projection updates these counts immediately.
+Manual excess construction remains allowed; build prices and existing population
+resource/baseline-mining contributions retain their rules.
+
+Branch save **v108 / orders v47**: fixed-size, count/ID/range-validated WFRK
+extension persists rates. Old saves migrate to 10/10 while retaining buildings
+and past history. A v107 fixture is byte-checked against the former writer's
+SHA256, then loaded and continued. PlayerTurn retains the owner's rates and
+withholds foreign settings; normal PBEM orders remain unchanged.
+
+Validation: full GCC14.2 / Qt6.12 Debug build; Linux/offscreen CTest **96/96
+passed (38.70 s)**; diff check clean. Dedicated core/save suites cover independent
+rates, proportional rounding, loss/reactivation/capture, shared mining/production,
+current cargo plans, growing and declining production forecasts versus real
+turns, AI limit/resumption, extreme integer bounds, valid host/PlayerTurn/PBEM
+round trips, real v107 migration/continuation, foreign export invariance and
+malformed/truncated rates/IDs/counts. Existing fixtures that relied on unstaffed
+factories now provide workforce or already-completed work; installation costs,
+queue order, science and communication assertions remain covered. Core/Qt tests
+also check xenocrystal dormancy, New campaign settings, reload/restart retention
+and live 22/100 to 25/100 counts when reversing cargo. UI captures were visually
+checked. Prepared for review; no merge or new remote CI result is claimed.
+
+## Reviewed dependency — PR #249 commands already in flight
 
 Checked 1 November 2026: review of `0e8c251` against coordinate base `a06f298`
 identified one P2 ([thread](https://github.com/kotrf/suns/pull/249#discussion_r4435207719)).

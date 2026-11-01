@@ -167,7 +167,7 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
     constexpr double extractionUnitsPerMine = 0.75;
     const auto extractionUnits = 1.0
         + static_cast<double>(planet.population) / 750000.0
-        + static_cast<double>(planet.mines) * extractionUnitsPerMine;
+        + static_cast<double>(colony_workforce(state, planet).operatingMines) * extractionUnitsPerMine;
     return {
         extractionUnits * concentration.ironium / 100.0,
         extractionUnits * concentration.boranium / 100.0,

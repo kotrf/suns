@@ -30,7 +30,7 @@ void bombardment_records_only_real_installation_losses()
     resolve_bombardments(s,3);
     assert(p.warDamage.factoriesDestroyed+p.warDamage.minesDestroyed>=destroyed);
     assert(p.industry+p.warDamage.factoriesDestroyed==10 && p.mines+p.warDamage.minesDestroyed==10);
-    assert(colony_output(p)<11); // Physical destroyed factories already remove their output.
+    assert(colony_output(s, p)<11); // Physical destroyed factories already remove their output.
     const auto hostile=make_player_view(s,1).state;
     assert(hostile.planets.empty());
     set_survey_level(s,1,1,SurveyLevel::GeologicalSurvey,3);

@@ -16,6 +16,37 @@ and empire settings. Three presets are playable:
 | Cryophile | 0–40 | 15–65 | 0–40 | Cold and lower-gravity worlds |
 | Radiotroph | 55–85 | 50–80 | immune | Narrow hot/heavy environments; safe hazardous-drive transport |
 
+## Factory and mine operation
+
+Each race has independent `factoriesPerTenThousand` and `minesPerTenThousand`
+settings, each 5–25, with 10/10 as the default. New campaign exposes both settings
+for human and computer empires. Surface residents operate each installation type
+independently; workers are not allocated from a shared factory/mine pool:
+
+`working = min(built, floor(surface population × racial rate / 10,000))`
+
+At 10/10, 25,000 residents operate 25 factories and 25 mines simultaneously.
+At 5/25 the same population operates 12 factories and 62 mines. Excess buildings
+remain installed and idle; loading residents, casualties, growth and a new
+owner's rates change the working count automatically. Fractional groups of
+10,000 count proportionally before rounding down to whole installations.
+Orbital habitat residents provide their established orbital output and do not
+operate surface installations.
+
+Only working factories contribute factory production. Population's existing
+resource contribution and installation build costs retain their current rules.
+Only working mines add extraction capacity, including colony xenocrystal mining.
+Production, research, forecasts and computer orders use the same derived limits.
+The UI shows active/built counts and the population limits, including accepted
+local cargo intent. Manual construction beyond today's limit is allowed.
+
+Save v108 adds a bounded WFRK racial-settings extension. Earlier saves receive
+10/10 defaults while retaining all installed buildings; host and player-turn
+saves preserve the local race's settings. Ordinary turn orders remain v47.
+Reference for the racial settings: [Stars! race guide](https://gamefaqs.gamespot.com/pc/198797-stars/faqs/41043).
+
+## Environment and population
+
 Axes are normalized 0–100. A value outside any applicable range produces
 negative habitability, scaled by its distance beyond the range. Within ranges,
 suitability decreases from the center toward the edges; the mean of the three

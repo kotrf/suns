@@ -216,7 +216,7 @@ int main()
     const auto initial = suns::make_demo_game();
     const auto& earth = planet(initial, 1);
     assert(suns::population_capacity(earth) == 2'500'000);
-    assert(suns::colony_output(earth) == 6);
+    assert(suns::colony_output(initial, earth) == 6);
 
     const auto* vega = suns::find_star(initial, 4);
     assert(vega != nullptr);

@@ -213,11 +213,13 @@ QString MainWindow::selectedPlanetPanelSummary() const
     if (planet->owner == pendingOrders_.player) {
         const auto planned = projected_cargo_order_state(received, pendingOrders_);
         const auto* afterCargo = find_planet(planned, planet->id);
+        const auto workforce = colony_workforce(planned, afterCargo ? *afterCargo : *planet);
         lines << QString("<span style='color:#85d5a5'><b>Your colony</b></span>");
-        lines << QString("Factories %1 • Mines %2 • Output %3 / turn")
-                     .arg(planet->industry)
-                     .arg(planet->mines)
-                     .arg(net_colony_output(planned, afterCargo ? *afterCargo : *planet));
+        lines << QString("Active / built — Factories %1 / %2 • Mines %3 / %4 • Output %5 / turn")
+                     .arg(workforce.operatingFactories).arg(planet->industry)
+                     .arg(workforce.operatingMines).arg(planet->mines)
+                     .arg(net_colony_output(planned, afterCargo ? *afterCargo : *planet,
+                         projected_mineral_mining(received, *planet)));
         lines << QString("Defenses %1 / %2 • bombardment protection: population %3%, installations %4%")
             .arg(planet->defenses).arg(kMaximumColonyDefenses)
             .arg(colony_defense_coverage(*planet)*100,0,'f',1).arg(colony_defense_coverage(*planet)*50,0,'f',1);
