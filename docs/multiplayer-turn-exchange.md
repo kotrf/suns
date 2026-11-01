@@ -1,9 +1,29 @@
 # Multiplayer turn exchange
 
+## Prepare each player's race
+
+Each participant can choose **File → Race designer…** before a campaign exists.
+Choose an empire name, environment preset, primary trait, propulsion access,
+hull family, remote mining and the two population operation rates. **Save race…**
+writes a portable `.sunsrace`; **Load race…** reopens it for editing. The editor
+does not change the current game. Send your race file to the host.
+
+In **New campaign**, the host selects the intended player under **Race files
+for:** and clicks **Load player race…** for each received file. The chosen row
+receives that race's settings and switches to **Human**. Player 1 plays locally;
+other human slots receive turn files. The host may explicitly change a loaded
+slot to Computer. **Edit race…** edits one slot with the same form; **Save race…**
+exports its settings for reuse. Cancel and failed loads leave the slot unchanged.
+
+Race files contain only pre-game settings. Player IDs, control mode, galaxy
+settings, technologies and turn credentials are assigned by the host. See the
+[race file format](race-profile.md#portable-race-files).
+
 ## Playing a campaign
 
 1. The host chooses **File → New campaign (races / multiplayer)**, sets the seed,
-   galaxy size, and 1–8 empires with names, race presets and Human/Computer control.
+   galaxy size, and 1–8 empires. Load each participant's race file into its slot,
+   or configure the row directly with names, race presets and Human/Computer control.
    Player 1 is human and plays locally; each remote human receives its own turn
    file. Computers submit ordinary orders automatically on the host. Homeworlds are chosen
    far apart and start with equal population, industry, minerals, orbital services
@@ -41,12 +61,11 @@ All players resolve together, and missing human submissions never silently becom
 Computer empires have no PBEM identities; their imported order files are rejected.
 The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 
-Save v31 introduced session mode, host inbox, player tokens, racial environment rules
-and projected observations. Earlier saves (v12–30) remain readable with their
-original scalar habitability. Controller integration uses save v67 and orders v21;
-supported save readers cover v12–67 and order readers v1–21. Older saves default
-to human controllers. Multiplayer clients
-should use the same build.
+Save v31 introduced session mode, host inbox, player tokens, racial environment
+rules and projected observations; controller integration arrived in v67/orders
+v21. Earlier saves retain their legacy defaults. Current saves/orders are
+v108/v47; race files use their own v1 schema and do not change those formats.
+Multiplayer clients should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;
 a restart creates a new campaign identity.
 

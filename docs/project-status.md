@@ -1,14 +1,29 @@
 # Project status and development handoff
 
-## Current work — integrate all four open PRs
+## Integration checkpoint — all four reviewed PRs
 
 On 1 November 2026 the user explicitly authorised merging #245, #247, #248
-and #249. Their original heads have green CI; main starts at `23d6b0f`.
-The local rehearsal combines the reviewed code before GitHub merges. Merge
-order is #247 -> retarget #249 to main -> #249 -> #245 -> retarget #248 to main
--> #248. Intermediate dependency branches must not receive the dependent PR.
-Source hunks merged automatically; documentation records are being reconciled.
-Full integration checks are pending. The combined format will be v108/v47.
+and #249. Starting main was `23d6b0f`. Each original head has independently
+verified successful CI: #245 `770d358` (96/96), #247 `a06f298` (94/94), #248
+`ab1f5ee` (98/98), #249 `2241898` (96/96). SHA checkout, Qt6.12.0 and CTest
+summaries were checked in the server logs.
+
+The complete local integration passed a full GCC14.2 / Qt6.12 Debug build
+and **100/100 Linux/offscreen CTest (35.84 s)** before any GitHub merge.
+All C++ changes merged automatically. Conflicts were confined to documentation
+and adjacent CMake registrations; both the race-file and fleet-planning suites
+are present. The tested code includes current-year mining before cargo,
+post-cargo factory operation, independent racial settings/race files, arbitrary
+coordinate waypoints, pending fleet reorganisation/names, ordinary fuel exchange
+and the commands-in-flight regression. Save v108 / orders v47.
+
+Publication order is #247 -> retarget #249 to main -> #249 -> update #245 with
+that main -> #245 -> retarget/update #248 with main -> #248. Dependencies must
+be incorporated into main rather than merged into a feature base. The final
+GitHub tree is compared with this local integration; actual merge SHAs and
+latest remote CI remain authoritative. Subsequent edits to this checkpoint
+are documentation only. Further #53, AI expansion, evacuation and #63 remain
+frozen/deferred under the user's earlier decisions.
 
 ## Reviewed dependency — PR #245 mining before cargo
 
@@ -39,10 +54,46 @@ fails with the former forecast calculation; the themed UI capture was inspected
 and diff check is clean. Local checks do not claim a new GitHub CI result or a
 merge.
 
+Dependency integration into #248: its complete race-file tree was rebuilt and
+**98/98 Linux/offscreen CTest passed (35.53 s)**. The forecast implementation
+and its regressions exactly match the reviewed #245 fix; both histories are
+retained in the dependency merge. Race import/export and the real editor path
+remain covered. The dependency PR still targets #245, pending its merge to main.
+
 Main remains `23d6b0f` after #244/#246. #248 (race files) depends on #245 and
-will receive this fix in its existing branch; merge #245 then retarget #248 to
+now includes this fix in its existing branch; merge #245 then retarget #248 to
 main. Separate coordinate #247 and fleet/fuel #249 remain open; #249 depends on
 #247. The user merges PRs. #53 and the previous deferred directions stay frozen.
+
+## Earlier checkpoint — independently prepared player races
+
+Checked 1 November 2026 (Europe/Moscow): main is `23d6b0f` after merged #246,
+save v107 / orders v47. Population-operated industry #245 and coordinate
+waypoints #247 remain separate open PRs. User selected pre-game race-file
+exchange as the next step toward playing a human PBEM campaign.
+
+Branch `codex/player-race-files` builds on #245 and retains save v108 / orders
+v47. File → Race designer saves/loads a participant's `.sunsrace` without
+changing the active campaign. New campaign imports into an explicit player
+slot, switches that slot to Human, and offers Edit/Save with the same form.
+Every supported race setting, including both workforce rates, survives the
+file-to-campaign path and subsequent reload/restart/player-turn export.
+
+The independent JSON schema v1 is bounded to 64 KiB and validates exact field
+types, enums and ranges. It carries no controller, campaign/player identity,
+world state, technologies or credentials. Failed import/cancel preserves the
+current race and atomic writes preserve existing files on failure. See
+[race files](race-profile.md#portable-race-files) and
+[participant workflow](multiplayer-turn-exchange.md#prepare-each-players-race).
+
+Validation: full GCC14.2 / Qt6.12 Debug build; **98/98 Linux/offscreen CTest
+passed (78.11 s)**. New suites cover every supported race-file choice,
+malformed/missing/oversized data, exact field types/rates, unchanged output on
+failure, the actual File menu/editor/save/load/cancel path, two imported Human
+slots, per-slot editing/export, unchanged active-game bytes, reload/restart and
+the remote player's own race in a PlayerTurn. The two themed dialogs were
+visually checked; diff check is clean. Prepared for review, not merged; no new
+GitHub CI result is claimed. Merge the #245 dependency first.
 
 ## Earlier checkpoint — population-operated factories and mines
 

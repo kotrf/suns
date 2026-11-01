@@ -4,6 +4,11 @@ add_library(suns_app_ui STATIC
     main_window_fleet_operations.cpp
     main_window.cpp
     main_window_campaign.cpp
+    main_window_races.cpp
+    race_file.cpp
+    race_file.hpp
+    race_setup_widget.cpp
+    race_setup_widget.hpp
     main_window.hpp
     main_window_cargo.cpp
     main_window_communications.cpp

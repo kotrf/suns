@@ -250,6 +250,7 @@ private:
     void endTurn();
     void newGalaxy(std::optional<GalaxyConfig> config = std::nullopt);
     void newCampaign();
+    void openRaceDesigner();
     void openComputerDecisions();
     void exportPlayerTurns();
     [[nodiscard]] SaveGameData campaignSnapshot() const;
