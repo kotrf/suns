@@ -211,6 +211,7 @@ public:
     void installProductionQueue();
 
 signals:
+    void controlsChanged();
     // Editor context updates immediately, even while map redraw is deferred.
     void routeProgramContextChanged(bool resetDrafts = false);
     void routeProgramMapTargetPicked(int kind, std::uint32_t id);
@@ -292,6 +293,7 @@ private:
     void moveSelectedResearchPlanItem(int direction);
     void removeSelectedResearchPlanItem();
     void refreshProductionQueue();
+    void refreshProductionControls();
     void moveSelectedProductionItem(int direction);
     void removeSelectedProductionItem();
     std::vector<ProductionItem> plannedProductionQueue(const Planet& planet) const;
@@ -455,6 +457,17 @@ private:
     QPushButton* productionMoveDownButton_{};
     QPushButton* productionRemoveButton_{};
     std::optional<PlanetId> productionQueuePlanet_;
+    std::uint64_t productionQueueRevision_{std::uint64_t(-1)};
+    std::optional<StarId> productionQueueStar_;
+    bool productionQueueCompact_{};
+    struct ProductionControlState {
+        bool friendlyColony{};
+        bool canTerraform{};
+        bool canBuildDefenses{};
+        std::uint64_t ruinedFactories{};
+        std::uint64_t ruinedMines{};
+        std::uint32_t cleanupUnits{};
+    } productionControls_;
 };
 
 } // namespace suns

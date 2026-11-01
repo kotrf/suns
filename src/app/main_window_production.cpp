@@ -21,7 +21,6 @@
 #include <QScrollBar>
 #include <QSizePolicy>
 #include <QShortcut>
-#include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
@@ -134,9 +133,8 @@ void MainWindow::installProductionQueue()
         const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
         amount->setMaximum(radar ? 1 : static_cast<int>(kMaximumProductionBatch));
         if (radar) amount->setValue(1);
-        refreshProductionQueue();
+        refreshProductionControls();
     });
-    connect(amount, &QSpinBox::valueChanged, this, [this] { refreshProductionQueue(); });
     connect(add, &QPushButton::clicked, this, [this, kind, amount] {
         const auto* planet = selectedPlanet();
         if (!planet || planet->owner != pendingOrders_.player) return;
@@ -171,7 +169,7 @@ void MainWindow::installProductionQueue()
             QString("Apply production template %1").arg(templates->currentText()));
         refreshProductionQueue();
     });
-    connect(templates, &QComboBox::currentIndexChanged, this, [this] { refreshProductionQueue(); });
+    connect(templates, &QComboBox::currentIndexChanged, this, [this] { refreshProductionControls(); });
 
     productionQueueSummary_ = new QLabel(group);
     productionQueueSummary_->setWordWrap(true);
@@ -229,30 +227,66 @@ void MainWindow::installProductionQueue()
             row >= 0 && row + 1 < productionQueueTree_->topLevelItemCount());
     });
 
-    auto* timer = new QTimer(this);
-    timer->setInterval(150);
-    connect(timer, &QTimer::timeout, this, &MainWindow::refreshProductionQueue);
-    timer->start();
     refreshProductionQueue();
+}
+
+void MainWindow::refreshProductionControls()
+{
+    auto* kind = findChild<QComboBox*>("productionBatchKind");
+    auto* add = findChild<QPushButton*>("productionBatchAdd");
+    auto* amount = findChild<QSpinBox*>("productionBatchQuantity");
+    auto* templates = findChild<QComboBox*>("productionTemplateName");
+    auto* apply = findChild<QPushButton*>("productionTemplateApply");
+    if (!kind || !add || !amount || !templates || !apply) return;
+
+    const auto selected = ProductionKind(kind->currentData().toInt());
+    const auto available = selected == ProductionKind::CleanupContamination ? productionControls_.cleanupUnits
+        : selected == ProductionKind::ReconstructFactory ? productionControls_.ruinedFactories
+        : selected == ProductionKind::ReconstructMine ? productionControls_.ruinedMines : 0;
+    const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
+    {
+        const QSignalBlocker block(amount);
+        amount->setMaximum(recovery_kind(selected) ? int(std::max<std::uint64_t>(1,
+            std::min<std::uint64_t>(available, kMaximumProductionBatch)))
+            : radar ? 1 : int(kMaximumProductionBatch));
+    }
+    const bool allowed = selected == ProductionKind::Terraforming ? productionControls_.canTerraform
+        : selected == ProductionKind::ColonyDefense ? productionControls_.canBuildDefenses
+        : recovery_kind(selected) ? available > 0 : true;
+    // Never transiently disable a usable button: doing so cancels a real
+    // press/release that straddles a panel update.
+    add->setEnabled(productionControls_.friendlyColony && allowed);
+    apply->setEnabled(productionControls_.friendlyColony && templates->currentIndex() > 0);
+    if (reconstruction_kind(selected)) {
+        add->setToolTip(available ? QString("Restore existing ruins through ordinary production and minerals. %1 unreserved units remain.").arg(qulonglong(available))
+            : "No unreserved ruins of this kind remain on this colony.");
+    } else if (selected == ProductionKind::CleanupContamination) {
+        add->setToolTip(available ? "Remove up to 10 contamination for 6 resources and B/G 1/1 kt per unit. Natural decay: 2/year; surplus work retires without further charge."
+            : "No unreserved contamination remains on this colony.");
+    } else add->setToolTip({});
 }
 
 void MainWindow::refreshProductionQueue()
 {
     if (shuttingDown_ || !productionQueueTree_ || !productionQueueSummary_) return;
+    const bool compact = productionQueueSummary_->property("compactColonySummary").toBool();
+    if (productionQueueRevision_ == planningRevision_ && productionQueueStar_ == selection_.star
+        && productionQueueCompact_ == compact) return;
+    productionQueueRevision_ = planningRevision_;
+    productionQueueStar_ = selection_.star;
+    productionQueueCompact_ = compact;
     const auto previousRow = productionQueueTree_->indexOfTopLevelItem(productionQueueTree_->currentItem());
     const auto previousPlanet = productionQueuePlanet_;
     const auto previousScroll = productionQueueTree_->verticalScrollBar()->value();
     productionQueueTree_->clear();
     productionMineralDetails_->clear();
     productionQueuePlanet_.reset();
-    auto* batchKind = findChild<QComboBox*>("productionBatchKind");
-    auto* batchAdd = findChild<QPushButton*>("productionBatchAdd");
+    productionControls_ = {};
     auto* templateName = findChild<QComboBox*>("productionTemplateName");
-    auto* templateApply = findChild<QPushButton*>("productionTemplateApply");
-    batchAdd->setEnabled(false); templateApply->setEnabled(false);
 
     const auto* planet = selectedPlanet();
     if (!planet || planet->owner != pendingOrders_.player) {
+        refreshProductionControls();
         productionQueueSummary_->setText("Select a friendly colony to inspect its production plan.");
         productionQueueSummary_->setToolTip({});
         if (auto* details = findChild<QLabel*>("productionExtendedSummary")) details->setText(productionQueueSummary_->text());
@@ -263,6 +297,7 @@ void MainWindow::refreshProductionQueue()
     }
 
     productionQueuePlanet_ = planet->id;
+    productionControls_.friendlyColony = true;
     const auto received = make_player_view(state_, pendingOrders_.player).state;
     const auto forecastState = planned_production_state(projected_cargo_order_state(received, pendingOrders_), pendingOrders_);
     const auto* beforeCargo = find_planet(received, planet->id);
@@ -285,33 +320,14 @@ void MainWindow::refreshProductionQueue()
             templateName->setCurrentIndex(std::max(0, templateName->findText(name)));
             templateName->setProperty("templateNames", names);
         }
-        const auto name = templateName->currentText().trimmed().toStdString();
-        const bool exists = std::any_of(forecastPlayer->productionTemplates.begin(), forecastPlayer->productionTemplates.end(),
-            [&](const auto& value) { return value.name == name; });
-        templateApply->setEnabled(exists);
     }
-    batchAdd->setEnabled(batchKind->currentData().toInt() != int(ProductionKind::Terraforming)
-        || next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value());
-    if(batchKind->currentData().toInt()==int(ProductionKind::ColonyDefense))
-        batchAdd->setEnabled(colony_defenses_available(forecastState,pendingOrders_.player) && planet->defenses<kMaximumColonyDefenses);
-    const auto selectedKind=ProductionKind(batchKind->currentData().toInt());
-    auto* amount=findChild<QSpinBox*>("productionBatchQuantity");
-    const auto available=selectedKind==ProductionKind::CleanupContamination ? cleanup_units_available(*projectedPlanet)
-        : reconstruction_available(*projectedPlanet,selectedKind);
-    {
-        const QSignalBlocker block(amount);
-        amount->setMaximum(recovery_kind(selectedKind) ? int(std::max<std::uint64_t>(1,std::min<std::uint64_t>(available,kMaximumProductionBatch)))
-            : selectedKind==ProductionKind::LocalRadar || selectedKind==ProductionKind::PlanetaryRadar ? 1 : int(kMaximumProductionBatch));
-    }
-    if(reconstruction_kind(selectedKind)) {
-        batchAdd->setEnabled(available>0);
-        batchAdd->setToolTip(available ? QString("Restore existing ruins through ordinary production and minerals. %1 unreserved units remain.").arg(qulonglong(available))
-            : "No unreserved ruins of this kind remain on this colony.");
-    } else if(selectedKind==ProductionKind::CleanupContamination) {
-        batchAdd->setEnabled(available>0);
-        batchAdd->setToolTip(available ? "Remove up to 10 contamination for 6 resources and B/G 1/1 kt per unit. Natural decay: 2/year; surplus work retires without further charge."
-            : "No unreserved contamination remains on this colony.");
-    } else batchAdd->setToolTip({});
+    productionControls_.canTerraform = next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value();
+    productionControls_.canBuildDefenses = colony_defenses_available(forecastState, pendingOrders_.player)
+        && planet->defenses < kMaximumColonyDefenses;
+    productionControls_.ruinedFactories = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructFactory);
+    productionControls_.ruinedMines = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructMine);
+    productionControls_.cleanupUnits = cleanup_units_available(*projectedPlanet);
+    refreshProductionControls();
     const auto forecast = forecast_production_queue(forecastState, *projectedPlanet, queue, 10000, firstTurnMining);
     const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
         ? forecastPlayer->technology.researchAllocationPercent

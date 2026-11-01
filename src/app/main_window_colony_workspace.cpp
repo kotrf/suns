@@ -7,6 +7,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -34,6 +35,37 @@ void fitMineralRows(QTreeWidget* table)
     if (table->minimumHeight() != height || table->maximumHeight() != height)
         table->setFixedHeight(height);
 }
+
+class MineralTable final : public QTreeWidget {
+public:
+    explicit MineralTable(QWidget* parent) : QTreeWidget(parent), fitTimer_(this)
+    {
+        fitTimer_.setSingleShot(true);
+        QObject::connect(&fitTimer_, &QTimer::timeout, this, [this] {
+            doItemsLayout();
+            fitMineralRows(this);
+        });
+    }
+protected:
+    bool event(QEvent* event) override
+    {
+        const bool result = QTreeWidget::event(event);
+        switch (event->type()) {
+        case QEvent::Show:
+        case QEvent::Resize:
+        case QEvent::FontChange:
+        case QEvent::StyleChange:
+            // Wait for font/style propagation and layout, without rereading
+            // game state or repeatedly polling a hidden panel.
+            fitTimer_.start(0);
+            break;
+        default: break;
+        }
+        return result;
+    }
+private:
+    QTimer fitTimer_;
+};
 
 QDialog* detailsWindow(MainWindow* window, QWidget* content, const QString& title, const char* name)
 {
@@ -119,7 +151,7 @@ void MainWindow::installColonyWorkspace()
     auto* minerals = new QGroupBox("Minerals", statusPanel);
     auto* mineralLayout = new QVBoxLayout(minerals);
     mineralLayout->setContentsMargins(4, 5, 4, 4);
-    auto* table = new QTreeWidget(minerals);
+    auto* table = new MineralTable(minerals);
     table->setObjectName("colonyMineralsTable");
     table->setHeaderLabels({"Mineral", "Stock kt", "/ year", "Conc."});
     table->setRootIsDecorated(false);
@@ -211,10 +243,6 @@ void MainWindow::installColonyWorkspace()
     // controls surrender their vertical space when a report is opened.
     setCorner(Qt::BottomLeftCorner, Qt::LeftDockWidgetArea);
     connect(this, &MainWindow::routeProgramContextChanged, this, [this] { refreshColonyWorkspace(); });
-    auto* timer = new QTimer(statusPanel);
-    timer->setInterval(150);
-    connect(timer, &QTimer::timeout, statusPanel, [this] { refreshColonyWorkspace(); });
-    timer->start();
     refreshColonyWorkspace();
     refreshProductionQueue();
 }

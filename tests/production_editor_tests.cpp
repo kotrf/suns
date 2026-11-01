@@ -15,7 +15,9 @@
 #include <QListWidget>
 #include <QMimeData>
 #include <QMouseEvent>
+#include <QPersistentModelIndex>
 #include <QPointer>
+#include <QTemporaryDir>
 #include <QToolButton>
 
 #include <QApplication>
@@ -108,6 +110,7 @@ struct MainWindowTestAccess {
     static void contaminationFixture(MainWindow& w)
     {
         recoveryFixture(w); auto& p=w.state_.planets.front(); p.warDamage.contamination=22;
+        w.rebuildScene();
         w.refreshProductionQueue();
     }
     static void stationDesigner(MainWindow& w) { w.openStationDesigner(); }
@@ -118,6 +121,13 @@ struct MainWindowTestAccess {
         w.refreshProductionQueue();
     }
     static bool canQueueDock(const MainWindow& w) { return w.buildOrbitalDockButton_->isEnabled(); }
+    static bool save(MainWindow& w, const QString& path) { return w.saveGameToPath(path); }
+    static bool load(MainWindow& w, const QString& path) { return w.loadGameFromPath(path); }
+    static void research(MainWindow& w) { w.queueResearchAllocation(50); }
+    static void selectOtherWorld(MainWindow& w) {
+        w.selectWorkspaceObject(1, w.state_.planets.back().star);
+        w.queueMapSelectionRebuild();
+    }
 };
 }
 
@@ -128,6 +138,67 @@ int main(int argc, char** argv)
     window.installUiPolish();
     window.installProductionQueue();
     suns::MainWindowTestAccess::install(window);
+    for (const bool stateChangesWhileHeld : {false, true}) {
+        // A real user can hold Add across a panel update. Disabling the button
+        // between press and release cancels that click, unlike button->click().
+        auto* kind = window.findChild<QComboBox*>("productionBatchKind");
+        auto* add = window.findChild<QPushButton*>("productionBatchAdd");
+        assert(kind && add);
+        kind->setCurrentIndex(kind->findText("Mines"));
+        const auto before = suns::MainWindowTestAccess::orders(window).orders.size();
+        const QPointF local(add->rect().center());
+        const QPointF global(add->mapToGlobal(local.toPoint()));
+        QMouseEvent press(QEvent::MouseButtonPress, local, global,
+            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(add, &press);
+        assert(add->isDown());
+        if (stateChangesWhileHeld) suns::MainWindowTestAccess::research(window);
+        QEventLoop idle;
+        QTimer::singleShot(350, &idle, &QEventLoop::quit);
+        idle.exec();
+        QMouseEvent release(QEvent::MouseButtonRelease, local, global,
+            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(add, &release);
+        assert(suns::MainWindowTestAccess::orders(window).orders.size()
+            == before + 1 + (stateChangesWhileHeld ? 1 : 0));
+        const auto& batch = std::get<suns::QueueProductionBatchOrder>(
+            suns::MainWindowTestAccess::orders(window).orders.back());
+        assert(batch.kind == suns::ProductionKind::Mine && batch.quantity == 10);
+        suns::MainWindowTestAccess::install(window);
+    }
+    {
+        auto* tree = window.findChild<QTreeWidget*>("productionQueueTree");
+        auto* kind = window.findChild<QComboBox*>("productionBatchKind");
+        auto* amount = window.findChild<QSpinBox*>("productionBatchQuantity");
+        auto* add = window.findChild<QPushButton*>("productionBatchAdd");
+        assert(tree && kind && amount && add);
+        const QPersistentModelIndex first(tree->model()->index(0, 0));
+        kind->setCurrentIndex(kind->findText("Factories"));
+        amount->setValue(17);
+        // Editing a draft and idling must preserve the existing queue model,
+        // its selection and scroll context rather than rebuilding it.
+        QEventLoop idle;
+        QTimer::singleShot(350, &idle, &QEventLoop::quit);
+        idle.exec();
+        assert(first.isValid());
+        QTemporaryDir dir;
+        assert(dir.isValid());
+        const auto path = dir.filePath("production.suns");
+        assert(suns::MainWindowTestAccess::save(window, path));
+        add->click();
+        assert(tree->topLevelItemCount() == 3);
+        assert(tree->topLevelItem(2)->text(1) == "Factory ×17");
+        const auto oldEta = tree->topLevelItem(0)->text(3);
+        suns::MainWindowTestAccess::research(window);
+        assert(tree->topLevelItem(0)->text(3) != oldEta);
+        assert(suns::MainWindowTestAccess::load(window, path));
+        assert(tree->topLevelItemCount() == 2); // same turn/IDs, older orders
+        assert(tree->topLevelItem(0)->text(3) == oldEta);
+        suns::MainWindowTestAccess::selectOtherWorld(window);
+        QApplication::processEvents();
+        assert(tree->topLevelItemCount() == 0 && !add->isEnabled());
+        suns::MainWindowTestAccess::install(window);
+    }
     auto* tree = window.findChild<QTreeWidget*>("productionQueueTree");
     auto* remove = window.findChild<QPushButton*>("productionRemoveButton");
     assert(tree && remove && tree->topLevelItemCount() == 2);

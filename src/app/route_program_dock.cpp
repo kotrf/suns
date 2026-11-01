@@ -1085,7 +1085,8 @@ void attachRouteProgramDock(MainWindow& window)
     // Refresh must survive moving this panel into the shared fleet dock.
     auto* timer = new QTimer(panel);
     timer->setObjectName("routeProgramRefreshTimer");
-    timer->setInterval(180);
+    timer->setSingleShot(true);
+    timer->setInterval(0);
     QObject::connect(timer, &QTimer::timeout, panel,
         [&window, routeLabel, routeTree, moveUpButton, moveDownButton, removeButton,
             warpSelector, appendButton, clearButton, repeatCheck,
@@ -1136,6 +1137,15 @@ void attachRouteProgramDock(MainWindow& window)
             refreshFuelWarning();
             drawRouteOverlay(window, !editor->editingLeg && targetType == 3 ? *coordinateTarget : std::nullopt);
         });
+    const auto scheduleRefresh = [timer] { timer->start(); };
+    QObject::connect(&window, &MainWindow::routeProgramContextChanged, timer, scheduleRefresh);
+    QObject::connect(&window, &MainWindow::routeProgramMapTargetPickChanged, timer, scheduleRefresh);
+    QObject::connect(destinationCombo, &QComboBox::currentIndexChanged, timer, scheduleRefresh);
+    QObject::connect(targetTypeCombo, &QComboBox::currentIndexChanged, timer, scheduleRefresh);
+    QObject::connect(targetFleetCombo, &QComboBox::currentIndexChanged, timer, scheduleRefresh);
+    QObject::connect(warpSelector, &QProgressBar::valueChanged, timer, scheduleRefresh);
+    QObject::connect(routeTree, &QTreeWidget::itemSelectionChanged, timer, scheduleRefresh);
+    QObject::connect(newWaypointButton, &QPushButton::clicked, timer, scheduleRefresh);
     timer->start();
 
     routeLabel->setText(window.selectedFleetRouteProgramSummary());

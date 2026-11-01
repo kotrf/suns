@@ -1,5 +1,65 @@
 # UI responsiveness: shared movement preview
 
+## Change-driven workspace refresh — 1 November 2026, #250
+
+The user selected Production Add reliability and late-campaign UI responsiveness
+as the first two fresh playtest notes. Baseline main is `787f499`, save v108 /
+orders v47. A real mouse press held across the 150 ms production timer loses its
+release: `refreshProductionQueue()` transiently disables the enabled Add button,
+which cancels Qt's pressed state. A new regression fails on that main code.
+
+Production now refreshes from the existing planning invalidation path after
+orders, selection, state replacement and load. Its revision/selected-star/display
+key retains the displayed queue and forecast for unchanged input. Kind/template
+controls use the already projected availability; changing quantity does not
+rebuild the queue. A valid Add button stays enabled through a genuine refresh.
+
+The main context (120 ms), colony (150 ms) and route (180 ms) polling loops also
+become change-driven. Context/route notifications coalesce through single-shot
+zero-delay callbacks; route draft controls explicitly schedule updates. Mineral
+table geometry follows show/resize/font/style events, including the existing
+11/14/18-point font acceptance cases, instead of relying on polling to fit rows.
+The production forecast algorithm and received-information model are unchanged.
+
+Validation: full GCC14.2/Qt6.12 Debug build; **100/100 CTest passed (35.74 s)**.
+The real press/350-ms-hold/release produces exactly one Mines ×10 order both
+while idle and when a research order changes the plan during the hold. Draft
+edits/idle preserve the existing model index; accepted builds and research
+changes update queue/ETA immediately. Loading an older same-turn save restores
+its queue/ETA; deferred selection clears production on an unavailable world.
+Existing cargo/workforce, PBEM, routes and layout suites also pass.
+
+The manual probe now uses one passive human and seven computer empires, seed
+20261027, and `--turns` resolves the ordinary campaign before opening its UI.
+Run the identical commands on main and this branch, without concurrent builds
+or tests:
+
+```sh
+cmake --build work/build --target suns_ui_performance_probe
+QT_QPA_PLATFORM=offscreen work/build/tests/suns_ui_performance_probe --systems 288 --turns 0
+QT_QPA_PLATFORM=offscreen work/build/tests/suns_ui_performance_probe --systems 288 --turns 69
+```
+
+Linux/offscreen, Debug, two-second requested idle window; elapsed wall time is
+reported rather than assumed. Turn 1 has 8 fleets; turn 70 has 26.
+
+| Turn | Measurement (ms) | Main before | Change-driven refresh |
+| --- | --- | ---: | ---: |
+| 1 | Idle CPU / wall | 188.51 / 2100.09 | 5.54 / 1946.57 |
+| 1 | Longest heartbeat gap | 28.23 | 20.25 |
+| 1 | Scene redraw | 51.94 | 51.90 |
+| 1 | Save | 1.76 | 1.98 |
+| 70 | Idle CPU / wall | 264.14 / 1968.12 | 8.27 / 1940.29 |
+| 70 | Longest heartbeat gap | 44.16 | 21.66 |
+| 70 | Scene redraw | 71.17 | 71.94 |
+| 70 | Save | 5.43 | 5.35 |
+
+All four saves read back successfully. The late campaign's idle CPU falls by
+about 32×; full redraw/save cost is essentially unchanged in these samples.
+These are controlled diagnostics, not measurements of the player's unprovided
+save or proof that every late-game bottleneck is resolved. The historical
+October measurements below used the earlier probe/setup and remain separate.
+
 ## Report and confirmed cause — 27 October 2026
 
 The player reported slow map/panel interactions on a Medium map (about 300

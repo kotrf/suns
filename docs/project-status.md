@@ -1,5 +1,34 @@
 # Project status and development handoff
 
+## UI playtest #250 — Add reliability and change-driven refresh, 1 November 2026
+
+The user selected mini-ideas 8/9 first, followed by Research/Hab/thin-route
+polish, then designer and new-action work. Main `787f499` already contains
+merged #247/#249/#245/#248; its CI run 41304477536 passed 100/100 (82.53 s).
+
+Branch `codex/production-ui-refresh` reproduces the lost Add click with actual
+mouse press/hold/release on main, then fixes it by removing periodic production
+refresh and transient button disabling. Planning changes refresh the queue;
+unchanged input and draft controls retain its display/forecast. Context, colony
+and route updates follow notifications/coalesced one-shot callbacks instead of
+120/150/180 ms polling. Mineral row fitting follows layout/font/style events.
+
+Full GCC14.2/Qt6.12 Debug build and **100/100 CTest passed (35.74 s)**, including
+held clicks across both idle and genuine plan updates, immediate research ETA,
+same-turn save reload, draft/model stability, deferred selection and the
+existing cargo/workforce/received-knowledge/layout suites. At turn 70 in the
+same deterministic 288-system/7-computer campaign, idle CPU for ~2 seconds falls
+**264.14 → 8.27 ms**; longest heartbeat gap **44.16 → 21.66 ms**. Redraw/save
+cost is essentially unchanged. [Details and reproduction](ui-performance.md).
+The user's particular save and all possible late-game bottlenecks remain
+outside this controlled measurement. Save v108/orders v47 unchanged.
+
+This slice is ready for review; publication/head/CI are tracked in GitHub
+[#250](https://github.com/kotrf/suns/issues/250). No new merge/CI success is
+claimed. Scrap Fleet's partial orbital recovery/collectible space debris is
+recorded for a later slice; recovery percentages remain undecided. #53/#63 and
+evacuation remain frozen; further AI development is deferred.
+
 ## Integration checkpoint — all four reviewed PRs
 
 On 1 November 2026 the user explicitly authorised merging #245, #247, #248
