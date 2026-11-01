@@ -1033,7 +1033,9 @@ void MainWindow::updateControls()
         if (candidate.owner == pendingOrders_.player) {
             ++colonies;
             population += total_colony_population(candidate);
-            output += net_colony_output(receivedEconomy,candidate);
+            const auto* beforeCargo = find_planet(received, candidate.id);
+            const auto mining = beforeCargo ? projected_mineral_mining(received, *beforeCargo) : MineralCargo{};
+            output += net_colony_output(receivedEconomy,candidate,mining);
         }
     }
 
@@ -1211,7 +1213,8 @@ void MainWindow::updateControls()
                 const auto& orbit=predictedPlanet==plannedCargo.planets.end()?receivedPlanet:*predictedPlanet;
                 populationLine+=QString("Orbital residents received: %1 / %2; after accepted orders: %3. Forecast orbital growth: +%4/year.<br>Support: %5; emergency reserve: %6 years.<br>")
                     .arg(qulonglong(receivedPlanet.habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity))
-                    .arg(qulonglong(orbit.habitat.population)).arg(qlonglong(projected_orbital_growth(plannedCargo,orbit)))
+                    .arg(qulonglong(orbit.habitat.population)).arg(qlonglong(projected_orbital_growth(plannedCargo,orbit,
+                        projected_mineral_mining(received,receivedPlanet))))
                     .arg(QString::fromStdString(habitat_service_name(receivedPlanet.habitat.service))).arg(receivedPlanet.habitat.reserveYears);
             }
             const auto observation = known_xenocrystal(received, pendingOrders_.player, planet->id);

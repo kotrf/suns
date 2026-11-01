@@ -1916,11 +1916,14 @@ void subtract_minerals(MineralCargo& available, const MineralCargo& required);
     const GameState& state, const Planet& planet, const ShipDesign& design);
 [[nodiscard]] MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item);
 [[nodiscard]] MineralCargo fleet_colonization_salvage(const GameState& state, const Fleet& fleet);
+// A post-cargo plan supplies the received pre-order extraction for year one;
+// later years recalculate mining from the simulated population and buildings.
 [[nodiscard]] std::vector<ProductionCompletionEstimate> forecast_production_queue(
     const GameState& state,
     const Planet& planet,
     const std::vector<ProductionItem>& queue,
-    std::uint32_t maximumTurns = 10000);
+    std::uint32_t maximumTurns = 10000,
+    std::optional<MineralCargo> firstTurnMining = std::nullopt);
 
 [[nodiscard]] double fleet_speed(FleetRole role);
 [[nodiscard]] double fleet_sensor_range(FleetRole role);

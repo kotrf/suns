@@ -218,8 +218,8 @@ void MainWindow::refreshResearchPanel()
 {
     if (!researchDialog_) return;
     if (!find_player(state_, pendingOrders_.player)) return;
-    const auto planned = planned_production_state(
-        projected_cargo_order_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_), pendingOrders_);
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto planned = planned_production_state(projected_cargo_order_state(received, pendingOrders_), pendingOrders_);
     const auto* player = find_player(planned, pendingOrders_.player);
     if (!player) return;
 
@@ -238,7 +238,9 @@ void MainWindow::refreshResearchPanel()
     if (planActive) {
         for (const auto& planet : planned.planets) {
             if (planet.owner != player->id) continue;
-            guaranteedRp += colony_research_allocation(planned, planet, net_colony_output(planned,planet));
+            const auto* beforeCargo = find_planet(received, planet.id);
+            const auto mining = beforeCargo ? projected_mineral_mining(received, *beforeCargo) : MineralCargo{};
+            guaranteedRp += colony_research_allocation(planned, planet, net_colony_output(planned,planet,mining));
             artifactRp += retained_sample_research(planned, planet);
             const auto parallel = resonance_research(planned, planet);
             for (std::size_t field = 0; field < parallel.size(); ++field) parallelRp[field] += parallel[field];
