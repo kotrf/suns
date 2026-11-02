@@ -142,7 +142,7 @@ bool route_tasks_valid(const FleetRouteProgram& program)
     const auto targetActionValid = [](FleetId target, const FleetArrivalAction& action) {
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
-        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::UnloadTransportStop) return false;
+        if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::ScrapFleet) return false;
         if (!mineral_load_policy_valid(action) || !transport_unload_valid(action)) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
             || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
@@ -364,6 +364,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
 bool projection_needs_arrival_outcome(const FleetArrivalAction& action)
 {
     return action.kind==FleetArrivalActionKind::TransitStargate
+        || action.kind==FleetArrivalActionKind::ScrapFleet
         || (action.kind==FleetArrivalActionKind::LoadMinerals && action.mineralMinimum)
         || action.kind==FleetArrivalActionKind::UnloadTransportStop
         || (action.kind==FleetArrivalActionKind::UnloadTransportLine && (action.destinationTarget || action.transportDestinationFleet));
@@ -946,15 +947,17 @@ void transfer_fleet_report_outbox(GameState& state, PlayerId player, FleetId sou
     });
 }
 
-void dispatch_fleet_report_outbox(GameState& state)
+void dispatch_fleet_report_outbox(GameState& state, FleetId onlyFleet, std::uint64_t atTurn)
 {
+    const auto dispatchTurn = atTurn ? atTurn : state.turn;
     visit_fleet_report_outbox(state,[&](PlayerId owner,auto& report) {
+        if (onlyFleet && report.transmissionFleet != onlyFleet) return;
         if(report.deliveryTurn!=kAwaitingTransmission || !report.transmissionFleet) return;
         const auto source=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f) {
             return f.id==report.transmissionFleet && f.owner==owner;
         });
-        if(source==state.fleets.end() || !fleet_can_share_reports(state,*source,state.turn)) return;
-        report.deliveryTurn=dispatch_report_delivery_turn(state,owner,source->position,state.turn,source->id);
+        if(source==state.fleets.end() || !fleet_can_share_reports(state,*source,dispatchTurn)) return;
+        report.deliveryTurn=dispatch_report_delivery_turn(state,owner,source->position,dispatchTurn,source->id);
         report.transmissionFleet=0;
         if constexpr(std::is_same_v<std::remove_cvref_t<decltype(report)>,PendingPlayerReport>) {
             if(report.contact) { report.contact->deliveryTurn=report.deliveryTurn; report.contact->transmissionFleet=0; }

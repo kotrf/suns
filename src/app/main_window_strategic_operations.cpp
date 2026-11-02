@@ -202,7 +202,8 @@ void MainWindow::renderStrategicObjects()
             .arg(intel.emission ? (intel.emission->channel==SignalChannel::Slow?"slow-channel":"fast-channel") : "legacy")
             .arg(intel.radius).arg(qulonglong(intel.emission?intel.emission->emittedTurn:intel.observedTurn))
             .arg(qulonglong(intel.observedTurn)).arg(qulonglong(intel.deliveryTurn))
-            : intel.type == StrategicObjectKind::Wreck ? QString("Wreck %1 — recover within 10 ly; expires year %2").arg(intel.id).arg(intel.quantity,0,'f',0)
+            : intel.type == StrategicObjectKind::Wreck ? QString("%1 wreck %2 — recover within 10 ly; expires year %3; observed year %4")
+                .arg(intel.kind == 1 ? "Mineral" : "Scientific").arg(intel.id).arg(intel.quantity,0,'f',0).arg(qulonglong(intel.observedTurn))
             : QString("%1 minefield %2 — %3 mines, safe Warp %4; observed year %5").arg(intel.kind == 1 ? "Heavy" : intel.kind == 2 ? "Speed trap" : "Standard")
                 .arg(intel.id).arg(intel.quantity,0,'f',0).arg(minefield_safe_warp(intel.kind)).arg(qulonglong(intel.observedTurn)));
     }

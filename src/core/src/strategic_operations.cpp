@@ -226,6 +226,8 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
     FleetArrivalActionKind action)
 {
     const auto task = arrival_work_task(action);
+    if (action == FleetArrivalActionKind::ScrapFleet && fleet.outpost != OutpostKind::None)
+        return "Use the installation's decommission controls before Scrap Fleet.";
     if (action == FleetArrivalActionKind::DeployOutpost) return outpost_deployment_error(state, fleet, destination);
     if (!task) return {};
     if (!fleet_task_equipment_available(state, fleet, *task)) {
@@ -473,6 +475,20 @@ void run_strategic_tasks(GameState& state, std::uint64_t turn)
             if (wreck == state.wrecks.end() || distance_between(wreck->position, fleet->position) > 10) continue;
             const auto* owner = find_player(state, fleet->owner);
             if (!owner) continue;
+            const auto stock = wreck->minerals.ironium + wreck->minerals.boranium + wreck->minerals.germanium;
+            if (stock > 0) {
+                const auto free = std::max(0.0, fleet_cargo_capacity(state, *fleet) - fleet_cargo_used(state, *fleet));
+                const auto fraction = std::min(1.0, free / stock);
+                const auto collect = [&](double& aboard, double& remaining) {
+                    const auto taken = remaining * fraction;
+                    aboard += taken; remaining = std::max(0.0, remaining - taken);
+                };
+                collect(fleet->minerals.ironium, wreck->minerals.ironium);
+                collect(fleet->minerals.boranium, wreck->minerals.boranium);
+                collect(fleet->minerals.germanium, wreck->minerals.germanium);
+                if (fraction == 1.0) state.wrecks.erase(wreck);
+                continue; // Material salvage never becomes a science reward.
+            }
             std::size_t field = 0; int novelty = 0;
             for (std::size_t i = 0; i < kResearchFieldCount; ++i) {
                 const int gap = int(wreck->technology[i]) - owner->technology.levels[i];
@@ -577,7 +593,7 @@ void observe_strategic_objects(GameState& state, std::uint64_t turn)
                     minefield_radius(field), field.owner, turn, 0, field.mines, field.kind}, detector.position,detector.id);
             for (const auto& wreck : state.wrecks) if (distance_between(wreck.position, detector.position) <= range)
                 stage_intel(state, player, {wreck.id, StrategicObjectKind::Wreck, wreck.position, 10, 0, turn,
-                    0, double(wreck.expiresTurn), 0}, detector.position,detector.id);
+                    0, double(wreck.expiresTurn), std::uint8_t(wreck.minerals.ironium + wreck.minerals.boranium + wreck.minerals.germanium > 0)}, detector.position,detector.id);
 
         }
     }

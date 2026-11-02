@@ -41,8 +41,8 @@ int main()
     original.pendingOrders = {1, {}};
     assert(write_save_game_file(path, original, error));
     auto current = bytes(path);
-    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 108); }
-    const auto extension = current.size() - 14; // marker/count + one fixed-size racial record
+    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 109); }
+    const auto extension = current.size() - 8 - 14; // Empty SCRP tail, then WFRK + one racial record.
     { QDataStream in(current.mid(extension)); quint32 magic{}, count{}; in >> magic >> count; assert(magic == 0x5746524b && count == 1); }
 
     // The pre-extension bytes are checked against a real v107 writer, built
@@ -97,11 +97,11 @@ int main()
     assert(write_turn_order_file(path + ".orders", packet, error));
     TurnOrderFileData parsed;
     assert(read_turn_order_file(path + ".orders", parsed, error));
-    assert(validate_turn_submission(host, parsed).isEmpty()); // Ordinary order format remains v47.
+    assert(validate_turn_submission(host, parsed).isEmpty()); // Existing production orders still round-trip.
 
     assert(write_save_game_file(path, host, error));
     const auto valid = bytes(path);
-    const auto offset = valid.size() - 20; // two racial records
+    const auto offset = valid.size() - 8 - 20; // Empty SCRP tail follows two racial records.
     for (int which = 0; which < 9; ++which) {
         auto corrupt = valid;
         switch (which) {
