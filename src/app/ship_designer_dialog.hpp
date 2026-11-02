@@ -6,10 +6,12 @@
 
 #include <optional>
 #include <functional>
+#include <set>
 #include <string>
 #include <vector>
 
 class QComboBox;
+class QCheckBox;
 class QGridLayout;
 class QLabel;
 class QLineEdit;
@@ -32,6 +34,8 @@ public:
     ~ShipDesignerDialog() override;
 
     [[nodiscard]] ShipDesignDraft draft() const;
+    // Refresh access from received own-empire knowledge without replacing the draft.
+    void refreshAvailability(const GameState& received);
     // Recheck against live planning state before accepting a nonmodal draft.
     void setSaveValidator(std::function<QString(const ShipDesignDraft&)> validator);
     void accept() override;
@@ -45,6 +49,7 @@ private:
     void focusAdjacentSlot(ShipSlotId slot, int rowDirection, int columnDirection);
     void updatePreview();
     void updateComponentDetails();
+    void filterCatalog(bool preserveScroll = false);
     [[nodiscard]] ShipDesign previewDesign() const;
     [[nodiscard]] std::optional<ShipComponentType> selectedCatalogComponent() const;
 
@@ -58,6 +63,10 @@ private:
     QComboBox* templateCombo_{};
     std::vector<ShipDesign> templates_;
     QListWidget* componentCatalog_{};
+    QLineEdit* componentSearch_{};
+    QComboBox* componentCategory_{};
+    QCheckBox* componentFitsHull_{};
+    std::set<ShipComponentType> availableComponents_;
     QLabel* componentDetails_{};
     QLabel* hullPortrait_{};
     QWidget* slotPanel_{};

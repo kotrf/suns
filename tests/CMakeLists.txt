@@ -267,6 +267,11 @@ if(SUNS_BUILD_APP)
     add_test(NAME suns_tool_windows_tests COMMAND suns_tool_windows_tests)
     set_tests_properties(suns_tool_windows_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 25)
+    add_executable(suns_ship_designer_live_access_tests ship_designer_live_access_tests.cpp)
+    target_link_libraries(suns_ship_designer_live_access_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_ship_designer_live_access_tests COMMAND suns_ship_designer_live_access_tests)
+    set_tests_properties(suns_ship_designer_live_access_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     add_executable(suns_combat_editor_tests combat_editor_tests.cpp)
     add_executable(suns_strategic_operations_editor_tests strategic_operations_editor_tests.cpp)
     target_link_libraries(suns_strategic_operations_editor_tests PRIVATE suns_app_ui)

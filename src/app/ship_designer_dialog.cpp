@@ -40,6 +40,7 @@
 #include <QStandardItemModel>
 #include <QStyle>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QStringList>
@@ -558,13 +559,11 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     hullCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     hullCombo_->setMinimumContentsLength(28);
     const auto addHull = [&](const ShipHullSpec& hull, bool legacy) {
-        const bool available = ship_hull_available_to_player(state, player_, hull.type);
         QString requirement;
         for (const auto& unlock : research_unlocks())
             if (unlock.hull == hull.type) requirement = QString::fromStdString(research_unlock_requirement(unlock));
         if (requirement.isEmpty() && hull.type == ShipHullType::RemoteMiner) requirement = "Construction 1";
         auto label = QString::fromStdString(hull.name) + (legacy ? " (legacy)" : "");
-        if (!available) label += QString(" (locked — %1)").arg(requirement);
         addEnumItem(hullCombo_, label, hull.type);
         QString support;
         if (hull.fuelGenerationPerTurn > 0)
@@ -575,15 +574,6 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             QString("%1 kt; %2 resources; %3 engines; %4 kt cargo; %5 mg fuel; %6 base armor; initiative %7.\n%8")
                 .arg(hull.mass).arg(hull.buildCost).arg(hull.requiredEngines).arg(hull.baseCargoCapacity)
                 .arg(hull.baseFuelCapacity).arg(hull.armor).arg(hull.initiative).arg(requirement) + support, Qt::ToolTipRole);
-        if (!available) {
-            hullCombo_->setItemIcon(hullCombo_->count()-1,lockedHullIcon());
-            if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model())) {
-                auto* item = model->item(hullCombo_->count()-1);
-                item->setForeground(QColor("#718698"));
-                auto font = item->font(); font.setItalic(true); item->setFont(font);
-                item->setEnabled(false);
-            }
-        }
     };
     if (player_uses_legacy_hulls(state, player_))
         for (int type = int(ShipHullType::Scout); type <= int(ShipHullType::MiniColonyShip); ++type)
@@ -597,10 +587,12 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     auto* catalogGroup = new QGroupBox("Component catalog", this);
     auto* catalogLayout = new QVBoxLayout(catalogGroup);
     auto* search = new QLineEdit(catalogGroup);
+    componentSearch_ = search;
     search->setObjectName("shipComponentSearch");
     search->setPlaceholderText("Search components…");
     catalogLayout->addWidget(search);
     auto* category = new QComboBox(catalogGroup);
+    componentCategory_ = category;
     category->setObjectName("shipComponentCategory");
     category->addItem("All equipment", -1);
     for (const auto& [name, kind] : {
@@ -613,6 +605,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         category->addItem(name, int(kind));
     catalogLayout->addWidget(category);
     auto* fitsHull = new QCheckBox("Fits this hull", catalogGroup);
+    componentFitsHull_ = fitsHull;
     fitsHull->setObjectName("shipComponentFitsHull");
     fitsHull->setToolTip("Show equipment accepted by at least one bank of the chosen hull. Research locks still apply.");
     catalogLayout->addWidget(fitsHull);
@@ -692,53 +685,15 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         if (legacy_scanner_component(component) && !player_uses_legacy_scanners(state, player)) continue;
         if (component == ShipComponentType::RemoteMiningModule && !player_uses_legacy_mining(state, player)) continue;
         if (legacy_equipment_component(component) && !player_uses_legacy_equipment(state, player)) continue;
-        const auto available = component_available_to_player(state, player, component);
-        auto label = QString("%1 • %2")
-                         .arg(QString::fromStdString(ship_component_equipment_name(component)),
-                             QString::fromStdString(component_spec(component).name));
-        if (!available) label += QString("  [locked — %1]").arg(componentCatalogRequirements(component));
-        if (legacy_propulsion_component(component) || legacy_scanner_component(component)
-            || component == ShipComponentType::RemoteMiningModule || legacy_equipment_component(component)) label += "  [legacy]";
-        auto* item = new QListWidgetItem(label, componentCatalog_);
-        item->setIcon(componentIcon(component, available));
+        auto* item = new QListWidgetItem(componentCatalog_);
         item->setData(Qt::UserRole, static_cast<int>(component));
-        item->setData(Qt::UserRole + 1, available);
-        item->setToolTip(componentCatalogDescription(component)
-            + (available ? QString{} : QString("\nLocked — requires %1").arg(componentCatalogRequirements(component))));
-        if (!available) {
-            item->setFlags(item->flags() & ~Qt::ItemIsDragEnabled);
-            item->setForeground(QBrush(QColor("#7b8999")));
-        }
     }
     componentCatalog_->setCurrentRow(0);
 
-    const auto filterCatalog = [this, search, category, fitsHull] {
-        const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-        const auto query = search->text().trimmed();
-        const auto wanted = category->currentData().toInt();
-        int firstVisible = -1;
-        for (int row = 0; row < componentCatalog_->count(); ++row) {
-            auto* item = componentCatalog_->item(row);
-            const auto component = static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
-            auto kind = component_spec(component).kind;
-            if (kind == ShipComponentKind::Fuel || kind == ShipComponentKind::Cargo) kind = ShipComponentKind::Mechanical;
-            const bool compatible = std::any_of(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const auto& slot) {
-                return ship_slot_accepts(slot, component);
-            });
-            const bool visible = (query.isEmpty() || item->text().contains(query, Qt::CaseInsensitive))
-                && (wanted < 0 || wanted == int(kind)) && (!fitsHull->isChecked() || compatible);
-            item->setHidden(!visible);
-            if (visible && firstVisible < 0) firstVisible = row;
-        }
-        if (!componentCatalog_->currentItem() || componentCatalog_->currentItem()->isHidden())
-            componentCatalog_->setCurrentRow(firstVisible);
-        if (componentCatalog_->currentItem()) componentCatalog_->scrollToItem(componentCatalog_->currentItem());
-        updateComponentDetails();
-    };
-    connect(search, &QLineEdit::textChanged, this, filterCatalog);
-    connect(category, &QComboBox::currentIndexChanged, this, filterCatalog);
-    connect(fitsHull, &QCheckBox::toggled, this, filterCatalog);
-    connect(hullCombo_, &QComboBox::currentIndexChanged, this, filterCatalog);
+    connect(search, &QLineEdit::textChanged, this, [this] { filterCatalog(); });
+    connect(category, &QComboBox::currentIndexChanged, this, [this] { filterCatalog(); });
+    connect(fitsHull, &QCheckBox::toggled, this, [this] { filterCatalog(); });
+    connect(hullCombo_, &QComboBox::currentIndexChanged, this, [this] { filterCatalog(); });
 
     auto* fittingGroup = new QGroupBox("Hull fitting cells", this);
     auto* fittingLayout = new QVBoxLayout(fittingGroup);
@@ -764,6 +719,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     slotScroll->setWidget(slotPanel_);
     fittingLayout->addWidget(slotScroll, 1);
     fitMessage_ = new QLabel(fittingGroup);
+    fitMessage_->setObjectName("shipDesignFitMessage");
     fitMessage_->setWordWrap(true);
     fittingLayout->addWidget(fitMessage_);
     removeButton_ = new QPushButton("Remove selected component", fittingGroup);
@@ -877,8 +833,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     });
 
     rebuildSlotGrid();
-    updatePreview();
-    updateComponentDetails();
+    refreshAvailability(state);
     if (parent && !QCoreApplication::arguments().contains("--smoke-test")) {
         const auto geometry = QSettings("SunsProject", "Suns").value("designer/geometry").toByteArray();
         if (!geometry.isEmpty()) restoreGeometry(geometry);
@@ -890,6 +845,99 @@ ShipDesignerDialog::~ShipDesignerDialog()
     if (parentWidget() && !QCoreApplication::arguments().contains("--smoke-test")) {
         QSettings("SunsProject", "Suns").setValue("designer/geometry", saveGeometry());
     }
+}
+
+void ShipDesignerDialog::refreshAvailability(const GameState& received)
+{
+    bool changed = false;
+    // Changing item flags must not choose another hull or migrate fitted banks.
+    const QSignalBlocker blockHull(hullCombo_);
+    auto* hullModel = qobject_cast<QStandardItemModel*>(hullCombo_->model());
+    for (int row = 0; row < hullCombo_->count(); ++row) {
+        const auto type = static_cast<ShipHullType>(hullCombo_->itemData(row).toInt());
+        const bool available = ship_hull_available_to_player(received, player_, type);
+        const auto previous = hullCombo_->itemData(row, Qt::UserRole + 1);
+        if (previous.isValid() && previous.toBool() == available) continue;
+        changed = true;
+        hullCombo_->setItemData(row, available, Qt::UserRole + 1);
+        auto label = QString::fromStdString(hull_spec(type).name)
+            + (reference_hull(type) ? "" : " (legacy)");
+        if (!available) {
+            QString requirement;
+            for (const auto& unlock : research_unlocks())
+                if (unlock.hull == type) requirement = QString::fromStdString(research_unlock_requirement(unlock));
+            if (requirement.isEmpty() && type == ShipHullType::RemoteMiner) requirement = "Construction 1";
+            label += QString(" (locked — %1)").arg(requirement);
+        }
+        hullCombo_->setItemText(row, label);
+        hullCombo_->setItemIcon(row, available ? QIcon{} : lockedHullIcon());
+        if (hullModel) {
+            auto* item = hullModel->item(row);
+            item->setEnabled(available);
+            item->setForeground(available ? QBrush{} : QBrush(QColor("#718698")));
+            auto font = item->font();
+            font.setItalic(!available);
+            item->setFont(font);
+        }
+    }
+    availableComponents_.clear();
+    for (int row = 0; row < componentCatalog_->count(); ++row) {
+        auto* item = componentCatalog_->item(row);
+        const auto component = static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
+        const bool available = component_available_to_player(received, player_, component);
+        if (available) availableComponents_.insert(component);
+        const auto previous = item->data(Qt::UserRole + 1);
+        if (previous.isValid() && previous.toBool() == available) continue;
+        changed = true;
+        auto label = QString("%1 • %2")
+            .arg(QString::fromStdString(ship_component_equipment_name(component)),
+                QString::fromStdString(component_spec(component).name));
+        if (!available) label += QString("  [locked — %1]").arg(componentCatalogRequirements(component));
+        if (legacy_propulsion_component(component) || legacy_scanner_component(component)
+            || component == ShipComponentType::RemoteMiningModule || legacy_equipment_component(component)) label += "  [legacy]";
+        item->setText(label);
+        item->setData(Qt::UserRole + 1, available);
+        item->setIcon(componentIcon(component, available));
+        item->setToolTip(componentCatalogDescription(component)
+            + (available ? QString{} : QString("\nLocked — requires %1").arg(componentCatalogRequirements(component))));
+        item->setFlags(available ? item->flags() | Qt::ItemIsDragEnabled : item->flags() & ~Qt::ItemIsDragEnabled);
+        item->setForeground(available ? QBrush{} : QBrush(QColor("#7b8999")));
+    }
+    if (changed) {
+        filterCatalog(true);
+        updatePreview();
+    }
+}
+
+void ShipDesignerDialog::filterCatalog(bool preserveScroll)
+{
+    const auto vertical = componentCatalog_->verticalScrollBar()->value();
+    const auto horizontal = componentCatalog_->horizontalScrollBar()->value();
+    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
+    const auto query = componentSearch_->text().trimmed();
+    const auto wanted = componentCategory_->currentData().toInt();
+    int firstVisible = -1;
+    for (int row = 0; row < componentCatalog_->count(); ++row) {
+        auto* item = componentCatalog_->item(row);
+        const auto component = static_cast<ShipComponentType>(item->data(Qt::UserRole).toInt());
+        auto kind = component_spec(component).kind;
+        if (kind == ShipComponentKind::Fuel || kind == ShipComponentKind::Cargo) kind = ShipComponentKind::Mechanical;
+        const bool compatible = std::any_of(hull.fittingSlots.begin(), hull.fittingSlots.end(), [&](const auto& slot) {
+            return ship_slot_accepts(slot, component);
+        });
+        const bool visible = (query.isEmpty() || item->text().contains(query, Qt::CaseInsensitive))
+            && (wanted < 0 || wanted == int(kind)) && (!componentFitsHull_->isChecked() || compatible);
+        item->setHidden(!visible);
+        if (visible && firstVisible < 0) firstVisible = row;
+    }
+    const bool replaceSelection = !componentCatalog_->currentItem() || componentCatalog_->currentItem()->isHidden();
+    if (replaceSelection) componentCatalog_->setCurrentRow(firstVisible);
+    if (preserveScroll && !replaceSelection) {
+        componentCatalog_->verticalScrollBar()->setValue(vertical);
+        componentCatalog_->horizontalScrollBar()->setValue(horizontal);
+    } else if (componentCatalog_->currentItem()) componentCatalog_->scrollToItem(componentCatalog_->currentItem());
+    fitButton_->setEnabled(selectedSlot_ != 0 && selectedCatalogComponent().has_value());
+    updateComponentDetails();
 }
 
 std::optional<ShipComponentType> ShipDesignerDialog::selectedCatalogComponent() const
@@ -1169,7 +1217,17 @@ void ShipDesignerDialog::updatePreview()
     hullPortrait_->setPixmap(hullPortrait(design.hull).scaled(150,70,Qt::KeepAspectRatio,Qt::SmoothTransformation));
     const auto generalUsed = ship_design_general_slots_used(design);
     const auto miningUsed = ship_design_mining_slots_used(design);
-    const auto validationError = ship_design_validation_error(design);
+    auto validationError = ship_design_validation_error(design);
+    if (validationError.empty() && !hullCombo_->currentData(Qt::UserRole + 1).toBool())
+        validationError = "Hull unavailable to this empire. Check its research, race and acquisition requirements.";
+    if (validationError.empty()) {
+        for (const auto component : design.components) {
+            if (availableComponents_.contains(component)) continue;
+            validationError = component_spec(component).name
+                + " is unavailable to this empire. Check its research, race and acquisition requirements.";
+            break;
+        }
+    }
     const auto valid = validationError.empty();
 
     QStringList armament;

@@ -41,6 +41,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPen>
+#include <QTimer>
 #include <QPolygonF>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -1504,6 +1505,8 @@ void MainWindow::replacePendingFleetMove(
 void MainWindow::openShipDesigner()
 {
     if (shipDesigner_) {
+        shipDesigner_->refreshAvailability(planned_ship_design_state(
+            make_player_view(state_, pendingOrders_.player).state, pendingOrders_));
         if (shipDesigner_->isMinimized())
             shipDesigner_->setWindowState(shipDesigner_->windowState() & ~Qt::WindowMinimized);
         shipDesigner_->show();
@@ -1512,7 +1515,8 @@ void MainWindow::openShipDesigner()
         return;
     }
 
-    auto* dialog = new ShipDesignerDialog(planned_ship_design_state(state_, pendingOrders_),
+    auto* dialog = new ShipDesignerDialog(planned_ship_design_state(
+        make_player_view(state_, pendingOrders_.player).state, pendingOrders_),
         pendingOrders_.player, this);
     shipDesigner_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -1525,7 +1529,24 @@ void MainWindow::openShipDesigner()
         if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
             return "A ship design with that name already exists or is pending";
         }
+        ShipDesign design;
+        design.owner = pendingOrders_.player;
+        design.hull = draft.hull;
+        design.components = draft.components;
+        const auto planning = planned_ship_design_state(
+            make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+        if (!ship_design_available_to_player(planning, pendingOrders_.player, design))
+            return "Hull or equipment unavailable. Check this empire's research, race and acquisition requirements.";
         return {};
+    });
+    auto* refresh = new QTimer(dialog);
+    refresh->setSingleShot(true);
+    connect(refresh, &QTimer::timeout, dialog, [this, dialog] {
+        dialog->refreshAvailability(planned_ship_design_state(
+            make_player_view(state_, pendingOrders_.player).state, pendingOrders_));
+    });
+    connect(this, &MainWindow::controlsChanged, dialog, [dialog, refresh] {
+        if (dialog->isVisible() && !refresh->isActive()) refresh->start(0);
     });
     connect(dialog, &QDialog::accepted, this, [this, dialog] {
         const auto draft = dialog->draft();
