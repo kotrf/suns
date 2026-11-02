@@ -15,7 +15,9 @@ roll 0–10000 is transformed as `0.5 * sqrt(roll / 10000)`, including actual
 zero and 50% endpoints. This is the selected initial shape for playtesting.
 Above an owned populated surface colony, recovery remains **75% with a 20%
 chance to lose another 5–15 percentage points**, including identical previous
-seed outcomes. The same yield applies to I/B/G; it is deterministic from galaxy seed, fleet ID,
+seed outcomes. Other planetary orbits also retain their previous **50% with
+the same 20% loss chance**; the broader density applies only away from every
+planet. The same yield applies to I/B/G; it is deterministic from galaxy seed, fleet ID,
 owner and execution year. Damage does not add a second recovery modifier.
 Existing cargo minerals are preserved at 100%, independently of that roll.
 Production resources and fuel are not refunded.

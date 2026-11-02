@@ -6,7 +6,7 @@
 
 namespace suns {
 namespace {
-double recoveryRate(const GameState& state, const Fleet& fleet, bool colony, std::uint64_t turn)
+double recoveryRate(const GameState& state, const Fleet& fleet, bool colony, bool orbital, std::uint64_t turn)
 {
     auto value = state.galaxySeed ^ (std::uint64_t(fleet.id) << 32) ^ fleet.owner
         ^ (turn * 0x9e3779b97f4a7c15ULL);
@@ -18,9 +18,9 @@ double recoveryRate(const GameState& state, const Fleet& fleet, bool colony, std
     value = mix(value);
     // Broad triangular space yield: density rises towards the 50% ceiling.
     // Discrete endpoints include an actual zero-material outcome.
-    if (!colony) return kSpaceScrapRecovery * std::sqrt(double(value % 10001) / 10000.0);
+    if (!orbital) return kSpaceScrapRecovery * std::sqrt(double(value % 10001) / 10000.0);
     const auto loss = value % 100 < 20 ? 5 + mix(value + 1) % 11 : 0;
-    return kColonyScrapRecovery - double(loss) / 100;
+    return (colony ? kColonyScrapRecovery : kSpaceScrapRecovery) - double(loss) / 100;
 }
 }
 bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
@@ -39,12 +39,17 @@ bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
         report(5); return false;
     }
     Planet* colony = nullptr;
-    for (auto& candidate : state.planets) if (candidate.owner == fleet.owner && candidate.population) {
+    bool orbital = false;
+    for (auto& candidate : state.planets) {
         const auto* star = find_star(state, candidate.star);
-        if (star && same_position(star->position, fleet.position)) { colony = &candidate; break; }
+        if (star && same_position(star->position, fleet.position)) {
+            orbital = true;
+            if (candidate.owner == fleet.owner && candidate.population) colony = &candidate;
+            break;
+        }
     }
     auto recovered = fleet.minerals;
-    const auto rate = recoveryRate(state, fleet, colony != nullptr, turn);
+    const auto rate = recoveryRate(state, fleet, colony != nullptr, orbital, turn);
     for (const auto& stack : fleet_ship_stacks(fleet)) if (const auto* design = find_ship_design(state, stack.design)) {
         const auto cost = ship_design_mineral_cost(*design);
         recovered.ironium += cost.ironium * stack.count * rate;

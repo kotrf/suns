@@ -94,6 +94,11 @@ void zeroMaterial()
         assert(scrap_fleet(orbit,orbit.fleets[0],2));
         const auto value=orbit.players[0].pendingPlayerReports.back().deliveredMinerals;
         assert(near(value.ironium,aboard.ironium+cost.ironium*percent/100.0));
+        for(const auto owner : {PlayerId{0},PlayerId{2}}) {
+            auto other=fixture();other.galaxySeed=seed;other.planets[0].owner=owner;
+            assert(scrap_fleet(other,other.fleets[0],2));
+            assert(near(other.wrecks[0].minerals.ironium,aboard.ironium+cost.ironium*(percent-25)/100.0));
+        }
     } // Fixed outputs from the previous orbital formula, including loss rolls.
 }
 void actualOrdersAndDelay()

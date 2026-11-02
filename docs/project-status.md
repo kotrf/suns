@@ -25,13 +25,14 @@ The user also requested a wider space Scrap Fleet density, reaching zero,
 while leaving the orbital case unchanged. The chosen initial density is
 triangular on 0–50%, weighted towards 50% (mean ~33.3%, standard deviation
 ~11.8 percentage points); discrete sqrt-transformed rolls include both endpoints.
-The prior orbital 75% / 20% loss-of-5–15pp formula and seed outcomes are intact.
+The prior orbital 75% at own populated colonies / 50% at other planetary orbits,
+with 20% loss-of-5–15pp, retains its exact previous seed outcomes.
 Cargo minerals remain fully preserved. Zero structural material with an empty
 hold consumes no wreck ID, creates no fake scientific wreck/observation and
 still delivers completion. Save v109/orders v48 remain unchanged from #259.
 
 Full GCC14.2/Qt6.12 Debug build and **105/105 Linux/offscreen CTest passed
-(37.41 s)**. The new catalog suite checks all 224 unique selectable entries,
+(39.15 s)**. The new catalog suite checks all 224 unique selectable entries,
 combined filters/no results, locked inspection, technology/race/trader changes,
 station gate requirements/unlimited limits, complete kit descriptions, small
 window Close, both real entry actions, singleton reuse/close/reopen, live state
@@ -39,7 +40,8 @@ refresh, stable text/scroll, no orders and no opponent-derived availability.
 Native themed hull/gate catalog captures inspected. Expanded recycling tests
 check broad space mean/variance/tails and deterministic replay over 1000 seeds,
 true zero with no fake wreck/ID/intel, retained cargo at zero structural yield,
-and fixed previous orbital outputs including loss rolls. Existing fitting,
+and fixed previous orbital outputs including loss rolls at owned, foreign and
+uncolonized planets. Existing fitting,
 save/PBEM/knowledge/layout/economy checks pass; diff check clean.
 See [catalog](technology-catalog.md) and
 [recycling](fleet-recycling.md). Frozen #53/auto-evacuation/further AI remain
