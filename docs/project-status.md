@@ -1,5 +1,39 @@
 # Project status and development handoff
 
+## Graphical designer #94: live availability — 2 November 2026
+
+The user selected #94 after the backlog audit. Branch
+`codex/ship-designer-live-access` is based on documentation-only #263
+(`73e487e078f954edeebe78bafb12dc352f593a48`), still open, after gameplay main
+`67215fc`. The parent is not silently merged. The independent main CI
+41481245165/job 125399816988 passed **105/105 (88.56 s)**, checkout/log verified.
+
+The real modeless designer now updates hull/component availability after
+received own-player research/acquisition/racial changes, using shared core
+access functions. MainWindow coalesces controlsChanged into one single-shot
+queued refresh; no periodic polling. Reopening the same window refreshes
+synchronously. Rows/details/icons, drag/Fit and Save state update without
+replacing the selected hull, name, fitting placements/cell or filter settings.
+Unchanged access does not scroll the catalog. A revoked fitted part remains in
+the draft and prevents Save with a reason; Save also rechecks current received
+access before emitting the normal CreateShipDesignOrder.
+
+The new offscreen regression reproduced the old failure after an actual
+MainWindow End Turn researched Propulsion 3 (assertion/exit 134). It now passes,
+covering research/hull unlocks, fitting/saving/resolving the ordinary new design,
+unchanged existing designs/draft, acquired equipment/traded hulls, racial and
+blueprint restrictions/revocation, pre-refresh Save rejection, stable selection/
+filters/scroll and irrelevant enemy changes. No order comes from refresh alone.
+Full GCC14.2/Qt6.12 Debug build and **106/106 offscreen CTest passed (38.50 s)**.
+The new target also passed separately (0.47 s); diff check and completion-matrix
+relative links passed. Remote head/CI/review remain separately tracked in GitHub.
+
+[Original #94 acceptance matrix](audits/2026-11-02-ship-designer-completion.md),
+[current UI contract](ship-designer.md). Core simulation/unlock rules and save
+v109/orders v48 are unchanged. #94 remains open pending review/merge to main;
+this is automated Qt/core acceptance, not a claim of user gameplay acceptance.
+The separate #47 ownership refactor and frozen/other major areas are unchanged.
+
 ## Merged mini-ideas and reconciled backlog — 2 November 2026
 
 The user authorized merging #259/#262, then explicitly selected an open-issue

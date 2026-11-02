@@ -44,6 +44,27 @@ The component list takes the catalog panel's additional vertical space when the
 window grows. The selected component description keeps its preferred height and
 scrolls for longer text, so blank description space does not displace list rows.
 
+### Availability in an open window
+
+Research breakthroughs and received racial/acquisition access update an already
+open designer. Hull rows, component locks/icons/tooltips, drag/Fit controls and
+Save validation use received own-empire knowledge. A single-shot queued refresh
+coalesces control changes; there is no periodic polling. Opening the same window
+again refreshes it immediately, including after it was hidden.
+
+Refreshing access never selects another hull, migrates fitting banks or replaces
+the draft's name, components or placements. Search/category/compatibility filters
+and a still-visible catalog selection are retained; unchanged updates do not
+scroll the list. A component leaving a text filter after its lock label changes
+can cause selection of the first remaining match. Existing saved designs and
+built ships are not refitted by research.
+
+If a draft's hull or fitted module is no longer available, it stays in the draft
+with a visible reason and Save disabled. Save also rechecks live own-player
+access before queuing the ordinary `CreateShipDesignOrder`, covering changes
+before the queued refresh runs. The core remains the authoritative validator.
+This changes no simulation, technology requirements or save/orders format.
+
 Suns! support equipment includes Field Repair Bay, Relay Array and Anomaly
 Detector. The following prototype equipment is retained for existing legacy
 empires; Colony Module, Fuel Tank, Cargo Pod and Antimatter Generator have
@@ -149,7 +170,8 @@ so drag sources/targets stay alive until Qt finishes the drag.
 Unavailable hulls remain visible for planning, with dim italic text, a lock
 icon and their technology/racial/acquisition requirements. They cannot be
 selected from the popup; core availability checks still guard saved orders.
-The proposed separate full hull/module reference window remains later work.
+The separate [full hull/module reference catalog](technology-catalog.md) is also
+available. Its read-only browser and the fitting draft are independent windows.
 
 Deck geometry and artwork are Qt presentation, with no effect on combat,
 equipment statistics or saved placements. When adding a hull or changing bank
