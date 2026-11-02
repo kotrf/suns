@@ -603,7 +603,9 @@ QString event_text(const GameState& state, const GameEvent& event)
         text = event.quantity <= 2 ? QString("Scrap Fleet completed. Recovered I %1 / B %2 / G %3 kt %4. Mineral cargo is included intact; no production resources are refunded.")
             .arg(event.deliveredMinerals.ironium,0,'f',2).arg(event.deliveredMinerals.boranium,0,'f',2)
             .arg(event.deliveredMinerals.germanium,0,'f',2)
-            .arg(event.quantity == 1 ? "on the colony surface" : "as collectible wreckage (20-year lifetime)")
+            .arg(event.quantity == 1 ? "on the colony surface"
+                : event.deliveredMinerals.ironium + event.deliveredMinerals.boranium + event.deliveredMinerals.germanium > 0
+                    ? "as collectible wreckage (20-year lifetime)" : "— no recoverable material remains")
             : event.quantity == 3 ? "Scrap Fleet waits: unload colonists, scientific samples and xenocrystals first. Stop cancels this order."
             : event.quantity == 4 ? "Scrap Fleet waits: use the installation's decommission controls."
             : event.quantity == 6 ? "Scrap Fleet waits: the colony mineral stock is full."

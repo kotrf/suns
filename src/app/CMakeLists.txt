@@ -3,6 +3,11 @@ add_library(suns_app_ui STATIC
     galaxy_setup_widget.hpp
     ship_fitting_layout.cpp
     ship_fitting_layout.hpp
+    ship_catalog_info.cpp
+    ship_catalog_info.hpp
+    technology_catalog_dialog.cpp
+    technology_catalog_dialog.hpp
+    main_window_technology_catalog.cpp
     main_window_fleet_operations.cpp
     main_window.cpp
     main_window_campaign.cpp

@@ -1,5 +1,50 @@
 # Project status and development handoff
 
+## Complete technology catalog #261 and space recovery #260 — 2 November 2026
+
+The user explicitly chose the remaining separate full catalog mini-idea. Work
+is on `codex/technology-catalog`, based on open #259 head
+`aa6ffb6e5fdf2a3c786928d8bfd157a967389c09`. Its source CI 41446442935 /
+job 125280603840 passed **104/104 (90.54 s)**, Qt6.12.0; SHA/log verified.
+#259 is not merged. Main remains `12dc73e` (#257), verified main CI
+102/102 (88.37 s). The new PR should initially target `codex/scrap-fleet`,
+then be retargeted to main after the parent is reviewed and merged.
+
+The separate Catalog window has 224 entries (41 ship hulls, 3 orbital hulls,
+180 components), combined search/category/available filters and selectable
+locked entries. Legacy hulls are labelled. Details cover hull costs/capacities/
+banks, component effects and exact technology/racial/acquisition restrictions.
+Station gates use dedicated access requirements and explicit unlimited limits.
+The Ship Designer component formatter is shared; special kit/screen descriptions
+retain basic mass/cost facts. Browsing adds no orders. Menu and toolbar actions
+reuse one modeless window; visible control changes coalesce without polling.
+Received own-empire availability refreshes while selection/unchanged text scroll
+are preserved. Public specifications reveal no opponents' private state.
+
+The user also requested a wider space Scrap Fleet density, reaching zero,
+while leaving the orbital case unchanged. The chosen initial density is
+triangular on 0–50%, weighted towards 50% (mean ~33.3%, standard deviation
+~11.8 percentage points); discrete sqrt-transformed rolls include both endpoints.
+The prior orbital 75% / 20% loss-of-5–15pp formula and seed outcomes are intact.
+Cargo minerals remain fully preserved. Zero structural material with an empty
+hold consumes no wreck ID, creates no fake scientific wreck/observation and
+still delivers completion. Save v109/orders v48 remain unchanged from #259.
+
+Full GCC14.2/Qt6.12 Debug build and **105/105 Linux/offscreen CTest passed
+(37.41 s)**. The new catalog suite checks all 224 unique selectable entries,
+combined filters/no results, locked inspection, technology/race/trader changes,
+station gate requirements/unlimited limits, complete kit descriptions, small
+window Close, both real entry actions, singleton reuse/close/reopen, live state
+refresh, stable text/scroll, no orders and no opponent-derived availability.
+Native themed hull/gate catalog captures inspected. Expanded recycling tests
+check broad space mean/variance/tails and deterministic replay over 1000 seeds,
+true zero with no fake wreck/ID/intel, retained cargo at zero structural yield,
+and fixed previous orbital outputs including loss rolls. Existing fitting,
+save/PBEM/knowledge/layout/economy checks pass; diff check clean.
+See [catalog](technology-catalog.md) and
+[recycling](fleet-recycling.md). Frozen #53/auto-evacuation/further AI remain
+outside this work. Next new phase has not been selected.
+
 ## Scrap Fleet #258 — 2 November 2026
 
 Reviewed [#257](https://github.com/kotrf/suns/pull/257) was merged at the user's

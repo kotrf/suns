@@ -369,6 +369,11 @@ if(SUNS_BUILD_APP)
     add_test(NAME suns_fleet_recycling_editor_tests COMMAND suns_fleet_recycling_editor_tests)
     set_tests_properties(suns_fleet_recycling_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 20)
+    add_executable(suns_technology_catalog_tests technology_catalog_tests.cpp)
+    target_link_libraries(suns_technology_catalog_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_technology_catalog_tests COMMAND suns_technology_catalog_tests)
+    set_tests_properties(suns_technology_catalog_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 20)
 endif()
 
 if(SUNS_BUILD_APP)

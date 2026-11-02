@@ -16,8 +16,11 @@ double recoveryRate(const GameState& state, const Fleet& fleet, bool colony, std
         return n ^ (n >> 31);
     };
     value = mix(value);
+    // Broad triangular space yield: density rises towards the 50% ceiling.
+    // Discrete endpoints include an actual zero-material outcome.
+    if (!colony) return kSpaceScrapRecovery * std::sqrt(double(value % 10001) / 10000.0);
     const auto loss = value % 100 < 20 ? 5 + mix(value + 1) % 11 : 0;
-    return (colony ? kColonyScrapRecovery : kSpaceScrapRecovery) - double(loss) / 100;
+    return kColonyScrapRecovery - double(loss) / 100;
 }
 }
 bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
@@ -58,7 +61,7 @@ bool scrap_fleet(GameState& state, const Fleet& fleet, std::uint64_t turn)
         colony->minerals.ironium += recovered.ironium;
         colony->minerals.boranium += recovered.boranium;
         colony->minerals.germanium += recovered.germanium;
-    } else {
+    } else if (recovered.ironium + recovered.boranium + recovered.germanium > 0) {
         SalvageWreck wreck{state.nextWreckId++, fleet.position, turn + 20, {}, recovered};
         state.wrecks.push_back(wreck);
         for (auto& player : state.players) if (player.id == fleet.owner) player.pendingStrategicIntel.push_back({
