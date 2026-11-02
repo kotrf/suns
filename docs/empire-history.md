@@ -136,8 +136,10 @@ retain exact integer counts even above the floating-point plot's precision.
 Save/PBEM exports preserve totals independently of retained Turn Messages and
 exclude other players' histories and pending packets. Orders remain v19.
 
-Further event categories remain extensions of issue #48; snapshots from older
-saves start at the loaded turn.
+The original #48 history scope is complete; see the
+[completion audit](audits/2026-11-02-backlog-reconciliation.md). Additional event
+categories can be separately scoped follow-ups. Snapshots from older saves start
+at the loaded turn.
 
 ## Station casualties (save v65)
 

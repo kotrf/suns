@@ -1,5 +1,44 @@
 # Project status and development handoff
 
+## Merged mini-ideas and reconciled backlog — 2 November 2026
+
+The user authorized merging #259/#262, then explicitly selected an open-issue
+completion audit. #259 merged as `e42b804757e1b15464dd6cf7339cd395d7079afb`;
+#262 merged as **`67215fc96933d8c6a427bce15f9d448fb2a6736a`**. Final main
+and #262 source head `262e402f73f3a2209c54e9348a0bb46216b1a982` have the same
+tree **`134e9b63d335670b122e751b1346fa7d402c438c`**. The latter is an
+ancestry-only sync after retargeting from #259 to main, with no source changes
+from reviewed `ef82069`. Re-review confirmed the legacy-hull price P2 fixed
+and no new confirmed findings; the sole old inline thread is resolved/outdated.
+Required source CI [41477603122](https://github.com/kotrf/suns/actions/runs/41477603122),
+job 125387190869, passed **105/105 (88.94 s)**, Qt6.12.0, checkout/log verified.
+#259 source CI passed 104/104 (90.54 s), and its merge's main CI passed 104/104
+(89.64 s). Final-main CI is a separate run, not implied by these results.
+
+Scrap Fleet, space recovery and the complete catalog are now on main; focused
+#258/#260/#261 are closed. Save v109/orders v48 remain current.
+
+The [backlog audit](audits/2026-11-02-backlog-reconciliation.md) compared twenty
+older feature issues with original requirements, merged PRs, source and scoped
+tests. **#45/#48/#105/#195 are closed as completed**, with evidence and preserved
+original bodies. Advanced reconnaissance stays under #58/#101/#205; optional
+medium phase 5 is future design. Exactly **16 feature issues remain open**,
+including frozen #53/#63 and discussion-only #108. #50 now correctly records
+that deferred/scheduled specialist gate programmes are delivered by #232.
+
+#94 stays open with a reproduced acceptance gap: changing own technology while
+ShipDesigner is open does not refresh component access in that reused dialog.
+An offscreen own-state probe shows core access true but UI availability false;
+this is not a full research-turn playtest. Catalog refresh does not fix Designer.
+No repair or new major feature was implemented by this audit. #47 retains its
+explicit shared GameSession-style ownership refactor. No next implementation
+slice has been chosen; gameplay acceptance remains relevant.
+
+Seven gate-related suites passed (4.97 s) and seven history/report/navigation
+suites passed (1.28 s), 13 distinct targets because save-game overlaps. The
+audit follow-up changes documentation only. The sections below are historical;
+references there to unmerged #259/#262 or pending #195/#105 are superseded.
+
 ## Catalog mineral prices: review fix in #262 — 2 November 2026
 
 Review of head `8b6370dacca9240b47b0d7735491ec710de4c4bf` against #259
