@@ -1,5 +1,9 @@
 # Strategic warfare and field science
 
+[Scrap Fleet and mineral salvage](fleet-recycling.md) add a one-shot final
+waypoint action alongside persistent work, with delivered completion reports
+and collectible partial mineral recovery.
+
 Fleet work is programmed in **Fleet Route Program → On arrival**. Mining,
 mine laying, sweeping, bombardment, field research and wreck recovery are
 persistent terminal actions: choose a destination and its work, then the ship

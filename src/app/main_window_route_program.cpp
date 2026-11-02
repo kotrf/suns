@@ -86,6 +86,7 @@ QString gateDestinationName(const GameState& state, PlanetId id)
 
 QString actionName(const GameState& state, const FleetArrivalAction& action)
 {
+    if (action.kind == FleetArrivalActionKind::ScrapFleet) return "Scrap Fleet (all ships)";
     if (action.kind == FleetArrivalActionKind::TransitStargate) return QString("Gate %1 → %2%3; wait and retry if unavailable")
         .arg(gateDestinationName(state,action.gateSource),gateDestinationName(state,action.gateDestination)).arg(action.gateResonant ? " (8 source xenocrystals on success)" : "");
     if (action.kind == FleetArrivalActionKind::DeployOutpost) return "Deploy outpost — permanent";
@@ -342,6 +343,11 @@ QString routeForecast(
             if (after) forecast.fuelRemaining = after->fuel;
         };
         if (!after) {
+            if (leg.arrivalAction.kind == FleetArrivalActionKind::ScrapFleet) {
+                lines << QString("%1. T+%2 — Scrap Fleet planned; nominal material recovery 50% / 75%, with possible additional loss. Actual recovery depends on arrival conditions.")
+                    .arg(legIndex + 1).arg(step);
+                markArrival(); legIndex = legs.size(); simulated = std::move(next); break;
+            }
             if (leg.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
                 && findFleet(next, leg.targetFleet)) {
                 lines << QString("%1. %2 — intercept T+%3, W%4 — <b>rendezvous completed; fleets merged</b>")
@@ -516,6 +522,9 @@ QString routeForecast(
                 break;
             case FleetArrivalActionKind::Colonize:
                 outcome = "; colonization could not be completed; fleet remains";
+                break;
+            case FleetArrivalActionKind::ScrapFleet:
+                outcome = "; Scrap Fleet waits for unloading or final transmission; fleet remains";
                 break;
             case FleetArrivalActionKind::RemoteMining:
                 outcome = after->task == FleetTask::RemoteMining
@@ -1030,7 +1039,8 @@ bool MainWindow::selectRouteProgramMapTarget(int kind, std::uint32_t id)
 bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
 {
     const auto* source = selectedFleet();
-    if (!source || source->owner != pendingOrders_.player || !arrival_work_task(action.kind)) return false;
+    if (!source || source->owner != pendingOrders_.player
+        || (!arrival_work_task(action.kind) && action.kind != FleetArrivalActionKind::ScrapFleet)) return false;
     const auto fleet = fleet_player_view(state_, *source);
     const auto route = effectiveRoute(state_, pendingOrders_, fleet);
     if (fleet.destination || fleet.targetFleet || !fleet.waypointQueue.empty()

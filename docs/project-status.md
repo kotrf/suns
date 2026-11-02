@@ -1,5 +1,59 @@
 # Project status and development handoff
 
+## Scrap Fleet #258 — 2 November 2026
+
+Reviewed [#257](https://github.com/kotrf/suns/pull/257) was merged at the user's
+instruction as `12dc73e80bb1ae0de8f7acb46a52de72be38a10e`; #256 is closed.
+Merge tree `04a8c67936fdd85bb765b185435b725a979e6f5e` matches reviewed head
+`b7e63f8aa2782ef274a9685f52cc459149af41f1`. Source CI 41438849185 passed
+**102/102 (90.10 s)**; main CI 41442259081 / job 125266741968 passed
+**102/102 (88.37 s)**, Qt6.12.0. Checkout SHA and final logs verified.
+
+The next approved mini-idea, **2**, is implemented on `codex/scrap-fleet`,
+[#258](https://github.com/kotrf/suns/issues/258). The user explicitly accepted
+50% space / 75% owned populated colony recovery plus a probability of further
+loss. Initial risk chosen for implementation: 20% chance of another 5–15
+percentage points lost, deterministic per seed/fleet/owner/year.
+
+Scrap Fleet is a terminal, one-shot route action with ordinary command delay;
+Scrap here queues it at a stationary fleet's received position. Every fitted
+ship stack contributes its mineral cost. Mineral cargo survives intact; surface
+material is credited at an owned populated colony, otherwise a 20-year mineral
+wreck remains. Passengers, samples and xenocrystals must be unloaded; fixed
+installations retain decommission controls. A full surface stock blocks rather
+than overflowing. Blocked final steps hold/retry and can be stopped. Stationary
+scrapping, including immobilized ships, resolves before motion/battles; a flight
+that reaches its scrap waypoint resolves there after its ordinary approach.
+
+The final transmission dispatches the fleet's stored outbox using the existing
+ledger logic. Passive/Silence without local exchange holds the step until it can
+report. A remote old contact persists until completion delivery; the new wreck
+observation travels in that packet. Player exports omit physical wreck stock.
+Recover wreckage retains its scanner/cargo requirement and science behavior;
+mineral collection is proportional to free shared hold space, preserves leftover
+stock, and never gives science. Markers distinguish received mineral/scientific
+wrecks and show observation/expiry dates.
+
+Save **v109 / orders v48** permit the new action/status. A trailing SCRP section
+stores stock by existing wreck ID, leaving STRA bytes intact. Old v108 wrecks
+load without invented stock. The v107 workforce migration's real baseline hash
+is retained; its offsets now account for the new trailing empty SCRP section.
+
+Full GCC14.2/Qt6.12 Debug build and **104/104 Linux/offscreen CTest passed
+(38.16 s)**. New core coverage checks 1,000 seed outcomes and replay, mixed ship
+stacks and intact cargo, actual commands, no repeated reward, final/repeat
+constraints, immobilized stationary fleets, partial/full/competing collection,
+foreign/empty orbits, passengers/samples/xenocrystals, full surface stocks,
+remote command/completion delivery and the final silent-fleet outbox. UI/save
+coverage checks the actual Scrap here click and planned route row, physical
+ships remaining during planning, save/turn-order round trips, v108 migration,
+PBEM omission of physical stock, NaN and truncated SCRP rejection. Existing
+workforce baseline hash and all earlier knowledge/economy/route suites pass.
+Native themed screenshot inspected; diff check clean. Native capture command:
+`QT_QPA_PLATFORM=offscreen work/build/tests/suns_fleet_recycling_editor_tests --capture`.
+See [fleet recycling](fleet-recycling.md). PR/head/remote CI are tracked in
+GitHub #258. No new catalogue/AI/frozen logistics scope is included.
+
 ## Station icon and received fitting #256 — 2 November 2026
 
 At the user's instruction, reviewed [#255](https://github.com/kotrf/suns/pull/255)

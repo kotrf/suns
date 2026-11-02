@@ -868,6 +868,7 @@ enum class PlayerReportKind {
     ResonanceProjectStatus,
     OrbitalBaseStatus,
     TransportLineDelivery,
+    FleetScrapStatus,
 };
 
 // A report is an immutable observation, independent of surviving objects and
@@ -1444,6 +1445,7 @@ enum class FleetArrivalActionKind {
     LoadMinerals, // Source reserve plus optional onboard departure minimum.
     UnloadTransportLine, // Ordinary mineral unload with frozen receipt attribution.
     UnloadTransportStop, // Multi-stop visit: one bounded delivery, retain surplus for later stops.
+    ScrapFleet, // Terminal, one-shot dismantling of the complete fleet.
 };
 
 // Work belongs to the final waypoint and starts autonomously there. Deployment
@@ -1466,7 +1468,8 @@ enum class FleetArrivalActionKind {
 [[nodiscard]] constexpr bool terminal_arrival_action(FleetArrivalActionKind kind)
 {
     return arrival_work_task(kind).has_value() || kind == FleetArrivalActionKind::Colonize
-        || kind == FleetArrivalActionKind::MergeWithFleet || kind == FleetArrivalActionKind::EnterWormhole;
+        || kind == FleetArrivalActionKind::MergeWithFleet || kind == FleetArrivalActionKind::EnterWormhole
+        || kind == FleetArrivalActionKind::ScrapFleet;
 }
 
 enum class FleetCargoKind {
@@ -1710,6 +1713,7 @@ struct SalvageWreck {
     Position position;
     std::uint64_t expiresTurn{};
     std::array<std::uint8_t, kResearchFieldCount> technology{};
+    MineralCargo minerals; // Physical remaining stock; never copied from hidden state to UI.
 };
 
 struct PendingFleetLossContact {

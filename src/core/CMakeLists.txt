@@ -36,6 +36,7 @@ add_library(suns_core
     src/scanners.cpp
     src/radiation.cpp
     src/turn_processor.cpp
+    src/fleet_recycling.cpp
     src/wormholes.cpp
 )
 

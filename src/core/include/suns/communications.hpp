@@ -33,7 +33,7 @@ template<class State, class Visit> void visit_fleet_report_outbox(State& state, 
     Position source, std::uint64_t observedTurn, FleetId observer=0);
 [[nodiscard]] FleetId held_report_source(const GameState&, PlayerId, Position,
     std::uint64_t observedTurn, FleetId observer=0);
-void dispatch_fleet_report_outbox(GameState&);
+void dispatch_fleet_report_outbox(GameState&, FleetId onlyFleet = 0, std::uint64_t atTurn = 0);
 
 // Round-trip infrastructure is intentionally simple in the first playable
 // slice: friendly established colonies are relay nodes. Later station/ship

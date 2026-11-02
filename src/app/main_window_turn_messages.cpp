@@ -186,6 +186,8 @@ QString event_subject(const GameState& state, const GameEvent& event)
         break;
     case GameEventKind::FleetTargetLost: subject = QString("%1 lost its fleet target").arg(fleetName); break;
     case GameEventKind::FleetsMerged: subject = QString("Fleets merged into %1").arg(fleetName); break;
+    case GameEventKind::FleetScrapStatus: subject = QString("Scrap Fleet — %1%2").arg(fleetName,
+        event.quantity <= 2 ? "" : " (waiting)"); break;
     case GameEventKind::ProductionWaitingForShipyard:
         subject = QString("%1 waits for a shipyard on %2").arg(production_item_name(state, event), planetName);
         break;
@@ -597,6 +599,15 @@ QString event_text(const GameState& state, const GameEvent& event)
                    .arg(static_cast<qulonglong>(event.turn))
                    .arg(fleetName)
                    .arg(event.quantity);
+    } else if (event.kind == GameEventKind::FleetScrapStatus) {
+        text = event.quantity <= 2 ? QString("Scrap Fleet completed. Recovered I %1 / B %2 / G %3 kt %4. Mineral cargo is included intact; no production resources are refunded.")
+            .arg(event.deliveredMinerals.ironium,0,'f',2).arg(event.deliveredMinerals.boranium,0,'f',2)
+            .arg(event.deliveredMinerals.germanium,0,'f',2)
+            .arg(event.quantity == 1 ? "on the colony surface" : "as collectible wreckage (20-year lifetime)")
+            : event.quantity == 3 ? "Scrap Fleet waits: unload colonists, scientific samples and xenocrystals first. Stop cancels this order."
+            : event.quantity == 4 ? "Scrap Fleet waits: use the installation's decommission controls."
+            : event.quantity == 6 ? "Scrap Fleet waits: the colony mineral stock is full."
+            : "Scrap Fleet waits: enable transmissions or reach a friendly populated colony to send the final report.";
     } else if (event.kind == GameEventKind::FleetsMerged) {
         text = QString("Turn %1  •  Fleet %2 rendezvoused with %3 and merged into it")
                    .arg(static_cast<qulonglong>(event.turn))

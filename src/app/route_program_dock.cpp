@@ -397,6 +397,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->addItem("Bombard enemy colony (persistent)", static_cast<int>(FleetArrivalActionKind::BombardColony));
     actionCombo->addItem("Field research (persistent)", static_cast<int>(FleetArrivalActionKind::FieldResearch));
     actionCombo->addItem("Recover wreckage (persistent)", static_cast<int>(FleetArrivalActionKind::RecoverWreckage));
+    actionCombo->addItem("Scrap Fleet (dismantle all ships)", static_cast<int>(FleetArrivalActionKind::ScrapFleet));
     actionCombo->addItem("Refuel at depot", int(FleetArrivalActionKind::Refuel));
     actionCombo->addItem("Deploy outpost (permanent)", int(FleetArrivalActionKind::DeployOutpost));
     actionCombo->addItem("Transfer fuel to fleet / outpost", int(FleetArrivalActionKind::SupplyOutpost));
@@ -415,6 +416,8 @@ void attachRouteProgramDock(MainWindow& window)
     workTip(FleetArrivalActionKind::BombardColony, "Requires bombs and a known enemy colony. Starts after arrival/combat, repeats until stopped; friendly or empty worlds are never bombed.");
     workTip(FleetArrivalActionKind::FieldResearch, "Requires a scanner and active sensors when collecting data. One study per empire/objective: star Energy 12; deep planet Biology 12 (artifact site 32); wormhole Propulsion 24. Rewards wait for report delivery. The order does not change emissions.");
     workTip(FleetArrivalActionKind::RecoverWreckage, "Requires a scanner, cargo space and reported wreckage within 10 ly. Recovers one nearest specimen per year; only unfamiliar technology yields science. Targets can expire before arrival.");
+    workTip(FleetArrivalActionKind::ScrapFleet, "Dismantles every ship at the final waypoint; no repeat. Nominal mineral recovery: 75% above your populated colony, 50% elsewhere; 20% chance of losing another 5–15 percentage points. Cargo minerals survive intact. Unload passengers/samples/xenocrystals first. Requires transmissions or local colony exchange for the final packet; fixed bases use Decommission.");
+    workTip(FleetArrivalActionKind::RecoverWreckage, "Requires a scanner and cargo capacity. Within 10 ly, collects one nearest wreck per year. Mineral salvage fills only free shared hold space; the remainder stays. Scientific wrecks may yield unfamiliar technology. Wrecks expire after 20 years.");
     workTip(FleetArrivalActionKind::DeployOutpost, "One ship with one paid kit, no colonists, at least 5 ly from stars and 1 ly from another installation. Permanent; last waypoint only, no repeat.");
     workTip(FleetArrivalActionKind::SupplyOutpost, "Choose a friendly fleet in Destination to follow it and transfer fuel on arrival, keeping the specified donor reserve. At a coordinate waypoint, supplies an owned outpost. Actual fuel and tank space are checked on arrival.");
     auto* cargoCombo = new QComboBox(waypointGroup);
@@ -531,7 +534,9 @@ void attachRouteProgramDock(MainWindow& window)
         }
         const auto transfersCargo = action == FleetArrivalActionKind::LoadAllAvailable
             || action == FleetArrivalActionKind::UnloadAll;
-        workHereButton->setEnabled(window.selectedFleetForRouteProgram() != 0 && arrival_work_task(action).has_value());
+        workHereButton->setEnabled(window.selectedFleetForRouteProgram() != 0
+            && (arrival_work_task(action).has_value() || action == FleetArrivalActionKind::ScrapFleet));
+        workHereButton->setText(action == FleetArrivalActionKind::ScrapFleet ? "Scrap here" : "Start work here");
         cargoCombo->setEnabled(transfersCargo);
         reserveSpin->setEnabled(
             action == FleetArrivalActionKind::LoadAllAvailable && (cargo == FleetCargoKind::Colonists || cargo==FleetCargoKind::OrbitalColonists));

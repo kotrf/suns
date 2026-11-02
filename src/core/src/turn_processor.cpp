@@ -1,4 +1,5 @@
 #include "suns/transport_lines.hpp"
+#include "suns/fleet_recycling.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
@@ -822,6 +823,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::DeployOutpost:
         return false; // Persistent work handled before this switch.
     case FleetArrivalActionKind::None:
+    case FleetArrivalActionKind::ScrapFleet:
         return false;
     case FleetArrivalActionKind::LoadMinerals:
     case FleetArrivalActionKind::LoadAllAvailable: {
@@ -1408,6 +1410,14 @@ bool finish_fleet_arrival(GameState& state, Fleet& fleet, std::vector<FleetId>& 
     if(fleet.electronics.wakeOnArrival) fleet.electronics={};
     fleet.fuelStalled = false;
     fleet.targetFleet = 0;
+    if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::ScrapFleet) {
+        if (scrap_fleet(state, fleet, state.turn + 1)) {
+            consumedFleets.push_back(fleet.id);
+            return true;
+        }
+        fleet.destination = fleet.position; // Hold the failed final step; Stop can cancel it.
+        return false;
+    }
     if (fleet.arrivalAction && fleet.arrivalAction->kind == FleetArrivalActionKind::EnterWormhole) {
         if (enter_wormhole(state, fleet, fleet.arrivalAction->wormholeEndpoint)) {
             consumedFleets.push_back(fleet.id);
@@ -1804,13 +1814,14 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
     fleetIds.reserve(state.fleets.size());
     for (const auto& fleet : state.fleets) fleetIds.push_back(fleet.id);
     std::sort(fleetIds.begin(), fleetIds.end());
-    // Gate steps already at their source run before motion/battles, so the
-    // destination participates in this year's ordinary encounter resolution.
+    // Gate and scrap steps already at their source run before motion/battles.
+    // In particular, an immobilized fleet can dismantle itself without flying.
     // An approach arriving later in the year waits for the following boundary.
     for (const auto id : fleetIds) {
         auto* fleet = fleet_by_id(state,id);
         if (!fleet || !fleet->destination || !same_position(fleet->position,*fleet->destination)
-            || !fleet->arrivalAction || fleet->arrivalAction->kind != FleetArrivalActionKind::TransitStargate) continue;
+            || !fleet->arrivalAction || (fleet->arrivalAction->kind != FleetArrivalActionKind::TransitStargate
+                && fleet->arrivalAction->kind != FleetArrivalActionKind::ScrapFleet)) continue;
         fleet->destination.reset();
         (void)finish_fleet_arrival(state,*fleet,consumedFleets,freight);
         skipMovement.push_back(id);

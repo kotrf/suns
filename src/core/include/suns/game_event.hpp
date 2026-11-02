@@ -70,6 +70,7 @@ enum class GameEventKind {
     VisitorExchangeFailed,
     VisitorDeparted,
     OrbitalBaseStatus,
+    FleetScrapStatus,
 };
 
 enum class GameEventSeverity {
