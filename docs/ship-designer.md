@@ -86,10 +86,11 @@ radiation hazard and the engine fuel curve.
 
 ## Logical fitting layout
 
-Hull specifications expose explicit fitting cells with stable numeric IDs, a
-slot category (`Engine`, `General` or `Mining`) and small grid coordinates for
-the visual designer. IDs describe logical cells and do not depend on widget
-pixels or replaceable hull artwork.
+Hull specifications expose fitting cells with stable numeric IDs, categories,
+equipment masks and bank identities/capacities. Their default grid coordinates
+are not persisted placement identities. The app's `ship_fitting_layout` maps
+copies of these cells to a presentation deck; it changes only their displayed
+row/column. Core specifications, IDs and fitting constraints remain unchanged.
 
 Every persisted design may store an exact component-to-slot placement in
 addition to its component list. Core validation independently checks that every
@@ -129,12 +130,32 @@ be docked or tabbed with a panel, and there is no Ship Design workspace preset.
 Opening it again raises the existing draft and restores a minimized window.
 Closing and immediately reopening creates a fresh draft safely, even before
 Qt finishes deleting the previous dialog.
-Each hull now has a distinct schematic silhouette above its fitting grid, and
-catalog/fitted components have compact category icons. Fitting cells are square,
-show their category and stable ID, and retain the complete component name for
-tooltips and accessibility when the visible caption is shortened. These graphics are drawn
-in Qt and have no role in slot identity or simulation; replacing them later
-does not change saved placements.
+All 41 current hulls (32 reference, two Suns! additions and seven legacy) have
+explicit bank/deck arrangements. Engines sit aft at the left; forward/flank
+equipment is to the right, with central support areas. Scout, transport, combat,
+mining, bomber and modular support families have different outlines and bank
+positions; Expedition Base has radial service decks. A compact reference image
+and orientation/cargo/fuel legend leave more vertical room for fitting.
+Cells belonging to a bank stay adjacent. Large decks scroll; returning to a
+small hull resets the grid's old size requirements. Arrow navigation follows
+the displayed cells rather than the core's default coordinates.
+
+Square cells retain full component names in tooltips/accessibility when their
+captions are shortened. Empty cells have subdued text, a dark background and a
+dashed border, while remaining selectable/drop targets. Checked/focused cells
+retain their highlight. Updating a fit refreshes the existing buttons in place
+so drag sources/targets stay alive until Qt finishes the drag.
+
+Unavailable hulls remain visible for planning, with dim italic text, a lock
+icon and their technology/racial/acquisition requirements. They cannot be
+selected from the popup; core availability checks still guard saved orders.
+The proposed separate full hull/module reference window remains later work.
+
+Deck geometry and artwork are Qt presentation, with no effect on combat,
+equipment statistics or saved placements. When adding a hull or changing bank
+capacities, update its app deck profile and check coverage/non-overlap; the
+layout test covers all current IDs and exercises archived placements, keyboard
+movement, delete/refit, large-to-small resizing and the 1000×760 window.
 The Start from selector loads one of the current player's saved or planned
 designs as a new draft, preserving each component's logical cell. The proposed
 name gets a Copy suffix; creating the draft never edits the original design or

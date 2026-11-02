@@ -1,4 +1,5 @@
 #include "ship_designer_dialog.hpp"
+#include "ship_fitting_layout.hpp"
 #include "suns/hulls.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
@@ -36,6 +37,7 @@
 #include <QPolygonF>
 #include <QPushButton>
 #include <QStandardItemModel>
+#include <QStyle>
 #include <QScrollArea>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -58,8 +60,60 @@ namespace {
 constexpr auto kComponentMimeType = "application/x-suns-ship-component";
 constexpr auto kSlotButtonStyle =
     "QToolButton { color: #e4edf5; border: 1px solid #52677a; background: #142433; padding: 5px; }"
+    "QToolButton[emptySlot=\"true\"] { color: #718698; border: 1px dashed #3a5062; background: #0e1c28; }"
     "QToolButton:checked { border: 2px solid #52b6d9; background: #193346; }"
     "QToolButton:hover, QToolButton:focus { border: 2px solid #78c8e5; }";
+
+QIcon lockedHullIcon()
+{
+    QPixmap image(18,18);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(QColor("#718698"),1.5));
+    painter.drawArc(QRectF(5,2,8,10),0,180*16);
+    painter.setBrush(QColor("#283d4e"));
+    painter.drawRoundedRect(QRectF(3,8,12,8),2,2);
+    return QIcon(image);
+}
+
+class HullDeck final : public QWidget {
+public:
+    explicit HullDeck(QWidget* parent) : QWidget(parent) {}
+    void setDeck(HullDeckShape shape, int columns, int rows)
+    {
+        shape_ = shape; columns_ = columns; rows_ = rows; update();
+    }
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QWidget::paintEvent(event);
+        const auto* grid = qobject_cast<QGridLayout*>(layout());
+        if (!grid || !columns_ || !rows_) return;
+        const QRectF area = grid->cellRect(0,0).united(grid->cellRect(rows_-1,columns_-1)).adjusted(-5,-5,5,5);
+        const auto point = [&](double x, double y) { return QPointF(area.left()+x*area.width(),area.top()+y*area.height()); };
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor("#355267"),1.5));
+        painter.setBrush(QColor("#101f2b"));
+        if (shape_ == HullDeckShape::Base) painter.drawEllipse(area);
+        else if (shape_ == HullDeckShape::Transport) painter.drawRoundedRect(area,24,24);
+        else {
+            const double wing = shape_ == HullDeckShape::Combat || shape_ == HullDeckShape::Bomber ? 0.22 : 0.4;
+            painter.drawPolygon(QPolygonF{point(0,0.25),point(wing,0),point(0.8,0.08),
+                point(1,0.5),point(0.8,0.92),point(wing,1),point(0,0.75)});
+            if (shape_ == HullDeckShape::Miner) {
+                painter.setPen(QPen(QColor("#6d593c"),2));
+                for (double y : {0.2,0.5,0.8}) painter.drawLine(point(0.8,y),point(1,y));
+            }
+        }
+        painter.setPen(QPen(QColor("#233c50"),1,Qt::DashLine));
+        painter.drawLine(point(0,0.5),point(1,0.5));
+    }
+private:
+    HullDeckShape shape_{HullDeckShape::Support};
+    int columns_{}, rows_{};
+};
 
 template <typename Enum>
 void addEnumItem(QComboBox* combo, const QString& text, Enum value)
@@ -397,7 +451,7 @@ public:
         setAcceptDrops(true);
         setObjectName(QString("shipSlot_%1").arg(slot_.id));
         setFocusPolicy(Qt::StrongFocus);
-        setFixedSize(96, 96);
+        setFixedSize(88, 88);
         setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         setIconSize(QSize(26, 26));
         setCheckable(true);
@@ -504,14 +558,21 @@ protected:
 private:
     void refreshText()
     {
+        const bool empty = !component_;
+        if (!property("emptySlot").isValid() || property("emptySlot").toBool() != empty) {
+            setProperty("emptySlot",empty);
+            style()->unpolish(this);
+            style()->polish(this);
+            update();
+        }
         const auto fullTitle = QString::fromStdString(ship_slot_name(slot_));
-        const auto title = slot_.bank ? QString("Bank %1\n%2").arg(slot_.bank).arg(fontMetrics().elidedText(fullTitle, Qt::ElideRight, 78))
+        const auto title = slot_.bank ? QString("Bank %1\n%2").arg(slot_.bank).arg(fontMetrics().elidedText(fullTitle, Qt::ElideRight, 68))
             : QString("%1 #%2").arg(fullTitle).arg(slot_.id);
         const auto bankHint = slot_.bank ? QString("\n%1 — bank %2, up to %3 identical components. Fit fills the bank; Delete removes one cell.")
             .arg(fullTitle).arg(slot_.bank).arg(slot_.bankCapacity) : QString{};
         if (component_) {
             const auto fullName = QString::fromStdString(component_spec(*component_).name);
-            setText(QString("%1\n%2").arg(title, fontMetrics().elidedText(fullName, Qt::ElideRight, 84)));
+            setText(QString("%1\n%2").arg(title, fontMetrics().elidedText(fullName, Qt::ElideRight, 70)));
             setAccessibleName(QString("%1 slot, bank %2, %3 fitted").arg(fullTitle).arg(slot_.bank).arg(fullName));
             setToolTip(componentTooltip(*component_) + bankHint
                 + "\n\nDrag to another compatible slot. Double-click or press Delete to remove.");
@@ -546,7 +607,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     setObjectName("shipDesignerDialog");
     setModal(false);
     setWindowTitle("Suns! — Ship Designer");
-    resize(980, 760);
+    resize(1280, 860);
 
     auto* layout = new QVBoxLayout(this);
     auto* intro = new QLabel(
@@ -575,6 +636,8 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
 
     hullCombo_ = new QComboBox(this);
     hullCombo_->setObjectName("shipHullCatalog");
+    hullCombo_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    hullCombo_->setMinimumContentsLength(28);
     const auto addHull = [&](const ShipHullSpec& hull, bool legacy) {
         const bool available = ship_hull_available_to_player(state, player_, hull.type);
         QString requirement;
@@ -593,9 +656,15 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             QString("%1 kt; %2 resources; %3 engines; %4 kt cargo; %5 mg fuel; %6 base armor; initiative %7.\n%8")
                 .arg(hull.mass).arg(hull.buildCost).arg(hull.requiredEngines).arg(hull.baseCargoCapacity)
                 .arg(hull.baseFuelCapacity).arg(hull.armor).arg(hull.initiative).arg(requirement) + support, Qt::ToolTipRole);
-        if (!available)
-            if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model()))
-                model->item(hullCombo_->count() - 1)->setEnabled(false);
+        if (!available) {
+            hullCombo_->setItemIcon(hullCombo_->count()-1,lockedHullIcon());
+            if (auto* model = qobject_cast<QStandardItemModel*>(hullCombo_->model())) {
+                auto* item = model->item(hullCombo_->count()-1);
+                item->setForeground(QColor("#718698"));
+                auto font = item->font(); font.setItalic(true); item->setFont(font);
+                item->setEnabled(false);
+            }
+        }
     };
     if (player_uses_legacy_hulls(state, player_))
         for (int type = int(ShipHullType::Scout); type <= int(ShipHullType::MiniColonyShip); ++type)
@@ -754,15 +823,22 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
 
     auto* fittingGroup = new QGroupBox("Hull fitting cells", this);
     auto* fittingLayout = new QVBoxLayout(fittingGroup);
+    auto* deckHeader = new QHBoxLayout;
     hullPortrait_ = new QLabel(fittingGroup);
     hullPortrait_->setObjectName("shipHullPortrait");
     hullPortrait_->setAlignment(Qt::AlignCenter);
-    hullPortrait_->setToolTip("Hull silhouette is visual reference; cell positions and fitting rules come from the hull specification.");
-    fittingLayout->addWidget(hullPortrait_);
-    slotPanel_ = new QWidget(fittingGroup);
+    hullPortrait_->setToolTip("Hull reference. The deck groups fitting cells by bank and function.");
+    deckHeader->addWidget(hullPortrait_);
+    auto* legend = new QLabel(fittingGroup);
+    legend->setObjectName("shipHullLayoutLegend");
+    legend->setWordWrap(true);
+    deckHeader->addWidget(legend,1);
+    fittingLayout->addLayout(deckHeader);
+    slotPanel_ = new HullDeck(fittingGroup);
+    slotPanel_->setObjectName("shipHullDeck");
     slotGrid_ = new QGridLayout(slotPanel_);
     slotGrid_->setSpacing(8);
-    slotGrid_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    slotGrid_->setAlignment(Qt::AlignCenter);
     auto* slotScroll = new QScrollArea(fittingGroup);
     slotScroll->setObjectName("shipHullSlotScroll");
     slotScroll->setWidgetResizable(true);
@@ -775,7 +851,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     removeButton_->setObjectName("removeSelectedComponent");
     removeButton_->setEnabled(false);
     fittingLayout->addWidget(removeButton_);
-    workspace->addWidget(fittingGroup, 2);
+    workspace->addWidget(fittingGroup, 3);
     layout->addLayout(workspace, 2);
 
     previewLabel_ = new QLabel(this);
@@ -916,8 +992,7 @@ void ShipDesignerDialog::updateComponentDetails()
 void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 {
     selectedSlot_ = slot;
-    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    for (const auto& cell : hull.fittingSlots) {
+    for (const auto& cell : displaySlots_) {
         const auto* item = slotGrid_->itemAtPosition(cell.row, cell.column);
         if (item && item->widget())
             static_cast<SlotButton*>(item->widget())->setChosen(cell.id == slot);
@@ -932,14 +1007,13 @@ void ShipDesignerDialog::selectSlot(ShipSlotId slot)
 
 void ShipDesignerDialog::focusAdjacentSlot(ShipSlotId slot, int rowDirection, int columnDirection)
 {
-    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    const auto current = std::find_if(hull.fittingSlots.begin(), hull.fittingSlots.end(),
+    const auto current = std::find_if(displaySlots_.begin(), displaySlots_.end(),
         [slot](const ShipSlotSpec& candidate) { return candidate.id == slot; });
-    if (current == hull.fittingSlots.end()) return;
+    if (current == displaySlots_.end()) return;
 
     const ShipSlotSpec* nearest = nullptr;
     std::pair<int, int> best{std::numeric_limits<int>::max(), std::numeric_limits<int>::max()};
-    for (const auto& candidate : hull.fittingSlots) {
+    for (const auto& candidate : displaySlots_) {
         const int row = int(candidate.row) - int(current->row);
         const int column = int(candidate.column) - int(current->column);
         const int forward = rowDirection * row + columnDirection * column;
@@ -1080,8 +1154,7 @@ void ShipDesignerDialog::refreshSlotGrid()
 {
     // A drop runs while QDrag::exec() still owns the source widget on Wayland.
     // Keep both source and target alive until the drag has finished.
-    const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    for (const auto& slot : hull.fittingSlots) {
+    for (const auto& slot : displaySlots_) {
         const auto* item = slotGrid_->itemAtPosition(slot.row, slot.column);
         if (!item || !item->widget()) continue;
         auto* button = static_cast<SlotButton*>(item->widget());
@@ -1107,7 +1180,19 @@ void ShipDesignerDialog::rebuildSlotGrid()
         delete item;
     }
     const auto hull = hull_spec(static_cast<ShipHullType>(hullCombo_->currentData().toInt()));
-    for (const auto& slot : hull.fittingSlots) {
+    const auto deck = ship_fitting_layout(hull);
+    displaySlots_ = deck.cells;
+    for (int row=0;row<slotGrid_->rowCount();++row) { slotGrid_->setRowMinimumHeight(row,0); slotGrid_->setRowStretch(row,0); }
+    for (int col=0;col<slotGrid_->columnCount();++col) { slotGrid_->setColumnMinimumWidth(col,0); slotGrid_->setColumnStretch(col,0); }
+    for (int row=0;row<deck.rows;++row) slotGrid_->setRowMinimumHeight(row,88);
+    for (int col=0;col<deck.columns;++col) slotGrid_->setColumnMinimumWidth(col,88);
+    static_cast<HullDeck*>(slotPanel_)->setDeck(deck.shape,deck.columns,deck.rows);
+    if (auto* legend=findChild<QLabel*>("shipHullLayoutLegend"))
+        legend->setText(QString("<b>%1</b><br>%2<br>Cargo %3 kt · Fuel %4 mg")
+            .arg(QString::fromStdString(hull.name),deck.shape==HullDeckShape::Base
+                ? "Radial service decks" : "Aft at left · Bow at right")
+            .arg(hull.baseCargoCapacity).arg(hull.baseFuelCapacity));
+    for (const auto& slot : displaySlots_) {
         const auto placement = std::find_if(placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& candidate) {
             return candidate.slot == slot.id;
         });
@@ -1126,8 +1211,6 @@ void ShipDesignerDialog::rebuildSlotGrid()
             slotPanel_);
         slotGrid_->addWidget(button, slot.row, slot.column);
     }
-    for (int row = 0; row < slotGrid_->rowCount(); ++row) slotGrid_->setRowStretch(row, 0);
-    slotGrid_->setColumnStretch(3, 1);
     const auto selectedPlacement = std::find_if(
         placements_.begin(), placements_.end(), [&](const ShipComponentPlacement& placement) {
             return placement.slot == selectedSlot_;
@@ -1164,7 +1247,7 @@ void ShipDesignerDialog::updatePreview()
 {
     const auto design = previewDesign();
     const auto hull = hull_spec(design.hull);
-    hullPortrait_->setPixmap(hullPortrait(design.hull));
+    hullPortrait_->setPixmap(hullPortrait(design.hull).scaled(150,70,Qt::KeepAspectRatio,Qt::SmoothTransformation));
     const auto generalUsed = ship_design_general_slots_used(design);
     const auto miningUsed = ship_design_mining_slots_used(design);
     const auto validationError = ship_design_validation_error(design);
