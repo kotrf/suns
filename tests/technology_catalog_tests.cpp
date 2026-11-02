@@ -11,6 +11,7 @@
 #include <QEventLoop>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScrollBar>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -19,6 +20,8 @@
 #include <QToolBar>
 #include <QTreeWidget>
 #include <cassert>
+#include <array>
+#include <cmath>
 #include <set>
 
 using namespace suns;
@@ -42,6 +45,26 @@ int visible(QTreeWidget* list)
 {
     int count=0;for(int i=0;i<list->topLevelItemCount();++i)count+=!list->topLevelItem(i)->isHidden();return count;
 }
+void hullMineralPrices(QTreeWidget* list,QTextBrowser* details)
+{
+    const std::array<MineralCargo,7> legacy{{{4,1,1},{6,2,2},{9,3,3},{12,6,8},{10,5,5},{18,6,6},{2,0,2}}};
+    const QRegularExpression price("^Minerals: I (\\S+) / B (\\S+) / G (\\S+) kt$",QRegularExpression::MultilineOption);
+    int count=0;
+    for(int id=int(ShipHullType::Scout);id<=int(ShipHullType::SurveyProbe);++id) {
+        auto* item=entry(list,0,id);list->setCurrentItem(item);
+        const auto match=price.match(details->toPlainText());assert(match.hasMatch());
+        const MineralCargo shown{match.captured(1).toDouble(),match.captured(2).toDouble(),match.captured(3).toDouble()};
+        ShipDesign bare;bare.hull=ShipHullType(id);const auto cost=ship_design_mineral_cost(bare);
+        assert(std::abs(shown.ironium-cost.ironium)<1e-8);
+        assert(std::abs(shown.boranium-cost.boranium)<1e-8);
+        assert(std::abs(shown.germanium-cost.germanium)<1e-8);
+        if(id<int(legacy.size())) {
+            assert(shown.ironium==legacy[id].ironium && shown.boranium==legacy[id].boranium && shown.germanium==legacy[id].germanium);
+        }
+        ++count;
+    }
+    assert(count==41);
+}
 void completeReference(TechnologyCatalogDialog& dialog,GameState state,bool capture)
 {
     auto* list=dialog.findChild<QTreeWidget*>("technologyCatalogEntries");
@@ -57,6 +80,7 @@ void completeReference(TechnologyCatalogDialog& dialog,GameState state,bool capt
         hulls+=item->data(0,Qt::UserRole).toInt()==0;orbital+=item->data(0,Qt::UserRole).toInt()==1;
         assert(item->flags().testFlag(Qt::ItemIsEnabled) && item->flags().testFlag(Qt::ItemIsSelectable));}
     assert(hulls==41 && orbital==3 && !available->isChecked());
+    hullMineralPrices(list,details);
     auto* nubian=entry(list,0,int(ShipHullType::Nubian));assert(nubian->text(2)=="Locked");
     list->setCurrentItem(nubian);assert(details->toPlainText().contains("Construction 26"));
     assert(details->toPlainText().contains("Cargo") && details->toPlainText().contains("Fitting banks:"));

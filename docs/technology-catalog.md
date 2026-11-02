@@ -14,7 +14,10 @@ combined. Both result list and description use the available height and scroll.
 Close remains outside those panes at smaller sizes.
 
 Hull entries show production/mineral cost, mass, armor, initiative, cargo/fuel,
-required engines, extra support effects and fitting bank sizes/counts. Station
+required engines, extra support effects and fitting bank sizes/counts. Ship hull
+mineral prices use `ship_design_mineral_cost` for a bare hull with no components,
+matching the production calculation for all hulls, including legacy hulls whose
+specification's mineral field is empty. Station
 hulls show their slot capacities and configurable services. Components show
 shared Ship Designer descriptions: costs, mass, ratings, fuel tables, scanner/
 mining/service effects and fitting restrictions as applicable. The shared

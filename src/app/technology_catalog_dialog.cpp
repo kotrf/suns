@@ -49,7 +49,9 @@ QString hullRequirements(const ShipHullSpec& hull)
 }
 QString hullDescription(const ShipHullSpec& hull)
 {
-    QStringList lines{QString("Mass %1 kt • Production %2").arg(hull.mass).arg(hull.buildCost),minerals(hull.baseMineralCost),
+    ShipDesign bareHull;
+    bareHull.hull=hull.type;
+    QStringList lines{QString("Mass %1 kt • Production %2").arg(hull.mass).arg(hull.buildCost),minerals(ship_design_mineral_cost(bareHull)),
         QString("Base armor %1 • Initiative %2").arg(hull.armor).arg(hull.initiative),
         QString("Cargo %1 kt • Fuel %2 mg • Engines %3").arg(hull.baseCargoCapacity).arg(hull.baseFuelCapacity).arg(hull.requiredEngines)};
     if(hull.fuelGenerationPerTurn) lines<<QString("Generates %1 mg fuel/year").arg(hull.fuelGenerationPerTurn);

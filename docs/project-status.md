@@ -1,5 +1,27 @@
 # Project status and development handoff
 
+## Catalog mineral prices: review fix in #262 — 2 November 2026
+
+Review of head `8b6370dacca9240b47b0d7735491ec710de4c4bf` against #259
+found one P2: all seven legacy hulls displayed zero I/B/G because their
+`ShipHullSpec::baseMineralCost` is empty, while production uses the legacy
+prices in the common economic calculation. No published findings in #259.
+
+`hullDescription` now calls `ship_design_mineral_cost` for a bare hull without
+components. Core prices, production, equipment costs, Scrap Fleet distribution
+and save/orders formats are unchanged. The catalog UI regression reads all
+41 displayed hull prices and compares them with the economic calculation;
+seven independent legacy fixtures include Scout 4/1/1 and Heavy Transport
+18/6/6. It fails on the old UI at Scout's ironium assertion, then passes with
+the fix. No price table is duplicated into product UI code.
+
+Full GCC14.2/Qt6.12 Debug build and **105/105 Linux/offscreen CTest passed
+(40.59 s)**; diff check clean. The prior source CI 41451422936 / job
+125297282822 passed 105/105 (92.70 s), Qt6.12.0, checkout SHA/log verified;
+that predates the new regression/fix and is not proof for the new head.
+New head/tree/CI are tracked in GitHub #262. The PR remains based on open
+#259 (`codex/scrap-fleet`); no merge is part of this review fix.
+
 ## Complete technology catalog #261 and space recovery #260 — 2 November 2026
 
 The user explicitly chose the remaining separate full catalog mini-idea. Work
