@@ -1,5 +1,40 @@
 # Project status and development handoff
 
+## Late-campaign selection stalls #265 — 3 November 2026
+
+User reports severe system-selection stalls in the ongoing year 80–90 campaign,
+predating #264. The supplied year-89 save has 288 systems and reproduces the
+problem. Work is on `codex/ui-selection-performance`, based on merged main
+`b1fe4ad`; #263/#264 are merged and #94 is closed.
+
+Pure selection used to increment planningRevision, discard cached logistics/
+movement/ETA projections and run a disposable full TurnProcessor again. A star
+selection now reuses projections and existing scene markers when the selected
+fleet and rendered state revision match. Fleet selection still rebuilds geometry
+without invalidating unchanged physical projections. Actual data/order/load/turn
+boundaries retain invalidation. Related panel readers share a received-player
+projection; explicit control updates refresh it. Command/Designer Save validation
+still reads fresh knowledge. Core rules and save v109/orders v48 are unchanged.
+
+The fleet-planning Qt regression verifies a real queued star selection, retained
+planning projection and marker/highlight, then confirms a real rebuild invalidates
+the projection. The uploaded campaign is kept outside the repository. Validation
+and comparative measurements follow.
+
+Full GCC14.2/Qt6.12 Debug build and **106/106 offscreen CTest passed (38.24 s)**.
+The received-access regression also passed: action/Save checks retain fresh
+knowledge despite shared rendering snapshots. Diff check passed.
+
+With no concurrent compiler/tests, the same fully installed offscreen Qt window
+loads the supplied year-89 save, settles, and selects three stars through the
+normal queued selection path. Baseline main b1fe4ad: **8776 / 8854 / 8512 ms**;
+fixed code: **701 / 707 / 763 ms**, roughly **12× faster**. These are Debug
+measurements on this executor, not a promise of sub-millisecond interaction or
+identical user-machine latency. Idle was quiet in both versions (four initial
+scene notifications, no continuous recomputation). The earlier 18-second figure
+was observed with concurrent compilation; use the controlled comparison above.
+Remote head/source CI/review are tracked separately in GitHub #265's PR.
+
 ## Graphical designer #94: live availability — 2 November 2026
 
 The user selected #94 after the backlog audit. Branch

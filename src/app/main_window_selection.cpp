@@ -6,6 +6,7 @@
 
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QSignalBlocker>
 #include <QGraphicsView>
 #include <QMenu>
 #include <QIcon>
@@ -96,7 +97,22 @@ void MainWindow::queueMapSelectionRebuild()
     mapSelectionRebuildPending_ = true;
     QTimer::singleShot(0, this, [this] {
         mapSelectionRebuildPending_ = false;
-        if (!shuttingDown_) rebuildScene();
+        if (shuttingDown_) return;
+        if (renderedPlanningRevision_ != planningRevision_ || renderedFleetSelection_ != selection_.fleet) {
+            rebuildScene(false);
+            return;
+        }
+        // A star selection changes highlights and panels, not the physical map.
+        // Preserve its items as well as the expensive planning projections.
+        const QSignalBlocker blocker(scene_);
+        for (auto* item : scene_->items()) {
+            if (item->data(1).toInt() == kMapItemStar)
+                item->setSelected(selection_.star && item->data(0).toUInt() == *selection_.star);
+        }
+        refreshMapLabels();
+        updateControls();
+        refreshProductionQueue();
+        emit routeProgramContextChanged();
     });
 }
 

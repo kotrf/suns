@@ -104,7 +104,7 @@ void MainWindow::installMapDisplayModes()
 void MainWindow::applyMapDisplayMode()
 {
     if (!scene_) return;
-    const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto received = receivedPlayerState();
 
     bool changed = false;
     for (auto* item : scene_->items()) {
