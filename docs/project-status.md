@@ -1,5 +1,42 @@
 # Project status and development handoff
 
+## Ship Designer decks #254 — 2 November 2026
+
+The user continued the approved mini-idea order with 3/4. Main `8f1c625` already
+contains merged #253; #252 is closed. Its CI run 41398408781, linux job
+125124681797, passed **100/100 (85.60 s)** with Qt6.12.0; checkout SHA/log
+independently verified. Save v108/orders v47 unchanged.
+
+Branch `codex/designer-hull-layouts`, [#254](https://github.com/kotrf/suns/issues/254),
+adds explicit presentation decks for all 41 hulls. Stable cell IDs, categories,
+equipment masks, bank identities/capacities and archived placements are retained.
+Engines sit aft, forward/flank equipment to the right; each hull's bank anchors
+and family outline replace the former vertical bank list. Expedition Base uses
+radial service decks. A smaller reference portrait/orientation legend and wider
+fitting area leave more room for the deck; large hulls scroll without leaving
+stale grid dimensions after switching back to Scout.
+
+Locked hulls remain visible, dim/italic with lock icons and exact requirements.
+Empty cells are subdued/dashed yet selectable; fitted cells and focus/selection/
+drag feedback remain distinct. Keyboard movement now uses displayed positions.
+In-place refresh keeps buttons alive during drag/drop; core validation remains
+on the unchanged logical hull. No core source or serialized data is changed.
+
+Full GCC14.2/Qt6.12 Debug build and **101/101 Linux/offscreen CTest passed
+(37.12 s)**. The new suite checks every hull's ID/bank coverage, bounded disjoint
+geometry, representative real widgets, large-to-small resizing, locked popup
+state, archived placements, spatial keyboard navigation, delete/refit with
+stable widgets and Save visibility in a 1000×760 window. Existing actual mouse/
+drag/template, core, save/PBEM and knowledge checks remain green. Themed Scout,
+freighter, miner, battleship/Dreadnought/base and locked-popup captures inspected;
+captions refined to avoid double elision, diff check clean.
+
+This slice is ready for review; actual PR/head/CI are tracked in GitHub #254.
+No new merge or remote CI success is claimed. The separate full catalogue
+window is later work; next are station icon/fit access and new actions. Scrap
+Fleet recovery fractions remain undecided. #53/#63 and evacuation stay frozen;
+further AI development remains deferred.
+
 ## UI readability #252 — Research, Hab and selected routes, 2 November 2026
 
 The user continued the agreed mini-idea order after merged #251. Baseline main

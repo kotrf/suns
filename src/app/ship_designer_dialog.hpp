@@ -68,6 +68,7 @@ private:
     QLabel* previewLabel_{};
     QPushButton* saveButton_{};
     std::vector<ShipComponentPlacement> placements_;
+    std::vector<ShipSlotSpec> displaySlots_;
     ShipSlotId selectedSlot_{};
     std::function<QString(const ShipDesignDraft&)> saveValidator_;
 };

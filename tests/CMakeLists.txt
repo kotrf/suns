@@ -348,6 +348,12 @@ if(SUNS_BUILD_APP)
     set_tests_properties(suns_production_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         TIMEOUT 20)
+    add_executable(suns_ship_fitting_layout_tests ship_fitting_layout_tests.cpp)
+    target_link_libraries(suns_ship_fitting_layout_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_ship_fitting_layout_tests COMMAND suns_ship_fitting_layout_tests)
+    set_tests_properties(suns_ship_fitting_layout_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 20)
 endif()
 
 if(SUNS_BUILD_APP)
