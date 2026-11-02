@@ -243,6 +243,7 @@ private:
     void queueShipDesign();
     void queueProduction(ProductionKind kind);
     void openStationDesigner();
+    void openStationDetails();
     void openGateTransit();
     void openReconnaissance();
     [[nodiscard]] std::optional<Fleet> knownFleetTarget(FleetId) const;

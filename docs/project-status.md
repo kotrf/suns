@@ -1,5 +1,48 @@
 # Project status and development handoff
 
+## Station icon and received fitting #256 — 2 November 2026
+
+At the user's instruction, reviewed [#255](https://github.com/kotrf/suns/pull/255)
+was merged as `6ff8f81067eb4ce48f38a4960ee659a740bab8b9`; #254 is closed.
+The merge tree `2b03b967ae7e44f35b243420b9f8e6bbb2984d5f` exactly matches
+reviewed head `2c52da6a117fd0f1513909b2ac62679f9c5e2ea6`. Source CI
+41412632143 / linux job 125168922060 passed **101/101 (86.06 s)** with Qt6.12.0;
+checkout SHA and final log were independently checked. Main run 41437299011
+is separate; its final result must be checked in GitHub rather than inferred.
+
+The next approved mini-idea, **6**, is implemented on
+`codex/station-details-fit`, [#256](https://github.com/kotrf/suns/issues/256):
+
+- System Details contains a hull-specific station icon/button when the
+  selected system has a station in `make_player_view`.
+- Clicking opens a read-only snapshot with the hull at the center, numbered
+  weapon cells above, armor/shield cells left and electronics right. Repeated
+  fitted components, empty cells, gates (including unlimited limits), total
+  armor/shields, damage and fitted services are visible. Small docks start in
+  a shorter dialog; large/narrow fits scroll while Close stays reachable.
+- The snapshot uses received operational equipment, independent of queued
+  refits and current research availability. Hidden refit/loss/construction
+  cannot refresh it before receipt. Delivered absence hides the icon. The
+  existing context signal refreshes selection/load/turn changes, without a
+  timer. Icons are cached. Foreign station intelligence and independently
+  anchored fleet-base controls retain their current separate contracts.
+
+Full GCC14.2 / Qt6.12 Debug build and **102/102 Linux/offscreen CTest passed
+(38.73 s)**. New real-UI coverage opens/closes the dialog through the station
+button, checks all three hull capacities, repeated/interleaved component groups,
+empty cells, gate names/limits, HTML-safe station names, queued-vs-operational
+fits, both services, small-window scrolling and Close accessibility. Host and
+sanitized PBEM views retain the same old fit after hidden refit/destruction;
+new receipt, explicit absence, unreported construction, legacy loss ledger,
+foreign/empty systems, deselection and state reload are covered. Native themed
+images of all three hulls and the System Details button were inspected.
+
+No core rules or save/order format changes: **save v108 / orders v47**. The
+slice is ready for review; actual PR/head/remote CI are tracked in GitHub #256.
+Next are new actions; Scrap Fleet partial mineral recovery remains approved in
+principle, with recovery percentages still unspecified. Full catalog window,
+frozen #53/auto-evacuation and further AI are not included here.
+
 ## Ship Designer decks #254 — 2 November 2026
 
 The user continued the approved mini-idea order with 3/4. Main `8f1c625` already

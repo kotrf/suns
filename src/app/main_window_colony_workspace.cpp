@@ -1,7 +1,9 @@
 #include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
+#include "station_details_dialog.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
+#include "suns/stations.hpp"
 #include "suns/planetary_recovery.hpp"
 
 #include <QDialog>
@@ -17,6 +19,7 @@
 #include <QScrollArea>
 #include <QTimer>
 #include <QTreeWidget>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <array>
@@ -135,6 +138,17 @@ void MainWindow::installColonyWorkspace()
     }
     detailsDock->setWidget(overviewDetails);
     addDockWidget(Qt::LeftDockWidgetArea, detailsDock);
+    if (auto* group = detailsDock->findChild<QGroupBox*>("planetGroup")) {
+        auto* station = new QToolButton(group);
+        station->setObjectName("systemStationButton");
+        station->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        station->setIconSize(QSize(32, 32));
+        station->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        station->setAccessibleName("Orbital station details");
+        station->hide();
+        connect(station, &QToolButton::clicked, this, &MainWindow::openStationDetails);
+        if (auto* column = qobject_cast<QVBoxLayout*>(group->layout())) column->insertWidget(1, station);
+    }
     auto* statusPanel = new QWidget(overview);
     statusPanel->setObjectName("colonyStatusPanel");
     statusPanel->setMinimumWidth(300);
@@ -257,6 +271,16 @@ void MainWindow::refreshColonyWorkspace()
     const auto planned = projected_cargo_order_state(received, pendingOrders_);
     const auto* star = selectedStar();
     const auto* observed = star ? find_planet_at_star(received, star->id) : nullptr;
+    if (auto* button = findChild<QToolButton*>("systemStationButton")) {
+        const auto* station = observed ? find_orbital_station_at_planet(received, observed->id) : nullptr;
+        button->setVisible(station != nullptr);
+        if (station) {
+            button->setIcon(stationIcon(station->hull));
+            button->setText(QString::fromUtf8(station_hull_spec(station->hull).name) + "…");
+            button->setToolTip(QString("%1\nOpen received station information and fitting")
+                .arg(QString::fromStdString(station->name)));
+        }
+    }
     const auto* planet = observed && observed->owner == pendingOrders_.player
         ? find_planet(planned, observed->id) : observed;
     const bool own = star && planet && planet->owner == pendingOrders_.player
