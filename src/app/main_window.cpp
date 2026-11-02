@@ -299,6 +299,35 @@ GameState receivedFleetPlanningState(const GameState& state, PlayerId player)
     return received;
 }
 
+bool affectsMovementProjection(const Order& order)
+{
+    return std::holds_alternative<SetFleetColonistsOrder>(order)
+        || std::holds_alternative<SetFleetMineralCargoOrder>(order)
+        || std::holds_alternative<TransferCargoOrder>(order)
+        || std::holds_alternative<TransferFleetFuelOrder>(order)
+        || std::holds_alternative<RefuelFleetOrder>(order)
+        || std::holds_alternative<MergeFleetsOrder>(order)
+        || std::holds_alternative<SplitFleetOrder>(order)
+        || std::holds_alternative<RenameFleetOrder>(order);
+}
+
+bool panelOnlyOrder(const Order& order)
+{
+    // Immediate fleet projection ignores these orders. Annual ETA forecasts
+    // still depend on them, so the general planning revision must advance.
+    return std::holds_alternative<QueueProductionOrder>(order)
+        || std::holds_alternative<QueueProductionBatchOrder>(order)
+        || std::holds_alternative<QueueShipDesignOrder>(order)
+        || std::holds_alternative<QueueStationOrder>(order)
+        || std::holds_alternative<ReorderProductionQueueOrder>(order)
+        || std::holds_alternative<CancelProductionOrder>(order)
+        || std::holds_alternative<SetProductionTemplateOrder>(order)
+        || std::holds_alternative<ApplyProductionTemplateOrder>(order)
+        || std::holds_alternative<SetColonyResearchOrder>(order)
+        || std::holds_alternative<SetResearchPlanOrder>(order)
+        || std::holds_alternative<SetResearchAllocationOrder>(order);
+}
+
 GameState movementPhasePreviewState(
     const GameState& state,
     const PlayerOrders& pending,
@@ -330,14 +359,7 @@ GameState movementPhasePreviewState(
 
     PlayerOrders logistics{pending.player, {}};
     for (const auto& order : pending.orders) {
-        if (std::holds_alternative<SetFleetColonistsOrder>(order)
-            || std::holds_alternative<SetFleetMineralCargoOrder>(order)
-            || std::holds_alternative<TransferCargoOrder>(order)
-            || std::holds_alternative<TransferFleetFuelOrder>(order)
-            || std::holds_alternative<RefuelFleetOrder>(order)
-            || std::holds_alternative<MergeFleetsOrder>(order)
-            || std::holds_alternative<SplitFleetOrder>(order)
-            || std::holds_alternative<RenameFleetOrder>(order)) {
+        if (affectsMovementProjection(order)) {
             logistics.orders.push_back(order);
         }
     }
@@ -440,6 +462,7 @@ QString componentSummary(const ShipDesign* design)
 
 MainWindow::~MainWindow()
 {
+    stopRouteForecastWorkers();
     shuttingDown_ = true;
     // Qt destroys child widgets after C++ members. Scene teardown must not
     // refresh panels that read the already destroyed planning/game state.
@@ -586,15 +609,15 @@ MainWindow::MainWindow(QWidget* parent)
         showSensorRanges_ = checked;
         rebuildScene();
     });
-    connect(warpSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
+    connect(warpSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(false); });
     connect(colonistLoadSpin_, &QSpinBox::valueChanged, this, [this](int) {
         // Dockside cargo changes are planning-time actions: the disposable
         // movement preview makes them effective immediately in this year's UI
         // and the same order is resolved before movement when End Turn is used.
         queueColonists();
     });
-    connect(arrivalReserveSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(); });
-    connect(shipDesignCombo_, &QComboBox::currentIndexChanged, this, [this](int) { updateControls(); });
+    connect(arrivalReserveSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(false); });
+    connect(shipDesignCombo_, &QComboBox::currentIndexChanged, this, [this](int) { updateControls(false); });
     connect(newGalaxyButton_, &QPushButton::clicked, this, [this] { newGalaxy(); });
     connect(fleetMoveButton_, &QPushButton::clicked, this, [this] { queueFleetMove(); });
     connect(fleetLoadAllButton_, &QPushButton::clicked, this, [this] { queueFleetLoadAll(); });
@@ -683,6 +706,7 @@ const GameState& MainWindow::movementPlanningPreview() const
     // it for edits, telemetry, loads and new games (including reused turn IDs).
     if (!movementPreview_ || movementPreviewRevision_ != planningRevision_
         || movementPreviewPlayer_ != pendingOrders_.player || movementPreview_->turn != state_.turn + 1) {
+        ++movementPreviewBuildCount_;
         movementPreview_ = movementPhasePreviewState(state_, pendingOrders_, processor_);
         movementPreviewRevision_ = planningRevision_;
         movementPreviewPlayer_ = pendingOrders_.player;
@@ -1044,16 +1068,16 @@ void MainWindow::rebuildScene(bool planningStateChanged)
     refreshMapLabels();
     renderedPlanningRevision_ = planningRevision_;
     renderedFleetSelection_ = selection_.fleet;
-    updateControls();
+    updateControls(false);
     refreshProductionQueue();
     emit routeProgramContextChanged();
 }
 
-void MainWindow::updateControls()
+void MainWindow::updateControls(bool refreshReceivedState)
 {
     // Explicit control updates are also used after received own-state changes.
     // Share the fresh projection with the subsequent deferred panel readers.
-    receivedPlayerState_.reset();
+    if (refreshReceivedState) receivedPlayerState_.reset();
     refreshCargoTransferControls();
     const auto* star = selectedStar();
     const auto received = receivedPlayerState();
@@ -1487,15 +1511,27 @@ void MainWindow::updateControls()
         ? QString("End Turn %1 — %2 computer empires").arg(qulonglong(state_.turn)).arg(qulonglong(computers))
         : QString("End Turn %1").arg(qulonglong(state_.turn)));
     endTurnButton_->setToolTip(readiness.join("\n"));
-    refreshResearchPanel();
+    if (researchDialog_ && researchDialog_->isVisible() && !researchDialog_->isMinimized()) refreshResearchPanel();
     emit controlsChanged();
 }
 
 void MainWindow::appendPendingOrder(Order order, const QString& description)
 {
+    const bool panelsOnly = panelOnlyOrder(order);
+    const bool keepMovement = !affectsMovementProjection(order)
+        && movementPreview_ && movementPreviewRevision_ == planningRevision_;
     pendingOrders_.orders.push_back(std::move(order));
     pendingDescriptions_.push_back(description);
-    rebuildScene();
+    if (keepMovement) movementPreviewRevision_ = planningRevision_ + 1;
+    if (panelsOnly) {
+        const auto previous = planningRevision_++;
+        if (fleetPlanningRevision_ == previous) fleetPlanningRevision_ = planningRevision_;
+        if (receivedPlayerRevision_ == previous) receivedPlayerRevision_ = planningRevision_;
+        if (renderedPlanningRevision_ == previous) renderedPlanningRevision_ = planningRevision_;
+        updateControls(false);
+        refreshProductionQueue();
+        emit routeProgramContextChanged();
+    } else rebuildScene();
     statusBar()->showMessage(description);
 }
 
@@ -1510,6 +1546,8 @@ void MainWindow::replacePendingFleetMove(
         if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]); move && move->fleet == fleet) {
             pendingOrders_.orders[index] = MoveFleetOrder{fleet, destination, warp, arrivalAction};
             pendingDescriptions_[static_cast<int>(index)] = description;
+            if (movementPreview_ && movementPreviewRevision_ == planningRevision_)
+                movementPreviewRevision_ = planningRevision_ + 1;
             rebuildScene();
             statusBar()->showMessage(description);
             return;
@@ -1818,9 +1856,11 @@ void MainWindow::endTurn()
             statusBar()->showMessage("Waiting for orders from every remote human. An empty submission is a pass.", 6000);
             return;
         }
+        stopRouteForecastWorkers();
         result = resolve_controlled_campaign_turn(state_, std::move(submissions));
     } catch (const std::exception& error) {
         statusBar()->showMessage(QString("Cannot resolve turn: %1").arg(error.what()), 7000);
+        emit routeProgramContextChanged();
         return;
     }
     inbox_.clear();
@@ -1865,6 +1905,7 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
         const auto setups = empireSetups_.empty()
             ? std::vector<EmpireSetup>{{"Terrans", RacePreset::Terran}} : empireSetups_;
         auto generated = generate_campaign(requested, setups);
+        stopRouteForecastWorkers();
         sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
         pendingOrders_ = {1, {}};
         inbox_.clear();

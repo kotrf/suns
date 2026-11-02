@@ -252,6 +252,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
         return false;
     }
 
+    stopRouteForecastWorkers();
     if (shipDesigner_) shipDesigner_->close();
     sessionMode_ = loaded.mode;
     empireSetups_.clear();

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <utility>
 #include <type_traits>
 #include <tuple>
@@ -27,6 +28,15 @@ struct CommunicationField {
     double radius{};
     bool connected{};
 };
+
+struct CommunicationQueryFrame {
+    const GameState* state{};
+    bool enabled{};
+    CommunicationQueryFrame* previous{};
+    std::map<std::pair<PlayerId, std::uint64_t>, std::vector<CommunicationField>> graphs;
+};
+
+thread_local CommunicationQueryFrame* communicationQueries{};
 
 bool has_friendly_colony(const GameState& state, PlayerId owner, Position position)
 {
@@ -55,7 +65,7 @@ const Fleet* report_source(const GameState& state, PlayerId owner, Position posi
     return best;
 }
 
-std::vector<CommunicationField> communication_fields(
+std::vector<CommunicationField> build_communication_fields(
     const GameState& state,
     PlayerId player, std::uint64_t atTurn)
 {
@@ -90,6 +100,20 @@ std::vector<CommunicationField> communication_fields(
         }
     }
 
+    return fields;
+}
+
+std::vector<CommunicationField> communication_fields(
+    const GameState& state, PlayerId player, std::uint64_t atTurn)
+{
+    auto* frame = communicationQueries;
+    if (!frame || !frame->enabled || frame->state != &state)
+        return build_communication_fields(state, player, atTurn);
+    const auto key = std::pair{player, atTurn};
+    const auto found = frame->graphs.find(key);
+    if (found != frame->graphs.end()) return found->second;
+    auto fields = build_communication_fields(state, player, atTurn);
+    frame->graphs.emplace(key, fields);
     return fields;
 }
 
@@ -437,6 +461,27 @@ Position project_from_telemetry(const FleetTelemetry& telemetry, std::uint64_t a
 
 } // namespace
 
+struct CommunicationQueryScope::Impl {
+    CommunicationQueryFrame frame;
+};
+
+CommunicationQueryScope::CommunicationQueryScope(const GameState& state, bool cacheQueries)
+    : impl_(std::make_unique<Impl>())
+{
+    auto& frame = impl_->frame;
+    frame.state = &state;
+    frame.enabled = cacheQueries && (!communicationQueries || communicationQueries->enabled);
+    frame.previous = communicationQueries;
+    communicationQueries = &frame;
+}
+
+CommunicationQueryScope::~CommunicationQueryScope()
+{
+    auto** link = &communicationQueries;
+    while (*link && *link != &impl_->frame) link = &(*link)->previous;
+    if (*link) *link = impl_->frame.previous;
+}
+
 bool fleet_route_tasks_valid(const FleetRouteProgram& program)
 {
     return route_tasks_valid(program);
@@ -519,6 +564,18 @@ CommunicationRoute communication_route(const GameState& state, PlayerId player, 
 
 std::uint32_t communication_delay_turns(const GameState& state, PlayerId player, Position position, std::uint64_t atTurn)
 {
+    // A built, inhabited capital radar is itself a connected mesh root. A
+    // delay-only query inside that field does not need the remaining graph;
+    // interference still applies at the actual queried receiver and year.
+    // Keep communication_route unchanged: packet emission needs its exact
+    // transmitter/receiver identity, including deterministic tie choices.
+    for (const auto& planet : state.planets) {
+        if (planet.owner != player || !planet.homeworld || total_colony_population(planet) == 0
+            || planet.radar == PlanetaryRadarLevel::None) continue;
+        const auto* star = find_star(state, planet.star);
+        if (star && distance_between(position, star->position) <= planetary_radar_range(planet.radar))
+            return communication_jamming_delay(state, player, position, atTurn ? atTurn : state.turn);
+    }
     const auto route=communication_route(state,player,position,atTurn);
     return route.propagationTurns+route.receiverDelay;
 }

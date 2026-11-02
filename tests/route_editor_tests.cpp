@@ -5,6 +5,8 @@
 #include <QAction>
 #include <QApplication>
 #include <QBrush>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsView>
@@ -232,6 +234,22 @@ struct MainWindowTestAccess {
 };
 
 } // namespace suns
+
+namespace {
+void awaitForecasts(suns::MainWindow& window)
+{
+    QElapsedTimer deadline;
+    deadline.start();
+    // The dock first coalesces context updates, then delivers exact forecast
+    // results on the GUI thread. Keep the real asynchronous UI path active.
+    do {
+        QEventLoop loop;
+        QTimer::singleShot(5, &loop, &QEventLoop::quit);
+        loop.exec();
+    } while (window.routeForecastsPending() && deadline.elapsed() < 20000);
+    assert(!window.routeForecastsPending());
+}
+}
 
 int main(int argc, char* argv[])
 {
@@ -540,6 +558,7 @@ int main(int argc, char* argv[])
     // Selecting a row edits that exact leg immediately, including the real
     // order, ETA and table. It must not change the new-waypoint draft.
     warp->setValue(8);
+    awaitForecasts(window);
     assert(routeTree->topLevelItem(1)->text(2) == "W8");
     assert(routeTree->topLevelItem(1)->text(3) == "2");
     auto editedRoute = std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front());
@@ -547,6 +566,7 @@ int main(int argc, char* argv[])
     assert(editedRoute.queuedWaypoints.front().arrivalAction.kind == suns::FleetArrivalActionKind::UnloadAll);
     routeTree->setCurrentItem(routeTree->topLevelItem(0));
     warp->setValue(4);
+    awaitForecasts(window);
     assert(routeTree->topLevelItem(0)->text(2) == "W4");
     assert(routeTree->topLevelItem(0)->text(3) == "2");
     assert(routeTree->topLevelItem(1)->text(3) == "3");
@@ -577,6 +597,7 @@ int main(int argc, char* argv[])
     assert(suns::fleet_fuel_consumption_for_distance(suns::MainWindowTestAccess::state(window), slowFleet, 49) < 9);
     assert(window.appendSelectedStarWaypoint(8, {}));
     assert(window.appendSelectedStarWaypoint(8, {}));
+    awaitForecasts(window);
     rows = window.selectedFleetRouteProgramRows();
     assert(rows.size() == 3 && !rows[0].fuelShortage && rows[1].fuelShortage && !rows[2].fuelShortage);
     assert(rows[0].fuelUsed != "—" && rows[1].fuelUsed.startsWith("≥"));
@@ -587,6 +608,7 @@ int main(int argc, char* argv[])
     // Changing speed recalculates the fuel warning and removes old coloring.
     routeTree->setCurrentItem(routeTree->topLevelItem(1));
     warp->setValue(1);
+    awaitForecasts(window);
     rows = window.selectedFleetRouteProgramRows();
     assert(!rows[1].fuelShortage);
     assert(!routeTree->topLevelItem(1)->data(0, Qt::UserRole + 1).toBool());
@@ -606,6 +628,7 @@ int main(int argc, char* argv[])
 
     suns::MainWindowTestAccess::installFuelFixture(window, 2);
     warp->setValue(8);
+    awaitForecasts(window);
     assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
     assert(warp->property("fuelLimited").toBool());
     assert(warp->toolTip().contains("Fuel shortage"));
@@ -615,6 +638,7 @@ int main(int argc, char* argv[])
     assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{100, 30}).isEmpty());
     assert(window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{50, 0.01}).isEmpty());
     warp->setValue(1);
+    awaitForecasts(window);
     assert(window.selectedFleetWaypointFuelWarning(1, 0, {}).isEmpty());
     assert(!warp->property("fuelLimited").toBool());
     suns::MainWindowTestAccess::installFuelFixture(window, 1);

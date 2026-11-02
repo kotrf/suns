@@ -153,7 +153,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
 {
     ColonyProductionResolution result;
     result.hasShipyard = hasShipyard;
-    result.engineeringSupport=engineeringSupport.value_or(engineering_station_available(state,planet));
+    result.engineeringSupport=engineeringSupport ? *engineeringSupport : engineering_station_available(state,planet);
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
         && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
         && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);

@@ -90,9 +90,10 @@ public:
         updateAppearance();
     }
 
-    void setFuelWarning(const QString& warning)
+    void setFuelWarning(const QString& warning, bool pending = false)
     {
         fuelWarning_ = warning;
+        fuelPending_ = pending;
         updateAppearance();
     }
 
@@ -130,7 +131,7 @@ private:
     void updateAppearance()
     {
         const bool unsafe = damageRate_ > 1e-8;
-        const bool fuelLimited = !fuelWarning_.isEmpty();
+        const bool fuelLimited = !fuelPending_ && !fuelWarning_.isEmpty() && !fuelWarning_.startsWith("Forecast unavailable");
         if (property("unsafe").toBool() != unsafe || property("fuelLimited").toBool() != fuelLimited) {
             setProperty("unsafe", unsafe);
             setProperty("fuelLimited", fuelLimited);
@@ -141,17 +142,18 @@ private:
         setFormat((unsafe
             ? QString("W%1 • +%2% damage/turn").arg(value()).arg(damageText)
             : QString("W%1 • base W%2").arg(value()).arg(safeWarp_))
-            + (fuelLimited ? " • fuel!" : ""));
+            + (fuelPending_ ? " • calculating…" : fuelLimited ? " • fuel!" : fuelWarning_.startsWith("Forecast unavailable") ? " • forecast unavailable" : ""));
         setToolTip((unsafe
             ? QString("Hull risk at the reported position: base rating W%1, selected W%2. Check the route forecast for clouds along the path.")
                   .arg(safeWarp_).arg(value())
             : QString("Selected W%1; base rating W%2. No local risk in received profiles; check the complete route forecast.").arg(value()).arg(safeWarp_))
-            + (fuelLimited ? "\n" + fuelWarning_ : "\nFuel preview covers up to 96 years; no warning does not guarantee arrival."));
+            + ((fuelPending_ || !fuelWarning_.isEmpty()) ? "\n" + fuelWarning_ : "\nFuel preview covers up to 96 years; no warning does not guarantee arrival."));
     }
 
     int safeWarp_{1};
     double damageRate_{};
     QString fuelWarning_;
+    bool fuelPending_{};
 };
 
 void clearRouteOverlay(QGraphicsScene* scene)
@@ -323,7 +325,11 @@ void attachRouteProgramDock(MainWindow& window)
         QMessageBox dialog(&window);
         dialog.setWindowTitle("Route forecast");
         dialog.setTextFormat(Qt::RichText);
-        dialog.setText(window.selectedFleetRouteProgramForecast());
+        dialog.setObjectName("routeForecastDialog");
+        dialog.setText(window.selectedFleetRouteProgramForecast(true));
+        QObject::connect(&window,&MainWindow::routeForecastReady,&dialog,[&window,&dialog] {
+            dialog.setText(window.selectedFleetRouteProgramForecast(true));
+        });
         dialog.exec();
     });
     layout->addWidget(routeGroup);
@@ -789,25 +795,30 @@ void attachRouteProgramDock(MainWindow& window)
 
     const auto refreshFuelWarning = [=, &window] {
         if (editor->editingLeg) {
+            window.cancelWaypointFuelForecast();
             const auto row = routeTree->currentIndex().row();
-            const auto rows = window.selectedFleetRouteProgramRows();
-            warpSelector->setFuelWarning(row >= 0 && static_cast<std::size_t>(row) < rows.size()
-                && rows[static_cast<std::size_t>(row)].fuelShortage
-                ? rows[static_cast<std::size_t>(row)].fuelTooltip : QString{});
+            const auto rows = window.selectedFleetRouteProgramRows(true);
+            const auto valid=row >= 0 && static_cast<std::size_t>(row) < rows.size();
+            const auto pending=valid && rows[static_cast<std::size_t>(row)].forecastPending;
+            warpSelector->setFuelWarning(valid && (pending || rows[static_cast<std::size_t>(row)].fuelShortage)
+                ? rows[static_cast<std::size_t>(row)].fuelTooltip : QString{},pending);
             return;
         }
         const auto targetType = targetTypeCombo->currentData().toInt();
         const bool fleetTarget = targetType == 1 || targetType == 2;
         if (window.selectedFleetForRouteProgram() == 0 || destinationCombo->currentIndex() < 0
             || (fleetTarget && targetFleetCombo->currentIndex() < 0)) {
+            window.cancelWaypointFuelForecast();
             warpSelector->setFuelWarning({});
             return;
         }
-        warpSelector->setFuelWarning(window.selectedFleetWaypointFuelWarning(
+        bool pending=false;
+        const auto warning=window.selectedFleetWaypointFuelWarning(
             static_cast<std::uint8_t>(warpSelector->value()),
             fleetTarget ? static_cast<FleetId>(targetFleetCombo->currentData().toUInt()) : 0,
             actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan),
-            targetType == 3 ? *coordinateTarget : std::nullopt));
+            targetType == 3 ? *coordinateTarget : std::nullopt,true,&pending);
+        warpSelector->setFuelWarning(warning,pending);
     };
     QObject::connect(warpSelector, &QProgressBar::valueChanged, panel, refreshFuelWarning);
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
@@ -817,6 +828,7 @@ void attachRouteProgramDock(MainWindow& window)
     QObject::connect(destinationCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
     QObject::connect(targetFleetCombo, &QComboBox::currentIndexChanged, panel, refreshFuelWarning);
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, refreshFuelWarning);
+    QObject::connect(&window, &MainWindow::routeForecastReady, panel, refreshFuelWarning);
     refreshFuelWarning();
 
     QObject::connect(pickTargetButton, &QPushButton::clicked, panel,
@@ -894,7 +906,7 @@ void attachRouteProgramDock(MainWindow& window)
     };
     const auto syncRouteSelection = [=, &window] {
         const auto row = selectedRouteIndex();
-        const auto rows = window.selectedFleetRouteProgramRows();
+        const auto rows = window.selectedFleetRouteProgramRows(true);
         const QSignalBlocker warpBlocker(warpSelector);
         if (row && *row < rows.size()) {
             if (!editor->editingLeg) {
@@ -958,7 +970,7 @@ void attachRouteProgramDock(MainWindow& window)
     });
     const auto refreshRouteTable = [=, &window, lastRouteSignature = std::make_shared<QString>()] {
         const auto selectedFleet = window.selectedFleetForRouteProgram();
-        const auto rows = window.selectedFleetRouteProgramRows();
+        const auto rows = window.selectedFleetRouteProgramRows(true);
         QString signature = QString::number(selectedFleet) + ':';
         for (const auto& row : rows) {
             signature += QString("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1f%6\x1f%7\x1f%8\x1f%9\x1e")
@@ -1006,6 +1018,7 @@ void attachRouteProgramDock(MainWindow& window)
             : QString("On arrival: %1").arg(selected.front()->data(0, Qt::UserRole).toString()));
     };
     QObject::connect(&window, &MainWindow::routeProgramContextChanged, panel, refreshRouteTable);
+    QObject::connect(&window, &MainWindow::routeForecastReady, panel, refreshRouteTable);
     QObject::connect(warpSelector, &QProgressBar::valueChanged, panel,
         [=, &window](int warp) {
             if (!editor->editingLeg) return;

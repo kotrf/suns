@@ -29,6 +29,8 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
+#include <memory>
 #include <tuple>
 
 namespace suns {
@@ -296,7 +298,9 @@ void MainWindow::openComputerDecisions()
         return;
     }
     if (auto* existing = findChild<QDialog*>("computerDecisionsDialog")) {
-        existing->show(); existing->raise(); existing->activateWindow(); return;
+        existing->show(); existing->raise(); existing->activateWindow();
+        if (auto* refresh = existing->findChild<QTimer*>("computerDecisionsRefreshTimer")) refresh->start(0);
+        return;
     }
     auto* dialog = new QDialog(this, Qt::Window);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -336,7 +340,8 @@ void MainWindow::openComputerDecisions()
     copyReport->setToolTip("Copy the visible full decisions and ongoing fleet goals as plain text.");
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
     layout->addWidget(buttons);
-    auto refresh = [this, dialog, table, goals, filter,
+    auto forceRefresh = std::make_shared<bool>(true);
+    auto refresh = std::make_shared<std::function<void()>>([this, dialog, table, goals, filter, forceRefresh,
         previous = std::vector<std::tuple<PlayerId, std::string, ComputerState>>{},
         previousFilter = -1]() mutable {
         if (shuttingDown_ || !dialog->isVisible()) return;
@@ -357,7 +362,8 @@ void MainWindow::openComputerDecisions()
             filter->setCurrentIndex(index >= 0 ? index : 0);
         }
         const auto selectedId = filter->currentData().toInt();
-        if (current == previous && selectedId == previousFilter) return;
+        if (!*forceRefresh && current == previous && selectedId == previousFilter) return;
+        *forceRefresh = false;
         previous = current;
         previousFilter = selectedId;
         table->clear();
@@ -391,12 +397,24 @@ void MainWindow::openComputerDecisions()
                     QString::number(qulonglong(goal.issuedTurn))});
             }
         }
-    };
+    });
     auto* timer = new QTimer(dialog);
-    timer->setInterval(500);
-    connect(timer, &QTimer::timeout, dialog, refresh);
-    connect(filter, &QComboBox::currentIndexChanged, dialog, refresh);
-    connect(copyReport, &QPushButton::clicked, dialog, [this, filter, table, goals] {
+    timer->setObjectName("computerDecisionsRefreshTimer");
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, dialog, [refresh] { (*refresh)(); });
+    const auto schedule = [this,dialog,timer] {
+        if (sessionMode_ == SessionMode::PlayerTurn) { dialog->close(); return; }
+        if (dialog->isVisible() && !timer->isActive()) timer->start(0);
+    };
+    connect(this, &MainWindow::controlsChanged, dialog, schedule);
+    connect(this, &MainWindow::routeProgramContextChanged, dialog, [schedule,forceRefresh](bool reset) {
+        if (reset) *forceRefresh = true;
+        schedule();
+    });
+    connect(filter, &QComboBox::currentIndexChanged, dialog, [refresh] { (*refresh)(); });
+    connect(copyReport, &QPushButton::clicked, dialog, [this, filter, table, goals, refresh] {
+        (*refresh)();
+        if (sessionMode_ == SessionMode::PlayerTurn) return;
         QStringList report;
         report << "Suns! computer report"
                << QString("Campaign turn: %1").arg(qulonglong(state_.turn))
@@ -420,8 +438,7 @@ void MainWindow::openComputerDecisions()
         QApplication::clipboard()->setText(report.join('\n') + '\n');
         statusBar()->showMessage("Computer report copied to clipboard.", 4000);
     });
-    timer->start();
-    dialog->show(); refresh();
+    dialog->show(); (*refresh)();
 }
 
 } // namespace suns

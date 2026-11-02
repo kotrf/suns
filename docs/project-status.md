@@ -1,5 +1,50 @@
 # Project status and development handoff
 
+## Order-edit responsiveness #268 — 3 November 2026
+
+The user confirms system selection improved after merged #266, but adding a
+Factory still takes seconds, and requests broad UI optimization. Current work
+is `codex/ui-order-performance`, based on verified main
+`79d22c2ee18d140dcd404816e975c6a13990c483`. #265 is closed; main CI
+41538166676 completed successfully for that exact SHA. Documentation-only #267
+remains open and restores the older performance history; this task leaves its
+`docs/ui-performance.md` file untouched.
+
+Production/research-only edits now retain immediate physical projections and
+map items while invalidating annual route estimates correctly. Automatic route
+rows, candidate fuel warnings and the Forecast dialog use bounded cancellable
+QtCore workers with owned received snapshots, complete request identities and
+GUI-only publication. Superseded jobs, cache-hit reversions and invalid editor
+candidates cancel unnecessary work; stop/load/new world/turn/close join workers.
+Synchronous forecast APIs keep their exact existing simulation. Hidden Research
+is lazy; Intel/Computer tools refresh on coalesced events. Exact delay shortcuts,
+immutable snapshot-scoped communication graphs and lazy optional fallbacks
+remove additional repeated work. No gameplay or save v109/orders v48 change.
+
+Full GCC14.2/Qt6.12 Debug application/tests build succeeded;
+**111/111 Linux/offscreen CTest passed (37.95 s)**. Tests cover cache dependencies,
+fresh received knowledge, graph/export equivalence across scopes/threads, tool
+visibility/events, exact async/sync route parity, rapid edits, delayed commands,
+cache-hit cancellation and same-ID load/stop/close/destruction. Existing exact
+route editor ETA/fuel/action/color assertions now wait for async completion.
+Diff check passed. Uploaded saves/profiling files remain outside tracked files.
+
+Controlled real Factory Add clicks with the original active-route fleet on the
+user's year-89/288-system save: **8477 / 8216 / 8470 → 214 / 190 / 198 ms**, about
+40× lower foreground latency. Paired broader probe: original-fleet Factory
+**8046 → 219 ms**, fleet selection **1813 → 453 ms**, research allocation
+**808 → 207 ms**, load **8566 → 685 ms**. Necessary ETA work still takes about
+6.1 seconds in the background, with 21.4-ms longest heartbeat gap after Factory;
+idle CPU **76.8 → 7.2 ms / 2.1 s** after all forecasts settle. Save/readback
+passed without advancing or overwriting the original. Debug author measurements
+on this executor; no universal timing guarantee. [Mechanism, complete table and
+diagnostic](ui-order-performance.md). Source PR/CI tracked in
+[#268](https://github.com/kotrf/suns/issues/268); code awaits review/merge.
+
+#53/#63 and auto-evacuation stay frozen, AI extensions postponed. The active
+priority is user verification of responsiveness; no new gameplay slice selected.
+Older pending checkpoint sections below describe their original point in time.
+
 ## Late-campaign selection stalls #265 — 3 November 2026
 
 User reports severe system-selection stalls in the ongoing year 80–90 campaign,

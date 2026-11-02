@@ -25,6 +25,11 @@
 #include <QVBoxLayout>
 #include <QMessageBox>
 #include <QStatusBar>
+#include <QThread>
+#include <QTimer>
+#include <atomic>
+#include <exception>
+#include <memory>
 
 #include <algorithm>
 #include <cmath>
@@ -224,28 +229,18 @@ std::vector<FleetWaypoint> routeLegs(const MoveFleetOrder& route)
     return legs;
 }
 
-QString routeForecast(
-    const GameState& state,
-    const PlayerOrders& pending,
-    const TurnProcessor& processor,
-    FleetId fleetId,
-    const MoveFleetOrder& route,
-    std::vector<RouteProgramLegForecast>* legForecasts = nullptr,
-    QString* fuelWarning = nullptr)
-{
-    constexpr std::uint32_t kForecastHorizon = 96;
-    const auto legs = routeLegs(route);
-    if (legs.empty()) return {};
-    if (legForecasts) legForecasts->assign(legs.size(), {});
-    if (fuelWarning) fuelWarning->clear();
-    if (std::any_of(legs.begin(), legs.end(), [](const auto& leg) {
-        return leg.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole;
-    })) return "WH approach uses last observed coordinates. Local sensors can reacquire a drifting mouth. "
-        "Entry, lifetime, exit and survival cannot be forecast with certainty.";
+struct RouteForecastWorld {
+    GameState display;
+    GameState simulation;
+};
 
+RouteForecastWorld prepareRouteForecastWorld(const GameState& state, PlayerId player)
+{
+    const PlayerOrders pending{player,{}};
     // Every route uses received fittings, queues and stocks. Physical hidden
     // station losses must not invalidate a previously delivered programme.
     GameState simulated = make_player_view(state,pending.player).state;
+    GameState display = simulated;
     // Chart-only systems have no received physical planet to service a route.
     // Re-observing every chart entry for 96 simulated years adds no navigation
     // evidence; keep all received planets and their stellar environments.
@@ -274,6 +269,36 @@ QString routeForecast(
             f.pendingCommands=original->pendingCommands;
     }
     for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining && f.task != FleetTask::DeployOutpost) f.task = FleetTask::None;
+    return {std::move(display),std::move(simulated)};
+}
+
+QString routeForecast(
+    const GameState& state,
+    const PlayerOrders& pending,
+    const TurnProcessor& processor,
+    FleetId fleetId,
+    const MoveFleetOrder& route,
+    std::vector<RouteProgramLegForecast>* legForecasts = nullptr,
+    QString* fuelWarning = nullptr,
+    const RouteForecastWorld* prepared = nullptr,
+    const std::atomic_bool* cancelled = nullptr)
+{
+    constexpr std::uint32_t kForecastHorizon = 96;
+    const auto legs = routeLegs(route);
+    if (legs.empty()) return {};
+    if (legForecasts) legForecasts->assign(legs.size(), {});
+    if (fuelWarning) fuelWarning->clear();
+    if (std::any_of(legs.begin(), legs.end(), [](const auto& leg) {
+        return leg.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole;
+    })) return "WH approach uses last observed coordinates. Local sensors can reacquire a drifting mouth. "
+        "Entry, lifetime, exit and survival cannot be forecast with certainty.";
+
+    if (cancelled && cancelled->load()) return {};
+    std::optional<RouteForecastWorld> localWorld;
+    if (!prepared) localWorld = prepareRouteForecastWorld(state,pending.player);
+    const auto& world = prepared ? *prepared : *localWorld;
+    GameState simulated = world.simulation;
+    const auto& display = world.display;
     QStringList lines;
     lines << "<br><b>Forecast if no further orders are issued:</b>";
     lines << "<i>Navigation only: hostile encounters can interrupt this route; combat is not forecast.</i>";
@@ -286,6 +311,7 @@ QString routeForecast(
     bool fuelShortageSeen = false;
 
     for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
+        if (cancelled && cancelled->load()) return {};
         std::optional<GameState> splitPreview;
         const auto* beforeFleet = findFleet(simulated, fleetId);
         if (!beforeFleet && firstTurn) {
@@ -309,6 +335,7 @@ QString routeForecast(
         firstTurn = false;
 
         auto result = processor.process_with_events(simulated, submissions);
+        if (cancelled && cancelled->load()) return {};
         auto next = std::move(result.state);
         const auto* after = findFleet(next, fleetId);
         const auto& leg = legs[legIndex];
@@ -331,7 +358,7 @@ QString routeForecast(
                         "This preview includes earlier legs, cargo changes, fuel generation and orbital refuelling. "
                         "Reduce Warp or add a refuelling stop.")
                         .arg(step).arg(static_cast<qulonglong>(legIndex + 1))
-                        .arg(waypointName(state, leg.destination, leg.targetFleet));
+                        .arg(waypointName(display, leg.destination, leg.targetFleet));
                 }
             }
         }
@@ -352,7 +379,7 @@ QString routeForecast(
                 && findFleet(next, leg.targetFleet)) {
                 lines << QString("%1. %2 — intercept T+%3, W%4 — <b>rendezvous completed; fleets merged</b>")
                              .arg(static_cast<qulonglong>(legIndex + 1))
-                             .arg(waypointName(state, leg.destination, leg.targetFleet))
+                             .arg(waypointName(display, leg.destination, leg.targetFleet))
                              .arg(step)
                              .arg(leg.warp);
                 markArrival();
@@ -366,7 +393,7 @@ QString routeForecast(
                 if (targetPlanet && targetPlanet->owner == fleetOwner) {
                     lines << QString("%1. %2 — T+%3, W%4 — <b>colonized successfully; fleet dismantled</b>")
                                  .arg(static_cast<qulonglong>(legIndex + 1))
-                                 .arg(waypointName(state, leg.destination, leg.targetFleet))
+                                 .arg(waypointName(display, leg.destination, leg.targetFleet))
                                  .arg(step)
                                  .arg(leg.warp);
                     if (legIndex + 1 < legs.size()) {
@@ -549,7 +576,7 @@ QString routeForecast(
 
             lines << QString("%1. %2 — T+%3, W%4, fuel %5, damage %6%, colonists %7 — <b>%8</b>%9")
                          .arg(static_cast<qulonglong>(legIndex + 1))
-                         .arg(waypointName(state, leg.destination, leg.targetFleet))
+                         .arg(waypointName(display, leg.destination, leg.targetFleet))
                          .arg(step)
                          .arg(leg.warp)
                          .arg(after->fuel, 0, 'f', 1)
@@ -570,7 +597,7 @@ QString routeForecast(
                 ++legIndex;
                 markArrival();
                 lines << QString("%1. %2 — T+%3; already reached, no action")
-                    .arg(qulonglong(legIndex+1)).arg(waypointName(state,legs[legIndex].destination)).arg(step);
+                    .arg(qulonglong(legIndex+1)).arg(waypointName(display,legs[legIndex].destination)).arg(step);
             }
             ++legIndex;
             if (invasionOutcomeUncertain) {
@@ -603,6 +630,193 @@ QString routeForecast(
 }
 
 } // namespace
+
+struct AsyncRouteForecastKey {
+    std::uint64_t revision{};
+    PlayerId player{};
+    FleetId fleet{};
+    std::optional<StarId> selectedStar;
+    MoveFleetOrder route;
+    bool warning{};
+    QString warningKey;
+};
+
+namespace {
+bool sameRoute(const MoveFleetOrder& a, const MoveFleetOrder& b)
+{
+    if (a.fleet!=b.fleet || a.destination!=b.destination || a.warp!=b.warp
+        || a.arrivalAction!=b.arrivalAction || a.repeatOrders!=b.repeatOrders
+        || a.targetFleet!=b.targetFleet || a.clearRoute!=b.clearRoute
+        || a.queuedWaypoints.size()!=b.queuedWaypoints.size()) return false;
+    for (std::size_t i=0;i<a.queuedWaypoints.size();++i) {
+        const auto& x=a.queuedWaypoints[i]; const auto& y=b.queuedWaypoints[i];
+        if (x.destination!=y.destination || x.warp!=y.warp || x.arrivalAction!=y.arrivalAction || x.targetFleet!=y.targetFleet) return false;
+    }
+    return true;
+}
+bool sameForecastKey(const AsyncRouteForecastKey& a,const AsyncRouteForecastKey& b)
+{
+    return a.revision==b.revision && a.player==b.player && a.fleet==b.fleet
+        && a.selectedStar==b.selectedStar && a.warning==b.warning
+        && a.warningKey==b.warningKey && sameRoute(a.route,b.route);
+}
+}
+
+struct AsyncRouteForecastJob {
+    AsyncRouteForecastKey key;
+    PlayerOrders orders;
+    std::shared_ptr<const RouteForecastWorld> world;
+    std::atomic_bool cancelled{};
+    QThread* thread{}; // Created, joined and deleted exclusively on the GUI thread.
+    QString summary, warning;
+    std::vector<RouteProgramLegForecast> legs;
+};
+
+struct AsyncRouteForecastState {
+    struct Slot {
+        std::shared_ptr<AsyncRouteForecastJob> active;
+        std::optional<AsyncRouteForecastKey> pending, latest;
+    } route, warning;
+    bool launchQueued{};
+    std::uint64_t worldRevision{std::uint64_t(-1)};
+    PlayerId worldPlayer{};
+    std::shared_ptr<const RouteForecastWorld> world;
+    ~AsyncRouteForecastState()
+    {
+        // Cancelling both before joining bounds shutdown to the current simulated
+        // year rather than allowing the other worker to finish all 96 years.
+        for (auto* slot : {&route,&warning}) if(slot->active) slot->active->cancelled=true;
+        for (auto* slot : {&route,&warning}) if(slot->active && slot->active->thread) {
+            slot->active->thread->wait();
+            delete slot->active->thread;
+            slot->active->thread=nullptr;
+        }
+    }
+};
+
+namespace {
+void cancelForecastKind(const std::shared_ptr<AsyncRouteForecastState>& state,bool warning)
+{
+    if(!state)return;
+    auto& slot=warning?state->warning:state->route;
+    if(slot.active)slot.active->cancelled=true;
+    slot.pending.reset();slot.latest.reset();
+}
+}
+
+void MainWindow::stopRouteForecastWorkers()
+{
+    asyncRouteForecasts_.reset();
+}
+
+void MainWindow::cancelWaypointFuelForecast() const
+{
+    cancelForecastKind(asyncRouteForecasts_,true);
+}
+
+bool MainWindow::routeForecastsPending() const
+{
+    if (!asyncRouteForecasts_) return false;
+    const auto& s=*asyncRouteForecasts_;
+    return s.launchQueued || s.route.active || s.route.pending || s.warning.active || s.warning.pending;
+}
+
+void MainWindow::requestAsyncRouteForecast(const MoveFleetOrder& route,bool warning,const QString& warningKey) const
+{
+    if(shuttingDown_)return;
+    if(!asyncRouteForecasts_)asyncRouteForecasts_=std::make_shared<AsyncRouteForecastState>();
+    auto& state=*asyncRouteForecasts_;
+    auto& slot=warning?state.warning:state.route;
+    AsyncRouteForecastKey key{planningRevision_,pendingOrders_.player,route.fleet,
+        warning?selection_.star:std::optional<StarId>{},route,warning,warningKey};
+    slot.latest=key;
+    if(slot.active && sameForecastKey(slot.active->key,key) && !slot.active->cancelled.load())return;
+    slot.pending=key; // At most one replaceable pending request per kind/window.
+    if(slot.active)slot.active->cancelled=true;
+    if(state.launchQueued)return;
+    state.launchQueued=true;
+    const auto weak=std::weak_ptr<AsyncRouteForecastState>(asyncRouteForecasts_);
+    QTimer::singleShot(0,const_cast<MainWindow*>(this),[this,weak] {
+        if(asyncRouteForecasts_!=weak.lock())return;
+        launchAsyncRouteForecasts();
+    });
+}
+
+void MainWindow::launchAsyncRouteForecasts() const
+{
+    if(!asyncRouteForecasts_ || shuttingDown_)return;
+    auto& state=*asyncRouteForecasts_;
+    state.launchQueued=false;
+    for(auto* slot:{&state.route,&state.warning}) {
+        if(slot->active || !slot->pending)continue;
+        const auto key=*slot->pending;
+        slot->pending.reset();
+        if(key.revision!=planningRevision_ || key.player!=pendingOrders_.player
+            || key.fleet!=selectedFleetForRouteProgram()
+            || (key.warning && key.selectedStar!=selection_.star))continue;
+        if(!state.world || state.worldRevision!=planningRevision_ || state.worldPlayer!=pendingOrders_.player) {
+            // All host/knowledge projection runs once on the GUI thread. Workers
+            // receive only this owned immutable received world and sent commands.
+            state.world=std::make_shared<RouteForecastWorld>(prepareRouteForecastWorld(state_,pendingOrders_.player));
+            state.worldRevision=planningRevision_;state.worldPlayer=pendingOrders_.player;
+        }
+        auto job=std::make_shared<AsyncRouteForecastJob>();
+        job->key=key;job->orders=pendingOrders_;job->world=state.world;
+        if(key.warning) {
+            if(auto* existing=pendingMove(job->orders,key.fleet))*existing=key.route;
+            else job->orders.orders.push_back(key.route);
+        }
+        slot->active=job;
+        ++routeForecastBuildCount_;
+        job->thread=QThread::create([job] {
+            try {
+                const TurnProcessor processor;
+                job->summary=routeForecast(job->world->display,job->orders,processor,
+                    job->key.fleet,job->key.route,job->key.warning?nullptr:&job->legs,
+                    job->key.warning?&job->warning:nullptr,job->world.get(),&job->cancelled);
+            } catch(const std::exception& error) {
+                job->legs.clear();
+                job->summary=QString("Forecast unavailable: %1").arg(QString::fromUtf8(error.what()));
+                job->warning=job->summary;
+            } catch(...) {
+                job->legs.clear();
+                job->summary="Forecast unavailable: calculation failed.";job->warning=job->summary;
+            }
+        });
+        QObject::connect(job->thread,&QThread::finished,const_cast<MainWindow*>(this),[this,job] {
+            finishAsyncRouteForecast(job);
+        },Qt::QueuedConnection);
+        job->thread->start();
+    }
+}
+
+void MainWindow::finishAsyncRouteForecast(const std::shared_ptr<AsyncRouteForecastJob>& job) const
+{
+    if(!asyncRouteForecasts_)return; // Stop/load may already have joined/deleted it.
+    auto& state=*asyncRouteForecasts_;
+    auto& slot=job->key.warning?state.warning:state.route;
+    if(slot.active!=job)return;
+    job->thread->wait();delete job->thread;job->thread=nullptr;
+    slot.active.reset();
+    const auto& key=job->key;
+    const bool current=!shuttingDown_ && !job->cancelled.load() && slot.latest
+        && sameForecastKey(*slot.latest,key) && key.revision==planningRevision_
+        && key.player==pendingOrders_.player && key.fleet==selectedFleetForRouteProgram()
+        && (!key.warning || key.selectedStar==selection_.star);
+    if(current) {
+        if(key.warning) {
+            waypointFuelKey_=key.warningKey;
+            waypointFuelAction_=key.route.queuedWaypoints.empty()?key.route.arrivalAction:key.route.queuedWaypoints.back().arrivalAction;
+            waypointFuelWarning_=job->warning;
+        } else {
+            routeForecastSummary_=job->summary;routeLegForecasts_=job->legs;
+            routeEtaRevision_=key.revision;routeEtaFleet_=key.fleet;
+        }
+    }
+    // A pending request is rebuilt from the newest current GUI snapshot only.
+    launchAsyncRouteForecasts();
+    if(current)emit const_cast<MainWindow*>(this)->routeForecastReady();
+}
 
 FleetId MainWindow::selectedFleetForRouteProgram() const
 {
@@ -698,20 +912,29 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     return lines.join("<br>");
 }
 
-QString MainWindow::selectedFleetRouteProgramForecast() const
+QString MainWindow::selectedFleetRouteProgramForecast(bool asynchronous) const
 {
     const auto* authoritative = selectedFleet();
-    if (!authoritative) return "Select a fleet first.";
+    if (!authoritative) { cancelForecastKind(asyncRouteForecasts_,false); return "Select a fleet first."; }
     const auto fleet = fleet_player_view(state_, *authoritative);
     const auto route = effectiveRoute(state_, pendingOrders_, fleet);
-    if (!route || routeIsClearIntent(fleet, *route)) return "No route to forecast.";
-    return routeForecast(state_, pendingOrders_, processor_, fleet.id, *route);
+    if (!route || routeIsClearIntent(fleet, *route)) { cancelForecastKind(asyncRouteForecasts_,false); return "No route to forecast."; }
+    if (routeEtaRevision_ != planningRevision_ || routeEtaFleet_ != fleet.id) {
+        if(asynchronous) { requestAsyncRouteForecast(*route,false); return "Forecast pending — calculating the exact received-state route…"; }
+        ++routeForecastBuildCount_;
+        routeForecastSummary_ = routeForecast(state_, pendingOrders_, processor_, fleet.id, *route, &routeLegForecasts_);
+        routeEtaRevision_ = planningRevision_;
+        routeEtaFleet_ = fleet.id;
+    }
+    cancelForecastKind(asyncRouteForecasts_,false);
+    return routeForecastSummary_;
 }
 
 QString MainWindow::selectedFleetWaypointFuelWarning(
     std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
-    std::optional<Position> coordinateDestination) const
+    std::optional<Position> coordinateDestination, bool asynchronous, bool* pending) const
 {
+    if(pending)*pending=false;
     const auto key = QString("%1:%2:%3:%4:%5:%6:%7:%8:%9:%10")
         .arg(planningRevision_).arg(selectedFleetForRouteProgram())
         .arg(selection_.star.value_or(0)).arg(warp).arg(targetFleet)
@@ -719,23 +942,24 @@ QString MainWindow::selectedFleetWaypointFuelWarning(
         .arg(static_cast<int>(action.cargo))
         .arg(coordinateDestination ? QString::number(coordinateDestination->x, 'g', 17) : QString{})
         .arg(coordinateDestination ? QString::number(coordinateDestination->y, 'g', 17) : QString{});
-    if (key == waypointFuelKey_) return waypointFuelWarning_;
-    waypointFuelKey_ = key;
-    waypointFuelWarning_.clear();
+    if (key == waypointFuelKey_ && waypointFuelAction_ && *waypointFuelAction_==action) {
+        cancelForecastKind(asyncRouteForecasts_,true);
+        return waypointFuelWarning_;
+    }
     const auto* source = selectedFleet();
-    if (!source) return {};
+    if (!source) { cancelForecastKind(asyncRouteForecasts_,true); return {}; }
     const auto fleet = fleet_player_view(state_, *source);
     Position destination;
     if (targetFleet != 0) {
         const auto target = knownFleetTarget(targetFleet);
-        if (!target || targetFleet == fleet.id) return {};
+        if (!target || targetFleet == fleet.id) { cancelForecastKind(asyncRouteForecasts_,true); return {}; }
         destination = target->position;
         if (target->owner != fleet.owner) targetFleet = 0;
     } else if (coordinateDestination) {
         destination = *coordinateDestination;
     } else {
         const auto* star = selectedStar();
-        if (!star) return {};
+        if (!star) { cancelForecastKind(asyncRouteForecasts_,true); return {}; }
         destination = star->position;
     }
     auto route = effectiveRoute(state_, pendingOrders_, fleet);
@@ -744,35 +968,46 @@ QString MainWindow::selectedFleetWaypointFuelWarning(
     } else {
         route->queuedWaypoints.push_back({destination, warp, action, targetFleet});
     }
-    auto pending = pendingOrders_;
-    if (auto* existing = pendingMove(pending, fleet.id)) *existing = *route;
-    else pending.orders.push_back(*route);
-    (void)routeForecast(state_, pending, processor_, fleet.id, *route, nullptr, &waypointFuelWarning_);
+    if(asynchronous) {
+        requestAsyncRouteForecast(*route,true,key);
+        if(pending)*pending=true;
+        return "Calculating fuel forecast…";
+    }
+    auto submitted = pendingOrders_;
+    if (auto* existing = pendingMove(submitted, fleet.id)) *existing = *route;
+    else submitted.orders.push_back(*route);
+    waypointFuelKey_=key;waypointFuelAction_=action;waypointFuelWarning_.clear();
+    (void)routeForecast(state_, submitted, processor_, fleet.id, *route, nullptr, &waypointFuelWarning_);
+    cancelForecastKind(asyncRouteForecasts_,true);
     return waypointFuelWarning_;
 }
 
-std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() const
+std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows(bool asynchronous) const
 {
     const auto* authoritativeFleet = selectedFleet();
     const auto visibleFleetStorage = authoritativeFleet
         ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
-    if (!fleet) return {};
+    if (!fleet) { cancelForecastKind(asyncRouteForecasts_,false); return {}; }
     const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
-    if (!route || routeIsClearIntent(*fleet, *route)) return {};
+    if (!route || routeIsClearIntent(*fleet, *route)) { cancelForecastKind(asyncRouteForecasts_,false); return {}; }
 
     std::vector<RouteProgramDisplayRow> rows;
     const auto legs = routeLegs(*route);
     rows.reserve(legs.size());
-    if (routeEtaRevision_ != planningRevision_ || routeEtaFleet_ != fleet->id) {
-        (void)routeForecast(state_, pendingOrders_, processor_, fleet->id, *route, &routeLegForecasts_);
+    const bool calculating=asynchronous && (routeEtaRevision_!=planningRevision_ || routeEtaFleet_!=fleet->id);
+    if(calculating) requestAsyncRouteForecast(*route,false);
+    else if (routeEtaRevision_ != planningRevision_ || routeEtaFleet_ != fleet->id) {
+        ++routeForecastBuildCount_;
+        routeForecastSummary_ = routeForecast(state_, pendingOrders_, processor_, fleet->id, *route, &routeLegForecasts_);
         routeEtaRevision_ = planningRevision_;
         routeEtaFleet_ = fleet->id;
     }
+    if(!calculating)cancelForecastKind(asyncRouteForecasts_,false);
     for (std::size_t index = 0; index < legs.size(); ++index) {
         const auto& leg = legs[index];
-        const auto forecast = index < routeLegForecasts_.size()
+        const auto forecast = !calculating && index < routeLegForecasts_.size()
             ? routeLegForecasts_[index] : RouteProgramLegForecast{};
         QString tooltip = "Projected movement fuel for this leg, including turn-by-turn billing and cargo changes. "
             "Fuel left includes arrival refuelling. Preview horizon: 96 years; later orders and hostile encounters may change the result.";
@@ -780,7 +1015,8 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
         if (medium) tooltip+="\nMedium estimate uses received profiles only. The fuel range covers density 0–1 for the forecast flown segments, with fitted engines and rounding. "
             "Unsurveyed density can change fuel-limited coasting, arrival time and refuelling; ETA and fuel left are estimates.";
         if (medium && forecast.fuelUsed) tooltip+=QString("\nReceived-profile consumption estimate: ≈%1 mg.").arg(*forecast.fuelUsed,0,'f',1);
-        if (!forecast.arrivalTurn) tooltip += "\nArrival is not predicted: ≥ is consumption so far, not the complete leg's cost; — means no data.";
+        if(calculating) tooltip="Forecast pending — calculating this route from the latest received state. Previous ETA/fuel values are not current.";
+        else if (!forecast.arrivalTurn) tooltip += "\nArrival is not predicted: ≥ is consumption so far, not the complete leg's cost; — means no data.";
         if (forecast.fuelShortageTurn) tooltip += QString("\nFuel shortage at T+%1 on this leg: the ordered Warp cannot be maintained. "
             "Reduce Warp or add a refuelling stop; free-speed coasting may still allow a later arrival.").arg(*forecast.fuelShortageTurn);
         rows.push_back({
@@ -790,7 +1026,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             actionName(state_,leg.arrivalAction),
             leg.warp,
             index == 0,
-            forecast.arrivalTurn ? (medium?QString("≈%1").arg(*forecast.arrivalTurn):QString::number(*forecast.arrivalTurn)) : QString("—"),
+            calculating ? QString("Pending…") : forecast.arrivalTurn ? (medium?QString("≈%1").arg(*forecast.arrivalTurn):QString::number(*forecast.arrivalTurn)) : QString("—"),
             medium && forecast.fuelMinimum && forecast.fuelMaximum ? QString("%1%2–%3").arg(forecast.arrivalTurn?"":"≥")
                 .arg(*forecast.fuelMinimum,0,'f',1).arg(*forecast.fuelMaximum,0,'f',1) :
             forecast.fuelUsed ? QString("%1%2").arg(forecast.arrivalTurn ? "" : "≥")
@@ -798,6 +1034,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
             forecast.fuelRemaining ? (medium?QString("≈%1").arg(*forecast.fuelRemaining,0,'f',1):QString::number(*forecast.fuelRemaining, 'f', 1)) : QString("—"),
             tooltip,
             forecast.fuelShortageTurn.has_value(),
+            calculating,
         });
     }
     return rows;
@@ -1343,6 +1580,8 @@ bool MainWindow::appendRouteWaypoint(
                 break;
             }
         }
+        if (movementPreview_ && movementPreviewRevision_ == planningRevision_)
+            movementPreviewRevision_ = planningRevision_ + 1;
         rebuildScene();
         statusBar()->showMessage("Waypoint appended to pending fleet program");
         return true;
@@ -1375,6 +1614,8 @@ bool MainWindow::stageSelectedFleetRoute(
             }
             break;
         }
+        if (movementPreview_ && movementPreviewRevision_ == planningRevision_)
+            movementPreviewRevision_ = planningRevision_ + 1;
         rebuildScene();
     } else {
         appendPendingOrder(route, routeDescription(state_, fleet, route));
@@ -1611,6 +1852,8 @@ bool MainWindow::setSelectedFleetRepeatOrdersForRouteProgram(bool enabled)
                 break;
             }
         }
+        if (movementPreview_ && movementPreviewRevision_ == planningRevision_)
+            movementPreviewRevision_ = planningRevision_ + 1;
         rebuildScene();
     } else {
         appendPendingOrder(*route, routeDescription(state_, *fleet, *route));
@@ -1645,6 +1888,8 @@ bool MainWindow::clearSelectedFleetRouteProgram()
             move && move->fleet == fleet->id) {
             pendingOrders_.orders[index] = clear;
             pendingDescriptions_[static_cast<int>(index)] = routeDescription(state_, *fleet, clear);
+            if (movementPreview_ && movementPreviewRevision_ == planningRevision_)
+                movementPreviewRevision_ = planningRevision_ + 1;
             rebuildScene();
             statusBar()->showMessage("Fleet route program cleared for End Turn");
             return true;

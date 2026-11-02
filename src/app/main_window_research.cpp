@@ -20,7 +20,9 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScopeGuard>
 #include <QSignalBlocker>
+#include <QShowEvent>
 #include <QSpinBox>
 #include <QStandardItemModel>
 #include <QStatusBar>
@@ -33,10 +35,29 @@
 #include <algorithm>
 #include <limits>
 #include <iterator>
+#include <functional>
 
 namespace suns {
 
 namespace {
+
+class ResearchDialog final : public QDialog {
+public:
+    ResearchDialog(QWidget* parent, Qt::WindowFlags flags, std::function<void()> refresh)
+        : QDialog(parent, flags), refresh_(std::move(refresh)) {}
+
+protected:
+    void showEvent(QShowEvent* event) override
+    {
+        QDialog::showEvent(event);
+        // Automatic workspace updates may leave a hidden tool untouched.
+        // Refresh every show path, including direct window/layout restoration.
+        refresh_();
+    }
+
+private:
+    std::function<void()> refresh_;
+};
 
 constexpr std::array<ResearchField, kResearchFieldCount> kResearchFields = {
     ResearchField::Energy,
@@ -58,8 +79,9 @@ void MainWindow::installResearch()
 {
     if (researchDialog_) return;
 
-    researchDialog_ = new QDialog(this, Qt::Window | Qt::WindowTitleHint
-        | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+    researchDialog_ = new ResearchDialog(this, Qt::Window | Qt::WindowTitleHint
+        | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint,
+        [this] { refreshResearchPanel(); });
     researchDialog_->setObjectName("researchDialog");
     researchDialog_->setWindowTitle("Suns! — Empire Research");
     researchDialog_->setModal(false);
@@ -211,7 +233,7 @@ void MainWindow::installResearch()
 void MainWindow::openResearchDialog()
 {
     installResearch();
-    refreshResearchPanel();
+    if (researchDialog_->isVisible()) refreshResearchPanel();
     if (researchDialog_->isMinimized())
         researchDialog_->setWindowState(researchDialog_->windowState() & ~Qt::WindowMinimized);
     researchDialog_->show();
@@ -397,6 +419,9 @@ void MainWindow::refreshResearchPanel()
 
 void MainWindow::queueResearchAllocation(int percent)
 {
+    const auto refreshHiddenEditor = qScopeGuard([this] {
+        if (researchDialog_ && !researchDialog_->isVisible()) refreshResearchPanel();
+    });
     const auto* player = find_player(state_, pendingOrders_.player);
     if (!player || percent < 0 || percent > 100) return;
 
@@ -428,6 +453,9 @@ void MainWindow::queueResearchAllocation(int percent)
 
 void MainWindow::queueResearchPlan()
 {
+    const auto refreshHiddenEditor = qScopeGuard([this] {
+        if (researchDialog_ && !researchDialog_->isVisible()) refreshResearchPanel();
+    });
     const auto* player = find_player(state_, pendingOrders_.player);
     if (!player || !researchPlanTree_) return;
     std::vector<ResearchField> planFields;

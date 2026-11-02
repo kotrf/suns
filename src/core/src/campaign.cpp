@@ -463,6 +463,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
 {
     const auto* player = find_player(host, playerId);
     if (!player) throw std::invalid_argument("Unknown player");
+    const CommunicationQueryScope communicationScope(host);
     PlayerView view;
     view.player = playerId;
     auto& state = view.state;

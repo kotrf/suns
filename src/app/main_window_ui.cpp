@@ -977,6 +977,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    stopRouteForecastWorkers();
     setMapExpanded(false);
     shuttingDown_ = true;
     mapSelectionRebuildPending_ = false;
