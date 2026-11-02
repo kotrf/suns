@@ -227,7 +227,8 @@ protected:
 private:
     friend struct MainWindowTestAccess;
     static constexpr int workspaceLayoutVersion = 6;
-    void rebuildScene();
+    void rebuildScene(bool planningStateChanged = true);
+    [[nodiscard]] const GameState& receivedPlayerState() const;
     [[nodiscard]] QGraphicsItem* mapObjectAtViewportPosition(const QPoint& position) const;
     void queueMapSelectionRebuild();
     void showMapFleetPicker(const QVariantList& fleets, const QPoint& position, bool target, bool quick);
@@ -340,9 +341,14 @@ private:
     GameState state_;
     TurnProcessor processor_;
     std::uint64_t planningRevision_{};
+    std::uint64_t renderedPlanningRevision_{std::uint64_t(-1)};
+    std::optional<FleetId> renderedFleetSelection_;
     mutable std::uint64_t movementPreviewRevision_{std::uint64_t(-1)};
     mutable PlayerId movementPreviewPlayer_{};
     mutable std::optional<GameState> movementPreview_;
+    mutable std::optional<GameState> receivedPlayerState_;
+    mutable std::uint64_t receivedPlayerRevision_{std::uint64_t(-1)};
+    mutable PlayerId receivedPlayerId_{};
     mutable std::uint64_t fleetPlanningRevision_{std::uint64_t(-1)};
     mutable std::optional<GameState> fleetPlanningState_;
     mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};

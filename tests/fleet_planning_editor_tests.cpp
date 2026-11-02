@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QEventLoop>
 #include <QDoubleSpinBox>
 #include <QGraphicsScene>
 #include <QGraphicsView>
@@ -42,6 +43,29 @@ struct MainWindowTestAccess {
     static const GameState& raw(MainWindow& w) { return w.state_; }
     static const GameState& plan(MainWindow& w) { return w.fleetPlanningState(); }
     static const GameState& movementPlan(MainWindow& w) { return w.movementPlanningPreview(); }
+    static void selectionCacheRegression(MainWindow& w)
+    {
+        const auto revision = w.planningRevision_;
+        const auto turn = w.movementPlanningPreview().turn;
+        QGraphicsItem* marker = nullptr;
+        for (auto* item : w.scene_->items())
+            if (item->data(1).toInt() == 1 && item->data(0).toUInt() == w.state_.stars.back().id) marker = item;
+        assert(marker);
+        assert(w.selectWorkspaceObject(1, w.state_.stars.back().id));
+        w.queueMapSelectionRebuild();
+        QEventLoop loop;
+        QTimer::singleShot(30, &loop, &QEventLoop::quit);
+        loop.exec();
+        // Map selection must reuse the already computed logistics/movement
+        // projection, not simulate another turn just to select another star.
+        assert(w.planningRevision_ == revision);
+        assert(w.movementPreviewRevision_ == revision && w.movementPlanningPreview().turn == turn);
+        assert(w.selection_.star == w.state_.stars.back().id);
+        assert(w.scene_->items().contains(marker) && marker->isSelected());
+        w.rebuildScene(); // A real state/order boundary must still invalidate.
+        assert(w.planningRevision_ != revision);
+        assert(w.movementPreviewRevision_ == w.planningRevision_);
+    }
     static SaveGameData snapshot(MainWindow& w) { return w.campaignSnapshot(); }
     static bool load(MainWindow& w, const QString& path) { return w.loadGameFromPath(path); }
     static void advance(MainWindow& w) { w.endTurn(); }
@@ -134,6 +158,8 @@ int main(int argc, char** argv)
     MainWindow window; window.installDeferredMapSelectionHandler(); attachRouteProgramDock(window);
     window.installUiPolish(); window.installFleetReadabilityPolish(); window.installFleetOperationsPanel();
     window.resize(1366, 900); window.show(); app.processEvents();
+    MainWindowTestAccess::splitSetup(window);
+    MainWindowTestAccess::selectionCacheRegression(window);
     MainWindowTestAccess::splitSetup(window);
     QTimer::singleShot(0, [] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog && dialog->windowTitle() == "Split fleet");

@@ -960,7 +960,7 @@ bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
     if (!selectWorkspaceObject(2, fleetId)) return false;
-    rebuildScene();
+    rebuildScene(false);
     return true;
 }
 

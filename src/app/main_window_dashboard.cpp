@@ -156,7 +156,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
 {
     const auto* star = selectedStar();
     if (!star) return "<span style='color:#8090a2'>No system selected.</span>";
-    const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto received = receivedPlayerState();
 
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));

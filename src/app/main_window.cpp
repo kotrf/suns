@@ -665,6 +665,17 @@ const GameState& MainWindow::fleetPlanningState() const
     return *fleetPlanningState_;
 }
 
+const GameState& MainWindow::receivedPlayerState() const
+{
+    if (!receivedPlayerState_ || receivedPlayerRevision_ != planningRevision_
+        || receivedPlayerId_ != pendingOrders_.player || receivedPlayerState_->turn != state_.turn) {
+        receivedPlayerState_ = make_player_view(state_, pendingOrders_.player).state;
+        receivedPlayerRevision_ = planningRevision_;
+        receivedPlayerId_ = pendingOrders_.player;
+    }
+    return *receivedPlayerState_;
+}
+
 const GameState& MainWindow::movementPlanningPreview() const
 {
     // Panels poll much more often than the game/order boundary changes. Share
@@ -720,9 +731,9 @@ void MainWindow::refreshShipDesignChoices()
     else if (shipDesignCombo_->count() > 0) shipDesignCombo_->setCurrentIndex(0);
 }
 
-void MainWindow::rebuildScene()
+void MainWindow::rebuildScene(bool planningStateChanged)
 {
-    ++planningRevision_;
+    if (planningStateChanged) ++planningRevision_;
     const auto selectionToRestore = selection_.star;
 
     if (!selectedFleet()) {
@@ -1031,6 +1042,8 @@ void MainWindow::rebuildScene()
     // see them; the scene-changed timer is too late after a redraw.
     applyMapDisplayMode();
     refreshMapLabels();
+    renderedPlanningRevision_ = planningRevision_;
+    renderedFleetSelection_ = selection_.fleet;
     updateControls();
     refreshProductionQueue();
     emit routeProgramContextChanged();
@@ -1038,9 +1051,12 @@ void MainWindow::rebuildScene()
 
 void MainWindow::updateControls()
 {
+    // Explicit control updates are also used after received own-state changes.
+    // Share the fresh projection with the subsequent deferred panel readers.
+    receivedPlayerState_.reset();
     refreshCargoTransferControls();
     const auto* star = selectedStar();
-    const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto received = receivedPlayerState();
     const auto* planet = selectedPlanet();
     if (planet) {
         const auto* known=find_planet(received,planet->id);

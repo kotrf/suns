@@ -807,7 +807,7 @@ void MainWindow::installUiPolish()
         refreshFleetCompositionTable();
 
         const auto environmentState=find_player(state_,pendingOrders_.player)
-            ? make_player_view(state_,pendingOrders_.player).state : GameState{};
+            ? receivedPlayerState() : GameState{};
         const auto* environmentSource=selectedPlanet();
         const auto* environmentPlanet=environmentSource?find_planet(environmentState,environmentSource->id):nullptr;
         const auto* environmentStar = selectedStar();
