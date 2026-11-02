@@ -344,7 +344,7 @@ QString routeForecast(
         };
         if (!after) {
             if (leg.arrivalAction.kind == FleetArrivalActionKind::ScrapFleet) {
-                lines << QString("%1. T+%2 — Scrap Fleet planned; nominal material recovery 50% / 75%, with possible additional loss. Actual recovery depends on arrival conditions.")
+                lines << QString("%1. T+%2 — Scrap Fleet planned; deep-space material recovery 0–50%, weighted towards 50%; orbital recovery 75% at your populated colony or 50% elsewhere, with a 20% chance of another 5–15 percentage points lost. Actual recovery depends on arrival conditions.")
                     .arg(legIndex + 1).arg(step);
                 markArrival(); legIndex = legs.size(); simulated = std::move(next); break;
             }

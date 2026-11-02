@@ -43,7 +43,8 @@ void onboard(GameState& s)
 }
 void refundsAndRandomness()
 {
-    int losses = 0;
+    int losses = 0, lowSpace = 0, highSpace = 0;
+    double spaceSum = 0, spaceSquares = 0;
     for (unsigned seed = 0; seed < 1000; ++seed) {
         auto s=fixture(); s.galaxySeed=seed;
         const auto cost=buildCost(s), cargo=s.fleets[0].minerals;
@@ -61,11 +62,44 @@ void refundsAndRandomness()
         assert(scrap_fleet(space,space.fleets[0],2));
         assert(space.wrecks.size()==1);
         const auto material=space.wrecks[0].minerals;
-        assert(near((material.ironium-cargo.ironium)/cost.ironium,rate-0.25));
+        const auto spaceRate=(material.ironium-cargo.ironium)/cost.ironium;
+        assert(spaceRate>=0 && spaceRate<=0.50+1e-9);
+        assert(near(material.boranium,cargo.boranium+cost.boranium*spaceRate));
+        assert(near(material.germanium,cargo.germanium+cost.germanium*spaceRate));
+        spaceSum+=spaceRate;spaceSquares+=spaceRate*spaceRate;
+        lowSpace+=spaceRate<0.10;highSpace+=spaceRate>0.45;
+        auto spaceReplay=source;spaceReplay.fleets[0].position={1000,0};
+        assert(scrap_fleet(spaceReplay,spaceReplay.fleets[0],2));
+        assert(near(total(spaceReplay.wrecks[0].minerals),total(material)));
         assert(std::all_of(space.wrecks[0].technology.begin(),space.wrecks[0].technology.end(),[](auto v){return v==0;}));
         assert(space.players[0].strategicIntel.empty()); // New debris is not globally known yet.
     }
     assert(losses > 140 && losses < 260); // Detect missing/always-on or badly biased loss rolls.
+    const auto mean=spaceSum/1000, deviation=std::sqrt(spaceSquares/1000-mean*mean);
+    assert(mean>0.31 && mean<0.36 && deviation>0.10 && deviation<0.14);
+    assert(lowSpace>15 && lowSpace<80 && highSpace>120 && highSpace<260);
+}
+void zeroMaterial()
+{
+    auto s=fixture();s.galaxySeed=6983;s.fleets[0].position={1000,0};s.fleets[0].minerals={};
+    assert(scrap_fleet(s,s.fleets[0],2));
+    assert(s.wrecks.empty() && s.nextWreckId==1);
+    assert(s.players[0].pendingStrategicIntel.empty());
+    assert(total(s.players[0].pendingPlayerReports.back().deliveredMinerals)==0);
+    auto cargo=fixture();cargo.galaxySeed=6983;cargo.fleets[0].position={1000,0};
+    assert(scrap_fleet(cargo,cargo.fleets[0],2));
+    assert(cargo.wrecks.size()==1 && near(total(cargo.wrecks[0].minerals),31));
+    for(const auto [seed,percent] : {std::pair{0u,75}, {12u,61}, {18u,69}, {21u,62}, {22u,69}}) {
+        auto orbit=fixture();orbit.galaxySeed=seed;const auto cost=buildCost(orbit),aboard=orbit.fleets[0].minerals;
+        assert(scrap_fleet(orbit,orbit.fleets[0],2));
+        const auto value=orbit.players[0].pendingPlayerReports.back().deliveredMinerals;
+        assert(near(value.ironium,aboard.ironium+cost.ironium*percent/100.0));
+        for(const auto owner : {PlayerId{0},PlayerId{2}}) {
+            auto other=fixture();other.galaxySeed=seed;other.planets[0].owner=owner;
+            assert(scrap_fleet(other,other.fleets[0],2));
+            assert(near(other.wrecks[0].minerals.ironium,aboard.ironium+cost.ironium*(percent-25)/100.0));
+        }
+    } // Fixed outputs from the previous orbital formula, including loss rolls.
 }
 void actualOrdersAndDelay()
 {
@@ -152,5 +186,5 @@ void safeFailuresAndFinalPacket()
 }
 int main()
 {
-    refundsAndRandomness(); actualOrdersAndDelay(); materialCollection(); safeFailuresAndFinalPacket();
+    refundsAndRandomness(); zeroMaterial(); actualOrdersAndDelay(); materialCollection(); safeFailuresAndFinalPacket();
 }

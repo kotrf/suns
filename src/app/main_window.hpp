@@ -40,6 +40,7 @@ class QTextBrowser;
 namespace suns {
 
 class ShipDesignerDialog;
+class TechnologyCatalogDialog;
 
 struct RouteProgramDisplayRow {
     QString destination;
@@ -237,6 +238,7 @@ private:
     [[nodiscard]] const GameState& fleetPlanningState() const;
     void refreshShipDesignChoices();
     void openShipDesigner();
+    void openTechnologyCatalog();
     void openEmpireHistory();
     void queueFleetMove();
     void queueFleetLoadAll();
@@ -386,6 +388,7 @@ private:
     std::set<QString> hiddenTurnMessageClasses_;
     std::size_t hiddenTurnMessagesCount_{};
     QPointer<ShipDesignerDialog> shipDesigner_;
+    QPointer<TechnologyCatalogDialog> technologyCatalog_;
     QPointer<QDialog> colonyTemplatesDialog_;
 
     QGraphicsScene* scene_{};

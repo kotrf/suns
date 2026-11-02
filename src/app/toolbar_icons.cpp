@@ -32,6 +32,10 @@ QIcon toolbarIcon(ToolbarGlyph glyph)
             p.drawLine(to, to - n * 4 - cross * 2.5);
         };
         switch (glyph) {
+        case ToolbarGlyph::Catalog:
+            p.drawRoundedRect(QRectF(4,3,16,18),1,1);
+            line(8,3,8,21);line(11,8,17,8);line(11,12,17,12);line(11,16,15,16);
+            break;
         case ToolbarGlyph::EndTurn:
             p.setBrush(QColor("#e4b77d"));
             p.setPen(Qt::NoPen);

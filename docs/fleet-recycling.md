@@ -7,17 +7,27 @@ fleet's received position. Planning does not remove physical ships; commands
 must reach the fleet and the waypoint must actually execute.
 
 Every ship stack contributes its fitted hull/component mineral build cost.
-The user accepted nominal recovery of **50% in space / 75% above an owned,
-populated surface colony**, plus a chance of additional loss. Initial parameters
-for that risk are **20% chance to lose another 5–15 percentage points**. The
-same yield applies to I/B/G; it is deterministic from galaxy seed, fleet ID,
+The user refined space recovery to a broad distribution reaching zero, while
+keeping orbital recovery unchanged. Space material recovery now ranges from
+**0–50%**, using a triangular density increasing towards 50% (mean about
+33.3 percentage points, standard deviation about 11.8). A discrete uniform
+roll 0–10000 is transformed as `0.5 * sqrt(roll / 10000)`, including actual
+zero and 50% endpoints. This is the selected initial shape for playtesting.
+Above an owned populated surface colony, recovery remains **75% with a 20%
+chance to lose another 5–15 percentage points**, including identical previous
+seed outcomes. Other planetary orbits also retain their previous **50% with
+the same 20% loss chance**; the broader density applies only away from every
+planet. The same yield applies to I/B/G; it is deterministic from galaxy seed, fleet ID,
 owner and execution year. Damage does not add a second recovery modifier.
 Existing cargo minerals are preserved at 100%, independently of that roll.
 Production resources and fuel are not refunded.
 
 At an owned populated colony, recovered material goes to surface stocks. A
 shipyard is not required. Elsewhere (including foreign or uncolonized orbits),
-one mineral wreck remains at the fleet position. It uses the existing **20-year
+one mineral wreck remains at the fleet position if any material or cargo
+minerals survived. A zero return with an empty hold creates no wreck, consumes
+no wreck ID and publishes no false wreck observation; completion still reports
+zero material. Wreckage uses the existing **20-year
 wreck lifetime**, with no science/technology reward. Before scrapping, unload
 colonists, scientific specimens and xenocrystals; a blocked final step holds
 and retries, and Stop can cancel it. Fixed installations use their existing

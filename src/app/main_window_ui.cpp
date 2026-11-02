@@ -672,6 +672,11 @@ void MainWindow::installUiPolish()
     auto* designerAction = fleetMenu->addAction("Ship designer…");
     designerAction->setObjectName("openShipDesignerAction");
     connect(designerAction, &QAction::triggered, this, [this] { openShipDesigner(); });
+    auto* catalogAction=fleetMenu->addAction("Hull and equipment catalog…");
+    catalogAction->setObjectName("openTechnologyCatalogAction");
+    catalogAction->setIcon(toolbarIcon(ToolbarGlyph::Catalog));
+    catalogAction->setToolTip("Browse all hulls and equipment, including locked entries and their requirements");
+    connect(catalogAction,&QAction::triggered,this,[this]{openTechnologyCatalog();});
     auto* templatesAction = fleetMenu->addAction("Colony development templates…");
     templatesAction->setObjectName("openColonyTemplatesAction");
     connect(templatesAction, &QAction::triggered, this, [this] { openColonyTemplates(); });
@@ -691,6 +696,10 @@ void MainWindow::installUiPolish()
     designerToolAction->setObjectName("openShipDesignerToolAction");
     designerToolAction->setToolTip("Open the graphical Ship Designer");
     connect(designerToolAction, &QAction::triggered, this, [this] { openShipDesigner(); });
+    auto* catalogToolAction=dialogToolbar->addAction(toolbarIcon(ToolbarGlyph::Catalog),"Catalog");
+    catalogToolAction->setObjectName("openTechnologyCatalogToolAction");
+    catalogToolAction->setToolTip(catalogAction->toolTip());
+    connect(catalogToolAction,&QAction::triggered,this,[this]{openTechnologyCatalog();});
 
     auto* researchToolAction = dialogToolbar->addAction("Research");
     researchToolAction->setObjectName("openResearchToolAction");
