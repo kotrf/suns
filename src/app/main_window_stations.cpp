@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "station_details_dialog.hpp"
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
@@ -31,6 +32,17 @@ QString gateLimits(const StargateSpec& gate)
         .arg(gate.maximumMassKt == 0 ? QString("Unlimited") : QString::number(gate.maximumMassKt, 'f', 0));
 }
 }
+void MainWindow::openStationDetails()
+{
+    const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const auto* star = selectedStar();
+    const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
+    const auto* station = planet ? find_orbital_station_at_planet(received, planet->id) : nullptr;
+    if (!station) return;
+    StationDetailsDialog dialog(*station, received.turn, this);
+    dialog.exec();
+}
+
 void MainWindow::openStationDesigner()
 {
     const auto* selected=selectedPlanet();

@@ -6,6 +6,26 @@ planet's orbit. Homeworlds start with an empty basic dock; new colonies do not.
 
 ## Fitting and production
 
+**System Details** shows a hull-specific station icon/button for an orbital
+station present in the selected system's received player view. Click it for a
+read-only fitting diagram: weapons above the hull, armor/shields on the left,
+electronics on the right, with individual numbered cells and subdued empty
+cells. The three ordinary station hulls have distinct silhouettes. Component
+names are not filtered by current technology: this is installed equipment, not
+the build catalog. Gate tooltips include range/mass and explicit unlimited
+limits. Total armor, shields, damage, identity and fitted shipyard/refueling
+services appear alongside the diagram. Large fits and narrow windows scroll;
+Close remains outside the scroll area. Small docks start in a shorter window.
+
+This modal view captures received data when opened, labels the player turn and
+does not edit orders. Hidden host refits/losses and unreported new stations do
+not change that data; delivered absence suppresses the icon until a new report.
+Pending refits/builds do not replace the operational fit. Selection/load/turn
+changes refresh the icon through the existing context signal, without polling.
+Foreign stations/fits remain absent because current player exports omit them;
+this UI does not add enemy-station intelligence. Independently anchored fleet
+bases retain their existing separate base panel and knowledge model.
+
 Select an owned colony and use **Station…** to inspect, build or refit its
 station. The dialog shows armor, shields, damage, technology requirements and
 production/mineral costs. Equipment choices reuse the ship catalog and its

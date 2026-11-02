@@ -27,6 +27,8 @@ add_library(suns_app_ui STATIC
     map_marker_items.hpp
     main_window_mining.cpp
     main_window_stations.cpp
+    station_details_dialog.cpp
+    station_details_dialog.hpp
     main_window_intelligence.cpp
     main_window_strategic_operations.cpp
     main_window_planet.cpp
