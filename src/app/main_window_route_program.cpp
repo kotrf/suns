@@ -135,6 +135,16 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
     return "no action";
 }
 
+void removePendingMiningTask(PlayerOrders& pending, QStringList& descriptions, FleetId fleet)
+{
+    for (std::size_t index = pending.orders.size(); index-- > 0;) {
+        const auto* mining = std::get_if<SetRemoteMiningOrder>(&pending.orders[index]);
+        if (!mining || mining->fleet != fleet) continue;
+        pending.orders.erase(pending.orders.begin() + static_cast<std::ptrdiff_t>(index));
+        descriptions.removeAt(static_cast<int>(index));
+    }
+}
+
 MoveFleetOrder* pendingMove(PlayerOrders& pending, FleetId fleet)
 {
     bool transportAfter = false;
@@ -286,34 +296,39 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
         auto summary = QString("<b>%1 route:</b> none<br><b>Current task:</b> %2")
                            .arg(QString::fromStdString(fleet->name))
                            .arg(task);
-        if (route && routeIsClearIntent(*fleet, *route)) {
-            summary += "<br><i>Pending: clear route and set No Task when the command arrives.</i>";
-        } else if (!route) {
-            bool queuedTask = false;
-            bool miningWork = fleet->task == FleetTask::RemoteMining;
-            for (auto it = pendingOrders_.orders.rbegin(); it != pendingOrders_.orders.rend(); ++it) {
-                const auto* mining = std::get_if<SetRemoteMiningOrder>(&*it);
-                const auto* taskOrder = std::get_if<SetFleetTaskOrder>(&*it);
-                if ((!mining || mining->fleet != fleet->id) && (!taskOrder || taskOrder->fleet != fleet->id)) continue;
-                const auto intended = mining ? (mining->enabled ? FleetTask::RemoteMining : FleetTask::None) : taskOrder->task;
-                summary += QString("<br><i>Queued work: %1. Transmitted on End Turn; starts after command delivery.</i>")
-                    .arg(QString::fromStdString(fleet_task_name(intended)));
-                queuedTask = true;
-                miningWork |= intended == FleetTask::RemoteMining;
+        std::optional<FleetTask> queuedTask;
+        for (auto it = pendingOrders_.orders.rbegin(); it != pendingOrders_.orders.rend(); ++it) {
+            if (const auto* move = std::get_if<MoveFleetOrder>(&*it); move && move->fleet == fleet->id) break;
+            if (const auto* mining = std::get_if<SetRemoteMiningOrder>(&*it); mining && mining->fleet == fleet->id) {
+                queuedTask = mining->enabled ? FleetTask::RemoteMining : FleetTask::None;
                 break;
             }
-            if (!queuedTask) {
-                for (auto it = authoritativeFleet->pendingCommands.rbegin(); it != authoritativeFleet->pendingCommands.rend(); ++it) {
-                    if (!it->task) continue;
-                    summary += QString("<br><i>Work command in flight: %1. Starts after command delivery.</i>")
-                        .arg(QString::fromStdString(fleet_task_name(*it->task)));
-                    miningWork |= *it->task == FleetTask::RemoteMining;
-                    break;
-                }
+            if (const auto* taskOrder = std::get_if<SetFleetTaskOrder>(&*it); taskOrder && taskOrder->fleet == fleet->id) {
+                queuedTask = taskOrder->task;
+                break;
             }
-            if (miningWork) {
-                summary += "<br>Remote Mining adds minerals to the planet's surface stockpile, not the miner's hold.";
+        }
+        if (route) {
+            summary += queuedTask
+                ? "<br><i>Pending: cancel the old route and commands before applying queued work.</i>"
+                : "<br><i>Pending: clear route and set No Task when the command arrives.</i>";
+        }
+        bool miningWork = fleet->task == FleetTask::RemoteMining;
+        if (queuedTask) {
+            summary += QString("<br><i>Queued work: %1. Transmitted on End Turn; starts after command delivery.</i>")
+                .arg(QString::fromStdString(fleet_task_name(*queuedTask)));
+            miningWork |= *queuedTask == FleetTask::RemoteMining;
+        } else if (!route) {
+            for (auto it = authoritativeFleet->pendingCommands.rbegin(); it != authoritativeFleet->pendingCommands.rend(); ++it) {
+                if (!it->task) continue;
+                summary += QString("<br><i>Work command in flight: %1. Starts after command delivery.</i>")
+                    .arg(QString::fromStdString(fleet_task_name(*it->task)));
+                miningWork |= *it->task == FleetTask::RemoteMining;
+                break;
             }
+        }
+        if (miningWork) {
+            summary += "<br>Remote Mining adds minerals to the planet's surface stockpile, not the miner's hold.";
         }
         const auto age = authoritativeFleet ? fleet_telemetry_age(state_, *authoritativeFleet) : 0;
         if (!route && age > 0) {
@@ -675,16 +690,14 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
             statusBar()->showMessage("Remote Mining requires a reported unowned planet at the fleet's position.", 5000);
             return false;
         }
-        // Replace unsent mining/Stop intent, then append the native task last.
-        // A stationary miner needs no artificial arrival leg or extra mining year.
-        for (std::size_t index = pendingOrders_.orders.size(); index-- > 0;) {
-            const auto* mining = std::get_if<SetRemoteMiningOrder>(&pendingOrders_.orders[index]);
-            const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
-            if ((mining && mining->fleet == fleet.id)
-                || (move && move->fleet == fleet.id && routeIsClearIntent(fleet, *move))) {
-                pendingOrders_.orders.erase(pendingOrders_.orders.begin() + static_cast<std::ptrdiff_t>(index));
-                pendingDescriptions_.removeAt(static_cast<int>(index));
-            }
+        // Keep Stop before the native task: only Stop cancels older packets.
+        // Reissue a sent Stop if it might otherwise arrive after this new task.
+        removePendingMiningTask(pendingOrders_, pendingDescriptions_, fleet.id);
+        if (route && !pendingMove(std::as_const(pendingOrders_), fleet.id)) {
+            auto stop = *route;
+            stop.clearRoute = true;
+            pendingOrders_.orders.push_back(stop);
+            pendingDescriptions_.push_back(routeDescription(state_, fleet, stop));
         }
         appendPendingOrder(SetRemoteMiningOrder{fleet.id, true},
             "Remote Mining queued for End Turn; starts after command delivery and deposits minerals on the planet.");
@@ -1266,6 +1279,10 @@ bool MainWindow::clearSelectedFleetRouteProgram()
         statusBar()->showMessage("Select a fleet first");
         return false;
     }
+
+    // A later Stop must supersede unsent mining even when replacing an earlier
+    // Stop in-place. Keep the cancellation command, not the old mining task.
+    removePendingMiningTask(pendingOrders_, pendingDescriptions_, fleet->id);
 
     MoveFleetOrder clear{
         fleet->id,

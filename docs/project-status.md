@@ -1,5 +1,39 @@
 # Project status and development handoff
 
+## PR #272 review: keep Stop cancellation before mining — 3 November 2026
+
+[One P2 on source 724ef9e](https://github.com/kotrf/suns/pull/272#discussion_r4460217935)
+was reproduced with the real UI and TurnProcessor: deleting queued Stop lost
+its cancellation of already sent navigation. A six-year Move packet issued at
+T1 survives when a relay resumes at T2 and new commands become instantaneous;
+native mining starts, but the old Move later cancels it and takes the ship away.
+
+Start now deduplicates only unsent mining orders, preserving Stop before the
+new native task. An already sent Stop is reissued before mining if it would
+otherwise arrive later. A subsequent Stop removes unsent mining, including when
+replacing an earlier Stop in-place. The summary resolves final queued task order
+and describes cancellation followed by work rather than incorrectly promising
+No Task. Cancellation remains an ordinary physical command; no core rules,
+formats, emissions, communication delays or annual UI estimates changed.
+
+The new regression failed against the original app library on the surviving
+pendingCommands assertion. After the fix it passes real UI Stop/Start through
+T9, past the old delivery boundary, with mining and position retained; a control
+without Stop reproduces escape/No Task. Additional cases cover a Stop already
+in flight, last-click Stop, no artificial waypoint and actual paired-order
+serialization/descriptions. Full GCC14.2/Qt6.12 Debug build and **114/114
+offscreen CTest passed (82.09 s)**, including existing route, communication,
+strategic-work, recycling and scanner-coverage suites. Diff check is clean;
+no new build warnings. Prior source 724ef9e CI is separate evidence, not a
+claim for this revision; see GitHub for the updated source and new CI.
+
+Start work here and Stop work / route remain explicit controls: changing the
+action selector is a draft; Stop also cancels travel and older packets. Mini-2
+currently contains four accumulated notes in Notion (remove map numbers, compact
+station button, platform icons/desktop entry, cheap per-leg fuel estimates);
+implementation was not requested and none is included in this review fix.
+Current branch is codex/mining-map-coverage, PR #272 awaits repeat review/unmerged.
+
 ## Stationary mining and scanner coverage — 3 November 2026
 
 Current base is main e2211cd48cf8a7075608b6f1b78c1719e645e44b after merged #269;

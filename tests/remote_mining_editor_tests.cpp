@@ -24,6 +24,7 @@ struct MainWindowTestAccess {
         w.rebuildScene(); emit w.routeProgramContextChanged(true);
     }
     static PlayerOrders orders(const MainWindow& w) { return w.pendingOrders_; }
+    static QStringList descriptions(const MainWindow& w) { return w.pendingDescriptions_; }
 };
 }
 
@@ -56,6 +57,83 @@ const Fleet& miner(const GameState& s) {
 void chooseMining(MainWindow& w) {
     auto* combo = w.findChild<QComboBox*>("routeArrivalActionCombo"); assert(combo);
     combo->setCurrentIndex(combo->findData(int(FleetArrivalActionKind::RemoteMining))); settle();
+}
+
+void stopThenMineCancelsSentNavigation(MainWindow& w) {
+    // An old six-year packet remains in flight when a scheduled relay resumes
+    // transmission and suddenly makes new commands instantaneous.
+    auto s = fixture(800);
+    s.fleets[0].electronics = {}; s.fleets[0].telemetry.electronics = {};
+    s.players[0].technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 24;
+    s.shipDesigns.push_back({91, 1, "Resume relay", ShipHullType::Scout,
+        {ShipComponentType::QuickJump5, ShipComponentType::PeerlessScanner}});
+    auto relay = s.fleets.front(); relay.id = 2; relay.design = 91; relay.ships = {{91, 1}};
+    relay.position = {400, 0}; relay.electronics = {EmissionMode::RadioSilence, s.turn + 1};
+    relay.fuel = fleet_fuel_capacity(s, relay); relay.telemetry.position = relay.position;
+    relay.telemetry.ships = relay.ships; relay.telemetry.fuel = relay.fuel;
+    relay.telemetry.electronics = relay.electronics;
+    s.fleets.push_back(relay); s.nextFleetId = 3;
+    const auto delay = communication_delay_turns(s, 1, miner(s).position);
+    assert(delay == 6);
+    const TurnProcessor processor;
+    auto boundary = processor.process(s, {{1, {MoveFleetOrder{1, {1000, 0}, 5}}}});
+    assert(boundary.turn == s.turn + 1 && communication_delay_turns(boundary, 1, miner(boundary).position) == 0);
+    assert(!miner(boundary).destination && miner(boundary).pendingCommands.size() == 1);
+    const auto oldDelivery = miner(boundary).pendingCommands.front().deliveryTurn;
+    assert(oldDelivery == s.turn + delay);
+
+    assert(same_position(fleet_player_view(boundary, miner(boundary)).position, s.stars[1].position));
+    assert(known_planet_owner(boundary, 1, boundary.planets[1].id) == std::optional<PlayerId>{0});
+    MainWindowTestAccess::install(w, boundary); settle();
+    auto* stop = w.findChild<QPushButton*>("routeStopButton"); assert(stop);
+    auto* here = w.findChild<QPushButton*>("routeWorkHereButton"); assert(here);
+    stop->click(); settle(); chooseMining(w); here->click(); settle();
+    const auto orders = MainWindowTestAccess::orders(w);
+    assert(orders.orders.size() == 2);
+    assert(w.selectedFleetRouteProgramPolyline().size() < 2);
+    auto started = processor.process(boundary, {orders});
+    assert(miner(started).task == FleetTask::RemoteMining && !miner(started).destination);
+    assert(miner(started).pendingCommands.empty());
+    assert(w.selectedFleetRouteProgramSummary().contains("Queued work"));
+    assert(!w.selectedFleetRouteProgramSummary().contains("set No Task when"));
+    for (; started.turn <= oldDelivery + 2; started = processor.process(started, {})) {
+        assert(same_position(miner(started).position, s.stars[1].position));
+        assert(miner(started).task == FleetTask::RemoteMining && !miner(started).destination);
+        assert(miner(started).electronics.mode == EmissionMode::Standard);
+        assert(started.planets[1].minerals.ironium > 0);
+    }
+
+    // Control: dropping Stop reproduces the original failure beyond the old
+    // delivery boundary, despite successful mining in the intervening years.
+    auto droppedStop = processor.process(boundary, {{1, {SetRemoteMiningOrder{1, true}}}});
+    while (droppedStop.turn <= oldDelivery) droppedStop = processor.process(droppedStop, {});
+    assert(!same_position(miner(droppedStop).position, s.stars[1].position));
+    assert(miner(droppedStop).task == FleetTask::None);
+
+    // A Stop already sent on the old slow link must not arrive later and
+    // cancel the new work either. Start reissues its cancellation first.
+    MoveFleetOrder stopOrder{1, s.stars[1].position, 5}; stopOrder.clearRoute = true;
+    auto stopping = processor.process(s, {{1, {MoveFleetOrder{1, {1000, 0}, 5}, stopOrder}}});
+    assert(miner(stopping).pendingCommands.size() == 2);
+    MainWindowTestAccess::install(w, stopping); settle(); chooseMining(w); here->click(); settle();
+    auto resumed = processor.process(stopping, {MainWindowTestAccess::orders(w)});
+    assert(miner(resumed).pendingCommands.empty());
+    for (; resumed.turn <= oldDelivery + 2; resumed = processor.process(resumed, {})) {
+        assert(miner(resumed).task == FleetTask::RemoteMining && !miner(resumed).destination);
+        assert(same_position(miner(resumed).position, s.stars[1].position));
+    }
+
+    // Last-click Stop still cancels both new mining intent and old traffic.
+    MainWindowTestAccess::install(w, boundary); settle(); stop->click(); settle();
+    chooseMining(w); here->click(); settle(); stop->click(); settle();
+    const auto stoppedOrders = MainWindowTestAccess::orders(w);
+    assert(stoppedOrders.orders.size() == 1 && std::get<MoveFleetOrder>(stoppedOrders.orders[0]).clearRoute);
+    auto stopped = processor.process(boundary, {stoppedOrders});
+    for (; stopped.turn <= oldDelivery + 2; stopped = processor.process(stopped, {})) {
+        assert(miner(stopped).task == FleetTask::None && !miner(stopped).destination);
+        assert(miner(stopped).pendingCommands.empty());
+        assert(same_position(miner(stopped).position, s.stars[1].position));
+    }
 }
 }
 
@@ -95,12 +173,15 @@ int main(int argc, char** argv) {
     assert(w.clearSelectedFleetRouteProgram());
     assert(w.startSelectedFleetWorkHere({FleetArrivalActionKind::RemoteMining}));
     orders = MainWindowTestAccess::orders(w);
-    assert(orders.orders.size() == 1);
+    assert(orders.orders.size() == 2 && std::get<MoveFleetOrder>(orders.orders[0]).clearRoute);
+    assert(std::holds_alternative<SetRemoteMiningOrder>(orders.orders[1]));
+    assert(w.selectedFleetRouteProgramSummary().contains("Queued work"));
     assert(processor.process(s, {orders}).planets[1].minerals.ironium == 4);
 
     // Existing save/order serialization carries the UI's actual native order.
     TurnOrderFileData packet; packet.campaignId = 1; packet.turn = s.turn; packet.turnToken = 1;
-    packet.orders = orders; packet.descriptions = {"Remote Mining"};
+    packet.orders = orders; packet.descriptions = MainWindowTestAccess::descriptions(w);
+    assert(packet.descriptions.size() == int(orders.orders.size()));
     QString error; const auto path = dir.filePath("mining.sunsorders");
     assert(write_turn_order_file(path, packet, error)); TurnOrderFileData restored;
     assert(read_turn_order_file(path, restored, error));
@@ -221,4 +302,5 @@ int main(int argc, char** argv) {
         assert(w.setSelectedFleetRouteProgramLegAction(0, {}));
         assert(w.setSelectedFleetRouteProgramLegAction(0, {FleetArrivalActionKind::RemoteMining}));
     }
+    stopThenMineCancelsSentNavigation(w);
 }
