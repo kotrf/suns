@@ -27,8 +27,10 @@ module design. It does not bypass the new research progression.
 
 ## Operations
 
-- **Remote Mining** is assigned to a route waypoint as its arrival task. Merely entering orbit with `No Task` does not start extraction.
-- It is a persistent terminal task: it must be the last item in the route, begins producing on the turn after arrival and continues until a replacement route or `No Task` command reaches the fleet.
+- Already in orbit: select **Remote Mining** and press **Start mining here**. This queues the native mining task without a new waypoint. It is transmitted on End Turn, respects ordinary communication delay, and produces in the first annual mining phase after delivery. Emissions stay unchanged. The route summary distinguishes queued work, a command in flight and the received current task.
+- Before travelling: assign **Remote Mining** to the final route waypoint, using Add waypoint or editing that leg's arrival action. The action selector alone is a draft. Merely entering orbit with `No Task` does not start extraction.
+- Arrival orders may attempt an unexplored system, but reject a reported colony. The host checks actual world ownership when the order executes; stale or missing knowledge never exposes hidden ownership through UI admission. Starting work at the current position requires a reported unowned world there.
+- It is a persistent terminal task: it must be the last item in a travel route, begins producing on the turn after arrival and continues until a replacement route or `No Task` command reaches the fleet. An arrival year does not also grant a full year of extraction.
 - A robot produces its rated output multiplied by each mineral's concentration / 100. Modules add their individual rates; fleet stacks multiply output by ship count. Prediction, actual extraction, dashboards and history use the same calculation.
 - The minerals are added to the planet's existing **surface stockpile** (`Planet::minerals`); they do not enter the miner's cargo hold.
 - Any friendly cargo fleet co-located with that uncolonized planet may use Cargo Transfer to collect the surface stockpile. The planet and fleet dashboards show the stock and active I/B/G extraction per turn. Foreign colonies are not valid transfer sources.

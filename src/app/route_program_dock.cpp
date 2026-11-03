@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFormLayout>
+#include <QFont>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGroupBox>
@@ -168,7 +169,11 @@ void drawRouteOverlay(MainWindow& window, std::optional<Position> coordinateDraf
 
         auto* label = scene->addText(QString("%1").arg(static_cast<qulonglong>(index)));
         label->setDefaultTextColor(QColor(150, 215, 255, 210));
-        label->setScale(0.68);
+        QFont font;
+        font.setPixelSize(10);
+        label->setFont(font);
+        label->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+        label->setAcceptedMouseButtons(Qt::NoButton);
         label->setPos(to.x + 5.0, to.y + 3.0);
         label->setData(kRouteOverlayDataKey, true);
         label->setZValue(12.0);
@@ -207,7 +212,7 @@ void attachRouteProgramDock(MainWindow& window)
         "For a faster order, right-click a star or fleet to append it immediately with the current settings. "
         "Selecting a system lists it and all visible orbiting fleets in Destination; enemies are red.\n\n"
         "Select a route row to change that leg's Warp. New waypoint leaves editing and starts map picking. "
-        "Fuel used and Fuel left are projected per leg; red marks the first leg with insufficient fuel at its ordered Warp. "
+        "The table shows nominal ETA from distance / Warp²; actual fuel use and arrival outcomes resolve on End Turn. "
         "Each leg keeps its own Warp and arrival action. Friendly moving targets are resolved every turn. Merge absorbs the pursuing fleet into the target fleet. "
         "Mining, mine laying/sweeping, bombardment, field research and wreck recovery are persistent final-waypoint tasks. They begin on arrival without another command. Stop/new travel cancels work without changing emissions. Load and unload use the real surface stockpile on arrival. Repeat Orders repeats the whole route; terminal actions cannot be repeated. "
         "Colonization dismantles the entire fleet and recovers 33% of its ship minerals. Dockside loading and refuelling are in Fleet Logistics.");
@@ -464,7 +469,7 @@ void attachRouteProgramDock(MainWindow& window)
     waypointLayout->addWidget(alternativesButton);
     auto* workHereButton = new QPushButton("Start work here", waypointGroup);
     workHereButton->setObjectName("routeWorkHereButton");
-    workHereButton->setToolTip("Use the selected On arrival work at this stationary fleet's reported position. Queues an ordinary route order with normal command delay; emissions stay unchanged.");
+    workHereButton->setToolTip("Use the selected work at this stationary fleet's reported position. Remote Mining sends a task without adding a waypoint. Normal command delay applies; emissions stay unchanged.");
     waypointActions->addWidget(workHereButton, 1);
     waypointLayout->addLayout(waypointActions);
     layout->addWidget(waypointGroup);
@@ -504,7 +509,8 @@ void attachRouteProgramDock(MainWindow& window)
             || action == FleetArrivalActionKind::UnloadAll;
         workHereButton->setEnabled(window.selectedFleetForRouteProgram() != 0
             && (arrival_work_task(action).has_value() || action == FleetArrivalActionKind::ScrapFleet));
-        workHereButton->setText(action == FleetArrivalActionKind::ScrapFleet ? "Scrap here" : "Start work here");
+        workHereButton->setText(action == FleetArrivalActionKind::ScrapFleet ? "Scrap here"
+            : action == FleetArrivalActionKind::RemoteMining ? "Start mining here" : "Start work here");
         cargoCombo->setEnabled(transfersCargo);
         reserveSpin->setEnabled(
             action == FleetArrivalActionKind::LoadAllAvailable && (cargo == FleetCargoKind::Colonists || cargo==FleetCargoKind::OrbitalColonists));

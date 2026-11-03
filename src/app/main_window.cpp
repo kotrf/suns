@@ -40,6 +40,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPen>
 #include <QTimer>
 #include <QPolygonF>
@@ -337,33 +338,24 @@ void addTravelLabel(
     label->setZValue(-8.0);
 }
 
-void addSensorRange(
-    QGraphicsScene* scene,
-    Position center,
-    double range,
-    const QColor& outline,
-    const QColor& fill,
-    const char* kind,
-    const QString& label)
-{
-    if (range <= 0.0) return;
-
-    QPen pen(outline);
-    pen.setCosmetic(true);
-    pen.setWidthF(0.9);
-    pen.setStyle(Qt::DashLine);
-    auto* circle = scene->addEllipse(
-        center.x - range,
-        center.y - range,
-        range * 2.0,
-        range * 2.0,
-        pen,
-        QBrush(fill));
-    circle->setZValue(-60.0);
-    circle->setAcceptedMouseButtons(Qt::NoButton);
-    circle->setData(0, kind);
-    circle->setToolTip(QString("%1: %2 ly").arg(label).arg(range, 0, 'f', 1));
-}
+// Winding fill draws the union in a single paint operation, including duplicate
+// discs, without boolean geometry or opacity accumulating at intersections.
+struct SensorCoverage {
+    QPainterPath path;
+    SensorCoverage() { path.setFillRule(Qt::WindingFill); }
+    void add(Position center, double range) {
+        if (range > 0.0) path.addEllipse(QPointF(center.x, center.y), range, range);
+    }
+    void draw(QGraphicsScene* scene, const QColor& fill, const char* kind,
+        const QString& label, double z = -60.0) const {
+        if (path.isEmpty()) return;
+        auto* item = scene->addPath(path, QPen(Qt::NoPen), QBrush(fill));
+        item->setZValue(z);
+        item->setAcceptedMouseButtons(Qt::NoButton);
+        item->setData(0, kind);
+        item->setToolTip(label);
+    }
+};
 
 void addBackgroundStars(QGraphicsScene* scene, std::uint64_t galaxySeed)
 {
@@ -750,37 +742,45 @@ void MainWindow::rebuildScene(bool planningStateChanged)
     if (showSensorRanges_) {
         const auto* extraRanges = findChild<QAction*>("showPassiveEmissionRangesAction");
         const bool showExtraRanges = extraRanges && extraRanges->isChecked();
-        for (const auto& planet : state_.planets) {
+        SensorCoverage ordinary, penetrating, passive, emissions;
+        for (const auto& planet : playerView.planets) {
             if (planet.owner != pendingOrders_.player
                 || planet.radar == PlanetaryRadarLevel::None) continue;
-            if (const auto* sourceStar = find_star(state_, planet.star)) {
-                const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.colony==planet.id;});
+            if (const auto* sourceStar = find_star(playerView, planet.star)) {
+                const auto status = std::find_if(sensorKnowledge.begin(), sensorKnowledge.end(),
+                    [&](const auto& s) { return s.colony == planet.id; });
                 const auto nominal = planetary_radar_range(planet.radar);
-                const auto actual = status == sensorKnowledge.end() ? nominal
-                    : nominal * (1 - status->interferencePercent / 100.0);
-                addSensorRange(scene_, sourceStar->position, actual,
-                    QColor(100, 220, 155, 105), QColor(100, 220, 155, 12),
-                    "planetaryRadarRange", "Planetary radar");
+                const auto factor = status == sensorKnowledge.end() ? 1.0
+                    : 1.0 - status->interferencePercent / 100.0;
+                ordinary.add(sourceStar->position, nominal * factor);
             }
         }
         for (const auto& fleet : displayFleets) {
             if (fleet.owner != pendingOrders_.player) continue;
-            const auto visibleFleet = fleet_player_view(state_, fleet);
-            const auto status=std::find_if(sensorKnowledge.begin(),sensorKnowledge.end(),[&](const auto& s){return s.fleet==fleet.id;});
-            const auto range=fleet_active_sensors(visibleFleet,state_.turn)
-                ? (status==sensorKnowledge.end()?fleet_sensor_range(state_,visibleFleet):status->nominalRange*(1-status->interferencePercent/100.0)) : 0;
-            if(showExtraRanges && status!=sensorKnowledge.end()) {
-                addSensorRange(scene_,visibleFleet.position,status->passiveRange,QColor(185,160,90,75),QColor(185,160,90,4),
-                    "passiveHullRange", "Passive hull detection baseline (motion and cloak affect detection)");
-                addSensorRange(scene_,visibleFleet.position,status->emissionRange,QColor(175,135,210,55),QColor(175,135,210,2),
-                    "emissionReceptionRange", "Reception of other ships' emissions");
+            const auto visibleFleet = fleet_player_view(playerView, fleet);
+            const auto status = std::find_if(sensorKnowledge.begin(), sensorKnowledge.end(),
+                [&](const auto& s) { return s.fleet == fleet.id; });
+            const auto factor = status == sensorKnowledge.end() ? 1.0
+                : 1.0 - status->interferencePercent / 100.0;
+            if (fleet_active_sensors(visibleFleet, playerView.turn)) {
+                const auto penetratingRange = fleet_penetrating_sensor_range(playerView, visibleFleet);
+                const auto detectionRange = std::max(fleet_ordinary_sensor_range(playerView, visibleFleet), penetratingRange);
+                ordinary.add(visibleFleet.position, detectionRange * factor);
+                penetrating.add(visibleFleet.position, penetratingRange * factor);
             }
-            if (range > 0.0) {
-                addSensorRange(scene_, visibleFleet.position, range,
-                    QColor(90, 165, 255, 115), QColor(90, 165, 255, 10),
-                    "activeScannerRange", "Active ship scanner");
+            if (showExtraRanges && status != sensorKnowledge.end()) {
+                passive.add(visibleFleet.position, status->passiveRange);
+                emissions.add(visibleFleet.position, status->emissionRange);
             }
         }
+        ordinary.draw(scene_, QColor(90, 165, 255, 16), "scannerCoverage",
+            "Ordinary scanner coverage — ship scanners and planetary radar");
+        penetrating.draw(scene_, QColor(90, 165, 255, 24), "penetratingScannerCoverage",
+            "Penetrating scanner coverage — planetary survey", -59.0);
+        passive.draw(scene_, QColor(185, 160, 90, 4), "passiveHullRange",
+            "Passive hull detection baseline (motion and cloak affect detection)", -62.0);
+        emissions.draw(scene_, QColor(175, 135, 210, 2), "emissionReceptionRange",
+            "Reception of other ships' emissions", -61.0);
     }
 
     for (const auto& fleet : displayFleets) {

@@ -1,5 +1,49 @@
 # Project status and development handoff
 
+## Stationary mining and scanner coverage — 3 November 2026
+
+Current base is main e2211cd48cf8a7075608b6f1b78c1719e645e44b after merged #269;
+#268 is completed. Its separate main CI 41643240035 succeeded. The older open-PR
+checkpoints below are historical; independent documentation PR #267 remains open.
+
+Issues [#270](https://github.com/kotrf/suns/issues/270) and
+[#271](https://github.com/kotrf/suns/issues/271) are implemented in the existing
+codex/mining-map-coverage branch. Start mining here stages the existing native
+SetRemoteMiningOrder instead of a fake arrival waypoint at the fleet's position.
+It validates equipment and received world ownership, replaces repeated unsent
+mining/Stop intent in the right order, and retains physical command delivery and
+emission settings. Route summary distinguishes queued/in-flight work and explains
+that extraction accumulates on the planet's surface, not aboard the miner.
+Ordinary arrival mining still starts output in the annual phase after arrival.
+The reported earlier lost arrival order was not separately reproduced: synthetic
+UI Add-waypoint and edited-leg orders survive travel and communication delays.
+
+Numbered route labels now have a fixed 10-pixel font, ignore map transforms and
+pass mouse clicks. Default sensor coverage merges ship scanners and planetary
+radar into one faint blue fill, with a stronger blue penetrating-scanner layer.
+The map previously never drew penetrating coverage. Each type uses one winding
+path/no pen: overlap does not accumulate opacity or cancel duplicate circles.
+Optional passive/emission layers also merge; Sensors hides all layers. Geometry
+uses received player data, reported interference and received emission settings,
+without host jammer queries, boolean unions, annual forecasts or gameplay changes.
+User chose this simpler map presentation explicitly (MEM-33).
+
+Full GCC14.2/Qt6.12 Debug build and **114/114 offscreen CTest passed (82.39 s)**.
+The new native-order assertion failed against the original app library before
+the fix. Actual UI buttons/edited legs feed real TurnProcessor calls, including
+local and delayed starts, arrival, persistent output, Stop/Start order precedence,
+existing orders serialization, equipment/world validation, unknown ownership and
+hidden-ownership invariance. Fixed route-label device size is checked at four
+zooms. Coverage tests paint real graphics paths and compare pixels in single and
+overlapping areas, including duplicate discs, reported interference, emissions,
+missing penetration, hidden-state invariance, input transparency and visibility.
+The existing map selection, route, mining and recycling suites also pass.
+A local synthetic map render was visually inspected; no private screenshot or
+save is committed. Diff check is clean; final build introduced no new warnings.
+All new fixtures are synthetic; private save contents are not published.
+Save v109/orders v48, core turn rules and minimal realtime estimates remain unchanged.
+New source head, PR and CI are authoritative on GitHub; this branch awaits review.
+
 ## PR #269 review: skipped production rows — 3 November 2026
 
 Review of 62f0e93 identified one P2: the minimal queue estimate charged known

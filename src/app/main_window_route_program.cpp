@@ -288,6 +288,32 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
                            .arg(task);
         if (route && routeIsClearIntent(*fleet, *route)) {
             summary += "<br><i>Pending: clear route and set No Task when the command arrives.</i>";
+        } else if (!route) {
+            bool queuedTask = false;
+            bool miningWork = fleet->task == FleetTask::RemoteMining;
+            for (auto it = pendingOrders_.orders.rbegin(); it != pendingOrders_.orders.rend(); ++it) {
+                const auto* mining = std::get_if<SetRemoteMiningOrder>(&*it);
+                const auto* taskOrder = std::get_if<SetFleetTaskOrder>(&*it);
+                if ((!mining || mining->fleet != fleet->id) && (!taskOrder || taskOrder->fleet != fleet->id)) continue;
+                const auto intended = mining ? (mining->enabled ? FleetTask::RemoteMining : FleetTask::None) : taskOrder->task;
+                summary += QString("<br><i>Queued work: %1. Transmitted on End Turn; starts after command delivery.</i>")
+                    .arg(QString::fromStdString(fleet_task_name(intended)));
+                queuedTask = true;
+                miningWork |= intended == FleetTask::RemoteMining;
+                break;
+            }
+            if (!queuedTask) {
+                for (auto it = authoritativeFleet->pendingCommands.rbegin(); it != authoritativeFleet->pendingCommands.rend(); ++it) {
+                    if (!it->task) continue;
+                    summary += QString("<br><i>Work command in flight: %1. Starts after command delivery.</i>")
+                        .arg(QString::fromStdString(fleet_task_name(*it->task)));
+                    miningWork |= *it->task == FleetTask::RemoteMining;
+                    break;
+                }
+            }
+            if (miningWork) {
+                summary += "<br>Remote Mining adds minerals to the planet's surface stockpile, not the miner's hold.";
+            }
         }
         const auto age = authoritativeFleet ? fleet_telemetry_age(state_, *authoritativeFleet) : 0;
         if (!route && age > 0) {
@@ -638,6 +664,10 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
         return false;
     }
     if (action.kind == FleetArrivalActionKind::RemoteMining) {
+        if (!fleet_can_remote_mine(fleetPlanningState(), fleet)) {
+            statusBar()->showMessage("Remote Mining requires a mining hull with fitted mining equipment.", 5000);
+            return false;
+        }
         const auto* star = findStarAtPosition(state_, fleet.position);
         const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
         const auto owner = planet ? known_planet_owner(state_, fleet.owner, planet->id) : std::nullopt;
@@ -645,6 +675,20 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
             statusBar()->showMessage("Remote Mining requires a reported unowned planet at the fleet's position.", 5000);
             return false;
         }
+        // Replace unsent mining/Stop intent, then append the native task last.
+        // A stationary miner needs no artificial arrival leg or extra mining year.
+        for (std::size_t index = pendingOrders_.orders.size(); index-- > 0;) {
+            const auto* mining = std::get_if<SetRemoteMiningOrder>(&pendingOrders_.orders[index]);
+            const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]);
+            if ((mining && mining->fleet == fleet.id)
+                || (move && move->fleet == fleet.id && routeIsClearIntent(fleet, *move))) {
+                pendingOrders_.orders.erase(pendingOrders_.orders.begin() + static_cast<std::ptrdiff_t>(index));
+                pendingDescriptions_.removeAt(static_cast<int>(index));
+            }
+        }
+        appendPendingOrder(SetRemoteMiningOrder{fleet.id, true},
+            "Remote Mining queued for End Turn; starts after command delivery and deposits minerals on the planet.");
+        return true;
     }
     return appendRouteWaypoint(fleet.position, 0, std::max<std::uint8_t>(1, fleet.warp), action);
 }
@@ -768,13 +812,14 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         }
     }
     if (arrivalAction.kind == FleetArrivalActionKind::RemoteMining) {
-        if (!fleet_can_remote_mine(state_, *fleet)) {
+        if (!fleet_can_remote_mine(fleetPlanningState(), *fleet)) {
             statusBar()->showMessage("Remote Mining requires a Remote Miner hull with mining equipment", 3000);
             return false;
         }
         const auto* planet = find_planet_at_star(state_, star->id);
-        if (!planet || planet->owner != 0) {
-            statusBar()->showMessage("Remote Mining requires an uncolonized destination world", 3000);
+        const auto owner = planet ? known_planet_owner(state_, fleet->owner, planet->id) : std::nullopt;
+        if (owner && *owner != 0) {
+            statusBar()->showMessage("Remote Mining cannot target a reported colony", 3000);
             return false;
         }
     }
@@ -1072,10 +1117,12 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         statusBar()->showMessage("Refuel requires a friendly orbital depot at the waypoint", 4000);
         return false;
     }
-    if (action.kind == FleetArrivalActionKind::RemoteMining
-        && (!planet || planet->owner != 0 || !fleet_can_remote_mine(state_, fleet))) {
-        statusBar()->showMessage("Remote Mining requires an unowned planet and mining fleet", 4000);
-        return false;
+    if (action.kind == FleetArrivalActionKind::RemoteMining) {
+        const auto owner = planet ? known_planet_owner(state_, fleet.owner, planet->id) : std::nullopt;
+        if (!star || (owner && *owner != 0) || !fleet_can_remote_mine(fleetPlanningState(), fleet)) {
+            statusBar()->showMessage("Remote Mining needs a mining fleet and a system without a reported colony", 4000);
+            return false;
+        }
     }
     if (action.kind == FleetArrivalActionKind::EnterWormhole) {
         statusBar()->showMessage("Use the wormhole navigator for this action", 4000);
