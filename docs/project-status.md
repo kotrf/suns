@@ -1,5 +1,132 @@
 # Project status and development handoff
 
+## PR #269 review: skipped production rows — 3 November 2026
+
+Review of 62f0e93 identified one P2: the minimal queue estimate charged known
+skipped work to later rows. A legal template of 100 defenses followed by a Factory
+at Energy 0, or at the defense cap, predicted Factory T86 instead of T2. Both
+cases were independently reproduced using the original helper and one real
+resolve_colony_production call before the fix.
+
+The helper now receives the current received/planned colony and applies cheap
+resolver-equivalent technology/cap/radar/station skip checks before budgeting.
+Skipped rows have zero effective quantity/work and preserve prefix certainty.
+Manual defenses clamp to the remaining cap, including partial first-unit work;
+capped annual rules remain explicitly idle. Scalar defense/radar/station facts
+advance only after a confidently estimated prefix. Missing minerals/shipyards
+still block, and skipping a later row never clears an earlier unknown. The UI
+shows effective bills/work and Currently skipped; skipped stations do not create
+an estimated shipyard. No core, real-turn, save/orders or forecast policy change.
+
+Full GCC14.2/Qt6.12 Debug build and **112/112 offscreen CTest passed (37.07 s)**.
+New cases use exact mineral budgets and one real resolver call for the two legal
+template repros, annual cap persistence, partial/repeated capped defense batches,
+installed/duplicate radar and invalid stations. A real MainWindow production
+template test checks the Factory row is ~Turn 2 (+1). Huge-batch/overflow and
+unknown-prefix regressions still pass. Independent read-only review found no
+additional confirmed defect; diff check clean. Complexity remains one queue pass,
+without year/unit loops; previous private-save timings are not newly remeasured.
+
+Work stays on codex/ui-order-performance, PR #269 open/unmerged. The prior
+62f0e93 source CI 41599894742/job 125795896503 passed **112/112 (83.02 s)**,
+Qt6.12.0/GCC15.2, checkout/log verified; it does not validate this subsequent fix.
+Current source/CI are recorded on the PR. #267 remains independent; frozen
+directions and the minimal-estimate decision are unchanged.
+
+## Minimal realtime estimates — user decision, 3 November 2026
+
+The user explicitly prefers minimal, imperceptibly cheap estimates over detailed
+realtime forecasts, including background calculations. Rough population growth
+and distance/speed ETA are sufficient; actual outcomes resolve on End Turn.
+This supersedes the detailed background-forecast approach in the earlier #269
+checkpoint below. Work remains in the existing codex/ui-order-performance branch;
+PR #269/#268 stay open for review, not merged. Main is still 79d22c2; #267 is an
+independent open documentation restoration.
+
+Deleted the 96-year route simulation, QtCore worker manager, pending forecast
+states and Fuel/Left columns. Route rows/summary use cumulative distance/Warp²,
+marked ≈, received-derived positions and existing pending/sent route precedence.
+Conditional actions, moving targets, gates and wormholes leave later ETA unknown.
+The current accepted cargo/fleet projection replaces the disposable full-turn
+movement preview. It stays in the current year and credits no future generation
+or automatic service. Its dependencies include route edits/Stop, unlike the old
+logistics-filtered preview; stale route-cache retags were removed and tested.
+
+Production uses one pass over current work, net output and received mineral
+budget. Auto/nonlinear/blocked prefixes show Annual rule or no date. Removed
+future queue/service simulations from templates, engineering, resonance labs and
+mobile bases. Current rates, eligibility, costs, order validation and received
+knowledge remain. Bounded habitat-upkeep arithmetic derives current net rates
+on one local planet copy; it does not run future world turns. Real simulation
+and save v109/orders v48 are unchanged. [Current contract](minimal-ui-estimates.md)
+and durable decision MEM-32 explain the new boundary.
+
+Full GCC14.2/Qt6.12 Debug build and **112/112 offscreen CTest passed (39.76 s)**.
+Updated UI assertions distinguish nominal estimates from actual outcomes; exact
+EndTurn/logistics/knowledge/save assertions remain. New tests cover geometric
+routes beyond 96 years, received track projections/hidden invariance, sent
+command precedence, conditional unknowns, current-year manifests, static queue
+rates/mineral budgets, large batches and overflow.
+
+On the same private year-89/288-system/37-fleet save without concurrent builds:
+route summary **0.050 ms** synchronous; detailed 659fd9b needed **6.594 seconds
+background work** after Factory, now there is no such work. Paired foreground
+Factory **209 → 215 ms** (including queued GUI events): no claim of additional
+foreground improvement over that revision. Three real current clicks were
+**184 / 260 / 245 ms**, versus original main **8477 / 8216 / 8470 ms** before
+the broader #269 work. Settled idle CPU **5.4 ms / 2.1 s**, heartbeat **20.4 ms**;
+both modes use the same 500-ms layout settling floor. Save/readback passed and
+the supplied turn was never advanced/overwritten. Measurements are executor
+Debug results; private files remain untracked. PR #269 carries exact source/CI.
+
+#53/#63/auto-evacuation remain frozen; AI extensions postponed. Prior sections
+describe their historical checkpoints, including superseded forecast behavior.
+
+## Order-edit responsiveness #268 — 3 November 2026
+
+The user confirms system selection improved after merged #266, but adding a
+Factory still takes seconds, and requests broad UI optimization. Current work
+is `codex/ui-order-performance`, based on verified main
+`79d22c2ee18d140dcd404816e975c6a13990c483`. #265 is closed; main CI
+41538166676 completed successfully for that exact SHA. Documentation-only #267
+remains open and restores the older performance history; this task leaves its
+`docs/ui-performance.md` file untouched.
+
+Production/research-only edits now retain immediate physical projections and
+map items while invalidating annual route estimates correctly. Automatic route
+rows, candidate fuel warnings and the Forecast dialog use bounded cancellable
+QtCore workers with owned received snapshots, complete request identities and
+GUI-only publication. Superseded jobs, cache-hit reversions and invalid editor
+candidates cancel unnecessary work; stop/load/new world/turn/close join workers.
+Synchronous forecast APIs keep their exact existing simulation. Hidden Research
+is lazy; Intel/Computer tools refresh on coalesced events. Exact delay shortcuts,
+immutable snapshot-scoped communication graphs and lazy optional fallbacks
+remove additional repeated work. No gameplay or save v109/orders v48 change.
+
+Full GCC14.2/Qt6.12 Debug application/tests build succeeded;
+**111/111 Linux/offscreen CTest passed (37.95 s)**. Tests cover cache dependencies,
+fresh received knowledge, graph/export equivalence across scopes/threads, tool
+visibility/events, exact async/sync route parity, rapid edits, delayed commands,
+cache-hit cancellation and same-ID load/stop/close/destruction. Existing exact
+route editor ETA/fuel/action/color assertions now wait for async completion.
+Diff check passed. Uploaded saves/profiling files remain outside tracked files.
+
+Controlled real Factory Add clicks with the original active-route fleet on the
+user's year-89/288-system save: **8477 / 8216 / 8470 → 214 / 190 / 198 ms**, about
+40× lower foreground latency. Paired broader probe: original-fleet Factory
+**8046 → 219 ms**, fleet selection **1813 → 453 ms**, research allocation
+**808 → 207 ms**, load **8566 → 685 ms**. Necessary ETA work still takes about
+6.1 seconds in the background, with 21.4-ms longest heartbeat gap after Factory;
+idle CPU **76.8 → 7.2 ms / 2.1 s** after all forecasts settle. Save/readback
+passed without advancing or overwriting the original. Debug author measurements
+on this executor; no universal timing guarantee. [Mechanism, complete table and
+diagnostic](ui-order-performance.md). Source PR/CI tracked in
+[#268](https://github.com/kotrf/suns/issues/268); code awaits review/merge.
+
+#53/#63 and auto-evacuation stay frozen, AI extensions postponed. The active
+priority is user verification of responsiveness; no new gameplay slice selected.
+Older pending checkpoint sections below describe their original point in time.
+
 ## Late-campaign selection stalls #265 — 3 November 2026
 
 User reports severe system-selection stalls in the ongoing year 80–90 campaign,

@@ -66,21 +66,17 @@ struct MainWindowTestAccess {
 QByteArray bytes(const QString& p) {QFile f(p);assert(f.open(QIODevice::ReadOnly));return f.readAll();}
 void write(const QString& p,const QByteArray& b) {QFile f(p);assert(f.open(QIODevice::WriteOnly));assert(f.write(b)==b.size());}
 QByteArray tag(quint32 value) {QByteArray b;QDataStream out(&b,QIODevice::WriteOnly);out<<value;return b;}
-void check_estimate(MainWindow& w,bool progressing)
+void check_current_project(MainWindow& w,bool progressing)
 {
-    MainWindowTestAccess::refresh(w); // The application's production pane normally refreshes on its timer.
+    MainWindowTestAccess::refresh(w);
     const auto* tree=w.findChild<QTreeWidget*>("productionQueueTree");
     if(!tree || tree->topLevelItemCount()!=1)qCritical()<<"Queue rows"<<(tree?tree->topLevelItemCount():-1)
         <<"orders"<<MainWindowTestAccess::orders(w).orders.size()<<w.findChild<QLabel*>("engineeringStatus")->text();
     assert(tree && tree->topLevelItemCount()==1);
     const auto text=w.findChild<QLabel*>("engineeringStatus")->text();
-    if(progressing) {
-        assert(text.contains("Estimated completion: year 40"));
-        assert(tree->topLevelItem(0)->text(3)=="Turn 40 (+30)");
-    } else {
-        assert(text.contains("No completion within the 128-year forecast"));
-        assert(tree->topLevelItem(0)->text(3)=="beyond forecast");
-    }
+    assert(text.contains("0 / 2400 work") && text.contains("Scheduled in production queue"));
+    assert(!text.contains("Estimated completion") && !text.contains("128-year forecast"));
+    assert(tree->topLevelItem(0)->text(3)=="—");
     const auto s=MainWindowTestAccess::state(w); const auto orders=MainWindowTestAccess::orders(w);
     const auto resolved=TurnProcessor{}.process(s,{orders});
     assert(s.planets[0].engineering.kind==E::None); // Planning did not spend a year or mutate physical work.
@@ -89,7 +85,7 @@ void check_estimate(MainWindow& w,bool progressing)
 void newly_planned_project_uses_projected_planet(MainWindow& w)
 {
     MainWindowTestAccess::setup(w,10);
-    w.findChild<QPushButton*>("engineeringStart")->click(); check_estimate(w,true);
+    w.findChild<QPushButton*>("engineeringStart")->click(); check_current_project(w,true);
 }
 void research_orders_reach_both_forecasts(MainWindow& w)
 {
@@ -97,17 +93,17 @@ void research_orders_reach_both_forecasts(MainWindow& w)
         MainWindowTestAccess::setup(w,10,true,initiallyBlocked?100:0);
         w.findChild<QPushButton*>("engineeringStart")->click();
         MainWindowTestAccess::append(w,SetResearchAllocationOrder{std::uint8_t(initiallyBlocked?0:100)});
-        check_estimate(w,initiallyBlocked);
+        check_current_project(w,initiallyBlocked);
         assert(MainWindowTestAccess::state(w).players[0].technology.researchAllocationPercent==(initiallyBlocked?100:0));
     }
     MainWindowTestAccess::setup(w,10,false,100);
     w.findChild<QPushButton*>("engineeringStart")->click();
-    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{},true}); check_estimate(w,false);
-    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{},false}); check_estimate(w,true);
+    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{},true}); check_current_project(w,false);
+    MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{},false}); check_current_project(w,true);
     // Invalid research orders must be rejected just as they are by End Turn.
     MainWindowTestAccess::append(w,SetResearchAllocationOrder{101});
     MainWindowTestAccess::append(w,SetResearchPlanOrder{ResearchField::Construction,{ResearchField::Energy},false});
-    check_estimate(w,true);
+    check_current_project(w,true);
     const auto projected=planned_production_state(MainWindowTestAccess::state(w),MainWindowTestAccess::orders(w));
     assert(projected.players[0].technology.researchAllocationPercent==100);
     assert(!projected.players[0].technology.researchActive && projected.players[0].technology.queuedFocuses.empty());
@@ -181,7 +177,8 @@ void magnetic_ui_persistence_and_private_evidence(MainWindow& w)
     start->click();
     const auto& order=std::get<SetPlanetaryEngineeringOrder>(MainWindowTestAccess::orders(w).orders.back());
     assert(order.kind==E::AdaptiveMagnetosphere && order.strength==20);
-    assert(status->text().contains("Estimated completion: year 70"));
+    assert(status->text().contains("0 / 4800 work") && status->text().contains("Scheduled in production queue"));
+    assert(!status->text().contains("Estimated completion"));
     assert(apply_planetary_engineering_order(s,s.planets[0],order));
     for(unsigned i=0;i<38;++i) {(void)resolve_colony_production(s,s.planets[0],true);++s.turn;}
     assert(s.planets[0].engineering.work==3040);set_survey_level(s,1,1,SurveyLevel::DeepSurvey,s.turn);

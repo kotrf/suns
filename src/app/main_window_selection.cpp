@@ -110,7 +110,7 @@ void MainWindow::queueMapSelectionRebuild()
                 item->setSelected(selection_.star && item->data(0).toUInt() == *selection_.star);
         }
         refreshMapLabels();
-        updateControls();
+        updateControls(false);
         refreshProductionQueue();
         emit routeProgramContextChanged();
     });

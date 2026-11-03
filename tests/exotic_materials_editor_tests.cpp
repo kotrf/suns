@@ -492,7 +492,9 @@ void ui_commands_and_previews(MainWindow& w)
     assert(std::holds_alternative<TransferXenocrystalOrder>(MainWindowTestAccess::orders(w).back()));
     assert(MainWindowTestAccess::state(w).fleets[0].xenocrystal == 8 && !MainWindowTestAccess::state(w).planets[0].xenocrystal.surface);
     select_planet(w, 1); auto* start = w.findChild<QPushButton*>("startResonanceLab"); assert(start->isEnabled()); start->click();
-    auto* details = w.findChild<QLabel*>("exoticProjectDetails"); assert(details->text().contains("Forecast completion: year"));
+    auto* details = w.findChild<QLabel*>("exoticProjectDetails");
+    assert(details->text().contains("0/600 work") && details->text().contains("Scheduled in production queue"));
+    assert(!details->text().contains("Forecast completion: year"));
     assert(!MainWindowTestAccess::state(w).planets[0].resonanceLab.started);
     s.fleets[0].position = {900, 0}; s.fleets[0].telemetry.observedTurn = s.turn - 1; s.planets[0].xenocrystal.surface = 99;
     MainWindowTestAccess::load(w, s); select_planet(w, 1);

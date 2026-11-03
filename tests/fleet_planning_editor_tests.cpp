@@ -47,6 +47,7 @@ struct MainWindowTestAccess {
     {
         const auto revision = w.planningRevision_;
         const auto turn = w.movementPlanningPreview().turn;
+        assert(turn == w.state_.turn); // A preview applies current orders without advancing the world.
         QGraphicsItem* marker = nullptr;
         for (auto* item : w.scene_->items())
             if (item->data(1).toInt() == 1 && item->data(0).toUInt() == w.state_.stars.back().id) marker = item;

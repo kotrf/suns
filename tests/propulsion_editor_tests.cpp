@@ -95,6 +95,7 @@ int main(int argc, char** argv)
     {
         MainWindow levelsWindow;
         levelsWindow.installResearch();
+        levelsWindow.findChild<QDialog*>("researchDialog")->show();
         const auto initial = MainWindowTestAccess::plannedLevels(levelsWindow);
         auto* fields = levelsWindow.findChild<QComboBox*>("researchAddCombo");
         auto* add = levelsWindow.findChild<QPushButton*>("researchAddButton");

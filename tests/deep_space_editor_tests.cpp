@@ -50,10 +50,10 @@ int main(int argc,char** argv)
     const auto& move=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(w).back());
     assert(move.arrivalAction.kind==FleetArrivalActionKind::SupplyOutpost && move.arrivalAction.reserveFuel==75.25);
     assert(same_position(move.destination,Position{60,0}) && move.targetFleet==0);
-    const auto forecast=w.selectedFleetRouteProgramForecast();
+    const auto forecast=w.selectedFleetRouteProgramEstimate();
     MainWindowTestAccess::hidden(w);
     assert(tree->topLevelItem(0)->text(3).startsWith("120.0") && tree->topLevelItem(0)->text(4)=="0%");
-    assert(w.selectedFleetRouteProgramForecast()==forecast);
+    assert(w.selectedFleetRouteProgramEstimate()==forecast);
     // The route editor preserves and changes fractional tanker reserves.
     auto* routes=w.findChild<QTreeWidget*>("routeProgramQueue");
     assert(routes && routes->topLevelItemCount()==1); routes->setCurrentItem(routes->topLevelItem(0));

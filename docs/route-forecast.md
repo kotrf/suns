@@ -1,103 +1,38 @@
-# Route-program forecasts
+# Quick route estimates
 
-The fleet route dock distinguishes navigation that is already determined from navigation that depends on a future dynamic logistics result.
+The 3 November 2026 [minimal estimate contract](minimal-ui-estimates.md) replaces
+annual route forecasts. The interface performs one pass over known waypoints;
+there is no disposable TurnProcessor, 96-year horizon or background worker.
 
-For the selected fleet, the Qt client projects the programmed route by running a disposable copy of `GameState` through the real `TurnProcessor`:
+The table shows position, destination, Warp and **ETA ≈**. Nominal travel time
+is cumulative ceil(distance / Warp²) from the received fleet position. Numbers
+are prefixed ≈ and exclude command delivery, fuel, coasting, generation, clouds,
+refueling, encounters and future arrival actions. The Route estimate dialog is
+a quick summary of the same geometry. It does not run a detailed calculation.
+Current fuel and the local overdrive warning remain available separately.
 
-- the current turn includes all orders already queued by the player;
-- later projected turns assume no additional orders are issued;
-- onboard fuel generation, ram-scoop behaviour, fuel-limited movement, population growth and arrival actions therefore use the same rules as the authoritative simulation;
-- the preview horizon is 96 turns.
+A moving target uses a position estimate from its received track, without
+claiming an interception outcome. A gate row estimates approach to the source only; the actual hop and
+later ETA are unknown. Wormhole entry never predicts exit or survival. Any
+conditional arrival action makes subsequent ETA unknown (—). The real turn
+resolves every action normally; next year's received reports update the plan.
 
-## Exact versus projected
+Selecting a row loads that exact leg's Warp and arrival action. Editing changes
+only that leg; other speeds, targets and actions remain intact. New waypoint
+clears row selection and restores the separate addition draft. Adding through
+the button or map immediately selects the appended row; a failed append does
+not select another leg. Choosing Colonize edits that selected leg and retains
+the explicit colony-plan choice.
 
-A leg before any dynamic `Load All` result is labelled **exact navigation**. Its route geometry and departure mass are already known from the current/pending state.
+Committed routes can be reordered or have points removed like current drafts.
+Removing the last point submits explicit Stop: navigation, repetition and
+stationary tasks stop when delivered. Older packets cannot restart the canceled
+program. Stop remains valid for an immobilized fleet and does not depend on an
+estimated future coordinate.
 
-`Load All` itself remains explicitly projected because the amount depends on the colony population that exists when the fleet actually arrives.
-
-Every later leg is labelled **projected navigation** because its gross mass and fuel burn may depend on that dynamic load result.
-
-The forecast is intentionally phrased as "if no further orders are issued". Future player actions, combat and other systems may invalidate a projection; the authoritative result always comes from `TurnProcessor` when the real turn is resolved.
-Enemy fleets are excluded from navigation simulation. A preview never runs a
-battle using hidden enemy equipment, routes or the host's battle seed.
-
-
-## Per-waypoint ETA
-
-The route table shows `ETA (years)` for each point: cumulative years from the
-current planning boundary, including preceding legs, cargo/refuel actions and
-command delivery. The same simulation powers the detailed forecast. `N` denotes
-the whole number of game turns until arrival, assuming no further orders. No
-approximation prefix is displayed; `—` means arrival is not predicted inside
-96 turns (for example, insufficient fuel or an unreachable moving target).
-Repeating programs show the next traversal. The result is cached until the
-planning state or selected fleet changes.
-
-Committed routes can be reordered or have individual points removed exactly as
-current-year drafts can. Removing the last point submits an explicit stop. It
-cancels navigation, repeated waypoints and stationary tasks when delivered;
-older command packets still in transit cannot restart that canceled program.
-Stop semantics do not depend on an estimated fleet coordinate and also work
-for an immobilized fleet.
-# Compact route table and fuel warning
-
-The Current program table shows destination, Warp, cumulative ETA, **Fuel**
-(used on the leg) and **Left** (fuel remaining). Compact headers keep both fuel
-columns visible in a narrow fleet panel; tooltips specify mg. Selecting a row displays its arrival action and loads that
-leg's Warp into the selector. Changing Warp updates that leg's pending order,
-table, ETA and fuel forecast immediately. Other leg speeds, destinations and
-arrival actions stay intact. This also works for an already committed route:
-the edited program takes effect when its command arrives. **New waypoint**
-clears row selection and restores the separate addition draft; changing its
-Warp does not alter existing legs.
-
-Adding a waypoint with the button or a right-click on the map immediately
-selects the newly appended row and opens its Warp / On arrival editor. Choosing
-Colonize after that gesture updates that exact leg, without another row click
-or waiting for the periodic refresh. Use **New waypoint** to prepare a separate
-addition draft; a failed append does not select another leg.
-
-Fuel used is movement consumption on each leg, not cumulative consumption or
-the difference between tanks at two planning boundaries. Transient
-`TurnResult::movementFuel` accounting records engine consumption before arrival
-refuelling, merging or colonization. Cargo changes, generators, scoops, rounded
-turn billing and depots therefore use actual turn rules. Fuel left includes
-arrival refuelling. It is a projection, not a record of past consumption.
-
-The first leg where the fleet cannot maintain its ordered Warp due to fuel is
-highlighted red. Its tooltip identifies the projected shortage year. A free
-coasting speed may still permit a later arrival; the row remains a warning for
-the requested speed. Exact exhaustion on arrival is not itself a shortage on
-that leg. Red coloring is removed when the edited plan can sustain its speed.
-
-For an incomplete forecast, `≥` marks movement consumption observed so far
-within the 96-year preview, rather than a complete leg cost. `—` marks a leg
-for which no movement data or arrival is predicted, including later legs after
-a permanent stall. Unknown values are never presented as zero. Hidden hazards
-and hostile fleet outcomes remain excluded from the preview.
-
-Waypoint Warp turns red for unsafe overdrive or a predicted fuel shortage while
-following the current program plus the candidate waypoint. A `low fuel` suffix
-and tooltip distinguish fuel shortage from hull-damage risk. The forecast uses
-turn processing, including cargo changes, command delays, fuel generation and
-orbital refuelling, up to 96 years. It is cached until the plan or candidate
-changes. Absence of a warning does not guarantee arrival beyond that horizon.
-
-## Gate steps
-
-A gate row describes approach plus an autonomous hop, not a conventional flight
-to the receiving system. Its ETA includes command delivery, a separate hop year
-and earlier legs. Gate outcomes and later legs are explicitly projected from
-received evidence; a blocked gate displays a forecast reason and leaves later
-ETA unknown. Neither hidden station loss nor undelivered telemetry can confirm
-or invalidate the hop. See [scheduled gates](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).
-
-Own commands already sent remain in the gate forecast with their original
-issue/delivery dates after End Turn; they are not incoming telemetry. Reached
-No action points at the receiving system share the hop's ETA and zero additional
-movement fuel, including when the traversal restarts a repeating programme.
-
-Route edits use the current draft first, then the latest sent navigation command
-(including Stop), then the received onboard route. This also applies while old
-telemetry shows an active voyage: appending a waypoint retains the gate programme
-already in transit. Non-navigation settings packets do not replace that intent.
+Route intent precedence remains current pending edits, then the latest sent
+navigation command (including Stop), then the received onboard route. Sent
+commands retain original issue/delivery dates, even when telemetry still shows
+an old voyage. Non-navigation settings packets do not replace this intent.
+Neither hidden station loss nor undelivered fleet movement changes received
+labels or confirms a gate outcome. See [scheduled gate orders](stargate-specialist.md#deferred-commands-and-scheduled-gate-routes-195).

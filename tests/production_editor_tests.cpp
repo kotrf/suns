@@ -4,6 +4,7 @@
 #include <QDialog>
 #include <QTableWidget>
 #include "suns/stations.hpp"
+#include "suns/production.hpp"
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QEventLoop>
@@ -124,6 +125,33 @@ struct MainWindowTestAccess {
     static bool save(MainWindow& w, const QString& path) { return w.saveGameToPath(path); }
     static bool load(MainWindow& w, const QString& path) { return w.loadGameFromPath(path); }
     static void research(MainWindow& w) { w.queueResearchAllocation(50); }
+    static void skippedDefenseTemplate(MainWindow& w, bool atLimit)
+    {
+        w.state_ = make_demo_game();
+        auto& player = w.state_.players.front();
+        player.technology.researchActive = false;
+        player.technology.levels[std::size_t(ResearchField::Energy)] = atLimit ? 1 : 0;
+        const ProductionTemplate value{"Review defenses", {
+            {ProductionKind::ColonyDefense, production_cost(ProductionKind::ColonyDefense), 0,
+                ProductionAutomation::None, 100},
+            {ProductionKind::Factory, kFactoryCost}}};
+        assert(production_template_valid(value));
+        player.productionTemplates = {value};
+        auto& planet = w.state_.planets.front();
+        planet.population = 6 * kPopulationPerProductionUnit;
+        planet.industry = 0;
+        planet.mines = 0;
+        planet.minerals = {1000, 1000, 1000};
+        planet.defenses = atLimit ? kMaximumColonyDefenses : 0;
+        planet.productionQueue.clear();
+        assert(colony_output(w.state_, planet) == 6);
+        set_survey_level(w.state_, player.id, planet.star, SurveyLevel::DeepSurvey, w.state_.turn);
+        w.pendingOrders_ = {player.id, {ApplyProductionTemplateOrder{planet.id, value.name}}};
+        w.pendingDescriptions_ = {"Apply review template"};
+        w.selection_.star = planet.star;
+        w.rebuildScene();
+        w.refreshProductionQueue();
+    }
     static void selectOtherWorld(MainWindow& w) {
         w.selectWorkspaceObject(1, w.state_.planets.back().star);
         w.queueMapSelectionRebuild();
@@ -137,6 +165,16 @@ int main(int argc, char** argv)
     suns::MainWindow window;
     window.installUiPolish();
     window.installProductionQueue();
+    suns::MainWindowTestAccess::install(window);
+    for (const bool atLimit : {false, true}) {
+        suns::MainWindowTestAccess::skippedDefenseTemplate(window, atLimit);
+        auto* queue = window.findChild<QTreeWidget*>("productionQueueTree");
+        assert(queue && queue->topLevelItemCount() == 2);
+        assert(!queue->topLevelItem(0)->text(3).startsWith("~Turn "));
+        const auto nextTurn = suns::MainWindowTestAccess::state(window).turn + 1;
+        assert(queue->topLevelItem(1)->text(1) == "Factory");
+        assert(queue->topLevelItem(1)->text(3) == QString("~Turn %1 (+1)").arg(qulonglong(nextTurn)));
+    }
     suns::MainWindowTestAccess::install(window);
     for (const bool stateChangesWhileHeld : {false, true}) {
         // A real user can hold Add across a panel update. Disabling the button
@@ -366,7 +404,8 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::queueDesign(window);
     assert(tree->topLevelItemCount() == 1);
     assert(tree->topLevelItem(0)->text(1) == "Immediate Scout");
-    assert(tree->topLevelItem(0)->text(3).startsWith("Turn "));
+    assert(tree->topLevelItem(0)->text(3).startsWith("~Turn "));
+    assert(tree->headerItem()->text(3).contains("Approx."));
     auto* minerals = window.findChild<QLabel*>("productionMineralDetails");
     assert(minerals && minerals->text().contains("I 6.0 / B 4.0 / G 5.0 kt"));
     const auto& queued = std::get<suns::QueueShipDesignOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
@@ -386,6 +425,7 @@ int main(int argc, char** argv)
     kind->setCurrentIndex(kind->findText("Auto factories ↻")); quantity->setValue(3); add->click();
     assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
     assert(tree->topLevelItem(0)->font(1).italic());
+    assert(tree->topLevelItem(0)->text(3) == "Annual rule");
     kind->setCurrentIndex(kind->findText("Mines")); quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1).contains("×2"));
     suns::MainWindowTestAccess::saveTemplate(window);
@@ -400,7 +440,7 @@ int main(int argc, char** argv)
     kind->setCurrentIndex(kind->findText("Terraform")); quantity->setValue(1);
     assert(add->isEnabled()); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1) == "Terraforming");
-    assert(tree->topLevelItem(1)->text(3).startsWith("Turn "));
+    assert(tree->topLevelItem(1)->text(3) == QString::fromUtf8("—"));
     if (const auto path = qEnvironmentVariable("SUNS_TERRAFORM_SCREENSHOT"); !path.isEmpty()) {
         window.installPanelLayoutFixes();
         window.resize(1400, 900); window.show();
@@ -415,7 +455,7 @@ int main(int argc, char** argv)
     assert(add->isEnabled() && quantity->maximum()==2);
     quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1).contains("Reconstruct factory"));
-    assert(tree->topLevelItem(0)->text(3).startsWith("Turn ") && !add->isEnabled());
+    assert(tree->topLevelItem(0)->text(3) == QString::fromUtf8("—") && !add->isEnabled());
     assert(tree->topLevelItem(0)->toolTip(1).contains("4 production"));
     const auto count=suns::MainWindowTestAccess::orders(window).orders.size(); add->click();
     assert(suns::MainWindowTestAccess::orders(window).orders.size()==count);

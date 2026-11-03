@@ -29,19 +29,12 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <utility>
 
 namespace suns {
 
 namespace {
-
-Fleet* findFleet(GameState& state, FleetId id)
-{
-    const auto it = std::find_if(state.fleets.begin(), state.fleets.end(), [id](const Fleet& fleet) {
-        return fleet.id == id;
-    });
-    return it == state.fleets.end() ? nullptr : &*it;
-}
 
 const Fleet* findFleet(const GameState& state, FleetId id)
 {
@@ -224,384 +217,6 @@ std::vector<FleetWaypoint> routeLegs(const MoveFleetOrder& route)
     return legs;
 }
 
-QString routeForecast(
-    const GameState& state,
-    const PlayerOrders& pending,
-    const TurnProcessor& processor,
-    FleetId fleetId,
-    const MoveFleetOrder& route,
-    std::vector<RouteProgramLegForecast>* legForecasts = nullptr,
-    QString* fuelWarning = nullptr)
-{
-    constexpr std::uint32_t kForecastHorizon = 96;
-    const auto legs = routeLegs(route);
-    if (legs.empty()) return {};
-    if (legForecasts) legForecasts->assign(legs.size(), {});
-    if (fuelWarning) fuelWarning->clear();
-    if (std::any_of(legs.begin(), legs.end(), [](const auto& leg) {
-        return leg.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole;
-    })) return "WH approach uses last observed coordinates. Local sensors can reacquire a drifting mouth. "
-        "Entry, lifetime, exit and survival cannot be forecast with certainty.";
-
-    // Every route uses received fittings, queues and stocks. Physical hidden
-    // station losses must not invalidate a previously delivered programme.
-    GameState simulated = make_player_view(state,pending.player).state;
-    // Chart-only systems have no received physical planet to service a route.
-    // Re-observing every chart entry for 96 simulated years adds no navigation
-    // evidence; keep all received planets and their stellar environments.
-    std::erase_if(simulated.stars,[&](const auto& star) {
-        return std::none_of(simulated.planets.begin(),simulated.planets.end(),[&](const auto& p){return p.star==star.id;});
-    });
-    simulated.pendingMobileBaseTransfers.clear(); // Host-only undelivered logistics are not planning evidence.
-    project_interstellar_medium(simulated,pending.player);
-    // Navigation previews must never resolve battles using hidden enemy fits,
-    // routes or the authoritative seed. Combat outcomes are not forecasts.
-    std::erase_if(simulated.fleets, [&](const auto& f) { return f.owner != pending.player; });
-    simulated.minefields.clear(); simulated.wrecks.clear();
-    if (const auto* p = find_player(state,pending.player)) for (const auto& i : p->strategicIntel)
-        if (i.type == StrategicObjectKind::Minefield && i.quantity > 0)
-            simulated.minefields.push_back({i.id,i.owner,i.position,i.quantity,i.kind});
-
-    simulated.wormholes.clear();
-    simulated.wormholeRules.spawnChancePerTurn = 0.0;
-    // PlayerView already includes last contacts for unconfirmed fleet losses.
-    // Appending them again would duplicate their projected mining/logistics.
-    for (auto& f : simulated.fleets) f = fleet_player_view(state, f);
-    for (auto& f : simulated.fleets) {
-        // These are the owner's sent commands, not incoming telemetry or host
-        // logistics. Keep their original issue/delivery dates in the forecast.
-        if (const auto* original=findFleet(state,f.id); original && original->owner==pending.player)
-            f.pendingCommands=original->pendingCommands;
-    }
-    for (auto& f : simulated.fleets) if (f.task != FleetTask::RemoteMining && f.task != FleetTask::DeployOutpost) f.task = FleetTask::None;
-    QStringList lines;
-    lines << "<br><b>Forecast if no further orders are issued:</b>";
-    lines << "<i>Navigation only: hostile encounters can interrupt this route; combat is not forecast.</i>";
-    if (state.interstellarMediumEnabled) lines << "<i>Medium estimate: received cloud profiles only. Undiscovered or approximately detected density can change fuel, coasting and ETA. "
-        "Fuel ranges cover density 0–1 along the forecast flown segments; actual arrival/refuelling may change. Density changes engine safe Warp and hull risk; the estimate can miss unknown hazards.</i>";
-
-    bool firstTurn = true;
-    bool dependsOnDynamicResult = false;
-    std::size_t legIndex = 0;
-    bool fuelShortageSeen = false;
-
-    for (std::uint32_t step = 1; step <= kForecastHorizon && legIndex < legs.size(); ++step) {
-        std::optional<GameState> splitPreview;
-        const auto* beforeFleet = findFleet(simulated, fleetId);
-        if (!beforeFleet && firstTurn) {
-            splitPreview = projected_cargo_order_state(simulated, pending);
-            beforeFleet = findFleet(*splitPreview, fleetId);
-        }
-        if (!beforeFleet) {
-            lines << "Fleet no longer exists in the projected state.";
-            break;
-        }
-        const auto fleetOwner = beforeFleet->owner;
-        PlayerId targetOwnerBeforeTurn{};
-        if (const auto* targetStar = findStarAtPosition(simulated, legs[legIndex].destination)) {
-            if (const auto* targetPlanet = find_planet_at_star(simulated, targetStar->id)) {
-                targetOwnerBeforeTurn = targetPlanet->owner;
-            }
-        }
-
-        std::vector<PlayerOrders> submissions;
-        if (firstTurn && !pending.orders.empty()) submissions.push_back(pending);
-        firstTurn = false;
-
-        auto result = processor.process_with_events(simulated, submissions);
-        auto next = std::move(result.state);
-        const auto* after = findFleet(next, fleetId);
-        const auto& leg = legs[legIndex];
-        for (const auto& movement : result.movementFuel) {
-            if (movement.fleet != fleetId
-                || (leg.targetFleet != 0 ? movement.targetFleet != leg.targetFleet
-                    : movement.targetFleet != 0 || !same_position(movement.destination, leg.destination))) continue;
-            if (legForecasts) {
-                auto& forecast = (*legForecasts)[legIndex];
-                forecast.fuelUsed = forecast.fuelUsed.value_or(0.0) + movement.consumed;
-                forecast.fuelRemaining = movement.remaining;
-                forecast.fuelMinimum=forecast.fuelMinimum.value_or(0.0)+movement.consumedMinimum;
-                forecast.fuelMaximum=forecast.fuelMaximum.value_or(0.0)+movement.consumedMaximum;
-            }
-            if (movement.fuelLimited && !fuelShortageSeen) {
-                fuelShortageSeen = true;
-                if (legForecasts) (*legForecasts)[legIndex].fuelShortageTurn = step;
-                if (fuelWarning) {
-                    *fuelWarning = QString("Fuel shortage forecast at T+%1, before waypoint %2 (%3). "
-                        "This preview includes earlier legs, cargo changes, fuel generation and orbital refuelling. "
-                        "Reduce Warp or add a refuelling stop.")
-                        .arg(step).arg(static_cast<qulonglong>(legIndex + 1))
-                        .arg(waypointName(state, leg.destination, leg.targetFleet));
-                }
-            }
-        }
-        const auto markArrival = [&] {
-            if (!legForecasts) return;
-            auto& forecast = (*legForecasts)[legIndex];
-            forecast.arrivalTurn = step;
-            if (!forecast.fuelUsed) forecast.fuelUsed = 0.0;
-            if (after) forecast.fuelRemaining = after->fuel;
-        };
-        if (!after) {
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::ScrapFleet) {
-                lines << QString("%1. T+%2 — Scrap Fleet planned; deep-space material recovery 0–50%, weighted towards 50%; orbital recovery 75% at your populated colony or 50% elsewhere, with a 20% chance of another 5–15 percentage points lost. Actual recovery depends on arrival conditions.")
-                    .arg(legIndex + 1).arg(step);
-                markArrival(); legIndex = legs.size(); simulated = std::move(next); break;
-            }
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::MergeWithFleet
-                && findFleet(next, leg.targetFleet)) {
-                lines << QString("%1. %2 — intercept T+%3, W%4 — <b>rendezvous completed; fleets merged</b>")
-                             .arg(static_cast<qulonglong>(legIndex + 1))
-                             .arg(waypointName(state, leg.destination, leg.targetFleet))
-                             .arg(step)
-                             .arg(leg.warp);
-                markArrival();
-                legIndex = legs.size();
-                simulated = std::move(next);
-                break;
-            }
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::Colonize) {
-                const auto* targetStar = findStarAtPosition(next, leg.destination);
-                const auto* targetPlanet = targetStar ? find_planet_at_star(next, targetStar->id) : nullptr;
-                if (targetPlanet && targetPlanet->owner == fleetOwner) {
-                    lines << QString("%1. %2 — T+%3, W%4 — <b>colonized successfully; fleet dismantled</b>")
-                                 .arg(static_cast<qulonglong>(legIndex + 1))
-                                 .arg(waypointName(state, leg.destination, leg.targetFleet))
-                                 .arg(step)
-                                 .arg(leg.warp);
-                    if (legIndex + 1 < legs.size()) {
-                        lines << "<i>Later waypoints cannot execute because successful colonization dismantles the fleet.</i>";
-                    }
-                    markArrival();
-                    legIndex = legs.size();
-                    simulated = std::move(next);
-                    break;
-                }
-            }
-            lines << QString("%1. fleet removed before completing the route")
-                         .arg(static_cast<qulonglong>(legIndex + 1));
-            simulated = std::move(next);
-            break;
-        }
-
-        if (after->damagePercent >= 100.0) {
-            lines << QString("<b>T+%1: critical hull damage (100%); fleet immobilized before completing its program.</b>")
-                         .arg(step);
-            return lines.join("<br>");
-        }
-
-        if (fuelWarning && !fuelWarning->isEmpty() && !legForecasts) {
-            break;
-        }
-
-        const auto remainingLegs = (after->destination ? std::size_t{1} : std::size_t{0})
-            + after->waypointQueue.size();
-        const auto* movingTarget = findFleet(next, leg.targetFleet);
-        auto arrivalPosition = movingTarget ? movingTarget->position : leg.destination;
-        if (leg.arrivalAction.kind == FleetArrivalActionKind::TransitStargate) {
-            const auto* p = find_planet(next, leg.arrivalAction.gateDestination);
-            if (const auto* star = p ? find_star(next,p->star) : nullptr) arrivalPosition = star->position;
-            dependsOnDynamicResult = true;
-            if (after->arrivalAction && after->arrivalAction->kind == FleetArrivalActionKind::TransitStargate
-                && same_position(after->position, leg.destination)) {
-                const auto error = stargate_transfer_error(next,after->owner,after->id,
-                    leg.arrivalAction.gateSource,leg.arrivalAction.gateDestination,leg.arrivalAction.gateResonant,true);
-                if (!error.empty()) {
-                    lines << QString("%1. Gate step waiting (forecast): %2 Later legs remain blocked; retries once per year.")
-                        .arg(qulonglong(legIndex+1)).arg(QString::fromStdString(error).toHtmlEscaped());
-                    break;
-                }
-            }
-        }
-        if(leg.arrivalAction.kind==FleetArrivalActionKind::LoadMinerals && after->arrivalAction
-            && after->arrivalAction->kind==FleetArrivalActionKind::LoadMinerals
-            && same_position(after->position,leg.destination)) {
-            lines << QString("%1. Load policy waiting (received-stock forecast): leave %2 kt at source; depart with at least %3 kt. "
-                "Partial cargo remains aboard; retry annually. Future supplies are not promised; later ETA is unknown.")
-                .arg(qulonglong(legIndex+1)).arg(leg.arrivalAction.mineralReserve).arg(leg.arrivalAction.mineralMinimum);
-            break;
-        }
-        if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportStop && after->arrivalAction
-            && after->arrivalAction->kind==FleetArrivalActionKind::UnloadTransportStop && same_position(after->position,leg.destination)) {
-            lines << QString("%1. Delivery visit blocked (received-state forecast); recipient ownership/availability is conditional. Cargo retained; later ETA unknown.").arg(qulonglong(legIndex+1));break;
-        }
-        if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet)
-            && after->arrivalAction && after->arrivalAction->kind==FleetArrivalActionKind::UnloadTransportLine
-            && same_position(after->position,leg.destination)) {
-            lines << QString("%1. Destination target waiting (received-stock forecast): stock target %2 kt (0 = unload within capacity). "
-                "Surplus remains aboard; retry annually. Future demand, capacity and ownership are unconfirmed; later ETA is unknown.")
-                .arg(qulonglong(legIndex+1)).arg(leg.arrivalAction.destinationTarget);
-            break;
-        }
-        // Activation can consume multiple already-reached No action points,
-        // including the receiving-system point immediately following a hop.
-        std::size_t skipped=0;
-        while (legIndex+1+skipped<legs.size()) {
-            const auto& candidate=legs[legIndex+1+skipped];
-            if (candidate.targetFleet || candidate.arrivalAction.kind!=FleetArrivalActionKind::None
-                || !same_position(candidate.destination,arrivalPosition)) break;
-            ++skipped;
-        }
-        const auto completed=legIndex+1+skipped;
-        const auto expectedRemaining=route.repeatOrders && completed==legs.size()
-            ? after->routeTemplate.size() : legs.size()-completed;
-        const bool arrived = same_position(after->position, arrivalPosition)
-            && remainingLegs == expectedRemaining;
-
-        if (arrived) {
-            markArrival();
-            const auto navigationCertainty = leg.targetFleet != 0
-                ? (dependsOnDynamicResult ? "projected continuous intercept" : "continuous intercept")
-                : (dependsOnDynamicResult ? "projected navigation" : "exact navigation");
-            const auto* arrivalStar = findStarAtPosition(next, arrivalPosition);
-            const auto* arrivalPlanet = arrivalStar
-                ? find_planet_at_star(next, arrivalStar->id)
-                : nullptr;
-            QString outcome;
-            bool invasionOutcomeUncertain = false;
-            switch (leg.arrivalAction.kind) {
-            case FleetArrivalActionKind::TransitStargate:
-                outcome = "; projected gate hop completed; no transit fuel charge; physical support and payment are rechecked";
-                break;
-            case FleetArrivalActionKind::None:
-                if (leg.targetFleet != 0) outcome = "; moving-target rendezvous completed";
-                break;
-            case FleetArrivalActionKind::LoadMinerals:
-            case FleetArrivalActionKind::LoadAllAvailable:
-                if (leg.arrivalAction.cargo == FleetCargoKind::Xenocrystal) {
-                    outcome = QString("; projected xenocrystals aboard: %1 (received surface-stock estimate)").arg(after->xenocrystal);
-                } else if (leg.arrivalAction.cargo == FleetCargoKind::OrbitalColonists) {
-                    outcome=QString("; projected orbital colonists aboard: %1 (received population/capacity estimate; zero reserve permits complete evacuation)").arg(qulonglong(after->colonists));
-                } else if (leg.arrivalAction.cargo == FleetCargoKind::Colonists) {
-                    outcome = QString("; projected colonists aboard: %1")
-                                  .arg(static_cast<qulonglong>(after->colonists));
-                } else if (leg.arrivalAction.cargo != FleetCargoKind::All) {
-                    const auto amount = leg.arrivalAction.cargo == FleetCargoKind::Ironium
-                        ? after->minerals.ironium
-                        : leg.arrivalAction.cargo == FleetCargoKind::Boranium
-                            ? after->minerals.boranium
-                            : after->minerals.germanium;
-                    outcome = QString("; projected mineral cargo aboard: %1").arg(amount, 0, 'f', 1);
-                }
-                break;
-            case FleetArrivalActionKind::UnloadTransportStop:
-                outcome="; one bounded delivery visit using received stocks/capacity; carry surplus onward, recipient availability remains conditional";break;
-            case FleetArrivalActionKind::UnloadTransportLine:
-            case FleetArrivalActionKind::UnloadAll:
-                if(leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet)) {
-                    outcome=QString("; projected delivery, target %1 kt (0 = unload within capacity), using received stock; onward travel depends on actual capacity/demand and retained cargo")
-                        .arg(leg.arrivalAction.destinationTarget);
-                    break;
-                }
-                if(leg.arrivalAction.cargo==FleetCargoKind::OrbitalColonists) {
-                    outcome=QString("; projected orbital delivery, limited by received habitat capacity; colonists remaining aboard: %1").arg(qulonglong(after->colonists));
-                    break;
-                }
-                if ((leg.arrivalAction.cargo == FleetCargoKind::Colonists
-                        || leg.arrivalAction.cargo == FleetCargoKind::All)
-                    && targetOwnerBeforeTurn != 0
-                    && targetOwnerBeforeTurn != fleetOwner) {
-                    outcome = "; ground invasion attempted; outcome hidden because the defending population may change before arrival";
-                    invasionOutcomeUncertain = true;
-                } else {
-                    outcome = leg.arrivalAction.cargo == FleetCargoKind::All
-                        ? "; all cargo unloaded to the planetary surface"
-                        : "; selected cargo unloaded to the planetary surface";
-                }
-                break;
-            case FleetArrivalActionKind::Refuel:
-                outcome = QString("; projected fuel after arrival: %1 mg; refuel requires a working friendly depot. Deep-space stock is finite and may change before arrival")
-                    .arg(after->fuel, 0, 'f', 1);
-                break;
-            case FleetArrivalActionKind::DeployOutpost:
-                outcome = after->outpost != OutpostKind::None ? "; permanently deployed; upkeep begins next year"
-                    : "; deployment could not be completed at these coordinates";
-                break;
-            case FleetArrivalActionKind::SupplyOutpost:
-                outcome = QString("; projected tanker fuel after delivery: %1 mg; transfer is limited by actual receiver capacity and tanker stock").arg(after->fuel,0,'f',1);
-                break;
-            case FleetArrivalActionKind::Colonize:
-                outcome = "; colonization could not be completed; fleet remains";
-                break;
-            case FleetArrivalActionKind::ScrapFleet:
-                outcome = "; Scrap Fleet waits for unloading or final transmission; fleet remains";
-                break;
-            case FleetArrivalActionKind::RemoteMining:
-                outcome = after->task == FleetTask::RemoteMining
-                    ? "; Remote Mining assigned; extraction begins next turn"
-                    : "; Remote Mining could not be assigned";
-                break;
-            case FleetArrivalActionKind::LayMinefields:
-            case FleetArrivalActionKind::SweepMinefields:
-            case FleetArrivalActionKind::BombardColony:
-            case FleetArrivalActionKind::FieldResearch:
-            case FleetArrivalActionKind::RecoverWreckage:
-            case FleetArrivalActionKind::RecoverSample:
-                outcome = "; work begins locally on arrival if equipment and target still permit; future results are unknown";
-                break;
-            case FleetArrivalActionKind::EnterWormhole:
-                outcome = "; wormhole outcome remains unknown";
-                break;
-            case FleetArrivalActionKind::MergeWithFleet:
-                outcome = "; rendezvous still pending";
-                break;
-            }
-
-            lines << QString("%1. %2 — T+%3, W%4, fuel %5, damage %6%, colonists %7 — <b>%8</b>%9")
-                         .arg(static_cast<qulonglong>(legIndex + 1))
-                         .arg(waypointName(state, leg.destination, leg.targetFleet))
-                         .arg(step)
-                         .arg(leg.warp)
-                         .arg(after->fuel, 0, 'f', 1)
-                         .arg(after->damagePercent, 0, 'f', 1)
-                         .arg(static_cast<qulonglong>(after->colonists))
-                         .arg(navigationCertainty)
-                         .arg(outcome);
-
-            if (leg.arrivalAction.kind == FleetArrivalActionKind::UnloadTransportStop
-                || leg.arrivalAction.kind == FleetArrivalActionKind::LoadMinerals
-                || (leg.arrivalAction.kind==FleetArrivalActionKind::UnloadTransportLine && (leg.arrivalAction.destinationTarget || leg.arrivalAction.transportDestinationFleet))
-                || leg.arrivalAction.kind == FleetArrivalActionKind::LoadAllAvailable
-                || leg.arrivalAction.kind == FleetArrivalActionKind::SupplyOutpost
-                || (leg.arrivalAction.kind == FleetArrivalActionKind::Refuel && !arrivalPlanet)) {
-                dependsOnDynamicResult = true;
-            }
-            for (std::size_t i=0;i<skipped;++i) {
-                ++legIndex;
-                markArrival();
-                lines << QString("%1. %2 — T+%3; already reached, no action")
-                    .arg(qulonglong(legIndex+1)).arg(waypointName(state,legs[legIndex].destination)).arg(step);
-            }
-            ++legIndex;
-            if (invasionOutcomeUncertain) {
-                lines << "<i>Later route results depend on the ground battle, so the forecast stops here.</i>";
-                legIndex = legs.size();
-                simulated = std::move(next);
-                break;
-            }
-        }
-
-        simulated = std::move(next);
-    }
-
-    if (legIndex < legs.size()) {
-        if (legs[legIndex].targetFleet != 0) {
-            lines << QString("<i>No intercept is predicted inside the %1-turn preview horizon; pursuit remains active and the ETA is uncertain.</i>")
-                         .arg(kForecastHorizon);
-        } else {
-            lines << QString("<i>Program does not complete inside the %1-turn preview horizon; it may be fuel-limited or very long.</i>")
-                         .arg(kForecastHorizon);
-        }
-    } else if (dependsOnDynamicResult) {
-        lines << "<i>Projected legs depend on actual arrival cargo and gate support/payment.</i>";
-    }
-    if (route.repeatOrders && legIndex == legs.size()) {
-        lines << "<i>Repeat Orders restarts the complete program after the final arrival.</i>";
-    }
-
-    return lines.join("<br>");
-}
-
 } // namespace
 
 FleetId MainWindow::selectedFleetForRouteProgram() const
@@ -641,9 +256,7 @@ double MainWindow::selectedFleetOverdriveDamageForRouteProgram(std::uint8_t warp
 {
     const auto* fleet = selectedFleet();
     if (!fleet) return 0.0;
-    auto received=state_;
-    project_interstellar_medium(received,fleet->owner);
-    return fleet_overdrive_damage_rate(received, fleet_player_view(state_, *fleet), warp);
+    return fleet_overdrive_damage_rate(receivedPlayerState(), fleet_player_view(state_, *fleet), warp);
 }
 
 bool MainWindow::selectedFleetRepeatOrdersForRouteProgram() const
@@ -698,107 +311,82 @@ QString MainWindow::selectedFleetRouteProgramSummary() const
     return lines.join("<br>");
 }
 
-QString MainWindow::selectedFleetRouteProgramForecast() const
+QString MainWindow::selectedFleetRouteProgramEstimate() const
 {
-    const auto* authoritative = selectedFleet();
-    if (!authoritative) return "Select a fleet first.";
-    const auto fleet = fleet_player_view(state_, *authoritative);
-    const auto route = effectiveRoute(state_, pendingOrders_, fleet);
-    if (!route || routeIsClearIntent(fleet, *route)) return "No route to forecast.";
-    return routeForecast(state_, pendingOrders_, processor_, fleet.id, *route);
-}
-
-QString MainWindow::selectedFleetWaypointFuelWarning(
-    std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
-    std::optional<Position> coordinateDestination) const
-{
-    const auto key = QString("%1:%2:%3:%4:%5:%6:%7:%8:%9:%10")
-        .arg(planningRevision_).arg(selectedFleetForRouteProgram())
-        .arg(selection_.star.value_or(0)).arg(warp).arg(targetFleet)
-        .arg(static_cast<int>(action.kind)).arg(action.reservePopulation)
-        .arg(static_cast<int>(action.cargo))
-        .arg(coordinateDestination ? QString::number(coordinateDestination->x, 'g', 17) : QString{})
-        .arg(coordinateDestination ? QString::number(coordinateDestination->y, 'g', 17) : QString{});
-    if (key == waypointFuelKey_) return waypointFuelWarning_;
-    waypointFuelKey_ = key;
-    waypointFuelWarning_.clear();
-    const auto* source = selectedFleet();
-    if (!source) return {};
-    const auto fleet = fleet_player_view(state_, *source);
-    Position destination;
-    if (targetFleet != 0) {
-        const auto target = knownFleetTarget(targetFleet);
-        if (!target || targetFleet == fleet.id) return {};
-        destination = target->position;
-        if (target->owner != fleet.owner) targetFleet = 0;
-    } else if (coordinateDestination) {
-        destination = *coordinateDestination;
-    } else {
-        const auto* star = selectedStar();
-        if (!star) return {};
-        destination = star->position;
+    if (!selectedFleet()) return "Select a fleet first.";
+    const auto rows = selectedFleetRouteProgramRows();
+    if (rows.empty()) return "No route to estimate.";
+    QStringList lines;
+    lines << "<b>Nominal travel time</b>"
+          << "Distance / Warp², rounded up for each leg. Uses received information and the planned route. "
+             "Command delivery, fuel, refuelling, clouds and arrival actions can change actual timing.";
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        const auto& row = rows[index];
+        lines << QString("%1. %2 — %3 years, W%4<br>%5")
+            .arg(qulonglong(index + 1)).arg(row.destination.toHtmlEscaped(), row.eta)
+            .arg(row.warp).arg(row.arrivalAction.toHtmlEscaped());
     }
-    auto route = effectiveRoute(state_, pendingOrders_, fleet);
-    if (!route || routeIsClearIntent(fleet, *route)) {
-        route = MoveFleetOrder{fleet.id, destination, warp, action, {}, false, targetFleet};
-    } else {
-        route->queuedWaypoints.push_back({destination, warp, action, targetFleet});
-    }
-    auto pending = pendingOrders_;
-    if (auto* existing = pendingMove(pending, fleet.id)) *existing = *route;
-    else pending.orders.push_back(*route);
-    (void)routeForecast(state_, pending, processor_, fleet.id, *route, nullptr, &waypointFuelWarning_);
-    return waypointFuelWarning_;
+    lines << "Only the first pass of Repeat Orders is listed. "
+             "Gate transit, wormhole exits and arrival outcomes are unknown until resolved on End Turn; "
+             "later arrival times remain unknown.";
+    return lines.join("<br>");
 }
 
 std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() const
 {
-    const auto* authoritativeFleet = selectedFleet();
-    const auto visibleFleetStorage = authoritativeFleet
-        ? std::optional<Fleet>{fleet_player_view(state_, *authoritativeFleet)}
-        : std::nullopt;
-    const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
-    if (!fleet) return {};
-    const auto route = effectiveRoute(state_, pendingOrders_, *fleet);
-    if (!route || routeIsClearIntent(*fleet, *route)) return {};
+    const auto* selected = selectedFleet();
+    if (!selected) return {};
+    const auto fleet = fleet_player_view(state_, *selected);
+    const auto route = effectiveRoute(state_, pendingOrders_, fleet);
+    if (!route || routeIsClearIntent(fleet, *route)) return {};
 
     std::vector<RouteProgramDisplayRow> rows;
     const auto legs = routeLegs(*route);
     rows.reserve(legs.size());
-    if (routeEtaRevision_ != planningRevision_ || routeEtaFleet_ != fleet->id) {
-        (void)routeForecast(state_, pendingOrders_, processor_, fleet->id, *route, &routeLegForecasts_);
-        routeEtaRevision_ = planningRevision_;
-        routeEtaFleet_ = fleet->id;
-    }
+    auto departure = fleet.position;
+    std::uint64_t elapsed = 0;
+    bool knownTime = true;
+    const QString geometricNote = "Nominal travel time: cumulative distance / Warp², rounded up for each leg. "
+        "Uses received information. Command delivery, fuel, refuelling, clouds and arrival actions are not predicted.";
+    QString uncertainty;
     for (std::size_t index = 0; index < legs.size(); ++index) {
         const auto& leg = legs[index];
-        const auto forecast = index < routeLegForecasts_.size()
-            ? routeLegForecasts_[index] : RouteProgramLegForecast{};
-        QString tooltip = "Projected movement fuel for this leg, including turn-by-turn billing and cargo changes. "
-            "Fuel left includes arrival refuelling. Preview horizon: 96 years; later orders and hostile encounters may change the result.";
-        const bool medium=state_.interstellarMediumEnabled;
-        if (medium) tooltip+="\nMedium estimate uses received profiles only. The fuel range covers density 0–1 for the forecast flown segments, with fitted engines and rounding. "
-            "Unsurveyed density can change fuel-limited coasting, arrival time and refuelling; ETA and fuel left are estimates.";
-        if (medium && forecast.fuelUsed) tooltip+=QString("\nReceived-profile consumption estimate: ≈%1 mg.").arg(*forecast.fuelUsed,0,'f',1);
-        if (!forecast.arrivalTurn) tooltip += "\nArrival is not predicted: ≥ is consumption so far, not the complete leg's cost; — means no data.";
-        if (forecast.fuelShortageTurn) tooltip += QString("\nFuel shortage at T+%1 on this leg: the ordered Warp cannot be maintained. "
-            "Reduce Warp or add a refuelling stop; free-speed coasting may still allow a later arrival.").arg(*forecast.fuelShortageTurn);
-        rows.push_back({
-            leg.arrivalAction.kind == FleetArrivalActionKind::TransitStargate
-                ? waypointName(state_,leg.destination) + " → " + gateDestinationName(state_,leg.arrivalAction.gateDestination) + " [gate]"
-                : waypointName(state_, leg.destination, leg.targetFleet),
-            actionName(state_,leg.arrivalAction),
-            leg.warp,
-            index == 0,
-            forecast.arrivalTurn ? (medium?QString("≈%1").arg(*forecast.arrivalTurn):QString::number(*forecast.arrivalTurn)) : QString("—"),
-            medium && forecast.fuelMinimum && forecast.fuelMaximum ? QString("%1%2–%3").arg(forecast.arrivalTurn?"":"≥")
-                .arg(*forecast.fuelMinimum,0,'f',1).arg(*forecast.fuelMaximum,0,'f',1) :
-            forecast.fuelUsed ? QString("%1%2").arg(forecast.arrivalTurn ? "" : "≥")
-                .arg(*forecast.fuelUsed, 0, 'f', 1) : QString("—"),
-            forecast.fuelRemaining ? (medium?QString("≈%1").arg(*forecast.fuelRemaining,0,'f',1):QString::number(*forecast.fuelRemaining, 'f', 1)) : QString("—"),
-            tooltip,
-            forecast.fuelShortageTurn.has_value(),
-        });
+        auto destination = leg.destination;
+        auto destinationName = waypointName(state_, destination);
+        if (leg.targetFleet) {
+            if (const auto target = knownFleetTarget(leg.targetFleet)) {
+                destination = target->position;
+                destinationName = QString("%1 [estimated position]").arg(QString::fromStdString(target->name));
+            } else {
+                destinationName = QString("Fleet %1 [position unknown]").arg(leg.targetFleet);
+                knownTime = false;
+                uncertainty = "The target's received position is unavailable.";
+            }
+        }
+        const auto speed = warp_distance(leg.warp);
+        const auto years = speed > 0 ? std::ceil(distance_between(departure, destination) / speed) : -1.0;
+        if (!std::isfinite(years) || years < 0 || years > double(std::numeric_limits<std::uint32_t>::max())) {
+            knownTime = false;
+            uncertainty = "No geometric travel time is available for this leg.";
+        }
+        if (knownTime) elapsed += travel_turns(departure, destination, speed);
+        auto note = geometricNote;
+        if (!knownTime) note += "\n" + uncertainty;
+        if (leg.arrivalAction.kind == FleetArrivalActionKind::TransitStargate) {
+            destinationName += " → " + gateDestinationName(receivedPlayerState(), leg.arrivalAction.gateDestination) + " [gate]";
+            note += "\nThis is the approach time to the source gate only. Gate availability, payment and transit are resolved on End Turn.";
+        } else if (leg.arrivalAction.kind == FleetArrivalActionKind::EnterWormhole) {
+            note += "\nThis is the approach time only. The wormhole exit and survival cannot be estimated.";
+        } else if (leg.targetFleet) {
+            note += "\nTime to the target position estimated from received information only; not an interception prediction.";
+        }
+        rows.push_back({destinationName, actionName(receivedPlayerState(), leg.arrivalAction), leg.warp, index == 0,
+            knownTime ? QString("≈%1").arg(qulonglong(elapsed)) : QString("—"), note});
+        departure = destination;
+        if (leg.targetFleet || leg.arrivalAction.kind != FleetArrivalActionKind::None) {
+            knownTime = false;
+            uncertainty = "A preceding arrival action or moving target makes later arrival times unknown.";
+        }
     }
     return rows;
 }
@@ -819,14 +407,15 @@ std::vector<Position> MainWindow::selectedFleetRouteProgramPolyline() const
     if (!route || routeIsClearIntent(*fleet, *route)) return points;
 
     const auto resolvedPosition = [&](Position snapshot, FleetId target) {
-        if (const auto* targetFleet = findFleet(state_, target)) return targetFleet->position;
+        if (const auto targetFleet = knownFleetTarget(target)) return targetFleet->position;
         return snapshot;
     };
     for (const auto& waypoint : routeLegs(*route)) {
         points.push_back(resolvedPosition(waypoint.destination,waypoint.targetFleet));
         if (waypoint.arrivalAction.kind==FleetArrivalActionKind::TransitStargate) {
-            const auto* p=find_planet(state_,waypoint.arrivalAction.gateDestination);
-            if (const auto* star=p?find_star(state_,p->star):nullptr) points.push_back(star->position);
+            const auto& received = receivedPlayerState();
+            const auto* p=find_planet(received,waypoint.arrivalAction.gateDestination);
+            if (const auto* star=p?find_star(received,p->star):nullptr) points.push_back(star->position);
         }
     }
     return points;
@@ -1104,7 +693,7 @@ void MainWindow::openStargateRouteDialog()
     const auto refresh = [&] {
         const auto from = source->currentData().toUInt(), to = destination->currentData().toUInt();
         buttons->button(QDialogButtonBox::Ok)->setEnabled(from && to && from!=to);
-        status->setText("Forecast from received gates and fleet telemetry. Arrival mass, source stocks and physical gate support are rechecked locally; "
+        status->setText("Uses received gates and fleet telemetry. Arrival mass, source stocks and physical gate support are rechecked locally; "
             "no future supplies or successful transit are guaranteed. Command and report delivery use normal communications.");
     };
     connect(source,&QComboBox::currentIndexChanged,&dialog,refresh);
@@ -1246,7 +835,7 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         "Append to the selected star from the end of the current route.\n"
         "Received cloud profiles only; unknown density can change the result.\n"
         "Coarse travel time and gross fuel exclude command delay, per-year rounding, refuelling and prior legs.\n"
-        "Use Route forecast after choosing to check the complete programme.",choices,0,false,&accepted);
+        "Travel time is geometric only; actual movement and arrival actions resolve on End Turn.",choices,0,false,&accepted);
     if (!accepted) return false;
     const auto index=choices.indexOf(choice);
     if (index<0 || !appendRouteWaypoint(star->position,0,warp,arrivalAction)) return false;

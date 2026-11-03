@@ -4,10 +4,30 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 
 namespace suns {
 
 inline constexpr std::uint64_t kAwaitingTransmission = std::numeric_limits<std::uint64_t>::max();
+
+// Amortize pure communication queries over one immutable snapshot. The bound
+// GameState must not be mutated, even through another alias, until destruction.
+// Keep scopes on their creating thread; nested scopes restore the previous one.
+// Different state addresses never share cached graphs. Nothing survives a scope.
+// cacheQueries=false also disables nested scopes, for uncached comparison/profiling.
+class CommunicationQueryScope final {
+public:
+    explicit CommunicationQueryScope(const GameState& state, bool cacheQueries = true);
+    ~CommunicationQueryScope();
+    CommunicationQueryScope(const CommunicationQueryScope&) = delete;
+    CommunicationQueryScope& operator=(const CommunicationQueryScope&) = delete;
+    CommunicationQueryScope(CommunicationQueryScope&&) = delete;
+    CommunicationQueryScope& operator=(CommunicationQueryScope&&) = delete;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
 
 // Shared host outbox order for dispatch and save metadata. Already dispatched
 // packets have a finite deliveryTurn and transmissionFleet == 0.
