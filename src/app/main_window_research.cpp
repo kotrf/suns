@@ -283,7 +283,7 @@ void MainWindow::refreshResearchPanel()
     }
     levels += "</tr></table>";
     const auto allocationSummary = planActive
-        ? QString("Guaranteed RP next turn: %1, plus unused colony output%2").arg(guaranteedRp)
+        ? QString("Current-rate estimate — Guaranteed RP next turn: %1, plus unused colony output%2").arg(guaranteedRp)
             .arg(artifactRp ? QString(" (includes %1 from retained artifacts)").arg(artifactRp) : QString{})
         : QString("Research is paused; the allocation is not deducted from colony output");
     researchSummary_->setText(QString("<b>Current technology levels</b>%1%2")
@@ -312,29 +312,31 @@ void MainWindow::refreshResearchPanel()
     QStringList nextUnlocks;
     auto* catalog = researchDialog_->findChild<QTreeWidget*>("technologyCatalog");
     catalog->clear();
-    auto projected = state_;
+    // Only compare one next technology level against received prerequisites;
+    // no future annual production/research simulation belongs in this window.
+    auto projected = received;
     auto& projectedPlayer = *std::find_if(projected.players.begin(), projected.players.end(),
         [player](const auto& candidate) { return candidate.id == player->id; });
     if (level < std::numeric_limits<std::uint8_t>::max())
         projectedPlayer.technology.levels[static_cast<std::size_t>(focus)] = level + 1;
     for (std::size_t unlockIndex = 0; unlockIndex < research_unlocks().size(); ++unlockIndex) {
         const auto& unlock = research_unlocks()[unlockIndex];
-        if (unlock.legacyPropulsion && !player_uses_legacy_propulsion(state_, player->id)) continue;
-        if (unlock.legacyScanner && !player_uses_legacy_scanners(state_, player->id)) continue;
-        if (unlock.legacyHull && !player_uses_legacy_hulls(state_, player->id)) continue;
-        if (unlock.legacyMining && !player_uses_legacy_mining(state_, player->id)) continue;
-        if (unlock.legacyEquipment && !player_uses_legacy_equipment(state_, player->id)) continue;
+        if (unlock.legacyPropulsion && !player_uses_legacy_propulsion(received, player->id)) continue;
+        if (unlock.legacyScanner && !player_uses_legacy_scanners(received, player->id)) continue;
+        if (unlock.legacyHull && !player_uses_legacy_hulls(received, player->id)) continue;
+        if (unlock.legacyMining && !player_uses_legacy_mining(received, player->id)) continue;
+        if (unlock.legacyEquipment && !player_uses_legacy_equipment(received, player->id)) continue;
         auto* row = new QTreeWidgetItem(catalog);
         row->setText(0, QString::fromStdString(unlock.name) + (unlock.legacyPropulsion || unlock.legacyHull || unlock.legacyScanner || unlock.legacyMining || unlock.legacyEquipment ? " (legacy)" : ""));
         row->setText(1, QString::fromStdString(research_unlock_requirement(unlock)));
         const bool legacyBiology = unlock.field == ResearchField::Biology
             && !unlock.component && !player->race.environmentBased;
-        const bool applicable = research_unlock_applicable(state_, player->id, unlock);
+        const bool applicable = research_unlock_applicable(received, player->id, unlock);
         const auto* hull = unlock.hull ? reference_hull(*unlock.hull) : nullptr;
         const auto* equipment = unlock.component ? equipment_technology(*unlock.component) : nullptr;
         row->setText(2, legacyBiology ? "Legacy rules" : !applicable ? ((hull && hull->mysteryTrader)
                 || (equipment && equipment->access == EquipmentAccess::MysteryTrader) ? "Acquisition required" : "Race restriction")
-            : research_unlock_available(state_, player->id, unlock) ? "Available" : "Locked");
+            : research_unlock_available(received, player->id, unlock) ? "Available" : "Locked");
         row->setText(3, QString::fromStdString(unlock.description));
         row->setData(0, Qt::UserRole, int(unlock.field));
         row->setData(0, Qt::UserRole + 1, int(unlock.level));

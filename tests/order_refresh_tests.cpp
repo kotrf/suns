@@ -26,7 +26,7 @@ struct MainWindowTestAccess {
     }
     static auto builds(const MainWindow& w) { return w.movementPreviewBuildCount_; }
     static auto orderCount(const MainWindow& w) { return w.pendingOrders_.orders.size(); }
-    static auto forecasts(const MainWindow& w) { return w.routeForecastBuildCount_; }
+    static auto turn(const MainWindow& w) { return w.state_.turn; }
     static void route(MainWindow& w) { w.appendPendingOrder(MoveFleetOrder{w.state_.fleets.front().id,{25,0},5},"Route"); }
     static void research(MainWindow& w) { w.appendPendingOrder(SetResearchAllocationOrder{50}, "Research"); }
     static void rename(MainWindow& w) { w.appendPendingOrder(RenameFleetOrder{w.state_.fleets.front().id,"Renamed"}, "Rename"); }
@@ -57,6 +57,7 @@ int main(int argc,char** argv)
     MainWindow w; attachRouteProgramDock(w); w.installUiPolish(); w.installProductionQueue();
     MainWindowTestAccess::setup(w); w.show(); settle();
     const auto before=MainWindowTestAccess::projection(w);
+    assert(before.turn == MainWindowTestAccess::turn(w));
     const auto builds=MainWindowTestAccess::builds(w);
     QGraphicsItem* marker=nullptr;
     for(auto* item:MainWindowTestAccess::scene(w).items())
@@ -85,23 +86,27 @@ int main(int argc,char** argv)
     assert(MainWindowTestAccess::scene(w).items().contains(marker));
     MainWindowTestAccess::route(w); settle();
     const auto rows=w.selectedFleetRouteProgramRows();
-    const auto forecasts=MainWindowTestAccess::forecasts(w);
-    const auto summary=w.selectedFleetRouteProgramForecast();
+    const auto summary=w.selectedFleetRouteProgramEstimate();
     assert(!rows.empty() && !summary.isEmpty());
-    assert(MainWindowTestAccess::forecasts(w)==forecasts);
-    assert(MainWindowTestAccess::builds(w)==builds);
+    assert(rows.front().eta.startsWith("≈"));
+    const auto routeBuilds=MainWindowTestAccess::builds(w);
+    assert(routeBuilds==builds+1);
+    assert((MainWindowTestAccess::projection(w).fleets.front().destination == std::optional<Position>{{25,0}}));
     add->click(); settle();
-    assert(MainWindowTestAccess::forecasts(w)>forecasts); // Future supplies can change ETA.
-    assert(MainWindowTestAccess::builds(w)==builds); // Immediate cargo inputs did not change.
+    // Geometry-only estimates do not predict future production or supplies.
+    assert(w.selectedFleetRouteProgramRows().front().eta == rows.front().eta);
+    assert(w.selectedFleetRouteProgramEstimate() == summary);
+    assert(MainWindowTestAccess::builds(w)==routeBuilds); // Accepted current orders did not change.
     w.clearSelectedFleetRouteProgram(); settle();
-    assert(MainWindowTestAccess::builds(w)==builds);
+    assert(MainWindowTestAccess::builds(w)==routeBuilds+1);
+    assert(!MainWindowTestAccess::projection(w).fleets.front().destination);
     assert(w.selectedFleetRouteProgramRows().empty());
     // Relevant logistics input and a same-year world replacement still rebuild.
     MainWindowTestAccess::rename(w); settle();
-    assert(MainWindowTestAccess::builds(w)==builds+1);
+    assert(MainWindowTestAccess::builds(w)==routeBuilds+2);
     assert(MainWindowTestAccess::projection(w).fleets.front().name=="Renamed");
     MainWindowTestAccess::reloadSameTurn(w); settle();
-    assert(MainWindowTestAccess::builds(w)==builds+2);
+    assert(MainWindowTestAccess::builds(w)==routeBuilds+3);
     assert(MainWindowTestAccess::projection(w).players.front().technology.levels[std::size_t(ResearchField::Propulsion)]
         != before.players.front().technology.levels[std::size_t(ResearchField::Propulsion)]);
 }

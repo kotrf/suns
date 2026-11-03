@@ -121,7 +121,7 @@ int main(int argc,char** argv)
         QEventLoop loop;QTimer::singleShot(20,&loop,&QEventLoop::quit);loop.exec();
     };
     const auto waitForecasts=[&](const char* name) {
-#ifndef SUNS_LEGACY_UI_PROBE
+#ifdef SUNS_DETAILED_UI_PROBE
         const auto start=now();auto previous=now();double gap=0;
         while(w.routeForecastsPending() && elapsed(start)<120000) {
             drain();gap=std::max(gap,elapsed(previous));previous=now();
@@ -142,6 +142,16 @@ int main(int argc,char** argv)
         waitForecasts(name);
         return performed;
     };
+    std::size_t routeCharacters=0;
+    const auto readRoute=[&] {
+        if(!w.selectedFleetForRouteProgram() || w.selectedFleetRouteProgramRows().empty()) return false;
+#ifdef SUNS_DETAILED_UI_PROBE
+        routeCharacters=w.selectedFleetRouteProgramForecast().size();
+#else
+        routeCharacters=w.selectedFleetRouteProgramEstimate().size();
+#endif
+        return true;
+    };
     try {
     if(parser.isSet("save")) {
         if(!measure("load",[&]{return MainWindowTestAccess::load(w,inputCopy);})) return 1;
@@ -151,6 +161,10 @@ int main(int argc,char** argv)
     }
     const auto startRedraw=now();MainWindowTestAccess::redraw(w);const auto redraw=elapsed(startRedraw);drain();
     waitForecasts("redraw");
+    // Give initial layout/paint callbacks the same settling time in both modes;
+    // a historical background wait must not make only its idle sample quiet.
+    QEventLoop settle;QTimer::singleShot(500,&settle,&QEventLoop::quit);settle.exec();
+    std::cout<<"layout_settle_floor_ms=500\n"<<std::flush;
     const auto actualSystems=MainWindowTestAccess::systems(w);
     std::cout<<"source="<<(parser.isSet("save")?"save":"generated")<<" systems="<<actualSystems
         <<" turn="<<MainWindowTestAccess::turn(w)<<" fleets="<<MainWindowTestAccess::fleets(w)
@@ -178,6 +192,7 @@ int main(int argc,char** argv)
         add->click();return MainWindowTestAccess::orders(w)==beforeFactory+1;
     };
     std::cout<<"factory_original_fleet="<<w.selectedFleetForRouteProgram()<<'\n'<<std::flush;
+    measure("route_estimate_original_fleet",readRoute);
     measure("factory_add_original_fleet",addFactory);
     measure("star_select",[&]{return MainWindowTestAccess::selectNextStar(w);});
     measure("fleet_select",[&]{return MainWindowTestAccess::selectNextFleet(w);});
@@ -191,13 +206,8 @@ int main(int argc,char** argv)
         return allocation->value()!=previous;
     });
     if(auto* research=w.findChild<QDialog*>("researchDialog")) research->hide();drain();
-    std::size_t routeCharacters=0;
-    const auto readRoute=[&] {
-        if(!w.selectedFleetForRouteProgram() || w.selectedFleetRouteProgramRows().empty()) return false;
-        routeCharacters=w.selectedFleetRouteProgramForecast().size();return true;
-    };
-    measure("route_forecast_first_read",readRoute);
-    measure("route_forecast_warm_read",readRoute);
+    measure("route_estimate_first_read",readRoute);
+    measure("route_estimate_repeated_read",readRoute);
     std::cout<<"route_text_characters="<<routeCharacters<<" pending_orders="<<MainWindowTestAccess::orders(w)<<'\n';
 
     const auto path=dir.filePath("probe.suns");
@@ -210,7 +220,7 @@ int main(int argc,char** argv)
     }
     std::cout<<"save_reload=ok original_save_unchanged="<<parser.isSet("save")<<'\n';
     } catch(const std::exception& error) {
-        // Returning unwinds the window/workers and temporary directory safely.
+        // Returning unwinds the window and temporary directory safely.
         std::cerr<<error.what()<<'\n';return 1;
     }
 }

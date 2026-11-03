@@ -15,7 +15,6 @@
 #include <QVariant>
 
 #include <optional>
-#include <memory>
 #include <set>
 #include <vector>
 
@@ -40,9 +39,6 @@ class QTextBrowser;
 
 namespace suns {
 
-struct AsyncRouteForecastState;
-struct AsyncRouteForecastJob;
-
 class ShipDesignerDialog;
 class TechnologyCatalogDialog;
 
@@ -52,19 +48,7 @@ struct RouteProgramDisplayRow {
     std::uint8_t warp{};
     bool active{};
     QString eta;
-    QString fuelUsed;
-    QString fuelRemaining;
-    QString fuelTooltip;
-    bool fuelShortage{};
-    bool forecastPending{};
-};
-
-struct RouteProgramLegForecast {
-    std::optional<std::uint32_t> arrivalTurn;
-    std::optional<double> fuelUsed;
-    std::optional<double> fuelRemaining;
-    std::optional<std::uint32_t> fuelShortageTurn;
-    std::optional<double> fuelMinimum, fuelMaximum;
+    QString etaTooltip;
 };
 
 struct RouteProgramTargetOption {
@@ -95,15 +79,8 @@ public:
     [[nodiscard]] double selectedFleetOverdriveDamageForRouteProgram(std::uint8_t warp) const;
     [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
-    [[nodiscard]] QString selectedFleetRouteProgramForecast(bool asynchronous = false) const;
-    [[nodiscard]] QString selectedFleetWaypointFuelWarning(
-        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
-        std::optional<Position> coordinateDestination = std::nullopt,
-        bool asynchronous = false, bool* pending = nullptr) const;
-    [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows(bool asynchronous = false) const;
-    [[nodiscard]] bool routeForecastsPending() const;
-    void cancelWaypointFuelForecast() const;
-    void stopRouteForecastWorkers();
+    [[nodiscard]] QString selectedFleetRouteProgramEstimate() const;
+    [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
     [[nodiscard]] std::vector<FleetId> availableOwnedFleetsForRouteProgram() const;
@@ -217,12 +194,11 @@ public:
     void installPlanetaryEngineering();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 
-    // Ordered colony build list with completion forecasts and move controls.
+    // Ordered colony build list with current costs and move controls.
     void installProductionQueue();
 
 signals:
     void controlsChanged();
-    void routeForecastReady();
     // Editor context updates immediately, even while map redraw is deferred.
     void routeProgramContextChanged(bool resetDrafts = false);
     void routeProgramMapTargetPicked(int kind, std::uint32_t id);
@@ -235,9 +211,6 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private:
-    void requestAsyncRouteForecast(const MoveFleetOrder& route, bool warning, const QString& warningKey = {}) const;
-    void launchAsyncRouteForecasts() const;
-    void finishAsyncRouteForecast(const std::shared_ptr<AsyncRouteForecastJob>& job) const;
     friend struct MainWindowTestAccess;
     static constexpr int workspaceLayoutVersion = 6;
     void rebuildScene(bool planningStateChanged = true);
@@ -352,7 +325,6 @@ private:
 
     GalaxyConfig galaxyConfig_;
     GameState state_;
-    TurnProcessor processor_;
     std::uint64_t planningRevision_{};
     std::uint64_t renderedPlanningRevision_{std::uint64_t(-1)};
     std::optional<FleetId> renderedFleetSelection_;
@@ -365,14 +337,6 @@ private:
     mutable PlayerId receivedPlayerId_{};
     mutable std::uint64_t fleetPlanningRevision_{std::uint64_t(-1)};
     mutable std::optional<GameState> fleetPlanningState_;
-    mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
-    mutable FleetId routeEtaFleet_{};
-    mutable std::vector<RouteProgramLegForecast> routeLegForecasts_;
-    mutable QString routeForecastSummary_;
-    mutable std::uint64_t routeForecastBuildCount_{};
-    mutable QString waypointFuelKey_;
-    mutable QString waypointFuelWarning_;
-    mutable std::optional<FleetArrivalAction> waypointFuelAction_;
     PlayerOrders pendingOrders_{1, {}};
     SessionMode sessionMode_{SessionMode::Solo};
     std::vector<EmpireSetup> empireSetups_;
@@ -495,8 +459,6 @@ private:
         std::uint64_t ruinedMines{};
         std::uint32_t cleanupUnits{};
     } productionControls_;
-    // Declared last: cancellation/join precedes destruction of live world/cache members.
-    mutable std::shared_ptr<AsyncRouteForecastState> asyncRouteForecasts_;
 };
 
 } // namespace suns

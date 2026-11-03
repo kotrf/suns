@@ -137,7 +137,7 @@ void MainWindow::refreshExoticMaterials()
             row->setText(6, blocked.empty() ? QString("Forecast: up to %1 units/year").arg(known_colony_xenocrystal_rate(known, pendingOrders_.player, p))
                 : QString::fromStdString(blocked));
             row->setToolTip(6, "Estimate from received private colony inputs; not current stock. Mining precedes movement and production, "
-                "after gate/local-transfer orders. Production ETAs include estimated colony extraction; it is not current transferable stock.");
+                "after gate/local-transfer orders. Future extraction is not current transferable stock.");
         } else row->setText(6, p.owner ? "Private colony mining" : "Remote mining only");
         if (selected == key({p.id, 0})) tree->setCurrentItem(row);
     }
@@ -197,14 +197,8 @@ void MainWindow::refreshExoticMaterialControls()
             .arg(QString::fromStdString(p->name)).arg(p->resonanceLab.work).arg(p->resonanceLab.crystalsPaid)
             .arg(p->resonanceLab.invested.ironium).arg(p->resonanceLab.invested.boranium).arg(p->resonanceLab.invested.germanium)
             .arg(QString::fromStdString(resonance_block(known, *p)));
-        if (resonance_scheduled(*p)) {
-            const auto received = make_player_view(state_,pendingOrders_.player).state;
-            const auto* beforeCargo = find_planet(received,p->id);
-            const auto firstTurnMining = beforeCargo ? projected_mineral_mining(received,*beforeCargo) : MineralCargo{};
-            const auto forecast = forecast_production_queue(known, *p, p->productionQueue, 128, firstTurnMining);
-            for (std::size_t i = 0; i < p->productionQueue.size(); ++i) if (p->productionQueue[i].kind == ProductionKind::ResonanceLaboratory)
-                details += forecast[i].completionTurn ? QString(" Forecast completion: year %1.").arg(qulonglong(*forecast[i].completionTurn)) : " Completion not forecast with received supplies.";
-        }
+        if (resonance_scheduled(*p))
+            details += "\nScheduled in production queue. Progress is resolved each turn from output, queue priority and supplies.";
     }
     findChild<QLabel*>("exoticProjectDetails")->setText(details);
 }

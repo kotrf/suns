@@ -19,7 +19,6 @@ struct MainWindowTestAccess {
  static QString counter(MainWindow& w){ return w.empireLabel_->text(); }
  static void change(MainWindow& w,GameState s){w.state_=std::move(s);w.rebuildScene();}
  static void selectStar(MainWindow& w,StarId id){w.selection_.star=id;w.rebuildScene();}
- static void clearWarning(MainWindow& w){w.waypointFuelKey_.clear();}
  static void selectFleet(MainWindow& w,FleetId id){w.selection_.fleet=id;w.rebuildScene();}
  static void merge(MainWindow& w){w.openMergeFleetsDialog();}
 };
@@ -49,9 +48,13 @@ void missing_miner_forecast(MainWindow& w) {
  const auto f=std::find_if(control.fleets.begin(),control.fleets.end(),[](const auto& f){return f.id==1;});
  assert(f!=control.fleets.end() && std::abs(f->minerals.ironium-8)<1e-6);
  MainWindowTestAccess::set(w,s);
- const auto forecast=w.selectedFleetRouteProgramForecast();
- assert(forecast.contains("projected mineral cargo aboard: 8.0"));
- assert(!forecast.contains("projected mineral cargo aboard: 16.0"));
+ const auto forecast=w.selectedFleetRouteProgramEstimate();
+ // The UI estimates approach geometry only; the real processor above still
+ // checks exact mining/loading and guards against the historical duplicate miner.
+ assert(forecast.contains("Nominal travel time"));
+ assert(!forecast.contains("projected mineral cargo"));
+ const auto rows=w.selectedFleetRouteProgramRows();
+ assert(rows.size()==1 && rows.front().eta=="≈0");
 }
 int main(int argc,char** argv){
  QApplication app(argc,argv);MainWindow w;missing_miner_forecast(w);
@@ -78,8 +81,8 @@ int main(int argc,char** argv){
  refuel.orbitalStations.push_back({2,1,2,"Remote refueling station",OrbitalStationHullType::OrbitalDock,{OrbitalStationModule::Shipyard,OrbitalStationModule::RefuelingDepot}});refuel.nextOrbitalStationId=3;
  queue_survey_report(refuel,1,2,0,{0,0},refuel.turn,SurveyLevel::DeepSurvey);queue_survey_report(refuel,1,3,0,{0,0},refuel.turn,SurveyLevel::DeepSurvey);deliver_due_survey_reports(refuel);
  orbital_test::acknowledge(refuel);ship.telemetry.warp=ship.warp;ship.telemetry.arrivalAction=ship.arrivalAction;ship.telemetry.waypointQueue=ship.waypointQueue;MainWindowTestAccess::set(w,refuel);
- const auto liveForecast=w.selectedFleetRouteProgramForecast();std::cout<<"REFUEL LIVE "<<liveForecast.toStdString()<<"\n";
+ const auto liveForecast=w.selectedFleetRouteProgramEstimate();std::cout<<"REFUEL LIVE "<<liveForecast.toStdString()<<"\n";
  auto lost=refuel;lost.pendingStationContacts.push_back({lost.orbitalStations.front(),lost.turn,lost.turn+34});lost.orbitalStations.clear();MainWindowTestAccess::change(w,lost);
- const auto lostForecast=w.selectedFleetRouteProgramForecast();assert(liveForecast==lostForecast);std::cout<<"REFUEL LOST "<<lostForecast.toStdString()<<"\n";
+ const auto lostForecast=w.selectedFleetRouteProgramEstimate();assert(liveForecast==lostForecast);std::cout<<"REFUEL LOST "<<lostForecast.toStdString()<<"\n";
  std::cout<<"REFUEL EQUAL "<<(liveForecast==lostForecast)<<" known_live="<<make_player_view(refuel,1).state.orbitalStations.size()<<" known_lost="<<make_player_view(lost,1).state.orbitalStations.size()<<"\n"<<std::flush;
 }

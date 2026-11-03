@@ -1,5 +1,11 @@
 # Order editing and background forecast performance
 
+**Historical checkpoint:** this describes the first #269 revision, 659fd9b.
+The user subsequently chose minimal realtime estimates on 3 November 2026.
+The revised #269 removes the detailed simulations and background workers below;
+see [the current contract](minimal-ui-estimates.md). Earlier measurements remain
+here as historical evidence, not the behavior of the latest head.
+
 This continues the selection-only correction in #266. The user supplied a
 288-system year-89 campaign where real Factory Add clicks still took about
 8.2–8.5 seconds. The expensive path ran a disposable annual simulation, rebuilt

@@ -373,14 +373,15 @@ int main(int argc, char** argv)
     MainWindowTestAccess::verifyCargo(window, 25000, 0, 123);
 
     // Workforce after cargo is current intent, but this year's extraction is
-    // fixed before cargo. Compare the displayed ETA with actual annual turns
-    // in both directions across the mine/factory staffing threshold.
+    // fixed before cargo. The UI does not simulate future mining to invent an
+    // ETA from empty current I stocks; actual turns retain exact completion.
     for (const bool unloading : {true,false}) {
         MainWindowTestAccess::miningCargo(window,unloading);
         settle();
         const auto expected = MainWindowTestAccess::physicalCompletion(window);
         assert(queue->topLevelItemCount() == 1);
-        assert(queue->topLevelItem(0)->text(3) == QString("Turn %1 (+%2)").arg(expected).arg(expected-1));
+        assert(queue->topLevelItem(0)->text(3) == QString::fromUtf8("—"));
+        assert(queue->topLevelItem(0)->toolTip(3).contains("future mining"));
         assert(minerals->topLevelItem(0)->text(2) == (unloading ? "1.0" : "76.1"));
         assert(minerals->topLevelItem(0)->toolTip(2).contains("before cargo"));
         auto* mining = window.findChild<QLabel*>("miningInfrastructureSummary");

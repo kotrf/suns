@@ -178,7 +178,7 @@ QString stellarVariabilitySummary(const GameState& state, const StarSystem& star
 
 QString turnCount(std::uint32_t turns)
 {
-    return QString("%1 turn%2").arg(turns).arg(turns == 1 ? "" : "s");
+    return QString("≈%1 turn%2").arg(turns).arg(turns == 1 ? "" : "s");
 }
 
 QString fuelValue(double fuel)
@@ -288,8 +288,8 @@ GameState receivedFleetPlanningState(const GameState& state, PlayerId player)
 {
     auto received = make_player_view(state, player).state;
     // Outgoing commands are the owner's already sent intent, not fresh
-    // observations. Keep them before projecting Split/Merge, as the route
-    // forecast does, without restoring physical manifests or reports.
+    // observations. Keep them before projecting Split/Merge, without
+    // restoring physical manifests or reports.
     for (auto& fleet : received.fleets) {
         if (fleet.owner != player) continue;
         if (const auto* original = findFleet(state, fleet.id);
@@ -299,22 +299,10 @@ GameState receivedFleetPlanningState(const GameState& state, PlayerId player)
     return received;
 }
 
-bool affectsMovementProjection(const Order& order)
-{
-    return std::holds_alternative<SetFleetColonistsOrder>(order)
-        || std::holds_alternative<SetFleetMineralCargoOrder>(order)
-        || std::holds_alternative<TransferCargoOrder>(order)
-        || std::holds_alternative<TransferFleetFuelOrder>(order)
-        || std::holds_alternative<RefuelFleetOrder>(order)
-        || std::holds_alternative<MergeFleetsOrder>(order)
-        || std::holds_alternative<SplitFleetOrder>(order)
-        || std::holds_alternative<RenameFleetOrder>(order);
-}
-
 bool panelOnlyOrder(const Order& order)
 {
-    // Immediate fleet projection ignores these orders. Annual ETA forecasts
-    // still depend on them, so the general planning revision must advance.
+    // Immediate fleet manifests ignore these orders. Production/research
+    // panels still need their normal planning revision and refresh.
     return std::holds_alternative<QueueProductionOrder>(order)
         || std::holds_alternative<QueueProductionBatchOrder>(order)
         || std::holds_alternative<QueueShipDesignOrder>(order)
@@ -326,45 +314,6 @@ bool panelOnlyOrder(const Order& order)
         || std::holds_alternative<SetColonyResearchOrder>(order)
         || std::holds_alternative<SetResearchPlanOrder>(order)
         || std::holds_alternative<SetResearchAllocationOrder>(order);
-}
-
-GameState movementPhasePreviewState(
-    const GameState& state,
-    const PlayerOrders& pending,
-    const TurnProcessor& processor)
-{
-    // Let the real TurnProcessor validate and resolve logistics on a disposable
-    // copy. Clearing destinations prevents this preview turn from actually
-    // moving fleets; keeping only logistics and fleet-organization orders
-    // avoids unrelated actions.
-    // The processor still applies turn-start onboard fuel generation, exactly
-    // as it will before the real orders and movement phase.
-    GameState preview = receivedFleetPlanningState(state, pending.player);
-    preview.pendingMobileBaseTransfers.clear();
-    project_interstellar_medium(preview,pending.player);
-    // A local cargo preview must not turn a remote site's physical stock or
-    // undelivered deployment into planning knowledge, or run its work orders.
-    for (auto& fleet : preview.fleets) {
-        if (fleet.owner==pending.player) {
-            auto known=fleet_player_view(state,fleet);
-            known.pendingCommands = fleet.pendingCommands;
-            if (fleet.outpost!=OutpostKind::None || known.outpost!=OutpostKind::None
-                || mobile_base_hulls(preview,fleet)>0 || mobile_base_hulls(preview,known)>0) fleet=known;
-            fleet.mobileBase.enabled=false;
-            fleet.probe = known.probe;
-        }
-        fleet.destination.reset();
-        if (fleet.task==FleetTask::DeployOutpost) fleet.task=FleetTask::None;
-    }
-
-    PlayerOrders logistics{pending.player, {}};
-    for (const auto& order : pending.orders) {
-        if (affectsMovementProjection(order)) {
-            logistics.orders.push_back(order);
-        }
-    }
-
-    return processor.process(preview, {logistics});
 }
 
 QColor fleetColor(FleetRole role, int alpha = 255)
@@ -462,7 +411,6 @@ QString componentSummary(const ShipDesign* design)
 
 MainWindow::~MainWindow()
 {
-    stopRouteForecastWorkers();
     shuttingDown_ = true;
     // Qt destroys child widgets after C++ members. Scene teardown must not
     // refresh panels that read the already destroyed planning/game state.
@@ -701,13 +649,15 @@ const GameState& MainWindow::receivedPlayerState() const
 
 const GameState& MainWindow::movementPlanningPreview() const
 {
-    // Panels poll much more often than the game/order boundary changes. Share
-    // the identical simulation across those readers; rebuildScene invalidates
-    // it for edits, telemetry, loads and new games (including reused turn IDs).
+    // This is the current accepted order boundary, not a simulated future year.
+    // Cargo, reorganization and explicit refuelling use the same cheap core
+    // projection as the editor. Annual generation, services and movement happen
+    // only when the turn is resolved.
     if (!movementPreview_ || movementPreviewRevision_ != planningRevision_
-        || movementPreviewPlayer_ != pendingOrders_.player || movementPreview_->turn != state_.turn + 1) {
+        || movementPreviewPlayer_ != pendingOrders_.player || movementPreview_->turn != state_.turn) {
         ++movementPreviewBuildCount_;
-        movementPreview_ = movementPhasePreviewState(state_, pendingOrders_, processor_);
+        movementPreview_ = fleetPlanningState();
+        project_interstellar_medium(*movementPreview_, pendingOrders_.player);
         movementPreviewRevision_ = planningRevision_;
         movementPreviewPlayer_ = pendingOrders_.player;
     }
@@ -854,13 +804,13 @@ void MainWindow::rebuildScene(bool planningStateChanged)
             routeStart.x(), routeStart.y(), routeEnd.x(), routeEnd.y(), routePen);
         route->setZValue(-20.0);
         QString routeText = visibleFleet.targetFleet != 0
-            ? QString("W%1 • intercept ETA ~%2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
+            ? QString("W%1 • intercept ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
             : QString("W%1 • ETA %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         if (visibleFleet.arrivalAction) routeText += QString(" • %1").arg(arrivalActionSummary(*visibleFleet.arrivalAction));
         if (visibleFleet.targetFleet != 0) routeText += QString(" • pursuing Fleet %1").arg(visibleFleet.targetFleet);
         route->setToolTip(routeText);
         const auto routeLabel = visibleFleet.targetFleet != 0
-            ? QString("W%1 • intercept ~%2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
+            ? QString("W%1 • intercept %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)))
             : QString("W%1 • %2").arg(visibleFleet.warp).arg(turnCount(fleet_eta(visibleFleet)));
         if (selection_.fleet && *selection_.fleet == fleet.id)
             addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet.role, 155));
@@ -893,7 +843,7 @@ void MainWindow::rebuildScene(bool planningStateChanged)
                 const auto routeWarp = concreteOrder.warp == 0 ? visibleFleet.warp : concreteOrder.warp;
                 const auto eta = travel_turns(visibleFleet.position, routeDestination, warp_distance(routeWarp));
                 QString routeText = concreteOrder.targetFleet != 0
-                    ? QString("course W%1 • intercept ETA ~%2").arg(routeWarp).arg(turnCount(eta))
+                    ? QString("course W%1 • intercept ETA %2").arg(routeWarp).arg(turnCount(eta))
                     : QString("course W%1 • %2").arg(routeWarp).arg(turnCount(eta));
                 if (concreteOrder.targetFleet != 0) routeText += QString(" • pursuing Fleet %1").arg(concreteOrder.targetFleet);
                 if (concreteOrder.arrivalAction.kind != FleetArrivalActionKind::None) {
@@ -901,7 +851,7 @@ void MainWindow::rebuildScene(bool planningStateChanged)
                 }
                 route->setToolTip(routeText);
                 const auto routeLabel = concreteOrder.targetFleet != 0
-                    ? QString("W%1 • intercept ~%2").arg(routeWarp).arg(turnCount(eta))
+                    ? QString("W%1 • intercept %2").arg(routeWarp).arg(turnCount(eta))
                     : QString("W%1 • %2").arg(routeWarp).arg(turnCount(eta));
                 if (selection_.fleet && *selection_.fleet == fleet->id)
                     addTravelLabel(scene_, routeStart, routeEnd, routeLabel, fleetColor(fleet->role, 210));
@@ -1080,7 +1030,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
     if (refreshReceivedState) receivedPlayerState_.reset();
     refreshCargoTransferControls();
     const auto* star = selectedStar();
-    const auto received = receivedPlayerState();
+    const auto& received = receivedPlayerState();
     const auto* planet = selectedPlanet();
     if (planet) {
         const auto* known=find_planet(received,planet->id);
@@ -1106,7 +1056,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
     std::size_t colonies = 0;
     std::uint64_t population = 0;
     std::uint32_t output = 0;
-    const auto receivedEconomy = projected_cargo_order_state(received, pendingOrders_);
+    const auto& receivedEconomy = fleetPlanningState();
     for (const auto& candidate : receivedEconomy.planets) {
         if (candidate.owner == pendingOrders_.player) {
             ++colonies;
@@ -1188,7 +1138,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
         const auto fuelChange = fleet_fuel_change_for_segment(movementPreview, preview, star->position);
         const auto fuelConsumed = fleet_fuel_consumption_for_segment(movementPreview, preview, star->position);
         if (fuelChange > 0.000001) {
-            routeFuelLine = QString("<br>Direct-route fuel: <b>%1</b>; fuel at movement phase: %2.")
+            routeFuelLine = QString("<br>Direct-route fuel: <b>%1</b>; current/planned fuel: %2.")
                                 .arg(fuelValue(fuelChange)).arg(fuelValue(preview.fuel));
         } else if (fuelChange < -0.000001) {
             routeFuelLine = QString("<br>Ram-scoop gain on direct route: <b>+%1</b> fuel.").arg(fuelValue(-fuelChange));
@@ -1196,10 +1146,10 @@ void MainWindow::updateControls(bool refreshReceivedState)
             routeFuelLine = "<br>Direct route is fuel-neutral at this Warp.";
         }
         if (fuelConsumed > preview.fuel + 0.000001)
-            routeFuelLine += " <b>Insufficient for ordered Warp at movement phase.</b>";
+            routeFuelLine += " <b>Current/planned fuel is below this direct-leg estimate.</b>";
         if (state_.interstellarMediumEnabled) {
             const auto bounds=fleet_segment_fuel_bounds(movementPreview,preview,routeDistance);
-            routeFuelLine+=QString("<br>Received-medium estimate: direct-leg consumption %1–%2 over density 0–1; ETA may change in unsurveyed space. Use Route forecast for annual billing/refuelling.")
+            routeFuelLine+=QString("<br>Received-medium estimate: direct-leg consumption %1–%2 over density 0–1; ETA may change in unsurveyed space. Annual generation, billing and refuelling are resolved on End Turn.")
                 .arg(bounds.consumedMinimum,0,'f',1).arg(bounds.consumedMaximum,0,'f',1);
         }
     }
@@ -1388,7 +1338,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
         QString movementPlanLine;
         if (effectiveFleet && (std::abs(effectiveFleet->fuel - fleet->fuel) > 0.000001
                                || effectiveFleet->colonists != fleet->colonists)) {
-            movementPlanLine = QString("<br><b>Movement-phase plan:</b> fuel %1, colonists %2, gross mass %3 kt.")
+            movementPlanLine = QString("<br><b>Current-turn plan:</b> fuel %1, colonists %2, gross mass %3 kt.")
                                    .arg(fuelValue(effectiveFleet->fuel))
                                    .arg(static_cast<qulonglong>(effectiveFleet->colonists))
                                    .arg(fleet_gross_mass(state_, *effectiveFleet), 0, 'f', 1);
@@ -1518,7 +1468,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
 void MainWindow::appendPendingOrder(Order order, const QString& description)
 {
     const bool panelsOnly = panelOnlyOrder(order);
-    const bool keepMovement = !affectsMovementProjection(order)
+    const bool keepMovement = panelsOnly
         && movementPreview_ && movementPreviewRevision_ == planningRevision_;
     pendingOrders_.orders.push_back(std::move(order));
     pendingDescriptions_.push_back(description);
@@ -1546,8 +1496,6 @@ void MainWindow::replacePendingFleetMove(
         if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]); move && move->fleet == fleet) {
             pendingOrders_.orders[index] = MoveFleetOrder{fleet, destination, warp, arrivalAction};
             pendingDescriptions_[static_cast<int>(index)] = description;
-            if (movementPreview_ && movementPreviewRevision_ == planningRevision_)
-                movementPreviewRevision_ = planningRevision_ + 1;
             rebuildScene();
             statusBar()->showMessage(description);
             return;
@@ -1635,7 +1583,7 @@ void MainWindow::queueFleetMove()
     if (!fleet_warp_valid(state_, *fleet, warp)) return;
 
     const auto eta = travel_turns(fleet->position, star->position, warp_distance(warp));
-    const auto movementPreview = movementPhasePreviewState(state_, pendingOrders_, processor_);
+    const auto& movementPreview = movementPlanningPreview();
     const auto* plannedFleet = findFleet(movementPreview, fleet->id);
     auto preview = plannedFleet ? *plannedFleet : *fleet;
     preview.warp = warp;
@@ -1651,7 +1599,7 @@ void MainWindow::queueFleetMove()
     } else {
         fuelText = ", fuel-neutral";
     }
-    if (fuelConsumed > preview.fuel + 0.000001) fuelText += " [INSUFFICIENT FOR ORDERED WARP]";
+    if (fuelConsumed > preview.fuel + 0.000001) fuelText += " [CURRENT FUEL BELOW ESTIMATE]";
 
     replacePendingFleetMove(fleet->id, star->position, warp, {},
         QString("Plot %1 course to %2 — W%3, %4%5")
@@ -1856,7 +1804,6 @@ void MainWindow::endTurn()
             statusBar()->showMessage("Waiting for orders from every remote human. An empty submission is a pass.", 6000);
             return;
         }
-        stopRouteForecastWorkers();
         result = resolve_controlled_campaign_turn(state_, std::move(submissions));
     } catch (const std::exception& error) {
         statusBar()->showMessage(QString("Cannot resolve turn: %1").arg(error.what()), 7000);
@@ -1905,7 +1852,6 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
         const auto setups = empireSetups_.empty()
             ? std::vector<EmpireSetup>{{"Terrans", RacePreset::Terran}} : empireSetups_;
         auto generated = generate_campaign(requested, setups);
-        stopRouteForecastWorkers();
         sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
         pendingOrders_ = {1, {}};
         inbox_.clear();

@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
+#include "simple_production_estimate.hpp"
 #include "suns/production.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
@@ -178,7 +179,7 @@ void MainWindow::installProductionQueue()
     productionQueueTree_ = new QTreeWidget(group);
     productionQueueTree_->setObjectName("productionQueueTree");
     productionQueueTree_->setColumnCount(4);
-    productionQueueTree_->setHeaderLabels({"#", "Item", "Remaining", "Completion"});
+    productionQueueTree_->setHeaderLabels({"#", "Item", "Remaining", "Approx. completion"});
     productionQueueTree_->setRootIsDecorated(false);
     productionQueueTree_->setAlternatingRowColors(true);
     productionQueueTree_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -328,13 +329,13 @@ void MainWindow::refreshProductionQueue()
     productionControls_.ruinedMines = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructMine);
     productionControls_.cleanupUnits = cleanup_units_available(*projectedPlanet);
     refreshProductionControls();
-    const auto forecast = forecast_production_queue(forecastState, *projectedPlanet, queue, 10000, firstTurnMining);
-    const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
-        ? forecastPlayer->technology.researchAllocationPercent
-        : 0;
     const auto output = net_colony_output(forecastState,*projectedPlanet,firstTurnMining);
-    const auto guaranteedResearch = static_cast<std::uint32_t>(
-        static_cast<std::uint64_t>(output) * allocationPercent / 100U);
+    const auto guaranteedResearch = colony_research_allocation(forecastState, *projectedPlanet, output);
+    const auto* knownStation = known_orbital_station(state_, planet->owner, planet->id);
+    bool shipyardAvailable = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
+    // One bounded pass at today's rate/stocks; do not resolve future years in UI.
+    const auto estimates = simple_production_estimates(forecastState, queue,
+        output - guaranteedResearch, projectedPlanet->minerals, shipyardAvailable);
     productionQueueSummary_->setText(
         QString("<b>%1</b> • output %2/turn • guaranteed research %3 • production %4 • %5 item%6")
             .arg(QString::fromStdString(planet->name))
@@ -356,7 +357,7 @@ void MainWindow::refreshProductionQueue()
         total.germanium += cost.germanium * units;
     }
     productionQueueSummary_->setText(productionQueueSummary_->text()
-        + QString("<br>Stock: %1<br>Current-year mining (before cargo): %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion.")
+        + QString("<br>Stock: %1<br>Current-year mining (before cargo): %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion. Completion dates are approximate: current production rate and received stocks only; no future-year simulation.")
             .arg(mineralAmounts(projectedPlanet->minerals), mineralAmounts(firstTurnMining), mineralAmounts(total)));
     const auto ruinedFactories=reconstruction_remaining(*planet,ProductionKind::ReconstructFactory);
     const auto ruinedMines=reconstruction_remaining(*planet,ProductionKind::ReconstructMine);
@@ -378,13 +379,11 @@ void MainWindow::refreshProductionQueue()
             .arg(queue.size()).arg(queue.size() == 1 ? "" : "s").arg(queue.empty() ? " — queue empty" : ""));
     }
 
-    const auto* knownStation = known_orbital_station(state_, planet->owner, planet->id);
-    bool shipyardAvailable = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
         const bool automatic = item.automation != ProductionAutomation::None;
         QString remaining = automatic ? QString("≤%1/yr").arg(item.quantity)
-            : QString::number(item.remainingCost + (item.quantity - 1) * production_item_cost(forecastState, item));
+            : QString::number(qulonglong(estimates[index].remainingWork));
         const bool waitingForShipyard = item.kind == ProductionKind::ColonyShip
             && !shipyardAvailable;
         if (waitingForShipyard) {
@@ -395,15 +394,12 @@ void MainWindow::refreshProductionQueue()
         }
 
         QString completion;
-        if (forecast[index].completionTurn) {
-            completion = QString("Turn %1 (+%2)")
-                .arg(static_cast<qulonglong>(*forecast[index].completionTurn))
-                .arg(static_cast<qulonglong>(*forecast[index].completionTurn - state_.turn));
-        } else if(forecast[index].retiredTurn) completion=QString("Unneeded · T%1").arg(*forecast[index].retiredTurn);
-        else completion = waitingForShipyard ? "waiting for dock" : "beyond forecast";
-        if (automatic) completion = forecast[index].completionTurn
-            ? QString("First +%1 yr").arg(*forecast[index].completionTurn - state_.turn)
-            : "Idle / beyond forecast";
+        if (estimates[index].completionTurn) {
+            completion = QString("~Turn %1 (+%2)")
+                .arg(qulonglong(*estimates[index].completionTurn))
+                .arg(qulonglong(*estimates[index].completionTurn - state_.turn));
+        } else completion = QString::fromUtf8("—");
+        if (automatic) completion = "Annual rule";
 
         auto* row = new QTreeWidgetItem(productionQueueTree_);
         row->setText(0, QString::number(index + 1));
@@ -419,12 +415,13 @@ void MainWindow::refreshProductionQueue()
         auto details = QString("%1 — minerals per completed unit: %2\n"
                                      "Shortfall against current stock before other builds: %3")
             .arg(productionItemName(forecastState, item), mineralAmounts(cost), mineralAmounts(missing));
+        details += QString("\n%1\nApproximate dates hold today's production rate and mineral budget fixed; growth, future mining, arrivals and future technology are not predicted.")
+            .arg(QString::fromUtf8(simple_production_estimate_reason(estimates[index].status)));
         if (automatic) {
-            details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped. First-completion estimate assumes current technology; forecast horizon is 256 years.").arg(item.quantity);
-            if (forecast[index].completionTurn) details += QString("\nFirst completion: Turn %1").arg(*forecast[index].completionTurn);
+            details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped during actual turn resolution.").arg(item.quantity);
         }
-        if(item.kind==ProductionKind::CleanupContamination) details+="\nRemoves up to 10 contamination for 6 resources and B/G 1/1 kt. Decay of 2/year is included in the forecast; no assumed future bombardments. Unneeded work retires without further charge.";
-        if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority and forecast apply; obsolete surplus work retires without further charge.")
+        if(item.kind==ProductionKind::CleanupContamination) details+="\nRemoves up to 10 contamination for 6 resources and B/G 1/1 kt. Natural decay and retirement of unneeded work are resolved during actual turns.";
+        if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority applies; obsolete surplus work retires during actual turn resolution.")
             .arg(item.kind==ProductionKind::ReconstructFactory?"factory":"mine").arg(production_cost(item.kind));
         if (engineering_kind(item.kind))
             details+="\nLong engineering project: at most 80 work/year; I/B/G 0.10/0.05/0.10 kt per actual work. Remaining minerals exclude already paid work. Removing this queue item pauses construction and retains investment; manage output and dismantling in Planetary engineering.";

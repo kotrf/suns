@@ -1,20 +1,25 @@
 # Production queue
 
-Each friendly colony exposes its complete production plan as an ordered four-column list: position, item, remaining production and forecast completion. Above it, the dock shows the colony stock, next-turn extraction and the total I/B/G bill for the visible queue. Selecting a row shows that item's bill and any shortfall against current stock. The forecast mirrors turn order: colony mining occurs first, the empire research percentage is deducted from current output, completed factories and mines affect later estimates, and population grows at the end of the turn.
+Each friendly colony exposes its ordered plan: position, item, remaining work
+and approximate completion. The dock shows current stock/mining and the I/B/G
+bill; selecting a row shows its cost and current shortfall. Under the
+[minimal estimate contract](minimal-ui-estimates.md), UI dates use cumulative
+remaining work divided by current production after research/upkeep, marked ~.
+There is no future annual simulation, growth, newly built output or future
+mining/delivery credit. An uncertain/blocked prefix makes later dates unknown.
 
 Factory output is limited to the factories the current surface population can
 operate under its owner's racial rate; extra installed factories remain idle.
 Mining uses the independent mine-operation rate. Limits are recalculated in the
-shared resolver as population grows or falls, so forecasts include later
-reactivation. The System panel shows active/built counts and population limits;
+shared resolver as population grows or falls. UI estimates use only the current
+operation limit and rate. The System panel shows active/built counts and population limits;
 see [race operation settings](race-profile.md#factory-and-mine-operation).
 
 Ordinary mining precedes cargo orders in the physical turn. A post-cargo plan
-therefore supplies the queue forecast with the received pre-cargo extraction
-for its first year, while factories immediately use post-cargo staffing. Later
-years recalculate mining from simulated population and completed mines; the
-initial extraction is not frozen for the whole forecast. The same first-year
-amount funds orbital upkeep and its output/growth estimates. Mining labels and
+therefore uses received pre-cargo extraction for current output/upkeep facts,
+while factories use post-cargo staffing. The displayed static mineral budget
+does not grow in later estimated years. Real turns recalculate mining, staffing
+and upkeep normally; the interface does not resolve them in advance. Mining labels and
 the Minerals table show current-year extraction before cargo, independently of
 the immediately updated active/built counts and cargo-adjusted stocks.
 
@@ -41,7 +46,10 @@ allocation percentage, resolves its own queue with the remainder, and sends any
 unused output to the common research pool. Production points do not carry over
 between turns.
 
-Mineral-short construction remains in the queue with zero production remaining. The completion forecast simulates future planetary mining as well as I/B/G construction bills; very long estimates are reported as beyond the forecast horizon rather than inventing a date.
+Mineral-short construction remains queued with zero production remaining. Its
+UI completion date is unknown until the received mineral budget covers the
+batch; future mining and deliveries are not predicted. Real turns continue to
+fund and complete it under normal rules.
 
 Ships can be added to a colony's queue only while an operational Orbital Dock
 with a shipyard is present. The ship selector and queue button are disabled
@@ -65,12 +73,11 @@ following matching rule's annual quota. A normal build, including such unfinishe
 work, can wait for minerals and block the queue as usual. Reordering or deleting
 rows follows the existing pending-order sequence.
 
-The forecast and host share the yearly queue resolver. It includes research
-allocation, production, mineral costs and physical terraforming before population
-growth. Normal batches show completion of the entire remaining batch; persistent
-rules show their first future completion and remain active afterwards. Forecasts
-with auto rules are limited to 256 years and assume current technology, without
-predicting empire research discoveries or future cargo deliveries.
+The host retains the full yearly queue resolver, research allocation, costs,
+physical terraforming and growth. UI dates cover only simple finite batches at
+the current rate and available mineral budget. Persistent rules show Annual
+rule; changing-condition work, missing shipyards and uncertain prefixes show no
+date. Templates list rules/costs without simulating an example future colony.
 
 ## Production templates
 
@@ -90,7 +97,8 @@ supported formats remain readable.
 ## Reconstruction
 
 [Factory/mine reconstruction](planetary-reconstruction.md) consumes existing war ruins
-through the same queue and forecast resolver. Once-only batches cost 4/3 resources
+through the ordinary yearly queue resolver. Its UI completion date remains
+unknown because eligibility and surplus work can change. Once-only batches cost 4/3 resources
 and ordinary factory/mine minerals. Annual rules and colony templates cannot create
 planet-specific reconstruction. Queue reservations prevent overbooking ruins.
 

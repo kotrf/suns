@@ -366,7 +366,8 @@ int main(int argc, char** argv)
     suns::MainWindowTestAccess::queueDesign(window);
     assert(tree->topLevelItemCount() == 1);
     assert(tree->topLevelItem(0)->text(1) == "Immediate Scout");
-    assert(tree->topLevelItem(0)->text(3).startsWith("Turn "));
+    assert(tree->topLevelItem(0)->text(3).startsWith("~Turn "));
+    assert(tree->headerItem()->text(3).contains("Approx."));
     auto* minerals = window.findChild<QLabel*>("productionMineralDetails");
     assert(minerals && minerals->text().contains("I 6.0 / B 4.0 / G 5.0 kt"));
     const auto& queued = std::get<suns::QueueShipDesignOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
@@ -386,6 +387,7 @@ int main(int argc, char** argv)
     kind->setCurrentIndex(kind->findText("Auto factories ↻")); quantity->setValue(3); add->click();
     assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
     assert(tree->topLevelItem(0)->font(1).italic());
+    assert(tree->topLevelItem(0)->text(3) == "Annual rule");
     kind->setCurrentIndex(kind->findText("Mines")); quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1).contains("×2"));
     suns::MainWindowTestAccess::saveTemplate(window);
@@ -400,7 +402,7 @@ int main(int argc, char** argv)
     kind->setCurrentIndex(kind->findText("Terraform")); quantity->setValue(1);
     assert(add->isEnabled()); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1) == "Terraforming");
-    assert(tree->topLevelItem(1)->text(3).startsWith("Turn "));
+    assert(tree->topLevelItem(1)->text(3) == QString::fromUtf8("—"));
     if (const auto path = qEnvironmentVariable("SUNS_TERRAFORM_SCREENSHOT"); !path.isEmpty()) {
         window.installPanelLayoutFixes();
         window.resize(1400, 900); window.show();
@@ -415,7 +417,7 @@ int main(int argc, char** argv)
     assert(add->isEnabled() && quantity->maximum()==2);
     quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1).contains("Reconstruct factory"));
-    assert(tree->topLevelItem(0)->text(3).startsWith("Turn ") && !add->isEnabled());
+    assert(tree->topLevelItem(0)->text(3) == QString::fromUtf8("—") && !add->isEnabled());
     assert(tree->topLevelItem(0)->toolTip(1).contains("4 production"));
     const auto count=suns::MainWindowTestAccess::orders(window).orders.size(); add->click();
     assert(suns::MainWindowTestAccess::orders(window).orders.size()==count);

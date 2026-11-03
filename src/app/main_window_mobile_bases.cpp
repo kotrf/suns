@@ -55,8 +55,8 @@ void MainWindow::installMobileBases()
     cargoForm->addRow("Transfer fuel, mg",fuel); cargoForm->addRow("Keep donor fuel, mg",donorReserve); layout->addLayout(cargoForm);
     auto* transferHint=new QLabel("Transfers use the client selected above. At a received shared position, "
         "send fuel/mineral delivery commands in either direction. Commands travel to the base; remote positions and stocks may change before delivery. Minerals share the ordinary hold with all cargo. "
-        "Automatic queued service happens once after movement, delivery and onboard repair. Forecast uses received snapshots; "
-        "remote outcomes and later orders may differ.",body); transferHint->setWordWrap(true); layout->addWidget(transferHint);
+        "Automatic queued service happens once after movement, delivery and onboard repair. "
+        "The client list shows received positions; actual repair and refuelling are resolved each turn.",body); transferHint->setWordWrap(true); layout->addWidget(transferHint);
     auto* transfers=new QHBoxLayout;
     auto* deliver=new QPushButton("Client → base",body); deliver->setObjectName("mobileBaseDeliver"); transfers->addWidget(deliver);
     auto* collect=new QPushButton("Base → client",body); collect->setObjectName("mobileBaseCollect"); transfers->addWidget(collect); layout->addLayout(transfers);
@@ -101,25 +101,24 @@ void MainWindow::installMobileBases()
                 for(auto& f:known.fleets) if(f.id==id) f.lastMovedTurn=state_.turn+1;
         }
         const auto error=mobile_base_service_error(known,*find_service_fleet(known,id),state_.turn+1);
-        QString text=error.empty()?"Service-policy preview from received stocks (after command delivery):":QString::fromStdString(error);
+        QString text=error.empty()?"Service eligibility from received positions and planned policy:":QString::fromStdString(error);
         if(error.empty()) {
             if(mobile_base_repair_capacity(known,snapshot)<=0) text+="\nNo workshops fitted; refuel and cargo only.";
             else if(snapshot.minerals.ironium<=0 || snapshot.minerals.boranium<=0 || snapshot.minerals.germanium<=0)
                 text+="\nRepair blocked: workshop minerals exhausted.";
             if(snapshot.fuel<=policy().fuelReserve) text+="\nRefuel blocked: no fuel above base reserve.";
         }
-        const auto before=known; service_mobile_bases(known,state_.turn+1);
         for(auto client:policy().clients) {
-            const auto* a=find_service_fleet(before,client); const auto* b=find_service_fleet(known,client);
+            const auto* a=find_service_fleet(known,client);
             QString detail="missing client";
-            if(a && b) {
+            if(a) {
                 if(!same_position(a->position,snapshot.position)) detail="not at base";
-                else detail=QString("repair %1 percentage points; fuel +%2 mg").arg(a->damagePercent-b->damagePercent,0,'f',2).arg(b->fuel-a->fuel,0,'f',1);
+                else detail="at received base position";
             }
             text+=QString("\n#%1: %2").arg(client).arg(detail);
         }
         forecast->setText(text);
-        const auto* client=find_service_fleet(before,clients->currentData().toUInt());
+        const auto* client=find_service_fleet(known,clients->currentData().toUInt());
         const bool transfer=client && same_position(snapshot.position,client->position) && error.empty();
         deliver->setEnabled(transfer); collect->setEnabled(transfer);
     };

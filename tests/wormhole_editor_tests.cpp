@@ -73,8 +73,10 @@ int main(int argc, char** argv)
     assert(move.arrivalAction.kind == suns::FleetArrivalActionKind::EnterWormhole);
     assert(move.arrivalAction.wormholeEndpoint == 19);
     assert(move.destination.x == 20); // Last known coordinate, not host truth 30.
-    assert(window.selectedFleetRouteProgramForecast().contains("cannot be forecast"));
-    assert(!window.selectedFleetRouteProgramForecast().contains("-400"));
+    const auto approachRows=window.selectedFleetRouteProgramRows();
+    assert(approachRows.size()==1 && approachRows.front().eta=="≈1");
+    assert(approachRows.front().etaTooltip.contains("wormhole exit and survival cannot be estimated"));
+    assert(!window.selectedFleetRouteProgramEstimate().contains("-400"));
     suns::MainWindowTestAccess::hidePhysicalFleet(window);
     assert(suns::MainWindowTestAccess::hasSelectedFleet(window));
     auto* status = window.findChild<QLabel*>("wormholeFleetStatus");

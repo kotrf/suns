@@ -1,5 +1,54 @@
 # Project status and development handoff
 
+## Minimal realtime estimates — user decision, 3 November 2026
+
+The user explicitly prefers minimal, imperceptibly cheap estimates over detailed
+realtime forecasts, including background calculations. Rough population growth
+and distance/speed ETA are sufficient; actual outcomes resolve on End Turn.
+This supersedes the detailed background-forecast approach in the earlier #269
+checkpoint below. Work remains in the existing codex/ui-order-performance branch;
+PR #269/#268 stay open for review, not merged. Main is still 79d22c2; #267 is an
+independent open documentation restoration.
+
+Deleted the 96-year route simulation, QtCore worker manager, pending forecast
+states and Fuel/Left columns. Route rows/summary use cumulative distance/Warp²,
+marked ≈, received-derived positions and existing pending/sent route precedence.
+Conditional actions, moving targets, gates and wormholes leave later ETA unknown.
+The current accepted cargo/fleet projection replaces the disposable full-turn
+movement preview. It stays in the current year and credits no future generation
+or automatic service. Its dependencies include route edits/Stop, unlike the old
+logistics-filtered preview; stale route-cache retags were removed and tested.
+
+Production uses one pass over current work, net output and received mineral
+budget. Auto/nonlinear/blocked prefixes show Annual rule or no date. Removed
+future queue/service simulations from templates, engineering, resonance labs and
+mobile bases. Current rates, eligibility, costs, order validation and received
+knowledge remain. Bounded habitat-upkeep arithmetic derives current net rates
+on one local planet copy; it does not run future world turns. Real simulation
+and save v109/orders v48 are unchanged. [Current contract](minimal-ui-estimates.md)
+and durable decision MEM-32 explain the new boundary.
+
+Full GCC14.2/Qt6.12 Debug build and **112/112 offscreen CTest passed (39.76 s)**.
+Updated UI assertions distinguish nominal estimates from actual outcomes; exact
+EndTurn/logistics/knowledge/save assertions remain. New tests cover geometric
+routes beyond 96 years, received track projections/hidden invariance, sent
+command precedence, conditional unknowns, current-year manifests, static queue
+rates/mineral budgets, large batches and overflow.
+
+On the same private year-89/288-system/37-fleet save without concurrent builds:
+route summary **0.050 ms** synchronous; detailed 659fd9b needed **6.594 seconds
+background work** after Factory, now there is no such work. Paired foreground
+Factory **209 → 215 ms** (including queued GUI events): no claim of additional
+foreground improvement over that revision. Three real current clicks were
+**184 / 260 / 245 ms**, versus original main **8477 / 8216 / 8470 ms** before
+the broader #269 work. Settled idle CPU **5.4 ms / 2.1 s**, heartbeat **20.4 ms**;
+both modes use the same 500-ms layout settling floor. Save/readback passed and
+the supplied turn was never advanced/overwritten. Measurements are executor
+Debug results; private files remain untracked. PR #269 carries exact source/CI.
+
+#53/#63/auto-evacuation remain frozen; AI extensions postponed. Prior sections
+describe their historical checkpoints, including superseded forecast behavior.
+
 ## Order-edit responsiveness #268 — 3 November 2026
 
 The user confirms system selection improved after merged #266, but adding a

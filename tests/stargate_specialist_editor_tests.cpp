@@ -103,19 +103,23 @@ int main(int argc, char** argv)
     assert(std::holds_alternative<MoveFleetOrder>(MainWindowTestAccess::orders(window).front()));
     assert(window.appendStargateRouteStep(2,1,5));
     const auto rows=window.selectedFleetRouteProgramRows();
-    assert(rows.size()==2 && rows[0].destination.contains("[gate]") && rows[0].eta=="1" && rows[1].eta=="2");
+    assert(rows.size()==2 && rows[0].destination.contains("[gate]") && rows[0].eta=="≈0" && rows[1].eta=="—");
+    assert(rows[0].etaTooltip.contains("approach time to the source gate only"));
     assert(rows[0].arrivalAction.contains("wait and retry"));
     assert(window.setSelectedFleetRouteProgramLegWarp(0,4));
     assert(window.selectedFleetRouteProgramLegAction(0)->gateDestination==2);
-    const auto forecast=window.selectedFleetRouteProgramForecast();
-    assert(forecast.contains("projected gate hop completed"));
+    const auto forecast=window.selectedFleetRouteProgramEstimate();
+    assert(forecast.contains("Nominal travel time") && !forecast.contains("projected gate hop completed"));
     MainWindowTestAccess::hideDestinationGate(window,false);
-    assert(window.selectedFleetRouteProgramForecast()==forecast);
+    assert(window.selectedFleetRouteProgramEstimate()==forecast);
     MainWindowTestAccess::hideDestinationGate(window,true);
-    assert(window.selectedFleetRouteProgramForecast().contains("Gate step waiting (forecast)"));
+    // Even newly received gate loss changes validation, not the cheap approach geometry.
+    const auto unavailableGateRows=window.selectedFleetRouteProgramRows();
+    assert(unavailableGateRows[0].eta=="≈0" && unavailableGateRows[1].eta=="—");
     assert(!window.appendStargateRouteStep(1,2,5));
     assert(window.removeSelectedFleetRouteProgramLeg(1) && window.clearSelectedFleetRouteProgram());
-    // A receiving-system No action point can complete in the hop year.
+    // A receiving-system No action point can complete in the real hop year,
+    // while the UI intentionally leaves everything after a gate unknown.
     for (const bool middle:{false,true}) for (const bool repeat:{false,true}) {
         MainWindowTestAccess::install(window,true);
         assert(window.appendStargateRouteStep(1,2,5));
@@ -124,9 +128,12 @@ int main(int argc, char** argv)
         if(middle) assert(window.appendStargateRouteStep(2,1,5));
         if(repeat) assert(window.setSelectedFleetRepeatOrdersForRouteProgram(true));
         const auto forecastRows=window.selectedFleetRouteProgramRows();
-        assert(forecastRows.size()==(middle?3:2) && forecastRows[0].eta=="1" && forecastRows[1].eta=="1");
-        assert(forecastRows[1].fuelUsed=="0.0");
-        if(middle) assert(forecastRows[2].eta=="2");
+        assert(forecastRows.size()==(middle?3:2) && forecastRows[0].eta=="≈0" && forecastRows[1].eta=="—");
+        if(middle) assert(forecastRows[2].eta=="—");
+        const auto resolved=TurnProcessor{}.process(MainWindowTestAccess::snapshot(window),
+            {PlayerOrders{1,MainWindowTestAccess::orders(window)}});
+        assert((resolved.fleets[0].position==Position{5000,0}));
+        if(!middle && !repeat) assert(!resolved.fleets[0].destination);
     }
     MainWindowTestAccess::install(window,true); MainWindowTestAccess::remote(window);
     QTimer::singleShot(0,[&] {
@@ -137,11 +144,15 @@ int main(int argc, char** argv)
     MainWindowTestAccess::transit(window);
     const auto& deferred=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
     assert(deferred.arrivalAction.gateSource==2 && deferred.arrivalAction.gateDestination==1);
-    const auto originalEta=window.selectedFleetRouteProgramRows()[0].eta.toInt();
-    assert(originalEta>1);
+    const auto originalEta=window.selectedFleetRouteProgramRows()[0].eta;
+    assert(originalEta=="≈0"); // Delivery delay and gate operation are deliberately not predicted.
     MainWindowTestAccess::advance(window);
-    assert(window.selectedFleetRouteProgramRows()[0].eta.toInt()==originalEta-1);
-    assert(window.selectedFleetRouteProgramForecast().contains("projected gate hop completed"));
+    const auto stillApproaching=window.selectedFleetRouteProgramRows();
+    assert(stillApproaching[0].eta==originalEta);
+    const auto afterIssue=MainWindowTestAccess::snapshot(window);
+    assert(!afterIssue.fleets[0].pendingCommands.empty()
+        && afterIssue.fleets[0].pendingCommands.front().deliveryTurn>afterIssue.turn);
+    assert(stillApproaching[0].etaTooltip.contains("Command delivery"));
     assert(window.appendStargateRouteStep(1,2,5));
     const auto& extended=std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).front());
     assert(extended.arrivalAction.gateSource==2 && extended.arrivalAction.gateDestination==1);
