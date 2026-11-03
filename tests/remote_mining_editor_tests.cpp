@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
+#include <QGraphicsLineItem>
 #include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
@@ -204,21 +205,15 @@ int main(int argc, char** argv) {
     assert(next.planets[1].minerals.ironium == 0); // Travel does not grant a mining year.
     assert(processor.process(next, {}).planets[1].minerals.ironium == 4);
 
-    // Real numbered waypoints stay a fixed screen size and pass mouse clicks.
-    int numberedLabels = 0;
+    // Route geometry remains visible and mouse-transparent, without map numbers.
+    int routeSegments = 0;
     for (auto* item : w.routeProgramScene()->items()) {
-        auto* label = dynamic_cast<QGraphicsTextItem*>(item);
-        if (!label || label->toPlainText() != "1" || !label->data(73).toBool()) continue;
-        ++numberedLabels;
-        assert(label->acceptedMouseButtons() == Qt::NoButton);
-        const auto screenSize = label->deviceTransform(QTransform::fromScale(0.5, 0.5)).mapRect(label->boundingRect()).size();
-        for (const auto zoom : {1.0, 4.0, 12.0}) {
-            const auto size = label->deviceTransform(QTransform::fromScale(zoom, zoom)).mapRect(label->boundingRect()).size();
-            assert(std::abs(size.width() - screenSize.width()) < 0.001);
-            assert(std::abs(size.height() - screenSize.height()) < 0.001);
-        }
+        if (!item->data(73).toBool()) continue;
+        assert(!dynamic_cast<QGraphicsTextItem*>(item));
+        if (dynamic_cast<QGraphicsLineItem*>(item)) ++routeSegments;
+        assert(item->acceptedMouseButtons() == Qt::NoButton);
     }
-    assert(numberedLabels == 1);
+    assert(routeSegments == 1);
 
     // Editing an existing leg also preserves mining through command delay.
     s = fixture(410, false); s.fleets[0].position = {400, 0}; s.fleets[0].telemetry.position = {400, 0};

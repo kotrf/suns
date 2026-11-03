@@ -37,6 +37,11 @@ ctest --test-dir build --output-on-failure
 ./build/src/app/suns
 ```
 
+Windows builds embed the application icon in `suns.exe`. On Linux,
+`cmake --install build --prefix "$HOME/.local"` installs the app, desktop launcher
+and hicolor icons; the installation's `bin` directory must be on `PATH` for the
+launcher. See [platform assets and route estimates](docs/mini-2.md).
+
 For a headless core/test build without Qt:
 
 ```sh

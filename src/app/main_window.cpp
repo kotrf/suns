@@ -1,6 +1,7 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/mobile_base.hpp"
 #include "main_window.hpp"
+#include "application_icon.hpp"
 #include "suns/interstellar_medium.hpp"
 #include "suns/deep_space.hpp"
 #include <QAction>
@@ -416,6 +417,7 @@ MainWindow::MainWindow(QWidget* parent)
 {
     resetTurnExchangeIdentity();
     setWindowTitle("Suns!");
+    setWindowIcon(applicationIcon());
     resize(1300, 840);
 
     auto* central = new QWidget(this);

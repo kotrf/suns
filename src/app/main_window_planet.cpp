@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include <QGridLayout>
 #include "suns/campaign.hpp"
 
 #include <QAction>
@@ -209,7 +210,9 @@ void MainWindow::installPlanetPolish()
             portrait->setAlignment(Qt::AlignCenter);
             portrait->setFixedHeight(84);
             portrait->setPixmap(compactPortrait(unknownPortrait()));
-            layout->insertWidget(0, portrait);
+            if (auto* header = planetGroup->findChild<QWidget*>("systemPlanetHeader"))
+                qobject_cast<QGridLayout*>(header->layout())->addWidget(portrait, 0, 0, Qt::AlignHCenter);
+            else layout->insertWidget(0, portrait);
 
             planetPopulationBar_ = new QProgressBar(planetGroup);
             planetPopulationBar_->setObjectName("planetPopulationBar");

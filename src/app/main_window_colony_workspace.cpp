@@ -12,6 +12,7 @@
 #include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -139,15 +140,28 @@ void MainWindow::installColonyWorkspace()
     detailsDock->setWidget(overviewDetails);
     addDockWidget(Qt::LeftDockWidgetArea, detailsDock);
     if (auto* group = detailsDock->findChild<QGroupBox*>("planetGroup")) {
-        auto* station = new QToolButton(group);
+        auto* header = new QWidget(group);
+        header->setObjectName("systemPlanetHeader");
+        auto* headerLayout = new QGridLayout(header);
+        headerLayout->setContentsMargins(0, 0, 0, 0);
+        headerLayout->setSpacing(0);
+        auto* station = new QToolButton(header);
         station->setObjectName("systemStationButton");
-        station->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        station->setIconSize(QSize(32, 32));
-        station->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        station->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        station->setIconSize(QSize(24, 24));
+        station->setFixedSize(28, 28);
+        station->setAutoRaise(true);
         station->setAccessibleName("Orbital station details");
         station->hide();
         connect(station, &QToolButton::clicked, this, &MainWindow::openStationDetails);
-        if (auto* column = qobject_cast<QVBoxLayout*>(group->layout())) column->insertWidget(1, station);
+        if (auto* column = qobject_cast<QVBoxLayout*>(group->layout())) {
+            if (auto* portrait = group->findChild<QLabel*>("planetPortrait")) {
+                column->removeWidget(portrait);
+                headerLayout->addWidget(portrait, 0, 0, Qt::AlignHCenter);
+            }
+            headerLayout->addWidget(station, 0, 0, Qt::AlignTop | Qt::AlignRight);
+            column->insertWidget(0, header);
+        }
     }
     auto* statusPanel = new QWidget(overview);
     statusPanel->setObjectName("colonyStatusPanel");
@@ -277,8 +291,8 @@ void MainWindow::refreshColonyWorkspace()
         if (station) {
             button->setIcon(stationIcon(station->hull));
             button->setText(QString::fromUtf8(station_hull_spec(station->hull).name) + "…");
-            button->setToolTip(QString("%1\nOpen received station information and fitting")
-                .arg(QString::fromStdString(station->name)));
+            button->setToolTip(QString("%1 — %2\nOpen received station information and fitting")
+                .arg(QString::fromStdString(station->name), QString::fromUtf8(station_hull_spec(station->hull).name)));
         }
     }
     const auto* planet = observed && observed->owner == pendingOrders_.player

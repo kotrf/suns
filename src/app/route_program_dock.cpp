@@ -9,7 +9,6 @@
 #include <QComboBox>
 #include <QDockWidget>
 #include <QFormLayout>
-#include <QFont>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGroupBox>
@@ -166,17 +165,7 @@ void drawRouteOverlay(MainWindow& window, std::optional<Position> coordinateDraf
         auto* line = scene->addLine(from.x, from.y, to.x, to.y, pen);
         line->setData(kRouteOverlayDataKey, true);
         line->setZValue(-10.0);
-
-        auto* label = scene->addText(QString("%1").arg(static_cast<qulonglong>(index)));
-        label->setDefaultTextColor(QColor(150, 215, 255, 210));
-        QFont font;
-        font.setPixelSize(10);
-        label->setFont(font);
-        label->setFlag(QGraphicsItem::ItemIgnoresTransformations);
-        label->setAcceptedMouseButtons(Qt::NoButton);
-        label->setPos(to.x + 5.0, to.y + 3.0);
-        label->setData(kRouteOverlayDataKey, true);
-        label->setZValue(12.0);
+        line->setAcceptedMouseButtons(Qt::NoButton);
     }
 }
 
@@ -242,9 +231,10 @@ void attachRouteProgramDock(MainWindow& window)
     routeLayout->setSpacing(3);
     auto* routeTree = new QTreeWidget(routeGroup);
     routeTree->setObjectName("routeProgramQueue");
-    routeTree->setColumnCount(4);
-    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA ≈"});
+    routeTree->setColumnCount(5);
+    routeTree->setHeaderLabels({"#", "Destination", "Warp", "ETA ≈", "Fuel ≈"});
     routeTree->headerItem()->setToolTip(3, "Nominal travel years: distance / Warp², rounded up per leg. Actual timing resolves on End Turn.");
+    routeTree->headerItem()->setToolTip(4, "Approximate fuel cost in mg per leg, at its Warp and the current received/planned cargo. Assumes open space; actual costs resolve on End Turn.");
     routeTree->setRootIsDecorated(false);
     routeTree->setAlternatingRowColors(true);
     routeTree->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -254,6 +244,7 @@ void attachRouteProgramDock(MainWindow& window)
     routeTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     routeTree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     routeTree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    routeTree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     routeTree->setTextElideMode(Qt::ElideMiddle);
     routeTree->setFixedHeight(100);
     routeLayout->addWidget(routeTree);
@@ -900,9 +891,9 @@ void attachRouteProgramDock(MainWindow& window)
         const auto rows = window.selectedFleetRouteProgramRows();
         QString signature = QString::number(selectedFleet) + ':';
         for (const auto& row : rows) {
-            signature += QString("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1f%6\x1e")
+            signature += QString("%1\x1f%2\x1f%3\x1f%4\x1f%5\x1f%6\x1f%7\x1f%8\x1e")
                 .arg(row.destination, row.arrivalAction).arg(row.warp).arg(row.active)
-                .arg(row.eta, row.etaTooltip);
+                .arg(row.eta, row.etaTooltip, row.fuel, row.fuelTooltip);
         }
         if (signature == *lastRouteSignature) return;
         const auto previousRow = routeTree->property("fleetId").toUInt() == selectedFleet
@@ -916,13 +907,14 @@ void attachRouteProgramDock(MainWindow& window)
                 auto* item = new QTreeWidgetItem(routeTree, {
                     row.active ? QString("%1 ▶").arg(static_cast<qulonglong>(index + 1))
                                : QString::number(static_cast<qulonglong>(index + 1)),
-                    row.destination, QString("W%1").arg(row.warp), row.eta,
+                    row.destination, QString("W%1").arg(row.warp), row.eta, row.fuel,
                 });
                 item->setData(0, Qt::UserRole, row.arrivalAction);
                 item->setToolTip(0, row.active
                     ? "Current route leg; edits replace the fleet program when delivered" : "Select to edit this leg's Warp");
                 item->setToolTip(1, row.destination + "\nOn arrival: " + row.arrivalAction);
                 item->setToolTip(3, row.etaTooltip);
+                item->setToolTip(4, row.fuelTooltip);
                 if (row.warp > window.selectedFleetMaxWarpForRouteProgram()) item->setForeground(2, QColor("#ff8787"));
 
             }

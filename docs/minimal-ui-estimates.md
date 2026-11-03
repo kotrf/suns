@@ -37,11 +37,19 @@ still use shared current-order validation. Opening a tool does not advance time.
 - Current fuel, local overdrive risk and direct-leg algebraic estimates remain
   current-state facts/rough estimates; there is no table of simulated future
   fuel remaining or predicted shortage years.
+- On 4 November 2026 Mini-2 restores a `Fuel ≈` cost per leg from current
+  received/planned ships and cargo, the ordered Warp and direct distance.
+  One bounded pass uses the existing engine formula without future turns.
+  It assumes open space; yearly rounding, future load, regeneration/scooping
+  and hazards are not predicted. Changed load/composition or uncertain position
+  makes later burn unknown; refuelling alone does not change nominal burn.
 - Engineering, resonance labs, templates and mobile bases show current work,
   stocks, rules and eligibility, without simulated future completion/service.
 
 The old 96-year route calculation, worker manager, pending forecast states and
-Fuel/Left columns are removed. Current manifests share the existing order
+simulated Fuel/Left columns are removed. Mini-2's algebraic `Fuel ≈` column is
+separate and does not restore remaining-fuel or shortage forecasts.
+Current manifests share the existing order
 boundary projection; the discarded full-turn movement preview is removed too.
 The real turn processor retains all fuel, cargo, population, production,
 communication, risk and service rules. Save/orders formats do not change.

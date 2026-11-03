@@ -49,6 +49,8 @@ struct RouteProgramDisplayRow {
     bool active{};
     QString eta;
     QString etaTooltip;
+    QString fuel;
+    QString fuelTooltip;
 };
 
 struct RouteProgramTargetOption {
