@@ -2,6 +2,7 @@
 
 #include "suns/game_state.hpp"
 #include "suns/stations.hpp"
+#include "suns/orbital_bases.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,12 +16,15 @@ namespace suns {
 enum class SimpleProductionStatus {
     Approximate, AnnualRule, Nonlinear, Unavailable, NoProduction,
     MissingMinerals, MissingShipyard, EarlierUncertain, Overflow,
+    Skipped, InactiveAnnualRule,
 };
 
 struct SimpleProductionEstimate {
     std::optional<std::uint64_t> completionTurn;
     SimpleProductionStatus status{SimpleProductionStatus::Nonlinear};
     std::uint64_t remainingWork{};
+    std::uint32_t effectiveQuantity{};
+    std::uint32_t skippedQuantity{};
 };
 
 // A display estimate, not a future-turn simulation. The caller supplies the
@@ -28,7 +32,7 @@ struct SimpleProductionEstimate {
 // while walking the queue. No growth, future mining, upkeep or new technology
 // is predicted. Unknown/annual work prevents dates for the following prefix.
 inline std::vector<SimpleProductionEstimate> simple_production_estimates(
-    const GameState& state, const std::vector<ProductionItem>& queue,
+    const GameState& state, const Planet& planet, const std::vector<ProductionItem>& queue,
     std::uint32_t productionPerYear, MineralCargo availableMinerals,
     bool shipyardAvailable)
 {
@@ -36,10 +40,39 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
     result.reserve(queue.size());
     std::uint64_t accumulatedWork = 0;
     bool prefixKnown = true;
+    auto defenses = planet.defenses;
+    auto radar = planet.radar;
+    bool stationExists = shipyardAvailable || find_orbital_station_at_planet(state, planet.id)
+        || orbital_base_at(state, planet.id);
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
     for (const auto& item : queue) {
         SimpleProductionEstimate estimate;
-        const auto units = std::uint64_t(item.quantity);
+        const bool automatic = item.automation != ProductionAutomation::None;
+        // These are the resolver's current, free-retirement predicates. Retired
+        // work must neither reserve minerals nor make a known prefix uncertain.
+        const bool skipped = item.kind == ProductionKind::Research || item.quantity == 0
+            || (item.kind == ProductionKind::OrbitalStation && (item.station
+                ? !station_construction_valid(state, planet, *item.station) : stationExists))
+            || (item.kind == ProductionKind::LocalRadar && radar != PlanetaryRadarLevel::None)
+            || (item.kind == ProductionKind::PlanetaryRadar && radar == PlanetaryRadarLevel::Full)
+            || (item.kind == ProductionKind::ColonyDefense && (!colony_defenses_available(state, planet.owner)
+                || (!automatic && defenses >= kMaximumColonyDefenses)));
+        const bool inactiveAnnual = automatic && item.kind == ProductionKind::ColonyDefense
+            && defenses >= kMaximumColonyDefenses;
+        if (skipped || inactiveAnnual) {
+            estimate.status = skipped ? SimpleProductionStatus::Skipped : SimpleProductionStatus::InactiveAnnualRule;
+            estimate.skippedQuantity = skipped ? item.quantity : 0;
+            result.push_back(estimate);
+            continue;
+        }
+        auto effective = item.quantity;
+        if (!automatic && item.kind == ProductionKind::ColonyDefense)
+            effective = std::min<std::uint32_t>(effective, kMaximumColonyDefenses - defenses);
+        if (!automatic && (item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar))
+            effective = std::min<std::uint32_t>(effective, 1);
+        estimate.effectiveQuantity = effective;
+        estimate.skippedQuantity = item.quantity - effective;
+        const auto units = std::uint64_t(effective);
         estimate.remainingWork = item.remainingCost;
         if (units) estimate.remainingWork += (units - 1) * production_item_cost(state, item);
         const bool fixed = item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
@@ -80,6 +113,10 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
                 availableMinerals.germanium -= batchCost.germanium;
                 if (item.kind == ProductionKind::OrbitalStation)
                     shipyardAvailable = !item.station || item.station->loadout.shipyard;
+                if (item.kind == ProductionKind::OrbitalStation) stationExists = true;
+                if (item.kind == ProductionKind::ColonyDefense) defenses += effective;
+                if (item.kind == ProductionKind::LocalRadar) radar = std::max(radar, PlanetaryRadarLevel::Local);
+                if (item.kind == ProductionKind::PlanetaryRadar) radar = PlanetaryRadarLevel::Full;
             }
         }
         if (!estimate.completionTurn) prefixKnown = false;
@@ -100,6 +137,8 @@ inline const char* simple_production_estimate_reason(SimpleProductionStatus stat
     case SimpleProductionStatus::MissingShipyard: return "A shipyard is required.";
     case SimpleProductionStatus::EarlierUncertain: return "Earlier work has no simple completion estimate.";
     case SimpleProductionStatus::Overflow: return "Completion exceeds the supported date range.";
+    case SimpleProductionStatus::Skipped: return "Currently skipped without spending work or minerals under the received technology, cap, radar or station conditions.";
+    case SimpleProductionStatus::InactiveAnnualRule: return "Annual rule currently does no work at the defense cap; it remains active for future turns and conditions.";
     }
     return "No simple completion estimate.";
 }

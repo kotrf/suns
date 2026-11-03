@@ -29,6 +29,11 @@ still use shared current-order validation. Opening a tool does not advance time.
   No future growth, factories, mining, research or supply deliveries are assumed.
   Annual rules, changing-condition projects and an uncertain/blocked prefix show
   no completion date. Their current progress, costs and requirements remain.
+  Rows the current resolver would skip (unavailable/capped defenses, redundant
+  radar, invalid station work) consume no work/mineral budget and do not make a
+  known prefix uncertain. Defense batches count only currently buildable units.
+  A skipped row cannot restore an already uncertain prefix; missing minerals or
+  shipyards still block estimates. Idle capped annual defenses remain a rule.
 - Current fuel, local overdrive risk and direct-leg algebraic estimates remain
   current-state facts/rough estimates; there is no table of simulated future
   fuel remaining or predicted shortage years.

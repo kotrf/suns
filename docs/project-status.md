@@ -1,5 +1,38 @@
 # Project status and development handoff
 
+## PR #269 review: skipped production rows — 3 November 2026
+
+Review of 62f0e93 identified one P2: the minimal queue estimate charged known
+skipped work to later rows. A legal template of 100 defenses followed by a Factory
+at Energy 0, or at the defense cap, predicted Factory T86 instead of T2. Both
+cases were independently reproduced using the original helper and one real
+resolve_colony_production call before the fix.
+
+The helper now receives the current received/planned colony and applies cheap
+resolver-equivalent technology/cap/radar/station skip checks before budgeting.
+Skipped rows have zero effective quantity/work and preserve prefix certainty.
+Manual defenses clamp to the remaining cap, including partial first-unit work;
+capped annual rules remain explicitly idle. Scalar defense/radar/station facts
+advance only after a confidently estimated prefix. Missing minerals/shipyards
+still block, and skipping a later row never clears an earlier unknown. The UI
+shows effective bills/work and Currently skipped; skipped stations do not create
+an estimated shipyard. No core, real-turn, save/orders or forecast policy change.
+
+Full GCC14.2/Qt6.12 Debug build and **112/112 offscreen CTest passed (37.07 s)**.
+New cases use exact mineral budgets and one real resolver call for the two legal
+template repros, annual cap persistence, partial/repeated capped defense batches,
+installed/duplicate radar and invalid stations. A real MainWindow production
+template test checks the Factory row is ~Turn 2 (+1). Huge-batch/overflow and
+unknown-prefix regressions still pass. Independent read-only review found no
+additional confirmed defect; diff check clean. Complexity remains one queue pass,
+without year/unit loops; previous private-save timings are not newly remeasured.
+
+Work stays on codex/ui-order-performance, PR #269 open/unmerged. The prior
+62f0e93 source CI 41599894742/job 125795896503 passed **112/112 (83.02 s)**,
+Qt6.12.0/GCC15.2, checkout/log verified; it does not validate this subsequent fix.
+Current source/CI are recorded on the PR. #267 remains independent; frozen
+directions and the minimal-estimate decision are unchanged.
+
 ## Minimal realtime estimates — user decision, 3 November 2026
 
 The user explicitly prefers minimal, imperceptibly cheap estimates over detailed
