@@ -12,6 +12,7 @@
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsLineItem>
 #include <QGraphicsEllipseItem>
+#include <QGraphicsPathItem>
 #include <QMouseEvent>
 #include <QMenu>
 #include <QKeyEvent>
@@ -136,7 +137,7 @@ static int sensorRanges(suns::MainWindow& window, const char* kind)
     int count = 0;
     for (auto* item : window.routeProgramScene()->items()) {
         if (item->data(0).toString() != kind) continue;
-        assert(dynamic_cast<QGraphicsEllipseItem*>(item));
+        assert(dynamic_cast<QGraphicsPathItem*>(item));
         assert(!item->toolTip().isEmpty());
         assert(item->acceptedMouseButtons() == Qt::NoButton);
         ++count;
@@ -172,20 +173,18 @@ int main(int argc, char** argv)
     auto* sensors = window.findChild<QAction*>("showSensorRangesAction");
     auto* extraRanges = window.findChild<QAction*>("showPassiveEmissionRangesAction");
     assert(sensors && sensors->isChecked() && extraRanges && !extraRanges->isChecked());
-    assert(sensorRanges(window, "activeScannerRange") == 1);
-    assert(sensorRanges(window, "planetaryRadarRange") == 1);
+    assert(sensorRanges(window, "scannerCoverage") == 1);
     assert(sensorRanges(window, "passiveHullRange") == 0);
     assert(sensorRanges(window, "emissionReceptionRange") == 0);
     extraRanges->trigger();
     assert(sensorRanges(window, "passiveHullRange") == 1);
     assert(sensorRanges(window, "emissionReceptionRange") == 1);
     sensors->trigger();
-    for (const auto* kind : {"activeScannerRange", "planetaryRadarRange", "passiveHullRange", "emissionReceptionRange"})
+    for (const auto* kind : {"scannerCoverage", "penetratingScannerCoverage", "passiveHullRange", "emissionReceptionRange"})
         assert(sensorRanges(window, kind) == 0);
     sensors->trigger();
     MainWindowTestAccess::passiveScanner(window);
-    assert(sensorRanges(window, "activeScannerRange") == 0);
-    assert(sensorRanges(window, "planetaryRadarRange") == 1);
+    assert(sensorRanges(window, "scannerCoverage") == 1);
     assert(sensorRanges(window, "passiveHullRange") == 1);
     assert(sensorRanges(window, "emissionReceptionRange") == 1);
     extraRanges->trigger();
