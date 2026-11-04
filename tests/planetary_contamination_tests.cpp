@@ -12,7 +12,7 @@ GameState fixture()
     auto s=make_demo_game(); s.wormholeRules.spawnChancePerTurn=0; s.fleets.clear();
     for(auto& player:s.players) player.technology.researchActive=false;
     auto& p=s.planets.front(); p.productionQueue.clear(); p.habitability=100; p.population=100000;
-    p.industry=6; p.mines=0; p.minerals={50,50,50}; p.warDamage.lastBombardmentTurn=1;
+    p.population=6000; p.industry=0; p.mines=0; p.minerals={50,50,50}; p.warDamage.lastBombardmentTurn=1;
     return s;
 }
 void only_explicit_radiological_weapons_create_bounded_scars()

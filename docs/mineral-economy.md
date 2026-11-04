@@ -20,9 +20,9 @@ Baseline extraction units are:
 
 `1 + surface population / 750,000`
 
-A working **Mine** adds another `0.75` extraction units. Working mines are limited by surface population and the owner’s racial mine-operation rate (5–25 per 10,000; default 10). Installed mines above that limit remain idle and reactivate as population grows. Because this capacity is still multiplied by mineral concentration, the same Mine is much more valuable on a geologically rich world than on a poor one. The colony UI therefore shows both current extraction and the marginal I/B/G gain from the next Mine before the player queues it.
+A working **Basic Mine** adds `1` extraction unit; an **Advanced Mine** adds `2`. Working mines are limited by surface population and the owner’s racial mine-operation rate (5–25 per 10,000; default 10). Installed mines above that limit remain idle and reactivate as population grows. Because this capacity is still multiplied by mineral concentration, the same Mine is much more valuable on a geologically rich world than on a poor one. The colony UI therefore shows both current extraction and the marginal I/B/G gain from the next Mine before the player queues it.
 
-A Mine costs `5` production and `1 I / 2 B / 1 G`. Mines do not alter or deplete concentration; they represent extraction infrastructure, not a finite geological meter.
+A Basic Mine costs `5` resources and no minerals. An Advanced Mine costs `10` resources and `1 I / 2 B / 1 G`. An upgrade costs the difference: `5` resources and the same minerals. Mines do not alter or deplete concentration; they represent extraction infrastructure, not a finite geological meter.
 
 ## Stocks and cargo
 
@@ -37,9 +37,9 @@ Production has two independent constraints:
 
 A construction item may reach zero remaining production points and then wait at the head of the queue until the colony has all required minerals. Minerals are consumed atomically when construction completes.
 
-Factory mineral bill: `2 I / 1 B / 2 G`.
+Basic Factory: `10` resources and `4 G`, producing `1` resource per working factory. Advanced Factory: `20` resources and `4 I / 2 B / 8 G`, producing `2`. Upgrading an existing basic factory costs `10` resources and `4 I / 2 B / 4 G`.
 
-Mine mineral bill: `1 I / 2 B / 1 G`.
+Basic and advanced versions share each installation type’s workforce cap. Advanced installations operate first. Surface and normally serviced orbital residents produce `1` resource per `1000` inhabitants; population growth remains independent of factory counts. See [the complete balance contract](economy-rebalance.md).
 
 Ship mineral bills are derived from hull plus fitted components. This makes ship design affect industrial logistics as well as mass, fuel, cargo, sensing, and mission capability.
 

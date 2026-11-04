@@ -295,7 +295,7 @@ void plan_research(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
     auto& goal = plan.nextState.researchGoal;
     if (!goal || goal->field != technology.focus) {
         goal = ComputerResearchGoal{technology.focus, static_cast<std::uint8_t>(
-            std::min(255, int(technology.levels[static_cast<std::size_t>(technology.focus)]) + 1))};
+            std::min(int(kMaximumResearchLevel), int(technology.levels[static_cast<std::size_t>(technology.focus)]) + 1))};
         return;
     }
     if (technology.levels[static_cast<std::size_t>(goal->field)] < goal->level) return;
@@ -331,7 +331,7 @@ void plan_research(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         else if (technology.levels[static_cast<std::size_t>(ResearchField::Energy)] < 1) next = ResearchField::Energy;
     }
     goal = ComputerResearchGoal{next, static_cast<std::uint8_t>(
-        std::min(255, int(technology.levels[static_cast<std::size_t>(next)]) + 1))};
+        std::min(int(kMaximumResearchLevel), int(technology.levels[static_cast<std::size_t>(next)]) + 1))};
     if (next != technology.focus) {
         plan.orders.orders.push_back(SetResearchPlanOrder{next, {}, true});
         explain(reason, "Research " + research_field_name(next) + " " + std::to_string(goal->level));
@@ -836,6 +836,11 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 production_item_mineral_cost(state, ProductionItem{kind, production_cost(kind), 0}));
         };
         const auto build = [&](ProductionKind kind, std::uint32_t quantity = 1) {
+            const auto cost = production_item_mineral_cost(state, ProductionItem{kind});
+            for (const auto [stock, required] : {std::pair{colony->minerals.ironium,cost.ironium},
+                    std::pair{colony->minerals.boranium,cost.boranium}, std::pair{colony->minerals.germanium,cost.germanium}})
+                if (required > 0) quantity = std::min(quantity, std::uint32_t(std::clamp(std::floor((stock+1e-6)/required),0.0,double(kMaximumProductionBatch))));
+            if (!quantity) return;
             plan.orders.orders.push_back(QueueProductionBatchOrder{colony->id, kind, quantity});
             explain(reason, "Build " + std::to_string(quantity) + " "
                 + (kind == ProductionKind::CleanupContamination ? "contamination cleanup" : kind == ProductionKind::ReconstructFactory ? "factory reconstruction" : kind == ProductionKind::ReconstructMine ? "mine reconstruction" : kind == ProductionKind::Mine ? "mine" : kind == ProductionKind::Factory ? "factory" : "terraform")
@@ -868,17 +873,27 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         const auto exotic = known_xenocrystal(state, view.player, colony->id);
         const bool rareDeposit = exotic_mining_available(state, view.player) && exotic && exotic->depositSurveyed
             && exotic->site.remaining && exotic->colony && exotic->colony->owner == view.player && exotic->colony->population;
-        const auto minesWanted = std::min(workforce.mineLimit, std::max(rareDeposit ? 25u : 2u, colony->industry / 2));
+        const auto minesWanted = std::min(workforce.mineLimit, std::max({rareDeposit ? 25u : 2u, workforce.mineLimit / 10, colony->industry / 2}));
         const bool lowStock = std::min({colony->minerals.ironium, colony->minerals.boranium, colony->minerals.germanium}) < 15;
         if (colony->mines < minesWanted && (colony->mines < 2 || lowStock) && canAfford(ProductionKind::Mine)) {
-            build(ProductionKind::Mine); continue;
+            build(ProductionKind::Mine, std::min(10u,minesWanted-colony->mines)); continue;
         }
         const bool yard = colony_has_orbital_service(state, colony->id, view.player, OrbitalStationModule::Shipyard);
         const ShipDesign* ship = nullptr;
-        if (yard && colony->population / 4 >= kMinimumSettlers && colonyDesign && settlers < std::min<std::size_t>(2, sites)
-            && mineral_cargo_sufficient(colony->minerals, ship_design_mineral_cost(*colonyDesign))) ship = &*colonyDesign;
-        else if (yard && scoutDesign && unexplored && scouts < scoutsWanted
-            && mineral_cargo_sufficient(colony->minerals, ship_design_mineral_cost(*scoutDesign))) ship = &*scoutDesign;
+        if (yard && colony->population / 4 >= kMinimumSettlers && colonyDesign && settlers < std::min<std::size_t>(2, sites)) ship = &*colonyDesign;
+        else if (yard && scoutDesign && unexplored && scouts < scoutsWanted) ship = &*scoutDesign;
+        // Do not spend the future ship's Germanium on endless population-scaled
+        // factory batches. Basic mines are mineral-free and can fund its bill.
+        if (ship && !mineral_cargo_sufficient(colony->minerals, ship_design_mineral_cost(*ship))) {
+            if (colony->mines < minesWanted) build(ProductionKind::Mine,std::min(10u,minesWanted-colony->mines));
+            else explain(reason,"Save minerals for " + ship->name + " at colony " + std::to_string(colony->id));
+            continue;
+        }
+        if (!yard && !find_orbital_station_at_planet(state,colony->id) && colony->industry >= 4
+            && colony->population >= 100'000 && canAfford(ProductionKind::OrbitalStation)) {
+            plan.orders.orders.push_back(QueueProductionOrder{colony->id,ProductionKind::OrbitalStation});
+            explain(reason,"Build dock at colony " + std::to_string(colony->id)); continue;
+        }
         if (ship) {
             if (ship->id == 0 && std::find(createdDesigns.begin(), createdDesigns.end(), ship->name) == createdDesigns.end()) {
                 plan.orders.orders.push_back(CreateShipDesignOrder{ship->name, ship->hull, ship->components, ship->placements});
@@ -887,10 +902,14 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             plan.orders.orders.push_back(QueueShipDesignOrder{colony->id, ship->id, ship->id == 0 ? ship->name : std::string{}});
             if (ship_design_can_colonize(*ship)) ++settlers; else ++scouts;
             explain(reason, "Build " + ship->name + " at colony " + std::to_string(colony->id));
-        } else if (colony->industry < std::min(24u, workforce.factoryLimit) && canAfford(ProductionKind::Factory)) {
-            build(ProductionKind::Factory);
+        } else if (colony->industry < workforce.factoryLimit && canAfford(ProductionKind::Factory)) {
+            build(ProductionKind::Factory, std::min(10u,workforce.factoryLimit-colony->industry));
         } else if (colony->mines < minesWanted && canAfford(ProductionKind::Mine)) {
-            build(ProductionKind::Mine);
+            build(ProductionKind::Mine,std::min(10u,minesWanted-colony->mines));
+        } else if (workforce.operatingAdvancedFactories < workforce.operatingFactories && industry_upgrade_available(*colony, ProductionKind::UpgradeFactory) && canAfford(ProductionKind::UpgradeFactory)) {
+            build(ProductionKind::UpgradeFactory,std::min(10u,workforce.operatingFactories-workforce.operatingAdvancedFactories));
+        } else if (workforce.operatingAdvancedMines < workforce.operatingMines && industry_upgrade_available(*colony, ProductionKind::UpgradeMine) && canAfford(ProductionKind::UpgradeMine)) {
+            build(ProductionKind::UpgradeMine,std::min(10u,workforce.operatingMines-workforce.operatingAdvancedMines));
         } else if (!find_orbital_station_at_planet(state, colony->id) && colony->industry >= 4
             && colony->population >= 100'000 && canAfford(ProductionKind::OrbitalStation)) {
             plan.orders.orders.push_back(QueueProductionOrder{colony->id, ProductionKind::OrbitalStation});
@@ -938,8 +957,17 @@ bool computer_state_valid(const Player& player, std::uint64_t boundaryTurn)
     return true;
 }
 
-ComputerTurnPlan plan_computer_turn(const PlayerView& view)
+ComputerTurnPlan plan_computer_turn(const PlayerView& input)
 {
+    // Late-game engineering/probe policies also iterate whole collections.
+    // Canonicalize the received view once, so richer economies cannot make
+    // their orders/reasons depend on incidental host/export storage order.
+    auto view = input;
+    const auto byId = [](const auto& a, const auto& b) { return a.id < b.id; };
+    std::sort(view.state.planets.begin(),view.state.planets.end(),byId);
+    std::sort(view.state.stars.begin(),view.state.stars.end(),byId);
+    std::sort(view.state.shipDesigns.begin(),view.state.shipDesigns.end(),byId);
+    std::sort(view.state.fleets.begin(),view.state.fleets.end(),byId);
     const auto* player = find_player(view.state, view.player);
     if (!player || player->controller != PlayerController::Computer
         || view.state.players.size() != 1 || view.state.turn == 0

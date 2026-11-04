@@ -460,6 +460,7 @@ private:
         std::uint64_t ruinedFactories{};
         std::uint64_t ruinedMines{};
         std::uint32_t cleanupUnits{};
+        std::uint32_t upgradeFactories{}, upgradeMines{};
     } productionControls_;
 };
 

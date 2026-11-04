@@ -135,7 +135,7 @@ void legacy_v102_line(const QString& path) {
     const auto& d=loaded.state.players[0].transportLines[0].spec;assert(!d.sourceReserve && !d.departureMinimum);
 }
 void computer_line_persistence(const QString& path) {
-    auto s=computer_transport_world(5100);s.fleets[0].position={5100,0};
+    auto s=computer_transport_world(5100);s.fleets.resize(1);s.fleets[0].position={5100,0}; // Isolate one held assignment.
     for(auto& d:s.shipDesigns)if(d.id==202)d.components={C::FuelMizer,C::FuelMizer};acknowledge(s);
     Player human;human.id=2;human.name="Human observer";s.players.push_back(human);
     s=resolve_controlled_campaign_turn(s,{{2,{}}}).state;
@@ -248,7 +248,7 @@ void destination_target_persistence_and_ui(const QString& path) {
     assert(write_save_game_file(path,saved,error));assert(read_save_game_file(path,loaded,error));
     assert(loaded.state.fleets[0].arrivalAction->destinationTarget==100 && loaded.state.fleets[0].minerals.ironium==50);
     assert(std::get<SetTransportLineOrder>(loaded.pendingOrders.orders[0]).value.destinationTarget==150);
-    auto control=s,restored=loaded.state;tick(control,{QueueProductionOrder{1,ProductionKind::Factory}});tick(restored,{QueueProductionOrder{1,ProductionKind::Factory}});
+    auto control=s,restored=loaded.state;tick(control,{QueueProductionOrder{1,ProductionKind::ColonyDefense}});tick(restored,{QueueProductionOrder{1,ProductionKind::ColonyDefense}});
     tick(control);tick(restored);assert(control.fleets[0].minerals.ironium==48 && restored.fleets[0].minerals.ironium==48);
     assert(control.players[0].transportReceipts.size()==restored.players[0].transportReceipts.size());
     MainWindow w;MainWindowTestAccess::set(w,s);w.installTransportLines();

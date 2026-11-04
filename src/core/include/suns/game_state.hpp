@@ -22,7 +22,7 @@ enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant };
 enum class ObjectKnowledgeLevel : std::uint8_t { Detected, Classified, Studied };
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
-inline constexpr std::uint32_t kFactoryCost = 6;
+inline constexpr std::uint32_t kFactoryCost = 10;
 inline constexpr std::uint32_t kMineCost = 5;
 inline constexpr std::uint32_t kOrbitalDockCost = 24;
 inline constexpr std::uint32_t kTerraformingCost = 12;
@@ -43,14 +43,15 @@ inline constexpr double kColonistMassKg = 10'000.0;
 inline constexpr double kColonistsPerCargoUnit = 1'000'000.0 / kColonistMassKg;
 inline constexpr std::uint64_t kInitialHomePopulation = 1'000'000;
 inline constexpr std::uint64_t kPopulationPerHabitability = 25'000;
-inline constexpr std::uint64_t kPopulationPerProductionUnit = 500'000;
+inline constexpr std::uint64_t kPopulationPerProductionUnit = 1'000;
 inline constexpr std::uint64_t kPopulationPerWorkforceGroup = 10'000;
 inline constexpr std::uint8_t kMinWorkforceRate = 5;
 inline constexpr std::uint8_t kMaxWorkforceRate = 25;
 inline constexpr std::uint8_t kDefaultWorkforceRate = 10;
 inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
-inline constexpr std::uint32_t kFirstResearchLevelCost = 18;
+inline constexpr std::uint32_t kFirstResearchLevelCost = 50;
+inline constexpr std::uint8_t kMaximumResearchLevel = 26;
 
 // First communications slice: established friendly colonies temporarily act as
 // access nodes to the empire's instantaneous subspace backbone. Outside the
@@ -515,6 +516,10 @@ enum class ProductionKind {
     ArtificialMagnetosphere,
     AdaptiveMagnetosphere,
     OrbitalHabitat,
+    AdvancedFactory,
+    AdvancedMine,
+    UpgradeFactory,
+    UpgradeMine,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -714,6 +719,9 @@ struct Planet {
     XenocrystalSite xenocrystal;
     ResonanceLaboratory resonanceLab;
     OrbitalHabitat habitat;
+    // Subsets of industry/mines, not additional buildings or workforce caps.
+    std::uint32_t advancedFactories{};
+    std::uint32_t advancedMines{};
 };
 
 struct OrbitalStation {
@@ -744,6 +752,8 @@ struct HabitatObservation {
     std::uint64_t stationEvidenceTime{}; // 3*year + phase: observation 0, battle 1, final surface 2.
     PlanetaryRadarLevel radar{PlanetaryRadarLevel::None}; // Same dated packet as the production queue.
     std::optional<ColonyConditions> conditions;
+    std::uint32_t advancedFactories{};
+    std::uint32_t advancedMines{};
 };
 
 struct PendingStationContact {
@@ -822,6 +832,7 @@ enum class ResearchField : std::uint8_t {
 };
 
 inline constexpr std::size_t kResearchFieldCount = 6;
+enum class ResearchCost : std::uint8_t { Normal, Cheap, Expensive };
 
 enum class PlayerReportKind {
     FleetArrived,
@@ -1043,6 +1054,7 @@ struct RaceProfile {
     bool legacyBiologyAdaptation{}; // Preserve pre-terraforming saves without changing their colonies.
     std::uint8_t factoriesPerTenThousand{kDefaultWorkforceRate};
     std::uint8_t minesPerTenThousand{kDefaultWorkforceRate};
+    std::array<ResearchCost, kResearchFieldCount> researchCosts{};
 };
 
 struct ColonyTurnStatistics {
@@ -1819,6 +1831,7 @@ struct GameState {
     std::vector<SalvageWreck> wrecks;
     std::uint32_t nextEmissionId{1};
     std::vector<EmissionPulse> emissions;
+    bool slowResearch{};
 };
 
 struct GalaxyConfig {
@@ -1827,6 +1840,7 @@ struct GalaxyConfig {
     double width{400.0};
     double height{400.0};
     double minimumSeparation{15.0};
+    bool slowResearch{};
 };
 
 enum class GalaxySize : std::uint8_t { Tiny, Small, Medium, Large, Huge };
@@ -1895,6 +1909,8 @@ void normalize_ship_design_placement(ShipDesign& design);
 [[nodiscard]] std::uint8_t technology_level(
     const GameState& state, PlayerId player, ResearchField field);
 [[nodiscard]] std::uint32_t research_level_cost(ResearchField field, std::uint8_t level);
+[[nodiscard]] std::uint32_t research_level_cost(const GameState& state, PlayerId player,
+    ResearchField field, std::uint8_t level);
 [[nodiscard]] bool component_available_to_player(
     const GameState& state, PlayerId player, ShipComponentType component);
 
@@ -2002,6 +2018,10 @@ void refresh_sensor_intel(GameState& state);
     switch (kind) {
     case ProductionKind::ColonyShip: return kColonyShipCost;
     case ProductionKind::Factory: return kFactoryCost;
+    case ProductionKind::AdvancedFactory: return 20;
+    case ProductionKind::AdvancedMine: return 10;
+    case ProductionKind::UpgradeFactory: return 10;
+    case ProductionKind::UpgradeMine: return 5;
     case ProductionKind::ReconstructFactory: return 4;
     case ProductionKind::ReconstructMine: return 3;
     case ProductionKind::CleanupContamination: return 6;
@@ -2031,7 +2051,12 @@ void refresh_sensor_intel(GameState& state);
 struct ColonyWorkforce {
     std::uint32_t factoryLimit{}, mineLimit{};
     std::uint32_t operatingFactories{}, operatingMines{};
+    std::uint32_t operatingAdvancedFactories{}, operatingAdvancedMines{};
 };
+[[nodiscard]] constexpr bool industry_upgrade_kind(ProductionKind kind) {
+    return kind == ProductionKind::UpgradeFactory || kind == ProductionKind::UpgradeMine;
+}
+[[nodiscard]] std::uint32_t industry_upgrade_available(const Planet&, ProductionKind);
 // Surface residents support the two installation types independently. Limits
 // are proportional to the exact population, rounded down to whole buildings.
 [[nodiscard]] ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet);

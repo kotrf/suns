@@ -19,6 +19,7 @@ static void put(const QString& path, const QByteArray& bytes)
 }
 static void sameRace(const EmpireSetup& a, const EmpireSetup& b)
 {
+    assert(a.researchCosts == b.researchCosts);
     assert(a.name == b.name && a.race == b.race && a.primaryTrait == b.primaryTrait);
     assert(a.hullAccess == b.hullAccess && a.improvedFuelEfficiency == b.improvedFuelEfficiency);
     assert(a.noRamScoopEngines == b.noRamScoopEngines && a.settlerEngineAccess == b.settlerEngineAccess);
@@ -55,7 +56,7 @@ int main(int argc, char** argv)
             sameRace(original, loaded);
             assert(loaded.controller == PlayerController::Human);
             const auto json = QJsonDocument::fromJson(bytesAt(path)).object();
-            assert(json.size() == 12 && json.value("format").toString() == "suns-race");
+            assert(json.size() == 13 && json.value("format").toString() == "suns-race");
             for (const auto* key : {"controller", "seed", "player_id", "token", "technology"}) assert(!json.contains(key));
         }
 
@@ -63,6 +64,13 @@ int main(int argc, char** argv)
     assert(write_race_file(path, original, error));
     const auto validBytes = bytesAt(path);
     const auto valid = QJsonDocument::fromJson(validBytes).object();
+    // Original v1 races remain portable and default to normal research.
+    auto v1=valid; v1.insert("version",1); v1.remove("research_costs");
+    put(path,QJsonDocument(v1).toJson()); EmpireSetup legacy;
+    legacy.researchCosts.fill(ResearchCost::Expensive);
+    assert(read_race_file(path,legacy,error));
+    for(auto cost:legacy.researchCosts) assert(cost==ResearchCost::Normal);
+
     const auto reject = [&](const QByteArray& bytes) {
         put(path, bytes);
         EmpireSetup untouched{"Sentinel"}; untouched.controller = PlayerController::Computer;
@@ -76,7 +84,7 @@ int main(int argc, char** argv)
         auto null = valid; null.insert(key, QJsonValue::Null); reject(QJsonDocument(null).toJson());
     }
     for (const auto& [key, value] : std::vector<std::pair<QString, QJsonValue>>{
-            {"format", "other-game"}, {"version", 2}, {"version", 1.5}, {"version", true},
+            {"format", "other-game"}, {"version", 3}, {"version", 1.5}, {"version", true},
             {"name", 10}, {"name", ""}, {"name", "\n"}, {"name", "A\nB"}, {"name", QString(81, 'a')},
             {"environment", "unlimited"}, {"primary_trait", "habitat-civilization"},
             {"hull_family", -1}, {"remote_mining", "both"}, {"fuel_efficiency", 1},

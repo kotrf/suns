@@ -49,6 +49,8 @@ void verify_design_production()
 {
     const suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
+    state.planets.front().population=6000; state.planets.front().industry=0;
+    state.planets.front().habitability=0;
 
     suns::PlayerOrders order{1, {}};
     order.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kScoutDesignId});

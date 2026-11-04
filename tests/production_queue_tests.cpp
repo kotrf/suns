@@ -6,11 +6,16 @@
 
 namespace {
 using namespace suns;
+GameState fixed_production_fixture() {
+    auto state=make_demo_game(); state.planets.front().population=6000;
+    state.planets.front().industry=0; state.planets.front().habitability=0;
+    return state;
+}
 
 void reorder_is_applied_before_production()
 {
     TurnProcessor processor;
-    auto state = make_demo_game();
+    auto state = fixed_production_fixture();
     auto& colony = state.planets.front();
     colony.productionQueue = {
         {ProductionKind::Factory, kFactoryCost, 0},
@@ -27,7 +32,7 @@ void reorder_is_applied_before_production()
 
 void radar_builds_obey_cost_and_no_duplicate_rule()
 {
-    auto state = make_demo_game();
+    auto state = fixed_production_fixture();
     auto& p = state.planets.front();
     p.radar = PlanetaryRadarLevel::None;
     p.minerals = {20, 20, 20};
@@ -52,7 +57,7 @@ void radar_builds_obey_cost_and_no_duplicate_rule()
 void forecast_matches_resolved_completion_turns()
 {
     TurnProcessor processor;
-    auto state = make_demo_game();
+    auto state = fixed_production_fixture();
     auto& colony = state.planets.front();
     colony.minerals = {100.0, 100.0, 100.0};
     colony.productionQueue = {
@@ -80,15 +85,15 @@ void forecast_matches_resolved_completion_turns()
 
 void guaranteed_research_allocation_reduces_local_production()
 {
-    auto state = make_demo_game();
+    auto state = fixed_production_fixture();
     auto& colony = state.planets.front();
     colony.productionQueue = {{ProductionKind::Factory, kFactoryCost, 0}};
     const auto fullProduction = forecast_production_queue(state, colony, colony.productionQueue);
-    assert(fullProduction.front().completionTurn == state.turn + 1);
+    assert(fullProduction.front().completionTurn == state.turn + 2);
 
     state.players.front().technology.researchAllocationPercent = 50;
     const auto shared = forecast_production_queue(state, colony, colony.productionQueue);
-    assert(shared.front().completionTurn == state.turn + 2);
+    assert(shared.front().completionTurn == state.turn + 4);
 }
 
 } // namespace
@@ -96,7 +101,7 @@ void guaranteed_research_allocation_reduces_local_production()
 void cancellation_obeys_order_sequence_and_ownership()
 {
     using namespace suns;
-    auto state = make_demo_game();
+    auto state = fixed_production_fixture();
     state.players.front().technology.researchAllocationPercent = 100;
     auto& colony = state.planets.front();
     colony.productionQueue = {{ProductionKind::Factory, 2, 0}, {ProductionKind::Mine, 4, 0}};
@@ -123,7 +128,7 @@ void cancellation_obeys_order_sequence_and_ownership()
 void cancelled_build_does_not_spend_minerals_or_complete()
 {
     using namespace suns;
-    auto state = make_demo_game();
+    auto state = fixed_production_fixture();
     auto& colony = state.planets.front();
     colony.productionQueue = {{ProductionKind::Factory, 0, 0}};
     auto empty = state;

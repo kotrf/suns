@@ -40,6 +40,7 @@ struct MainWindowTestAccess {
     {
         window.state_ = make_demo_game();
         auto& colony = window.state_.planets.front();
+        colony.population=6000; colony.industry=0; colony.habitability=0;
         colony.radar = PlanetaryRadarLevel::None;
         colony.minerals = {100, 100, 100};
         colony.productionQueue.clear();

@@ -43,6 +43,8 @@ std::uint32_t production_item_cost(const GameState& state, const ProductionItem&
     if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
     if (item.kind == ProductionKind::Factory) return kFactoryCost;
     if (item.kind == ProductionKind::Mine) return kMineCost;
+    if (item.kind == ProductionKind::AdvancedFactory || item.kind == ProductionKind::AdvancedMine
+        || industry_upgrade_kind(item.kind)) return production_cost(item.kind);
     if (recovery_kind(item.kind) || item.kind == ProductionKind::LocalRadar || item.kind==ProductionKind::PlanetaryRadar || item.kind == ProductionKind::ColonyDefense) return production_cost(item.kind);
     if (item.kind == ProductionKind::OrbitalStation) return item.station ? station_build_cost(item.station->loadout) : kOrbitalDockCost;
     if (item.shipDesign != 0) {
@@ -87,7 +89,7 @@ std::uint64_t research_event_id(
 void apply_research_points(
     GameState& state,
     PlayerId playerId,
-    std::uint32_t points,
+    std::uint64_t points,
     std::uint64_t completionTurn,
     std::vector<GameEvent>& events)
 {
@@ -99,13 +101,23 @@ void apply_research_points(
         if (!valid_research_field(field)) return;
         const auto index = static_cast<std::size_t>(field);
         const auto level = player->technology.levels[index];
-        if (level == std::numeric_limits<std::uint8_t>::max()) return;
+        if (level >= kMaximumResearchLevel) {
+            if (!player->technology.queuedFocuses.empty()) {
+                player->technology.focus = player->technology.queuedFocuses.front();
+                player->technology.queuedFocuses.erase(player->technology.queuedFocuses.begin());
+            } else {
+                const auto lowest = std::min_element(player->technology.levels.begin(), player->technology.levels.end());
+                if (*lowest >= kMaximumResearchLevel) return;
+                player->technology.focus = ResearchField(std::distance(player->technology.levels.begin(), lowest));
+            }
+            continue;
+        }
 
         const auto nextLevel = static_cast<std::uint8_t>(level + 1);
-        const auto cost = research_level_cost(field, nextLevel);
+        const auto cost = research_level_cost(state, playerId, field, nextLevel);
         auto& progress = player->technology.progress[index];
         const auto remaining = cost > progress ? cost - progress : 0;
-        const auto spent = std::min(points, remaining);
+        const auto spent = std::uint32_t(std::min<std::uint64_t>(points, remaining));
         progress += spent;
         points -= spent;
         if (progress < cost) break;
@@ -168,13 +180,23 @@ void apply_precursor_research(
         if (!valid_research_field(field)) return;
         const auto index = static_cast<std::size_t>(field);
         const auto level = player->technology.levels[index];
-        if (level == std::numeric_limits<std::uint8_t>::max()) return;
+        if (level >= kMaximumResearchLevel) {
+            if (!player->technology.queuedFocuses.empty()) {
+                player->technology.focus = player->technology.queuedFocuses.front();
+                player->technology.queuedFocuses.erase(player->technology.queuedFocuses.begin());
+            } else {
+                const auto lowest = std::min_element(player->technology.levels.begin(), player->technology.levels.end());
+                if (*lowest >= kMaximumResearchLevel) return;
+                player->technology.focus = ResearchField(std::distance(player->technology.levels.begin(), lowest));
+            }
+            continue;
+        }
 
         const auto nextLevel = static_cast<std::uint8_t>(level + 1);
-        const auto cost = research_level_cost(field, nextLevel);
+        const auto cost = research_level_cost(state, playerId, field, nextLevel);
         auto& progress = player->technology.progress[index];
         const auto remaining = cost > progress ? cost - progress : 0;
-        const auto spent = std::min(points, remaining);
+        const auto spent = std::uint32_t(std::min<std::uint64_t>(points, remaining));
         progress += spent;
         points -= spent;
         if (progress < cost) break;
@@ -276,7 +298,8 @@ std::optional<std::uint32_t> complete_production(
 {
     if (item.kind == ProductionKind::Research) return std::nullopt;
     // Local buildings and physical environment are resolved by the shared queue engine.
-    if (recovery_kind(item.kind) || item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
+    if (industry_upgrade_kind(item.kind) || item.kind == ProductionKind::AdvancedFactory || item.kind == ProductionKind::AdvancedMine
+        || recovery_kind(item.kind) || item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
         || item.kind == ProductionKind::Terraforming || item.kind == ProductionKind::ColonyDefense
         || item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar) return FleetId{0};
     if (item.kind == ProductionKind::OrbitalStation) {
@@ -337,7 +360,8 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
         if (!object || !star) continue;
         const auto design = completed.kind == ProductionKind::ColonyShip
             ? (completed.shipDesign != 0 ? completed.shipDesign : kColonyShipDesignId) : ShipDesignId{0};
-        const auto quantity = reconstruction_kind(completed.kind) || completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine || completed.kind == ProductionKind::ColonyDefense
+        const auto quantity = industry_upgrade_kind(completed.kind) || completed.kind == ProductionKind::AdvancedFactory
+            || completed.kind == ProductionKind::AdvancedMine || reconstruction_kind(completed.kind) || completed.kind == ProductionKind::Factory || completed.kind == ProductionKind::Mine || completed.kind == ProductionKind::ColonyDefense
             ? completion.localQuantity : *object;
         queue_player_report(state, planet.owner, PlayerReportKind::ProductionCompleted,
             star->position, state.turn + 1, planet.star, planet.id,
@@ -2677,7 +2701,10 @@ TurnResult TurnProcessor::process_with_events(
                         });
                         if (planet == next.planets.end()) return;
 
-                        if (concreteOrder.kind == ProductionKind::Factory) {
+                        if (concreteOrder.kind == ProductionKind::AdvancedFactory || concreteOrder.kind == ProductionKind::AdvancedMine
+                            || industry_upgrade_kind(concreteOrder.kind)) {
+                            (void)apply_production_batch(next, *planet, {planet->id, concreteOrder.kind});
+                        } else if (concreteOrder.kind == ProductionKind::Factory) {
                             planet->productionQueue.push_back({ProductionKind::Factory, kFactoryCost, 0});
                         } else if (concreteOrder.kind == ProductionKind::Mine) {
                             planet->productionQueue.push_back({ProductionKind::Mine, kMineCost, 0});
@@ -2835,9 +2862,9 @@ TurnResult TurnProcessor::process_with_events(
     refresh_planetary_engineering(next);
     observe_current_sensor_coverage(next, next.turn + 1);
     observe_enemy_fleet_contacts(next, next.turn + 1);
-    std::vector<std::pair<PlayerId, std::uint32_t>> researchByPlayer;
+    std::vector<std::pair<PlayerId, std::uint64_t>> researchByPlayer;
     for (auto& planet : next.planets) {
-        const auto contribution = run_colony_production(next, planet) + retained_sample_research(next, planet);
+        const auto contribution = std::uint64_t(run_colony_production(next, planet)) + retained_sample_research(next, planet);
         const auto parallel = resonance_research(next, planet);
         for (std::size_t field = 0; field < parallel.size(); ++field) if (parallel[field]) {
             const auto* star = find_star(next, planet.star);

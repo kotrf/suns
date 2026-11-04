@@ -65,9 +65,9 @@ void MainWindow::newCampaign()
         "frontier travel still needs engines.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    QTableWidget table(8, 11, &dialog);
+    QTableWidget table(8, 17, &dialog);
     table.setObjectName("campaignEmpiresTable");
-    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k"});
+    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k", "Energy cost", "Propulsion cost", "Construction cost", "Electronics cost", "Biology cost", "Weapons cost"});
     table.horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table.horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int row = 0; row < 8; ++row) {
@@ -113,6 +113,12 @@ void MainWindow::newCampaign()
             operation->setToolTip("Operating installations per 10,000 surface colonists. Factory and mine limits are independent; excess buildings remain idle.");
             table.setCellWidget(row, column, operation);
         }
+        for (int field = 0; field < int(kResearchFieldCount); ++field) {
+            auto* cost = new QComboBox(&table);
+            cost->setObjectName(QString("campaignResearchCost%1_%2").arg(row).arg(field));
+            cost->addItems({"Normal", "Cheap (50%)", "Expensive (175%)"});
+            table.setCellWidget(row, 11 + field, cost);
+        }
         connect(hullAccess, &QComboBox::currentIndexChanged, &table, [&table, row](int index) {
             if (index == static_cast<int>(HullAccess::HyperExpansion))
                 qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->setChecked(true);
@@ -120,7 +126,7 @@ void MainWindow::newCampaign()
         table.setRowHidden(row, row >= count.value());
     }
     const auto raceAtRow = [&table](int row) {
-        return EmpireSetup{table.item(row, 0)->text().trimmed().toUtf8().toStdString(),
+        EmpireSetup result{table.item(row, 0)->text().trimmed().toUtf8().toStdString(),
             static_cast<RacePreset>(qobject_cast<QComboBox*>(table.cellWidget(row, 1))->currentIndex()),
             qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->isChecked(),
             qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->isChecked(),
@@ -132,6 +138,9 @@ void MainWindow::newCampaign()
             static_cast<PrimaryRaceTrait>(qobject_cast<QComboBox*>(table.cellWidget(row, 8))->currentData().toInt()),
             static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->value()),
             static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->value())};
+        for (int field = 0; field < int(kResearchFieldCount); ++field)
+            result.researchCosts[field] = ResearchCost(qobject_cast<QComboBox*>(table.cellWidget(row, 11 + field))->currentIndex());
+        return result;
     };
     const auto applyRace = [&table](int row, const EmpireSetup& setup) {
         table.item(row, 0)->setText(QString::fromStdString(setup.name));
@@ -147,6 +156,8 @@ void MainWindow::newCampaign()
         trait->setCurrentIndex(trait->findData(int(setup.primaryTrait)));
         qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->setValue(setup.factoriesPerTenThousand);
         qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->setValue(setup.minesPerTenThousand);
+        for (int field = 0; field < int(kResearchFieldCount); ++field)
+            qobject_cast<QComboBox*>(table.cellWidget(row, 11 + field))->setCurrentIndex(int(setup.researchCosts[field]));
     };
     connect(&count, &QSpinBox::valueChanged, &dialog, [&](int value) {
         for (int row = 0; row < 8; ++row) table.setRowHidden(row, row >= value);

@@ -68,6 +68,12 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     }
     form->addRow("Factories / 10,000 colonists", factories_);
     form->addRow("Mines / 10,000 colonists", mines_);
+    for (std::size_t i = 0; i < researchCosts_.size(); ++i) {
+        auto* choice = researchCosts_[i] = new QComboBox(this);
+        choice->setObjectName(QString("raceResearchCost%1").arg(i));
+        choice->addItems({"Normal (100%)", "Cheap (50%)", "Expensive (175%)"});
+        form->addRow(QString::fromStdString(research_field_name(ResearchField(i))) + " research", choice);
+    }
     layout->addLayout(form);
     auto* note = new QLabel("Choose from the supported race presets and traits. These settings use the same rules as New campaign.", this);
     note->setWordWrap(true); layout->addWidget(note);
@@ -90,6 +96,8 @@ EmpireSetup RaceSetupWidget::setup() const
     result.basicRemoteMining = mining_->currentIndex() == 2;
     result.factoriesPerTenThousand = static_cast<std::uint8_t>(factories_->value());
     result.minesPerTenThousand = static_cast<std::uint8_t>(mines_->value());
+    for (std::size_t i = 0; i < researchCosts_.size(); ++i)
+        result.researchCosts[i] = ResearchCost(researchCosts_[i]->currentIndex());
     return result;
 }
 
@@ -105,5 +113,7 @@ void RaceSetupWidget::setSetup(const EmpireSetup& setup)
     mining_->setCurrentIndex(setup.advancedRemoteMining ? 1 : setup.basicRemoteMining ? 2 : 0);
     factories_->setValue(setup.factoriesPerTenThousand);
     mines_->setValue(setup.minesPerTenThousand);
+    for (std::size_t i = 0; i < researchCosts_.size(); ++i)
+        researchCosts_[i]->setCurrentIndex(int(setup.researchCosts[i]));
 }
 } // namespace suns

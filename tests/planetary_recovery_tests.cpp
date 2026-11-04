@@ -30,7 +30,7 @@ void bombardment_records_only_real_installation_losses()
     resolve_bombardments(s,3);
     assert(p.warDamage.factoriesDestroyed+p.warDamage.minesDestroyed>=destroyed);
     assert(p.industry+p.warDamage.factoriesDestroyed==10 && p.mines+p.warDamage.minesDestroyed==10);
-    assert(colony_output(s, p)<11); // Physical destroyed factories already remove their output.
+    assert(colony_output(s, p) < p.population / kPopulationPerProductionUnit + 10); // Physical destroyed factories already remove their output.
     const auto hostile=make_player_view(s,1).state;
     assert(hostile.planets.empty());
     set_survey_level(s,1,1,SurveyLevel::GeologicalSurvey,3);
@@ -49,7 +49,7 @@ void reconstruction_is_paid_limited_and_not_a_template_cheat()
     for(int i=0;i<4;++i) { auto resolved=resolve_colony_production(s,p,false); assert(resolved.completions.empty()); ++s.turn; }
     assert(p.industry==0 && p.warDamage.factoriesReconstructed==0 && p.productionWaitingForMinerals);
     assert(p.productionQueue.front().remainingCost==0 && reconstruction_remaining(p,K::ReconstructFactory)==2);
-    p.minerals={2,1,2};
+    p.minerals={0,0,4};
     const auto completed=resolve_colony_production(s,p,false);
     assert(completed.completions.size()==1 && p.industry==1 && p.warDamage.factoriesReconstructed==1);
     assert(p.minerals.ironium==0 && p.minerals.boranium==0 && p.minerals.germanium==0);
@@ -87,7 +87,7 @@ void forecasts_orders_and_recovery_history_use_the_same_production()
     newBuild=TurnProcessor{}.process(newBuild,{{2,{QueueProductionOrder{1,K::Factory}}}});
     assert(newBuild.planets[0].industry==7 && reconstruction_remaining(newBuild.planets[0],K::ReconstructFactory)==1);
     auto result=TurnProcessor{}.process(normal,{{2,{QueueProductionOrder{1,K::ReconstructFactory}}}});
-    assert(!result.planets[0].productionQueue.empty());
+    assert(result.planets[0].productionQueue.empty() && result.planets[0].warDamage.factoriesReconstructed==1);
     auto wrong=TurnProcessor{}.process(normal,{{1,{QueueProductionBatchOrder{1,K::ReconstructFactory,1}}}});
     assert(wrong.planets[0].productionQueue.empty() && wrong.planets[0].warDamage.factoriesReconstructed==0);
 }
@@ -121,8 +121,8 @@ void computer_uses_ordinary_reconstruction_orders()
     const auto order=std::get<QueueProductionBatchOrder>(*repair); assert(order.quantity==3 && production_batch_valid(order));
     const auto mined=projected_mineral_mining(s,p);
     const auto resolved=TurnProcessor{}.process(s,{{2,{order}}});
-    assert(resolved.planets[0].warDamage.factoriesReconstructed==2 && resolved.planets[0].industry==10);
-    assert(std::abs(resolved.planets[0].minerals.ironium-(100+mined.ironium-4))<1e-6);
+    assert(resolved.planets[0].warDamage.factoriesReconstructed==3 && resolved.planets[0].industry==11);
+    assert(std::abs(resolved.planets[0].minerals.ironium-(100+mined.ironium))<1e-6);
 }
 int main()
 {

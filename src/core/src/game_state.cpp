@@ -776,11 +776,26 @@ std::uint8_t technology_level(const GameState& state, PlayerId player, ResearchF
 
 std::uint32_t research_level_cost(ResearchField, std::uint8_t level)
 {
-    if (level == 0) return 0;
-    // Preserve 18/36/72 RP at levels 1–3, then grow quadratically so the
-    // original Propulsion-23 engines remain reachable in a Suns! campaign.
-    const auto n = static_cast<std::uint32_t>(level);
-    return kFirstResearchLevelCost * (1U + n * (n - 1U) / 2U);
+    // Stars! normal base costs (StarsFAQ research table). State-dependent
+    // costs must use the overload below, including total known levels.
+    constexpr std::array<std::uint32_t, 27> costs{0,50,80,130,210,340,550,
+        890,1440,2330,3770,6100,9870,13850,18040,22440,27050,31870,
+        36900,42140,47590,53250,59120,65200,71490,77990,84700};
+    return level <= kMaximumResearchLevel ? costs[level] : std::numeric_limits<std::uint32_t>::max();
+}
+
+std::uint32_t research_level_cost(const GameState& state, PlayerId id, ResearchField field, std::uint8_t level)
+{
+    if (!level) return 0;
+    if (level > kMaximumResearchLevel || std::size_t(field) >= kResearchFieldCount)
+        return std::numeric_limits<std::uint32_t>::max();
+    const auto* player = find_player(state, id);
+    std::uint32_t total = 0;
+    if (player) for (auto known : player->technology.levels) total += known;
+    const auto setting = player ? player->race.researchCosts[std::size_t(field)] : ResearchCost::Normal;
+    const auto quarters = setting == ResearchCost::Cheap ? 2U : setting == ResearchCost::Expensive ? 7U : 4U;
+    const auto cost = (research_level_cost(field, level) + 10U * total) * quarters / 4U;
+    return cost * (state.slowResearch ? 2U : 1U);
 }
 
 bool component_available_to_player(
@@ -1560,6 +1575,8 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
             result.habitat=HabitatObservation{planet->habitat,engineering_station_available(state,*planet),planet->population,planet->industry,planet->minerals,planet->mines,planet->productionQueue};
             result.habitat->conditions=ColonyConditions{planet->defenses,planet->warDamage};
             result.habitat->radar=planet->radar;
+            result.habitat->advancedFactories=planet->advancedFactories;
+            result.habitat->advancedMines=planet->advancedMines;
             result.habitat->stationEvidenceTime=3*observedTurn+(observedTurn<=state.turn?2:0);
             if(const auto* station=find_orbital_station_at_planet(state,planet->id);station && station->owner==player) result.habitat->station=*station;
             result.resonanceLab = planet->resonanceLab;
@@ -1826,7 +1843,10 @@ ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet)
     };
     const auto factories = limit(player ? player->race.factoriesPerTenThousand : kDefaultWorkforceRate);
     const auto mines = limit(player ? player->race.minesPerTenThousand : kDefaultWorkforceRate);
-    return {factories, mines, std::min(planet.industry, factories), std::min(planet.mines, mines)};
+    const auto workingFactories = std::min(planet.industry, factories);
+    const auto workingMines = std::min(planet.mines, mines);
+    return {factories, mines, workingFactories, workingMines,
+        std::min(planet.advancedFactories, workingFactories), std::min(planet.advancedMines, workingMines)};
 }
 
 std::uint32_t colony_output(const GameState& state, const Planet& planet)
@@ -1836,8 +1856,9 @@ std::uint32_t colony_output(const GameState& state, const Planet& planet)
         && planet.habitat.service==HabitatService::Normal?planet.habitat.population:0;
     const auto populationOutput = planet.population / kPopulationPerProductionUnit + orbital / kPopulationPerProductionUnit
         + (planet.population % kPopulationPerProductionUnit + orbital % kPopulationPerProductionUnit) / kPopulationPerProductionUnit;
+    const auto workforce = colony_workforce(state, planet);
     return static_cast<std::uint32_t>(std::min<std::uint64_t>(std::numeric_limits<std::uint32_t>::max(),
-        colony_workforce(state, planet).operatingFactories + populationOutput));
+        std::uint64_t(workforce.operatingFactories) + workforce.operatingAdvancedFactories + populationOutput));
 }
 
 int stellar_habitability_bias(StarClass stellarClass)
@@ -2099,6 +2120,7 @@ GameState generate_game(const GalaxyConfig& requestedConfig)
     const auto nameDeck = generated_star_name_deck(namingRng);
 
     GameState state;
+    state.slowResearch = requestedConfig.slowResearch;
     state.galaxySeed = config.seed;
     state.wormholeRules.width = config.width;
     state.wormholeRules.height = config.height;

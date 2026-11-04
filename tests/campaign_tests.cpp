@@ -106,6 +106,13 @@ int main()
     catch (const std::invalid_argument&) { rejected = true; }
     assert(rejected);
 
+    // Small colonies plus pre-invested work isolate the one-level independent
+    // research/ordering check from the much richer million-person start.
+    for (auto& colony : state.planets) if (colony.owner) { colony.population=6000; colony.industry=0; }
+    for (auto& player : state.players) {
+        const auto field=player.id==1?ResearchField::Energy:player.id==2?ResearchField::Propulsion:ResearchField::Biology;
+        player.technology.progress[std::size_t(field)]=research_level_cost(state,player.id,field,1)-18;
+    }
     std::vector<PlayerOrders> orders{
         {3, {SetResearchPlanOrder{ResearchField::Biology}, SetResearchAllocationOrder{100}}},
         {2, {SetResearchPlanOrder{ResearchField::Propulsion}, SetResearchAllocationOrder{100},

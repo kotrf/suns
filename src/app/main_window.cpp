@@ -72,7 +72,11 @@ QString productionName(ProductionKind kind)
 {
     switch (kind) {
     case ProductionKind::ColonyShip: return "Colony Ship";
-    case ProductionKind::Factory: return "Factory";
+    case ProductionKind::Factory: return "Basic factory";
+    case ProductionKind::AdvancedFactory: return "Advanced factory";
+    case ProductionKind::AdvancedMine: return "Advanced mine";
+    case ProductionKind::UpgradeFactory: return "Upgrade factory";
+    case ProductionKind::UpgradeMine: return "Upgrade mine";
     case ProductionKind::Mine: return "Mine";
     case ProductionKind::ReconstructFactory: return "Factory reconstruction";
     case ProductionKind::ReconstructMine: return "Mine reconstruction";
@@ -103,8 +107,16 @@ QString productionSummary(const GameState& state, const Planet& planet)
     QString name;
     if (item.kind == ProductionKind::Research) {
         name = "Ongoing Research";
+    } else if (item.kind == ProductionKind::AdvancedFactory) {
+        name = "Advanced factory";
+    } else if (item.kind == ProductionKind::AdvancedMine) {
+        name = "Advanced mine";
+    } else if (item.kind == ProductionKind::UpgradeFactory) {
+        name = "Upgrade factory";
+    } else if (item.kind == ProductionKind::UpgradeMine) {
+        name = "Upgrade mine";
     } else if (item.kind == ProductionKind::Factory) {
-        name = "Factory";
+        name = "Basic factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
     } else if (item.kind == ProductionKind::ReconstructFactory) {

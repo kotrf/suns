@@ -291,7 +291,7 @@ void bounded_receipts_and_received_status() {
 void destination_target_demand_cycle() {
     auto s=stock_target_world();auto d=line_spec();d.destinationTarget=100;
     assert(set_transport_line(s,1,{d}) && assign_transport_line(s,1,{1,1}));
-    const auto initial=ironium(s);const auto initialIndustry=s.planets[0].industry;
+    const auto initial=ironium(s);const auto initialIndustry=s.planets[0].defenses;
     for(int i=0;i<3;++i){tick(s);assert(std::abs(ironium(s)-initial)<1e-6);}
     assert(s.planets[0].minerals.ironium==100 && s.fleets[0].minerals.ironium==50);
     assert(s.fleets[0].arrivalAction && s.fleets[0].arrivalAction->destinationTarget==100);
@@ -301,15 +301,15 @@ void destination_target_demand_cycle() {
     // Real production consumes the target stock after arrival actions. The
     // next annual visit, without another HQ order, supplies exactly its deficit.
     auto noHQ=s;noHQ.players[0].transportLines.clear();
-    tick(s,{QueueProductionOrder{1,ProductionKind::Factory}});tick(noHQ,{QueueProductionOrder{1,ProductionKind::Factory}});
-    assert(s.planets[0].industry==initialIndustry+1 && s.planets[0].minerals.ironium==98 && s.fleets[0].minerals.ironium==50);
+    tick(s,{QueueProductionOrder{1,ProductionKind::ColonyDefense}});tick(noHQ,{QueueProductionOrder{1,ProductionKind::ColonyDefense}});
+    assert(s.planets[0].defenses==initialIndustry+1 && s.planets[0].minerals.ironium==98 && s.fleets[0].minerals.ironium==50);
     tick(s);tick(noHQ);assert(s.planets[0].minerals.ironium==100 && s.fleets[0].minerals.ironium==48);
     assert(noHQ.planets[0].minerals.ironium==s.planets[0].minerals.ironium && noHQ.fleets[0].minerals.ironium==s.fleets[0].minerals.ironium);
-    tick(s,{QueueProductionBatchOrder{1,ProductionKind::Factory,24}});
-    for(int i=0;i<30 && (s.planets[0].industry<initialIndustry+25 || s.fleets[0].minerals.ironium>0);++i) {
-        tick(s);assert(std::abs(ironium(s)-(initial-2*(s.planets[0].industry-initialIndustry)))<1e-6);
+    tick(s,{QueueProductionBatchOrder{1,ProductionKind::ColonyDefense,24}});
+    for(int i=0;i<30 && (s.planets[0].defenses<initialIndustry+25 || s.fleets[0].minerals.ironium>0);++i) {
+        tick(s);assert(std::abs(ironium(s)-(initial-2*(s.planets[0].defenses-initialIndustry)))<1e-6);
     }
-    assert(s.planets[0].industry==initialIndustry+25 && s.fleets[0].minerals.ironium==0);
+    assert(s.planets[0].defenses==initialIndustry+25 && s.fleets[0].minerals.ironium==0);
     assert(s.fleets[0].destination && same_position(*s.fleets[0].destination,{40,0}));
     assert(transport_line_metrics(make_player_view(s,1),s.players[0].transportLines[0]).delivered.ironium==80);
 }

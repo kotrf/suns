@@ -42,15 +42,24 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
     bool prefixKnown = true;
     auto defenses = planet.defenses;
     auto radar = planet.radar;
+    auto factories = std::uint64_t(planet.industry), mines = std::uint64_t(planet.mines);
+    auto advancedFactories = std::uint64_t(planet.advancedFactories), advancedMines = std::uint64_t(planet.advancedMines);
     bool stationExists = shipyardAvailable || find_orbital_station_at_planet(state, planet.id)
         || orbital_base_at(state, planet.id);
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
     for (const auto& item : queue) {
         SimpleProductionEstimate estimate;
         const bool automatic = item.automation != ProductionAutomation::None;
+        const bool factoryBuild = item.kind == ProductionKind::Factory || item.kind == ProductionKind::AdvancedFactory;
+        const bool mineBuild = item.kind == ProductionKind::Mine || item.kind == ProductionKind::AdvancedMine;
+        const auto eligible = item.kind == ProductionKind::UpgradeFactory ? factories - std::min(factories, advancedFactories)
+            : item.kind == ProductionKind::UpgradeMine ? mines - std::min(mines, advancedMines)
+            : factoryBuild ? std::numeric_limits<std::uint32_t>::max() - factories
+            : mineBuild ? std::numeric_limits<std::uint32_t>::max() - mines : maximum;
         // These are the resolver's current, free-retirement predicates. Retired
         // work must neither reserve minerals nor make a known prefix uncertain.
         const bool skipped = item.kind == ProductionKind::Research || item.quantity == 0
+            || (prefixKnown && !automatic && !eligible)
             || (item.kind == ProductionKind::OrbitalStation && (item.station
                 ? !station_construction_valid(state, planet, *item.station) : stationExists))
             || (item.kind == ProductionKind::LocalRadar && radar != PlanetaryRadarLevel::None)
@@ -66,6 +75,7 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
             continue;
         }
         auto effective = item.quantity;
+        if (!automatic && prefixKnown) effective = std::uint32_t(std::min<std::uint64_t>(effective, eligible));
         if (!automatic && item.kind == ProductionKind::ColonyDefense)
             effective = std::min<std::uint32_t>(effective, kMaximumColonyDefenses - defenses);
         if (!automatic && (item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar))
@@ -76,6 +86,8 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
         estimate.remainingWork = item.remainingCost;
         if (units) estimate.remainingWork += (units - 1) * production_item_cost(state, item);
         const bool fixed = item.kind == ProductionKind::Factory || item.kind == ProductionKind::Mine
+            || item.kind == ProductionKind::AdvancedFactory || item.kind == ProductionKind::AdvancedMine
+            || industry_upgrade_kind(item.kind)
             || item.kind == ProductionKind::ColonyDefense || item.kind == ProductionKind::LocalRadar
             || item.kind == ProductionKind::PlanetaryRadar || item.kind == ProductionKind::ColonyShip
             || item.kind == ProductionKind::OrbitalStation;
@@ -117,6 +129,10 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
                 if (item.kind == ProductionKind::ColonyDefense) defenses += effective;
                 if (item.kind == ProductionKind::LocalRadar) radar = std::max(radar, PlanetaryRadarLevel::Local);
                 if (item.kind == ProductionKind::PlanetaryRadar) radar = PlanetaryRadarLevel::Full;
+                if (factoryBuild) factories += effective;
+                if (mineBuild) mines += effective;
+                if (item.kind == ProductionKind::AdvancedFactory || item.kind == ProductionKind::UpgradeFactory) advancedFactories += effective;
+                if (item.kind == ProductionKind::AdvancedMine || item.kind == ProductionKind::UpgradeMine) advancedMines += effective;
             }
         }
         if (!estimate.completionTurn) prefixKnown = false;

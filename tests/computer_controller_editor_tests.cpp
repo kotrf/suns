@@ -56,7 +56,7 @@ void create_campaign(MainWindow& window, bool remoteHuman)
         assert(dialog && dialog->objectName() == "newCampaignDialog");
         auto* count = dialog->findChild<QSpinBox*>("campaignEmpireCount");
         auto* table = dialog->findChild<QTableWidget*>("campaignEmpiresTable");
-        assert(count && table && table->columnCount() == 11);
+        assert(count && table && table->columnCount() == 17);
         auto* factories = qobject_cast<QSpinBox*>(table->cellWidget(1, 9));
         auto* mines = qobject_cast<QSpinBox*>(table->cellWidget(1, 10));
         assert(factories && mines && factories->minimum() == 5 && factories->maximum() == 25);
