@@ -1,5 +1,107 @@
 # Project status and development handoff
 
+## Stars! starting population and growth follow-up — 4 November 2026
+
+The user extended [#278](https://github.com/kotrf/suns/pull/278) with ordinary
+Stars! surface demographics. New homeworlds start at **25,000**, with the existing
+four basic factories producing **29 resources**. Ideal capacity is **1,000,000**;
+racial maximum growth is configurable **1–20%**, new default **15%**. Full growth
+through 25% capacity, then the quadratic factor `(16/9)*(1-density)^2`, red-world
+mortality and capped overcrowding losses use a shared bounded integer function.
+No minimum one-person birth is invented; natural mortality preserves 100-person
+colonies. See [the contract](economy-rebalance.md) for rounding and all limits.
+
+- Current UI growth and after-cargo next-year figures use the same scalar rule,
+  with no turn simulation. Capacity labels use the same 5% habitability floor.
+- Race designer, campaign slot, portable race, host/player save and reload→New
+  galaxy retain the racial rate. That restart path also now retains the six
+  research-cost choices introduced by this PR.
+- Save **v112** appends validated POPR after v111 ECON; orders remain **v49**.
+  Race files write **v3**, read v1/v2/v3. Older formats default to their implicit
+  10% rate, retaining every stored population/cargo/ledger/RP/paid-work value.
+  Subsequent years use the new density model; an already crowded old world may
+  lose people on End Turn, with no load-time truncation.
+- An actual original-v111 writer at source `109afca` generated the synthetic
+  million-person fixture with advanced subsets, partial work, RP and ledger.
+  Provenance/hash are in tests/fixtures. v110 fixture and v107 hash stay checked.
+- Normal population is tested at/below/above 25%, 50%, 75%, capacity and 2x/4x/8x
+  capacity, plus positive/zero/red hab, minimum, custom races, received views,
+  real End Turn and extreme stored counts. Real race UI/file/campaign/restart and
+  malformed POPR/race inputs are covered.
+
+The original Player's Guide and public Craig Stars code are the references; the
+original executable was not run. Advanced racial PRT effects, Accelerated BBS,
+orbital habitat demographics and other ship/project recipes are outside this
+population change. Whole-campaign balance and native Windows Qt remain manual
+acceptance items. #278 is still stacked on open #277; neither is merged here.
+The earlier source `109afca` passed CI 41839840687; the new published head needs
+its own CI. Full GCC14.2 / Qt6.8.2 Debug app/test build and **117/117
+CTest passed (132.58 s, -j4)** on the final code. The initial demographic changes
+required explicit mature/funded fixtures for expensive ship/lab construction,
+new-start cargo expectations, the 18th campaign column and a corruption test
+addressing SMIN rather than the last byte of the whole file. All original paid,
+knowledge, replay and transport assertions are retained. Race-editor growth and
+Research/Production layouts were rendered and inspected. No private saves or
+screenshots are committed.
+
+
+## Population economy and Stars! research (#276) — 4 November 2026
+
+The user approved implementing #276 and explicitly selected Stars! research
+pricing in the same slice. Branch `codex/economy-research-276` is based on
+**a1a5b87916dbdf9a8f0d6724b058d15c38afc17f**, the still-unmerged #277 source.
+This is a separate stacked PR: merge #277 first and then retarget this branch
+onto main. No merge is authorized by this implementation request.
+
+- Population produces one resource per 1000 residents. Basic/advanced factories
+  and mines share their type's workforce cap; advanced buildings operate first.
+  Direct advanced construction and paid basic upgrades have identical total
+  bills. Basic mines require no minerals. Growth remains factory-independent.
+  [The contract](economy-rebalance.md) records all initial recipes and boundaries.
+- Research uses the 1–26 Stars! base table, +10 per known level, racial field
+  factors 50/100/175%, and optional doubled slow tech. Every overflow/ordinary,
+  precursor and delivered-data path uses the shared current price. Legacy levels
+  above 26 and per-field RP are retained; a capped focus falls through its queue
+  and then the lowest unfinished field. Full research reserves no allocation.
+- Race/campaign editors and race v2 persist each field's setting; v1 defaults to
+  Normal. Research plan prices remain one bounded pass over projected **levels**;
+  production estimates track known count/upgrade eligibility without annual UI
+  simulation. Production, current extraction and selected-colony counts show both
+  tiers through received owner observations.
+- Richer income exposed mineral starvation in the civilian AI: endless factories
+  consumed the intended colonizer's Germanium. Development now uses capped,
+  affordable batches and population-scaled mining, saves that civilian bill,
+  considers forward docks before unlimited factories, and upgrades working
+  buildings. Military selections use ordinary paid queues, which may wait for
+  minerals. Late engineering/probe decisions canonicalize the received view by
+  stable IDs so input storage order cannot change orders or decision history.
+- Save **v111**, orders **v49**, race **v2**. ECON follows #277's v110 SURF and
+  preserves physical/received/pending advanced subsets plus racial costs. Old
+  buildings load basic; four more remaining factory resources preserve old paid
+  work at the new price 10. Templates/annual rules migrate consistently; old
+  stocks, population, technology, RP and historical ledgers are retained.
+
+Full GCC14.2 / Qt6.8.2 Debug build and **117/117 offscreen CTest passed (138.77 s)**.
+Checks include exact reference prices/factors/overflow/cap, real resource debits
+for repeated advanced/upgrading units, no-ore mines, common workforce/idle/capture
+bounds, host/player/order round trips, hidden-upgrade byte invariance and corrupt
+ECON rejection. A genuine writer from #277 produced the synthetic v110 migration
+fixture with partial work, templates and received evidence; its source and hash
+are recorded under tests/fixtures. The real v107 writer hash still matches.
+No private game or screenshot is committed.
+
+The fair AI's three fixed-seed 120-year scenarios retain development, fuel,
+replay and shuffled-input assertions; each narrow race is now explicitly given
+one nearby viable frontier in physical setup. The combat/landing fixture keeps
+its small defender's population fixed. These isolate policy/simulation contracts;
+they do not assert campaign balance or future conquests on arbitrary maps.
+Production/Research/race layouts were rendered and inspected; real UI Add,
+reservation, End Turn and scalar estimates pass. Native Windows Qt was not run.
+The million-person start now yields 1004 resources with four basic factories;
+new/continued campaign pacing still needs play acceptance. PR/source CI on GitHub
+is authoritative; this branch is not merged. Independent #267 and frozen
+project directions remain separate.
+
 ## Mini-2: received radar and mineral-stock bars — 4 November 2026
 
 User authorized completing all remaining Mini-2 notes, including newly added

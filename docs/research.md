@@ -22,7 +22,15 @@ becomes active and is removed from the queue. Excess RP from the completing turn
 immediately enters the new field; no research is lost. If the future queue is
 empty, research continues in the current field.
 
-Level costs are `18 * (1 + level * (level - 1) / 2)` RP: 18, 36 and 72 for levels 1–3; 4572 for level 23. The quadratic curve makes late reference engines reachable and reprices existing higher-level projects without losing their RP. These values remain initial balance parameters.
+Research uses the Stars! cost curve and level cap 26. The full base-price table,
+racial factors and migration rules are in [Economy rebalance](economy-rebalance.md).
+The price of the next level is `(base + 10 × total known levels) × field factor`,
+rounded down, and doubled by Slow tech advances. The factor is 0.5 / 1 / 1.75
+for Cheap / Normal / Expensive research in that racial field. Every breakthrough
+updates the total before pricing the next field or overflow level. These are
+resources: the ordinary RP contribution is deducted from colony output, not a
+second free research budget. At the cap, queued fields take precedence, then the
+lowest unfinished field; completed empires reserve no research allocation.
 
 ## Empire allocation and colony production
 

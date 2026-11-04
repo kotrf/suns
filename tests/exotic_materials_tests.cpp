@@ -18,7 +18,8 @@ namespace {
 bool near(double a, double b) { return std::abs(a - b) < 1e-5; }
 GameState fixture()
 {
-    auto s = make_demo_game(); s.turn = 10; s.wormholeRules.spawnChancePerTurn = 0;
+    auto s = make_demo_game(); s.planets[0].population=1'000'000; // Mature, fully staffed fixture.
+    s.turn = 10; s.wormholeRules.spawnChancePerTurn = 0;
     s.players[0].technology.levels.fill(16); s.players[0].technology.progress.fill(0);
     s.players[0].technology.researchActive = false;
     auto& p = s.planets[0]; p.industry = 1000; p.mines = 0; p.productionQueue.clear(); p.minerals = {10000, 10000, 10000};

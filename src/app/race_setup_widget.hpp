@@ -27,6 +27,8 @@ private:
     QComboBox* mining_{};
     QSpinBox* factories_{};
     QSpinBox* mines_{};
+    QSpinBox* growth_{};
+    std::array<QComboBox*, kResearchFieldCount> researchCosts_{};
     QLabel* environmentSummary_{};
 };
 } // namespace suns

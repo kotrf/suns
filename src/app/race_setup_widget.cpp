@@ -60,6 +60,10 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     mining_->addItems({"Standard", "Advanced (ARM)", "Basic (BRM)"});
     mining_->setToolTip("ARM adds Midget Miner and Ultra-Miner; BRM blocks reference miner hulls.");
     form->addRow("Remote mining", mining_);
+    growth_ = new QSpinBox(this); growth_->setObjectName("racePopulationGrowth");
+    growth_->setRange(1, 20); growth_->setSuffix("%");
+    growth_->setToolTip("Maximum annual surface growth on a 100% world. Full rate through 25% capacity; crowding slows growth above it. New homeworld: 25,000 colonists.");
+    form->addRow("Maximum population growth / year", growth_);
     factories_ = new QSpinBox(this); factories_->setObjectName("raceFactoryOperation");
     mines_ = new QSpinBox(this); mines_->setObjectName("raceMineOperation");
     for (auto* rate : {factories_, mines_}) {
@@ -68,6 +72,12 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     }
     form->addRow("Factories / 10,000 colonists", factories_);
     form->addRow("Mines / 10,000 colonists", mines_);
+    for (std::size_t i = 0; i < researchCosts_.size(); ++i) {
+        auto* choice = researchCosts_[i] = new QComboBox(this);
+        choice->setObjectName(QString("raceResearchCost%1").arg(i));
+        choice->addItems({"Normal (100%)", "Cheap (50%)", "Expensive (175%)"});
+        form->addRow(QString::fromStdString(research_field_name(ResearchField(i))) + " research", choice);
+    }
     layout->addLayout(form);
     auto* note = new QLabel("Choose from the supported race presets and traits. These settings use the same rules as New campaign.", this);
     note->setWordWrap(true); layout->addWidget(note);
@@ -79,6 +89,7 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
 EmpireSetup RaceSetupWidget::setup() const
 {
     EmpireSetup result;
+    result.populationGrowthRate = static_cast<std::uint8_t>(growth_->value());
     result.name = name_->text().trimmed().toUtf8().toStdString();
     result.race = static_cast<RacePreset>(environment_->currentData().toInt());
     result.primaryTrait = static_cast<PrimaryRaceTrait>(trait_->currentData().toInt());
@@ -90,11 +101,14 @@ EmpireSetup RaceSetupWidget::setup() const
     result.basicRemoteMining = mining_->currentIndex() == 2;
     result.factoriesPerTenThousand = static_cast<std::uint8_t>(factories_->value());
     result.minesPerTenThousand = static_cast<std::uint8_t>(mines_->value());
+    for (std::size_t i = 0; i < researchCosts_.size(); ++i)
+        result.researchCosts[i] = ResearchCost(researchCosts_[i]->currentIndex());
     return result;
 }
 
 void RaceSetupWidget::setSetup(const EmpireSetup& setup)
 {
+    growth_->setValue(setup.populationGrowthRate);
     name_->setText(QString::fromStdString(setup.name));
     environment_->setCurrentIndex(environment_->findData(int(setup.race)));
     trait_->setCurrentIndex(trait_->findData(int(setup.primaryTrait)));
@@ -105,5 +119,7 @@ void RaceSetupWidget::setSetup(const EmpireSetup& setup)
     mining_->setCurrentIndex(setup.advancedRemoteMining ? 1 : setup.basicRemoteMining ? 2 : 0);
     factories_->setValue(setup.factoriesPerTenThousand);
     mines_->setValue(setup.minesPerTenThousand);
+    for (std::size_t i = 0; i < researchCosts_.size(); ++i)
+        researchCosts_[i]->setCurrentIndex(int(setup.researchCosts[i]));
 }
 } // namespace suns

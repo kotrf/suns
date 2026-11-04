@@ -175,7 +175,8 @@ static void serialization()
     evidence.minerals.ironium = std::numeric_limits<double>::quiet_NaN();
     assert(!write_save_game_file(path, original, error)); evidence.minerals.ironium = 25;
     evidence.observedTurn = s.turn + 1; assert(!write_save_game_file(path, original, error));
-    auto corrupt = current; corrupt[corrupt.size() - 1] = char(2); // Invalid final-surface flag in the pending report.
+    quint32 payloadSize{}; { QDataStream in(current.mid(tail + 4)); in >> payloadSize; }
+    auto corrupt = current; corrupt[tail + 8 + payloadSize - 1] = char(2); // SMIN pending report phase; later extensions may follow.
     put(path, corrupt); assert(!read_save_game_file(path, loaded, error));
     corrupt = current;
     { QDataStream out(&corrupt, QIODevice::ReadWrite); assert(out.device()->seek(tail + 25)); out << std::numeric_limits<double>::quiet_NaN(); }

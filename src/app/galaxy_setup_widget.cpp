@@ -1,6 +1,7 @@
 #include "galaxy_setup_widget.hpp"
 
 #include <QComboBox>
+#include <QCheckBox>
 #include <QFormLayout>
 #include <QLabel>
 #include <QSpinBox>
@@ -30,6 +31,10 @@ GalaxySetupWidget::GalaxySetupWidget(const GalaxyConfig& current, QWidget* paren
     form->addRow("Size", size_);
     form->addRow("Density", density_);
     form->addRow("Systems", systems_);
+    slowResearch_ = new QCheckBox("Double all research costs", this);
+    slowResearch_->setObjectName("slowResearchCheck");
+    slowResearch_->setChecked(current.slowResearch);
+    form->addRow("Slow tech advances", slowResearch_);
     form->addRow(dimensions_);
     size_->setCurrentIndex(5);
     for (int size = 0; size < 5; ++size) {
@@ -53,11 +58,14 @@ GalaxySetupWidget::GalaxySetupWidget(const GalaxyConfig& current, QWidget* paren
 GalaxyConfig GalaxySetupWidget::config(std::uint64_t seed) const
 {
     if (size_->currentIndex() < 5) {
-        return galaxy_preset(static_cast<GalaxySize>(size_->currentIndex()),
+        auto result = galaxy_preset(static_cast<GalaxySize>(size_->currentIndex()),
             static_cast<GalaxyDensity>(density_->currentIndex()), seed);
+        result.slowResearch = slowResearch_->isChecked();
+        return result;
     }
     auto result = original_;
     result.seed = seed;
+    result.slowResearch = slowResearch_->isChecked();
     result.starCount = static_cast<std::size_t>(systems_->value());
     return result;
 }

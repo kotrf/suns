@@ -38,8 +38,16 @@ QString productionLine(const GameState& state, const Planet& planet)
     QString name;
     if (item.kind == ProductionKind::Research) {
         name = "Ongoing Research";
+    } else if (item.kind == ProductionKind::AdvancedFactory) {
+        name = "Advanced factory";
+    } else if (item.kind == ProductionKind::AdvancedMine) {
+        name = "Advanced mine";
+    } else if (item.kind == ProductionKind::UpgradeFactory) {
+        name = "Upgrade factory";
+    } else if (item.kind == ProductionKind::UpgradeMine) {
+        name = "Upgrade mine";
     } else if (item.kind == ProductionKind::Factory) {
-        name = "Factory";
+        name = "Basic factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
     } else if (item.kind == ProductionKind::ReconstructFactory) {
@@ -258,7 +266,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
             : "<span style='color:#c6b57c'><b>Uncolonized</b></span>");
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
-                     .arg(static_cast<qulonglong>(std::max(0, knownHabitability.value_or(0)))
+                     .arg(static_cast<qulonglong>(std::clamp(knownHabitability.value_or(0), 5, 100))
                          * kPopulationPerHabitability);
         if (planet_geology_known(received, pendingOrders_.player, planet->id)) {
             const auto remoteYield = remoteMiningAtPlanet(received, pendingOrders_.player, *planet);

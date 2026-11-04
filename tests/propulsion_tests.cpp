@@ -4,6 +4,7 @@
 #include "suns/propulsion.hpp"
 
 #include <cassert>
+#include <limits>
 #include <algorithm>
 #include <cmath>
 
@@ -161,8 +162,8 @@ void verify_stars_progression_and_multifield_gates()
     assert(!component_available_to_player(state, 1, ShipComponentType::GalaxyScoop));
     state.players.front().race.noRamScoopEngines = false;
     assert(component_available_to_player(state, 1, ShipComponentType::GalaxyScoop));
-    assert(research_level_cost(ResearchField::Propulsion, 23) == 4572);
-    assert(research_level_cost(ResearchField::Propulsion, 255) < 1'000'000);
+    assert(research_level_cost(ResearchField::Propulsion, 23) == 65200);
+    assert(research_level_cost(ResearchField::Propulsion, 27) == std::numeric_limits<std::uint32_t>::max());
 }
 
 void verify_stars_speed_bands_and_settler_restriction()

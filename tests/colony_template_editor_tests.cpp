@@ -94,7 +94,7 @@ int main(int argc, char** argv)
     dialog->findChild<QPushButton*>("colonyTemplateStepDown")->click();
     assert(steps->topLevelItem(0)->text(0).contains("Radar"));
     dialog->findChild<QPushButton*>("colonyTemplateStepUp")->click();
-    assert(steps->topLevelItem(0)->text(0) == "Factories");
+    assert(steps->topLevelItem(0)->text(0) == "Basic factories");
     assert(save->isEnabled()); save->click();
     const auto snapshot = window.colonyTemplatesForOrders().front();
     assert(snapshot.items.front().quantity == 4 && !snapshot.defaultForNewColonies);

@@ -112,7 +112,7 @@ void failed_and_repeat_colonization_cannot_consume_or_duplicate_site()
 void artifact_progress_completes_levels_through_the_normal_technology_state()
 {
     auto state = colonization_fixture(10);
-    state.players.front().technology.progress[3] = 15;
+    state.players.front().technology.progress[3] = 47;
     const auto result = TurnProcessor{}.process_with_events(
         state, {{1, {ColonizePlanetOrder{1, 2}}}});
 

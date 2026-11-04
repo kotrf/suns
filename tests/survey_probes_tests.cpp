@@ -14,7 +14,8 @@ GameState world()
     auto s = make_demo_game(); s.turn = 10; s.wormholeRules.spawnChancePerTurn = 0;
     s.players.resize(1); auto& player = s.players[0]; player.technology.levels.fill(26); player.technology.researchActive = false;
     player.surveyKnowledge.clear(); player.pendingSurveyReports.clear(); player.surveyedStars.clear();
-    auto home = s.planets[0]; home.productionQueue.clear(); home.mines = 0; home.industry = 1000; home.minerals = {10000, 10000, 10000};
+    auto home = s.planets[0]; home.population=1'000'000; // Mature production yard.
+    home.productionQueue.clear(); home.mines = 0; home.industry = 1000; home.minerals = {10000, 10000, 10000};
     auto star = s.stars[0]; star.position = {0, 0}; star.variability = {}; s.stars = {star}; s.planets = {home};
     for (StarId id = 2; id <= 5; ++id) {
         star.id = id; star.name = "Field " + std::to_string(id); star.position = {900.0 + 20.0 * (id - 2), 0}; s.stars.push_back(star);

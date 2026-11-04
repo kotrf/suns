@@ -14,10 +14,10 @@ void fixed_rate_and_priority()
     const std::vector<ProductionItem> queue{{ProductionKind::Factory,3,0,ProductionAutomation::None,2},
         {ProductionKind::Mine,2,0,ProductionAutomation::None,3}};
     const auto estimates = simple_production_estimates(state, state.planets.front(), queue, 4, {100,100,100}, true);
-    assert(estimates[0].remainingWork == 9 && estimates[1].remainingWork == 12);
-    assert(estimates[0].completionTurn == 13 && estimates[1].completionTurn == 16);
+    assert(estimates[0].remainingWork == 13 && estimates[1].remainingWork == 12);
+    assert(estimates[0].completionTurn == 14 && estimates[1].completionTurn == 17);
     const auto faster = simple_production_estimates(state, state.planets.front(), queue, 8, {100,100,100}, true);
-    assert(faster[0].completionTurn == 12 && faster[1].completionTurn == 13);
+    assert(faster[0].completionTurn == 12 && faster[1].completionTurn == 14);
     // Future factories/population cannot change the supplied current rate.
     state.planets.front().industry = 100000;
     state.planets.front().population = 10000000;
@@ -80,7 +80,7 @@ void wide_work_and_date_overflow()
     const auto maximum32 = std::numeric_limits<std::uint32_t>::max();
     const ProductionItem batch{ProductionKind::Factory,maximum32,0,ProductionAutomation::None,maximum32};
     const auto estimates = simple_production_estimates(state, state.planets.front(), {batch}, 1, {1e100,1e100,1e100}, true);
-    assert(estimates[0].remainingWork == std::uint64_t(maximum32) + std::uint64_t(maximum32 - 1) * 6);
+    assert(estimates[0].remainingWork == std::uint64_t(maximum32) + std::uint64_t(maximum32 - 5) * kFactoryCost);
     assert(estimates[0].remainingWork > maximum32 && estimates[0].completionTurn);
     state.turn = std::numeric_limits<std::uint64_t>::max() - 1;
     const auto beyond = simple_production_estimates(state, state.planets.front(), {{ProductionKind::Factory,6}}, 1, {100,100,100}, true);

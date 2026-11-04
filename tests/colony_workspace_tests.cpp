@@ -97,7 +97,7 @@ struct MainWindowTestAccess {
         w.state_.players.front().technology.researchActive = false;
         auto& p = w.state_.planets.front();
         p.population = unloading ? 500 : 100500;
-        p.industry = p.mines = 100; p.minerals = {0,100,100};
+        p.industry = p.mines = 100; p.minerals = {100,100,0};
         p.observedConcentration = MineralCargo{100,100,100};
         p.productionQueue = {{ProductionKind::Factory,kFactoryCost}};
         auto& design = w.state_.shipDesigns.front();
@@ -404,10 +404,10 @@ int main(int argc, char** argv)
         assert(queue->topLevelItemCount() == 1);
         assert(queue->topLevelItem(0)->text(3) == QString::fromUtf8("—"));
         assert(queue->topLevelItem(0)->toolTip(3).contains("future mining"));
-        assert(minerals->topLevelItem(0)->text(2) == (unloading ? "1.0" : "76.1"));
+        assert(minerals->topLevelItem(0)->text(2) == (unloading ? "1.0" : "101.1"));
         assert(minerals->topLevelItem(0)->toolTip(2).contains("before cargo"));
         auto* mining = window.findChild<QLabel*>("miningInfrastructureSummary");
-        assert(mining && mining->text().contains(unloading ? "before cargo) I 1.00" : "before cargo) I 76.13"));
+        assert(mining && mining->text().contains(unloading ? "before cargo) I 1.00" : "before cargo) I 101.13"));
         assert(status->text().contains(unloading ? "Mines: 100 active / 100 built" : "Mines: 0 active / 100 built"));
         assert(status->text().contains(unloading ? "Population: 100500 /" : "Population: 500 /"));
         if (unloading) {

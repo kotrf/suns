@@ -40,6 +40,7 @@ struct MainWindowTestAccess {
     {
         window.state_ = make_demo_game();
         auto& colony = window.state_.planets.front();
+        colony.population=6000; colony.industry=0; colony.habitability=0;
         colony.radar = PlanetaryRadarLevel::None;
         colony.minerals = {100, 100, 100};
         colony.productionQueue.clear();
@@ -74,7 +75,7 @@ struct MainWindowTestAccess {
         tech.focus = ResearchField::Energy;
         tech.researchActive = true;
         tech.researchAllocationPercent = 100;
-        tech.progress[static_cast<std::size_t>(ResearchField::Energy)] = research_level_cost(ResearchField::Energy, 4) - 1;
+        tech.progress[static_cast<std::size_t>(ResearchField::Energy)] = research_level_cost(window.state_, 1, ResearchField::Energy, 4) - 1;
         tech.queuedFocuses = {ResearchField::Propulsion, ResearchField::Energy};
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();

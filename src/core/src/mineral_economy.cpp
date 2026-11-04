@@ -164,10 +164,10 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
     // Population supplies a small baseline extraction workforce. Dedicated
     // mines add fixed extraction capacity, so concentration determines whether
     // building another mine on this particular world is worth the production.
-    constexpr double extractionUnitsPerMine = 0.75;
+    const auto workforce = colony_workforce(state, planet);
     const auto extractionUnits = 1.0
         + static_cast<double>(planet.population) / 750000.0
-        + static_cast<double>(colony_workforce(state, planet).operatingMines) * extractionUnitsPerMine;
+        + static_cast<double>(workforce.operatingMines) + workforce.operatingAdvancedMines;
     return {
         extractionUnits * concentration.ironium / 100.0,
         extractionUnits * concentration.boranium / 100.0,
@@ -194,8 +194,11 @@ MineralCargo production_item_mineral_cost(const GameState& state, const Producti
     if (engineering_kind(item.kind)) return {item.remainingCost*0.1,item.remainingCost*0.05,item.remainingCost*0.1};
     if (item.kind == ProductionKind::CleanupContamination) return {0,1,1};
     if (item.kind == ProductionKind::Research || item.kind == ProductionKind::Terraforming) return {};
-    if (item.kind == ProductionKind::Factory || item.kind==ProductionKind::ReconstructFactory) return {2.0, 1.0, 2.0};
-    if (item.kind == ProductionKind::Mine || item.kind==ProductionKind::ReconstructMine) return {1.0, 2.0, 1.0};
+    if (item.kind == ProductionKind::Factory || item.kind==ProductionKind::ReconstructFactory) return {0, 0, 4};
+    if (item.kind == ProductionKind::AdvancedFactory) return {4, 2, 8};
+    if (item.kind == ProductionKind::UpgradeFactory) return {4, 2, 4};
+    if (item.kind == ProductionKind::Mine || item.kind==ProductionKind::ReconstructMine) return {};
+    if (item.kind == ProductionKind::AdvancedMine || item.kind == ProductionKind::UpgradeMine) return {1, 2, 1};
     if (item.kind == ProductionKind::ColonyDefense) return {2,1,1};
     if (item.kind == ProductionKind::LocalRadar) return {}; // Autonomously bootstrap even without stores.
     if (item.kind == ProductionKind::PlanetaryRadar) return {2, 3, 4};

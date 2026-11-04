@@ -206,7 +206,7 @@ void MainWindow::installResearch()
     connect(researchAddButton_, &QPushButton::clicked, this, &MainWindow::addResearchPlanItem);
     connect(researchAddCombo_, &QComboBox::currentIndexChanged, this, [this] {
         const auto target = researchAddCombo_->currentData(Qt::UserRole + 1).toInt();
-        researchAddButton_->setEnabled(target > 0 && target <= std::numeric_limits<std::uint8_t>::max());
+        researchAddButton_->setEnabled(target > 0 && target <= kMaximumResearchLevel);
     });
     connect(researchMoveUpButton_, &QPushButton::clicked, this,
         [this] { moveSelectedResearchPlanItem(-1); });
@@ -259,9 +259,9 @@ void MainWindow::refreshResearchPanel()
         const QSignalBlocker blocker(researchAllocationSpin_);
         researchAllocationSpin_->setValue(allocationPercent);
     }
-    std::uint32_t guaranteedRp = 0;
-    std::uint32_t artifactRp = 0;
-    std::array<std::uint32_t, kResearchFieldCount> parallelRp{};
+    std::uint64_t guaranteedRp = 0;
+    std::uint64_t artifactRp = 0;
+    std::array<std::uint64_t, kResearchFieldCount> parallelRp{};
     if (planActive) {
         for (const auto& planet : planned.planets) {
             if (planet.owner != player->id) continue;
@@ -288,6 +288,9 @@ void MainWindow::refreshResearchPanel()
         : QString("Research is paused; the allocation is not deducted from colony output");
     researchSummary_->setText(QString("<b>Current technology levels</b>%1%2")
         .arg(levels, allocationSummary));
+    researchSummary_->setText(researchSummary_->text()
+        + "<br>Stars! costs: base + 10 resources per known technology level, then field cost setting."
+        + (planned.slowResearch ? " Slow tech advances: ×2." : ""));
     QStringList parallelFields;
     for (std::size_t field = 0; field < parallelRp.size(); ++field) if (parallelRp[field])
         parallelFields << QString("%1 %2 RP/year").arg(QString::fromStdString(research_field_name(ResearchField(field)))).arg(parallelRp[field]);
@@ -296,9 +299,9 @@ void MainWindow::refreshResearchPanel()
 
     const auto index = static_cast<std::size_t>(focus);
     const auto level = player->technology.levels[index];
-    if (planActive) {
+    if (planActive && level < kMaximumResearchLevel) {
         const auto progress = player->technology.progress[index];
-        const auto cost = research_level_cost(focus, static_cast<std::uint8_t>(level + 1));
+        const auto cost = research_level_cost(planned, player->id, focus, static_cast<std::uint8_t>(level + 1));
         researchProgress_->setRange(0, static_cast<int>(cost));
         researchProgress_->setValue(static_cast<int>(std::min(progress, cost)));
         researchProgress_->setFormat(QString("%1 %2 → %3: %4 / %5 RP")
@@ -306,7 +309,7 @@ void MainWindow::refreshResearchPanel()
     } else {
         researchProgress_->setRange(0, 1);
         researchProgress_->setValue(0);
-        researchProgress_->setFormat("Research paused — add a field to the plan");
+        researchProgress_->setFormat(planActive ? "Maximum research level reached (26)" : "Research paused — add a field to the plan");
     }
 
     QStringList nextUnlocks;
@@ -317,7 +320,7 @@ void MainWindow::refreshResearchPanel()
     auto projected = received;
     auto& projectedPlayer = *std::find_if(projected.players.begin(), projected.players.end(),
         [player](const auto& candidate) { return candidate.id == player->id; });
-    if (level < std::numeric_limits<std::uint8_t>::max())
+    if (level < kMaximumResearchLevel)
         projectedPlayer.technology.levels[static_cast<std::size_t>(focus)] = level + 1;
     for (std::size_t unlockIndex = 0; unlockIndex < research_unlocks().size(); ++unlockIndex) {
         const auto& unlock = research_unlocks()[unlockIndex];
@@ -365,14 +368,17 @@ void MainWindow::refreshResearchPanel()
         const auto field = planFields[planIndex];
         const auto fieldIndex = static_cast<std::size_t>(field);
         const auto fromLevel = projectedLevels[fieldIndex];
-        const auto toLevel = static_cast<std::uint8_t>(fromLevel + 1);
-        const auto levelCost = research_level_cost(field, toLevel);
+        const auto toLevel = fromLevel >= kMaximumResearchLevel ? fromLevel : static_cast<std::uint8_t>(fromLevel + 1);
+        projectedPlayer.technology.levels = projectedLevels;
+        const auto levelCost = fromLevel >= kMaximumResearchLevel ? 0U
+            : research_level_cost(projected, player->id, field, toLevel);
         const auto completedRp = std::min(projectedProgress[fieldIndex], levelCost);
 
         auto* row = new QTreeWidgetItem(researchPlanTree_);
         row->setText(0, QString::number(planIndex + 1));
         row->setText(1, fieldName(field));
-        row->setText(2, QString("L%1 → L%2").arg(fromLevel).arg(toLevel));
+        row->setText(2, fromLevel >= kMaximumResearchLevel ? QString("Maximum (L%1)").arg(fromLevel)
+            : QString("L%1 → L%2").arg(fromLevel).arg(toLevel));
         row->setText(3, QString("%1 / %2 RP").arg(completedRp).arg(levelCost));
         const bool alreadyActive = planIndex == 0
             && player->technology.researchActive
@@ -382,7 +388,7 @@ void MainWindow::refreshResearchPanel()
             : "Queued");
         row->setData(0, Qt::UserRole, static_cast<int>(field));
 
-        projectedLevels[fieldIndex] = toLevel;
+        projectedLevels[fieldIndex] = std::max(fromLevel, toLevel);
         projectedProgress[fieldIndex] = 0;
     }
     const auto rowCount = researchPlanTree_->topLevelItemCount();
@@ -402,7 +408,7 @@ void MainWindow::refreshResearchPanel()
             const auto fieldIndex = static_cast<std::size_t>(field);
             const int current = player->technology.levels[fieldIndex];
             const int target = nextTargets[fieldIndex];
-            const bool available = target <= std::numeric_limits<std::uint8_t>::max();
+            const bool available = target <= kMaximumResearchLevel;
             researchAddCombo_->setItemText(choice, available
                 ? QString("%1 (L%2 now → L%3 after queue)").arg(fieldName(field)).arg(current).arg(target)
                 : QString("%1 (L%2 now; maximum planned)").arg(fieldName(field)).arg(current));
@@ -411,12 +417,12 @@ void MainWindow::refreshResearchPanel()
                 ? QString("Current level: L%1. Existing plan reaches L%2. Append one step targeting L%3.")
                     .arg(current).arg(target - 1).arg(target)
                 : QString("The plan already reaches the maximum level L%1.")
-                    .arg(std::numeric_limits<std::uint8_t>::max()), Qt::ToolTipRole);
+                    .arg(kMaximumResearchLevel), Qt::ToolTipRole);
             if (model) model->item(choice)->setEnabled(available);
         }
     }
     const auto target = researchAddCombo_->currentData(Qt::UserRole + 1).toInt();
-    researchAddButton_->setEnabled(target > 0 && target <= std::numeric_limits<std::uint8_t>::max());
+    researchAddButton_->setEnabled(target > 0 && target <= kMaximumResearchLevel);
 }
 
 void MainWindow::queueResearchAllocation(int percent)
@@ -511,7 +517,7 @@ void MainWindow::addResearchPlanItem()
 {
     if (!researchPlanTree_ || !researchAddCombo_) return;
     const auto target = researchAddCombo_->currentData(Qt::UserRole + 1).toInt();
-    if (target <= 0 || target > std::numeric_limits<std::uint8_t>::max()) return;
+    if (target <= 0 || target > kMaximumResearchLevel) return;
     auto* row = new QTreeWidgetItem(researchPlanTree_);
     row->setData(0, Qt::UserRole, researchAddCombo_->currentData());
     const auto selectedRow = researchPlanTree_->topLevelItemCount() - 1;

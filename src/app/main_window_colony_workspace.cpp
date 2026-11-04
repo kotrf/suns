@@ -330,6 +330,9 @@ void MainWindow::refreshColonyWorkspace()
                 lines << QString("Mines: %1 active / %2 built (max %3)")
                     .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit);
                 const auto* empire = find_player(received, pendingOrders_.player);
+                lines << QString("Advanced: %1 / %2 factories active • %3 / %4 mines active (included above)")
+                    .arg(workforce.operatingAdvancedFactories).arg(planet->advancedFactories)
+                    .arg(workforce.operatingAdvancedMines).arg(planet->advancedMines);
                 status->setToolTip(QString("Population operates factories and mines independently. Per 10,000 surface colonists: %1 factories and %2 mines. Excess buildings remain idle.")
                     .arg(empire ? empire->race.factoriesPerTenThousand : kDefaultWorkforceRate)
                     .arg(empire ? empire->race.minesPerTenThousand : kDefaultWorkforceRate));

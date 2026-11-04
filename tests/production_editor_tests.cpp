@@ -61,6 +61,8 @@ struct MainWindowTestAccess {
     static void planFreshDesign(MainWindow& w)
     {
         w.state_ = make_demo_game();
+        w.state_.planets.front().population=6000; w.state_.planets.front().industry=0; w.state_.planets.front().habitability=0;
+        set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
         w.pendingOrders_ = {1, {}};
         w.pendingDescriptions_.clear();
         w.selection_.star = w.state_.planets.front().star;
@@ -171,9 +173,9 @@ int main(int argc, char** argv)
         auto* queue = window.findChild<QTreeWidget*>("productionQueueTree");
         assert(queue && queue->topLevelItemCount() == 2);
         assert(!queue->topLevelItem(0)->text(3).startsWith("~Turn "));
-        const auto nextTurn = suns::MainWindowTestAccess::state(window).turn + 1;
-        assert(queue->topLevelItem(1)->text(1) == "Factory");
-        assert(queue->topLevelItem(1)->text(3) == QString("~Turn %1 (+1)").arg(qulonglong(nextTurn)));
+        const auto nextTurn = suns::MainWindowTestAccess::state(window).turn + 2;
+        assert(queue->topLevelItem(1)->text(1) == "Basic factory");
+        assert(queue->topLevelItem(1)->text(3) == QString("~Turn %1 (+2)").arg(qulonglong(nextTurn)));
     }
     suns::MainWindowTestAccess::install(window);
     for (const bool stateChangesWhileHeld : {false, true}) {
@@ -182,7 +184,7 @@ int main(int argc, char** argv)
         auto* kind = window.findChild<QComboBox*>("productionBatchKind");
         auto* add = window.findChild<QPushButton*>("productionBatchAdd");
         assert(kind && add);
-        kind->setCurrentIndex(kind->findText("Mines"));
+        kind->setCurrentIndex(kind->findText("Basic mines"));
         const auto before = suns::MainWindowTestAccess::orders(window).orders.size();
         const QPointF local(add->rect().center());
         const QPointF global(add->mapToGlobal(local.toPoint()));
@@ -211,7 +213,7 @@ int main(int argc, char** argv)
         auto* add = window.findChild<QPushButton*>("productionBatchAdd");
         assert(tree && kind && amount && add);
         const QPersistentModelIndex first(tree->model()->index(0, 0));
-        kind->setCurrentIndex(kind->findText("Factories"));
+        kind->setCurrentIndex(kind->findText("Basic factories"));
         amount->setValue(17);
         // Editing a draft and idling must preserve the existing queue model,
         // its selection and scroll context rather than rebuilding it.
@@ -225,7 +227,7 @@ int main(int argc, char** argv)
         assert(suns::MainWindowTestAccess::save(window, path));
         add->click();
         assert(tree->topLevelItemCount() == 3);
-        assert(tree->topLevelItem(2)->text(1) == "Factory ×17");
+        assert(tree->topLevelItem(2)->text(1) == "Basic factory ×17");
         const auto oldEta = tree->topLevelItem(0)->text(3);
         suns::MainWindowTestAccess::research(window);
         assert(tree->topLevelItem(0)->text(3) != oldEta);
@@ -242,9 +244,9 @@ int main(int argc, char** argv)
     assert(tree && remove && tree->topLevelItemCount() == 2);
     tree->setCurrentItem(tree->topLevelItem(1));
     suns::MainWindowTestAccess::moveUp(window);
-    assert(tree->topLevelItem(0)->text(1) == "Mine");
+    assert(tree->topLevelItem(0)->text(1) == "Basic mine");
     remove->click(); // newly queued and reordered mine
-    assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1) == "Factory");
+    assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1) == "Basic factory");
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::colony(window).productionQueue.size() == 1);
     auto* shortcut = tree->findChild<QShortcut*>();
@@ -423,15 +425,15 @@ int main(int argc, char** argv)
     auto* editTemplates = window.findChild<QPushButton*>("productionTemplateEdit");
     assert(kind && quantity && add && templateName && applyTemplate && editTemplates);
     kind->setCurrentIndex(kind->findText("Auto factories ↻")); quantity->setValue(3); add->click();
-    assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
+    assert(tree->topLevelItemCount() == 1 && tree->topLevelItem(0)->text(1).contains("↻ Basic factory") && tree->topLevelItem(0)->text(2) == "≤3/yr");
     assert(tree->topLevelItem(0)->font(1).italic());
     assert(tree->topLevelItem(0)->text(3) == "Annual rule");
-    kind->setCurrentIndex(kind->findText("Mines")); quantity->setValue(2); add->click();
+    kind->setCurrentIndex(kind->findText("Basic mines")); quantity->setValue(2); add->click();
     assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(1)->text(1).contains("×2"));
     suns::MainWindowTestAccess::saveTemplate(window);
     templateName->setCurrentIndex(templateName->findText("Development"));
     assert(applyTemplate->isEnabled()); applyTemplate->click();
-    assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(0)->text(1).contains("Mine"));
+    assert(tree->topLevelItemCount() == 2 && tree->topLevelItem(0)->text(1).contains("mine",Qt::CaseInsensitive));
     suns::MainWindowTestAccess::advance(window);
     const auto& developed = suns::MainWindowTestAccess::colony(window);
     assert(developed.mines == 2 && developed.industry == 39);

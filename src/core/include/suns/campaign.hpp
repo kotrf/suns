@@ -19,6 +19,8 @@ struct EmpireSetup {
     PrimaryRaceTrait primaryTrait{PrimaryRaceTrait::Generalist};
     std::uint8_t factoriesPerTenThousand{kDefaultWorkforceRate};
     std::uint8_t minesPerTenThousand{kDefaultWorkforceRate};
+    std::array<ResearchCost, kResearchFieldCount> researchCosts{};
+    std::uint8_t populationGrowthRate{kDefaultPopulationGrowthRate};
 };
 struct ResearchUnlock {
     ResearchField field;

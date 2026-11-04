@@ -68,7 +68,7 @@ void maintenance_reserve_growth_and_recovery()
     const auto resolved=resolve_colony_production(s,p,true);
     assert(p.habitat.service==HabitatService::Normal && p.habitat.productionPaid==2);
     assert(p.minerals.ironium==before.ironium-1 && resolved.researchPoints==0);
-    assert(projected_orbital_growth(p)==9000 && colony_output(s, p)==output);
+    assert(projected_orbital_growth(p)==9000 && colony_output(s, p)==output+200);
     (void)resolve_colony_production(s,p,true);assert(p.minerals.ironium==before.ironium-1);
     p.habitat.population=2000000;assert(projected_orbital_growth(p)==0);
     p.habitat.population=200000;
@@ -97,12 +97,12 @@ void orbital_output_is_counted_once_and_upkeep_precedes_research()
     const auto extraction=projected_mineral_mining(s,p);
     const auto before=p.minerals;
     const auto produced=resolve_colony_production(s,p,true);
-    assert(colony_output(s, p)==5 && p.habitat.productionPaid==2 && produced.researchPoints==3);
+    assert(colony_output(s, p)==2500 && p.habitat.productionPaid==2 && produced.researchPoints==2498);
     assert(p.minerals.ironium==before.ironium-1 && projected_mineral_mining(s,p).ironium==extraction.ironium);
     ++s.turn;p.population=0;p.habitat.population=500000;p.minerals={100,100,100};
     (void)resolve_colony_production(s,p,true);
-    assert(p.habitat.service==HabitatService::Reserve && !p.habitat.productionPaid && !colony_output(s, p));
-    assert(p.minerals.ironium==100 && !projected_mineral_mining(s,p).ironium);
+    assert(p.habitat.service==HabitatService::Normal && p.habitat.productionPaid==2 && colony_output(s, p)==500);
+    assert(p.minerals.ironium==99 && !projected_mineral_mining(s,p).ironium);
 }
 void annual_helpers_match_mining_before_maintenance()
 {
@@ -123,15 +123,15 @@ void annual_helpers_match_mining_before_maintenance()
         assert(!mineral_cargo_mass(received.planets[0].minerals) && received.planets[0].habitat==p.habitat);
     }
     // The queue forecaster already mines before maintenance: one mining phase
-    // yields only 0.733 kt after upkeep, so a factory's I/G bill needs 3 years.
+    // yields 1.233 kt after upkeep, so a basic factory's 4 G bill needs 4 years.
     auto s=fixture();finish(s);s.fleets.clear();auto& p=s.planets[0];
     p.population=1000000;p.habitat.population=1500000;p.industry=0;p.mines=20;p.minerals={};p.observedConcentration=MineralCargo{10,10,10};
     p.productionQueue={{ProductionKind::Factory,3}};
     const auto estimate=forecast_production_queue(s,p,p.productionQueue,5);
-    assert(estimate[0].completionTurn==s.turn+3);
+    assert(estimate[0].completionTurn==s.turn+4);
     const auto year=s.turn;
-    for(unsigned n=1;n<=3;++n){s=TurnProcessor{}.process(s,{});assert(s.planets[0].industry==(n==3?1U:0U));}
-    assert(s.turn==year+3);
+    for(unsigned n=1;n<=4;++n){s=TurnProcessor{}.process(s,{});assert(s.planets[0].industry==(n==4?1U:0U));}
+    assert(s.turn==year+4);
 }
 void cargo_is_atomic_and_routes_can_evacuate_without_station()
 {

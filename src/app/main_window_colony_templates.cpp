@@ -24,7 +24,11 @@ namespace {
 QString stepName(ProductionKind kind)
 {
     switch (kind) {
-    case ProductionKind::Factory: return "Factories";
+    case ProductionKind::Factory: return "Basic factories";
+    case ProductionKind::AdvancedFactory: return "Advanced factories";
+    case ProductionKind::AdvancedMine: return "Advanced mines";
+    case ProductionKind::UpgradeFactory: return "Upgrade factories";
+    case ProductionKind::UpgradeMine: return "Upgrade mines";
     case ProductionKind::Mine: return "Mines";
     case ProductionKind::LocalRadar: return "Local Radar (30 ly)";
     case ProductionKind::PlanetaryRadar: return "Full Radar (150 ly)";
@@ -132,7 +136,7 @@ void MainWindow::openColonyTemplates()
     editor->addLayout(stepButtons);
     auto* kind = new QComboBox(dialog);
     kind->setObjectName("colonyTemplateStepKind");
-    for (auto value : {ProductionKind::Factory, ProductionKind::Mine, ProductionKind::LocalRadar,
+    for (auto value : {ProductionKind::Factory, ProductionKind::Mine, ProductionKind::AdvancedFactory, ProductionKind::AdvancedMine, ProductionKind::UpgradeFactory, ProductionKind::UpgradeMine, ProductionKind::LocalRadar,
             ProductionKind::PlanetaryRadar, ProductionKind::Terraforming, ProductionKind::ColonyDefense})
         kind->addItem(stepName(value), int(value));
     auto* quantity = new QSpinBox(dialog);
@@ -249,7 +253,7 @@ void MainWindow::openColonyTemplates()
         if (selected == ProductionKind::Terraforming) {
             mode->addItem("Min terraform", int(ProductionAutomation::MinTerraform));
             mode->addItem("Max terraform", int(ProductionAutomation::MaxTerraform));
-        } else mode->addItem("Annual limit", int(ProductionAutomation::Annual));
+        } else if (!industry_upgrade_kind(selected)) mode->addItem("Annual limit", int(ProductionAutomation::Annual));
         mode->setCurrentIndex(std::max(0, mode->findData(previous)));
         const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
         quantity->setMaximum(radar ? 1 : kMaximumProductionBatch);

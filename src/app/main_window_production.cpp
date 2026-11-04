@@ -43,8 +43,12 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
 {
     QString name;
     switch (item.kind) {
-    case ProductionKind::Factory: name = "Factory"; break;
-    case ProductionKind::Mine: name = "Mine"; break;
+    case ProductionKind::Factory: name = "Basic factory"; break;
+    case ProductionKind::Mine: name = "Basic mine"; break;
+    case ProductionKind::AdvancedFactory: name = "Advanced factory"; break;
+    case ProductionKind::AdvancedMine: name = "Advanced mine"; break;
+    case ProductionKind::UpgradeFactory: name = "Upgrade factory"; break;
+    case ProductionKind::UpgradeMine: name = "Upgrade mine"; break;
     case ProductionKind::ReconstructFactory: name = "Reconstruct factory"; break;
     case ProductionKind::ReconstructMine: name = "Reconstruct mine"; break;
     case ProductionKind::CleanupContamination: name = "Contamination cleanup"; break;
@@ -104,8 +108,14 @@ void MainWindow::installProductionQueue()
         kind->addItem(label, int(item));
         kind->setItemData(kind->count() - 1, int(automation), Qt::UserRole + 1);
     };
-    addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
-    addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Basic factories", ProductionKind::Factory, ProductionAutomation::None);
+    addKind("Basic mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Advanced factories", ProductionKind::AdvancedFactory, ProductionAutomation::None);
+    addKind("Advanced mines", ProductionKind::AdvancedMine, ProductionAutomation::None);
+    addKind("Upgrade factories", ProductionKind::UpgradeFactory, ProductionAutomation::None);
+    addKind("Upgrade mines", ProductionKind::UpgradeMine, ProductionAutomation::None);
+    addKind("Auto advanced factories ↻", ProductionKind::AdvancedFactory, ProductionAutomation::Annual);
+    addKind("Auto advanced mines ↻", ProductionKind::AdvancedMine, ProductionAutomation::Annual);
     addKind("Reconstruct factories", ProductionKind::ReconstructFactory, ProductionAutomation::None);
     addKind("Reconstruct mines", ProductionKind::ReconstructMine, ProductionAutomation::None);
     addKind("Clean contamination", ProductionKind::CleanupContamination, ProductionAutomation::None);
@@ -142,7 +152,7 @@ void MainWindow::installProductionQueue()
         const QueueProductionBatchOrder order{planet->id, ProductionKind(kind->currentData().toInt()),
             std::uint32_t(amount->value()), ProductionAutomation(kind->currentData(Qt::UserRole + 1).toInt())};
         if (!production_batch_valid(order)) return;
-        if(recovery_kind(order.kind)) {
+        if(recovery_kind(order.kind) || industry_upgrade_kind(order.kind)) {
             auto planned=planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_);
             const auto target=std::find_if(planned.planets.begin(),planned.planets.end(),[&](const auto& p){return p.id==planet->id;});
             if(target==planned.planets.end() || !apply_production_batch(planned,*target,order)) return;
@@ -243,22 +253,26 @@ void MainWindow::refreshProductionControls()
     const auto selected = ProductionKind(kind->currentData().toInt());
     const auto available = selected == ProductionKind::CleanupContamination ? productionControls_.cleanupUnits
         : selected == ProductionKind::ReconstructFactory ? productionControls_.ruinedFactories
-        : selected == ProductionKind::ReconstructMine ? productionControls_.ruinedMines : 0;
+        : selected == ProductionKind::ReconstructMine ? productionControls_.ruinedMines
+        : selected == ProductionKind::UpgradeFactory ? productionControls_.upgradeFactories
+        : selected == ProductionKind::UpgradeMine ? productionControls_.upgradeMines : 0;
     const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
     {
         const QSignalBlocker block(amount);
-        amount->setMaximum(recovery_kind(selected) ? int(std::max<std::uint64_t>(1,
+        amount->setMaximum((recovery_kind(selected) || industry_upgrade_kind(selected)) ? int(std::max<std::uint64_t>(1,
             std::min<std::uint64_t>(available, kMaximumProductionBatch)))
             : radar ? 1 : int(kMaximumProductionBatch));
     }
     const bool allowed = selected == ProductionKind::Terraforming ? productionControls_.canTerraform
         : selected == ProductionKind::ColonyDefense ? productionControls_.canBuildDefenses
-        : recovery_kind(selected) ? available > 0 : true;
+        : (recovery_kind(selected) || industry_upgrade_kind(selected)) ? available > 0 : true;
     // Never transiently disable a usable button: doing so cancels a real
     // press/release that straddles a panel update.
     add->setEnabled(productionControls_.friendlyColony && allowed);
     apply->setEnabled(productionControls_.friendlyColony && templates->currentIndex() > 0);
-    if (reconstruction_kind(selected)) {
+    if (industry_upgrade_kind(selected)) {
+        add->setToolTip(QString("Convert an existing basic installation; total buildings and workforce limit stay unchanged. %1 unreserved basic units remain.").arg(qulonglong(available)));
+    } else if (reconstruction_kind(selected)) {
         add->setToolTip(available ? QString("Restore existing ruins through ordinary production and minerals. %1 unreserved units remain.").arg(qulonglong(available))
             : "No unreserved ruins of this kind remain on this colony.");
     } else if (selected == ProductionKind::CleanupContamination) {
@@ -325,6 +339,8 @@ void MainWindow::refreshProductionQueue()
     productionControls_.canTerraform = next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value();
     productionControls_.canBuildDefenses = colony_defenses_available(forecastState, pendingOrders_.player)
         && planet->defenses < kMaximumColonyDefenses;
+    productionControls_.upgradeFactories = industry_upgrade_available(*projectedPlanet, ProductionKind::UpgradeFactory);
+    productionControls_.upgradeMines = industry_upgrade_available(*projectedPlanet, ProductionKind::UpgradeMine);
     productionControls_.ruinedFactories = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructFactory);
     productionControls_.ruinedMines = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructMine);
     productionControls_.cleanupUnits = cleanup_units_available(*projectedPlanet);
@@ -361,6 +377,10 @@ void MainWindow::refreshProductionQueue()
             .arg(mineralAmounts(projectedPlanet->minerals), mineralAmounts(firstTurnMining), mineralAmounts(total)));
     const auto ruinedFactories=reconstruction_remaining(*planet,ProductionKind::ReconstructFactory);
     const auto ruinedMines=reconstruction_remaining(*planet,ProductionKind::ReconstructMine);
+    productionQueueSummary_->setText(productionQueueSummary_->text()
+        + QString("<br>Factories: %1 basic + %2 advanced (1 / 2 resources each). Mines: %3 basic + %4 advanced (1 / 2 kt at 100% concentration). Shared workforce caps; advanced installations operate first.")
+            .arg(planet->industry - std::min(planet->industry, planet->advancedFactories)).arg(planet->advancedFactories)
+            .arg(planet->mines - std::min(planet->mines, planet->advancedMines)).arg(planet->advancedMines));
     if(ruinedFactories || ruinedMines || planet->warDamage.factoriesReconstructed || planet->warDamage.minesReconstructed)
         productionQueueSummary_->setText(productionQueueSummary_->text()
             + QString("<br>War ruins: %1 factories / %2 mines. Natural repair: 0/year.<br>Reconstruct each factory: 4 resources; mine: 3 resources; ordinary unit minerals. Completion restores one working installation.")

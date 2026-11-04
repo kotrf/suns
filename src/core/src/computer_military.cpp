@@ -382,7 +382,10 @@ void plan_military(const PlayerView& view, ComputerTurnPlan& plan, std::string& 
         const ShipDesign* design = guards < wantedGuards && guardDesign ? &*guardDesign
             : target && bombers < 1 && bombDesign ? &*bombDesign
             : target && transports < 2 && assaultDesign ? &*assaultDesign : nullptr;
-        if (!design || !mineral_cargo_sufficient(colony->minerals, ship_design_mineral_cost(*design))) continue;
+        if (!design) continue;
+        // Preserve the strategic mineral budget through an ordinary paid queue
+        // entry. Continuous factory expansion must not starve a selected ship;
+        // existing staffed mines replenish its materials while work waits.
         if (design->id == 0 && std::find(created.begin(), created.end(), design->name) == created.end()) {
             plan.orders.orders.push_back(CreateShipDesignOrder{design->name, design->hull, design->components, design->placements});
             created.push_back(design->name);
