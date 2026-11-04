@@ -31,6 +31,10 @@ GameState fixture(bool known = true)
         if (p.owner == 2) p.population = 2'000'000;
         if (p.owner == 1) p.population = 250;
     }
+    // Hold the small defender population fixed: this is the deterministic
+    // assembly/combat/landing scenario, not a race against campaign growth.
+    state.players.front().race.environmentBased=false;
+    for(auto& p:state.planets) if(p.owner==1) p.habitability=0;
     for (auto& player : state.players) { player.technology.levels.fill(6); player.surveyKnowledge.clear(); player.surveyedStars.clear(); }
     for (auto& f : state.fleets) {
         const auto home = std::find_if(state.planets.begin(), state.planets.end(), [&](const auto& p) { return p.owner == f.owner; });
@@ -67,7 +71,12 @@ std::string fingerprint(const ComputerTurnPlan& plan)
             else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) out << x.fleet << ',' << int(x.task);
             else if constexpr (std::is_same_v<T, SetResearchAllocationOrder>) out << unsigned(x.percent);
             else if constexpr (std::is_same_v<T, SetResearchPlanOrder>) { out << int(x.focus) << ',' << x.active; for (auto f : x.queuedFocuses) out << ',' << int(f); }
-            else assert(false && "Unexpected military policy order");
+            else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
+                const auto& p=x.program;
+                out << x.fleet << ',' << int(x.action) << ',' << p.center.x << ',' << p.center.y << ',' << p.radius
+                    << ',' << int(p.depth) << ',' << int(p.flight) << ',' << unsigned(p.maxWarp)
+                    << ',' << p.fuelReserve << ',' << p.maxSystems << ',' << p.maxTurns << ',' << p.returnHome;
+            } else assert(false && "Unexpected military policy order");
         }, order);
         out << '\n';
     }

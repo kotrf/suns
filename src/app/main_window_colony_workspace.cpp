@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
+#include "mineral_stock_panel.hpp"
 #include "station_details_dialog.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
@@ -12,6 +13,7 @@
 #include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -139,15 +141,28 @@ void MainWindow::installColonyWorkspace()
     detailsDock->setWidget(overviewDetails);
     addDockWidget(Qt::LeftDockWidgetArea, detailsDock);
     if (auto* group = detailsDock->findChild<QGroupBox*>("planetGroup")) {
-        auto* station = new QToolButton(group);
+        auto* header = new QWidget(group);
+        header->setObjectName("systemPlanetHeader");
+        auto* headerLayout = new QGridLayout(header);
+        headerLayout->setContentsMargins(0, 0, 0, 0);
+        headerLayout->setSpacing(0);
+        auto* station = new QToolButton(header);
         station->setObjectName("systemStationButton");
-        station->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        station->setIconSize(QSize(32, 32));
-        station->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        station->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        station->setIconSize(QSize(24, 24));
+        station->setFixedSize(28, 28);
+        station->setAutoRaise(true);
         station->setAccessibleName("Orbital station details");
         station->hide();
         connect(station, &QToolButton::clicked, this, &MainWindow::openStationDetails);
-        if (auto* column = qobject_cast<QVBoxLayout*>(group->layout())) column->insertWidget(1, station);
+        if (auto* column = qobject_cast<QVBoxLayout*>(group->layout())) {
+            if (auto* portrait = group->findChild<QLabel*>("planetPortrait")) {
+                column->removeWidget(portrait);
+                headerLayout->addWidget(portrait, 0, 0, Qt::AlignHCenter);
+            }
+            headerLayout->addWidget(station, 0, 0, Qt::AlignTop | Qt::AlignRight);
+            column->insertWidget(0, header);
+        }
     }
     auto* statusPanel = new QWidget(overview);
     statusPanel->setObjectName("colonyStatusPanel");
@@ -267,8 +282,8 @@ void MainWindow::refreshColonyWorkspace()
     auto* status = findChild<QLabel*>("colonyStatusSummary");
     auto* table = findChild<QTreeWidget*>("colonyMineralsTable");
     if (!status || !table) return;
-    const auto received = make_player_view(state_, pendingOrders_.player).state;
-    const auto planned = projected_cargo_order_state(received, pendingOrders_);
+    const auto& received = receivedPlayerState();
+    const auto& planned = fleetPlanningState();
     const auto* star = selectedStar();
     const auto* observed = star ? find_planet_at_star(received, star->id) : nullptr;
     if (auto* button = findChild<QToolButton*>("systemStationButton")) {
@@ -277,8 +292,8 @@ void MainWindow::refreshColonyWorkspace()
         if (station) {
             button->setIcon(stationIcon(station->hull));
             button->setText(QString::fromUtf8(station_hull_spec(station->hull).name) + "…");
-            button->setToolTip(QString("%1\nOpen received station information and fitting")
-                .arg(QString::fromStdString(station->name)));
+            button->setToolTip(QString("%1 — %2\nOpen received station information and fitting")
+                .arg(QString::fromStdString(station->name), QString::fromUtf8(station_hull_spec(station->hull).name)));
         }
     }
     const auto* planet = observed && observed->owner == pendingOrders_.player
@@ -315,6 +330,9 @@ void MainWindow::refreshColonyWorkspace()
                 lines << QString("Mines: %1 active / %2 built (max %3)")
                     .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit);
                 const auto* empire = find_player(received, pendingOrders_.player);
+                lines << QString("Advanced: %1 / %2 factories active • %3 / %4 mines active (included above)")
+                    .arg(workforce.operatingAdvancedFactories).arg(planet->advancedFactories)
+                    .arg(workforce.operatingAdvancedMines).arg(planet->advancedMines);
                 status->setToolTip(QString("Population operates factories and mines independently. Per 10,000 surface colonists: %1 factories and %2 mines. Excess buildings remain idle.")
                     .arg(empire ? empire->race.factoriesPerTenThousand : kDefaultWorkforceRate)
                     .arg(empire ? empire->race.minesPerTenThousand : kDefaultWorkforceRate));
@@ -346,21 +364,22 @@ void MainWindow::refreshColonyWorkspace()
         }
     }
     status->setText(lines.join("<br>"));
-    const auto mining = own ? projected_mineral_mining(received, *observed) : MineralCargo{};
-    const bool geology = planet && planet_geology_known(received, pendingOrders_.player, planet->id);
-    const auto concentration = geology ? planet_mineral_concentration(received, *planet) : MineralCargo{};
-    const auto values = [](const MineralCargo& minerals) { return std::array{minerals.ironium, minerals.boranium, minerals.germanium}; };
-    const auto stock = values(own ? planet->minerals : MineralCargo{});
-    const auto extraction = values(mining);
-    const auto conc = values(concentration);
+    const auto minerals = planet ? mineral_display_data(received, planned, pendingOrders_.player, planet->id) : MineralDisplayData{};
+    const auto values = [](const MineralCargo& m) { return std::array{m.ironium, m.boranium, m.germanium}; };
+    const auto stock = values(minerals.stock.value_or(MineralCargo{}));
+    const auto extraction = values(minerals.mining.value_or(MineralCargo{}));
+    const auto conc = values(minerals.concentration.value_or(MineralCargo{}));
+    const auto age = minerals.observedTurn ? received.turn - std::min(received.turn, *minerals.observedTurn) : 0;
+    const auto ageText = !minerals.observedTurn ? QString("No received surface-stock report") : age == 0 ? QString("Current surface-stock report")
+        : QString("Surface stock: %1 years old (year %2)").arg(qulonglong(age)).arg(qulonglong(*minerals.observedTurn));
     for (int row = 0; row < 3; ++row) {
         auto* item = table->topLevelItem(row);
-        item->setText(1, own ? QString::number(stock[row], 'f', 1) : "—");
-        item->setText(2, own ? QString::number(extraction[row], 'f', 1) : "—");
-        item->setText(3, geology ? QString::number(conc[row], 'f', 0) + "%" : "?");
+        item->setText(1, minerals.stock ? QString::number(stock[row], 'f', 1) : "—");
+        item->setText(2, minerals.mining ? QString::number(extraction[row], 'f', 1) : "—");
+        item->setText(3, minerals.concentration ? QString::number(conc[row], 'f', 0) + "%" : "?");
         for (int column = 0; column < 4; ++column)
-            item->setToolTip(column, QString("%1 • Stock: %2 kt • Current-year mining before cargo: %3 kt • Concentration: %4")
-                .arg(item->text(0), item->text(1), item->text(2), item->text(3)));
+            item->setToolTip(column, QString("%1 • Stock: %2 kt • Current-year mining before cargo: %3 kt • Concentration: %4 • %5")
+                .arg(item->text(0), item->text(1), item->text(2), item->text(3), ageText));
     }
     fitMineralRows(table);
 }

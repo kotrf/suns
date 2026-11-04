@@ -1,4 +1,6 @@
 #include "main_window.hpp"
+#include "mineral_stock_panel.hpp"
+#include <QGridLayout>
 #include "suns/campaign.hpp"
 
 #include <QAction>
@@ -141,18 +143,6 @@ QPixmap renderPlanetPortrait(const Planet& planet, StarClass stellarClass, std::
     return pixmap;
 }
 
-QProgressBar* makeMineralBar(const QString& name, const char* objectName, QWidget* parent)
-{
-    auto* bar = new QProgressBar(parent);
-    bar->setObjectName(objectName);
-    bar->setRange(0, 100);
-    bar->setValue(0);
-    bar->setTextVisible(true);
-    bar->setFormat(name + " — unknown");
-    bar->setToolTip("Geological concentration; higher concentration produces more mineral units each turn.");
-    return bar;
-}
-
 QPixmap compactPortrait(const QPixmap& portrait)
 {
     return portrait.scaled(80, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -209,7 +199,9 @@ void MainWindow::installPlanetPolish()
             portrait->setAlignment(Qt::AlignCenter);
             portrait->setFixedHeight(84);
             portrait->setPixmap(compactPortrait(unknownPortrait()));
-            layout->insertWidget(0, portrait);
+            if (auto* header = planetGroup->findChild<QWidget*>("systemPlanetHeader"))
+                qobject_cast<QGridLayout*>(header->layout())->addWidget(portrait, 0, 0, Qt::AlignHCenter);
+            else layout->insertWidget(0, portrait);
 
             planetPopulationBar_ = new QProgressBar(planetGroup);
             planetPopulationBar_->setObjectName("planetPopulationBar");
@@ -219,12 +211,7 @@ void MainWindow::installPlanetPolish()
             planetPopulationBar_->hide();
             layout->insertWidget(2, planetPopulationBar_);
 
-            auto* mineralsTitle = new QLabel("<b>Mineral geology</b>", planetGroup);
-            mineralsTitle->setObjectName("mineralGeologyTitle");
-            layout->insertWidget(3, mineralsTitle);
-            layout->insertWidget(4, makeMineralBar("Ironium", "ironiumConcentration", planetGroup));
-            layout->insertWidget(5, makeMineralBar("Boranium", "boraniumConcentration", planetGroup));
-            layout->insertWidget(6, makeMineralBar("Germanium", "germaniumConcentration", planetGroup));
+            layout->insertWidget(3, new MineralStockPanel(planetGroup));
         }
     }
 
@@ -242,25 +229,16 @@ void MainWindow::installPlanetPolish()
 void MainWindow::refreshPlanetPolish()
 {
     auto* portrait = findChild<QLabel*>("planetPortrait");
-    auto* ironium = findChild<QProgressBar*>("ironiumConcentration");
-    auto* boranium = findChild<QProgressBar*>("boraniumConcentration");
-    auto* germanium = findChild<QProgressBar*>("germaniumConcentration");
-    if (!portrait || !ironium || !boranium || !germanium) return;
-    const auto received = make_player_view(state_, pendingOrders_.player).state;
-
+    auto* minerals = findChild<MineralStockPanel*>("mineralStockPanel");
+    if (!portrait || !minerals) return;
+    const auto& received = receivedPlayerState();
     const auto* star = selectedStar();
     const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
+    minerals->setMinerals(planet ? mineral_display_data(received, fleetPlanningState(), pendingOrders_.player, planet->id) : MineralDisplayData{}, received.turn);
     const auto level = star ? survey_level(received, pendingOrders_.player, star->id) : SurveyLevel::Detected;
     if (!star || !planet || level < SurveyLevel::OrbitalSurvey) {
         portrait->setPixmap(compactPortrait(unknownPortrait()));
         if (planetPopulationBar_) planetPopulationBar_->hide();
-        for (auto* bar : {ironium, boranium, germanium}) {
-            bar->setValue(0);
-            bar->setFormat(level >= SurveyLevel::BasicScan
-                    ? "Unknown until orbital survey"
-                    : "Unknown until basic scan");
-            bar->setEnabled(false);
-        }
         return;
     }
 
@@ -292,46 +270,6 @@ void MainWindow::refreshPlanetPolish()
                     .arg(percent)
                     .arg(growth > 0 ? "+" : "")
                     .arg(static_cast<qlonglong>(growth)));
-        }
-    }
-    if (level < SurveyLevel::GeologicalSurvey && planet->owner != pendingOrders_.player) {
-        for (auto* bar : {ironium, boranium, germanium}) {
-            bar->setValue(0);
-            bar->setFormat("Unknown until geological survey");
-            bar->setEnabled(false);
-        }
-        return;
-    }
-    const auto concentration = planet_mineral_concentration(received, *planet);
-    const auto mining = projected_mineral_mining(received, *planet);
-
-    const struct {
-        QProgressBar* bar;
-        const char* name;
-        double concentration;
-        double stock;
-        double mining;
-    } entries[] = {
-        {ironium, "Ironium", concentration.ironium, planet->minerals.ironium, mining.ironium},
-        {boranium, "Boranium", concentration.boranium, planet->minerals.boranium, mining.boranium},
-        {germanium, "Germanium", concentration.germanium, planet->minerals.germanium, mining.germanium},
-    };
-    for (const auto& entry : entries) {
-        entry.bar->setEnabled(true);
-        entry.bar->setValue(static_cast<int>(std::lround(entry.concentration)));
-        if (findChild<QWidget*>("systemDetailsDock")) {
-            entry.bar->setFormat(QString("%1 %2%").arg(entry.name).arg(entry.concentration, 0, 'f', 0));
-        } else if (planet->owner != 0) {
-            entry.bar->setFormat(QString("%1 %2% • stock %3 • +%4/turn")
-                                     .arg(entry.name)
-                                     .arg(entry.concentration, 0, 'f', 0)
-                                     .arg(entry.stock, 0, 'f', 1)
-                                     .arg(entry.mining, 0, 'f', 1));
-        } else {
-            entry.bar->setFormat(QString("%1 %2% • stock %3")
-                                     .arg(entry.name)
-                                     .arg(entry.concentration, 0, 'f', 0)
-                                     .arg(entry.stock, 0, 'f', 1));
         }
     }
 }

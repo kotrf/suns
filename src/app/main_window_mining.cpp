@@ -38,7 +38,7 @@ void MainWindow::installMiningInfrastructure()
         productionGroup);
     queueMineButton->setObjectName("queueMineButton");
     queueMineButton->setToolTip(
-        "One Mine costs I 1 / B 2 / G 1. A staffed mine adds 0.75 extraction units per turn; excess mines wait for population.");
+        "Basic Mine: 5 resources, no minerals, 1 extraction unit. Advanced Mine: 10 resources plus I 1 / B 2 / G 1, 2 units. Both share the same workforce limit.");
 
     const int factoryIndex = productionLayout->indexOf(buildFactoryButton_);
     const int insertAt = factoryIndex >= 0 ? factoryIndex + 1 : productionLayout->count();

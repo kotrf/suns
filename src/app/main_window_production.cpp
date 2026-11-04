@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "main_window.hpp"
+#include "simple_production_estimate.hpp"
 #include "suns/production.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
@@ -42,8 +43,12 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
 {
     QString name;
     switch (item.kind) {
-    case ProductionKind::Factory: name = "Factory"; break;
-    case ProductionKind::Mine: name = "Mine"; break;
+    case ProductionKind::Factory: name = "Basic factory"; break;
+    case ProductionKind::Mine: name = "Basic mine"; break;
+    case ProductionKind::AdvancedFactory: name = "Advanced factory"; break;
+    case ProductionKind::AdvancedMine: name = "Advanced mine"; break;
+    case ProductionKind::UpgradeFactory: name = "Upgrade factory"; break;
+    case ProductionKind::UpgradeMine: name = "Upgrade mine"; break;
     case ProductionKind::ReconstructFactory: name = "Reconstruct factory"; break;
     case ProductionKind::ReconstructMine: name = "Reconstruct mine"; break;
     case ProductionKind::CleanupContamination: name = "Contamination cleanup"; break;
@@ -103,8 +108,14 @@ void MainWindow::installProductionQueue()
         kind->addItem(label, int(item));
         kind->setItemData(kind->count() - 1, int(automation), Qt::UserRole + 1);
     };
-    addKind("Factories", ProductionKind::Factory, ProductionAutomation::None);
-    addKind("Mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Basic factories", ProductionKind::Factory, ProductionAutomation::None);
+    addKind("Basic mines", ProductionKind::Mine, ProductionAutomation::None);
+    addKind("Advanced factories", ProductionKind::AdvancedFactory, ProductionAutomation::None);
+    addKind("Advanced mines", ProductionKind::AdvancedMine, ProductionAutomation::None);
+    addKind("Upgrade factories", ProductionKind::UpgradeFactory, ProductionAutomation::None);
+    addKind("Upgrade mines", ProductionKind::UpgradeMine, ProductionAutomation::None);
+    addKind("Auto advanced factories ↻", ProductionKind::AdvancedFactory, ProductionAutomation::Annual);
+    addKind("Auto advanced mines ↻", ProductionKind::AdvancedMine, ProductionAutomation::Annual);
     addKind("Reconstruct factories", ProductionKind::ReconstructFactory, ProductionAutomation::None);
     addKind("Reconstruct mines", ProductionKind::ReconstructMine, ProductionAutomation::None);
     addKind("Clean contamination", ProductionKind::CleanupContamination, ProductionAutomation::None);
@@ -141,7 +152,7 @@ void MainWindow::installProductionQueue()
         const QueueProductionBatchOrder order{planet->id, ProductionKind(kind->currentData().toInt()),
             std::uint32_t(amount->value()), ProductionAutomation(kind->currentData(Qt::UserRole + 1).toInt())};
         if (!production_batch_valid(order)) return;
-        if(recovery_kind(order.kind)) {
+        if(recovery_kind(order.kind) || industry_upgrade_kind(order.kind)) {
             auto planned=planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_);
             const auto target=std::find_if(planned.planets.begin(),planned.planets.end(),[&](const auto& p){return p.id==planet->id;});
             if(target==planned.planets.end() || !apply_production_batch(planned,*target,order)) return;
@@ -178,7 +189,7 @@ void MainWindow::installProductionQueue()
     productionQueueTree_ = new QTreeWidget(group);
     productionQueueTree_->setObjectName("productionQueueTree");
     productionQueueTree_->setColumnCount(4);
-    productionQueueTree_->setHeaderLabels({"#", "Item", "Remaining", "Completion"});
+    productionQueueTree_->setHeaderLabels({"#", "Item", "Remaining", "Approx. completion"});
     productionQueueTree_->setRootIsDecorated(false);
     productionQueueTree_->setAlternatingRowColors(true);
     productionQueueTree_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -242,22 +253,26 @@ void MainWindow::refreshProductionControls()
     const auto selected = ProductionKind(kind->currentData().toInt());
     const auto available = selected == ProductionKind::CleanupContamination ? productionControls_.cleanupUnits
         : selected == ProductionKind::ReconstructFactory ? productionControls_.ruinedFactories
-        : selected == ProductionKind::ReconstructMine ? productionControls_.ruinedMines : 0;
+        : selected == ProductionKind::ReconstructMine ? productionControls_.ruinedMines
+        : selected == ProductionKind::UpgradeFactory ? productionControls_.upgradeFactories
+        : selected == ProductionKind::UpgradeMine ? productionControls_.upgradeMines : 0;
     const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
     {
         const QSignalBlocker block(amount);
-        amount->setMaximum(recovery_kind(selected) ? int(std::max<std::uint64_t>(1,
+        amount->setMaximum((recovery_kind(selected) || industry_upgrade_kind(selected)) ? int(std::max<std::uint64_t>(1,
             std::min<std::uint64_t>(available, kMaximumProductionBatch)))
             : radar ? 1 : int(kMaximumProductionBatch));
     }
     const bool allowed = selected == ProductionKind::Terraforming ? productionControls_.canTerraform
         : selected == ProductionKind::ColonyDefense ? productionControls_.canBuildDefenses
-        : recovery_kind(selected) ? available > 0 : true;
+        : (recovery_kind(selected) || industry_upgrade_kind(selected)) ? available > 0 : true;
     // Never transiently disable a usable button: doing so cancels a real
     // press/release that straddles a panel update.
     add->setEnabled(productionControls_.friendlyColony && allowed);
     apply->setEnabled(productionControls_.friendlyColony && templates->currentIndex() > 0);
-    if (reconstruction_kind(selected)) {
+    if (industry_upgrade_kind(selected)) {
+        add->setToolTip(QString("Convert an existing basic installation; total buildings and workforce limit stay unchanged. %1 unreserved basic units remain.").arg(qulonglong(available)));
+    } else if (reconstruction_kind(selected)) {
         add->setToolTip(available ? QString("Restore existing ruins through ordinary production and minerals. %1 unreserved units remain.").arg(qulonglong(available))
             : "No unreserved ruins of this kind remain on this colony.");
     } else if (selected == ProductionKind::CleanupContamination) {
@@ -324,17 +339,19 @@ void MainWindow::refreshProductionQueue()
     productionControls_.canTerraform = next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value();
     productionControls_.canBuildDefenses = colony_defenses_available(forecastState, pendingOrders_.player)
         && planet->defenses < kMaximumColonyDefenses;
+    productionControls_.upgradeFactories = industry_upgrade_available(*projectedPlanet, ProductionKind::UpgradeFactory);
+    productionControls_.upgradeMines = industry_upgrade_available(*projectedPlanet, ProductionKind::UpgradeMine);
     productionControls_.ruinedFactories = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructFactory);
     productionControls_.ruinedMines = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructMine);
     productionControls_.cleanupUnits = cleanup_units_available(*projectedPlanet);
     refreshProductionControls();
-    const auto forecast = forecast_production_queue(forecastState, *projectedPlanet, queue, 10000, firstTurnMining);
-    const auto allocationPercent = forecastPlayer && forecastPlayer->technology.researchActive
-        ? forecastPlayer->technology.researchAllocationPercent
-        : 0;
     const auto output = net_colony_output(forecastState,*projectedPlanet,firstTurnMining);
-    const auto guaranteedResearch = static_cast<std::uint32_t>(
-        static_cast<std::uint64_t>(output) * allocationPercent / 100U);
+    const auto guaranteedResearch = colony_research_allocation(forecastState, *projectedPlanet, output);
+    const auto* knownStation = known_orbital_station(state_, planet->owner, planet->id);
+    bool shipyardAvailable = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
+    // One bounded pass at today's rate/stocks; do not resolve future years in UI.
+    const auto estimates = simple_production_estimates(forecastState, *projectedPlanet, queue,
+        output - guaranteedResearch, projectedPlanet->minerals, shipyardAvailable);
     productionQueueSummary_->setText(
         QString("<b>%1</b> • output %2/turn • guaranteed research %3 • production %4 • %5 item%6")
             .arg(QString::fromStdString(planet->name))
@@ -347,19 +364,23 @@ void MainWindow::refreshProductionQueue()
     MineralCargo total;
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
-        auto units = item.quantity;
+        auto units = estimates[index].effectiveQuantity;
         if (item.automation != ProductionAutomation::None && index > 0
-            && queue[index - 1].autoGenerated && queue[index - 1].kind == item.kind) --units;
+            && queue[index - 1].autoGenerated && queue[index - 1].kind == item.kind && units) --units;
         const auto cost = production_item_mineral_cost(forecastState, item);
         total.ironium += cost.ironium * units;
         total.boranium += cost.boranium * units;
         total.germanium += cost.germanium * units;
     }
     productionQueueSummary_->setText(productionQueueSummary_->text()
-        + QString("<br>Stock: %1<br>Current-year mining (before cargo): %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion.")
+        + QString("<br>Stock: %1<br>Current-year mining (before cargo): %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion. Completion dates are approximate: current production rate and received stocks only; no future-year simulation.")
             .arg(mineralAmounts(projectedPlanet->minerals), mineralAmounts(firstTurnMining), mineralAmounts(total)));
     const auto ruinedFactories=reconstruction_remaining(*planet,ProductionKind::ReconstructFactory);
     const auto ruinedMines=reconstruction_remaining(*planet,ProductionKind::ReconstructMine);
+    productionQueueSummary_->setText(productionQueueSummary_->text()
+        + QString("<br>Factories: %1 basic + %2 advanced (1 / 2 resources each). Mines: %3 basic + %4 advanced (1 / 2 kt at 100% concentration). Shared workforce caps; advanced installations operate first.")
+            .arg(planet->industry - std::min(planet->industry, planet->advancedFactories)).arg(planet->advancedFactories)
+            .arg(planet->mines - std::min(planet->mines, planet->advancedMines)).arg(planet->advancedMines));
     if(ruinedFactories || ruinedMines || planet->warDamage.factoriesReconstructed || planet->warDamage.minesReconstructed)
         productionQueueSummary_->setText(productionQueueSummary_->text()
             + QString("<br>War ruins: %1 factories / %2 mines. Natural repair: 0/year.<br>Reconstruct each factory: 4 resources; mine: 3 resources; ordinary unit minerals. Completion restores one working installation.")
@@ -378,16 +399,18 @@ void MainWindow::refreshProductionQueue()
             .arg(queue.size()).arg(queue.size() == 1 ? "" : "s").arg(queue.empty() ? " — queue empty" : ""));
     }
 
-    const auto* knownStation = known_orbital_station(state_, planet->owner, planet->id);
-    bool shipyardAvailable = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
     for (std::size_t index = 0; index < queue.size(); ++index) {
         const auto& item = queue[index];
         const bool automatic = item.automation != ProductionAutomation::None;
-        QString remaining = automatic ? QString("≤%1/yr").arg(item.quantity)
-            : QString::number(item.remainingCost + (item.quantity - 1) * production_item_cost(forecastState, item));
+        const bool skipped = estimates[index].status == SimpleProductionStatus::Skipped;
+        const bool inactiveAnnual = estimates[index].status == SimpleProductionStatus::InactiveAnnualRule;
+        QString remaining = skipped ? QString("0") : automatic ? QString("≤%1/yr").arg(item.quantity)
+            : QString::number(qulonglong(estimates[index].remainingWork));
         const bool waitingForShipyard = item.kind == ProductionKind::ColonyShip
             && !shipyardAvailable;
-        if (waitingForShipyard) {
+        if (skipped || inactiveAnnual) {
+            remaining = "0";
+        } else if (waitingForShipyard) {
             remaining = "shipyard";
         } else if (item.remainingCost == 0
             && !mineral_cargo_sufficient(planet->minerals, production_item_mineral_cost(forecastState, item))) {
@@ -395,15 +418,14 @@ void MainWindow::refreshProductionQueue()
         }
 
         QString completion;
-        if (forecast[index].completionTurn) {
-            completion = QString("Turn %1 (+%2)")
-                .arg(static_cast<qulonglong>(*forecast[index].completionTurn))
-                .arg(static_cast<qulonglong>(*forecast[index].completionTurn - state_.turn));
-        } else if(forecast[index].retiredTurn) completion=QString("Unneeded · T%1").arg(*forecast[index].retiredTurn);
-        else completion = waitingForShipyard ? "waiting for dock" : "beyond forecast";
-        if (automatic) completion = forecast[index].completionTurn
-            ? QString("First +%1 yr").arg(*forecast[index].completionTurn - state_.turn)
-            : "Idle / beyond forecast";
+        if (estimates[index].completionTurn) {
+            completion = QString("~Turn %1 (+%2)")
+                .arg(qulonglong(*estimates[index].completionTurn))
+                .arg(qulonglong(*estimates[index].completionTurn - state_.turn));
+        } else completion = QString::fromUtf8("—");
+        if (skipped) completion = "Currently skipped";
+        else if (inactiveAnnual) completion = "Annual rule (idle)";
+        else if (automatic) completion = "Annual rule";
 
         auto* row = new QTreeWidgetItem(productionQueueTree_);
         row->setText(0, QString::number(index + 1));
@@ -419,19 +441,24 @@ void MainWindow::refreshProductionQueue()
         auto details = QString("%1 — minerals per completed unit: %2\n"
                                      "Shortfall against current stock before other builds: %3")
             .arg(productionItemName(forecastState, item), mineralAmounts(cost), mineralAmounts(missing));
+        details += QString("\n%1\nApproximate dates hold today's production rate and mineral budget fixed; growth, future mining, arrivals and future technology are not predicted.")
+            .arg(QString::fromUtf8(simple_production_estimate_reason(estimates[index].status)));
+        if (estimates[index].skippedQuantity && estimates[index].effectiveQuantity)
+            details += QString("\nCurrent limits permit %1 of %2 queued units; the remaining %3 are skipped without payment under those conditions.")
+                .arg(estimates[index].effectiveQuantity).arg(item.quantity).arg(estimates[index].skippedQuantity);
         if (automatic) {
-            details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped. First-completion estimate assumes current technology; forecast horizon is 256 years.").arg(item.quantity);
-            if (forecast[index].completionTurn) details += QString("\nFirst completion: Turn %1").arg(*forecast[index].completionTurn);
+            details += QString("\nPersistent rule: up to %1 units each year; queue priority applies. Impossible work is skipped during actual turn resolution.").arg(item.quantity);
         }
-        if(item.kind==ProductionKind::CleanupContamination) details+="\nRemoves up to 10 contamination for 6 resources and B/G 1/1 kt. Decay of 2/year is included in the forecast; no assumed future bombardments. Unneeded work retires without further charge.";
-        if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority and forecast apply; obsolete surplus work retires without further charge.")
+        if(item.kind==ProductionKind::CleanupContamination) details+="\nRemoves up to 10 contamination for 6 resources and B/G 1/1 kt. Natural decay and retirement of unneeded work are resolved during actual turns.";
+        if(reconstruction_kind(item.kind)) details+=QString("\nRestores one ruined %1 for %2 production and the minerals above. Normal queue priority applies; obsolete surplus work retires during actual turn resolution.")
             .arg(item.kind==ProductionKind::ReconstructFactory?"factory":"mine").arg(production_cost(item.kind));
         if (engineering_kind(item.kind))
             details+="\nLong engineering project: at most 80 work/year; I/B/G 0.10/0.05/0.10 kt per actual work. Remaining minerals exclude already paid work. Removing this queue item pauses construction and retains investment; manage output and dismantling in Planetary engineering.";
         if (item.kind == ProductionKind::Terraforming) details += QString("\nEach unit costs %1 production and shifts one physical axis by 1 point. Hab improvement may differ.").arg(kTerraformingCost);
         row->setData(0, Qt::UserRole + 1, details);
         for (int column = 0; column < 4; ++column) row->setToolTip(column, details);
-        if (item.kind == ProductionKind::OrbitalStation) shipyardAvailable = !item.station || item.station->loadout.shipyard;
+        if (item.kind == ProductionKind::OrbitalStation && estimates[index].completionTurn)
+            shipyardAvailable = !item.station || item.station->loadout.shipyard;
     }
 
     if (!queue.empty()) {

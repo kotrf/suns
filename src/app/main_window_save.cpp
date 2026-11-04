@@ -273,7 +273,8 @@ bool MainWindow::loadGameFromPath(const QString& path)
                 player.race.advancedRemoteMining, player.race.basicRemoteMining, player.controller,
                 player.race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
                     ? PrimaryRaceTrait::StargateSpecialist : PrimaryRaceTrait::Generalist,
-                player.race.factoriesPerTenThousand, player.race.minesPerTenThousand});
+                player.race.factoriesPerTenThousand, player.race.minesPerTenThousand,
+                player.race.researchCosts, player.race.populationGrowthRate});
         }
     }
     campaignId_ = loaded.campaignId;

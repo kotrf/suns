@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/player_knowledge.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
@@ -349,6 +350,10 @@ std::int32_t player_planet_habitability(
 GameState generate_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
 {
     for (const auto& setup : empires) {
+        if (setup.populationGrowthRate < 1 || setup.populationGrowthRate > 20)
+            throw std::invalid_argument("Population growth must be between 1 and 20 percent");
+        if (std::any_of(setup.researchCosts.begin(), setup.researchCosts.end(), [](auto c) { return c > ResearchCost::Expensive; }))
+            throw std::invalid_argument("Invalid research cost setting");
         if (setup.factoriesPerTenThousand < kMinWorkforceRate || setup.factoriesPerTenThousand > kMaxWorkforceRate
             || setup.minesPerTenThousand < kMinWorkforceRate || setup.minesPerTenThousand > kMaxWorkforceRate)
             throw std::invalid_argument("Factory and mine operation must be between 5 and 25 per 10,000 colonists");
@@ -406,6 +411,8 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         player.race.basicRemoteMining = empires[i].basicRemoteMining;
         player.race.factoriesPerTenThousand = empires[i].factoriesPerTenThousand;
         player.race.minesPerTenThousand = empires[i].minesPerTenThousand;
+        player.race.researchCosts = empires[i].researchCosts;
+        player.race.populationGrowthRate = empires[i].populationGrowthRate;
         player.technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 1;
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),
@@ -463,10 +470,12 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
 {
     const auto* player = find_player(host, playerId);
     if (!player) throw std::invalid_argument("Unknown player");
+    const CommunicationQueryScope communicationScope(host);
     PlayerView view;
     view.player = playerId;
     auto& state = view.state;
     state.turn = host.turn;
+    state.slowResearch = host.slowResearch;
     state.interstellarMediumEnabled=host.interstellarMediumEnabled;
     state.mediumObserver=playerId;
     // Do not export the generation seed or global allocation counters.
@@ -540,17 +549,8 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                     known.engineering = intel->planetSnapshot->engineering;
                 }
             } else known.environment = {};
-            // Surface stocks change through other empires' mining/cargo orders.
-            // Only an immediately connected fleet on site knows today's stock.
-            if (level >= SurveyLevel::GeologicalSurvey && planet.owner == 0) {
-                const auto* star = find_star(host, planet.star);
-                const bool onSite = star && std::any_of(host.fleets.begin(), host.fleets.end(),
-                    [&](const Fleet& fleet) {
-                        return fleet.owner == playerId && same_position(fleet.position, star->position)
-                            && fleet_has_instant_link(host, fleet);
-                    });
-                if (onSite) known.minerals = planet.minerals;
-            }
+            if (const auto stock = known_surface_minerals(host, playerId, planet.id))
+                known.minerals = stock->minerals;
         }
         known.observedHabitability = known_planet_habitability(host, playerId, planet.id);
         known.habitability = known.observedHabitability.value_or(0);
@@ -566,6 +566,8 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         // Ownership does not deliver remote construction telemetry. Both the
         // installation and its remaining queue work come from the same packet.
         known.habitat = {};
+        known.advancedFactories = 0;
+        known.advancedMines = 0;
         // Owned remote construction is known only through delivered reports.
         // Older packets without receiver evidence confirm no receiver tier.
         known.radar = PlanetaryRadarLevel::None;
@@ -613,6 +615,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 const auto& h=*evidence->planetSnapshot->habitat;
                 known.habitat=h.habitat; known.population=h.surfacePopulation; known.industry=h.industry; known.minerals=h.minerals;
                 known.mines=h.mines; known.productionQueue=h.queue;
+                known.advancedFactories=h.advancedFactories; known.advancedMines=h.advancedMines;
                 known.radar=h.radar;
                 if(known.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !h.stationSupported)known.engineering.operational=false;
             }

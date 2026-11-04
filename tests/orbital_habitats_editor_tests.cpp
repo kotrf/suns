@@ -108,7 +108,7 @@ void receiver_evidence_survives_reload_and_v94_migration()
     // Remove its v95 radar byte to recreate the actual v94 HABI layout.
     auto legacy=make_demo_game();auto& player=legacy.players[0];
     player.surveyKnowledge.clear();player.pendingSurveyReports.clear();
-    legacy.planets[0].productionQueue={{ProductionKind::Factory,kFactoryCost}};
+    legacy.planets[0].productionQueue={{ProductionKind::Factory,6}}; // Historical v94 factory price.
     set_survey_level(legacy,1,1,SurveyLevel::DeepSurvey,legacy.turn);
     assert(player.surveyKnowledge.size()==1 && legacy.players.size()==1);
     assert(write_save_game_file(path,envelope(legacy),error));
@@ -222,7 +222,7 @@ void gui_upkeep_forecast_includes_ordinary_mining()
         assert(status.contains("Upkeep minerals unavailable")==!supplied);
         assert(MainWindowTestAccess::details(w).contains(supplied?"Forecast orbital growth: +18750/year":"Forecast orbital growth: +0/year"));
         const auto research=w.findChild<QLabel*>("researchSummary")->text();
-        assert(research.contains(supplied?"Guaranteed RP next turn: 3,":"Guaranteed RP next turn: 2,"));
+        assert(research.contains(supplied?"Guaranteed RP next turn: 2498,":"Guaranteed RP next turn: 1000,"));
         assert(!mineral_cargo_mass(MainWindowTestAccess::state(w).planets[0].minerals));
         assert(MainWindowTestAccess::state(w).planets[0].habitat==p.habitat);
     }

@@ -6,6 +6,7 @@
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -14,7 +15,11 @@
 namespace suns {
 void MainWindow::openReconnaissance()
 {
-    if(auto* existing=findChild<QDialog*>("intelligenceDialog")) { existing->show(); existing->raise(); existing->activateWindow(); return; }
+    if(auto* existing=findChild<QDialog*>("intelligenceDialog")) {
+        existing->show(); existing->raise(); existing->activateWindow();
+        if (auto* refresh = existing->findChild<QTimer*>("intelligenceRefreshTimer")) refresh->start(0);
+        return;
+    }
     auto* dialog=new QDialog(this,Qt::Window); dialog->setObjectName("intelligenceDialog"); dialog->setWindowTitle("Reconnaissance / received contacts");
     dialog->resize(1100,550);
     dialog->setStyleSheet("QDialog#intelligenceDialog { background: #0b121a; } QTableWidget { background: #101d29; color: #d6e5f2; gridline-color: #34495a; } QHeaderView::section { background: #1b2c3b; color: #d6e5f2; padding: 4px; }");
@@ -41,6 +46,8 @@ void MainWindow::openReconnaissance()
         if(shuttingDown_ || !dialog->isVisible()) return;
         const auto id=table->currentRow()>=0?table->item(table->currentRow(),0)->data(Qt::UserRole).toUInt():0;
         const auto contacts=known_enemy_contacts(state_,pendingOrders_.player);
+        const QSignalBlocker blockSelection(table);
+        int selectedRow = -1;
         table->setRowCount(int(contacts.size())); int active=0,stale=0;
         for(int row=0;row<int(contacts.size());++row) {
             const auto& c=contacts[row]; const auto age=state_.turn>c.lastSeenTurn?state_.turn-c.lastSeenTurn:0;
@@ -53,19 +60,35 @@ void MainWindow::openReconnaissance()
                 c.quality==ContactQuality::Identified?QString("%1 / %2").arg(c.shipCount).arg(hulls.join(", ")):"Unknown",
                 c.sourceFleet?QString("Fleet %1").arg(c.sourceFleet):QString("Colony %1").arg(c.sourceColony)};
             for(int col=0;col<cells.size();++col) {
-                auto* item=new QTableWidgetItem(cells[col]);
+                auto* item=table->item(row,col);
+                if (!item) { item=new QTableWidgetItem; table->setItem(row,col,item); }
+                if (item->text()!=cells[col]) item->setText(cells[col]);
                 item->setForeground(QColor(c.lost||age?"#9daebc":c.quality==ContactQuality::Probable?"#d2a963":"#dd7777"));
                 item->setToolTip(QString("Observed %1, received %2. %3 sensor%4. Last position remains historical evidence.")
                     .arg(qulonglong(c.observedTurn)).arg(qulonglong(c.deliveryTurn))
                     .arg(c.sensor==ContactSensor::Active?"Active":"Passive").arg(c.jammed?"; interference reduced quality":""));
-                if(col==0) item->setData(Qt::UserRole,c.fleet); table->setItem(row,col,item);
+                if(col==0) item->setData(Qt::UserRole,c.fleet);
             }
-            if(c.fleet==id) table->selectRow(row);
+            if(c.fleet==id) selectedRow=row;
         }
+        if (selectedRow>=0) table->setCurrentCell(selectedRow,0);
+        else { table->clearSelection(); table->setCurrentCell(-1,-1); }
         status->setText(QString("%1 received contacts • %2 retained tracks • %3 dated positions. Probable = area/estimate; confirmed = localized owner; identified = hull classes and count.").arg(contacts.size()).arg(active).arg(stale));
         locate->setEnabled(table->currentRow()>=0);
     };
-    auto* timer=new QTimer(dialog); timer->setInterval(500); connect(timer,&QTimer::timeout,dialog,refresh); timer->start();
+    auto* timer=new QTimer(dialog); timer->setObjectName("intelligenceRefreshTimer"); timer->setSingleShot(true);
+    connect(timer,&QTimer::timeout,dialog,refresh);
+    const auto schedule = [dialog,timer] {
+        if (dialog->isVisible() && !timer->isActive()) timer->start(0);
+    };
+    connect(this,&MainWindow::controlsChanged,dialog,schedule);
+    connect(this,&MainWindow::routeProgramContextChanged,dialog,[schedule,table](bool reset) {
+        if (reset) {
+            const QSignalBlocker blockSelection(table);
+            table->clearSelection(); table->setCurrentCell(-1,-1);
+        }
+        schedule();
+    });
     connect(table,&QTableWidget::itemSelectionChanged,dialog,[table,locate]{locate->setEnabled(table->currentRow()>=0);});
     dialog->show(); refresh();
 }

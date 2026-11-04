@@ -23,7 +23,7 @@ int main()
     assert(initialHistory.size() == 1);
     assert(initialHistory.front().turn == 1);
     assert(initialHistory.front().colonies == 1);
-    assert(initialHistory.front().population == 1'000'000);
+    assert(initialHistory.front().population == 25'000);
     assert(initialHistory.front().factories == 4);
     assert(initialHistory.front().fleets == 1);
     assert(initialHistory.front().ships == 1);
@@ -41,7 +41,7 @@ int main()
     assert(close(initialHistory.front().minerals.ironium, 100.0));
     assert(initialHistory.front().colonyHistory.size() == 1);
     assert(initialHistory.front().colonyHistory.front().planet == state.planets.front().id);
-    assert(initialHistory.front().colonyHistory.front().population == 1'000'000);
+    assert(initialHistory.front().colonyHistory.front().population == 25'000);
     assert(close(initialHistory.front().extraction.ironium, 0.0));
     assert(!initialHistory.front().extractionRecorded);
     assert(!initialHistory.front().freightRecorded);
@@ -53,7 +53,7 @@ int main()
     assert(first.turn == 2);
     assert(first.players.front().history.size() == 2);
     assert(first.players.front().history.back().turn == 2);
-    assert(first.players.front().history.back().population > 1'000'000);
+    assert(first.players.front().history.back().population > 25'000);
     assert(first.players.front().history.back().population
         == replay.players.front().history.back().population);
     assert(close(
@@ -197,10 +197,12 @@ int main()
 
     // Only delivered player-visible reports become compact history markers.
     auto briefing = state;
+    briefing.planets.front().population=6000; briefing.planets.front().industry=0;
+    briefing.planets.front().habitability=0;
     briefing.players.push_back({2, "Visitors", {}});
     suns::record_empire_turn_statistics(briefing);
     briefing.players.front().technology.progress[
-        static_cast<std::size_t>(suns::ResearchField::Electronics)] = 17;
+        static_cast<std::size_t>(suns::ResearchField::Electronics)] = 49;
     const auto* homeStar = suns::find_star(briefing, briefing.planets.front().star);
     assert(homeStar);
     suns::queue_player_report(briefing, 1, suns::PlayerReportKind::ColonyFounded,

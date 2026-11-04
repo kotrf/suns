@@ -48,18 +48,9 @@ struct RouteProgramDisplayRow {
     std::uint8_t warp{};
     bool active{};
     QString eta;
-    QString fuelUsed;
-    QString fuelRemaining;
+    QString etaTooltip;
+    QString fuel;
     QString fuelTooltip;
-    bool fuelShortage{};
-};
-
-struct RouteProgramLegForecast {
-    std::optional<std::uint32_t> arrivalTurn;
-    std::optional<double> fuelUsed;
-    std::optional<double> fuelRemaining;
-    std::optional<std::uint32_t> fuelShortageTurn;
-    std::optional<double> fuelMinimum, fuelMaximum;
 };
 
 struct RouteProgramTargetOption {
@@ -90,10 +81,7 @@ public:
     [[nodiscard]] double selectedFleetOverdriveDamageForRouteProgram(std::uint8_t warp) const;
     [[nodiscard]] bool selectedFleetRepeatOrdersForRouteProgram() const;
     [[nodiscard]] QString selectedFleetRouteProgramSummary() const;
-    [[nodiscard]] QString selectedFleetRouteProgramForecast() const;
-    [[nodiscard]] QString selectedFleetWaypointFuelWarning(
-        std::uint8_t warp, FleetId targetFleet, FleetArrivalAction action,
-        std::optional<Position> coordinateDestination = std::nullopt) const;
+    [[nodiscard]] QString selectedFleetRouteProgramEstimate() const;
     [[nodiscard]] std::vector<RouteProgramDisplayRow> selectedFleetRouteProgramRows() const;
     [[nodiscard]] std::vector<Position> selectedFleetRouteProgramPolyline() const;
     [[nodiscard]] std::vector<FleetId> availableFleetTargetsForRouteProgram() const;
@@ -208,7 +196,7 @@ public:
     void installPlanetaryEngineering();
     bool queueUnknownObjectApproach(UnknownObjectId,bool study);
 
-    // Ordered colony build list with completion forecasts and move controls.
+    // Ordered colony build list with current costs and move controls.
     void installProductionQueue();
 
 signals:
@@ -234,7 +222,7 @@ private:
     void showMapFleetPicker(const QVariantList& fleets, const QPoint& position, bool target, bool quick);
     void queueMapLabelRefresh();
     void refreshMapLabels();
-    void updateControls();
+    void updateControls(bool refreshReceivedState = true);
     [[nodiscard]] const GameState& movementPlanningPreview() const;
     [[nodiscard]] const GameState& fleetPlanningState() const;
     void refreshShipDesignChoices();
@@ -339,23 +327,18 @@ private:
 
     GalaxyConfig galaxyConfig_;
     GameState state_;
-    TurnProcessor processor_;
     std::uint64_t planningRevision_{};
     std::uint64_t renderedPlanningRevision_{std::uint64_t(-1)};
     std::optional<FleetId> renderedFleetSelection_;
     mutable std::uint64_t movementPreviewRevision_{std::uint64_t(-1)};
     mutable PlayerId movementPreviewPlayer_{};
     mutable std::optional<GameState> movementPreview_;
+    mutable std::uint64_t movementPreviewBuildCount_{};
     mutable std::optional<GameState> receivedPlayerState_;
     mutable std::uint64_t receivedPlayerRevision_{std::uint64_t(-1)};
     mutable PlayerId receivedPlayerId_{};
     mutable std::uint64_t fleetPlanningRevision_{std::uint64_t(-1)};
     mutable std::optional<GameState> fleetPlanningState_;
-    mutable std::uint64_t routeEtaRevision_{std::uint64_t(-1)};
-    mutable FleetId routeEtaFleet_{};
-    mutable std::vector<RouteProgramLegForecast> routeLegForecasts_;
-    mutable QString waypointFuelKey_;
-    mutable QString waypointFuelWarning_;
     PlayerOrders pendingOrders_{1, {}};
     SessionMode sessionMode_{SessionMode::Solo};
     std::vector<EmpireSetup> empireSetups_;
@@ -477,6 +460,7 @@ private:
         std::uint64_t ruinedFactories{};
         std::uint64_t ruinedMines{};
         std::uint32_t cleanupUnits{};
+        std::uint32_t upgradeFactories{}, upgradeMines{};
     } productionControls_;
 };
 

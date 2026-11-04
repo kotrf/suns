@@ -134,3 +134,15 @@ Specialist remain reserved, unavailable choices rather than placeholder bonuses.
 
 The Qt setup dialog calls `generate_campaign`; race mechanics and research
 validation live in the core and apply identically to every player.
+
+## Stars! surface growth (4 November 2026 follow-up)
+
+[Economy/population contract](economy-rebalance.md#surface-population-follow-up-4-november-2026)
+supersedes the earlier population-rule descriptions above: normal new homeworlds
+start at 25,000, ideal capacity is 1,000,000 and racial maximum growth is editable
+1–20% (default 15%). Full growth lasts through 25% capacity; thereafter quadratic
+crowding applies, with red-world and overcrowding mortality. Surface factories
+do not set birth rate. Hull access still does not grant full Stars! PRT effects;
+orbital habitat support/growth stays separate. Save v112 stores racial rates,
+orders stay v49; race files write v3 and read v1/v2 as implicit 10% maximum.
+Old counts, cargo and ledgers are retained; subsequent turns use the new curve.

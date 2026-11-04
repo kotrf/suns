@@ -43,14 +43,14 @@ int main()
     assert(mined.boranium > 0.0);
     assert(mined.germanium > 0.0);
 
-    // One Mine contributes exactly 0.75 extraction units, still scaled by the
+    // One Mine contributes exactly 1.0 extraction units, still scaled by the
     // immutable geological concentration of each mineral.
     auto withMine = earth;
     ++withMine.mines;
     const auto minedWithMine = suns::projected_mineral_mining(state, withMine);
-    assert(close(minedWithMine.ironium - mined.ironium, concentration.ironium * 0.75 / 100.0));
-    assert(close(minedWithMine.boranium - mined.boranium, concentration.boranium * 0.75 / 100.0));
-    assert(close(minedWithMine.germanium - mined.germanium, concentration.germanium * 0.75 / 100.0));
+    assert(close(minedWithMine.ironium - mined.ironium, concentration.ironium * 1.0 / 100.0));
+    assert(close(minedWithMine.boranium - mined.boranium, concentration.boranium * 1.0 / 100.0));
+    assert(close(minedWithMine.germanium - mined.germanium, concentration.germanium * 1.0 / 100.0));
 
     const auto* scout = suns::find_ship_design(state, suns::kScoutDesignId);
     assert(scout != nullptr);
@@ -67,9 +67,9 @@ int main()
     const auto built = processor.process(state, {buildFactory});
     assert(built.planets.front().industry == state.planets.front().industry + 1);
     assert(built.planets.front().productionQueue.empty());
-    assert(close(built.planets.front().minerals.ironium, 100.0 + beforeMining.ironium - 2.0));
-    assert(close(built.planets.front().minerals.boranium, 100.0 + beforeMining.boranium - 1.0));
-    assert(close(built.planets.front().minerals.germanium, 100.0 + beforeMining.germanium - 2.0));
+    assert(close(built.planets.front().minerals.ironium, 100.0 + beforeMining.ironium));
+    assert(close(built.planets.front().minerals.boranium, 100.0 + beforeMining.boranium));
+    assert(close(built.planets.front().minerals.germanium, 100.0 + beforeMining.germanium - 4.0));
 
     // Mine construction uses the same production queue and material gating.
     // Mining happens before production, so the newly completed Mine must not
@@ -84,9 +84,9 @@ int main()
     const auto mineBuilt = processor.process(mineState, {buildMine});
     assert(mineBuilt.planets.front().mines == minesBefore + 1);
     assert(mineBuilt.planets.front().productionQueue.empty());
-    assert(close(mineBuilt.planets.front().minerals.ironium, 100.0 + constructionTurnMining.ironium - 1.0));
-    assert(close(mineBuilt.planets.front().minerals.boranium, 100.0 + constructionTurnMining.boranium - 2.0));
-    assert(close(mineBuilt.planets.front().minerals.germanium, 100.0 + constructionTurnMining.germanium - 1.0));
+    assert(close(mineBuilt.planets.front().minerals.ironium, 100.0 + constructionTurnMining.ironium));
+    assert(close(mineBuilt.planets.front().minerals.boranium, 100.0 + constructionTurnMining.boranium));
+    assert(close(mineBuilt.planets.front().minerals.germanium, 100.0 + constructionTurnMining.germanium));
 
     // On the following turn the completed Mine contributes to extraction.
     const auto nextTurnMining = suns::projected_mineral_mining(mineBuilt, mineBuilt.planets.front());
@@ -112,17 +112,17 @@ int main()
     assert(blocked.planets.front().productionQueue.size() == 1);
     assert(blocked.planets.front().productionQueue.front().remainingCost == 0);
 
-    // Mines obey the same atomic mineral gate. With zero population there is no
+    // Advanced mines obey the atomic mineral gate. With zero population there is no
     // incidental mining. Pre-completed work precisely tests the I1/B2/G1 bill.
     auto mineStarved = suns::make_demo_game();
     mineStarved.planets.front().population = 0;
     mineStarved.planets.front().industry = 5;
     mineStarved.planets.front().minerals = {};
-    mineStarved.planets.front().productionQueue = {{suns::ProductionKind::Mine, 0}};
+    mineStarved.planets.front().productionQueue = {{suns::ProductionKind::AdvancedMine, 0}};
     const auto blockedMine = processor.process(mineStarved, {});
     assert(blockedMine.planets.front().mines == 0);
     assert(blockedMine.planets.front().productionQueue.size() == 1);
-    assert(blockedMine.planets.front().productionQueue.front().kind == suns::ProductionKind::Mine);
+    assert(blockedMine.planets.front().productionQueue.front().kind == suns::ProductionKind::AdvancedMine);
     assert(blockedMine.planets.front().productionQueue.front().remainingCost == 0);
 
     auto suppliedMine = blockedMine;

@@ -99,7 +99,7 @@ void MainWindow::installPlanetaryEngineering()
             if(owner) {
                 const auto report=std::find_if(owner->surveyKnowledge.begin(),owner->surveyKnowledge.end(),[&](const auto& k){return k.star==p->star;});
                 if(report!=owner->surveyKnowledge.end() && report->planetSnapshot)
-                    text+=QString("Received baseline: year %1 (age %2). Pending orders and completion/effect estimates are forecasts.\n")
+                    text+=QString("Received baseline: year %1 (age %2). Pending orders are shown below.\n")
                         .arg(qulonglong(report->observedTurn)).arg(qulonglong(known.turn-std::min(known.turn,report->observedTurn)));
             }
             text+=QString::fromStdString(engineering_block_name(engineering_block(known,*p)));
@@ -107,13 +107,8 @@ void MainWindow::installPlanetaryEngineering()
                 .arg(e.invested.ironium,0,'f',1).arg(e.invested.boranium,0,'f',1).arg(e.invested.germanium,0,'f',1)
                 .arg(p->minerals.ironium,0,'f',1).arg(p->minerals.boranium,0,'f',1).arg(p->minerals.germanium,0,'f',1);
             if(!planetary_engineering_available(known,p->owner,kind) && !complete) text+=kind==PlanetaryEngineeringKind::OrbitalHabitat?"\nRequires Construction 18, Energy 16 and Biology 14.":kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"\nRequires Energy 18, Construction 18 and delivered completed Compact remnant field research.":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"\nRequires Energy 16 and Construction 16.":"\nRequires Energy 14 and Construction 14.";
-            if(existing && !complete && engineering_scheduled(*p)) {
-                const auto forecast=forecast_production_queue(known,*p,p->productionQueue,128,firstTurnMining);
-                const auto item=std::find_if(p->productionQueue.begin(),p->productionQueue.end(),[](const auto& q){return engineering_kind(q.kind);});
-                const auto index=std::size_t(item-p->productionQueue.begin());
-                text+=forecast[index].completionTurn?QString("\nEstimated completion: year %1, using current supplies and technology.").arg(qulonglong(*forecast[index].completionTurn))
-                    :"\nNo completion within the 128-year forecast with current supplies and technology.";
-            }
+            if(existing && !complete && engineering_scheduled(*p))
+                text+="\nScheduled in production queue. Progress is resolved each turn from output, queue priority and supplies.";
         } else {
             const auto* owner=find_player(known,pendingOrders_.player);
             const auto intel=owner?std::find_if(owner->surveyKnowledge.begin(),owner->surveyKnowledge.end(),[&](const auto& k){return k.star==p->star;}):std::vector<SystemSurveyKnowledge>::const_iterator{};

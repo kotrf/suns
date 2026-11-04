@@ -66,7 +66,7 @@ Planet after_ordinary_mining(const GameState& state,const Planet& planet,
     // Queue forecasts already perform this phase and call the service resolver
     // directly, so they must not use this helper and mine a second time.
     auto forecast=planet;
-    const auto mined=firstTurnMining.value_or(projected_mineral_mining(state,forecast));
+    const auto mined=firstTurnMining ? *firstTurnMining : projected_mineral_mining(state,forecast);
     forecast.minerals.ironium+=mined.ironium;
     forecast.minerals.boranium+=mined.boranium;
     forecast.minerals.germanium+=mined.germanium;

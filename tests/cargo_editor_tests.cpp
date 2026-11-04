@@ -236,17 +236,17 @@ int main(int argc, char** argv)
     assert(transfer.source.planet == 1 && transfer.destination.fleet == 1);
     assert(transfer.colonists == 100 && transfer.minerals.ironium == 1);
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -100 / +0"));
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 999900"));
-    // The growth display is an explicit one-rate estimate, not a simulated
-    // End Turn. Its percentage is anchored to the *confirmed* population and
-    // its next-year estimate to the *after-cargo* population.
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 24900"));
+    // One scalar estimate uses confirmed conditions and after-cargo density;
+    // End Turn, future arrivals and production are not simulated.
     {
         const auto& baseline = suns::MainWindowTestAccess::state(window);
         const auto& planet = baseline.planets.front();
         const auto growth = suns::projected_population_growth(baseline, planet, baseline.turn);
         const double rate = static_cast<double>(growth) / planet.population;
-        const auto estimated = static_cast<std::int64_t>(std::llround(999900.0 * rate));
-        const auto nextPopulation = static_cast<std::uint64_t>(999900 + estimated);
+        auto afterCargo=planet; afterCargo.population=24900;
+        const auto estimated=suns::projected_population_growth(baseline,afterCargo,baseline.turn);
+        const auto nextPopulation = static_cast<std::uint64_t>(24900 + estimated);
         const auto info = suns::MainWindowTestAccess::systemInfo(window);
         assert(info.contains(QString("Current estimated annual growth: %1%2%")
             .arg(rate >= 0.0 ? "+" : "").arg(rate * 100.0, 0, 'f', 2)));
@@ -267,7 +267,7 @@ int main(int argc, char** argv)
         const auto* surfaceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
         const auto* manifestAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
         assert(destinationPeople && destinationPeople->value() == 200);
-        assert(surfaceAfter && surfaceAfter->text().contains("999900"));
+        assert(surfaceAfter && surfaceAfter->text().contains("24900"));
         assert(manifestAfter && manifestAfter->text().contains("colonists 200"));
         dialog->reject();
     });
@@ -305,7 +305,7 @@ int main(int argc, char** argv)
     window.openCargoManifestDialog();
     assert(suns::MainWindowTestAccess::orders(window).orders.size() == 1);
     assert(suns::MainWindowTestAccess::systemInfo(window).contains("Queued cargo: -2500 / +0"));
-    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 997500"));
+    assert(suns::MainWindowTestAccess::systemInfo(window).contains("population after validated orders: 22500"));
     QTimer::singleShot(0, [&] {
         auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
         assert(dialog);
@@ -313,7 +313,7 @@ int main(int argc, char** argv)
         const auto* sourceAfter = dialog->findChild<QLabel*>("cargoSourceAfterLabel");
         const auto* destinationAfter = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
         assert(destination && destination->value() == 2500 && destination->maximum() == 2500);
-        assert(sourceAfter && sourceAfter->text().contains("997500"));
+        assert(sourceAfter && sourceAfter->text().contains("22500"));
         assert(destinationAfter && destinationAfter->text().contains("colonists 2500"));
         dialog->reject();
     });

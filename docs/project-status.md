@@ -1,5 +1,395 @@
 # Project status and development handoff
 
+## Stars! starting population and growth follow-up — 4 November 2026
+
+The user extended [#278](https://github.com/kotrf/suns/pull/278) with ordinary
+Stars! surface demographics. New homeworlds start at **25,000**, with the existing
+four basic factories producing **29 resources**. Ideal capacity is **1,000,000**;
+racial maximum growth is configurable **1–20%**, new default **15%**. Full growth
+through 25% capacity, then the quadratic factor `(16/9)*(1-density)^2`, red-world
+mortality and capped overcrowding losses use a shared bounded integer function.
+No minimum one-person birth is invented; natural mortality preserves 100-person
+colonies. See [the contract](economy-rebalance.md) for rounding and all limits.
+
+- Current UI growth and after-cargo next-year figures use the same scalar rule,
+  with no turn simulation. Capacity labels use the same 5% habitability floor.
+- Race designer, campaign slot, portable race, host/player save and reload→New
+  galaxy retain the racial rate. That restart path also now retains the six
+  research-cost choices introduced by this PR.
+- Save **v112** appends validated POPR after v111 ECON; orders remain **v49**.
+  Race files write **v3**, read v1/v2/v3. Older formats default to their implicit
+  10% rate, retaining every stored population/cargo/ledger/RP/paid-work value.
+  Subsequent years use the new density model; an already crowded old world may
+  lose people on End Turn, with no load-time truncation.
+- An actual original-v111 writer at source `109afca` generated the synthetic
+  million-person fixture with advanced subsets, partial work, RP and ledger.
+  Provenance/hash are in tests/fixtures. v110 fixture and v107 hash stay checked.
+- Normal population is tested at/below/above 25%, 50%, 75%, capacity and 2x/4x/8x
+  capacity, plus positive/zero/red hab, minimum, custom races, received views,
+  real End Turn and extreme stored counts. Real race UI/file/campaign/restart and
+  malformed POPR/race inputs are covered.
+
+The original Player's Guide and public Craig Stars code are the references; the
+original executable was not run. Advanced racial PRT effects, Accelerated BBS,
+orbital habitat demographics and other ship/project recipes are outside this
+population change. Whole-campaign balance and native Windows Qt remain manual
+acceptance items. #278 is still stacked on open #277; neither is merged here.
+The earlier source `109afca` passed CI 41839840687; the new published head needs
+its own CI. Full GCC14.2 / Qt6.8.2 Debug app/test build and **117/117
+CTest passed (132.58 s, -j4)** on the final code. The initial demographic changes
+required explicit mature/funded fixtures for expensive ship/lab construction,
+new-start cargo expectations, the 18th campaign column and a corruption test
+addressing SMIN rather than the last byte of the whole file. All original paid,
+knowledge, replay and transport assertions are retained. Race-editor growth and
+Research/Production layouts were rendered and inspected. No private saves or
+screenshots are committed.
+
+
+## Population economy and Stars! research (#276) — 4 November 2026
+
+The user approved implementing #276 and explicitly selected Stars! research
+pricing in the same slice. Branch `codex/economy-research-276` is based on
+**a1a5b87916dbdf9a8f0d6724b058d15c38afc17f**, the still-unmerged #277 source.
+This is a separate stacked PR: merge #277 first and then retarget this branch
+onto main. No merge is authorized by this implementation request.
+
+- Population produces one resource per 1000 residents. Basic/advanced factories
+  and mines share their type's workforce cap; advanced buildings operate first.
+  Direct advanced construction and paid basic upgrades have identical total
+  bills. Basic mines require no minerals. Growth remains factory-independent.
+  [The contract](economy-rebalance.md) records all initial recipes and boundaries.
+- Research uses the 1–26 Stars! base table, +10 per known level, racial field
+  factors 50/100/175%, and optional doubled slow tech. Every overflow/ordinary,
+  precursor and delivered-data path uses the shared current price. Legacy levels
+  above 26 and per-field RP are retained; a capped focus falls through its queue
+  and then the lowest unfinished field. Full research reserves no allocation.
+- Race/campaign editors and race v2 persist each field's setting; v1 defaults to
+  Normal. Research plan prices remain one bounded pass over projected **levels**;
+  production estimates track known count/upgrade eligibility without annual UI
+  simulation. Production, current extraction and selected-colony counts show both
+  tiers through received owner observations.
+- Richer income exposed mineral starvation in the civilian AI: endless factories
+  consumed the intended colonizer's Germanium. Development now uses capped,
+  affordable batches and population-scaled mining, saves that civilian bill,
+  considers forward docks before unlimited factories, and upgrades working
+  buildings. Military selections use ordinary paid queues, which may wait for
+  minerals. Late engineering/probe decisions canonicalize the received view by
+  stable IDs so input storage order cannot change orders or decision history.
+- Save **v111**, orders **v49**, race **v2**. ECON follows #277's v110 SURF and
+  preserves physical/received/pending advanced subsets plus racial costs. Old
+  buildings load basic; four more remaining factory resources preserve old paid
+  work at the new price 10. Templates/annual rules migrate consistently; old
+  stocks, population, technology, RP and historical ledgers are retained.
+
+Full GCC14.2 / Qt6.8.2 Debug build and **117/117 offscreen CTest passed (138.77 s)**.
+Checks include exact reference prices/factors/overflow/cap, real resource debits
+for repeated advanced/upgrading units, no-ore mines, common workforce/idle/capture
+bounds, host/player/order round trips, hidden-upgrade byte invariance and corrupt
+ECON rejection. A genuine writer from #277 produced the synthetic v110 migration
+fixture with partial work, templates and received evidence; its source and hash
+are recorded under tests/fixtures. The real v107 writer hash still matches.
+No private game or screenshot is committed.
+
+The fair AI's three fixed-seed 120-year scenarios retain development, fuel,
+replay and shuffled-input assertions; each narrow race is now explicitly given
+one nearby viable frontier in physical setup. The combat/landing fixture keeps
+its small defender's population fixed. These isolate policy/simulation contracts;
+they do not assert campaign balance or future conquests on arbitrary maps.
+Production/Research/race layouts were rendered and inspected; real UI Add,
+reservation, End Turn and scalar estimates pass. Native Windows Qt was not run.
+The million-person start now yields 1004 resources with four basic factories;
+new/continued campaign pacing still needs play acceptance. PR/source CI on GitHub
+is authoritative; this branch is not merged. Independent #267 and frozen
+project directions remain separate.
+
+## Mini-2: received radar and mineral-stock bars — 4 November 2026
+
+User authorized completing all remaining Mini-2 notes, including newly added
+items 5–6. Items 1–4 are already merged in #274 and #273 is completed. Work uses
+the existing repository, branch codex/mini-2-radar-minerals, verified main
+4b4ec170775673183f27e1e9c3ee89ecf4c558d7 (tree
+155c5617cc562638afc2b51bb387af3464dfeebe). Tracking
+[#275](https://github.com/kotrf/suns/issues/275), [contract](mini-2.md).
+
+System Details shows received None/Local/Full planetary radar and nominal range,
+with unknown distinct from confirmed absence. Mineral rows share a clickable kt
+scale and paint light stocks, dark current extraction and an independently scaled
+concentration diamond. Exact tooltips and visible report age distinguish dated,
+zero and unknown stocks. The Minerals table now includes known uncolonized stocks.
+Both panels reuse player/planning caches; current mining is an algebraic pass over
+received/accepted stacks, with the colony's pre-Cargo workforce phase preserved.
+
+Ordinary surface evidence is independently dated in survey snapshots. Annual
+post-mining/cargo observations refresh already orbitally surveyed worlds without
+a scanner, preserve the original exploration rules, use the existing delayed
+outbox and preserve Passive/Silence. Older packets cannot roll back final stock;
+foreign supplies and exotic discoveries remain private. Save v110 appends bounded
+SMIN evidence after the unchanged v109 bodies; older saves remain readable and
+orders stay v48. Player packets retain received evidence and redact in-flight stock
+reports. The old workforce migration fixture still validates its original v107
+body hash; its tail lookup now tolerates later extensions.
+
+Validation: full GCC14.2/Qt6.12 Debug build and **115/115 CTest in 83.14 s**
+passed. Coverage includes radar Local/None/unknown and hidden receiver changes,
+known-zero/unknown/dated uncolonized stocks in the real UI, scannerless mining
+reports with unchanged exploration prerequisites, out-of-order evidence, Passive
+hold/coalescing/transmission, stock-scale keyboard/button control, accepted Cargo,
+host/player round trips, v109 migration and invalid/truncated evidence. Existing
+workforce v107 migration hash and all prior regressions still pass. The actual
+System Details window was inspected at 1366×900 and 1000×700.
+
+Ready for review; use linked GitHub #275 for the current PR/head and CI. Leave the
+new PR unmerged for review. The frozen gameplay issues and deferred AI work remain
+outside this slice.
+
+## Mini-2: four approved interface/platform improvements — 4 November 2026
+
+The user explicitly approved implementing all four accumulated notes; the prior
+collect-only instruction is superseded for this slice. Existing codex/mini-2 is
+based on merged main 317a23607642e6c5698cfeb5141c8028d3c37f14, tree
+48678d13201f28101420f838ec841b4fe15d8f72. #272 is merged and #270/#271 completed.
+Tracking: [#273](https://github.com/kotrf/suns/issues/273), [contract](mini-2.md).
+
+- Selected route geometry remains without map waypoint numbers; numbered table
+  rows and the map-coordinate marker retain their editing roles.
+- Station's icon-only 28×28 button shares the 84-pixel portrait header at its
+  upper right, saving the previous separate row. Tooltip, click and received
+  fitting/hidden-state semantics are preserved.
+- Windows RC embeds a seven-size ICO; Qt application/window icons use embedded
+  PNGs and explicit static-resource linkage. Linux gets hicolor SVG/PNG assets,
+  suns.desktop, matching desktop-file identity and CMake install rules. QSettings
+  identity is unchanged; custom Qt install runpaths remain usable.
+- Fuel ≈ gives nominal per-leg mg at each Warp/current received or accepted
+  manifest. The existing direct-distance formula is bounded by rows/stacks, not
+  years. Later costs become unknown after load/position/composition changes;
+  refuelling alone preserves burn but not completion dates. No future tank,
+  shortage, scooping/regeneration or cloud forecast, annual simulation or workers.
+
+Focused checks pass: actual UI icons at seven sizes; station geometry, live
+click/fitting and delayed intel; map trajectory without numbers; current fuel
+with Warp/cargo table refresh, real-turn billing/annual-rounding comparison,
+conditional unknowns and hidden-manifest invariance. A synthetic station/route
+render was inspected. Warm Debug row queries during a build measured 0.1027 ms
+for five legs and 19.2521 ms for 1000; this is not a complete click benchmark.
+
+Staged Linux install, installed-app smoke without SDK activation and
+desktop-file-validate pass. MinGW windres 2.44 compiled the configured RC and ICO
+into a resource-only Windows PE, with seven RT_ICON entries and RT_GROUP_ICON 1.
+A full native Windows Qt build/runtime was not executed here. Assets are
+committed, so normal builds require no artwork tools/SVG runtime plugin.
+Core rules, command delivery, balance and save v109/orders v48 are unchanged.
+Full GCC14.2/Qt6.12 Debug build and **114/114 offscreen CTest passed (79.22 s)**,
+including the pre-existing mining/Stop packet, hidden-refuel and gate invariants.
+Diff check is clean. Only existing Qt QDragEnterEvent deprecation/old nodiscard
+warnings appeared; this slice adds no new warnings. New PR/source/CI are recorded
+on GitHub; this implementation awaits review and is not merged.
+Independent #267 remains outside this slice; frozen directions stay frozen.
+
+## PR #272 review: keep Stop cancellation before mining — 3 November 2026
+
+[One P2 on source 724ef9e](https://github.com/kotrf/suns/pull/272#discussion_r4460217935)
+was reproduced with the real UI and TurnProcessor: deleting queued Stop lost
+its cancellation of already sent navigation. A six-year Move packet issued at
+T1 survives when a relay resumes at T2 and new commands become instantaneous;
+native mining starts, but the old Move later cancels it and takes the ship away.
+
+Start now deduplicates only unsent mining orders, preserving Stop before the
+new native task. An already sent Stop is reissued before mining if it would
+otherwise arrive later. A subsequent Stop removes unsent mining, including when
+replacing an earlier Stop in-place. The summary resolves final queued task order
+and describes cancellation followed by work rather than incorrectly promising
+No Task. Cancellation remains an ordinary physical command; no core rules,
+formats, emissions, communication delays or annual UI estimates changed.
+
+The new regression failed against the original app library on the surviving
+pendingCommands assertion. After the fix it passes real UI Stop/Start through
+T9, past the old delivery boundary, with mining and position retained; a control
+without Stop reproduces escape/No Task. Additional cases cover a Stop already
+in flight, last-click Stop, no artificial waypoint and actual paired-order
+serialization/descriptions. Full GCC14.2/Qt6.12 Debug build and **114/114
+offscreen CTest passed (82.09 s)**, including existing route, communication,
+strategic-work, recycling and scanner-coverage suites. Diff check is clean;
+no new build warnings. Prior source 724ef9e CI is separate evidence, not a
+claim for this revision; see GitHub for the updated source and new CI.
+
+Start work here and Stop work / route remain explicit controls: changing the
+action selector is a draft; Stop also cancels travel and older packets. Mini-2
+currently contains four accumulated notes in Notion (remove map numbers, compact
+station button, platform icons/desktop entry, cheap per-leg fuel estimates);
+implementation was not requested and none is included in this review fix.
+Current branch is codex/mining-map-coverage, PR #272 awaits repeat review/unmerged.
+
+## Stationary mining and scanner coverage — 3 November 2026
+
+Current base is main e2211cd48cf8a7075608b6f1b78c1719e645e44b after merged #269;
+#268 is completed. Its separate main CI 41643240035 succeeded. The older open-PR
+checkpoints below are historical; independent documentation PR #267 remains open.
+
+Issues [#270](https://github.com/kotrf/suns/issues/270) and
+[#271](https://github.com/kotrf/suns/issues/271) are implemented in the existing
+codex/mining-map-coverage branch. Start mining here stages the existing native
+SetRemoteMiningOrder instead of a fake arrival waypoint at the fleet's position.
+It validates equipment and received world ownership, replaces repeated unsent
+mining/Stop intent in the right order, and retains physical command delivery and
+emission settings. Route summary distinguishes queued/in-flight work and explains
+that extraction accumulates on the planet's surface, not aboard the miner.
+Ordinary arrival mining still starts output in the annual phase after arrival.
+The reported earlier lost arrival order was not separately reproduced: synthetic
+UI Add-waypoint and edited-leg orders survive travel and communication delays.
+
+Numbered route labels now have a fixed 10-pixel font, ignore map transforms and
+pass mouse clicks. Default sensor coverage merges ship scanners and planetary
+radar into one faint blue fill, with a stronger blue penetrating-scanner layer.
+The map previously never drew penetrating coverage. Each type uses one winding
+path/no pen: overlap does not accumulate opacity or cancel duplicate circles.
+Optional passive/emission layers also merge; Sensors hides all layers. Geometry
+uses received player data, reported interference and received emission settings,
+without host jammer queries, boolean unions, annual forecasts or gameplay changes.
+User chose this simpler map presentation explicitly (MEM-33).
+
+Full GCC14.2/Qt6.12 Debug build and **114/114 offscreen CTest passed (82.39 s)**.
+The new native-order assertion failed against the original app library before
+the fix. Actual UI buttons/edited legs feed real TurnProcessor calls, including
+local and delayed starts, arrival, persistent output, Stop/Start order precedence,
+existing orders serialization, equipment/world validation, unknown ownership and
+hidden-ownership invariance. Fixed route-label device size is checked at four
+zooms. Coverage tests paint real graphics paths and compare pixels in single and
+overlapping areas, including duplicate discs, reported interference, emissions,
+missing penetration, hidden-state invariance, input transparency and visibility.
+The existing map selection, route, mining and recycling suites also pass.
+A local synthetic map render was visually inspected; no private screenshot or
+save is committed. Diff check is clean; final build introduced no new warnings.
+All new fixtures are synthetic; private save contents are not published.
+Save v109/orders v48, core turn rules and minimal realtime estimates remain unchanged.
+New source head, PR and CI are authoritative on GitHub; this branch awaits review.
+
+## PR #269 review: skipped production rows — 3 November 2026
+
+Review of 62f0e93 identified one P2: the minimal queue estimate charged known
+skipped work to later rows. A legal template of 100 defenses followed by a Factory
+at Energy 0, or at the defense cap, predicted Factory T86 instead of T2. Both
+cases were independently reproduced using the original helper and one real
+resolve_colony_production call before the fix.
+
+The helper now receives the current received/planned colony and applies cheap
+resolver-equivalent technology/cap/radar/station skip checks before budgeting.
+Skipped rows have zero effective quantity/work and preserve prefix certainty.
+Manual defenses clamp to the remaining cap, including partial first-unit work;
+capped annual rules remain explicitly idle. Scalar defense/radar/station facts
+advance only after a confidently estimated prefix. Missing minerals/shipyards
+still block, and skipping a later row never clears an earlier unknown. The UI
+shows effective bills/work and Currently skipped; skipped stations do not create
+an estimated shipyard. No core, real-turn, save/orders or forecast policy change.
+
+Full GCC14.2/Qt6.12 Debug build and **112/112 offscreen CTest passed (37.07 s)**.
+New cases use exact mineral budgets and one real resolver call for the two legal
+template repros, annual cap persistence, partial/repeated capped defense batches,
+installed/duplicate radar and invalid stations. A real MainWindow production
+template test checks the Factory row is ~Turn 2 (+1). Huge-batch/overflow and
+unknown-prefix regressions still pass. Independent read-only review found no
+additional confirmed defect; diff check clean. Complexity remains one queue pass,
+without year/unit loops; previous private-save timings are not newly remeasured.
+
+Work stays on codex/ui-order-performance, PR #269 open/unmerged. The prior
+62f0e93 source CI 41599894742/job 125795896503 passed **112/112 (83.02 s)**,
+Qt6.12.0/GCC15.2, checkout/log verified; it does not validate this subsequent fix.
+Current source/CI are recorded on the PR. #267 remains independent; frozen
+directions and the minimal-estimate decision are unchanged.
+
+## Minimal realtime estimates — user decision, 3 November 2026
+
+The user explicitly prefers minimal, imperceptibly cheap estimates over detailed
+realtime forecasts, including background calculations. Rough population growth
+and distance/speed ETA are sufficient; actual outcomes resolve on End Turn.
+This supersedes the detailed background-forecast approach in the earlier #269
+checkpoint below. Work remains in the existing codex/ui-order-performance branch;
+PR #269/#268 stay open for review, not merged. Main is still 79d22c2; #267 is an
+independent open documentation restoration.
+
+Deleted the 96-year route simulation, QtCore worker manager, pending forecast
+states and Fuel/Left columns. Route rows/summary use cumulative distance/Warp²,
+marked ≈, received-derived positions and existing pending/sent route precedence.
+Conditional actions, moving targets, gates and wormholes leave later ETA unknown.
+The current accepted cargo/fleet projection replaces the disposable full-turn
+movement preview. It stays in the current year and credits no future generation
+or automatic service. Its dependencies include route edits/Stop, unlike the old
+logistics-filtered preview; stale route-cache retags were removed and tested.
+
+Production uses one pass over current work, net output and received mineral
+budget. Auto/nonlinear/blocked prefixes show Annual rule or no date. Removed
+future queue/service simulations from templates, engineering, resonance labs and
+mobile bases. Current rates, eligibility, costs, order validation and received
+knowledge remain. Bounded habitat-upkeep arithmetic derives current net rates
+on one local planet copy; it does not run future world turns. Real simulation
+and save v109/orders v48 are unchanged. [Current contract](minimal-ui-estimates.md)
+and durable decision MEM-32 explain the new boundary.
+
+Full GCC14.2/Qt6.12 Debug build and **112/112 offscreen CTest passed (39.76 s)**.
+Updated UI assertions distinguish nominal estimates from actual outcomes; exact
+EndTurn/logistics/knowledge/save assertions remain. New tests cover geometric
+routes beyond 96 years, received track projections/hidden invariance, sent
+command precedence, conditional unknowns, current-year manifests, static queue
+rates/mineral budgets, large batches and overflow.
+
+On the same private year-89/288-system/37-fleet save without concurrent builds:
+route summary **0.050 ms** synchronous; detailed 659fd9b needed **6.594 seconds
+background work** after Factory, now there is no such work. Paired foreground
+Factory **209 → 215 ms** (including queued GUI events): no claim of additional
+foreground improvement over that revision. Three real current clicks were
+**184 / 260 / 245 ms**, versus original main **8477 / 8216 / 8470 ms** before
+the broader #269 work. Settled idle CPU **5.4 ms / 2.1 s**, heartbeat **20.4 ms**;
+both modes use the same 500-ms layout settling floor. Save/readback passed and
+the supplied turn was never advanced/overwritten. Measurements are executor
+Debug results; private files remain untracked. PR #269 carries exact source/CI.
+
+#53/#63/auto-evacuation remain frozen; AI extensions postponed. Prior sections
+describe their historical checkpoints, including superseded forecast behavior.
+
+## Order-edit responsiveness #268 — 3 November 2026
+
+The user confirms system selection improved after merged #266, but adding a
+Factory still takes seconds, and requests broad UI optimization. Current work
+is `codex/ui-order-performance`, based on verified main
+`79d22c2ee18d140dcd404816e975c6a13990c483`. #265 is closed; main CI
+41538166676 completed successfully for that exact SHA. Documentation-only #267
+remains open and restores the older performance history; this task leaves its
+`docs/ui-performance.md` file untouched.
+
+Production/research-only edits now retain immediate physical projections and
+map items while invalidating annual route estimates correctly. Automatic route
+rows, candidate fuel warnings and the Forecast dialog use bounded cancellable
+QtCore workers with owned received snapshots, complete request identities and
+GUI-only publication. Superseded jobs, cache-hit reversions and invalid editor
+candidates cancel unnecessary work; stop/load/new world/turn/close join workers.
+Synchronous forecast APIs keep their exact existing simulation. Hidden Research
+is lazy; Intel/Computer tools refresh on coalesced events. Exact delay shortcuts,
+immutable snapshot-scoped communication graphs and lazy optional fallbacks
+remove additional repeated work. No gameplay or save v109/orders v48 change.
+
+Full GCC14.2/Qt6.12 Debug application/tests build succeeded;
+**111/111 Linux/offscreen CTest passed (37.95 s)**. Tests cover cache dependencies,
+fresh received knowledge, graph/export equivalence across scopes/threads, tool
+visibility/events, exact async/sync route parity, rapid edits, delayed commands,
+cache-hit cancellation and same-ID load/stop/close/destruction. Existing exact
+route editor ETA/fuel/action/color assertions now wait for async completion.
+Diff check passed. Uploaded saves/profiling files remain outside tracked files.
+
+Controlled real Factory Add clicks with the original active-route fleet on the
+user's year-89/288-system save: **8477 / 8216 / 8470 → 214 / 190 / 198 ms**, about
+40× lower foreground latency. Paired broader probe: original-fleet Factory
+**8046 → 219 ms**, fleet selection **1813 → 453 ms**, research allocation
+**808 → 207 ms**, load **8566 → 685 ms**. Necessary ETA work still takes about
+6.1 seconds in the background, with 21.4-ms longest heartbeat gap after Factory;
+idle CPU **76.8 → 7.2 ms / 2.1 s** after all forecasts settle. Save/readback
+passed without advancing or overwriting the original. Debug author measurements
+on this executor; no universal timing guarantee. [Mechanism, complete table and
+diagnostic](ui-order-performance.md). Source PR/CI tracked in
+[#268](https://github.com/kotrf/suns/issues/268); code awaits review/merge.
+
+#53/#63 and auto-evacuation stay frozen, AI extensions postponed. The active
+priority is user verification of responsiveness; no new gameplay slice selected.
+Older pending checkpoint sections below describe their original point in time.
+
 ## Late-campaign selection stalls #265 — 3 November 2026
 
 User reports severe system-selection stalls in the ongoing year 80–90 campaign,

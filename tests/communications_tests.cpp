@@ -94,6 +94,89 @@ void local_commands_remain_immediate()
     assert(moved.pendingCommands.empty());
 }
 
+void delay_only_queries_match_physical_routes_at_capital_fields()
+{
+    auto state = make_demo_game();
+    state.turn = 2;
+    auto& capital = state.planets.front();
+    capital.owner = 1;
+    capital.homeworld = true;
+    capital.population = 1000;
+    capital.radar = PlanetaryRadarLevel::Full;
+    const auto home = find_star(state, capital.star)->position;
+    if (!find_player(state, 2)) state.players.push_back({2, "Interference"});
+    const auto design = state.nextShipDesignId++;
+    state.shipDesigns.push_back({design, 2, "Receiver jammer", ShipHullType::Destroyer,
+        {ShipComponentType::FuelMizer, ShipComponentType::RhinoScanner, ShipComponentType::Jammer50}});
+    Fleet enemy;
+    enemy.id = state.nextFleetId++;
+    enemy.owner = 2;
+    enemy.design = design;
+    enemy.position = home;
+    enemy.ships = {{design, 1}};
+    state.fleets.push_back(enemy);
+    const auto jammer = enemy.id;
+
+    const auto compare = [&] {
+        const auto radius = planetary_radar_range(capital.radar);
+        for (const auto atTurn : {std::uint64_t(0), state.turn, state.turn + 2})
+            for (const auto position : {home, Position{home.x + radius, home.y},
+                     Position{home.x + radius - 0.0000001, home.y},
+                     Position{home.x + radius + 0.0000001, home.y},
+                     Position{home.x + radius + 0.001, home.y},
+                     Position{home.x + 500, home.y}}) {
+                const auto route = communication_route(state, 1, position, atTurn);
+                assert(communication_delay_turns(state, 1, position, atTurn)
+                    == route.propagationTurns + route.receiverDelay);
+            }
+    };
+    // A local root does not imply an interference-free instant link.
+    assert(communication_jamming_delay(state, 1, home, state.turn) > 0);
+    assert(communication_delay_turns(state, 1, home) > 0);
+    compare();
+    // Receiver identity may depend on root order when fields overlap. The
+    // delay-only shortcut must agree for both orders without changing routes.
+    auto overlapping = state;
+    auto extraStar = overlapping.stars.front();
+    extraStar.id = std::max_element(overlapping.stars.begin(), overlapping.stars.end(),
+        [](const auto& a, const auto& b) { return a.id < b.id; })->id + 1;
+    extraStar.position = {home.x + 160, home.y};
+    overlapping.stars.push_back(extraStar);
+    auto extraCapital = capital;
+    extraCapital.id = std::max_element(overlapping.planets.begin(), overlapping.planets.end(),
+        [](const auto& a, const auto& b) { return a.id < b.id; })->id + 1;
+    extraCapital.star = extraStar.id;
+    overlapping.planets.push_back(extraCapital);
+    for (int order = 0; order < 2; ++order) {
+        for (const auto position : {home, Position{home.x + 100, home.y},
+                 Position{home.x + 170, home.y}, Position{home.x + 500, home.y}}) {
+            const auto route = communication_route(overlapping, 1, position);
+            assert(communication_delay_turns(overlapping, 1, position)
+                == route.propagationTurns + route.receiverDelay);
+        }
+        std::reverse(overlapping.planets.begin(), overlapping.planets.end());
+    }
+    auto enemyFleet = std::find_if(state.fleets.begin(), state.fleets.end(),
+        [&](const auto& fleet) { return fleet.id == jammer; });
+    enemyFleet->electronics = {EmissionMode::RadioSilence, state.turn + 2};
+    assert(communication_delay_turns(state, 1, home) == 0);
+    assert(communication_delay_turns(state, 1, home, state.turn + 2) > 0);
+    compare();
+    capital.radar = PlanetaryRadarLevel::Local;
+    compare();
+    capital.radar = PlanetaryRadarLevel::None;
+    compare();
+    capital.radar = PlanetaryRadarLevel::Full;
+    capital.population = 0;
+    compare();
+    capital.population = 1000;
+    capital.homeworld = false;
+    compare();
+    capital.homeworld = true;
+    capital.owner = 2;
+    compare();
+}
+
 void homeworld_scanner_defines_the_initial_network_field()
 {
     auto state = generate_game(GalaxyConfig{});
@@ -528,6 +611,7 @@ int main()
 {
     colony_radar_bootstraps_detection_and_links();
     local_commands_remain_immediate();
+    delay_only_queries_match_physical_routes_at_capital_fields();
     homeworld_scanner_defines_the_initial_network_field();
     ordinary_scanners_automatically_form_a_relay_chain();
     penetrating_only_scanner_does_not_extend_the_network();

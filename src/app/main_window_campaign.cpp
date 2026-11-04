@@ -29,6 +29,8 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
+#include <memory>
 #include <tuple>
 
 namespace suns {
@@ -63,9 +65,9 @@ void MainWindow::newCampaign()
         "frontier travel still needs engines.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    QTableWidget table(8, 11, &dialog);
+    QTableWidget table(8, 18, &dialog);
     table.setObjectName("campaignEmpiresTable");
-    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k"});
+    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k", "Energy cost", "Propulsion cost", "Construction cost", "Electronics cost", "Biology cost", "Weapons cost", "Growth / year"});
     table.horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table.horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int row = 0; row < 8; ++row) {
@@ -111,6 +113,17 @@ void MainWindow::newCampaign()
             operation->setToolTip("Operating installations per 10,000 surface colonists. Factory and mine limits are independent; excess buildings remain idle.");
             table.setCellWidget(row, column, operation);
         }
+        for (int field = 0; field < int(kResearchFieldCount); ++field) {
+            auto* cost = new QComboBox(&table);
+            cost->setObjectName(QString("campaignResearchCost%1_%2").arg(row).arg(field));
+            cost->addItems({"Normal", "Cheap (50%)", "Expensive (175%)"});
+            table.setCellWidget(row, 11 + field, cost);
+        }
+        auto* growth = new QSpinBox(&table);
+        growth->setObjectName(QString("campaignPopulationGrowth%1").arg(row));
+        growth->setRange(1, 20); growth->setSuffix("%"); growth->setValue(kDefaultPopulationGrowthRate);
+        growth->setToolTip("Maximum annual surface growth; new homeworld population 25,000. Crowding starts above 25% capacity.");
+        table.setCellWidget(row, 17, growth);
         connect(hullAccess, &QComboBox::currentIndexChanged, &table, [&table, row](int index) {
             if (index == static_cast<int>(HullAccess::HyperExpansion))
                 qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->setChecked(true);
@@ -118,7 +131,7 @@ void MainWindow::newCampaign()
         table.setRowHidden(row, row >= count.value());
     }
     const auto raceAtRow = [&table](int row) {
-        return EmpireSetup{table.item(row, 0)->text().trimmed().toUtf8().toStdString(),
+        EmpireSetup result{table.item(row, 0)->text().trimmed().toUtf8().toStdString(),
             static_cast<RacePreset>(qobject_cast<QComboBox*>(table.cellWidget(row, 1))->currentIndex()),
             qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->isChecked(),
             qobject_cast<QCheckBox*>(table.cellWidget(row, 3))->isChecked(),
@@ -130,8 +143,13 @@ void MainWindow::newCampaign()
             static_cast<PrimaryRaceTrait>(qobject_cast<QComboBox*>(table.cellWidget(row, 8))->currentData().toInt()),
             static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->value()),
             static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->value())};
+        for (int field = 0; field < int(kResearchFieldCount); ++field)
+            result.researchCosts[field] = ResearchCost(qobject_cast<QComboBox*>(table.cellWidget(row, 11 + field))->currentIndex());
+        result.populationGrowthRate = static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 17))->value());
+        return result;
     };
     const auto applyRace = [&table](int row, const EmpireSetup& setup) {
+        qobject_cast<QSpinBox*>(table.cellWidget(row, 17))->setValue(setup.populationGrowthRate);
         table.item(row, 0)->setText(QString::fromStdString(setup.name));
         qobject_cast<QComboBox*>(table.cellWidget(row, 1))->setCurrentIndex(int(setup.race));
         qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->setChecked(setup.improvedFuelEfficiency);
@@ -145,6 +163,8 @@ void MainWindow::newCampaign()
         trait->setCurrentIndex(trait->findData(int(setup.primaryTrait)));
         qobject_cast<QSpinBox*>(table.cellWidget(row, 9))->setValue(setup.factoriesPerTenThousand);
         qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->setValue(setup.minesPerTenThousand);
+        for (int field = 0; field < int(kResearchFieldCount); ++field)
+            qobject_cast<QComboBox*>(table.cellWidget(row, 11 + field))->setCurrentIndex(int(setup.researchCosts[field]));
     };
     connect(&count, &QSpinBox::valueChanged, &dialog, [&](int value) {
         for (int row = 0; row < 8; ++row) table.setRowHidden(row, row >= value);
@@ -296,7 +316,9 @@ void MainWindow::openComputerDecisions()
         return;
     }
     if (auto* existing = findChild<QDialog*>("computerDecisionsDialog")) {
-        existing->show(); existing->raise(); existing->activateWindow(); return;
+        existing->show(); existing->raise(); existing->activateWindow();
+        if (auto* refresh = existing->findChild<QTimer*>("computerDecisionsRefreshTimer")) refresh->start(0);
+        return;
     }
     auto* dialog = new QDialog(this, Qt::Window);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -336,7 +358,8 @@ void MainWindow::openComputerDecisions()
     copyReport->setToolTip("Copy the visible full decisions and ongoing fleet goals as plain text.");
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::close);
     layout->addWidget(buttons);
-    auto refresh = [this, dialog, table, goals, filter,
+    auto forceRefresh = std::make_shared<bool>(true);
+    auto refresh = std::make_shared<std::function<void()>>([this, dialog, table, goals, filter, forceRefresh,
         previous = std::vector<std::tuple<PlayerId, std::string, ComputerState>>{},
         previousFilter = -1]() mutable {
         if (shuttingDown_ || !dialog->isVisible()) return;
@@ -357,7 +380,8 @@ void MainWindow::openComputerDecisions()
             filter->setCurrentIndex(index >= 0 ? index : 0);
         }
         const auto selectedId = filter->currentData().toInt();
-        if (current == previous && selectedId == previousFilter) return;
+        if (!*forceRefresh && current == previous && selectedId == previousFilter) return;
+        *forceRefresh = false;
         previous = current;
         previousFilter = selectedId;
         table->clear();
@@ -391,12 +415,24 @@ void MainWindow::openComputerDecisions()
                     QString::number(qulonglong(goal.issuedTurn))});
             }
         }
-    };
+    });
     auto* timer = new QTimer(dialog);
-    timer->setInterval(500);
-    connect(timer, &QTimer::timeout, dialog, refresh);
-    connect(filter, &QComboBox::currentIndexChanged, dialog, refresh);
-    connect(copyReport, &QPushButton::clicked, dialog, [this, filter, table, goals] {
+    timer->setObjectName("computerDecisionsRefreshTimer");
+    timer->setSingleShot(true);
+    connect(timer, &QTimer::timeout, dialog, [refresh] { (*refresh)(); });
+    const auto schedule = [this,dialog,timer] {
+        if (sessionMode_ == SessionMode::PlayerTurn) { dialog->close(); return; }
+        if (dialog->isVisible() && !timer->isActive()) timer->start(0);
+    };
+    connect(this, &MainWindow::controlsChanged, dialog, schedule);
+    connect(this, &MainWindow::routeProgramContextChanged, dialog, [schedule,forceRefresh](bool reset) {
+        if (reset) *forceRefresh = true;
+        schedule();
+    });
+    connect(filter, &QComboBox::currentIndexChanged, dialog, [refresh] { (*refresh)(); });
+    connect(copyReport, &QPushButton::clicked, dialog, [this, filter, table, goals, refresh] {
+        (*refresh)();
+        if (sessionMode_ == SessionMode::PlayerTurn) return;
         QStringList report;
         report << "Suns! computer report"
                << QString("Campaign turn: %1").arg(qulonglong(state_.turn))
@@ -420,8 +456,7 @@ void MainWindow::openComputerDecisions()
         QApplication::clipboard()->setText(report.join('\n') + '\n');
         statusBar()->showMessage("Computer report copied to clipboard.", 4000);
     });
-    timer->start();
-    dialog->show(); refresh();
+    dialog->show(); (*refresh)();
 }
 
 } // namespace suns

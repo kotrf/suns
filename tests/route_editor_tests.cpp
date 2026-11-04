@@ -501,11 +501,11 @@ int main(int argc, char* argv[])
     suns::MainWindowTestAccess::selectStar(window, 2);
     assert(window.appendSelectedStarWaypoint(5, {}));
     auto rows = window.selectedFleetRouteProgramRows();
-    assert(rows.size() == 2 && rows[0].eta == "1" && rows[1].eta == "3");
+    assert(rows.size() == 2 && rows[0].eta == "≈1" && rows[1].eta == "≈3");
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::orders(window).orders.empty());
     rows = window.selectedFleetRouteProgramRows();
-    assert(rows.size() == 1 && rows[0].eta == "2");
+    assert(rows.size() == 1 && rows[0].eta == "≈2");
     assert(window.removeSelectedFleetRouteProgramLeg(0));
     const auto& stop = std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front());
     assert(stop.clearRoute);
@@ -529,8 +529,10 @@ int main(int argc, char* argv[])
     auto* arrivalDetails = window.findChild<QLabel*>("routeSelectedArrivalAction");
     assert(routeTree && routeTimer && arrivalDetails);
     assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
-    assert(routeTree->columnCount() == 6 && routeTree->topLevelItemCount() == 2);
-    assert(routeTree->headerItem()->text(3) == "ETA");
+    assert(routeTree->columnCount() == 5 && routeTree->topLevelItemCount() == 2);
+    assert(routeTree->headerItem()->text(3) == "ETA ≈");
+    assert(routeTree->headerItem()->text(4) == "Fuel ≈");
+    assert(routeTree->headerItem()->toolTip(4).contains("mg"));
     assert(routeTree->headerItem()->toolTip(3).contains("years"));
     routeTree->setCurrentItem(routeTree->topLevelItem(0));
     assert(arrivalDetails->text().contains("no action"));
@@ -541,15 +543,15 @@ int main(int argc, char* argv[])
     // order, ETA and table. It must not change the new-waypoint draft.
     warp->setValue(8);
     assert(routeTree->topLevelItem(1)->text(2) == "W8");
-    assert(routeTree->topLevelItem(1)->text(3) == "2");
+    assert(routeTree->topLevelItem(1)->text(3) == "≈2");
     auto editedRoute = std::get<suns::MoveFleetOrder>(suns::MainWindowTestAccess::orders(window).orders.front());
     assert(editedRoute.warp == 5 && editedRoute.queuedWaypoints.front().warp == 8);
     assert(editedRoute.queuedWaypoints.front().arrivalAction.kind == suns::FleetArrivalActionKind::UnloadAll);
     routeTree->setCurrentItem(routeTree->topLevelItem(0));
     warp->setValue(4);
     assert(routeTree->topLevelItem(0)->text(2) == "W4");
-    assert(routeTree->topLevelItem(0)->text(3) == "2");
-    assert(routeTree->topLevelItem(1)->text(3) == "3");
+    assert(routeTree->topLevelItem(0)->text(3) == "≈2");
+    assert(routeTree->topLevelItem(1)->text(3) == "≈3");
     suns::MainWindowTestAccess::advance(window);
     assert(suns::MainWindowTestAccess::state(window).fleets.front().warp == 4);
     assert(suns::MainWindowTestAccess::state(window).fleets.front().position.x == 16);
@@ -568,70 +570,46 @@ int main(int argc, char* argv[])
     assert(routeTree->topLevelItem(0)->text(2) == "W5");
     assert(routeTree->topLevelItem(1)->text(2) == "W8");
 
-    // Spending all available fuel on the second leg marks only that leg.
-    // Later unknown legs must not display a made-up zero cost.
+    // Travel time is geometric even when received fuel would not sustain the
+    // ordered speed. The route table makes no future fuel/refuelling promise.
     suns::MainWindowTestAccess::installFuelFixture(window, 10);
     suns::MainWindowTestAccess::prependShortFuelLeg(window);
-    auto slowFleet = suns::MainWindowTestAccess::state(window).fleets.front();
-    slowFleet.warp = 1;
-    assert(suns::fleet_fuel_consumption_for_distance(suns::MainWindowTestAccess::state(window), slowFleet, 49) < 9);
     assert(window.appendSelectedStarWaypoint(8, {}));
     assert(window.appendSelectedStarWaypoint(8, {}));
     rows = window.selectedFleetRouteProgramRows();
-    assert(rows.size() == 3 && !rows[0].fuelShortage && rows[1].fuelShortage && !rows[2].fuelShortage);
-    assert(rows[0].fuelUsed != "—" && rows[1].fuelUsed.startsWith("≥"));
-    assert(rows[1].fuelRemaining == "0.0" && rows[2].fuelUsed == "—");
-    assert(routeTree->topLevelItem(1)->data(0, Qt::UserRole + 1).toBool());
-    assert(routeTree->topLevelItem(1)->background(0).color() == QColor("#592b31"));
-    assert(routeTree->topLevelItem(1)->toolTip(4).contains("Fuel shortage"));
-    // Changing speed recalculates the fuel warning and removes old coloring.
+    assert(rows.size() == 3 && rows[0].eta == "≈1" && rows[1].eta == "≈2" && rows[2].eta == "≈2");
+    assert(routeTree->columnCount() == 5 && routeTree->topLevelItem(1)->text(3) == "≈2");
+    assert(routeTree->topLevelItem(1)->background(0).style() == Qt::NoBrush);
+    assert(routeTree->topLevelItem(1)->toolTip(3).contains("fuel"));
     routeTree->setCurrentItem(routeTree->topLevelItem(1));
     warp->setValue(1);
     rows = window.selectedFleetRouteProgramRows();
-    assert(!rows[1].fuelShortage);
-    assert(!routeTree->topLevelItem(1)->data(0, Qt::UserRole + 1).toBool());
-    assert(routeTree->topLevelItem(1)->background(0).style() == Qt::NoBrush);
+    assert(rows[1].eta == "≈50" && rows[2].eta == "≈50");
+    assert(routeTree->topLevelItem(1)->text(3) == "≈50");
 
-    // Fuel used is per leg, not cumulative, and does not subtract tank gains
-    // from a refuelling depot at departure.
     suns::MainWindowTestAccess::installFuelFixture(window, 0, true);
     assert(window.appendSelectedStarWaypoint(8, {}));
     rows = window.selectedFleetRouteProgramRows();
-    auto fuelFleet = suns::MainWindowTestAccess::state(window).fleets.front();
-    fuelFleet.warp = 8;
-    const auto fuelCost = suns::fleet_fuel_consumption_for_distance(
-        suns::MainWindowTestAccess::state(window), fuelFleet, 100);
-    assert(rows.size() == 1 && !rows[0].fuelShortage && rows[0].eta != "—");
-    assert(std::abs(rows[0].fuelUsed.toDouble() - fuelCost) < 0.06);
+    assert(rows.size() == 1 && rows[0].eta == "≈2");
+    assert(suns::MainWindowTestAccess::state(window).fleets.front().fuel == 0);
 
+    // The selector still reports local overdrive risk from the received fit.
     suns::MainWindowTestAccess::installFuelFixture(window, 2);
-    warp->setValue(8);
-    assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
-    assert(warp->property("fuelLimited").toBool());
-    assert(warp->toolTip().contains("Fuel shortage"));
-    // Coordinate preview must use its own destination, including in the
-    // cache, rather than forecasting the still-selected distant star.
-    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{50, 0.01}).isEmpty());
-    assert(!window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{100, 30}).isEmpty());
-    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}, suns::Position{50, 0.01}).isEmpty());
+    // The demo's legacy Fusion Drive is safe through W8 and takes 12%/turn
+    // at W9; this checks the actual fit rather than assuming a W5 engine.
+    assert(window.selectedFleetOverdriveDamageForRouteProgram(9) == 12.0);
+    warp->setValue(9);
+    assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
+    assert(warp->property("unsafe").toBool());
+    assert(!warp->property("fuelLimited").isValid());
+    assert(!warp->toolTip().contains("Fuel shortage"));
     warp->setValue(1);
-    assert(window.selectedFleetWaypointFuelWarning(1, 0, {}).isEmpty());
-    assert(!warp->property("fuelLimited").toBool());
-    suns::MainWindowTestAccess::installFuelFixture(window, 1);
-    suns::MainWindowTestAccess::prependShortFuelLeg(window);
-    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).contains("waypoint 2"));
-    suns::MainWindowTestAccess::installFuelFixture(window, 300);
-    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty());
-    suns::MainWindowTestAccess::installFuelFixture(window, 0, true);
-    assert(window.selectedFleetWaypointFuelWarning(8, 0, {}).isEmpty()); // depot tops up first
-
+    assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
+    assert(!warp->property("unsafe").toBool());
     suns::MainWindowTestAccess::installFuelFixture(window, 0, false, true);
-    assert(!window.selectedFleetWaypointFuelWarning(9, 0, {}).isEmpty()); // free fallback collects, but slows arrival
-    assert(window.selectedFleetWaypointFuelWarning(4, 0, {}).isEmpty());
     assert(window.appendSelectedStarWaypoint(9, {}));
     rows = window.selectedFleetRouteProgramRows();
-    assert(rows.size() == 1 && rows[0].fuelShortage && rows[0].eta != "—");
-    assert(!rows[0].fuelUsed.startsWith("≥")); // free-speed fallback eventually arrives
+    assert(rows.size() == 1 && rows[0].eta == "≈1");
 
     // Exercise the real dock controls all the way through End Turn. This
     // catches arrival actions that look correct in the table but are not

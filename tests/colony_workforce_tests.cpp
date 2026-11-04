@@ -21,7 +21,7 @@ static void cargo_mining_forecast(bool unloading, std::uint32_t quantity)
     world.population = unloading ? 500 : 100500;
     world.industry = world.mines = 100;
     world.observedConcentration = MineralCargo{100,100,100};
-    world.minerals = {0,100,100};
+    world.minerals = {100,100,0};
     world.productionQueue = {{ProductionKind::Factory,kFactoryCost,0,ProductionAutomation::None,quantity}};
     auto& design = state.shipDesigns.front();
     design.hull = ShipHullType::SuperFreighter;
@@ -47,7 +47,7 @@ static void cargo_mining_forecast(bool unloading, std::uint32_t quantity)
     // This year's extraction was earned by the original residents, while
     // production already uses the new residents. Neither case can finish yet.
     assert(actual.planets.front().industry == 100);
-    assert(std::abs(actual.planets.front().minerals.ironium - beforeMining.ironium) < 1e-8);
+    assert(std::abs(actual.planets.front().minerals.ironium - 100 - beforeMining.ironium) < 1e-8);
     assert(actual.planets.front().productionWaitingForMinerals == unloading);
     while (!actual.planets.front().productionQueue.empty() && actual.turn <= state.turn + 128)
         actual = TurnProcessor{}.process(actual,{});
@@ -83,7 +83,9 @@ static void cargo_mining_upkeep(std::uint64_t beforePopulation)
     const auto actual = TurnProcessor{}.process(state,{orders});
     assert(actual.planets.front().habitat.service == HabitatService::Failing);
     assert(actual.planets.front().habitat.population == 90000 && growth == 0);
-    assert(output == 100 && output == colony_output(actual,actual.planets.front()));
+    auto paidBoundary=actual.planets.front();
+    paidBoundary.population=planned.planets.front().population; // Growth follows production.
+    assert(output == 200 && output == colony_output(actual,paidBoundary));
 }
 
 int main()
@@ -99,12 +101,12 @@ int main()
     const auto workers = colony_workforce(state, planet);
     assert(workers.factoryLimit == 25 && workers.mineLimit == 25);
     assert(workers.operatingFactories == 25 && workers.operatingMines == 25);
-    assert(colony_output(state, planet) == 25);
+    assert(colony_output(state, planet) == 50);
     const auto extraction = projected_mineral_mining(state, planet);
-    assert(std::abs(extraction.ironium - (1 + 25000.0 / 750000 + 25 * 0.75)) < 1e-9);
+    assert(std::abs(extraction.ironium - (1 + 25000.0 / 750000 + 25 * 1.0)) < 1e-9);
     auto extra = planet;
     ++extra.industry; ++extra.mines;
-    assert(colony_output(state, extra) == 25);
+    assert(colony_output(state, extra) == 50);
     assert(projected_mineral_mining(state, extra).ironium == extraction.ironium);
 
     // A loss of residents idles infrastructure; neither type competes for a
@@ -153,19 +155,20 @@ int main()
     assert(planned.planets.front().population == 22'500);
     assert(colony_workforce(planned, planned.planets.front()).operatingFactories == 22);
     assert(colony_workforce(planned, planned.planets.front()).operatingMines == 22);
-    assert(colony_output(planned, planned.planets.front()) == 22);
+    assert(colony_output(planned, planned.planets.front()) == 44);
     assert(colony.population == 25'000 && fleet.colonists == 0);
     const auto mined = projected_mineral_mining(state, colony);
     const auto next = TurnProcessor{}.process(state, {load});
     assert(next.planets.front().industry == 100 && next.planets.front().mines == 100);
     assert(std::abs(next.planets.front().minerals.ironium - colony.minerals.ironium - mined.ironium) < 1e-8);
     assert(next.fleets.front().colonists == 2500);
-    assert(next.planets.front().population < colony.population);
+    auto afterLoading=colony; afterLoading.population-=2500;
+    assert(next.planets.front().population==afterLoading.population+projected_population_growth(state,afterLoading,state.turn));
 
     auto researchState = state;
     researchState.players.front().technology.researchAllocationPercent = 100;
     researchState.players.front().technology.researchActive = true;
-    assert(resolve_colony_production(researchState, researchState.planets.front(), true).researchPoints == 25);
+    assert(resolve_colony_production(researchState, researchState.planets.front(), true).researchPoints == 50);
     colony.productionQueue = {{ProductionKind::Factory, kFactoryCost}};
     (void)resolve_colony_production(state, colony, true);
     assert(colony.industry == 101 && colony_workforce(state, colony).operatingFactories == 25);
@@ -181,7 +184,7 @@ int main()
     assert(!colony_workforce(state, colony).operatingFactories);
     assert(!colony_workforce(state, colony).operatingMines);
     assert(!projected_mineral_mining(state, colony).ironium);
-    assert(colony_output(state, colony) == 3);
+    assert(colony_output(state, colony) == 1500);
 
     colony.population = std::numeric_limits<std::uint64_t>::max();
     colony.industry = colony.mines = std::numeric_limits<std::uint32_t>::max();

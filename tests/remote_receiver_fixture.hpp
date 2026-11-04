@@ -8,6 +8,7 @@ namespace suns::test {
 inline GameState remote_receiver_fixture()
 {
     auto state = make_demo_game();
+    state.planets.front().population=6000; state.planets.front().industry=0; state.planets.front().habitability=0;
     state.turn = 10;
     state.wormholeRules.spawnChancePerTurn = 0;
     state.players.front().technology.researchAllocationPercent = 100;
@@ -16,13 +17,15 @@ inline GameState remote_receiver_fixture()
     state.stars[1].position = {900, 0};
     auto& colony = state.planets[1];
     colony.owner = 1;
-    colony.population = 1'000'000;
-    colony.industry = 4;
+    colony.population = 6000;
+    colony.habitability = 0;
+    colony.industry = 0;
     colony.mines = 0;
     colony.minerals = {100, 100, 100};
     colony.radar = PlanetaryRadarLevel::None;
     colony.productionQueue = {{ProductionKind::LocalRadar, 1}, {ProductionKind::Factory, kFactoryCost}};
     set_survey_level(state, 1, colony.star, SurveyLevel::DeepSurvey, state.turn);
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
     return state;
 }
 

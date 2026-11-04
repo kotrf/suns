@@ -59,9 +59,9 @@ void industry_first_is_local_and_pays_normal_costs()
     assert(state.fleets.empty() && state.planets[1].owner == 1);
     assert(state.planets[1].industry == 1 && state.planets[1].radar == PlanetaryRadarLevel::None);
     assert(state.planets[1].productionQueue.front().kind == ProductionKind::Factory);
-    assert(state.planets[1].productionQueue.front().remainingCost == kFactoryCost - 1);
+    assert(state.planets[1].productionQueue.front().remainingCost == kFactoryCost - 3);
     assert(communication_delay_turns(state, 1, state.stars[1].position) > 0);
-    while (state.turn < original.turn + kFactoryCost) {
+    while (state.planets[1].industry == 1 && state.turn < 40) {
         state = TurnProcessor{}.process(state, {});
         baseline = TurnProcessor{}.process(baseline, {});
     }
@@ -75,8 +75,8 @@ void industry_first_is_local_and_pays_normal_costs()
     assert(state.planets[1].industry == 4);
     assert(state.planets[1].radar == PlanetaryRadarLevel::Local);
     auto fast = TurnProcessor{}.process(original, {{1, {ColonizePlanetOrder{2, original.planets[1].id, colony_development_presets()[0]}}}});
-    assert(fast.planets[1].productionQueue.front().kind == ProductionKind::LocalRadar);
-    assert(fast.planets[1].industry == 1 && fast.planets[1].radar == PlanetaryRadarLevel::None);
+    assert(fast.planets[1].productionQueue.front().kind == ProductionKind::Factory);
+    assert(fast.planets[1].industry == 1 && fast.planets[1].radar == PlanetaryRadarLevel::Local);
     while (fast.planets[1].radar == PlanetaryRadarLevel::None && fast.turn < 40)
         fast = TurnProcessor{}.process(fast, {});
     assert(fast.planets[1].radar == PlanetaryRadarLevel::Local && fast.planets[1].industry == 1);

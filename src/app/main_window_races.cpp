@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 namespace suns {
@@ -22,7 +23,9 @@ void MainWindow::openRaceDesigner()
     auto* help = new QLabel("Create your race, save it as a .sunsrace file, and send that file to the host. "
         "The host loads each player's race in New campaign. Your current game is unaffected.", &dialog);
     help->setWordWrap(true); layout->addWidget(help);
-    RaceSetupWidget editor(&dialog); layout->addWidget(&editor);
+    auto* scroll = new QScrollArea(&dialog);
+    scroll->setWidgetResizable(true);
+    RaceSetupWidget editor(&dialog); scroll->setWidget(&editor); layout->addWidget(scroll);
     QLabel status(&dialog); status.setObjectName("raceFileStatus"); status.setWordWrap(true);
     layout->addWidget(&status);
     QString currentPath;
@@ -56,7 +59,7 @@ void MainWindow::openRaceDesigner()
     });
     connect(&buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(&buttons);
-    dialog.resize(740, 520);
+    dialog.resize(740, 720);
     dialog.exec();
 }
 } // namespace suns

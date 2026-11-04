@@ -199,7 +199,8 @@ void verify_component_tradeoffs()
 void verify_create_design_order()
 {
     const suns::TurnProcessor processor;
-    const auto initial = suns::make_demo_game();
+    auto initial = suns::make_demo_game();
+    initial.players.front().technology.researchActive = false;
     assert(initial.nextShipDesignId == suns::kFirstCustomShipDesignId);
 
     suns::PlayerOrders create{1, {}};
@@ -356,6 +357,7 @@ void verify_custom_design_can_enter_production()
 {
     const suns::TurnProcessor processor;
     auto state = suns::make_demo_game();
+    state.planets.front().population=6000; state.planets.front().industry=0; state.planets.front().habitability=0;
 
     suns::PlayerOrders create{1, {}};
     create.orders.emplace_back(suns::CreateShipDesignOrder{

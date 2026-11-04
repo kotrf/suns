@@ -215,8 +215,8 @@ int main()
     const suns::TurnProcessor processor;
     const auto initial = suns::make_demo_game();
     const auto& earth = planet(initial, 1);
-    assert(suns::population_capacity(earth) == 2'500'000);
-    assert(suns::colony_output(initial, earth) == 6);
+    assert(suns::population_capacity(earth) == 1'000'000);
+    assert(suns::colony_output(initial, earth) == 29);
 
     const auto* vega = suns::find_star(initial, 4);
     assert(vega != nullptr);
@@ -244,7 +244,7 @@ int main()
     suns::PlayerOrders queueShip{1, {}};
     queueShip.orders.emplace_back(suns::QueueShipDesignOrder{1, suns::kColonyShipDesignId});
     const auto shipTurn1 = processor.process(initial, {queueShip});
-    assert(planet(shipTurn1, 1).productionQueue.front().remainingCost == 6);
+    assert(planet(shipTurn1, 1).productionQueue.empty());
     const auto shipTurn2 = processor.process(shipTurn1, {});
     const auto* builtShip = colony_ship(shipTurn2);
     assert(builtShip != nullptr);
@@ -294,7 +294,7 @@ int main()
     colonize.orders.emplace_back(suns::ColonizePlanetOrder{readyShip->id, 2});
     const auto expanded = processor.process(destinationSurveyed, {colonize});
     assert(planet(expanded, 2).owner == 1);
-    assert(planet(expanded, 2).population == 269);
+    assert(planet(expanded, 2).population == 281);
     assert(colony_ship(expanded) == nullptr);
 
     return 0;

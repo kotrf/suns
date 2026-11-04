@@ -9,6 +9,16 @@
 #include <cassert>
 
 namespace {
+suns::GameState research_fixture()
+{
+    auto state=suns::make_demo_game();
+    // A fixed six-resource colony isolates planning, allocation and overflow
+    // from the campaign's deliberately much larger starting population.
+    state.planets.front().population=6000; state.planets.front().industry=0;
+    state.planets.front().habitability=0;
+    return state;
+}
+
 
 const suns::GameEvent* research_event(const std::vector<suns::GameEvent>& events)
 {
@@ -20,10 +30,10 @@ const suns::GameEvent* research_event(const std::vector<suns::GameEvent>& events
 
 void verify_research_costs_and_initial_unlocks()
 {
-    const auto state = suns::make_demo_game();
-    assert(suns::research_level_cost(suns::ResearchField::Electronics, 1) == 18);
-    assert(suns::research_level_cost(suns::ResearchField::Electronics, 2) == 36);
-    assert(suns::research_level_cost(suns::ResearchField::Electronics, 3) == 72);
+    const auto state = research_fixture();
+    assert(suns::research_level_cost(suns::ResearchField::Electronics, 1) == 50);
+    assert(suns::research_level_cost(suns::ResearchField::Electronics, 2) == 80);
+    assert(suns::research_level_cost(suns::ResearchField::Electronics, 3) == 130);
     assert(!suns::component_available_to_player(
         state, 1, suns::ShipComponentType::CompactLongRangeScanner));
     assert(!suns::component_available_to_player(
@@ -49,7 +59,7 @@ void verify_research_costs_and_initial_unlocks()
 void verify_unused_colony_output_advances_focus_queue()
 {
     const suns::TurnProcessor processor;
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
 
     suns::PlayerOrders start{1, {}};
     start.orders.emplace_back(suns::SetResearchPlanOrder{
@@ -66,10 +76,13 @@ void verify_unused_colony_output_advances_focus_queue()
     assert(turn3.state.players.front().technology.progress[3] == 12);
     assert(research_event(turn3.events) == nullptr);
 
-    const auto turn4 = processor.process_with_events(turn3.state, {});
+    auto beforeCompletion = turn3.state;
+    for (int i=0;i<6;++i) beforeCompletion=processor.process(beforeCompletion,{});
+    const auto turn4 = processor.process_with_events(beforeCompletion, {});
     const auto& technology = turn4.state.players.front().technology;
     assert(technology.levels[3] == 1);
     assert(technology.progress[3] == 0);
+    assert(technology.progress[1] == 4);
     assert(technology.focus == suns::ResearchField::Propulsion);
     assert(technology.queuedFocuses.size() == 1);
     assert(technology.queuedFocuses.front() == suns::ResearchField::Construction);
@@ -84,7 +97,7 @@ void verify_unused_colony_output_advances_focus_queue()
     assert(event->researchField == suns::ResearchField::Electronics);
     assert(event->technologyLevel == 1);
 
-    const auto replay = processor.process_with_events(turn3.state, {});
+    const auto replay = processor.process_with_events(beforeCompletion, {});
     const auto* replayEvent = research_event(replay.events);
     assert(replayEvent != nullptr);
     assert(replayEvent->id == event->id);
@@ -93,14 +106,14 @@ void verify_unused_colony_output_advances_focus_queue()
 void verify_overflow_follows_preselected_field()
 {
     const suns::TurnProcessor processor;
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
     auto& technology = state.players.front().technology;
     technology.focus = suns::ResearchField::Electronics;
     technology.queuedFocuses = {
         suns::ResearchField::Propulsion,
         suns::ResearchField::Construction,
     };
-    technology.progress[3] = 17;
+    technology.progress[3] = 49;
 
     const auto result = processor.process_with_events(state, {});
 
@@ -116,7 +129,7 @@ void verify_overflow_follows_preselected_field()
 void verify_future_plan_can_be_reordered_and_cleared()
 {
     const suns::TurnProcessor processor;
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
     state.players.front().technology.queuedFocuses = {
         suns::ResearchField::Propulsion,
         suns::ResearchField::Construction,
@@ -146,7 +159,7 @@ void verify_future_plan_can_be_reordered_and_cleared()
 void verify_active_research_can_be_moved_removed_and_resumed()
 {
     const suns::TurnProcessor processor;
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
     auto& technology = state.players.front().technology;
     technology.progress[static_cast<std::size_t>(suns::ResearchField::Electronics)] = 7;
     technology.queuedFocuses = {
@@ -196,7 +209,7 @@ void verify_active_research_can_be_moved_removed_and_resumed()
 void verify_component_unlock_is_enforced_for_new_designs()
 {
     const suns::TurnProcessor processor;
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
 
     suns::PlayerOrders locked{1, {}};
     locked.orders.emplace_back(suns::CreateShipDesignOrder{
@@ -230,7 +243,7 @@ void verify_component_unlock_is_enforced_for_new_designs()
 void verify_percentage_is_taken_before_production_and_leftovers_follow()
 {
     const suns::TurnProcessor processor;
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
     auto& colony = state.planets.front();
     colony.minerals = {100.0, 100.0, 100.0};
     colony.productionQueue = {{suns::ProductionKind::Factory, suns::kFactoryCost, 0}};
@@ -240,21 +253,25 @@ void verify_percentage_is_taken_before_production_and_leftovers_follow()
     const auto first = processor.process(state, {allocate});
     assert(first.players.front().technology.researchAllocationPercent == 50);
     assert(first.players.front().technology.progress[3] == 3);
-    assert(first.planets.front().productionQueue.front().remainingCost == 3);
+    assert(first.planets.front().productionQueue.front().remainingCost == 7);
 
     const auto second = processor.process(first, {});
     assert(second.players.front().technology.progress[3] == 6);
-    assert(second.planets.front().industry == colony.industry + 1);
-    assert(second.planets.front().productionQueue.empty());
-
+    assert(second.planets.front().productionQueue.front().remainingCost == 4);
     const auto third = processor.process(second, {});
-    assert(third.players.front().technology.progress[3] == 13);
+    assert(third.planets.front().productionQueue.front().remainingCost == 1);
+    const auto fourth = processor.process(third, {});
+    assert(fourth.planets.front().industry == colony.industry + 1);
+    assert(fourth.planets.front().productionQueue.empty());
+    assert(fourth.players.front().technology.progress[3] == 14);
+    const auto fifth = processor.process(fourth, {});
+    assert(fifth.players.front().technology.progress[3] == 21);
 }
 
 void verify_receiver_reserve_matches_research_forecast()
 {
     using namespace suns;
-    auto state = make_demo_game();
+    auto state = research_fixture();
     auto& colony = state.planets.front();
     colony.radar = PlanetaryRadarLevel::None;
     colony.minerals = {100, 100, 100};
@@ -323,7 +340,7 @@ void verify_receiver_completion_waits_for_delivered_report()
 
 void verify_new_research_changes_scouting_and_fuel_logistics()
 {
-    auto state = suns::make_demo_game();
+    auto state = research_fixture();
     const auto scoop = suns::ShipComponentType::EfficientRamScoopDrive;
     const auto scanner = suns::ShipComponentType::DeepPenetratingScanner;
     assert(!suns::component_available_to_player(state, 1, scoop));

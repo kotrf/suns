@@ -2,6 +2,7 @@
 #include "main_window.hpp"
 #include "suns/campaign.hpp"
 #include "suns/stations.hpp"
+#include "suns/player_knowledge.hpp"
 
 #include "suns/communications.hpp"
 
@@ -37,8 +38,16 @@ QString productionLine(const GameState& state, const Planet& planet)
     QString name;
     if (item.kind == ProductionKind::Research) {
         name = "Ongoing Research";
+    } else if (item.kind == ProductionKind::AdvancedFactory) {
+        name = "Advanced factory";
+    } else if (item.kind == ProductionKind::AdvancedMine) {
+        name = "Advanced mine";
+    } else if (item.kind == ProductionKind::UpgradeFactory) {
+        name = "Upgrade factory";
+    } else if (item.kind == ProductionKind::UpgradeMine) {
+        name = "Upgrade mine";
     } else if (item.kind == ProductionKind::Factory) {
-        name = "Factory";
+        name = "Basic factory";
     } else if (item.kind == ProductionKind::Mine) {
         name = "Mine";
     } else if (item.kind == ProductionKind::ReconstructFactory) {
@@ -156,7 +165,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
 {
     const auto* star = selectedStar();
     if (!star) return "<span style='color:#8090a2'>No system selected.</span>";
-    const auto received = receivedPlayerState();
+    const auto& received = receivedPlayerState();
 
     QStringList lines;
     lines << QString("<b>%1</b>").arg(QString::fromStdString(star->name));
@@ -194,6 +203,13 @@ QString MainWindow::selectedPlanetPanelSummary() const
                  .arg(estimated ? "~" : "")
                  .arg(knownHabitability.value_or(0));
     if (estimated) lines << "Basic scan estimate — enter orbit to confirm";
+    const auto* empire = find_player(received, pendingOrders_.player);
+    const bool radarKnown = empire && std::any_of(empire->surveyKnowledge.begin(), empire->surveyKnowledge.end(),
+        [&](const auto& k) { return k.star == star->id && k.observedOwner == pendingOrders_.player
+            && k.planetSnapshot && k.planetSnapshot->habitat; });
+    lines << (radarKnown ? QString("Planetary radar: <b>%1</b> (%2 ly)")
+        .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" : planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
+        .arg(planetary_radar_range(planet->radar), 0, 'f', 0) : QString("Planetary radar: <b>unknown</b>"));
     if (const auto artifactHint = known_precursor_artifact_hint(received, pendingOrders_.player, planet->id)) {
         lines << (*artifactHint
                 ? "<span style='color:#d8bd72'><b>Deep survey:</b> possible artificial structures</span>"
@@ -212,7 +228,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
     }
 
     if (planet->owner == pendingOrders_.player) {
-        const auto planned = projected_cargo_order_state(received, pendingOrders_);
+        const auto& planned = fleetPlanningState();
         const auto* afterCargo = find_planet(planned, planet->id);
         const auto workforce = colony_workforce(planned, afterCargo ? *afterCargo : *planet);
         lines << QString("<span style='color:#85d5a5'><b>Your colony</b></span>");
@@ -250,7 +266,7 @@ QString MainWindow::selectedPlanetPanelSummary() const
             : "<span style='color:#c6b57c'><b>Uncolonized</b></span>");
         lines << QString("%1 population capacity: %2")
                      .arg(estimated ? "Estimated" : "Potential")
-                     .arg(static_cast<qulonglong>(std::max(0, knownHabitability.value_or(0)))
+                     .arg(static_cast<qulonglong>(std::clamp(knownHabitability.value_or(0), 5, 100))
                          * kPopulationPerHabitability);
         if (planet_geology_known(received, pendingOrders_.player, planet->id)) {
             const auto remoteYield = remoteMiningAtPlanet(received, pendingOrders_.player, *planet);

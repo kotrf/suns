@@ -65,6 +65,7 @@ int main(int argc, char** argv)
     { QFile file(badPath); assert(file.open(QIODevice::WriteOnly)); file.write("{broken"); }
 
     EmpireSetup second{"Cold navigators", RacePreset::Cryophile};
+    second.populationGrowthRate=6; second.researchCosts[2]=ResearchCost::Expensive;
     second.primaryTrait = PrimaryRaceTrait::StargateSpecialist;
     second.hullAccess = HullAccess::InnerStrength;
     second.basicRemoteMining = true;
@@ -96,6 +97,8 @@ int main(int argc, char** argv)
         hulls->setCurrentIndex(int(HullAccess::SuperStealth)); assert(settlers->isEnabled());
         dialog->findChild<QComboBox*>("raceRemoteMining")->setCurrentIndex(1);
         dialog->findChild<QSpinBox*>("raceFactoryOperation")->setValue(7);
+        dialog->findChild<QSpinBox*>("racePopulationGrowth")->setValue(19);
+        dialog->findChild<QComboBox*>("raceResearchCost0")->setCurrentIndex(int(ResearchCost::Cheap));
         dialog->findChild<QSpinBox*>("raceMineOperation")->setValue(23);
         assert(editor->setup().race == RacePreset::Radiotroph);
         if (app.arguments().contains("--capture")) dialog->grab().save("/tmp/suns-race-designer.png");
@@ -132,6 +135,7 @@ int main(int argc, char** argv)
         chooseFile(secondPath); dialog->findChild<QPushButton*>("campaignLoadRaceButton")->click();
         assert(qobject_cast<QComboBox*>(table->cellWidget(1, 7))->currentIndex() == 0);
         assert(table->item(1, 0)->text() == "Cold navigators");
+        assert(qobject_cast<QSpinBox*>(table->cellWidget(1,17))->value()==6);
         QTimer::singleShot(0, [] {
             auto* file = qobject_cast<QFileDialog*>(QApplication::activeModalWidget()); assert(file); file->reject();
         });
@@ -162,10 +166,11 @@ int main(int argc, char** argv)
     });
     window.findChild<QAction*>("newCampaignAction")->trigger();
     EmpireSetup exported; assert(read_race_file(rowPath, exported, error));
-    assert(exported.name == second.name && exported.minesPerTenThousand == 9);
+    assert(exported.name == second.name && exported.minesPerTenThousand == 9 && exported.populationGrowthRate==6);
     const auto host = MainWindowTestAccess::snapshot(window);
     assert(host.mode == SessionMode::Host && host.state.players.size() == 2 && host.playerTokens.size() == 2);
     const auto& a = host.state.players[0]; const auto& b = host.state.players[1];
+    assert(a.race.populationGrowthRate==19 && b.race.populationGrowthRate==6);
     assert(a.controller == PlayerController::Human && b.controller == PlayerController::Human);
     assert(a.name == first.name && a.race.radiationImmune && a.race.hullAccess == HullAccess::SuperStealth);
     assert(a.race.improvedFuelEfficiency && a.race.noRamScoopEngines && a.race.advancedRemoteMining);
@@ -180,6 +185,10 @@ int main(int argc, char** argv)
     MainWindowTestAccess::restart(window);
     const auto restarted = MainWindowTestAccess::snapshot(window);
     assert(restarted.state.players[0].race.factoriesPerTenThousand == 7);
+    assert(restarted.state.players[0].race.populationGrowthRate==19 && restarted.state.players[1].race.populationGrowthRate==6);
+    assert(restarted.state.players[0].race.researchCosts[0]==ResearchCost::Cheap);
+    assert(restarted.state.players[1].race.researchCosts[2]==ResearchCost::Expensive);
+    for (const auto& p:restarted.state.planets) if(p.owner) assert(p.population==25'000);
     assert(restarted.state.players[1].race.primaryTrait == PrimaryRaceTrait::StargateSpecialist);
     assert(restarted.state.players[1].race.minesPerTenThousand == 9);
     assert(restarted.state.players[1].controller == PlayerController::Human);

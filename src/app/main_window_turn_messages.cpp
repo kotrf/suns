@@ -63,7 +63,11 @@ enum class MessageTypeFilter {
 QString production_item_name(const GameState& state, const GameEvent& event)
 {
     if (event.productionKind == ProductionKind::Terraforming) return "Terraforming";
-    if (event.productionKind == ProductionKind::Factory) return "Factory";
+    if (event.productionKind == ProductionKind::AdvancedFactory) return "Advanced factory";
+    if (event.productionKind == ProductionKind::AdvancedMine) return "Advanced mine";
+    if (event.productionKind == ProductionKind::UpgradeFactory) return "Factory upgrade";
+    if (event.productionKind == ProductionKind::UpgradeMine) return "Mine upgrade";
+    if (event.productionKind == ProductionKind::Factory) return "Basic factory";
     if (event.productionKind == ProductionKind::Mine) return "Mine";
     if (event.productionKind == ProductionKind::ReconstructFactory) return "Factory reconstruction";
     if (event.productionKind == ProductionKind::ReconstructMine) return "Mine reconstruction";
@@ -621,7 +625,11 @@ QString event_text(const GameState& state, const GameEvent& event)
             : QString("Colony %1").arg(event.planet);
         QString itemName;
         if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
-        else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
+        else if (event.productionKind == ProductionKind::AdvancedFactory) itemName = "Advanced factory";
+        else if (event.productionKind == ProductionKind::AdvancedMine) itemName = "Advanced mine";
+        else if (event.productionKind == ProductionKind::UpgradeFactory) itemName = "Factory upgrade";
+        else if (event.productionKind == ProductionKind::UpgradeMine) itemName = "Mine upgrade";
+        else if (event.productionKind == ProductionKind::Factory) itemName = "Basic factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
         else if (event.productionKind == ProductionKind::ReconstructFactory) itemName = "Factory reconstruction";
         else if (event.productionKind == ProductionKind::ReconstructMine) itemName = "Mine reconstruction";
@@ -726,7 +734,11 @@ QString event_text(const GameState& state, const GameEvent& event)
             : QString("Colony %1").arg(event.planet);
         QString itemName;
         if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
-        else if (event.productionKind == ProductionKind::Factory) itemName = "Factory";
+        else if (event.productionKind == ProductionKind::AdvancedFactory) itemName = "Advanced factory";
+        else if (event.productionKind == ProductionKind::AdvancedMine) itemName = "Advanced mine";
+        else if (event.productionKind == ProductionKind::UpgradeFactory) itemName = "Factory upgrade";
+        else if (event.productionKind == ProductionKind::UpgradeMine) itemName = "Mine upgrade";
+        else if (event.productionKind == ProductionKind::Factory) itemName = "Basic factory";
         else if (event.productionKind == ProductionKind::Mine) itemName = "Mine";
         else if (event.productionKind == ProductionKind::ReconstructFactory) itemName = "Factory reconstruction";
         else if (event.productionKind == ProductionKind::ReconstructMine) itemName = "Mine reconstruction";

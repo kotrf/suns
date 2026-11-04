@@ -75,6 +75,29 @@ void same_plan(const ComputerTurnPlan& a, const ComputerTurnPlan& b)
                 assert(order.colony == other.colony && order.construction.refitStation == other.construction.refitStation
                     && order.construction.loadout.hull == other.construction.loadout.hull
                     && order.construction.loadout.components == other.construction.loadout.components);
+            else if constexpr (std::is_same_v<T, TransferCargoOrder>)
+                assert(order.source.planet==other.source.planet && order.source.fleet==other.source.fleet && order.source.orbital==other.source.orbital
+                    && order.destination.planet==other.destination.planet && order.destination.fleet==other.destination.fleet && order.destination.orbital==other.destination.orbital
+                    && order.colonists==other.colonists && order.minerals.ironium==other.minerals.ironium
+                    && order.minerals.boranium==other.minerals.boranium && order.minerals.germanium==other.minerals.germanium);
+            else if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>)
+                assert(order.colony==other.colony && order.kind==other.kind && order.action==other.action && order.strength==other.strength);
+            else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
+                const auto& p=order.program; const auto& q=other.program;
+                assert(order.fleet==other.fleet && order.action==other.action && same_position(p.center,q.center)
+                    && p.radius==q.radius && p.depth==q.depth && p.flight==q.flight && p.maxWarp==q.maxWarp
+                    && p.fuelReserve==q.fuelReserve && p.maxSystems==q.maxSystems && p.maxTurns==q.maxTurns && p.returnHome==q.returnHome);
+            } else if constexpr (std::is_same_v<T, GateFleetOrder>)
+                assert(order.fleet==other.fleet && order.source==other.source && order.destination==other.destination && order.resonant==other.resonant);
+            else if constexpr (std::is_same_v<T, ProcessScienceSampleOrder>)
+                assert(order.colony==other.colony && order.sample==other.sample && order.retain==other.retain);
+            else if constexpr (std::is_same_v<T, SetResonanceLaboratoryOrder>)
+                assert(order.colony==other.colony && order.action==other.action && order.active==other.active);
+            else if constexpr (std::is_same_v<T, EncounterVisitorOrder>)
+                assert(order.fleet==other.fleet && order.visitor==other.visitor && order.warp==other.warp);
+            else if constexpr (std::is_same_v<T, SetFleetMineralCargoOrder>)
+                assert(order.colony==other.colony && order.fleet==other.fleet && order.minerals.ironium==other.minerals.ironium
+                    && order.minerals.boranium==other.minerals.boranium && order.minerals.germanium==other.minerals.germanium);
             else assert(false && "Unexpected computer order in replay comparison");
         }, a.orders.orders[i]);
     }
@@ -361,6 +384,24 @@ void autonomous_fixed_seed_campaigns()
         auto config = GalaxyConfig{}; config.seed = seed;
         auto state = generate_campaign(config, setup);
         state.wormholeRules.spawnChancePerTurn = 0;
+        // Give each narrow environmental race an actual nearby opportunity.
+        // This exercises autonomous paid expansion rather than depending on
+        // random map suitability and a particular research/scouting timetable.
+        std::vector<PlanetId> assigned;
+        for (PlayerId id : {2u,3u}) {
+            const auto home=std::find_if(state.planets.begin(),state.planets.end(),[&](const auto& p){return p.owner==id;});
+            const auto* star=find_star(state,home->star);
+            auto target=std::find_if(state.planets.begin(),state.planets.end(),[&](const auto& p){return p.owner==0 && std::find(assigned.begin(),assigned.end(),p.id)==assigned.end();});
+            assigned.push_back(target->id);
+            target->environment=home->environment;
+            target->habitability=100; target->naturalEnvironment.reset();
+            auto* frontier=const_cast<StarSystem*>(find_star(state,target->star));
+            frontier->position={star->position.x+20,star->position.y+20}; frontier->variability={};
+            // Mark this fixture choice only in physical setup, not player intel.
+            target->name="Expansion opportunity " + std::to_string(id);
+
+        }
+        refresh_sensor_intel(state);
         for (int year = 0; year < 120; ++year) {
             for (PlayerId id : {2u, 3u}) {
                 const auto view = make_player_view(state, id);
@@ -448,7 +489,18 @@ void legal_civilian_designs_and_recovery()
         assert(created && queued);
         const auto resolved = resolve_controlled_campaign_turn(state, {{1, {}}}).state;
         const auto colony = std::find_if(resolved.planets.begin(), resolved.planets.end(), [](const auto& p) { return p.owner == 2; });
-        assert(!colony->productionQueue.empty() && colony->productionQueue.front().shipDesign != 0);
+        if (!colony->productionQueue.empty()) assert(colony->productionQueue.front().shipDesign != 0);
+        else {
+            // The new population economy can finish the selected design in
+            // its submission year. Its resolved ID must survive in the fleet.
+            bool built=false;
+            for(const auto& fleet:resolved.fleets) if(fleet.owner==2) {
+                const auto* design=find_ship_design(resolved,fleet.design);
+                assert(design && ship_design_valid(*design) && design->owner==2);
+                built=true;
+            }
+            assert(built);
+        }
     }
 
     auto state = expansion_fixture();

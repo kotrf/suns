@@ -16,6 +16,17 @@
 
 namespace suns {
 
+std::uint32_t industry_upgrade_available(const Planet& planet, ProductionKind kind)
+{
+    if (!industry_upgrade_kind(kind)) return 0;
+    const auto total = kind == ProductionKind::UpgradeFactory ? planet.industry : planet.mines;
+    const auto advanced = kind == ProductionKind::UpgradeFactory ? planet.advancedFactories : planet.advancedMines;
+    auto available = total - std::min(total, advanced);
+    for (const auto& item : planet.productionQueue) if (item.kind == kind)
+        available -= std::min(available, item.quantity);
+    return available;
+}
+
 std::uint64_t reconstruction_remaining(const Planet& planet,ProductionKind kind)
 {
     const auto& damage=planet.warDamage;
@@ -38,9 +49,11 @@ std::uint64_t reconstruction_available(const Planet& planet,ProductionKind kind)
 bool production_batch_valid(const QueueProductionBatchOrder& order)
 {
     if (order.quantity == 0 || order.quantity > kMaximumProductionBatch) return false;
+    if (industry_upgrade_kind(order.kind)) return order.automation == ProductionAutomation::None;
     if (engineering_kind(order.kind) || order.kind == ProductionKind::ResonanceLaboratory) return order.quantity==1 && order.automation==ProductionAutomation::None;
     if (recovery_kind(order.kind)) return order.automation==ProductionAutomation::None;
     if (order.kind != ProductionKind::Factory && order.kind != ProductionKind::Mine
+        && order.kind != ProductionKind::AdvancedFactory && order.kind != ProductionKind::AdvancedMine
         && order.kind != ProductionKind::Terraforming && order.kind != ProductionKind::ColonyDefense
         && order.kind != ProductionKind::LocalRadar && order.kind != ProductionKind::PlanetaryRadar) return false;
     if (static_cast<unsigned>(order.automation) > static_cast<unsigned>(ProductionAutomation::MaxTerraform)) return false;
@@ -55,6 +68,7 @@ bool production_batch_valid(const QueueProductionBatchOrder& order)
 bool apply_production_batch(const GameState& state, Planet& planet, const QueueProductionBatchOrder& order)
 {
     if (planet.id != order.colony || !production_batch_valid(order)) return false;
+    if (industry_upgrade_kind(order.kind) && order.quantity > industry_upgrade_available(planet, order.kind)) return false;
     if (order.kind == ProductionKind::ResonanceLaboratory) return apply_resonance_order(state, planet, {planet.id});
     if (engineering_kind(order.kind)) return apply_planetary_engineering_order(state,planet,
         {planet.id,engineering_project_kind(order.kind),EngineeringAction::StartOrResume,10});
@@ -138,7 +152,8 @@ void apply_default_production_template(const GameState& state, Planet& planet)
 std::uint32_t colony_research_allocation(const GameState& state, const Planet& planet, std::uint32_t output)
 {
     const auto* player = find_player(state, planet.owner);
-    if (!player || !player->technology.researchActive) return 0;
+    if (!player || !player->technology.researchActive
+        || std::all_of(player->technology.levels.begin(), player->technology.levels.end(), [](auto level) { return level >= kMaximumResearchLevel; })) return 0;
     const auto requested = static_cast<std::uint32_t>(
         std::uint64_t(output) * player->technology.researchAllocationPercent / 100U);
     const bool bootstrappingReceiver = planet.radar == PlanetaryRadarLevel::None
@@ -153,7 +168,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
 {
     ColonyProductionResolution result;
     result.hasShipyard = hasShipyard;
-    result.engineeringSupport=engineeringSupport.value_or(engineering_station_available(state,planet));
+    result.engineeringSupport=engineeringSupport ? *engineeringSupport : engineering_station_available(state,planet);
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
         && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
         && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
@@ -181,6 +196,10 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         subtract_minerals(planet.minerals, production_item_mineral_cost(state, item));
         if (item.kind == ProductionKind::Factory) ++planet.industry;
         else if (item.kind == ProductionKind::Mine) ++planet.mines;
+        else if (item.kind == ProductionKind::AdvancedFactory) { ++planet.industry; ++planet.advancedFactories; }
+        else if (item.kind == ProductionKind::AdvancedMine) { ++planet.mines; ++planet.advancedMines; }
+        else if (item.kind == ProductionKind::UpgradeFactory) ++planet.advancedFactories;
+        else if (item.kind == ProductionKind::UpgradeMine) ++planet.advancedMines;
         else if (reconstruction_kind(item.kind)) {
             if(item.kind==ProductionKind::ReconstructFactory) { ++planet.industry; ++planet.warDamage.factoriesReconstructed; }
             else { ++planet.mines; ++planet.warDamage.minesReconstructed; }
@@ -203,13 +222,32 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
                 && item.station->loadout.shipyard;
         }
         result.completions.push_back({item, origin, finishedBatch,
-            item.kind == ProductionKind::Factory || item.kind==ProductionKind::ReconstructFactory ? planet.industry : item.kind == ProductionKind::Mine || item.kind==ProductionKind::ReconstructMine ? planet.mines : item.kind == ProductionKind::ColonyDefense ? planet.defenses : 0U});
+            item.kind == ProductionKind::UpgradeFactory ? planet.advancedFactories
+            : item.kind == ProductionKind::UpgradeMine ? planet.advancedMines
+            : item.kind == ProductionKind::Factory || item.kind==ProductionKind::ReconstructFactory || item.kind==ProductionKind::AdvancedFactory ? planet.industry
+            : item.kind == ProductionKind::Mine || item.kind==ProductionKind::ReconstructMine || item.kind==ProductionKind::AdvancedMine ? planet.mines
+            : item.kind == ProductionKind::ColonyDefense ? planet.defenses : 0U});
     };
     std::uint32_t engineeringUsed=0;
     std::uint32_t resonanceUsed=0;
     std::size_t index = 0;
     while (index < queue.size()) {
         const auto origin = origins[index];
+        const auto industrialKind = queue[index].kind;
+        const bool factoryBuild = industrialKind == ProductionKind::Factory || industrialKind == ProductionKind::AdvancedFactory;
+        const bool mineBuild = industrialKind == ProductionKind::Mine || industrialKind == ProductionKind::AdvancedMine;
+        if (industry_upgrade_kind(industrialKind) || factoryBuild || mineBuild) {
+            const auto total = factoryBuild || industrialKind == ProductionKind::UpgradeFactory ? planet.industry : planet.mines;
+            const auto advanced = industrialKind == ProductionKind::UpgradeFactory ? planet.advancedFactories : planet.advancedMines;
+            const auto eligible = industry_upgrade_kind(industrialKind) ? total - std::min(total, advanced)
+                : std::numeric_limits<std::uint32_t>::max() - total;
+            if (!eligible) {
+                if (queue[index].automation != ProductionAutomation::None) { ++index; continue; }
+                erase(index); continue;
+            }
+            if (queue[index].automation == ProductionAutomation::None)
+                queue[index].quantity = std::min(queue[index].quantity, eligible);
+        }
         if (queue[index].kind == ProductionKind::ResonanceLaboratory) {
             auto& lab = planet.resonanceLab;
             if (!lab.started || lab.work >= kResonanceWork) { erase(index); continue; }
@@ -259,6 +297,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         if (automatic) {
             const auto rule = queue[index];
             while (annualUsed[origin] < rule.quantity) {
+                if ((factoryBuild && planet.industry == std::numeric_limits<std::uint32_t>::max())
+                    || (mineBuild && planet.mines == std::numeric_limits<std::uint32_t>::max())) break;
                 if (kind == ProductionKind::ColonyDefense && planet.defenses >= kMaximumColonyDefenses) break;
                 if (kind == ProductionKind::Terraforming
                     && ((rule.automation == ProductionAutomation::MinTerraform
@@ -374,7 +414,7 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
                     && colony_has_orbital_service(result, colony.id, pending.player, OrbitalStationModule::Shipyard))
                     queue.push_back({ProductionKind::ColonyShip, ship_design_cost(*design), design->id});
             } else if constexpr (std::is_same_v<T, QueueProductionOrder>) {
-                if (engineering_kind(value.kind) || recovery_kind(value.kind) || value.kind == ProductionKind::Factory || value.kind == ProductionKind::Mine || value.kind == ProductionKind::Terraforming || value.kind == ProductionKind::ColonyDefense)
+                if (production_batch_valid({colony.id, value.kind}) || engineering_kind(value.kind) || recovery_kind(value.kind) || value.kind == ProductionKind::Factory || value.kind == ProductionKind::Mine || value.kind == ProductionKind::Terraforming || value.kind == ProductionKind::ColonyDefense)
                     (void)apply_production_batch(result, colony, {colony.id, value.kind});
                 else if (value.kind == ProductionKind::OrbitalStation && !find_orbital_station_at_planet(result, colony.id) && !orbital_base_at(result,colony.id)
                     && std::none_of(queue.begin(), queue.end(), [](const auto& item) { return item.kind == ProductionKind::OrbitalStation; }))

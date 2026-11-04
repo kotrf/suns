@@ -35,14 +35,25 @@ int main()
     SaveGameData original;
     original.campaignId = 1; original.turnToken = 2;
     original.state = make_demo_game();
+    // Preserve the historical v107 turn-1 ledger when recreating that writer's
+    // exact bytes. Historical output is not retroactively recalculated.
+    original.state.players.front().race.populationGrowthRate=10;
+    original.state.players.front().history.front().population=1'000'000;
+    original.state.players.front().history.front().colonyHistory.front().population=1'000'000;
+    original.state.players.front().history.front().productionOutput=6;
+    original.state.players.front().history.front().colonyHistory.front().productionOutput=6;
+    for (auto& knowledge : original.state.players.front().surveyKnowledge)
+        if (knowledge.star==1 && knowledge.planetSnapshot && knowledge.planetSnapshot->habitat)
+            knowledge.planetSnapshot->habitat->surfacePopulation=1'000'000;
     original.state.planets.front().population = 25'000;
     original.state.planets.front().industry = 100;
     original.state.planets.front().mines = 80;
     original.pendingOrders = {1, {}};
     assert(write_save_game_file(path, original, error));
     auto current = bytes(path);
-    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 109); }
-    const auto extension = current.size() - 8 - 14; // Empty SCRP tail, then WFRK + one racial record.
+    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 112); }
+    QByteArray workforceMarker; { QDataStream out(&workforceMarker, QIODevice::WriteOnly); out << quint32{0x5746524b}; }
+    const auto extension = current.lastIndexOf(workforceMarker); assert(extension > 0);
     { QDataStream in(current.mid(extension)); quint32 magic{}, count{}; in >> magic >> count; assert(magic == 0x5746524b && count == 1); }
 
     // The pre-extension bytes are checked against a real v107 writer, built
@@ -101,7 +112,7 @@ int main()
 
     assert(write_save_game_file(path, host, error));
     const auto valid = bytes(path);
-    const auto offset = valid.size() - 8 - 20; // Empty SCRP tail follows two racial records.
+    const auto offset = valid.lastIndexOf(workforceMarker); assert(offset > 0);
     for (int which = 0; which < 9; ++which) {
         auto corrupt = valid;
         switch (which) {

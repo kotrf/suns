@@ -108,7 +108,8 @@ void load_policy_persistence(const QString& path) {
     assert(loaded.state.fleets[0].arrivalAction->mineralReserve==100);
     MainWindow w;MainWindowTestAccess::set(w,s);assert(w.selectFleetForRouteProgram(1));
     assert(w.selectedFleetRouteProgramRows()[0].arrivalAction.contains("leave 100 kt"));
-    assert(w.selectedFleetRouteProgramForecast().contains("Load policy waiting"));
+    assert(w.selectedFleetRouteProgramEstimate().contains("leave 100 kt"));
+    assert(w.selectedFleetRouteProgramRows().back().eta=="—");
     auto control=s;s.planets[1].minerals.ironium+=50;control.planets[1].minerals.ironium+=50;
     tick(s);tick(control);assert(s.fleets[0].minerals.ironium==80 && s.planets[1].minerals.ironium==100);
     assert(same_position(*s.fleets[0].destination,{0,0}));
@@ -134,7 +135,7 @@ void legacy_v102_line(const QString& path) {
     const auto& d=loaded.state.players[0].transportLines[0].spec;assert(!d.sourceReserve && !d.departureMinimum);
 }
 void computer_line_persistence(const QString& path) {
-    auto s=computer_transport_world(5100);s.fleets[0].position={5100,0};
+    auto s=computer_transport_world(5100);s.fleets.resize(1);s.fleets[0].position={5100,0}; // Isolate one held assignment.
     for(auto& d:s.shipDesigns)if(d.id==202)d.components={C::FuelMizer,C::FuelMizer};acknowledge(s);
     Player human;human.id=2;human.name="Human observer";s.players.push_back(human);
     s=resolve_controlled_campaign_turn(s,{{2,{}}}).state;
@@ -247,7 +248,7 @@ void destination_target_persistence_and_ui(const QString& path) {
     assert(write_save_game_file(path,saved,error));assert(read_save_game_file(path,loaded,error));
     assert(loaded.state.fleets[0].arrivalAction->destinationTarget==100 && loaded.state.fleets[0].minerals.ironium==50);
     assert(std::get<SetTransportLineOrder>(loaded.pendingOrders.orders[0]).value.destinationTarget==150);
-    auto control=s,restored=loaded.state;tick(control,{QueueProductionOrder{1,ProductionKind::Factory}});tick(restored,{QueueProductionOrder{1,ProductionKind::Factory}});
+    auto control=s,restored=loaded.state;tick(control,{QueueProductionOrder{1,ProductionKind::ColonyDefense}});tick(restored,{QueueProductionOrder{1,ProductionKind::ColonyDefense}});
     tick(control);tick(restored);assert(control.fleets[0].minerals.ironium==48 && restored.fleets[0].minerals.ironium==48);
     assert(control.players[0].transportReceipts.size()==restored.players[0].transportReceipts.size());
     MainWindow w;MainWindowTestAccess::set(w,s);w.installTransportLines();
@@ -255,11 +256,14 @@ void destination_target_persistence_and_ui(const QString& path) {
     auto* selection=w.findChild<QComboBox*>("transportLineSelection");selection->setCurrentIndex(selection->findData(1u));
     auto* target=w.findChild<QSpinBox*>("transportLineTarget");assert(target && target->value()==100);
     assert(w.findChild<QListWidget*>("transportLineRoster")->item(0)->text().contains("Waiting at destination"));
-    assert(w.selectFleetForRouteProgram(1));assert(w.selectedFleetRouteProgramForecast().contains("Destination target waiting"));
+    assert(w.selectFleetForRouteProgram(1));assert(w.selectedFleetRouteProgramEstimate().contains("Top up Ironium to 100 kt"));
+    const auto waitingRows=w.selectedFleetRouteProgramRows();
+    assert(waitingRows.size()==1 && waitingRows.front().eta=="≈0");
+    assert(waitingRows.front().etaTooltip.contains("arrival actions are not predicted"));
     target->setValue(150);w.findChild<QPushButton*>("transportLineSave")->click();
     assert(std::get<SetTransportLineOrder>(MainWindowTestAccess::pending(w).orders.back()).value.destinationTarget==150);
     assert(pending_transport_route(s,MainWindowTestAccess::pending(w),1)->queuedWaypoints[0].arrivalAction.destinationTarget==150);
-    assert(w.selectedFleetRouteProgramForecast().contains("150 kt"));
+    assert(w.selectedFleetRouteProgramEstimate().contains("150 kt"));
 }
 void destination_target_remote_orders(const QString& path) {
     auto s=computer_transport_world(5100);s.players[0].controller=PlayerController::Human;s.fleets.resize(1);

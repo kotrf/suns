@@ -24,7 +24,11 @@ namespace {
 QString stepName(ProductionKind kind)
 {
     switch (kind) {
-    case ProductionKind::Factory: return "Factories";
+    case ProductionKind::Factory: return "Basic factories";
+    case ProductionKind::AdvancedFactory: return "Advanced factories";
+    case ProductionKind::AdvancedMine: return "Advanced mines";
+    case ProductionKind::UpgradeFactory: return "Upgrade factories";
+    case ProductionKind::UpgradeMine: return "Upgrade mines";
     case ProductionKind::Mine: return "Mines";
     case ProductionKind::LocalRadar: return "Local Radar (30 ly)";
     case ProductionKind::PlanetaryRadar: return "Full Radar (150 ly)";
@@ -115,11 +119,11 @@ void MainWindow::openColonyTemplates()
     editor->addWidget(name);
     auto* steps = new QTreeWidget(dialog);
     steps->setObjectName("colonyTemplateSteps");
-    steps->setHeaderLabels({"Step", "Quantity", "Mode", "Production", "I / B / G kt", "Example"});
+    steps->setHeaderLabels({"Step", "Quantity", "Mode", "Production", "I / B / G kt"});
     steps->setRootIsDecorated(false);
     steps->setSelectionMode(QAbstractItemView::SingleSelection);
     steps->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int i = 1; i < 6; ++i) steps->header()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+    for (int i = 1; i < 5; ++i) steps->header()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
     editor->addWidget(steps, 1);
     auto* stepButtons = new QHBoxLayout;
     auto* up = new QPushButton("Move up", dialog);
@@ -132,7 +136,7 @@ void MainWindow::openColonyTemplates()
     editor->addLayout(stepButtons);
     auto* kind = new QComboBox(dialog);
     kind->setObjectName("colonyTemplateStepKind");
-    for (auto value : {ProductionKind::Factory, ProductionKind::Mine, ProductionKind::LocalRadar,
+    for (auto value : {ProductionKind::Factory, ProductionKind::Mine, ProductionKind::AdvancedFactory, ProductionKind::AdvancedMine, ProductionKind::UpgradeFactory, ProductionKind::UpgradeMine, ProductionKind::LocalRadar,
             ProductionKind::PlanetaryRadar, ProductionKind::Terraforming, ProductionKind::ColonyDefense})
         kind->addItem(stepName(value), int(value));
     auto* quantity = new QSpinBox(dialog);
@@ -158,9 +162,9 @@ void MainWindow::openColonyTemplates()
     status->setObjectName("colonyTemplateStatus");
     status->setWordWrap(true);
     editor->addWidget(status);
-    auto* example = new QLabel("Example forecast: 2,500 settlers, one factory, no mines/radar, I/B/G 30 kt each, temperate world, current research allocation; 64 years. Dates are illustrative. Annual steps repeat in priority order and can postpone later work. Unavailable defenses/terraforming are skipped by ordinary production rules.", dialog);
-    example->setWordWrap(true);
-    layout->addWidget(example);
+    auto* programHint = new QLabel("Costs are shown for each step. One-time batches follow queue priority; annual steps repeat and can postpone later work. Actual completion depends on the colony's output and supplies each turn. Unavailable defenses or terraforming are skipped by ordinary production rules.", dialog);
+    programHint->setWordWrap(true);
+    layout->addWidget(programHint);
     auto* close = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
     connect(close, &QDialogButtonBox::rejected, dialog, &QDialog::close);
     layout->addWidget(close);
@@ -184,14 +188,7 @@ void MainWindow::openColonyTemplates()
     };
     const auto render = [=, this](int selected = -1) {
         draft->value.name = name->text().trimmed().toStdString();
-        const auto state = planned_production_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
-        Planet sample;
-        sample.owner = pendingOrders_.player;
-        sample.population = 2500;
-        sample.industry = 1;
-        sample.minerals = {30, 30, 30};
-        sample.environment = {50, 50, 15};
-        const auto forecast = forecast_production_queue(state, sample, draft->value.items, 64);
+        const auto& state = receivedPlayerState();
         const QSignalBlocker blocked(steps);
         steps->clear();
         int radar = -1;
@@ -200,13 +197,9 @@ void MainWindow::openColonyTemplates()
             if (radar < 0 && (item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar)) radar = int(i);
             const auto minerals = production_item_mineral_cost(state, item);
             const auto q = double(item.quantity);
-            const auto date = forecast[i].completionTurn
-                ? QString("T+%1%2").arg(*forecast[i].completionTurn - state.turn)
-                    .arg(item.automation == ProductionAutomation::None ? "" : " first")
-                : QString("—");
             new QTreeWidgetItem(steps, {stepName(item.kind), QString::number(item.quantity), modeName(item.automation),
                 QString::number(std::uint64_t(production_cost(item.kind)) * item.quantity),
-                QString("%1 / %2 / %3").arg(minerals.ironium*q, 0, 'f', 1).arg(minerals.boranium*q, 0, 'f', 1).arg(minerals.germanium*q, 0, 'f', 1), date});
+                QString("%1 / %2 / %3").arg(minerals.ironium*q, 0, 'f', 1).arg(minerals.boranium*q, 0, 'f', 1).arg(minerals.germanium*q, 0, 'f', 1)});
         }
         if (selected >= 0 && selected < steps->topLevelItemCount()) {
             steps->setCurrentItem(steps->topLevelItem(selected));
@@ -260,7 +253,7 @@ void MainWindow::openColonyTemplates()
         if (selected == ProductionKind::Terraforming) {
             mode->addItem("Min terraform", int(ProductionAutomation::MinTerraform));
             mode->addItem("Max terraform", int(ProductionAutomation::MaxTerraform));
-        } else mode->addItem("Annual limit", int(ProductionAutomation::Annual));
+        } else if (!industry_upgrade_kind(selected)) mode->addItem("Annual limit", int(ProductionAutomation::Annual));
         mode->setCurrentIndex(std::max(0, mode->findData(previous)));
         const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
         quantity->setMaximum(radar ? 1 : kMaximumProductionBatch);

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Suns!
+Comment=Turn-based space strategy
+Exec=suns
+TryExec=suns
+Icon=suns
+Terminal=false
+Categories=Game;StrategyGame;
+StartupNotify=true
+StartupWMClass=suns

@@ -320,6 +320,8 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             factories += std::min(planet.industry-factories,removed-factories-mines);
             removed = factories + mines + defenses + (radarHit ? 1U : 0U);
             planet.industry -= factories; planet.mines -= mines;
+            planet.advancedFactories = std::min(planet.advancedFactories, planet.industry);
+            planet.advancedMines = std::min(planet.advancedMines, planet.mines);
             planet.warDamage.factoriesDestroyed+=factories;
             planet.warDamage.minesDestroyed+=mines;
             if(killed || removed || reverting || contaminated) planet.warDamage.lastBombardmentTurn=turn;
@@ -625,9 +627,9 @@ void apply_scientific_data(GameState& state, Player& player, const PendingPlayer
     const auto index = std::size_t(report.researchField);
     if (index >= kResearchFieldCount) return;
     auto points = report.quantity;
-    while (points && player.technology.levels[index] < 255) {
+    while (points && player.technology.levels[index] < kMaximumResearchLevel) {
         const auto next = std::uint8_t(player.technology.levels[index]+1);
-        const auto cost = research_level_cost(report.researchField, next);
+        const auto cost = research_level_cost(state, player.id, report.researchField, next);
         auto& progress = player.technology.progress[index];
         const auto spent = std::min(points, cost > progress ? cost-progress : 0);
         points -= spent; progress += spent;

@@ -57,14 +57,14 @@ int main(int argc,char** argv)
         assert(item->sceneBoundingRect().center().x()==710 && !item->toolTip().contains("9000"));
     }
     const auto risk=w.selectedFleetOverdriveDamageForRouteProgram(8);
-    const auto forecast=w.selectedFleetRouteProgramForecast(); const auto rows=w.selectedFleetRouteProgramRows();
-    assert(forecast.contains("Medium estimate") && !rows.empty() && rows[0].fuelUsed.contains("–"));
-    assert(rows[0].fuelTooltip.contains("received profiles") && rows[0].eta.startsWith("≈"));
+    const auto forecast=w.selectedFleetRouteProgramEstimate(); const auto rows=w.selectedFleetRouteProgramRows();
+    assert(forecast.contains("Distance / Warp²") && rows.size()==1 && rows[0].eta=="≈2");
+    assert(rows[0].etaTooltip.contains("fuel") && rows[0].etaTooltip.contains("not predicted"));
     suns::MainWindowTestAccess::changeHidden(w);
-    assert(w.selectedFleetRouteProgramForecast()==forecast);
+    assert(w.selectedFleetRouteProgramEstimate()==forecast);
     assert(w.selectedFleetOverdriveDamageForRouteProgram(8)==risk);
     const auto changed=w.selectedFleetRouteProgramRows();
-    assert(changed[0].eta==rows[0].eta && changed[0].fuelUsed==rows[0].fuelUsed && changed[0].fuelRemaining==rows[0].fuelRemaining);
+    assert(changed[0].eta==rows[0].eta && changed[0].etaTooltip==rows[0].etaTooltip);
     overlay->setChecked(false); assert(count()==0 && tree->topLevelItemCount()==1);
     overlay->setChecked(original);
     suns::MainWindowTestAccess::alternativeFixture(w);

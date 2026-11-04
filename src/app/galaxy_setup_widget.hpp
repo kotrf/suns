@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QComboBox;
+class QCheckBox;
 class QLabel;
 class QSpinBox;
 
@@ -22,6 +23,7 @@ private:
     QComboBox* density_{};
     QSpinBox* systems_{};
     QLabel* dimensions_{};
+    QCheckBox* slowResearch_{};
 };
 
 } // namespace suns
