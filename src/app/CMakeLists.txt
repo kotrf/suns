@@ -38,6 +38,8 @@ add_library(suns_app_ui STATIC
     station_details_dialog.hpp
     main_window_intelligence.cpp
     main_window_strategic_operations.cpp
+    mineral_stock_panel.cpp
+    mineral_stock_panel.hpp
     main_window_planet.cpp
     main_window_production.cpp
     simple_production_estimate.hpp

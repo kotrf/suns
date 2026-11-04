@@ -2892,6 +2892,7 @@ TurnResult TurnProcessor::process_with_events(
     publish_planetary_engineering_reports(next,current);
     publish_habitat_reports(next,current);
     publish_exotic_material_reports(next,current);
+    publish_surface_mineral_reports(next, next.turn + 1);
 
     // The ledger counts physical deliveries; publish one manifest per receiving
     // colony instead of one message for every split cargo order or waypoint.

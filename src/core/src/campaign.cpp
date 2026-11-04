@@ -1,4 +1,5 @@
 #include "suns/campaign.hpp"
+#include "suns/player_knowledge.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
@@ -541,17 +542,8 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                     known.engineering = intel->planetSnapshot->engineering;
                 }
             } else known.environment = {};
-            // Surface stocks change through other empires' mining/cargo orders.
-            // Only an immediately connected fleet on site knows today's stock.
-            if (level >= SurveyLevel::GeologicalSurvey && planet.owner == 0) {
-                const auto* star = find_star(host, planet.star);
-                const bool onSite = star && std::any_of(host.fleets.begin(), host.fleets.end(),
-                    [&](const Fleet& fleet) {
-                        return fleet.owner == playerId && same_position(fleet.position, star->position)
-                            && fleet_has_instant_link(host, fleet);
-                    });
-                if (onSite) known.minerals = planet.minerals;
-            }
+            if (const auto stock = known_surface_minerals(host, playerId, planet.id))
+                known.minerals = stock->minerals;
         }
         known.observedHabitability = known_planet_habitability(host, playerId, planet.id);
         known.habitability = known.observedHabitability.value_or(0);

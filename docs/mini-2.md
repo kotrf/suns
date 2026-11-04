@@ -3,6 +3,8 @@
 The user approved implementation of all four accumulated notes on 4 November
 2026. Tracking: [#273](https://github.com/kotrf/suns/issues/273). This slice changes
 presentation and platform assets, not game balance, turn rules or save/orders.
+They were merged in [#274](https://github.com/kotrf/suns/pull/274). The user then
+authorized completing the added notes 5–6; tracking [#275](https://github.com/kotrf/suns/issues/275).
 
 ## Map and station details
 
@@ -68,6 +70,57 @@ at each listed size, then combine the PNGs in increasing size order:
 magick suns-16.png suns-24.png suns-32.png suns-48.png suns-64.png suns-128.png suns-256.png suns.ico
 ```
 
+## Received planetary radar (item 5)
+
+System Details now shows the received planetary radar tier (None/Local/Full)
+and nominal 0/30/150 ly range. The evidence comes from the owner-only received
+infrastructure snapshot, including its received construction queue; a newer
+hidden host installation cannot replace it. A foreign or unreported receiver is
+unknown rather than a confirmed absent radar. The intelligence age above the
+summary applies to the infrastructure report. These are nominal receiver ranges,
+not a claim that interference-adjusted sensor coverage is currently unobstructed.
+
+## Surface mineral bars (item 6)
+
+The three rows share a clickable kt scale (10, 50, 100, 500, 1000, 5000, 10000,
+50000; initially 1000). Clicking a row/the scale button or pressing Space/Return
+on a focused row cycles the same scale for all three. Light fill represents
+surface stock, followed by a darker extension for current mining per turn. A
+white diamond independently maps concentration onto 0–100%; changing the kt
+scale never changes it. Stocks beyond the selected scale show an overflow mark.
+Exact stock/mining/concentration values and stock observation age are available
+in each tooltip; the age also remains visible below the rows. A missing stock
+report is unknown; a received zero is displayed as a known empty stock. Stock
+and concentration can be known independently.
+
+The Minerals table uses the same knowledge-aware data. Uncolonized worlds show
+the latest received surface stock instead of unconditional dashes. Stock evidence
+is frozen in an optional independently dated survey field, captured on site and
+published again after mining/cargo at the annual boundary on previously orbitally
+surveyed worlds (or alongside a pending real orbital survey), including by fleets
+without a scanner. Stock measurement does not grant a planetary survey to a
+scannerless colonizer. A same-year final observation supersedes an arrival scan;
+late older or higher-quality packets cannot roll stocks back. Foreign colony
+stocks are never captured. Passive/silent observers retain their reports in the
+existing outbox until transmission, and repeated held observations coalesce.
+Ordinary mineral observations do not discover xenocrystal deposits.
+
+Displayed known stock includes accepted current Cargo changes. First-year colony extraction
+uses the received pre-Cargo workforce, matching actual mining phase order. For
+uncolonized worlds, the estimate sums the scalar extraction of the player's
+received/accepted remote-mining stacks currently at that orbit; unknown geology
+has no extraction estimate. Hidden mining fleets, future travel/commands, cargo,
+production and population are not simulated. The two affected panels reuse
+existing event-invalidated planning/player-view caches, with no polling, workers,
+TurnProcessor calls or year loops in their refresh paths.
+
+Save v110 appends a bounded SMIN evidence extension; readers retain compatibility
+with v12–109, with absent legacy uncolonized stock evidence remaining unknown
+until a new report arrives. Existing legacy owner habitat evidence still provides
+its recorded supplies. Player packets carry received stock evidence but no
+in-flight reports. Orders remain v48; real mining/balance and communication rules
+are unchanged.
+
 ## Validation
 
 Existing route/mining tests require geometry without map numbers. Station tests
@@ -85,3 +138,9 @@ Local synthetic measurements: five route legs take **0.1027 ms** per row query,
 query timings, not complete click/painting benchmarks; the estimator scales with
 waypoints rather than future years. Full build/CTest and current PR/CI evidence
 are recorded in [project status](project-status.md) and GitHub.
+
+Item 5–6 regression coverage includes received Local/None versus unknown radar,
+hidden installation changes, post-mining publication without a scanner, frozen
+and out-of-order stock reports, Passive hold/coalescing/transmission, known zero
+versus unknown, current mining stack estimates, shared scale and keyboard control,
+rendering, host/player serialization, v109 migration and corrupt/truncated evidence.

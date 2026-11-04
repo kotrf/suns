@@ -761,6 +761,12 @@ enum class SurveyLevel : std::uint8_t {
     DeepSurvey,
 };
 
+struct SurfaceMineralObservation {
+    MineralCargo minerals;
+    std::uint64_t observedTurn{};
+    bool finalSurface{}; // Post-mining/cargo evidence supersedes the same year's arrival scan.
+};
+
 struct PlanetSurveySnapshot {
     // Basic scans contain only a frozen rough Hab estimate. Orbital scans
     // retain the scalar baseline and environmental axes for known-cycle forecasts.
@@ -774,6 +780,7 @@ struct PlanetSurveySnapshot {
     std::optional<std::uint32_t> engineeringQueueIndex; // Owner-only queue position at observation.
     std::optional<HabitatObservation> habitat; // Private frozen population and operating supplies.
     std::optional<std::vector<ScienceSample>> scienceSamples; // Owner-only, including a confirmed empty surface.
+    std::optional<SurfaceMineralObservation> surfaceMinerals;
 };
 
 struct SystemSurveyKnowledge {

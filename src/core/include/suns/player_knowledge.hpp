@@ -7,6 +7,10 @@
 
 namespace suns {
 
+// Received surface evidence only. Absence is unknown, distinct from a known zero.
+[[nodiscard]] std::optional<SurfaceMineralObservation> known_surface_minerals(const GameState&, PlayerId, PlanetId);
+void publish_surface_mineral_reports(GameState&, std::uint64_t observationTurn);
+
 // Delivery routing/dates do not identify an award. Finite objectives can supply
 // their stable key to distinguish otherwise identical simultaneous findings.
 [[nodiscard]] std::uint64_t scientific_data_id(const PendingPlayerReport&,PlayerId,std::uint64_t objective=0);

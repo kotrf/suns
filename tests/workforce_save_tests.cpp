@@ -41,8 +41,9 @@ int main()
     original.pendingOrders = {1, {}};
     assert(write_save_game_file(path, original, error));
     auto current = bytes(path);
-    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 109); }
-    const auto extension = current.size() - 8 - 14; // Empty SCRP tail, then WFRK + one racial record.
+    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 110); }
+    QByteArray workforceMarker; { QDataStream out(&workforceMarker, QIODevice::WriteOnly); out << quint32{0x5746524b}; }
+    const auto extension = current.lastIndexOf(workforceMarker); assert(extension > 0);
     { QDataStream in(current.mid(extension)); quint32 magic{}, count{}; in >> magic >> count; assert(magic == 0x5746524b && count == 1); }
 
     // The pre-extension bytes are checked against a real v107 writer, built
@@ -101,7 +102,7 @@ int main()
 
     assert(write_save_game_file(path, host, error));
     const auto valid = bytes(path);
-    const auto offset = valid.size() - 8 - 20; // Empty SCRP tail follows two racial records.
+    const auto offset = valid.lastIndexOf(workforceMarker); assert(offset > 0);
     for (int which = 0; which < 9; ++which) {
         auto corrupt = valid;
         switch (which) {
