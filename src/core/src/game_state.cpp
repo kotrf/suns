@@ -1762,7 +1762,7 @@ void refresh_sensor_intel(GameState& state)
 
 std::uint64_t population_capacity(const Planet& planet)
 {
-    return static_cast<std::uint64_t>(std::max(0, planet.habitability)) * kPopulationPerHabitability;
+    return static_cast<std::uint64_t>(std::clamp(planet.habitability, 5, 100)) * kPopulationPerHabitability;
 }
 
 bool star_is_variable(const StarSystem& star)
@@ -1790,44 +1790,61 @@ std::int32_t current_planet_habitability(
 std::uint64_t population_capacity(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
-    return static_cast<std::uint64_t>(std::max(0, current_planet_habitability(state, planet, turn)))
+    return static_cast<std::uint64_t>(std::clamp(current_planet_habitability(state, planet, turn), 5, 100))
         * kPopulationPerHabitability;
 }
 
+namespace {
+// Stars! surface model: full rate through 25% capacity, then quadratic
+// crowding. Reference: Player's Guide 6-2/6-3 and Craig Stars planet.go.
+std::int64_t surface_population_growth(const Planet& planet, int habitability,
+    std::uint64_t capacity, std::uint8_t growthRate)
+{
+    if (!planet.owner || !planet.population) return 0;
+    habitability = std::clamp(habitability, -100, 100);
+    const auto population = planet.population;
+    // Divide first: even UINT64_MAX populations in old files stay safe.
+    const auto fraction = [](std::uint64_t value, std::uint64_t numerator, std::uint64_t denominator) {
+        return value / denominator * numerator
+            + (value % denominator * numerator + denominator / 2) / denominator;
+    };
+    const auto deaths = [&](std::uint64_t loss) {
+        // Natural losses do not extinguish an established 100-person colony.
+        // Smaller cargo-founded colonies are preserved, never inflated to 100.
+        const auto floor = std::min<std::uint64_t>(population, 100);
+        return -static_cast<std::int64_t>(std::min(loss, population - floor));
+    };
+    if (habitability < 0) return deaths(fraction(population, -habitability, 1000));
+    if (population > capacity) {
+        if (population >= capacity * 4) return deaths(fraction(population, 12, 100));
+        // Below 4x capacity, both operands are bounded by four million.
+        return deaths(fraction(population * (population - capacity), 1, 25 * capacity));
+    }
+    if (!habitability || population == capacity) return 0;
+    auto growth = fraction(population * std::clamp<int>(growthRate, 1, 20), habitability, 10000);
+    if (population * 4 > capacity) {
+        const auto headroom = capacity - population;
+        // Capacity <= 1,000,000: the numerator fits uint64_t. Integer arithmetic
+        // keeps the same whole-person result across Linux and Windows hosts.
+        growth = growth * 16 * headroom * headroom / (9 * capacity * capacity);
+    }
+    return static_cast<std::int64_t>(std::min(growth, capacity - population));
+}
+} // namespace
+
 std::int64_t projected_population_growth(const Planet& planet)
 {
-    if (planet.owner == 0 || planet.population == 0 || planet.habitability == 0) return 0;
-    if (planet.habitability < 0) {
-        const auto loss = std::max<std::uint64_t>(
-            1, planet.population * static_cast<std::uint64_t>(-planet.habitability) / 1000);
-        return -static_cast<std::int64_t>(std::min(loss, planet.population));
-    }
-    const auto capacity = population_capacity(planet);
-    if (capacity == 0 || planet.population >= capacity) return 0;
-    const auto rawGrowth = std::max<std::uint64_t>(1, planet.population * planet.habitability / 1000);
-    const auto headroom = capacity - planet.population;
-    auto growth = rawGrowth * headroom / capacity;
-    if (growth == 0) growth = 1;
-    return static_cast<std::int64_t>(std::min(growth, headroom));
+    return surface_population_growth(planet, planet.habitability,
+        population_capacity(planet), kDefaultPopulationGrowthRate);
 }
 
 std::int64_t projected_population_growth(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
-    const auto habitability = current_planet_habitability(state, planet, turn);
-    if (planet.owner == 0 || planet.population == 0 || habitability == 0) return 0;
-    if (habitability < 0) {
-        const auto loss = std::max<std::uint64_t>(
-            1, planet.population * static_cast<std::uint64_t>(-habitability) / 1000);
-        return -static_cast<std::int64_t>(std::min(loss, planet.population));
-    }
-    const auto capacity = population_capacity(state, planet, turn);
-    if (capacity == 0 || planet.population >= capacity) return 0;
-    const auto rawGrowth = std::max<std::uint64_t>(1, planet.population * habitability / 1000);
-    const auto headroom = capacity - planet.population;
-    auto growth = rawGrowth * headroom / capacity;
-    if (growth == 0) growth = 1;
-    return static_cast<std::int64_t>(std::min(growth, headroom));
+    const auto* player = find_player(state, planet.owner);
+    return surface_population_growth(planet, current_planet_habitability(state, planet, turn),
+        population_capacity(state, planet, turn),
+        player ? player->race.populationGrowthRate : kDefaultPopulationGrowthRate);
 }
 
 ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet)

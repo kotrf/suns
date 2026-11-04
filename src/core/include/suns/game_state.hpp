@@ -41,13 +41,14 @@ inline constexpr std::uint8_t kColonyShipCruiseWarp = 7;
 // Stars! reference ratio: 100 colonists occupy 1 kt of cargo (10,000 kg each).
 inline constexpr double kColonistMassKg = 10'000.0;
 inline constexpr double kColonistsPerCargoUnit = 1'000'000.0 / kColonistMassKg;
-inline constexpr std::uint64_t kInitialHomePopulation = 1'000'000;
-inline constexpr std::uint64_t kPopulationPerHabitability = 25'000;
+inline constexpr std::uint64_t kInitialHomePopulation = 25'000;
+inline constexpr std::uint64_t kPopulationPerHabitability = 10'000;
 inline constexpr std::uint64_t kPopulationPerProductionUnit = 1'000;
 inline constexpr std::uint64_t kPopulationPerWorkforceGroup = 10'000;
 inline constexpr std::uint8_t kMinWorkforceRate = 5;
 inline constexpr std::uint8_t kMaxWorkforceRate = 25;
 inline constexpr std::uint8_t kDefaultWorkforceRate = 10;
+inline constexpr std::uint8_t kDefaultPopulationGrowthRate = 15;
 inline constexpr double kRadiatingDriveSafeTolerance = 0.85;
 inline constexpr double kRadiatingDriveColonistLossFraction = 0.10;
 inline constexpr std::uint32_t kFirstResearchLevelCost = 50;
@@ -1055,6 +1056,7 @@ struct RaceProfile {
     std::uint8_t factoriesPerTenThousand{kDefaultWorkforceRate};
     std::uint8_t minesPerTenThousand{kDefaultWorkforceRate};
     std::array<ResearchCost, kResearchFieldCount> researchCosts{};
+    std::uint8_t populationGrowthRate{kDefaultPopulationGrowthRate};
 };
 
 struct ColonyTurnStatistics {

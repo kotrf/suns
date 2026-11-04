@@ -162,7 +162,8 @@ int main()
     assert(next.planets.front().industry == 100 && next.planets.front().mines == 100);
     assert(std::abs(next.planets.front().minerals.ironium - colony.minerals.ironium - mined.ironium) < 1e-8);
     assert(next.fleets.front().colonists == 2500);
-    assert(next.planets.front().population < colony.population);
+    auto afterLoading=colony; afterLoading.population-=2500;
+    assert(next.planets.front().population==afterLoading.population+projected_population_growth(state,afterLoading,state.turn));
 
     auto researchState = state;
     researchState.players.front().technology.researchAllocationPercent = 100;

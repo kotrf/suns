@@ -39,7 +39,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 111;
+constexpr quint32 kSaveFormatVersion = 112;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -3299,6 +3299,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeWreckMinerals(stream,data.state);
     writeSurfaceMinerals(stream,data.state);
     writeEconomy(stream,data.state);
+    writePopulationRules(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3433,6 +3434,8 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if(version>=109) readWreckMinerals(stream,loaded.state);
     if(version>=110) readSurfaceMinerals(stream,loaded.state);
     if(version>=111) readEconomy(stream,loaded.state);
+    if(version>=112) readPopulationRules(stream,loaded.state);
+    else for (auto& player : loaded.state.players) player.race.populationGrowthRate = 10;
     loaded.galaxyConfig.slowResearch = loaded.state.slowResearch;
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn

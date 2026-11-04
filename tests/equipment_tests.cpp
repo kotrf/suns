@@ -98,6 +98,7 @@ void fit_and_production()
     state = equipped_empire();
     auto& planet = state.planets.front();
     assert(planet.owner == 1);
+    planet.population=1'000'000; // Explicit fully staffed construction fixture.
     planet.industry = 1000; planet.minerals = {1000, 1000, 1000};
     state.orbitalStations.push_back({999, 1, planet.id, "Yard", OrbitalStationHullType::OrbitalDock,
         {OrbitalStationModule::Shipyard}});

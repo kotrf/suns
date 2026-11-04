@@ -61,7 +61,7 @@ void deployment_is_physical_paid_and_permanent()
     assert(same_position(after.fleets[0].position,f.position) && after.fleets[0].task==FleetTask::None);
     assert(!enter_wormhole(after,after.fleets[0],123));
     // Paid production consumes the entire constructor's ordinary ship cost.
-    auto paid=world(); paid.planets[0].industry=1000; paid.planets[0].minerals={1000,1000,1000};
+    auto paid=world(); paid.planets[0].population=1'000'000; paid.planets[0].industry=1000; paid.planets[0].minerals={1000,1000,1000};
     const auto minerals=ship_design_mineral_cost(*find_ship_design(paid,100));
     const auto baseline=TurnProcessor{}.process(paid,{});
     const auto built=TurnProcessor{}.process(paid,{{1,{QueueShipDesignOrder{1,100}}}});

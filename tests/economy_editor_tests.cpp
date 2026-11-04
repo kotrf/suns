@@ -28,7 +28,7 @@ namespace suns {
 struct MainWindowTestAccess {
     static void setup(MainWindow& w) {
         w.state_=make_demo_game();
-        auto& p=w.state_.planets.front(); p.industry=4; p.mines=3;
+        auto& p=w.state_.planets.front(); p.population=100000; p.industry=4; p.mines=3;
         p.advancedFactories=1; p.advancedMines=1;
         auto& t=w.state_.players.front().technology;
         t.focus=ResearchField::Energy; t.queuedFocuses={ResearchField::Propulsion}; t.researchActive=true;
@@ -52,26 +52,28 @@ static void save_and_received_evidence(const QString& path)
 {
     SaveGameData host; host.campaignId=1; host.turnToken=22;
     host.playerTokens={{1,11},{2,22}}; host.mode=SessionMode::Host;
-    EmpireSetup a{"First"}, b{"Second"}; a.researchCosts[0]=ResearchCost::Cheap;
+    EmpireSetup a{"First"}, b{"Second"}; a.researchCosts[0]=ResearchCost::Cheap; a.populationGrowthRate=19; b.populationGrowthRate=2;
     GalaxyConfig config; config.slowResearch=true;
     host.state=generate_campaign(config,{a,b}); host.galaxyConfig=config; host.pendingOrders={2,{}};
     auto& p=host.state.planets.front(); assert(p.owner==1);
-    p.industry=7; p.mines=5; p.advancedFactories=3; p.advancedMines=2;
+    p.population=100000; p.industry=7; p.mines=5; p.advancedFactories=3; p.advancedMines=2;
     set_survey_level(host.state,1,p.star,SurveyLevel::DeepSurvey,host.state.turn);
     // Undelivered physical upgrades must not leak into the received snapshot.
     p.advancedFactories=5;
     auto publicTurn=make_player_turn(host,1);
     assert(publicTurn.state.planets.front().advancedFactories==3);
     QString error; assert(write_save_game_file(path,publicTurn,error)); const auto original=bytes(path);
-    p.advancedFactories=6; host.state.players[1].race.researchCosts.fill(ResearchCost::Expensive);
+    p.advancedFactories=6; host.state.players[1].race.researchCosts.fill(ResearchCost::Expensive); host.state.players[1].race.populationGrowthRate=20;
     assert(write_save_game_file(path,make_player_turn(host,1),error)); assert(bytes(path)==original);
     SaveGameData parsed; assert(read_save_game_file(path,parsed,error));
     assert(parsed.state.planets.front().advancedFactories==3 && parsed.state.planets.front().advancedMines==2);
     assert(parsed.state.slowResearch && parsed.galaxyConfig.slowResearch);
+    assert(parsed.state.players.front().race.populationGrowthRate==19);
     assert(parsed.state.players.front().race.researchCosts[0]==ResearchCost::Cheap);
     assert(write_save_game_file(path,host,error) && read_save_game_file(path,parsed,error));
     assert(parsed.state.planets.front().advancedFactories==6);
     auto before=TurnProcessor{}.process(host.state,{}), after=TurnProcessor{}.process(parsed.state,{});
+    assert(before.planets.front().population==after.planets.front().population);
     assert(before.players.front().technology.levels==after.players.front().technology.levels);
     assert(before.players.front().technology.progress==after.players.front().technology.progress);
     assert(colony_output(before,before.planets.front())==colony_output(after,after.planets.front()));
@@ -120,12 +122,37 @@ static void genuine_v110_migration(const QString& path)
     assert(direct.planets.front().productionQueue==reread.planets.front().productionQueue);
     assert(direct.players.front().technology.progress==reread.players.front().technology.progress);
 }
+static void genuine_v111_population_migration(const QString& path)
+{
+    SaveGameData loaded; QString error;
+    assert(read_save_game_file(QString::fromUtf8(SUNS_TEST_FIXTURE_DIR "/population-v111.suns"),loaded,error));
+    const auto& p=loaded.state.planets.front();
+    assert(p.population==1'000'000 && p.industry==7 && p.advancedFactories==2 && p.advancedMines==1);
+    assert(loaded.state.players.front().race.populationGrowthRate==10);
+    assert(loaded.state.players.front().history.front().population==1'000'000);
+    assert(loaded.state.players.front().technology.progress[5]==17);
+    assert(p.productionQueue.front().remainingCost==6);
+    assert(write_save_game_file(path,loaded,error)); SaveGameData roundTrip;
+    assert(read_save_game_file(path,roundTrip,error));
+    assert(roundTrip.state.players.front().race.populationGrowthRate==10);
+    assert(roundTrip.state.planets.front().population==1'000'000);
+    const auto a=TurnProcessor{}.process(loaded.state,{}), b=TurnProcessor{}.process(roundTrip.state,{});
+    assert(a.planets.front().population==b.planets.front().population);
+    auto bad=bytes(path); QByteArray marker; { QDataStream out(&marker,QIODevice::WriteOnly); out<<quint32(0x504f5052); }
+    const auto offset=bad.lastIndexOf(marker); assert(offset>0);
+    for (auto rate:{0,21,255}) { auto invalid=bad; invalid[offset+12]=char(rate); put(path,invalid); assert(!read_save_game_file(path,roundTrip,error)); }
+    auto invalid=loaded; invalid.state.players.front().race.populationGrowthRate=0;
+    assert(!write_save_game_file(path,invalid,error));
+}
 static void editors_and_simple_estimates(const QString& racePath)
 {
-    EmpireSetup setup{"Research settings"}; setup.researchCosts={ResearchCost::Cheap,ResearchCost::Normal,ResearchCost::Expensive};
+    EmpireSetup setup{"Research settings"}; setup.populationGrowthRate=17; setup.researchCosts={ResearchCost::Cheap,ResearchCost::Normal,ResearchCost::Expensive};
     RaceSetupWidget race; race.setSetup(setup); assert(race.setup().researchCosts==setup.researchCosts);
+    auto* growth=race.findChild<QSpinBox*>("racePopulationGrowth");
+    assert(growth && growth->minimum()==1 && growth->maximum()==20 && growth->value()==17);
+    assert(race.setup().populationGrowthRate==17);
     QString error; assert(write_race_file(racePath,setup,error)); EmpireSetup read;
-    assert(read_race_file(racePath,read,error) && read.researchCosts==setup.researchCosts);
+    assert(read_race_file(racePath,read,error) && read.researchCosts==setup.researchCosts && read.populationGrowthRate==17);
     GalaxyConfig config; GalaxySetupWidget galaxy(config);
     auto* slow=galaxy.findChild<QCheckBox*>("slowResearchCheck"); assert(slow); slow->setChecked(true);
     assert(galaxy.config(1).slowResearch);
@@ -169,6 +196,7 @@ static void editors_and_simple_estimates(const QString& racePath)
 int main(int argc,char** argv) {
     QApplication app(argc,argv); QTemporaryDir dir; assert(dir.isValid());
     QSettings::setPath(QSettings::NativeFormat,QSettings::UserScope,dir.path());
+    genuine_v111_population_migration(dir.filePath("v111.suns"));
     genuine_v110_migration(dir.filePath("legacy-roundtrip.suns"));
     save_and_received_evidence(dir.filePath("economy.suns"));
     editors_and_simple_estimates(dir.filePath("race.sunsrace"));

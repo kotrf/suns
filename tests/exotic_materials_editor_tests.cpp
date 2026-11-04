@@ -26,7 +26,8 @@ using namespace suns;
 namespace {
 GameState fixture()
 {
-    auto s = make_demo_game(); s.turn = 10; s.wormholeRules.spawnChancePerTurn = 0;
+    auto s = make_demo_game(); s.planets[0].population=1'000'000; // Mature, fully staffed fixture.
+    s.turn = 10; s.wormholeRules.spawnChancePerTurn = 0;
     s.players[0].technology.levels.fill(16); s.players[0].technology.researchActive = false;
     s.planets[0].industry = 1000; s.planets[0].minerals = {10000, 10000, 10000}; s.planets[0].productionQueue.clear();
     s.orbitalStations[0].hull = OrbitalStationHullType::Starbase;

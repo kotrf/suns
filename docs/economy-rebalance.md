@@ -2,7 +2,8 @@
 
 The user approved 1 resource per 1000 inhabitants, basic/advanced industry with
 paid upgrades and shared workforce limits, and subsequently requested Stars!
-research costs in the same implementation. The numerical industry recipes below
+research costs in the same implementation, then the ordinary Stars! starting
+population and surface growth model. The numerical industry recipes below
 are initial implementation balance parameters, not a claim of campaign acceptance.
 
 ## Industry
@@ -116,10 +117,52 @@ increased by four, preserving already paid resources against the new price 10;
 annual rules/templates are repriced consistently. Old pending production orders
 receive the current recipe. Construction minerals were never prepaid.
 
-Suns!' million-person homeworld now starts at 1004 resources with four basic
-factories, versus the old six. This deliberately keeps the existing population
-setup while implementing the requested resource ratio and exact reference prices.
-It is not a claim of matching Stars!' whole campaign pacing: starting population,
-growth, ship recipes and existing special-project annual limits remain Suns! rules.
-New/continued campaigns and AI development need gameplay acceptance beyond the
-deterministic checks in this PR.
+New homeworlds now start with **25,000** surface colonists (the ordinary Stars!
+start), for **29 resources** with the existing four basic factories. There is no
+Accelerated BBS option in this slice. Existing counts in saves are not rescaled.
+Ship recipes and special-project annual limits remain Suns! rules; full campaign
+pacing still needs gameplay acceptance beyond deterministic checks.
+
+## Surface population (follow-up, 4 November 2026)
+
+- Maximum annual racial growth is editable from **1% to 20%**. The new-race
+  default is **15%** (a chosen default, not one universal rate for all Stars! races).
+- Capacity is `1,000,000 * max(5, habitability) / 100`, bounded to 100% suitability.
+  A 50% world supports 500,000; a red/zero/tiny-hab world uses a 50,000 density
+  denominator. This floor does not make hostile worlds grow.
+- Through 25% capacity, births are `round(population * racial_rate * hab / 10000)`.
+  Above 25% and below capacity, multiply by `(16/9) * (1 - population/capacity)^2`
+  and truncate to whole people. At capacity, growth is zero.
+- Above capacity on non-red worlds, annual mortality is
+  `min(12%, 4% * (population/capacity - 1))`, rounded to whole people.
+  Red worlds instead lose `abs(hab)/10` percent each year. Natural loss stops at
+  100 colonists; smaller already-existing colonies are preserved without creating
+  people. Invasion/bombardment and other physical losses retain their own rules.
+- Factories/mines do not affect births. The current scalar UI estimate uses the
+  same function, including density after validated cargo orders; no yearly
+  simulation/worker was added. Variable stars, contamination and terraforming
+  use their ordinary current received/physical habitability paths.
+- Hull-family access is not a full Stars! racial trait: choosing Hyper Expansion
+  hulls does not double growth or halve capacity. Existing serviced orbital
+  habitats keep their separate support/growth rules. No new Stars! PRTs, racial
+  point budget, crowded-population production penalty or 100-person cargo
+  quantization is introduced by this population request.
+
+Reference: [original Player's Guide, Planets 6-2/6-3 and Race Creation 20-15](https://www.bestoldgames.net/download/games/stars/stars-win-manual.pdf)
+for suitability, 25% threshold, million-person capacity, red/overcrowded mortality
+and the 1–20% racial range. The exact quadratic/rounding and ordinary 25,000 start
+are cross-checked against the public [Craig Stars planet.go](https://github.com/sirgwain/craig-stars/blob/develop/cs/planet.go),
+[universegenerator.go](https://github.com/sirgwain/craig-stars/blob/develop/cs/universegenerator.go)
+and rules. The original executable has not been run; this is the documented
+normal surface model, not a claim of bit-for-bit Stars! emulation.
+
+Save **v112** appends `POPR` racial rates after v111 ECON; orders remain **v49**.
+Race files write **v3**, read v1/v2/v3. Older saves and race files retain their
+previous implicit **10%** maximum rate, but subsequent turns use the new density
+curve/capacity. All stored populations (including >capacity), cargo, RP, partially
+paid work and historical ledgers remain unchanged on load. Old crowded worlds
+can therefore decline after the next End Turn; loading does not silently clamp
+or delete inhabitants. v111 ECON is still read without repricing its factories.
+The synthetic original-v111 fixture preserves a million-person colony, advanced
+subsets, partial work, technology/RP and the old historical ledger through a
+v112 round trip and actual turn continuation.

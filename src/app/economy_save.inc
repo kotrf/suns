@@ -74,3 +74,28 @@ void readEconomy(QDataStream& in, GameState& state)
         }
     }
 }
+
+// v112: configurable surface growth. Counts, identity and range are checked.
+void writePopulationRules(QDataStream& out, const GameState& state)
+{
+    out << quint32(0x504f5052) << quint32(state.players.size()); // POPR
+    for (const auto& player : state.players) {
+        if (player.race.populationGrowthRate < 1 || player.race.populationGrowthRate > 20) {
+            out.setStatus(QDataStream::WriteFailed); return;
+        }
+        out << quint32(player.id) << quint8(player.race.populationGrowthRate);
+    }
+}
+void readPopulationRules(QDataStream& in, GameState& state)
+{
+    quint32 magic{}, count{}, id{}; quint8 rate{};
+    in >> magic;
+    if (magic != 0x504f5052 || !readCount(in, count) || count != state.players.size()) {
+        markCorrupt(in); return;
+    }
+    for (auto& player : state.players) {
+        in >> id >> rate;
+        if (id != player.id || rate < 1 || rate > 20) { markCorrupt(in); return; }
+        player.race.populationGrowthRate = rate;
+    }
+}

@@ -22,3 +22,18 @@ fixture writer together with that commit's `src/app/save_game.cpp`, link the old
 core archive and Qt6::Core, and pass the desired fixture path as its one argument.
 Do not build this writer against current headers: its purpose is preserving the
 previous release's layout and recipes.
+
+## Population follow-up fixture
+
+`population-v111.suns` was written by `population_v111_writer.cpp` compiled with
+original headers, core and save writer at
+`109afcaa11eb935bcc5357b04b8959dae4af3a2e` (PR #278 before population changes),
+GCC14.2 / Qt6.8.2. It is synthetic data, not a user's game. It deliberately keeps
+1,000,000 inhabitants and the old million-person turn-1 ledger; it also contains
+advanced subsets, partially paid basic factories, annual/template work and RP.
+
+SHA-256: `5c338536f647cf7f72b33cee915270af776f25f2b864ea79e48b3057cd824b5f`.
+
+The v112 test checks unchanged counts/ledger/RP/paid work, the implicit old 10%
+maximum growth rate, valid new-format persistence and identical real continuation.
+This file came from the actual v111 writer, not a v112 header downgrade.

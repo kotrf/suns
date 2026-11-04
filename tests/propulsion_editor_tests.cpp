@@ -75,7 +75,7 @@ struct MainWindowTestAccess {
         tech.focus = ResearchField::Energy;
         tech.researchActive = true;
         tech.researchAllocationPercent = 100;
-        tech.progress[static_cast<std::size_t>(ResearchField::Energy)] = research_level_cost(ResearchField::Energy, 4) - 1;
+        tech.progress[static_cast<std::size_t>(ResearchField::Energy)] = research_level_cost(window.state_, 1, ResearchField::Energy, 4) - 1;
         tech.queuedFocuses = {ResearchField::Propulsion, ResearchField::Energy};
         window.pendingOrders_ = {1, {}};
         window.pendingDescriptions_.clear();

@@ -1,5 +1,50 @@
 # Project status and development handoff
 
+## Stars! starting population and growth follow-up — 4 November 2026
+
+The user extended [#278](https://github.com/kotrf/suns/pull/278) with ordinary
+Stars! surface demographics. New homeworlds start at **25,000**, with the existing
+four basic factories producing **29 resources**. Ideal capacity is **1,000,000**;
+racial maximum growth is configurable **1–20%**, new default **15%**. Full growth
+through 25% capacity, then the quadratic factor `(16/9)*(1-density)^2`, red-world
+mortality and capped overcrowding losses use a shared bounded integer function.
+No minimum one-person birth is invented; natural mortality preserves 100-person
+colonies. See [the contract](economy-rebalance.md) for rounding and all limits.
+
+- Current UI growth and after-cargo next-year figures use the same scalar rule,
+  with no turn simulation. Capacity labels use the same 5% habitability floor.
+- Race designer, campaign slot, portable race, host/player save and reload→New
+  galaxy retain the racial rate. That restart path also now retains the six
+  research-cost choices introduced by this PR.
+- Save **v112** appends validated POPR after v111 ECON; orders remain **v49**.
+  Race files write **v3**, read v1/v2/v3. Older formats default to their implicit
+  10% rate, retaining every stored population/cargo/ledger/RP/paid-work value.
+  Subsequent years use the new density model; an already crowded old world may
+  lose people on End Turn, with no load-time truncation.
+- An actual original-v111 writer at source `109afca` generated the synthetic
+  million-person fixture with advanced subsets, partial work, RP and ledger.
+  Provenance/hash are in tests/fixtures. v110 fixture and v107 hash stay checked.
+- Normal population is tested at/below/above 25%, 50%, 75%, capacity and 2x/4x/8x
+  capacity, plus positive/zero/red hab, minimum, custom races, received views,
+  real End Turn and extreme stored counts. Real race UI/file/campaign/restart and
+  malformed POPR/race inputs are covered.
+
+The original Player's Guide and public Craig Stars code are the references; the
+original executable was not run. Advanced racial PRT effects, Accelerated BBS,
+orbital habitat demographics and other ship/project recipes are outside this
+population change. Whole-campaign balance and native Windows Qt remain manual
+acceptance items. #278 is still stacked on open #277; neither is merged here.
+The earlier source `109afca` passed CI 41839840687; the new published head needs
+its own CI. Full GCC14.2 / Qt6.8.2 Debug app/test build and **117/117
+CTest passed (132.58 s, -j4)** on the final code. The initial demographic changes
+required explicit mature/funded fixtures for expensive ship/lab construction,
+new-start cargo expectations, the 18th campaign column and a corruption test
+addressing SMIN rather than the last byte of the whole file. All original paid,
+knowledge, replay and transport assertions are retained. Race-editor growth and
+Research/Production layouts were rendered and inspected. No private saves or
+screenshots are committed.
+
+
 ## Population economy and Stars! research (#276) — 4 November 2026
 
 The user approved implementing #276 and explicitly selected Stars! research

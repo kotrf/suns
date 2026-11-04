@@ -20,7 +20,7 @@ int main()
             [&](const Planet& p) { return p.owner == player.id; });
         assert(colony != state.planets.end());
         assert(current_planet_habitability(state, *colony, state.turn) == 100);
-        assert(population_capacity(state, *colony, state.turn) == 2'500'000);
+        assert(population_capacity(state, *colony, state.turn) == 1'000'000);
         assert(colony_has_orbital_service(state, colony->id, player.id, OrbitalStationModule::Shipyard));
         assert(state.fleets[player.id - 1].owner == player.id);
         assert(fleet_design(state, state.fleets[player.id - 1])->owner == player.id);
@@ -55,20 +55,20 @@ int main()
     colonyTrial.players[0].surveyedStars.push_back(target.star);
     colonyTrial.fleets[0].design = 2;
     colonyTrial.fleets[0].position = trialStar.position;
-    colonyTrial.fleets[0].colonists = 100;
+    colonyTrial.fleets[0].colonists = 1000;
     const auto hostileColony = resolve_campaign_turn(colonyTrial,
         {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
     assert(find_planet_at_star(hostileColony, target.star)->owner == 1);
-    assert(find_planet_at_star(hostileColony, target.star)->population < 100);
+    assert(find_planet_at_star(hostileColony, target.star)->population < 1000);
     colonyTrial.players[0].technology.levels[static_cast<std::size_t>(ResearchField::Biology)] = 1;
     const auto founded = resolve_campaign_turn(colonyTrial,
         {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
     assert(find_planet_at_star(founded, target.star)->owner == 1);
-    assert(find_planet_at_star(founded, target.star)->population < 100);
+    assert(find_planet_at_star(founded, target.star)->population < 1000);
     colonyTrial.players[0].race.legacyBiologyAdaptation = true;
     const auto legacyFounded = resolve_campaign_turn(colonyTrial,
         {{1, {ColonizePlanetOrder{1, targetId}}}, {2, {}}, {3, {}}}).state;
-    assert(find_planet_at_star(legacyFounded, target.star)->population > 100);
+    assert(find_planet_at_star(legacyFounded, target.star)->population > 1000);
 
     auto populationRules = make_demo_game();
     populationRules.planets[0].population = 1000;

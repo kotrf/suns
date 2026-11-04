@@ -8,10 +8,10 @@ using namespace suns;
 int main()
 {
     auto state = make_demo_game();
-    assert(state.planets[0].population == 1'000'000);
-    assert(population_capacity(state.planets[0]) == 2'500'000);
-    assert(colony_output(state, state.planets[0]) == 1004);
-    assert(projected_population_growth(state.planets[0]) == 60'000);
+    assert(state.planets[0].population == 25'000);
+    assert(population_capacity(state.planets[0]) == 1'000'000);
+    assert(colony_output(state, state.planets[0]) == 29);
+    assert(projected_population_growth(state.planets[0]) == 3750);
     assert(std::abs(colonist_cargo_mass(1) - 0.01) < 1e-12);
     assert(colonist_cargo_mass(100) == 1.0);
 

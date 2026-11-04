@@ -65,9 +65,9 @@ void MainWindow::newCampaign()
         "frontier travel still needs engines.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    QTableWidget table(8, 17, &dialog);
+    QTableWidget table(8, 18, &dialog);
     table.setObjectName("campaignEmpiresTable");
-    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k", "Energy cost", "Propulsion cost", "Construction cost", "Electronics cost", "Biology cost", "Weapons cost"});
+    table.setHorizontalHeaderLabels({"Empire name", "Environment", "Fuel efficiency", "No ram scoops", "Settler engines", "Hull family", "Remote mining", "Control", "Primary trait", "Factories / 10k", "Mines / 10k", "Energy cost", "Propulsion cost", "Construction cost", "Electronics cost", "Biology cost", "Weapons cost", "Growth / year"});
     table.horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table.horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int row = 0; row < 8; ++row) {
@@ -119,6 +119,11 @@ void MainWindow::newCampaign()
             cost->addItems({"Normal", "Cheap (50%)", "Expensive (175%)"});
             table.setCellWidget(row, 11 + field, cost);
         }
+        auto* growth = new QSpinBox(&table);
+        growth->setObjectName(QString("campaignPopulationGrowth%1").arg(row));
+        growth->setRange(1, 20); growth->setSuffix("%"); growth->setValue(kDefaultPopulationGrowthRate);
+        growth->setToolTip("Maximum annual surface growth; new homeworld population 25,000. Crowding starts above 25% capacity.");
+        table.setCellWidget(row, 17, growth);
         connect(hullAccess, &QComboBox::currentIndexChanged, &table, [&table, row](int index) {
             if (index == static_cast<int>(HullAccess::HyperExpansion))
                 qobject_cast<QCheckBox*>(table.cellWidget(row, 4))->setChecked(true);
@@ -140,9 +145,11 @@ void MainWindow::newCampaign()
             static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 10))->value())};
         for (int field = 0; field < int(kResearchFieldCount); ++field)
             result.researchCosts[field] = ResearchCost(qobject_cast<QComboBox*>(table.cellWidget(row, 11 + field))->currentIndex());
+        result.populationGrowthRate = static_cast<std::uint8_t>(qobject_cast<QSpinBox*>(table.cellWidget(row, 17))->value());
         return result;
     };
     const auto applyRace = [&table](int row, const EmpireSetup& setup) {
+        qobject_cast<QSpinBox*>(table.cellWidget(row, 17))->setValue(setup.populationGrowthRate);
         table.item(row, 0)->setText(QString::fromStdString(setup.name));
         qobject_cast<QComboBox*>(table.cellWidget(row, 1))->setCurrentIndex(int(setup.race));
         qobject_cast<QCheckBox*>(table.cellWidget(row, 2))->setChecked(setup.improvedFuelEfficiency);

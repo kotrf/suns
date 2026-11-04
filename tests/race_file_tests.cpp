@@ -19,7 +19,7 @@ static void put(const QString& path, const QByteArray& bytes)
 }
 static void sameRace(const EmpireSetup& a, const EmpireSetup& b)
 {
-    assert(a.researchCosts == b.researchCosts);
+    assert(a.researchCosts == b.researchCosts && a.populationGrowthRate==b.populationGrowthRate);
     assert(a.name == b.name && a.race == b.race && a.primaryTrait == b.primaryTrait);
     assert(a.hullAccess == b.hullAccess && a.improvedFuelEfficiency == b.improvedFuelEfficiency);
     assert(a.noRamScoopEngines == b.noRamScoopEngines && a.settlerEngineAccess == b.settlerEngineAccess);
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
             sameRace(original, loaded);
             assert(loaded.controller == PlayerController::Human);
             const auto json = QJsonDocument::fromJson(bytesAt(path)).object();
-            assert(json.size() == 13 && json.value("format").toString() == "suns-race");
+            assert(json.size() == 14 && json.value("format").toString() == "suns-race");
             for (const auto* key : {"controller", "seed", "player_id", "token", "technology"}) assert(!json.contains(key));
         }
 
@@ -65,12 +65,15 @@ int main(int argc, char** argv)
     const auto validBytes = bytesAt(path);
     const auto valid = QJsonDocument::fromJson(validBytes).object();
     // Original v1 races remain portable and default to normal research.
-    auto v1=valid; v1.insert("version",1); v1.remove("research_costs");
+    auto v1=valid; v1.insert("version",1); v1.remove("research_costs"); v1.remove("population_growth");
     put(path,QJsonDocument(v1).toJson()); EmpireSetup legacy;
     legacy.researchCosts.fill(ResearchCost::Expensive);
     assert(read_race_file(path,legacy,error));
     for(auto cost:legacy.researchCosts) assert(cost==ResearchCost::Normal);
 
+    assert(legacy.populationGrowthRate==10);
+    auto v2=valid; v2.insert("version",2); v2.remove("population_growth");
+    put(path,QJsonDocument(v2).toJson()); assert(read_race_file(path,legacy,error) && legacy.populationGrowthRate==10);
     const auto reject = [&](const QByteArray& bytes) {
         put(path, bytes);
         EmpireSetup untouched{"Sentinel"}; untouched.controller = PlayerController::Computer;
@@ -79,18 +82,18 @@ int main(int argc, char** argv)
         sameRace(before, untouched); assert(untouched.controller == before.controller);
     };
     for (const auto* key : {"format", "version", "name", "environment", "primary_trait", "fuel_efficiency",
-            "no_ram_scoops", "settler_engines", "hull_family", "remote_mining", "factories_per_10000", "mines_per_10000"}) {
+            "no_ram_scoops", "settler_engines", "hull_family", "remote_mining", "factories_per_10000", "mines_per_10000", "population_growth"}) {
         auto missing = valid; missing.remove(key); reject(QJsonDocument(missing).toJson());
         auto null = valid; null.insert(key, QJsonValue::Null); reject(QJsonDocument(null).toJson());
     }
     for (const auto& [key, value] : std::vector<std::pair<QString, QJsonValue>>{
-            {"format", "other-game"}, {"version", 3}, {"version", 1.5}, {"version", true},
+            {"format", "other-game"}, {"version", 4}, {"version", 1.5}, {"version", true},
             {"name", 10}, {"name", ""}, {"name", "\n"}, {"name", "A\nB"}, {"name", QString(81, 'a')},
             {"environment", "unlimited"}, {"primary_trait", "habitat-civilization"},
             {"hull_family", -1}, {"remote_mining", "both"}, {"fuel_efficiency", 1},
             {"no_ram_scoops", "false"}, {"settler_engines", 0},
             {"factories_per_10000", 4}, {"factories_per_10000", 26}, {"factories_per_10000", 10.5},
-            {"mines_per_10000", "10"}, {"mines_per_10000", true}, {"mines_per_10000", -1}}) {
+            {"mines_per_10000", "10"}, {"mines_per_10000", true}, {"mines_per_10000", -1}, {"population_growth", 0}, {"population_growth", 21}, {"population_growth", 1.5}, {"population_growth", true}, {"population_growth", "15"}}) {
         auto bad = valid; bad.insert(key, value); reject(QJsonDocument(bad).toJson());
     }
     auto privileged = valid; privileged.insert("starting_technology", 26); reject(QJsonDocument(privileged).toJson());
@@ -98,7 +101,7 @@ int main(int argc, char** argv)
 
     // Invalid settings and failed writes do not replace a previously valid file.
     put(path, validBytes);
-    for (int failure = 0; failure < 7; ++failure) {
+    for (int failure = 0; failure < 9; ++failure) {
         auto invalid = original;
         switch (failure) {
         case 0: invalid.race = static_cast<RacePreset>(90); break;
@@ -108,6 +111,8 @@ int main(int argc, char** argv)
         case 4: invalid.factoriesPerTenThousand = 0; break;
         case 5: invalid.name = std::string("A\0B", 3); break;
         case 6: invalid.name = std::string("\xff", 1); break;
+        case 7: invalid.populationGrowthRate=0; break;
+        case 8: invalid.populationGrowthRate=21; break;
         }
         assert(!write_race_file(path, invalid, error));
         assert(bytesAt(path) == validBytes);

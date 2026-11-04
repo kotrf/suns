@@ -60,6 +60,10 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     mining_->addItems({"Standard", "Advanced (ARM)", "Basic (BRM)"});
     mining_->setToolTip("ARM adds Midget Miner and Ultra-Miner; BRM blocks reference miner hulls.");
     form->addRow("Remote mining", mining_);
+    growth_ = new QSpinBox(this); growth_->setObjectName("racePopulationGrowth");
+    growth_->setRange(1, 20); growth_->setSuffix("%");
+    growth_->setToolTip("Maximum annual surface growth on a 100% world. Full rate through 25% capacity; crowding slows growth above it. New homeworld: 25,000 colonists.");
+    form->addRow("Maximum population growth / year", growth_);
     factories_ = new QSpinBox(this); factories_->setObjectName("raceFactoryOperation");
     mines_ = new QSpinBox(this); mines_->setObjectName("raceMineOperation");
     for (auto* rate : {factories_, mines_}) {
@@ -85,6 +89,7 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
 EmpireSetup RaceSetupWidget::setup() const
 {
     EmpireSetup result;
+    result.populationGrowthRate = static_cast<std::uint8_t>(growth_->value());
     result.name = name_->text().trimmed().toUtf8().toStdString();
     result.race = static_cast<RacePreset>(environment_->currentData().toInt());
     result.primaryTrait = static_cast<PrimaryRaceTrait>(trait_->currentData().toInt());
@@ -103,6 +108,7 @@ EmpireSetup RaceSetupWidget::setup() const
 
 void RaceSetupWidget::setSetup(const EmpireSetup& setup)
 {
+    growth_->setValue(setup.populationGrowthRate);
     name_->setText(QString::fromStdString(setup.name));
     environment_->setCurrentIndex(environment_->findData(int(setup.race)));
     trait_->setCurrentIndex(trait_->findData(int(setup.primaryTrait)));

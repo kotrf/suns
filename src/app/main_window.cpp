@@ -903,7 +903,7 @@ void MainWindow::rebuildScene(bool planningStateChanged)
                            .arg(estimated ? "~" : "")
                            .arg(knownHabitability)
                            .arg(estimated ? "estimated" : "potential")
-                           .arg(static_cast<qulonglong>(std::max(0, knownHabitability))
+                           .arg(static_cast<qulonglong>(std::clamp(knownHabitability, 5, 100))
                                * kPopulationPerHabitability);
             if (colony) {
                 tooltip += QString("\nOutput %1 / turn — %2\nColony sensor range %3")
@@ -1231,16 +1231,14 @@ void MainWindow::updateControls(bool refreshReceivedState)
                 ? receivedPlanet.population : predictedPlanet->population;
             const auto orderedOut = afterCargo < receivedPlanet.population ? receivedPlanet.population - afterCargo : 0;
             const auto orderedIn = afterCargo > receivedPlanet.population ? afterCargo - receivedPlanet.population : 0;
-            // One simple forecast: take the estimated annual growth rate
-            // under current conditions and apply that rate to the population
-            // after valid queued cargo orders. We deliberately do not simulate
-            // next year's arrivals, production, battles, or other events.
+            // One scalar calculation from received conditions and validated
+            // cargo. Recompute density after loading; never advance a year.
             const auto currentGrowth = projected_population_growth(received, receivedPlanet, received.turn);
             const double annualRate = receivedPlanet.population != 0
                 ? static_cast<double>(currentGrowth) / static_cast<double>(receivedPlanet.population)
                 : 0.0;
-            const auto estimatedChange = static_cast<std::int64_t>(std::llround(
-                annualRate * static_cast<double>(afterCargo)));
+            const auto estimatedChange = projected_population_growth(received,
+                predictedPlanet == plannedCargo.planets.end() ? receivedPlanet : *predictedPlanet, received.turn);
             const auto approximatePopulation = estimatedChange >= 0
                 ? afterCargo + static_cast<std::uint64_t>(estimatedChange)
                 : afterCargo - std::min(afterCargo, static_cast<std::uint64_t>(-estimatedChange));
@@ -1282,7 +1280,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")
-                                 .arg(static_cast<qulonglong>(std::max(0, knownHabitability))
+                                 .arg(static_cast<qulonglong>(std::clamp(knownHabitability, 5, 100))
                                      * kPopulationPerHabitability);
         }
         QString travelLine;

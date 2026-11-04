@@ -59,6 +59,7 @@ QString race_setup_error(const EmpireSetup& setup)
     if (setup.factoriesPerTenThousand < kMinWorkforceRate || setup.factoriesPerTenThousand > kMaxWorkforceRate
         || setup.minesPerTenThousand < kMinWorkforceRate || setup.minesPerTenThousand > kMaxWorkforceRate)
         return "Factory and mine operation rates must each be between 5 and 25 per 10,000 colonists.";
+    if (setup.populationGrowthRate < 1 || setup.populationGrowthRate > 20) return "Population growth must be between 1 and 20 percent.";
     for (auto cost : setup.researchCosts) if (cost > ResearchCost::Expensive) return "Invalid research cost setting.";
     return {};
 }
@@ -70,7 +71,7 @@ bool write_race_file(const QString& path, const EmpireSetup& setup, QString& err
     QJsonArray costs;
     for (auto cost : setup.researchCosts) costs.append(int(cost));
     const QJsonObject object{
-        {"format", "suns-race"}, {"version", 2},
+        {"format", "suns-race"}, {"version", 3},
         {"name", QString::fromStdString(setup.name).trimmed()},
         {"environment", keyFor(setup.race, environments)},
         {"primary_trait", keyFor(setup.primaryTrait, traits)},
@@ -80,7 +81,7 @@ bool write_race_file(const QString& path, const EmpireSetup& setup, QString& err
         {"hull_family", keyFor(setup.hullAccess, hulls)},
         {"remote_mining", setup.advancedRemoteMining ? "advanced" : setup.basicRemoteMining ? "basic" : "standard"},
         {"factories_per_10000", setup.factoriesPerTenThousand},
-        {"mines_per_10000", setup.minesPerTenThousand}, {"research_costs", costs}};
+        {"mines_per_10000", setup.minesPerTenThousand}, {"research_costs", costs}, {"population_growth", setup.populationGrowthRate}};
     const auto bytes = QJsonDocument(object).toJson(QJsonDocument::Indented);
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) { error = file.errorString(); return false; }
@@ -103,13 +104,14 @@ bool read_race_file(const QString& path, EmpireSetup& setup, QString& error)
         return false;
     }
     const auto object = document.object();
-    if (object.value("format") != QJsonValue("suns-race") || (object.value("version") != QJsonValue(1) && object.value("version") != QJsonValue(2))) {
+    if (object.value("format") != QJsonValue("suns-race") || (object.value("version") != QJsonValue(1) && object.value("version") != QJsonValue(2) && object.value("version") != QJsonValue(3))) {
         error = "Unsupported race file format or version.";
         return false;
     }
     QStringList keys{"format", "version", "name", "environment", "primary_trait", "fuel_efficiency",
         "no_ram_scoops", "settler_engines", "hull_family", "remote_mining", "factories_per_10000", "mines_per_10000"};
-    if (object.value("version") == QJsonValue(2)) keys << "research_costs";
+    if (object.value("version").toInt() >= 2) keys << "research_costs";
+    if (object.value("version").toInt() >= 3) keys << "population_growth";
     if (object.size() != keys.size()) { error = "Race file has missing or unsupported fields."; return false; }
     for (const auto& key : keys) if (!object.contains(key)) {
         error = "Race file has missing or unsupported fields.";
@@ -136,7 +138,14 @@ bool read_race_file(const QString& path, EmpireSetup& setup, QString& error)
         }
     }
     EmpireSetup loaded;
-    if (object.value("version") == QJsonValue(2)) {
+    if (object.value("version").toInt() >= 3) {
+        const auto value = object.value("population_growth");
+        if (!value.isDouble() || value.toDouble() != value.toInt(-1) || value.toInt(-1) < 1 || value.toInt(-1) > 20) {
+            error = "Invalid population growth rate."; return false;
+        }
+        loaded.populationGrowthRate = static_cast<std::uint8_t>(value.toInt());
+    } else loaded.populationGrowthRate = 10; // Previous implicit maximum rate.
+    if (object.value("version").toInt() >= 2) {
         const auto costs = object.value("research_costs");
         if (!costs.isArray() || costs.toArray().size() != int(kResearchFieldCount)) {
             error = "Research costs must have six entries."; return false;

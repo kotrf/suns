@@ -81,19 +81,19 @@ void verify_colonist_loading_and_unloading()
     load.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 300});
     const auto loaded = processor.process(state, {load});
     assert(fleet(loaded, 2)->colonists == 300);
-    assert(planet(loaded, 1)->population == 999700);
+    assert(planet(loaded, 1)->population == 24700);
 
     suns::PlayerOrders unload{1, {}};
     unload.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 100});
     const auto unloaded = processor.process(loaded, {unload});
     assert(fleet(unloaded, 2)->colonists == 100);
-    assert(planet(unloaded, 1)->population == 999900);
+    assert(planet(unloaded, 1)->population == 24900);
 
     suns::PlayerOrders overload{1, {}};
     overload.orders.emplace_back(suns::SetFleetColonistsOrder{1, 2, 600});
     const auto rejected = processor.process(unloaded, {overload});
     assert(fleet(rejected, 2)->colonists == 100);
-    assert(planet(rejected, 1)->population == 999900);
+    assert(planet(rejected, 1)->population == 24900);
 }
 
 void verify_loading_precedes_movement_in_the_same_turn()
@@ -109,7 +109,7 @@ void verify_loading_precedes_movement_in_the_same_turn()
 
     assert(fleet(next, 2)->colonists == 300);
     assert(!suns::same_position(fleet(next, 2)->position, origin));
-    assert(planet(next, 1)->population == 999700);
+    assert(planet(next, 1)->population == 24700);
 }
 
 void verify_colony_cannot_be_accidentally_emptied()

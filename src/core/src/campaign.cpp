@@ -350,6 +350,8 @@ std::int32_t player_planet_habitability(
 GameState generate_campaign(const GalaxyConfig& config, const std::vector<EmpireSetup>& empires)
 {
     for (const auto& setup : empires) {
+        if (setup.populationGrowthRate < 1 || setup.populationGrowthRate > 20)
+            throw std::invalid_argument("Population growth must be between 1 and 20 percent");
         if (std::any_of(setup.researchCosts.begin(), setup.researchCosts.end(), [](auto c) { return c > ResearchCost::Expensive; }))
             throw std::invalid_argument("Invalid research cost setting");
         if (setup.factoriesPerTenThousand < kMinWorkforceRate || setup.factoriesPerTenThousand > kMaxWorkforceRate
@@ -410,6 +412,7 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         player.race.factoriesPerTenThousand = empires[i].factoriesPerTenThousand;
         player.race.minesPerTenThousand = empires[i].minesPerTenThousand;
         player.race.researchCosts = empires[i].researchCosts;
+        player.race.populationGrowthRate = empires[i].populationGrowthRate;
         player.technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 1;
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),

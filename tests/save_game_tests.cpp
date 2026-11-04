@@ -511,7 +511,7 @@ void round_trip_preserves_communications_and_planning()
     assert(loaded.state.players.front().history.size() == 2);
     assert(loaded.state.players.front().history.front().turn == 1);
     assert(loaded.state.players.front().history.back().turn == 77);
-    assert(loaded.state.players.front().history.back().population == 1'000'000);
+    assert(loaded.state.players.front().history.back().population == suns::kInitialHomePopulation);
     assert(loaded.state.players.front().history.back().colonyHistory.size() == 1);
     assert(loaded.state.players.front().history.back().colonyHistory.front().planet
         == original.state.planets.front().id);

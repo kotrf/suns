@@ -227,7 +227,7 @@ int main()
     assert(fleet(preview, 3).colonists == 200);
     assert(planet(again, 1).population == planet(preview, 1).population);
     assert(fleet(again, 3).colonists == fleet(preview, 3).colonists);
-    assert(planet(transferState, 1).population == 1'000'000);
+    assert(planet(transferState, 1).population == 25'000);
     // The same replay also preserves the native atomic validation: an
     // impossible second load is ignored without partially moving minerals.
     auto invalidPreview = surfaceTransfer;

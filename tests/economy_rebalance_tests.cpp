@@ -5,8 +5,58 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 using namespace suns;
+
+static void stars_population_model()
+{
+    auto state=make_demo_game(); auto& p=state.planets.front();
+    assert(p.population==25'000 && population_capacity(state,p,state.turn)==1'000'000);
+    assert(state.players.front().race.populationGrowthRate==15);
+    const auto growth=[&] { return projected_population_growth(state,p,state.turn); };
+    assert(growth()==3750);
+    p.population=250'000; assert(growth()==37'500); // No penalty at the boundary.
+    p.population=500'000; assert(growth()==33'333);
+    p.population=750'000; assert(growth()==12'500);
+    p.population=1'000'000; assert(growth()==0);
+    p.population=2'000'000; assert(growth()==-80'000);
+    p.population=4'000'000; assert(growth()==-480'000);
+    p.population=8'000'000; assert(growth()==-960'000); // 12% maximum.
+    p.population=10'000; p.habitability=50;
+    assert(population_capacity(state,p,state.turn)==500'000 && growth()==750);
+    state.players.front().race.populationGrowthRate=20; assert(growth()==1000);
+    state.players.front().race.populationGrowthRate=1; assert(growth()==50);
+    p.habitability=1; assert(population_capacity(state,p,state.turn)==50'000 && growth()==1);
+    p.habitability=0; assert(population_capacity(state,p,state.turn)==50'000 && growth()==0);
+    p.habitability=-10; assert(growth()==-100);
+    p.population=101; assert(growth()==-1);
+    p.population=100; assert(growth()==0);
+    p.population=7; assert(growth()==0); // No invented colonists.
+    p.population=0; assert(growth()==0);
+    p.population=25000; p.habitability=100;
+    state.players.front().race.populationGrowthRate=15;
+    p.productionQueue.clear();
+    auto baseline=p; baseline.industry=baseline.mines=0;
+    assert(growth()==projected_population_growth(state,baseline,state.turn));
+    const auto next=TurnProcessor{}.process(state,{});
+    assert(next.planets.front().population==28'750);
+    assert(next.players.front().history.back().population==28'750);
+    const auto view=make_player_view(state,1);
+    assert(projected_population_growth(view.state,view.state.planets.front(),state.turn)==3750);
+    EmpireSetup a{"Slow"},b{"Fast"}; a.populationGrowthRate=1; b.populationGrowthRate=20;
+    const auto campaign=generate_campaign(GalaxyConfig{}, {a,b});
+    for (const auto& colony:campaign.planets) if(colony.owner) {
+        assert(colony.population==25'000);
+        assert(projected_population_growth(campaign,colony,campaign.turn)==(colony.owner==1?250:5000));
+    }
+    a.populationGrowthRate=0; bool rejected=false;
+    try { (void)generate_campaign(GalaxyConfig{}, {a}); } catch(const std::invalid_argument&) { rejected=true; }
+    assert(rejected);
+    // Extreme old counts must yield a bounded negative delta without overflow.
+    p.population=std::numeric_limits<std::uint64_t>::max();
+    assert(growth()<0);
+}
 
 static void research_prices_and_real_overflow()
 {
@@ -146,4 +196,4 @@ static void computer_reserves_colonizer_materials()
     for (const auto& order:plan.orders.orders) if(const auto* build=std::get_if<QueueProductionBatchOrder>(&order))
         assert(build->kind!=ProductionKind::Factory && build->kind!=ProductionKind::UpgradeFactory);
 }
-int main() { research_prices_and_real_overflow(); workforce_and_paid_upgrades(); allocation_and_scaling(); computer_reserves_colonizer_materials(); }
+int main() { stars_population_model(); research_prices_and_real_overflow(); workforce_and_paid_upgrades(); allocation_and_scaling(); computer_reserves_colonizer_materials(); }
