@@ -72,6 +72,24 @@ struct MainWindowTestAccess {
         w.refreshProductionQueue();
         w.refreshColonyWorkspace();
     }
+    static void remoteStocks(MainWindow& w)
+    {
+        w.state_ = make_demo_game(); w.pendingOrders_ = {1, {}};
+        auto& p = w.state_.planets[1]; p.owner = 0; p.minerals = {70, 0, 30};
+        set_survey_level(w.state_, 1, p.star, SurveyLevel::GeologicalSurvey, w.state_.turn);
+        w.state_.turn += 4; p.minerals = {9999, 9999, 9999};
+        w.selection_.star = p.star; w.rebuildScene(); w.refreshColonyWorkspace(); w.refreshPlanetPolish();
+    }
+    static QString radarObservation(MainWindow& w, std::optional<PlanetaryRadarLevel> radar)
+    {
+        w.state_ = make_demo_game(); w.pendingOrders_ = {1, {}};
+        auto& p = w.state_.planets.front(); p.radar = radar.value_or(PlanetaryRadarLevel::None);
+        if (!radar) p.owner = 2;
+        set_survey_level(w.state_, 1, p.star, SurveyLevel::GeologicalSurvey, w.state_.turn);
+        p.radar = PlanetaryRadarLevel::Full; // Host changes must not replace received infrastructure.
+        w.selection_.star = p.star; w.rebuildScene(); w.refreshColonyWorkspace();
+        return w.selectedPlanetPanelSummary();
+    }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
     static void miningCargo(MainWindow& w, bool unloading)
     {
@@ -217,6 +235,9 @@ int main(int argc, char** argv)
     using namespace suns;
     MainWindow window;
     installWorkspace(window);
+    assert(MainWindowTestAccess::radarObservation(window, PlanetaryRadarLevel::Local).contains("Planetary radar: <b>Local</b> (30 ly)"));
+    assert(MainWindowTestAccess::radarObservation(window, PlanetaryRadarLevel::None).contains("Planetary radar: <b>None</b> (0 ly)"));
+    assert(MainWindowTestAccess::radarObservation(window, std::nullopt).contains("Planetary radar: <b>unknown</b>"));
     MainWindowTestAccess::setup(window);
     window.show();
     settle();
@@ -236,6 +257,7 @@ int main(int argc, char** argv)
     auto* view = window.findChild<QGraphicsView*>();
     auto* expand = window.findChild<QAction*>("expandMapAction");
     assert(details && detailsScroll && planetInfo && temperature && geology);
+    assert(planetInfo->text().contains("Planetary radar: <b>Full</b> (150 ly)"));
     assert(details->isAncestorOf(planetInfo) && details->isAncestorOf(temperature) && details->isAncestorOf(geology));
     assert(!window.findChild<QDialog*>("systemDetailsDialog"));
     auto* detailsColumn = qobject_cast<QVBoxLayout*>(detailsScroll->widget()->layout());
@@ -498,6 +520,12 @@ int main(int argc, char** argv)
     settle();
     assert(overview->isVisible() && production->isVisible() && details->isVisible() && fleet->isVisible());
 
+    MainWindowTestAccess::remoteStocks(window);
+    settle();
+    assert(minerals->topLevelItem(0)->text(1) == "70.0");
+    assert(minerals->topLevelItem(1)->text(1) == "0.0");
+    assert(minerals->topLevelItem(0)->toolTip(1).contains("4 years old"));
+    assert(geology->toolTip().contains("70.0 kt") && !geology->toolTip().contains("9999"));
     MainWindowTestAccess::unknown(window);
     settle();
     assert(planetInfo->text().contains("never scanned") && !planetInfo->text().contains("999999"));

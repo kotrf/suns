@@ -241,9 +241,10 @@ void queue_survey_report_impl(
         held_report_source(state,playerId,sourcePosition,observationTurn,sourceFleet)};
     candidate.planetSnapshot = capture_planet_survey(state, playerId, star, level, observationTurn);
     if (finalSurfaceObservation && candidate.planetSnapshot) {
+        if (candidate.planetSnapshot->surfaceMinerals) candidate.planetSnapshot->surfaceMinerals->finalSurface = true;
         if(candidate.planetSnapshot->habitat)candidate.planetSnapshot->habitat->stationEvidenceTime=3*candidate.observedTurn+2;
         if (!candidate.planetSnapshot->xenocrystal) {
-            if (const auto* p = find_planet_at_star(state, star))
+            if (const auto* p = find_planet_at_star(state, star); p && (p->owner == playerId || known_xenocrystal(state, playerId, p->id)))
                 candidate.planetSnapshot->xenocrystal = XenocrystalObservation{{0, 0,
                     (!p->owner || p->owner == playerId) ? p->xenocrystal.surface : 0, 0}, observationTurn, false, 0, 1};
         } else candidate.planetSnapshot->xenocrystal->stockPhase = 1;
@@ -251,8 +252,9 @@ void queue_survey_report_impl(
         if (p && p->owner == playerId && candidate.planetSnapshot->xenocrystal)
             candidate.planetSnapshot->xenocrystal->colony = XenocrystalObservation::Colony{playerId, p->population, p->mines};
     }
-    const auto phase = [](const auto& r) { return r.planetSnapshot && r.planetSnapshot->xenocrystal
-        ? r.planetSnapshot->xenocrystal->stockPhase : 0; };
+    const auto phase = [](const auto& r) { return r.planetSnapshot &&
+        ((r.planetSnapshot->surfaceMinerals && r.planetSnapshot->surfaceMinerals->finalSurface)
+          || (r.planetSnapshot->xenocrystal && r.planetSnapshot->xenocrystal->stockPhase)) ? 1 : 0; };
     const auto dominated = std::any_of(player->pendingSurveyReports.begin(), player->pendingSurveyReports.end(),
         [&](const PendingSurveyReport& report) {
             return report.star == star && report.level >= level && report.deliveryTurn <= deliveryTurn
@@ -295,6 +297,35 @@ std::uint64_t scientific_data_id(const PendingPlayerReport& report,PlayerId reci
 void queue_survey_report(GameState& state, PlayerId owner, StarId star, FleetId fleet,
     Position position, std::uint64_t turn, SurveyLevel level, bool finalSurfaceObservation)
 { queue_survey_report_impl(state, owner, star, fleet, position, turn, level, finalSurfaceObservation); }
+
+std::optional<SurfaceMineralObservation> known_surface_minerals(const GameState& state, PlayerId owner, PlanetId id)
+{
+    const auto* p = find_planet(state, id);
+    const auto* player = find_player(state, owner);
+    if (!p || !player) return std::nullopt;
+    for (const auto& k : player->surveyKnowledge) if (k.star == p->star && k.planetSnapshot) {
+        if (k.planetSnapshot->surfaceMinerals) return k.planetSnapshot->surfaceMinerals;
+        // Historical owner reports already carried exact stock before v110.
+        if (k.observedOwner == owner && k.planetSnapshot->habitat)
+            return SurfaceMineralObservation{k.planetSnapshot->habitat->minerals, k.observedTurn, true};
+    }
+    return std::nullopt;
+}
+
+void publish_surface_mineral_reports(GameState& state, std::uint64_t turn)
+{
+    for (const auto& p : state.planets) {
+        if (p.owner) continue;
+        const auto* star = find_star(state, p.star);
+        if (!star) continue;
+        // Measuring a known world's stock must not turn a scannerless
+        // colonizer into a planetary survey instrument. Pending real surveys
+        // qualify too, so their final stock can travel in the same year's outbox.
+        for (const auto& f : state.fleets) if (same_position(f.position, star->position)
+            && best_observed_level(state, f.owner, star->id) >= SurveyLevel::OrbitalSurvey)
+            queue_survey_report(state, f.owner, star->id, f.id, f.position, turn, SurveyLevel::OrbitalSurvey, true);
+    }
+}
 
 void queue_player_report(
     GameState& state,
@@ -452,6 +483,11 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             const auto* observedPlanet = find_planet_at_star(state, report.star);
             const auto oldExotic = observedPlanet ? known_xenocrystal(state, player.id, observedPlanet->id) : std::nullopt;
             const auto incomingExotic = report.planetSnapshot ? report.planetSnapshot->xenocrystal : std::nullopt;
+            const auto oldStock = observedPlanet ? known_surface_minerals(state, player.id, observedPlanet->id) : std::nullopt;
+            const auto incomingStock = report.planetSnapshot ? report.planetSnapshot->surfaceMinerals : std::nullopt;
+            const bool newerStock = incomingStock && (!oldStock
+                || std::pair(incomingStock->observedTurn, incomingStock->finalSurface)
+                    > std::pair(oldStock->observedTurn, oldStock->finalSurface));
             const bool newerExotic = incomingExotic && (!oldExotic || incomingExotic->observedTurn > oldExotic->observedTurn
                 || (incomingExotic->observedTurn == oldExotic->observedTurn && incomingExotic->stockPhase > oldExotic->stockPhase)
                 || (incomingExotic->depositSurveyed && (!oldExotic->depositSurveyed
@@ -462,7 +498,7 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             const auto existing = std::find_if(
                 player.surveyKnowledge.begin(), player.surveyKnowledge.end(),
                 [&](const SystemSurveyKnowledge& entry) { return entry.star == report.star; });
-            if (!newerExotic && existing != player.surveyKnowledge.end()
+            if (!newerExotic && !newerStock && existing != player.surveyKnowledge.end()
                 && existing->level == report.level
                 && (existing->observedTurn > report.observedTurn
                     || (existing->observedTurn == report.observedTurn
@@ -483,6 +519,7 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                 updated->planetSnapshot=std::move(evidence);
             }
             if (updated != player.surveyKnowledge.end() && updated->planetSnapshot) {
+                updated->planetSnapshot->surfaceMinerals = newerStock ? incomingStock : oldStock;
                 if (newerExotic) {
                     auto merged = oldExotic.value_or(*incomingExotic);
                     if (!oldExotic || incomingExotic->observedTurn > oldExotic->observedTurn

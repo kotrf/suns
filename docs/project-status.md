@@ -1,5 +1,45 @@
 # Project status and development handoff
 
+## Mini-2: received radar and mineral-stock bars — 4 November 2026
+
+User authorized completing all remaining Mini-2 notes, including newly added
+items 5–6. Items 1–4 are already merged in #274 and #273 is completed. Work uses
+the existing repository, branch codex/mini-2-radar-minerals, verified main
+4b4ec170775673183f27e1e9c3ee89ecf4c558d7 (tree
+155c5617cc562638afc2b51bb387af3464dfeebe). Tracking
+[#275](https://github.com/kotrf/suns/issues/275), [contract](mini-2.md).
+
+System Details shows received None/Local/Full planetary radar and nominal range,
+with unknown distinct from confirmed absence. Mineral rows share a clickable kt
+scale and paint light stocks, dark current extraction and an independently scaled
+concentration diamond. Exact tooltips and visible report age distinguish dated,
+zero and unknown stocks. The Minerals table now includes known uncolonized stocks.
+Both panels reuse player/planning caches; current mining is an algebraic pass over
+received/accepted stacks, with the colony's pre-Cargo workforce phase preserved.
+
+Ordinary surface evidence is independently dated in survey snapshots. Annual
+post-mining/cargo observations refresh already orbitally surveyed worlds without
+a scanner, preserve the original exploration rules, use the existing delayed
+outbox and preserve Passive/Silence. Older packets cannot roll back final stock;
+foreign supplies and exotic discoveries remain private. Save v110 appends bounded
+SMIN evidence after the unchanged v109 bodies; older saves remain readable and
+orders stay v48. Player packets retain received evidence and redact in-flight stock
+reports. The old workforce migration fixture still validates its original v107
+body hash; its tail lookup now tolerates later extensions.
+
+Validation: full GCC14.2/Qt6.12 Debug build and **115/115 CTest in 83.14 s**
+passed. Coverage includes radar Local/None/unknown and hidden receiver changes,
+known-zero/unknown/dated uncolonized stocks in the real UI, scannerless mining
+reports with unchanged exploration prerequisites, out-of-order evidence, Passive
+hold/coalescing/transmission, stock-scale keyboard/button control, accepted Cargo,
+host/player round trips, v109 migration and invalid/truncated evidence. Existing
+workforce v107 migration hash and all prior regressions still pass. The actual
+System Details window was inspected at 1366×900 and 1000×700.
+
+Ready for review; use linked GitHub #275 for the current PR/head and CI. Leave the
+new PR unmerged for review. The frozen gameplay issues and deferred AI work remain
+outside this slice.
+
 ## Mini-2: four approved interface/platform improvements — 4 November 2026
 
 The user explicitly approved implementing all four accumulated notes; the prior

@@ -1553,6 +1553,8 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
     if (!planet || level < SurveyLevel::BasicScan) return std::nullopt;
     if (level >= SurveyLevel::OrbitalSurvey) {
         PlanetSurveySnapshot result{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
+        if (!planet->owner || planet->owner == player)
+            result.surfaceMinerals = SurfaceMineralObservation{planet->minerals, observedTurn, observedTurn <= state.turn};
         if (planet->owner == player) {
             result.scienceSamples=planet->scienceSamples;
             result.habitat=HabitatObservation{planet->habitat,engineering_station_available(state,*planet),planet->population,planet->industry,planet->minerals,planet->mines,planet->productionQueue};
@@ -1691,9 +1693,13 @@ void set_survey_level(
         && observedTurn >= updated->observedTurn
         && (level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey)) {
         const auto oldExotic = updated->planetSnapshot ? updated->planetSnapshot->xenocrystal : std::nullopt;
+        const auto oldStock = updated->planetSnapshot ? updated->planetSnapshot->surfaceMinerals : std::nullopt;
         updated->planetSnapshot = capture_planet_survey(state, player, star, level, observedTurn);
         if (oldExotic && updated->planetSnapshot && !updated->planetSnapshot->xenocrystal)
             updated->planetSnapshot->xenocrystal = oldExotic;
+        if (oldStock && updated->planetSnapshot && (!updated->planetSnapshot->surfaceMinerals
+            || std::pair(oldStock->observedTurn, oldStock->finalSurface) > std::pair(updated->planetSnapshot->surfaceMinerals->observedTurn, updated->planetSnapshot->surfaceMinerals->finalSurface)))
+            updated->planetSnapshot->surfaceMinerals = oldStock;
         if (level >= SurveyLevel::OrbitalSurvey)
             if (const auto* planet = find_planet_at_star(state, star)) updated->observedOwner = planet->owner;
     }
