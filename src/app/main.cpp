@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "route_program_dock.hpp"
+#include "application_icon.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -19,6 +20,9 @@
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
+    app.setApplicationDisplayName("Suns!");
+    app.setDesktopFileName("suns");
+    app.setWindowIcon(suns::applicationIcon());
     suns::MainWindow window;
     window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
@@ -52,6 +56,11 @@ int main(int argc, char* argv[])
     window.show();
 
     if (app.arguments().contains("--smoke-test")) {
+        for (const int size : {16, 24, 32, 48, 64, 128, 256}) {
+            if (window.windowIcon().pixmap(size, size).isNull()
+                || QApplication::windowIcon().pixmap(size, size).isNull())
+                qFatal("Application icon resource is unavailable");
+        }
         QTimer::singleShot(0, &window, [&window] {
             window.showMaximized();
             if (auto* scene = window.routeProgramScene()) {

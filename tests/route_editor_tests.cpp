@@ -529,8 +529,10 @@ int main(int argc, char* argv[])
     auto* arrivalDetails = window.findChild<QLabel*>("routeSelectedArrivalAction");
     assert(routeTree && routeTimer && arrivalDetails);
     assert(QMetaObject::invokeMethod(routeTimer, "timeout", Qt::DirectConnection));
-    assert(routeTree->columnCount() == 4 && routeTree->topLevelItemCount() == 2);
+    assert(routeTree->columnCount() == 5 && routeTree->topLevelItemCount() == 2);
     assert(routeTree->headerItem()->text(3) == "ETA ≈");
+    assert(routeTree->headerItem()->text(4) == "Fuel ≈");
+    assert(routeTree->headerItem()->toolTip(4).contains("mg"));
     assert(routeTree->headerItem()->toolTip(3).contains("years"));
     routeTree->setCurrentItem(routeTree->topLevelItem(0));
     assert(arrivalDetails->text().contains("no action"));
@@ -576,7 +578,7 @@ int main(int argc, char* argv[])
     assert(window.appendSelectedStarWaypoint(8, {}));
     rows = window.selectedFleetRouteProgramRows();
     assert(rows.size() == 3 && rows[0].eta == "≈1" && rows[1].eta == "≈2" && rows[2].eta == "≈2");
-    assert(routeTree->columnCount() == 4 && routeTree->topLevelItem(1)->text(3) == "≈2");
+    assert(routeTree->columnCount() == 5 && routeTree->topLevelItem(1)->text(3) == "≈2");
     assert(routeTree->topLevelItem(1)->background(0).style() == Qt::NoBrush);
     assert(routeTree->topLevelItem(1)->toolTip(3).contains("fuel"));
     routeTree->setCurrentItem(routeTree->topLevelItem(1));

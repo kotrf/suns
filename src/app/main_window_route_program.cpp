@@ -358,15 +358,18 @@ QString MainWindow::selectedFleetRouteProgramEstimate() const
     const auto rows = selectedFleetRouteProgramRows();
     if (rows.empty()) return "No route to estimate.";
     QStringList lines;
-    lines << "<b>Nominal travel time</b>"
+    lines << "<b>Nominal travel time and fuel</b>"
           << "Distance / Warp², rounded up for each leg. Uses received information and the planned route. "
              "Command delivery, fuel, refuelling, clouds and arrival actions can change actual timing.";
     for (std::size_t index = 0; index < rows.size(); ++index) {
         const auto& row = rows[index];
-        lines << QString("%1. %2 — %3 years, W%4<br>%5")
+        lines << QString("%1. %2 — %3 years, W%4 • Fuel %5 mg<br>%6")
             .arg(qulonglong(index + 1)).arg(row.destination.toHtmlEscaped(), row.eta)
-            .arg(row.warp).arg(row.arrivalAction.toHtmlEscaped());
+            .arg(row.warp).arg(row.fuel, row.arrivalAction.toHtmlEscaped());
     }
+    lines << "Fuel is the approximate cost of each straight-line leg at its Warp, with the current received/planned ships and cargo. "
+             "It assumes open space and does not predict future scooping, regeneration, fuel remaining or shortages. "
+             "After a change of load, fleet composition or uncertain position, later fuel costs are unknown.";
     lines << "Only the first pass of Repeat Orders is listed. "
              "Gate transit, wormhole exits and arrival outcomes are unknown until resolved on End Turn; "
              "later arrival times remain unknown.";
@@ -377,6 +380,7 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
 {
     const auto* selected = selectedFleet();
     if (!selected) return {};
+    const auto& planned = fleetPlanningState();
     const auto fleet = fleet_player_view(state_, *selected);
     const auto route = effectiveRoute(state_, pendingOrders_, fleet);
     if (!route || routeIsClearIntent(fleet, *route)) return {};
@@ -385,11 +389,17 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
     const auto legs = routeLegs(*route);
     rows.reserve(legs.size());
     auto departure = fleet.position;
+    auto fuelFleet = fleet;
     std::uint64_t elapsed = 0;
     bool knownTime = true;
+    bool knownFuel = true;
     const QString geometricNote = "Nominal travel time: cumulative distance / Warp², rounded up for each leg. "
         "Uses received information. Command delivery, fuel, refuelling, clouds and arrival actions are not predicted.";
     QString uncertainty;
+    const QString fuelNote = "Approximate fuel cost in mg for this leg only, at its Warp and current received/planned ships and cargo. "
+        "Assumes open space; actual per-year rounding, clouds, future cargo, scooping and fuel regeneration may change the result. "
+        "This is not a prediction of fuel remaining or availability.";
+    QString fuelUncertainty;
     for (std::size_t index = 0; index < legs.size(); ++index) {
         const auto& leg = legs[index];
         auto destination = leg.destination;
@@ -402,10 +412,13 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
                 destinationName = QString("Fleet %1 [position unknown]").arg(leg.targetFleet);
                 knownTime = false;
                 uncertainty = "The target's received position is unavailable.";
+                knownFuel = false;
+                fuelUncertainty = uncertainty;
             }
         }
         const auto speed = warp_distance(leg.warp);
-        const auto years = speed > 0 ? std::ceil(distance_between(departure, destination) / speed) : -1.0;
+        const auto distance = distance_between(departure, destination);
+        const auto years = speed > 0 ? std::ceil(distance / speed) : -1.0;
         if (!std::isfinite(years) || years < 0 || years > double(std::numeric_limits<std::uint32_t>::max())) {
             knownTime = false;
             uncertainty = "No geometric travel time is available for this leg.";
@@ -421,12 +434,30 @@ std::vector<RouteProgramDisplayRow> MainWindow::selectedFleetRouteProgramRows() 
         } else if (leg.targetFleet) {
             note += "\nTime to the target position estimated from received information only; not an interception prediction.";
         }
+        QString fuel = "—";
+        auto fuelTooltip = fuelNote;
+        if (knownFuel) {
+            fuelFleet.warp = leg.warp;
+            const auto cost = fleet_fuel_consumption_for_distance(planned, fuelFleet, distance);
+            if (std::isfinite(distance) && std::isfinite(cost) && leg.warp > 0 && leg.warp <= kMaxWarp)
+                fuel = QString("≈%1").arg(cost, 0, 'f', cost < 10.0 ? 1 : 0);
+            else {
+                knownFuel = false;
+                fuelUncertainty = "No nominal fuel cost is available for this leg.";
+            }
+        }
+        if (!knownFuel) fuelTooltip += "\n" + fuelUncertainty;
         rows.push_back({destinationName, actionName(receivedPlayerState(), leg.arrivalAction), leg.warp, index == 0,
-            knownTime ? QString("≈%1").arg(qulonglong(elapsed)) : QString("—"), note});
+            knownTime ? QString("≈%1").arg(qulonglong(elapsed)) : QString("—"), note, fuel, fuelTooltip});
         departure = destination;
         if (leg.targetFleet || leg.arrivalAction.kind != FleetArrivalActionKind::None) {
             knownTime = false;
             uncertainty = "A preceding arrival action or moving target makes later arrival times unknown.";
+        }
+        if (leg.targetFleet || (leg.arrivalAction.kind != FleetArrivalActionKind::None
+                && leg.arrivalAction.kind != FleetArrivalActionKind::Refuel)) {
+            knownFuel = false;
+            fuelUncertainty = "A preceding arrival action or moving target may change load, ships or position.";
         }
     }
     return rows;

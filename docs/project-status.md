@@ -1,5 +1,48 @@
 # Project status and development handoff
 
+## Mini-2: four approved interface/platform improvements — 4 November 2026
+
+The user explicitly approved implementing all four accumulated notes; the prior
+collect-only instruction is superseded for this slice. Existing codex/mini-2 is
+based on merged main 317a23607642e6c5698cfeb5141c8028d3c37f14, tree
+48678d13201f28101420f838ec841b4fe15d8f72. #272 is merged and #270/#271 completed.
+Tracking: [#273](https://github.com/kotrf/suns/issues/273), [contract](mini-2.md).
+
+- Selected route geometry remains without map waypoint numbers; numbered table
+  rows and the map-coordinate marker retain their editing roles.
+- Station's icon-only 28×28 button shares the 84-pixel portrait header at its
+  upper right, saving the previous separate row. Tooltip, click and received
+  fitting/hidden-state semantics are preserved.
+- Windows RC embeds a seven-size ICO; Qt application/window icons use embedded
+  PNGs and explicit static-resource linkage. Linux gets hicolor SVG/PNG assets,
+  suns.desktop, matching desktop-file identity and CMake install rules. QSettings
+  identity is unchanged; custom Qt install runpaths remain usable.
+- Fuel ≈ gives nominal per-leg mg at each Warp/current received or accepted
+  manifest. The existing direct-distance formula is bounded by rows/stacks, not
+  years. Later costs become unknown after load/position/composition changes;
+  refuelling alone preserves burn but not completion dates. No future tank,
+  shortage, scooping/regeneration or cloud forecast, annual simulation or workers.
+
+Focused checks pass: actual UI icons at seven sizes; station geometry, live
+click/fitting and delayed intel; map trajectory without numbers; current fuel
+with Warp/cargo table refresh, real-turn billing/annual-rounding comparison,
+conditional unknowns and hidden-manifest invariance. A synthetic station/route
+render was inspected. Warm Debug row queries during a build measured 0.1027 ms
+for five legs and 19.2521 ms for 1000; this is not a complete click benchmark.
+
+Staged Linux install, installed-app smoke without SDK activation and
+desktop-file-validate pass. MinGW windres 2.44 compiled the configured RC and ICO
+into a resource-only Windows PE, with seven RT_ICON entries and RT_GROUP_ICON 1.
+A full native Windows Qt build/runtime was not executed here. Assets are
+committed, so normal builds require no artwork tools/SVG runtime plugin.
+Core rules, command delivery, balance and save v109/orders v48 are unchanged.
+Full GCC14.2/Qt6.12 Debug build and **114/114 offscreen CTest passed (79.22 s)**,
+including the pre-existing mining/Stop packet, hidden-refuel and gate invariants.
+Diff check is clean. Only existing Qt QDragEnterEvent deprecation/old nodiscard
+warnings appeared; this slice adds no new warnings. New PR/source/CI are recorded
+on GitHub; this implementation awaits review and is not merged.
+Independent #267 remains outside this slice; frozen directions stay frozen.
+
 ## PR #272 review: keep Stop cancellation before mining — 3 November 2026
 
 [One P2 on source 724ef9e](https://github.com/kotrf/suns/pull/272#discussion_r4460217935)

@@ -142,6 +142,15 @@ int main(int argc, char** argv)
     auto* details = window.findChild<QDockWidget*>("systemDetailsDock");
     assert(button && details && details->isAncestorOf(button));
     assert(button->text() == "Orbital Dock…");
+    auto* header = window.findChild<QWidget*>("systemPlanetHeader");
+    auto* portrait = window.findChild<QLabel*>("planetPortrait");
+    assert(header && portrait && header->isAncestorOf(button) && header->isAncestorOf(portrait));
+    assert(button->toolButtonStyle() == Qt::ToolButtonIconOnly && button->width() <= 30 && button->height() <= 30);
+    assert(header->height() == portrait->height()); // No extra station row.
+    const QRect planetRect(portrait->mapTo(header, QPoint{}), portrait->size());
+    const QRect stationRect(button->mapTo(header, QPoint{}), button->size());
+    assert(!planetRect.intersects(stationRect) && header->rect().contains(stationRect));
+    assert(stationRect.top() <= planetRect.top() && stationRect.right() >= header->width() - 2);
     if (capture) details->grab().save("/tmp/suns-station-system-details.png");
     inspect(button, [&](QDialog* dialog) {
         assert(dialog->findChild<QLabel*>("stationDetailsSummary")->text().startsWith("Orbital Dock"));
