@@ -150,6 +150,7 @@ void GameSession::DocumentUpdate::commit()
 }
 void GameSession::replaceDocument(QObject* origin)
 {
+    ++documentGeneration_; // Even reopening the same file invalidates its old editor drafts.
     ++data_.planningRevision; // Receivers may immediately query the replacement's received view.
     publishPlanning(Change::Document, origin);
 }

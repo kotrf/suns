@@ -1531,9 +1531,12 @@ void MainWindow::openShipDesigner()
         make_player_view(state_, pendingOrders_.player).state, pendingOrders_),
         pendingOrders_.player, this);
     shipDesigner_ = dialog;
+    const auto documentGeneration = session_->documentGeneration();
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModal(false);
-    dialog->setSaveValidator([this](const ShipDesignDraft& draft) -> QString {
+    dialog->setSaveValidator([this, documentGeneration](const ShipDesignDraft& draft) -> QString {
+        if (documentGeneration != session_->documentGeneration())
+            return "This draft belongs to a replaced game. Reopen Ship Designer.";
         const auto duplicateInState = std::any_of(
             state_.shipDesigns.begin(), state_.shipDesigns.end(), [&](const ShipDesign& design) {
                 return design.owner == pendingOrders_.player && design.name == draft.name;
@@ -1553,14 +1556,18 @@ void MainWindow::openShipDesigner()
     });
     auto* refresh = new QTimer(dialog);
     refresh->setSingleShot(true);
-    connect(refresh, &QTimer::timeout, dialog, [this, dialog] {
+    connect(refresh, &QTimer::timeout, dialog, [this, dialog, documentGeneration] {
+        if (documentGeneration != session_->documentGeneration()) return;
         dialog->refreshAvailability(planned_ship_design_state(
             make_player_view(state_, pendingOrders_.player).state, pendingOrders_));
     });
     connect(this, &MainWindow::controlsChanged, dialog, [dialog, refresh] {
         if (dialog->isVisible() && !refresh->isActive()) refresh->start(0);
     });
-    connect(dialog, &QDialog::accepted, this, [this, dialog] {
+    connect(dialog, &QDialog::accepted, this, [this, dialog, documentGeneration] {
+        // Peer window closure is deferred beyond the current Qt event. A Save
+        // queued before replacement must never add this draft to the new world.
+        if (documentGeneration != session_->documentGeneration()) return;
         const auto draft = dialog->draft();
         appendPendingOrder(
             CreateShipDesignOrder{draft.name, draft.hull, draft.components, draft.placements},

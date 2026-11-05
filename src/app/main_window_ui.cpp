@@ -789,7 +789,7 @@ void MainWindow::installUiPolish()
     extraRangesAction->setObjectName("showPassiveEmissionRangesAction");
     extraRangesAction->setCheckable(true);
     extraRangesAction->setToolTip("Also show passive hull detection (gold) and reception of other ships' emissions (violet)");
-    connect(extraRangesAction, &QAction::toggled, this, [this] { rebuildScene(); });
+    connect(extraRangesAction, &QAction::toggled, this, [this] { rebuildScene(false); });
     if (auto* button = qobject_cast<QToolButton*>(mapToolbar->widgetForAction(sensorRangesAction))) {
         button->setMenu(sensorRangesMenu);
         button->setPopupMode(QToolButton::MenuButtonPopup);

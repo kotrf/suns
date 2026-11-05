@@ -1,5 +1,36 @@
 # Project status and development handoff
 
+## Follow-up review fixes for #279 / #47 — 5 November 2026
+
+Re-review of source 702d1d4 confirmed the four earlier fixes and the bounded UI
+waits, but found two remaining defects. Its [source CI](https://github.com/kotrf/suns/actions/runs/41992024641)
+has now completed successfully; that does not cover the new changes below.
+
+- [P2 queued Save](https://github.com/kotrf/suns/pull/279#discussion_r4478103388):
+  peer designer closure is deferred, so an already queued Save could insert an
+  old-world design after replacement. Each draft now captures a runtime document
+  generation. Every completed load/restart/demo advances it before notification,
+  even for the same saved campaign/year/token. Save validation and the actual
+  accepted/order callback both reject a different generation; stale availability
+  callbacks also stop. Normal orders/Save/selection/End Turn retain it. No file
+  field or version is added.
+- [P3 auxiliary Sensors](https://github.com/kotrf/suns/pull/279#discussion_r4478103394):
+  Passive and emission ranges now uses the local redraw path, like active Sensors.
+  Auditing visual toggles also found and fixed the same call in interstellar
+  medium, outpost and transport-line overlays. All retain shared revision,
+  received/accepted cache identity, movement build count and peer map items.
+
+New regression cases were first built against unchanged 702d1d4. Queued Save
+with another campaign, Save with the same file, a direct queued accepted event,
+and all four affected overlays failed for the reviewed behavior (seven logs under
+untracked work/review279-r2-before-*). After the fixes, the complete session target
+passed in 5.40 s, also checking a fresh post-load draft and an existing draft saved
+after a peer End Turn. The expanded session target passed five consecutive runs
+(27.57 s total). Full GCC14.2/Qt6.12 Debug app/test build and **118/118 CTest
+passed in 129.00 s**. Review fixes are ready; current source SHA/tree and new CI
+are recorded in GitHub. PR #279 and issue #47 remain open for re-review/merge;
+gameplay and v112/v49/v3 are unchanged.
+
 ## Review fixes for #279 / #47 — 5 November 2026
 
 The review of source 3825b3d confirmed three P2 issues and one P3. Its source CI

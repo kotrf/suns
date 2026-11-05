@@ -229,7 +229,7 @@ void MainWindow::installTransportLines() {
     connect(remove,&QPushButton::clicked,this,[=]{if(auto l=selected();l && l->spec.revision<std::numeric_limits<std::uint64_t>::max()){auto d=l->spec;++d.revision;send(SetTransportLineOrder{d,true},"Delete transport line and send Stop");}});
     connect(assign,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt()},"Assign transport to line");});
     connect(release,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt(),true},"Release transport and send Stop");});
-    connect(overlay,&QCheckBox::toggled,this,[this](bool on){setProperty("hideTransportLines",!on);rebuildScene();});
+    connect(overlay,&QCheckBox::toggled,this,[this](bool on){setProperty("hideTransportLines",!on);rebuildScene(false);});
     connect(this,&MainWindow::routeProgramContextChanged,this,[=](bool resetDrafts){
         if(resetDrafts)draft->selected.reset();
         // A loaded campaign/PlayerTurn must replace even a hidden dock's draft.

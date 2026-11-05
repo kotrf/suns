@@ -54,6 +54,12 @@ Qt's current click/selection delivery.
   Peers close their old-world ship drafts, cancel map target picks and reset
   view context before repainting. The session advances its epoch before the
   Document notification, so direct observers already see the replacement.
+  A separate runtime document generation changes on every replacement, including
+  reopening the same file. Ship drafts capture this generation and check it in
+  both Save validation and the controller's order submission callback. Queued Save
+  or accepted events cannot cross the boundary while peer closure is deferred.
+  Ordinary orders, selection, saving and End Turn retain that generation and
+  keep current drafts usable. This runtime value is never serialized.
   Same-year file replacement cannot retain the old received/planning cache. Reports and read marks are shared; filters and
   transient selections inside the report reader stay local to each view.
   Refreshing/filtering/restoring a report row only renders it; it never marks it
@@ -61,8 +67,10 @@ Qt's current click/selection delivery.
   including an already displayed row. Hidden peers therefore cannot consume
   another view's unread reports.
 
-The Sensors checkbox redraws only its own map without advancing the shared
-revision or invalidating the planning cache.
+Both Sensors controls (active ranges and passive/emission ranges) redraw only
+their own map without advancing the shared revision or invalidating the planning
+cache. The interstellar-medium, outpost and transport-line overlays use the same
+local redraw path; a visual toggle cannot rebuild a peer's map or physical plan.
 
 Dock placement, tool visibility, map zoom/mode, sensor-overlay visibility,
 filters and unsubmitted editor drafts remain view preferences. Existing presets,
@@ -91,3 +99,11 @@ ship draft, a hidden differently filtered report reader, a direct observer of
 four checks fail on the original PR source 3825b3d. Deferred UI assertions wait
 for their observable result with a bounded deadline, rather than treating a
 fixed 25 ms pause as proof that two queued refreshes ran.
+
+The follow-up review cases queue Save before replacing the document with another
+campaign or the very same file, then check the final orders after peer closure.
+A queued direct accepted event also exercises the controller's order boundary;
+an ordinary peer End Turn preserves a draft that can still be saved. Both Sensors
+controls and the three other overlay toggles preserve shared revision/cache/build
+count, peer map objects and peer visibility choices. All stale-save and overlay
+negative cases fail against unchanged review source 702d1d4 before these fixes.

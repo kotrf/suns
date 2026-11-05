@@ -34,6 +34,8 @@ public:
     const WorkspaceSelectionContext& selection() const { return data_.selection; }
     const QStringList& pendingDescriptions() const { return data_.pendingDescriptions; }
     std::uint64_t revision() const { return data_.planningRevision; }
+    // Runtime document incarnation, independent of campaign IDs, turns and edits.
+    std::uint64_t documentGeneration() const { return documentGeneration_; }
     SaveGameData snapshot() const;
 
 signals:
@@ -57,6 +59,7 @@ private:
     };
     DocumentUpdate beginDocumentUpdate(QObject* origin);
     unsigned documentUpdateDepth_{};
+    std::uint64_t documentGeneration_{};
     struct Data {
         GalaxyConfig galaxyConfig;
         GameState state;

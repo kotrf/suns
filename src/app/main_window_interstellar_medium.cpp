@@ -53,7 +53,7 @@ void MainWindow::installInterstellarMedium()
     overlay->setCheckable(true); overlay->setChecked(QSettings{}.value("map/interstellarMedium",true).toBool());
     if (menu) { menu->addAction(dock->toggleViewAction()); menu->addAction(overlay); }
     else { menuBar()->addAction(dock->toggleViewAction()); menuBar()->addAction(overlay); }
-    connect(overlay,&QAction::toggled,this,[this](bool checked) { QSettings{}.setValue("map/interstellarMedium",checked); rebuildScene(); });
+    connect(overlay,&QAction::toggled,this,[this](bool checked) { QSettings{}.setValue("map/interstellarMedium",checked); rebuildScene(false); });
     connect(tree,&QTreeWidget::itemSelectionChanged,this,[tree,locate] { locate->setEnabled(tree->currentItem()); });
     connect(locate,&QPushButton::clicked,this,[this,tree] { if (auto* row=tree->currentItem())
         view_->centerOn(row->data(0,Qt::UserRole+1).toDouble(),row->data(0,Qt::UserRole+2).toDouble()); });

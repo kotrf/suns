@@ -306,15 +306,95 @@ static void hidden_report_refresh_does_not_read(bool navigate = false)
     }
     waitUntil([&] { return MainWindowTestAccess::read(a, arrived.id) && !report(a, arrived.id)->font().bold(); }, "explicit filtered report read");
 }
-static void sensor_toggle_is_local()
+static void queued_designer_save_cannot_cross_document(bool sameFile, bool directAccept = false)
+{
+    QTemporaryDir dir;
+    MainWindow a; install(a); MainWindowTestAccess::setup(a);
+    const auto path = dir.filePath("replacement.suns");
+    if (sameFile) assert(MainWindowTestAccess::save(a, path));
+    else {
+        MainWindow replacement; MainWindowTestAccess::setup(replacement);
+        assert(MainWindowTestAccess::campaign(replacement) != MainWindowTestAccess::campaign(a));
+        assert(MainWindowTestAccess::save(replacement, path));
+    }
+    MainWindow b(a.session()); install(b); a.show(); b.show();
+    waitUntil([&] { return MainWindowTestAccess::idle(a) && MainWindowTestAccess::idle(b); }, "queued-save views");
+    MainWindowTestAccess::designer(b);
+    auto* dialog = MainWindowTestAccess::designer(std::as_const(b)); assert(dialog);
+    dialog->findChild<QLineEdit*>("shipDesignName")->setText("Old queued draft");
+    auto* save = dialog->findChild<QPushButton*>("saveShipDesign"); assert(save && save->isEnabled());
+    bool attempted = false;
+    // Queue Save before load schedules the peer's deferred Document refresh.
+    // Closing the old editor later cannot retract an order accepted in between.
+    QTimer::singleShot(0, dialog, [&] {
+        attempted = true;
+        if (directAccept) dialog->QDialog::accept(); // Also exercise the controller's order boundary.
+        else save->click();
+    });
+    assert(MainWindowTestAccess::load(a, path));
+    assert(a.session()->pendingOrders().orders.empty());
+    waitUntil([&] { return !MainWindowTestAccess::designer(std::as_const(b))
+        && MainWindowTestAccess::idle(a) && MainWindowTestAccess::idle(b); }, "queued Save and peer draft closure");
+    assert(attempted);
+    assert(a.session()->pendingOrders().orders.empty());
+    assert(a.session()->pendingDescriptions().empty());
+    if (sameFile && !directAccept) {
+        MainWindowTestAccess::designer(b);
+        auto* fresh = MainWindowTestAccess::designer(std::as_const(b)); assert(fresh);
+        fresh->findChild<QLineEdit*>("shipDesignName")->setText("Fresh replacement draft");
+        fresh->findChild<QPushButton*>("saveShipDesign")->click();
+        assert(a.session()->pendingOrders().orders.size() == 1);
+        const auto* order = std::get_if<CreateShipDesignOrder>(&a.session()->pendingOrders().orders.front());
+        assert(order && order->name == "Fresh replacement draft");
+    }
+}
+static void peer_turn_preserves_a_savable_draft()
 {
     MainWindow a; install(a); MainWindowTestAccess::setup(a);
     MainWindow b(a.session()); install(b);
+    waitUntil([&] { return MainWindowTestAccess::idle(a) && MainWindowTestAccess::idle(b); }, "live-draft views");
+    MainWindowTestAccess::designer(b);
+    auto* dialog = MainWindowTestAccess::designer(std::as_const(b)); assert(dialog);
+    dialog->findChild<QLineEdit*>("shipDesignName")->setText("Draft across peer turn");
+    const auto turn = a.session()->state().turn;
+    MainWindowTestAccess::addFactory(a);
+    MainWindowTestAccess::nextTurn(a);
+    waitUntil([&] { return MainWindowTestAccess::idle(b); }, "peer turn draft refresh");
+    assert(a.session()->state().turn == turn + 1 && MainWindowTestAccess::designer(std::as_const(b)) == dialog);
+    dialog->findChild<QPushButton*>("saveShipDesign")->click();
+    assert(a.session()->pendingOrders().orders.size() == 1);
+    const auto* order = std::get_if<CreateShipDesignOrder>(&a.session()->pendingOrders().orders.front());
+    assert(order && order->name == "Draft across peer turn");
+}
+static void sensor_toggle_is_local(const char* actionName = nullptr)
+{
+    MainWindow a; install(a); MainWindowTestAccess::setup(a);
+    MainWindow b(a.session()); install(b);
+    const auto name = QString::fromLatin1(actionName ? actionName : "");
+    for (auto* view : {&a, &b}) {
+        if (name == "interstellarMediumOverlay") view->installInterstellarMedium();
+        if (name == "outpostsOverlay") view->installOutposts();
+        if (name == "transportLines") view->installTransportLines();
+    }
     waitUntil([&] { return MainWindowTestAccess::idle(a) && MainWindowTestAccess::idle(b); }, "initial sensor views");
     const auto revision = a.session()->revision(), builds = MainWindowTestAccess::builds(a);
     const auto* cache = &a.session()->plannedState(); auto* marker = star(b, 1);
     const bool peerSensors = MainWindowTestAccess::sensors(b)->isChecked();
-    MainWindowTestAccess::sensors(a)->click(); settle();
+    if (name == "transportLines") {
+        auto* checkbox = a.findChild<QDockWidget*>("transportLinesDock")->findChild<QCheckBox*>();
+        auto* peerCheckbox = b.findChild<QDockWidget*>("transportLinesDock")->findChild<QCheckBox*>();
+        assert(checkbox && peerCheckbox);
+        const bool peerChecked = peerCheckbox->isChecked();
+        checkbox->click();
+        assert(peerCheckbox->isChecked() == peerChecked);
+    } else if (actionName) {
+        auto* action = a.findChild<QAction*>(actionName); auto* peerAction = b.findChild<QAction*>(actionName);
+        assert(action && peerAction);
+        const bool peerChecked = peerAction->isChecked();
+        action->trigger();
+        assert(peerAction->isChecked() == peerChecked);
+    } else MainWindowTestAccess::sensors(a)->click();
+    waitUntil([&] { return MainWindowTestAccess::idle(a) && MainWindowTestAccess::idle(b); }, "local overlay redraw");
     assert(a.session()->revision() == revision && MainWindowTestAccess::builds(b) == builds);
     assert(&a.session()->plannedState() == cache && star(b, 1) == marker);
     assert(MainWindowTestAccess::sensors(b)->isChecked() == peerSensors);
@@ -327,7 +407,19 @@ int main(int argc, char** argv)
     if (app.arguments().contains("--atomic")) { every_load_signal_sees_one_document(); return 0; }
     if (app.arguments().contains("--messages")) { hidden_report_refresh_does_not_read(); return 0; }
     if (app.arguments().contains("--sensors")) { sensor_toggle_is_local(); return 0; }
+    if (app.arguments().contains("--extra-sensors")) { sensor_toggle_is_local("showPassiveEmissionRangesAction"); return 0; }
+    if (app.arguments().contains("--medium-overlay")) { sensor_toggle_is_local("interstellarMediumOverlay"); return 0; }
+    if (app.arguments().contains("--outposts-overlay")) { sensor_toggle_is_local("outpostsOverlay"); return 0; }
+    if (app.arguments().contains("--lines-overlay")) { sensor_toggle_is_local("transportLines"); return 0; }
+    if (app.arguments().contains("--queued-save")) { queued_designer_save_cannot_cross_document(false); return 0; }
+    if (app.arguments().contains("--same-file-save")) { queued_designer_save_cannot_cross_document(true); return 0; }
+    if (app.arguments().contains("--queued-accept")) { queued_designer_save_cannot_cross_document(true, true); return 0; }
     shared_views_and_document_lifetime(); separate_documents_stay_separate();
     visitor_demo_replaces_both_contexts(); every_load_signal_sees_one_document();
     hidden_report_refresh_does_not_read(); hidden_report_refresh_does_not_read(true); sensor_toggle_is_local();
+    sensor_toggle_is_local("showPassiveEmissionRangesAction");
+    sensor_toggle_is_local("interstellarMediumOverlay"); sensor_toggle_is_local("outpostsOverlay");
+    sensor_toggle_is_local("transportLines");
+    queued_designer_save_cannot_cross_document(false); queued_designer_save_cannot_cross_document(true);
+    queued_designer_save_cannot_cross_document(true, true); peer_turn_preserves_a_savable_draft();
 }
