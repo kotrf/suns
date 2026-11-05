@@ -1,5 +1,41 @@
 # Project status and development handoff
 
+## Visitor trajectories complete original #46 scope — 6 November 2026
+
+The user continued the recorded queue. #280 is merged as 622189f266e1c7ec90c7e9ae1475b669f43790db;
+its tree 44fb606553885e4b8a352fa1b6573fd8b0ffd723 matches reviewed 1591bd8.
+Both source CI 42018032117 and main CI 42116108385 succeeded. New work remains in
+the existing repository, branch codex/visitor-trajectories-46, on that main.
+
+New visitors enter at a seeded point 150 ly beyond any of four edges. A point
+inside the central half of the real galaxy defines a ray, clipped to its far exit
+on another boundary of the enlarged rectangle. This supports oblique crossings
+and extreme aspect ratios without corner grazes. Constant 2D velocity and the
+existing ceil(length/121) year budget remain the physical model; rarity, one-active
+limit, offers, detection, delays and continuous encounter geometry retain their
+rules. Existing visitors/tracks/missions are never regenerated. Formats stay
+save v113/orders v49/race v3. Prepared demos now exercise horizontal, vertical
+and diagonal arrivals using the same ordinary encounter code.
+
+Independent geometry checks replay years 60–9999 across six galaxy sizes (200²,
+400², 1600×240, 240×1600, 10000×200 and 200×10000), require all four starts,
+different bounded exits and central crossings, and verify finite speed/replay.
+The acceptance test failed on unchanged 622189f's horizontal-only generation.
+A real generated oblique visitor also survives save/load and byte-identical
+TurnProcessor continuation past departure; a hidden velocity change does not
+alter a player file. The original profile/paid AI/knowledge/reader tests exercise
+the rotated demos. Visitor core/editor **2/2 passed in 0.99 s**. Full
+GCC14.2/Qt6.12 Debug build and **118/118 CTest passed in 122.87 s**. The
+diagonal demo and its map forecast were inspected offscreen at 1440×960. Ready
+for review; no annual UI forecast or polling was introduced.
+
+This completes the original issue's required rare encounters, received detection,
+physical pursuit/payment, varied bounded gifts, concise flavor/portraits and
+cancel/failure/departure UX. The PR will close #46 after review/merge. Broader AI
+ship construction/staging is not an original #46 requirement and remains deferred,
+with its future boundary retained in the visitor contract. Frozen #53/#63 and
+transport evacuation remain unchanged. PR/source/CI will be recorded in GitHub.
+
 ## PR #280 review: received offer-card status — 5 November 2026
 
 [P3](https://github.com/kotrf/suns/pull/280#discussion_r4479678276) on c1a55e7:

@@ -20,6 +20,33 @@ SaveGameData fixture(VisitorProfile profile=VisitorProfile::Freight)
     SaveGameData d; d.state=make_visitor_demo(profile); d.mode=SessionMode::Host; d.pendingOrders={1,{}};
     d.campaignId=17; d.turnToken=29; d.playerTokens={{1,31},{2,41}}; d.state.players.push_back({2,"Remote human"}); return d;
 }
+void generated_oblique_path_survives_save_and_continuation()
+{
+    SaveGameData original; original.campaignId=46; original.turnToken=2;
+    original.mode=SessionMode::Host; original.playerTokens={{1,2}};
+    original.galaxyConfig={771,16,1600,240,15};
+    original.state=generate_campaign(original.galaxyConfig,{{"Terrans",RacePreset::Terran}}); original.pendingOrders={1,{}};
+    auto& s=original.state; s.turn=59;
+    while(s.turn<10000 && s.visitors.empty()) { advance_visitors(s); ++s.turn; }
+    assert(s.visitors.size()==1 && s.visitors[0].velocity.x!=0 && s.visitors[0].velocity.y!=0);
+    const auto track=s.visitors[0];
+    QTemporaryDir dir; const auto a=dir.filePath("oblique.suns"), b=dir.filePath("continued.suns");
+    QString error; SaveGameData loaded;
+    assert(write_save_game_file(a,original,error) && read_save_game_file(a,loaded,error));
+    assert(loaded.state.visitors[0].position==track.position && loaded.state.visitors[0].velocity==track.velocity);
+    assert(loaded.state.visitors[0].departureTurn==track.departureTurn);
+    // A player file cannot reveal an undetected route, even after its hidden
+    // physical velocity and endpoint change.
+    assert(write_save_game_file(a,make_player_turn(original,1),error)); const auto hidden=bytes(a);
+    auto other=original; other.state.visitors[0].velocity={0,110};
+    assert(write_save_game_file(a,make_player_turn(other,1),error) && bytes(a)==hidden);
+    const auto years=track.departureTurn-track.arrivalTurn+2;
+    for(std::uint64_t n=0;n<years;++n) {
+        original.state=TurnProcessor{}.process(original.state,{}); loaded.state=TurnProcessor{}.process(loaded.state,{});
+        assert(write_save_game_file(a,original,error) && write_save_game_file(b,loaded,error));
+        assert(bytes(a)==bytes(b));
+    }
+}
 void profiles_round_trip_and_genuine_v112_defaults()
 {
     QTemporaryDir dir; const auto path=dir.filePath("profiles.suns"); QString error; SaveGameData loaded;
@@ -154,6 +181,7 @@ int main(int argc,char** argv)
 {
     QApplication app(argc,argv); invalid_visitor_enums_and_truncated_payloads_are_rejected(); save_orders_and_private_exports();
     profiles_round_trip_and_genuine_v112_defaults();
+    generated_oblique_path_survives_save_and_continuation();
     MainWindow w; w.installVisitors(); w.startVisitorDemo();
     auto* tree=w.findChild<QTreeWidget*>("visitorContacts"); auto* send=w.findChild<QPushButton*>("interceptVisitor");
     assert(tree && tree->topLevelItemCount()==1 && send->isEnabled());

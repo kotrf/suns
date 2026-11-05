@@ -5,10 +5,55 @@
 #include "suns/equipment.hpp"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cassert>
 #include <iostream>
 using namespace suns;
 namespace {
+// Clip a segment against the central half of the galaxy, independently of the
+// generator. A rare crossing must provide an interior opportunity, not skim a corner.
+bool crosses_core(Position start, Position end, double width, double height)
+{
+    double first=0,last=1;
+    for(const auto axis:{0,1}) {
+        const auto a=axis?start.y:start.x, b=axis?end.y:end.x;
+        const auto radius=(axis?height:width)/4;
+        if(std::abs(b-a)<1e-12) { if(std::abs(a)>radius) return false; continue; }
+        const auto t0=(-radius-a)/(b-a), t1=(radius-a)/(b-a);
+        first=std::max(first,std::min(t0,t1)); last=std::min(last,std::max(t0,t1));
+    }
+    return first<=last;
+}
+void generated_paths_cross_from_every_edge_deterministically()
+{
+    for(const auto size:std::array<Position,6>{{{200,200},{400,400},{1600,240},{240,1600},{10000,200},{200,10000}}}) {
+        auto s=generate_game({771,16,size.x,size.y,15}); auto replay=s;
+        const auto hx=size.x/2+150, hy=size.y/2+150;
+        std::array<bool,4> sides{}; bool diagonal=false; unsigned samples=0;
+        for(std::uint64_t year=60;year<10000;++year) {
+            s.turn=replay.turn=year-1; s.visitors.clear(); replay.visitors.clear();
+            advance_visitors(s); advance_visitors(replay);
+            assert(s.visitors.size()==replay.visitors.size()); if(s.visitors.empty()) continue;
+            const auto& v=s.visitors.front(); const auto& r=replay.visitors.front();
+            assert(v.position==r.position && v.velocity==r.velocity && v.departureTurn==r.departureTurn && v.profile==r.profile);
+            assert(v.arrivalTurn==year && v.departureTurn>year);
+            const auto speed=distance_between({},v.velocity); assert(speed>0 && speed<=121+1e-8);
+            const Position end{v.position.x+v.velocity.x*double(v.departureTurn-year),v.position.y+v.velocity.y*double(v.departureTurn-year)};
+            const auto edge=[&](Position p) {
+                if(std::abs(p.x+hx)<1e-6) return 0; if(std::abs(p.x-hx)<1e-6) return 1;
+                if(std::abs(p.y+hy)<1e-6) return 2; if(std::abs(p.y-hy)<1e-6) return 3;
+                return -1;
+            };
+            const auto startSide=edge(v.position), endSide=edge(end);
+            assert(std::abs(v.position.x)<=hx+1e-6 && std::abs(v.position.y)<=hy+1e-6);
+            assert(std::abs(end.x)<=hx+1e-6 && std::abs(end.y)<=hy+1e-6);
+            assert(startSide>=0 && endSide>=0 && startSide!=endSide);
+            sides[startSide]=true; diagonal |= std::abs(v.velocity.x)>1e-6 && std::abs(v.velocity.y)>1e-6;
+            assert(crosses_core(v.position,end,size.x,size.y)); ++samples;
+        }
+        assert(samples>0 && diagonal && std::all_of(sides.begin(),sides.end(),[](bool found){return found;}));
+    }
+}
 void demo_exchange_and_real_payment()
 {
     auto s=make_visitor_demo(); assert(known_visitor(s,1,1)); assert(s.players[0].acquiredEquipment.empty());
@@ -40,6 +85,9 @@ void distinct_offers_pay_atomically_and_keep_research_requirements()
 {
     for(const auto& offer:visitor_offers()) {
         auto initial=make_visitor_demo(offer.profile);
+        const auto velocity=initial.visitors[0].velocity;
+        if(offer.profile==VisitorProfile::Prospector) assert(velocity.x==0 && velocity.y>0);
+        if(offer.profile==VisitorProfile::Shieldwright) assert(velocity.x>0 && velocity.y>0);
         assert(known_visitor(initial,1,1)->profile==offer.profile);
         assert(fleet_cargo_used(initial,initial.fleets[0])<=fleet_cargo_capacity(initial,initial.fleets[0]));
         const auto designs=initial.shipDesigns.size(), fleets=initial.fleets.size();
@@ -258,6 +306,7 @@ void simultaneous_customers_and_spawn_are_deterministic()
 }
 int main()
 {
+    generated_paths_cross_from_every_edge_deterministically();
     distinct_offers_pay_atomically_and_keep_research_requirements(); computers_use_received_offer_and_all_requested_minerals();
     demo_exchange_and_real_payment(); gift_and_sightings_travel_as_immutable_packets();
     physical_refusal_delivers_evidence_but_navigation_failure_keeps_its_age();

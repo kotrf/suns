@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <random>
 
 namespace suns {
@@ -60,6 +61,26 @@ void clear_navigation(Fleet& f)
 {
     f.destination.reset(); f.targetFleet = 0; f.arrivalAction.reset(); f.waypointQueue.clear();
     f.routeTemplate.clear(); f.repeatOrders = false; f.task = FleetTask::None;
+}
+IntergalacticVisitor crossing(VisitorId id, std::uint64_t turn, double width, double height, std::mt19937_64& rng)
+{
+    const auto coordinate=[&](double span) { return (double(rng()%10001)/10000-0.5)*span; };
+    const double hx=width/2+150, hy=height/2+150;
+    const auto side=rng()%4;
+    Position start;
+    if(side<2) start={side==0?-hx:hx,coordinate(height*0.8)};
+    else start={coordinate(width*0.8),side==2?-hy:hy};
+    // Aim through the central half of the real galaxy, then extend the ray to
+    // a different outer edge. This avoids short, uninteresting corner grazes.
+    const Position aim{coordinate(width*0.5),coordinate(height*0.5)};
+    const Position delta{aim.x-start.x,aim.y-start.y};
+    double scale=std::numeric_limits<double>::infinity();
+    if(delta.x!=0) scale=std::min(scale,((delta.x>0?hx:-hx)-start.x)/delta.x);
+    if(delta.y!=0) scale=std::min(scale,((delta.y>0?hy:-hy)-start.y)/delta.y);
+    const Position travel{delta.x*scale,delta.y*scale};
+    const auto duration=std::uint64_t(std::ceil(distance_between({},travel)/121));
+    return {id,start,{travel.x/double(duration),travel.y/double(duration)},turn,turn+duration,0,
+        VisitorProfile(rng()%offers.size())};
 }
 }
 std::optional<Position> visitor_intercept_destination(const Fleet& f, const VisitorObservation& x, std::uint64_t turn, std::uint8_t warp)
@@ -153,9 +174,7 @@ void advance_visitors(GameState& s)
     std::mt19937_64 rng(s.galaxySeed ^ (turn*0x9e3779b97f4a7c15ULL) ^ 0x56495349544f52ULL);
     if (rng()%80) return;
     const auto width = std::max(200.0, s.wormholeRules.width), height = std::max(200.0, s.wormholeRules.height);
-    const auto duration = std::uint64_t(std::ceil((width+300)/121)); const bool reverse = rng()%2;
-    s.visitors.push_back({s.nextVisitorId++, {(reverse?1:-1)*(width/2+150), (double(rng()%10001)/10000-0.5)*height*0.8},
-        {(reverse?-1:1)*(width+300)/double(duration), 0}, turn, turn+duration, 0, VisitorProfile(rng()%offers.size())});
+    s.visitors.push_back(crossing(s.nextVisitorId++,turn,width,height,rng));
 }
 void observe_visitors(GameState& s)
 {
@@ -235,6 +254,12 @@ GameState make_visitor_demo(VisitorProfile profile)
     f.name="Rendezvous courier"; f.position={0,0}; f.destination.reset(); f.arrivalAction.reset(); f.waypointQueue.clear();
     f.colonists=0; f.minerals=visitor_offer(profile).request; f.fuel=fleet_fuel_capacity(s,f); f.warp=8; f.telemetry={};
     s.visitors={{1,{-140,0},{121,0},60,66,0,profile}}; s.nextVisitorId=2;
+    if(profile==VisitorProfile::Prospector) {
+        s.visitors[0].position={0,-140}; s.visitors[0].velocity={0,121};
+    } else if(profile==VisitorProfile::Shieldwright) {
+        const auto diagonal=std::sqrt(0.5);
+        s.visitors[0].position={-140*diagonal,-140*diagonal}; s.visitors[0].velocity={121*diagonal,121*diagonal};
+    }
     publish_fleet_telemetry(s,s.turn); deliver_due_fleet_telemetry(s); observe_visitors(s); (void)deliver_visitor_reports(s);
     return s;
 }

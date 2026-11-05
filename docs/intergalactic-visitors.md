@@ -10,7 +10,8 @@ Launch `suns --visitor-demo`, or choose a profile in **Visitor encounter demos**
 from the menu bar. The console flag uses Freight envoy. The menu asks before replacing the current game; save first.
 The default prepared single-player encounter starts in year 60 with a courier
 at Earth, 50 kt Germanium in its ordinary hold, full tanks and a received visitor
-broadcast. The other demos load their own advertised mineral mix.
+broadcast. Freight demonstrates a horizontal track, Prospector a vertical one,
+and Shieldwright a diagonal one. The other demos load their own advertised mineral mix.
 It does not alter generation or grant resources in ordinary campaigns.
 
 In **Intergalactic visitors**, select the contact/courier, keep Warp 8 and choose
@@ -58,11 +59,22 @@ card, while its historical terms remain visible.
 
 Ordinary galaxies with at least 16 stars become eligible after year 60. A separate
 seed/year generator has a 1/80 chance per eligible year, with at most one visitor
-in flight. Horizontal paths start 150 ly outside either map edge and leave at
-the opposite outer edge. Duration is `ceil((width + 300) / 121)` years; speed is
-the corresponding constant velocity, normally above player Warp 10. Stable IDs,
-positions, velocity, arrival/departure years and the physical customer are saved.
-The first slice bounds the historical visitor roster at 128.
+in flight. A new track starts 150 ly outside any of the four edges. A seeded
+interior point in the central half of the real galaxy defines its straight ray;
+the ray is extended to a different edge of the rectangle enlarged by 150 ly.
+Thus oblique routes cross useful interior space rather than grazing a corner,
+including in strongly rectangular galaxies. The nominal speed budget stays
+121 ly/year: duration is `ceil(track length / 121)`, and the constant velocity
+reaches the outer exit at that announced whole-year boundary. There are no
+turns or hidden course changes, so a measured 2D track remains predictable.
+Stable IDs, positions, velocity, arrival/departure years and the physical
+customer are saved. The historical visitor roster remains bounded at 128.
+
+Only newly generated tracks use this rule. An already saved physical visitor,
+received observation or incoming mission keeps its exact position, velocity
+and announced window; no migration or reroll is performed. Save v113 / orders
+v49 / race v3 remain unchanged. Normal profile selection is independent of the
+entry side; the three prepared demos choose directions purely for demonstration.
 
 The courier's navigation solves an intercept from its received track and chosen
 Warp. It then uses ordinary movement, fuel limits, mines, radiation, damage and
@@ -144,7 +156,18 @@ Review regressions cover delayed physical refusals, unchanged evidence age after
 navigation failures, invalid VISI report/gift enums and every truncated prefix of
 a VISI payload whose outer length remains valid.
 
-#46 stays open for alternative trajectories and strategic AI preparation.
-The three request/gift profiles, short greetings and distinct portraits are now
-delivered in this slice; broader AI staging remains deferred. Visitors are neutral and
-cannot be attacked in this slice. General moving/transient anomalies remain #55.
+The trajectory tests replay seeded generation across six square/rectangular
+sizes (including 50:1 aspect ratios), checking all four entry sides, a different
+bounded exit, interior crossings and finite legal speed. The old horizontal-only
+source fails those acceptance checks. A generated oblique track survives save/load
+and byte-identical real-turn continuation; an unseen changed velocity does not
+change a player export. The vertical/diagonal demos exercise the normal timed
+encounter, fuel, cargo, acquisition, delayed reports, AI and UI paths.
+
+This slice completes the original #46 acceptance: rare deterministic outsiders,
+received-only discovery, real timed interception, paid varied gifts, concise
+encounters/portraits, decline/cancellation, failure and departure reporting.
+The PR closes #46 after review and merge. Strategic AI construction/staging is a
+separate deferred enhancement, not a requirement of the original visitor issue.
+Visitors remain neutral and cannot be attacked. General moving/transient anomalies
+remain #55; frozen #53/#63/evacuation are not resumed.
