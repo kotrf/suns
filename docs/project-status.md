@@ -1,5 +1,109 @@
 # Project status and development handoff
 
+## Follow-up review fixes for #279 / #47 — 5 November 2026
+
+Re-review of source 702d1d4 confirmed the four earlier fixes and the bounded UI
+waits, but found two remaining defects. Its [source CI](https://github.com/kotrf/suns/actions/runs/41992024641)
+has now completed successfully; that does not cover the new changes below.
+
+- [P2 queued Save](https://github.com/kotrf/suns/pull/279#discussion_r4478103388):
+  peer designer closure is deferred, so an already queued Save could insert an
+  old-world design after replacement. Each draft now captures a runtime document
+  generation. Every completed load/restart/demo advances it before notification,
+  even for the same saved campaign/year/token. Save validation and the actual
+  accepted/order callback both reject a different generation; stale availability
+  callbacks also stop. Normal orders/Save/selection/End Turn retain it. No file
+  field or version is added.
+- [P3 auxiliary Sensors](https://github.com/kotrf/suns/pull/279#discussion_r4478103394):
+  Passive and emission ranges now uses the local redraw path, like active Sensors.
+  Auditing visual toggles also found and fixed the same call in interstellar
+  medium, outpost and transport-line overlays. All retain shared revision,
+  received/accepted cache identity, movement build count and peer map items.
+
+New regression cases were first built against unchanged 702d1d4. Queued Save
+with another campaign, Save with the same file, a direct queued accepted event,
+and all four affected overlays failed for the reviewed behavior (seven logs under
+untracked work/review279-r2-before-*). After the fixes, the complete session target
+passed in 5.40 s, also checking a fresh post-load draft and an existing draft saved
+after a peer End Turn. The expanded session target passed five consecutive runs
+(27.57 s total). Full GCC14.2/Qt6.12 Debug app/test build and **118/118 CTest
+passed in 129.00 s**. Review fixes are ready; current source SHA/tree and new CI
+are recorded in GitHub. PR #279 and issue #47 remain open for re-review/merge;
+gameplay and v112/v49/v3 are unchanged.
+
+## Review fixes for #279 / #47 — 5 November 2026
+
+The review of source 3825b3d confirmed three P2 issues and one P3. Its source CI
+41981060650 failed 117/118: the new linked-view test assumed a fixed 25 ms wait
+was sufficient for two queued callbacks. The initial 118/118 record below is a
+local result, not a claim that the original source CI passed.
+
+Four dedicated regression cases were compiled against unchanged 3825b3d and each
+failed for the reviewed behavior (logs under untracked work/):
+
+- [Visitor demo](https://github.com/kotrf/suns/pull/279#discussion_r4477453260):
+  exercise the real QAction and confirmation. Demo now uses the same document
+  boundary as load/restart, closing old-world drafts in both views and resetting
+  reports, context, history and identity together.
+- [Unread reports](https://github.com/kotrf/suns/pull/279#discussion_r4477453268):
+  hidden peer with a Fleet movement filter must not consume a new FleetArrived
+  while the source reader retains an older non-fleet report. List rebuilding
+  blocks selection signals, renders without read mutation and preserves explicit
+  click/selection/unread-navigation/Show on map read actions.
+- [Partial notifications](https://github.com/kotrf/suns/pull/279#discussion_r4477453271):
+  a scoped session update suppresses Planning/Messages/Selection/Metadata while
+  load/restart/demo install their complete fields. One completed Document boundary
+  advances the epoch before publishing. Local route reset/history refresh also
+  follow installation. The direct observer verifies state, received and planned
+  populations, pending orders, selection and revision on **every** emitted signal.
+- [Local Sensors](https://github.com/kotrf/suns/pull/279#discussion_r4477453277):
+  use rebuildScene(false); retain shared revision, cache/build count and the peer's
+  map items and overlay preference.
+
+Linked-view checks now wait for observable results with a bounded deadline;
+fixed 25 ms sleeps no longer decide completion. Targeted tests and five consecutive
+runs of the session suite passed (12.95 s total). The full GCC14.2/Qt6.12 Debug
+build and all 118/118 CTest targets passed in 126.19 s. Review fixes are ready;
+consult GitHub for the current source SHA and its new CI run. Gameplay and v112/v49/v3 formats remain unchanged; #279 stays open
+for re-review and #47 closes only after merging.
+
+## Shared GameSession ownership (#47) — 5 November 2026
+
+The user selected #47 next. The dock/preset/non-modal UI was already implemented;
+this slice completes the retained session ownership requirement. Work uses the
+existing repository, branch codex/shared-game-session-47, verified merged main
+6ee0c6baf3bf7422450e4682d24d2f70e71aa88b, tree
+a4c4c8951cb9f3b1c7c631561498819c858c7ec6. #277/#278/#267 are merged,
+#275/#276 completed, all six Mini-2 items finished; main CI 41867803440 passed.
+Earlier open/stacked statements below are historical.
+
+GameSession owns canonical world/orders, shared selection/distance IDs, exchange
+identity/tokens/inbox, reports/read IDs/save path and all received/planning caches.
+MainWindow controllers alias that data and can attach to the same shared owner;
+independent default constructors still create independent documents. Metadata and
+identity no longer reset when another view opens. One controller performs actual
+End Turn; notifications only refresh other views. Selection and panel-only edits
+retain map items and physics caches. Peer changes coalesce outside Qt click
+handling; file replacement resets peer tool context. Existing non-modal tools,
+fog of war, delayed/sent intent, layouts and view-specific drafts remain intact.
+Canonical save snapshots avoid the previous redundant full world copy in Save.
+The [contract](shared-game-session.md) documents boundaries and acceptance.
+
+Validation: full GCC14.2/Qt6.12 Debug app/test build and **118/118 CTest
+passed in 118.21 s**. The new two-view suite exercises actual map/production/
+report widgets, coalesced selection plus panel edits, exactly one paid End Turn,
+shared PBEM identity, save/title propagation without clobbering local seed drafts,
+same-year population/order replacement, direct document observers seeing the new
+epoch before notification, live designer drafts across a peer turn, closure on
+file replacement, read marks, vanished fleets and final owner release. Planning
+cache addresses/build counts and map objects stay unchanged on selection/Add.
+All 117 existing tests, including map/workspace/live-designer, logistics,
+knowledge, PBEM, economics, old saves and layouts, also pass.
+
+Ready for review; use GitHub #47 for the current PR/head and source CI. No gameplay
+or wire-format changes: save v112 / orders v49 / race v3. #47 remains open until
+review and merge. Frozen features and deferred AI are unchanged.
+
 ## Stars! starting population and growth follow-up — 4 November 2026
 
 The user extended [#278](https://github.com/kotrf/suns/pull/278) with ordinary

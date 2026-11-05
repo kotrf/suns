@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "ship_designer_dialog.hpp"
 #include "suns/campaign.hpp"
 #include "suns/intergalactic_visitors.hpp"
 #include <QAction>
@@ -24,11 +25,20 @@
 namespace suns {
 void MainWindow::startVisitorDemo()
 {
+    auto documentUpdate = session_->beginDocumentUpdate(this);
+    cancelRouteProgramMapTargetPick();
+    if (shipDesigner_) shipDesigner_->close();
     state_=make_visitor_demo(); sessionMode_=SessionMode::Solo; pendingOrders_={1,{}};
+    empireSetups_.clear(); resetTurnMessages(); historyRangeInitialized_ = false;
+    warpControlFleetId_.reset();
+    currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
+    currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
     pendingDescriptions_.clear(); inbox_.clear(); campaignMessages_.clear(); currentSavePath_.clear();
     selection_={}; logisticsControlFleetId_.reset(); resetTurnExchangeIdentity();
     galaxyConfig_={0,state_.stars.size(),400,400,15}; scene_->setSceneRect(-255,-255,510,510);
-    refreshShipDesignChoices(); rebuildScene(); updateSaveWindowTitle();
+    documentUpdate.commit();
+    emit routeProgramContextChanged(true);
+    refreshShipDesignChoices(); refreshEmpireHistory(); rebuildScene(false); updateSaveWindowTitle();
     if(auto* dock=findChild<QDockWidget*>("visitorsDock")) dock->show();
     fitGalaxyView();
     QTimer::singleShot(0,this,[this]{ if(!shuttingDown_) fitGalaxyView(); });

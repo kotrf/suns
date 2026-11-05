@@ -11,6 +11,9 @@ add_library(suns_app_ui STATIC
     technology_catalog_dialog.hpp
     main_window_technology_catalog.cpp
     main_window_fleet_operations.cpp
+    game_session.cpp
+    game_session.hpp
+    main_window_session.cpp
     main_window.cpp
     main_window_campaign.cpp
     main_window_races.cpp

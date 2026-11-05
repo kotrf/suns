@@ -1,5 +1,13 @@
 # Dockable workspace
 
+The campaign, pending orders and shared stable-ID context are owned by
+[GameSession](shared-game-session.md), including PBEM identity, report read state
+and received/planning caches. Docked tools and non-modal windows read that same
+document; MainWindow remains its controller/view. Multiple MainWindows may attach
+to one session without creating an independent campaign or resetting its orders.
+Peer notifications coalesce, and selection-only/production-only updates retain
+the existing fast paths. See the ownership contract for lifetime and acceptance.
+
 The galaxy map is the central canvas. System — Status & Minerals, Production, System Details, Fleet — Orders & Logistics and Turn Messages are `QDockWidget` panels around it.
 
 Ship Designer, Empire Research and Empire History are separate non-modal windows, with toolbar
@@ -9,7 +17,7 @@ Custom workspaces and fullscreen map do not save or change their visibility.
 
 Every panel can be moved, resized, closed, tabbed with another panel or detached into its own operating-system window. Fleet overview/logistics and Route Program share one right-side panel. System status, minerals and Production occupy the outer left column in the default layout. System Details fills a second column directly to its right, beside the map. **View** contains a visibility toggle for each panel and **Reset panel layout** restores the default arrangement.
 
-The system panel shows intelligence age, ownership, habitability and, for a friendly colony, population/capacity, factories, mines, yearly resources and orbital station status. Its mineral table keeps stock, yearly extraction and concentration visible together. Unknown or foreign stock and extraction remain hidden; concentration follows the player's geology knowledge.
+The system panel shows intelligence age, ownership, habitability and, for a friendly colony, population/capacity, factories, mines, yearly resources and orbital station status. Its mineral table keeps stock, yearly extraction and concentration visible together. Known uncolonized surface stocks carry their report age; unknown and foreign stocks remain hidden. Concentration follows the player's geology knowledge.
 
 The production queue has its own expanding list, with work, ETA, reorder/remove controls and compact ship/factory/mine/orbital-dock builders below it. Only the list scrolls; the surrounding panel has no outer scroll area. System Details is visible by default, with the selected planet first: portrait, habitability and survey information, population/capacity and growth, mineral geology, and environment bars with racial habitable ranges. Empire and current-order summaries follow below it. Its content scrolls inside the dock on small windows. The existing widgets keep their live selection updates and knowledge gates. **Production details…** still opens a non-modal infrastructure window. Research opens from **Research** in the toolbar or **View → Empire research…** in its own window and leaves the production queue visible.
 

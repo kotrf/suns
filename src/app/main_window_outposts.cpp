@@ -60,7 +60,7 @@ void MainWindow::installOutposts()
     overlay->setCheckable(true); overlay->setChecked(QSettings{}.value("map/outposts",true).toBool());
     if (auto* menu=menuBar()->findChild<QMenu*>("sunsViewMenu")) { menu->addAction(dock->toggleViewAction()); menu->addAction(overlay); }
     else { menuBar()->addAction(dock->toggleViewAction()); menuBar()->addAction(overlay); }
-    connect(overlay,&QAction::toggled,this,[this](bool checked) { QSettings{}.setValue("map/outposts",checked); rebuildScene(); });
+    connect(overlay,&QAction::toggled,this,[this](bool checked) { QSettings{}.setValue("map/outposts",checked); rebuildScene(false); });
     const auto selected=[this,tree]() -> std::optional<Fleet> {
         if (!tree->currentItem()) return std::nullopt;
         const auto id=tree->currentItem()->data(0,Qt::UserRole).toUInt();

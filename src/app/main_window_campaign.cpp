@@ -261,21 +261,7 @@ void MainWindow::newCampaign()
     newGalaxy(galaxy.config(seed.text().toULongLong()));
 }
 
-SaveGameData MainWindow::campaignSnapshot() const
-{
-    SaveGameData save;
-    save.campaignId = campaignId_;
-    save.turnToken = turnToken_;
-    save.galaxyConfig = galaxyConfig_;
-    save.state = state_;
-    save.pendingOrders = pendingOrders_;
-    save.pendingDescriptions = pendingDescriptions_;
-    save.mode = sessionMode_;
-    save.playerTokens = playerTokens_;
-    save.inbox = inbox_;
-    save.strategicMessages = sessionMode_ == SessionMode::Host ? campaignMessages_ : turnMessages_;
-    return save;
-}
+SaveGameData MainWindow::campaignSnapshot() const { return session_->snapshot(); }
 
 void MainWindow::exportPlayerTurns()
 {

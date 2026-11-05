@@ -922,7 +922,7 @@ void MainWindow::installTurnMessages()
         } else if (star) {
             selectWorkspaceObject(1, starId);
         }
-        rebuildScene();
+        rebuildScene(false);
         if (battle) {
             view_->centerOn(position.x, position.y);
         } else if (ownedFleet) {
@@ -932,27 +932,14 @@ void MainWindow::installTurnMessages()
         else view_->centerOn(event->position.x, event->position.y);
     };
 
-    const auto read = [this](QListWidgetItem* item) {
-        if (!item) return;
-        const auto id = item->data(kEventIdRole).toULongLong();
-        const auto* event = find_event(turnMessages_, id);
-        if (!event) return;
-        readTurnMessageIds_.insert(id);
-        item->setData(kUnreadRole, false);
-        auto font = item->font();
-        font.setBold(false);
-        item->setFont(font);
-        updateTurnMessagesSummary();
-        if (event->kind == GameEventKind::SpaceBattle) turnMessageBody_->setHtml(event_text(state_, *event));
-        else turnMessageBody_->setPlainText(event_text(state_, *event));
-        turnMessageShowOnMapButton_->setEnabled(event->star != 0 || event->fleet != 0);
-        turnMessageHideSimilarButton_->setEnabled(true);
-    };
     connect(turnMessagesList_, &QListWidget::currentItemChanged, this,
-        [read](QListWidgetItem* current, QListWidgetItem*) { read(current); });
+        [this](QListWidgetItem* current, QListWidgetItem*) { displayTurnMessage(current, true); });
     connect(turnMessagesList_, &QListWidget::itemClicked, this,
-        [showOnMap](QListWidgetItem*) { showOnMap(); });
-    connect(turnMessageShowOnMapButton_, &QPushButton::clicked, this, showOnMap);
+        [this, showOnMap](QListWidgetItem* item) { displayTurnMessage(item, true); showOnMap(); });
+    connect(turnMessageShowOnMapButton_, &QPushButton::clicked, this, [this, showOnMap] {
+        displayTurnMessage(turnMessagesList_->currentItem(), true);
+        showOnMap();
+    });
     const auto navigateUnread = [this](int direction) {
         if (!turnMessagesList_ || turnMessagesList_->count() == 0) return;
         const int count = turnMessagesList_->count();
@@ -963,6 +950,7 @@ void MainWindow::installTurnMessages()
             auto* item = turnMessagesList_->item(row);
             if (!item->data(kUnreadRole).toBool()) continue;
             turnMessagesList_->setCurrentItem(item);
+            displayTurnMessage(item, true);
             turnMessagesList_->scrollToItem(item);
             return;
         }
@@ -995,6 +983,7 @@ void MainWindow::installTurnMessages()
     connect(clearMessages, &QPushButton::clicked, this, [this] {
         turnMessages_.clear();
         readTurnMessageIds_.clear();
+        session_->publishMessages(this);
         refreshTurnMessages();
         statusBar()->showMessage("Turn messages cleared", 1800);
     });
@@ -1020,9 +1009,30 @@ void MainWindow::appendTurnMessages(const std::vector<GameEvent>& events)
     }
 
     if (added == 0) return;
+    session_->publishMessages(this);
     refreshTurnMessages();
     turnMessagesDock_->show();
     turnMessagesDock_->raise();
+}
+
+void MainWindow::displayTurnMessage(QListWidgetItem* item, bool markRead)
+{
+    const auto* event = item ? find_event(turnMessages_, item->data(kEventIdRole).toULongLong()) : nullptr;
+    if (!event) {
+        if (turnMessageBody_) turnMessageBody_->clear();
+        if (turnMessageShowOnMapButton_) turnMessageShowOnMapButton_->setEnabled(false);
+        if (turnMessageHideSimilarButton_) turnMessageHideSimilarButton_->setEnabled(false);
+        return;
+    }
+    if (markRead && readTurnMessageIds_.insert(event->id).second) session_->publishMessages(this);
+    const bool unread = !readTurnMessageIds_.contains(event->id);
+    item->setData(kUnreadRole, unread);
+    auto font = item->font(); font.setBold(unread); item->setFont(font);
+    updateTurnMessagesSummary();
+    if (event->kind == GameEventKind::SpaceBattle) turnMessageBody_->setHtml(event_text(state_, *event));
+    else turnMessageBody_->setPlainText(event_text(state_, *event));
+    turnMessageShowOnMapButton_->setEnabled(event->star != 0 || event->fleet != 0);
+    turnMessageHideSimilarButton_->setEnabled(true);
 }
 
 void MainWindow::refreshTurnMessages()
@@ -1064,6 +1074,7 @@ void MainWindow::refreshTurnMessages()
         ? static_cast<PlanetId>(turnMessagePlanetFilter_->currentData().toUInt())
         : 0;
 
+    const QSignalBlocker listSignals(turnMessagesList_);
     turnMessagesList_->clear();
     std::size_t hidden = 0;
     for (auto event = turnMessages_.rbegin(); event != turnMessages_.rend(); ++event) {
@@ -1099,11 +1110,7 @@ void MainWindow::refreshTurnMessages()
     }
     if (!restore && turnMessagesList_->count() > 0) restore = turnMessagesList_->item(0);
     if (restore) turnMessagesList_->setCurrentItem(restore);
-    else {
-        if (turnMessageBody_) turnMessageBody_->clear();
-        if (turnMessageShowOnMapButton_) turnMessageShowOnMapButton_->setEnabled(false);
-        if (turnMessageHideSimilarButton_) turnMessageHideSimilarButton_->setEnabled(false);
-    }
+    displayTurnMessage(restore, false); // Rendering/synchronizing a row is not a read action.
 
     hiddenTurnMessagesCount_ = hidden;
     updateTurnMessagesSummary();
@@ -1136,6 +1143,7 @@ void MainWindow::resetTurnMessages()
 {
     turnMessages_.clear();
     readTurnMessageIds_.clear();
+    session_->publishMessages(this);
     refreshTurnMessages();
     if (turnMessagesDock_) turnMessagesDock_->hide();
 }

@@ -129,7 +129,7 @@ void MainWindow::openFleetSummaryDialog()
             }
             // Resolve the ID anew: the game state can change while this
             // non-modal window remains open across turns and save loads.
-            rebuildScene();
+            rebuildScene(false);
             view_->centerOn(visible.position.x, visible.position.y);
             if (auto* dock = findChild<QDockWidget*>("fleetDock")) {
                 dock->show();

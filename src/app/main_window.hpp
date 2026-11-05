@@ -4,6 +4,7 @@
 #include "suns/turn_processor.hpp"
 #include "suns/campaign.hpp"
 #include "save_game.hpp"
+#include "game_session.hpp"
 
 #include <QCheckBox>
 #include <QByteArray>
@@ -27,6 +28,7 @@ class QGraphicsView;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QMenu;
 class QObject;
 class QPushButton;
@@ -60,17 +62,12 @@ struct RouteProgramTargetOption {
     bool enemy{};
 };
 
-// Stable IDs shared by the map, reports and docked tools. The owning game
-// state may be replaced after each turn, so panels must resolve IDs afresh.
-struct WorkspaceSelectionContext {
-    std::optional<StarId> star;
-    std::optional<FleetId> fleet{1};
-};
-
 class MainWindow final : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(GameSessionPtr session, QWidget* parent = nullptr);
+    [[nodiscard]] GameSessionPtr session() const { return session_; }
     ~MainWindow() override;
 
     // Route-program dock API. Kept outside the main map implementation so the
@@ -216,6 +213,7 @@ private:
     friend struct MainWindowTestAccess;
     static constexpr int workspaceLayoutVersion = 6;
     void rebuildScene(bool planningStateChanged = true);
+    void scheduleSessionRefresh(GameSession::Change change);
     [[nodiscard]] const GameState& receivedPlayerState() const;
     [[nodiscard]] QGraphicsItem* mapObjectAtViewportPosition(const QPoint& position) const;
     void queueMapSelectionRebuild();
@@ -265,6 +263,7 @@ private:
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
     void refreshTurnMessages();
+    void displayTurnMessage(QListWidgetItem* item, bool markRead);
     void updateTurnMessagesSummary();
     void openResearchDialog();
     void refreshResearchPanel();
@@ -325,37 +324,40 @@ private:
         FleetArrivalAction arrivalAction,
         const QString& description);
 
-    GalaxyConfig galaxyConfig_;
-    GameState state_;
-    std::uint64_t planningRevision_{};
+    // Controller aliases into the shared owner preserve the existing view API;
+    // they never hold independent canonical state, pending orders or selection.
+    GameSessionPtr session_;
+    GalaxyConfig& galaxyConfig_;
+    GameState& state_;
+    std::uint64_t& planningRevision_;
     std::uint64_t renderedPlanningRevision_{std::uint64_t(-1)};
     std::optional<FleetId> renderedFleetSelection_;
-    mutable std::uint64_t movementPreviewRevision_{std::uint64_t(-1)};
-    mutable PlayerId movementPreviewPlayer_{};
-    mutable std::optional<GameState> movementPreview_;
-    mutable std::uint64_t movementPreviewBuildCount_{};
-    mutable std::optional<GameState> receivedPlayerState_;
-    mutable std::uint64_t receivedPlayerRevision_{std::uint64_t(-1)};
-    mutable PlayerId receivedPlayerId_{};
-    mutable std::uint64_t fleetPlanningRevision_{std::uint64_t(-1)};
-    mutable std::optional<GameState> fleetPlanningState_;
-    PlayerOrders pendingOrders_{1, {}};
-    SessionMode sessionMode_{SessionMode::Solo};
-    std::vector<EmpireSetup> empireSetups_;
-    std::map<PlayerId, std::uint64_t> playerTokens_;
-    std::vector<PlayerOrders> inbox_;
-    std::vector<GameEvent> campaignMessages_;
-    std::uint64_t campaignId_{};
-    std::uint64_t turnToken_{};
-    WorkspaceSelectionContext selection_;
+    std::uint64_t& movementPreviewRevision_;
+    PlayerId& movementPreviewPlayer_;
+    std::optional<GameState>& movementPreview_;
+    std::uint64_t& movementPreviewBuildCount_;
+    std::optional<GameState>& receivedPlayerState_;
+    std::uint64_t& receivedPlayerRevision_;
+    PlayerId& receivedPlayerId_;
+    std::uint64_t& fleetPlanningRevision_;
+    std::optional<GameState>& fleetPlanningState_;
+    PlayerOrders& pendingOrders_;
+    SessionMode& sessionMode_;
+    std::vector<EmpireSetup>& empireSetups_;
+    std::map<PlayerId, std::uint64_t>& playerTokens_;
+    std::vector<PlayerOrders>& inbox_;
+    std::vector<GameEvent>& campaignMessages_;
+    std::uint64_t& campaignId_;
+    std::uint64_t& turnToken_;
+    WorkspaceSelectionContext& selection_;
     std::optional<FleetId> warpControlFleetId_;
     std::optional<FleetId> logisticsControlFleetId_;
-    int currentDistanceSelectionKind_{};
-    std::uint32_t currentDistanceSelectionId_{};
-    int previousDistanceSelectionKind_{};
-    std::uint32_t previousDistanceSelectionId_{};
-    QStringList pendingDescriptions_;
-    QString currentSavePath_;
+    int& currentDistanceSelectionKind_;
+    std::uint32_t& currentDistanceSelectionId_;
+    int& previousDistanceSelectionKind_;
+    std::uint32_t& previousDistanceSelectionId_;
+    QStringList& pendingDescriptions_;
+    QString& currentSavePath_;
     int mapDisplayMode_{};
     bool showSensorRanges_{true};
     bool mapSelectionRebuildPending_{};
@@ -365,6 +367,13 @@ private:
     bool mapDisplayApplyPending_{};
     bool planetPolishRefreshPending_{};
     bool shuttingDown_{};
+    bool sessionRefreshPending_{};
+    bool sessionPlanningRefresh_{};
+    bool sessionPanelsRefresh_{};
+    bool sessionSelectionRefresh_{};
+    bool sessionMessagesRefresh_{};
+    bool sessionMetadataRefresh_{};
+    bool sessionDocumentRefresh_{};
     bool mapExpanded_{};
     bool mapMenuWasVisible_{};
     bool mapStatusWasVisible_{};
@@ -372,8 +381,8 @@ private:
     QByteArray mapWorkspaceState_;
     QByteArray mapWorkspaceGeometry_;
     bool saveMenuBootstrap_{installSaveMenuBootstrap()};
-    std::vector<GameEvent> turnMessages_;
-    std::set<std::uint64_t> readTurnMessageIds_;
+    std::vector<GameEvent>& turnMessages_;
+    std::set<std::uint64_t>& readTurnMessageIds_;
     std::set<QString> hiddenTurnMessageClasses_;
     std::size_t hiddenTurnMessagesCount_{};
     QPointer<ShipDesignerDialog> shipDesigner_;
