@@ -181,7 +181,7 @@ public:
     void installVisitors();
     void refreshVisitors();
     void renderKnownVisitors();
-    void startVisitorDemo();
+    void startVisitorDemo(VisitorProfile profile = VisitorProfile::Freight);
     void installSurveyProbes();
     void refreshSurveyProbes();
     bool queueUnknownObjectRecovery(UnknownObjectId);

@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "visitor_offer_text.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/unknown_objects.hpp"
@@ -116,8 +117,9 @@ QString event_subject(const GameState& state, const GameEvent& event)
     QString subject;
     switch (event.kind) {
     case GameEventKind::VisitorSighted: subject=QString("Intergalactic visitor V%1 sighted; check Visitors for the dated offer/track").arg(event.quantity); break;
-    case GameEventKind::VisitorExchangeCompleted: subject=QString("Visitor V%1: 50 kt Germanium exchanged; Multi Cargo Pod blueprint received").arg(event.quantity); break;
-    case GameEventKind::VisitorExchangeFailed: subject=QString("Visitor V%1: encounter ended without exchange (no timed contact, available offer or 50 kt cargo)").arg(event.quantity); break;
+    case GameEventKind::VisitorExchangeCompleted: subject=QString("Visitor V%1: %2 exchanged; %3 received").arg(event.quantity)
+        .arg(visitor_request_text(event.visitorProfile)).arg(visitor_gift_text(event.visitorProfile)); break;
+    case GameEventKind::VisitorExchangeFailed: subject=QString("Visitor V%1: encounter ended without exchange (%2 required)").arg(event.quantity).arg(visitor_request_text(event.visitorProfile)); break;
     case GameEventKind::VisitorDeparted: subject=QString("Visitor V%1 departure observed").arg(event.quantity); break;
     case GameEventKind::InterstellarMediumObserved: subject=QString("Cloud C%1: %2").arg(event.mediumObservation?event.mediumObservation->id:0)
         .arg(event.mediumObservation && event.mediumObservation->level==MediumKnowledgeLevel::Characterized?"Characterized":"Detected"); break;
@@ -393,12 +395,15 @@ QString event_text(const GameState& state, const GameEvent& event)
             .arg(event_subject(state,event)).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
             .arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1);
         if (event.kind==GameEventKind::VisitorExchangeCompleted)
-            text+="The physical exchange consumed 50 kt Germanium. The Multi Cargo Pod blueprint is now acquired; normal technology, fitting, production and mineral costs still apply.";
+            text+=QString("The physical exchange consumed %1. The %2 is now acquired; normal technology, fitting, production and mineral costs still apply.")
+                .arg(visitor_request_text(event.visitorProfile)).arg(visitor_gift_text(event.visitorProfile));
         else if (event.kind==GameEventKind::VisitorExchangeFailed)
-            text+="The mission ended without a successful exchange. The announced intercept window, legal Warp, an available offer and 50 kt Germanium at timed physical contact are required. No cargo was charged for this failed encounter.";
+            text+=QString("The mission ended without a successful exchange. The announced intercept window, legal Warp, an available offer and %1 at timed physical contact are required. No cargo was charged for this failed encounter.")
+                .arg(visitor_request_text(event.visitorProfile));
         else if (event.kind==GameEventKind::VisitorDeparted)
             text+="A receiver observed departure. The visitor has left; this is a delivered observation, distinct from an old trajectory forecast.";
-        else text+="Open Intergalactic visitors for the dated offer and trajectory forecast. Bring 50 kt Germanium to a physical rendezvous before the announced departure. Hidden events do not refresh old contacts.";
+        else text+=QString("Open Intergalactic visitors for the dated offer and trajectory forecast: %1. Bring the requested minerals to a physical rendezvous before the announced departure. Hidden events do not refresh old contacts.")
+            .arg(visitor_offer_text(event.visitorProfile));
         return text;
     }
     if (event.mediumObservation) {

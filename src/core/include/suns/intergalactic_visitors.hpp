@@ -1,6 +1,17 @@
 #pragma once
 #include "suns/turn_processor.hpp"
+#include <span>
 namespace suns {
+struct VisitorOffer {
+    VisitorProfile profile;
+    const char* name;
+    const char* greeting;
+    MineralCargo request;
+    ShipComponentType gift;
+};
+[[nodiscard]] std::span<const VisitorOffer> visitor_offers();
+[[nodiscard]] const VisitorOffer& visitor_offer(VisitorProfile);
+[[nodiscard]] bool visitor_gift_valid(ShipComponentType);
 inline constexpr double kVisitorGermaniumPrice = 50;
 inline constexpr auto kVisitorGift = ShipComponentType::MultiCargoPod;
 [[nodiscard]] Position visitor_prediction(const VisitorObservation&, double turn);
@@ -14,5 +25,5 @@ void complete_visitor_encounter(GameState&, Fleet&, VisitorId, Position);
 void advance_visitors(GameState&);
 void observe_visitors(GameState&);
 [[nodiscard]] std::vector<GameEvent> deliver_visitor_reports(GameState&);
-[[nodiscard]] GameState make_visitor_demo();
+[[nodiscard]] GameState make_visitor_demo(VisitorProfile profile = VisitorProfile::Freight);
 } // namespace suns

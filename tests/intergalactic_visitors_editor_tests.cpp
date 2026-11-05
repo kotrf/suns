@@ -6,6 +6,7 @@
 #include <QDataStream>
 #include <QFile>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTreeWidget>
@@ -14,10 +15,49 @@ using namespace suns;
 namespace {
 QByteArray bytes(const QString& path) { QFile f(path); assert(f.open(QIODevice::ReadOnly)); return f.readAll(); }
 void put(const QString& path,const QByteArray& data) { QFile f(path); assert(f.open(QIODevice::WriteOnly)); assert(f.write(data)==data.size()); }
-SaveGameData fixture()
+SaveGameData fixture(VisitorProfile profile=VisitorProfile::Freight)
 {
-    SaveGameData d; d.state=make_visitor_demo(); d.mode=SessionMode::Host; d.pendingOrders={1,{}};
+    SaveGameData d; d.state=make_visitor_demo(profile); d.mode=SessionMode::Host; d.pendingOrders={1,{}};
     d.campaignId=17; d.turnToken=29; d.playerTokens={{1,31},{2,41}}; d.state.players.push_back({2,"Remote human"}); return d;
+}
+void profiles_round_trip_and_genuine_v112_defaults()
+{
+    QTemporaryDir dir; const auto path=dir.filePath("profiles.suns"); QString error; SaveGameData loaded;
+    for(const auto& offer:visitor_offers()) {
+        auto d=fixture(offer.profile); auto& s=d.state; auto& f=s.fleets[0]; f.position.x+=900;
+        assert(submit_visitor_command(s,1,{f.id,1,8}));
+        f.visitor={s.players[0].visitorKnowledge[0],8}; f.telemetry.visitor=f.visitor;
+        auto obs=s.players[0].visitorKnowledge[0]; obs.receivedTurn=0;
+        s.players[0].pendingVisitorReports.push_back({obs,VisitorReportKind::Exchanged,60,62,0});
+        for(const auto& o:visitor_offers()) s.players[0].acquiredEquipment.push_back(o.gift);
+        GameEvent event; event.id=46; event.recipient=1; event.turn=event.observedTurn=60;
+        event.kind=GameEventKind::VisitorExchangeCompleted; event.quantity=1; event.visitorProfile=offer.profile;
+        d.strategicMessages={event};
+        assert(write_save_game_file(path,d,error) && read_save_game_file(path,loaded,error));
+        assert(loaded.state.visitors[0].profile==offer.profile);
+        assert(loaded.state.players[0].visitorKnowledge[0].profile==offer.profile);
+        assert(loaded.state.players[0].pendingVisitorReports[0].observation.profile==offer.profile);
+        assert(loaded.state.players[0].acquiredEquipment.size()==3);
+        assert(loaded.state.fleets[0].visitor.track.profile==offer.profile);
+        assert(loaded.state.fleets[0].telemetry.visitor.track.profile==offer.profile);
+        assert(loaded.state.fleets[0].pendingCommands[0].visitor->track.profile==offer.profile);
+        assert(loaded.strategicMessages[0].visitorProfile==offer.profile);
+        assert(write_save_game_file(path,make_player_turn(d,1),error)); const auto visible=bytes(path);
+        s.visitors[0].profile=VisitorProfile::Shieldwright; s.players[0].pendingVisitorReports[0].observation.profile=VisitorProfile::Freight;
+        assert(write_save_game_file(path,make_player_turn(d,1),error) && bytes(path)==visible);
+        assert(read_save_game_file(path,loaded,error) && loaded.state.players[0].visitorKnowledge[0].profile==offer.profile);
+    }
+    const auto legacy=QByteArray::fromHex(bytes(QString::fromUtf8(SUNS_TEST_FIXTURE_DIR "/visitor-v112.hex")));
+    put(path,legacy); assert(read_save_game_file(path,loaded,error));
+    assert(loaded.campaignId==46112 && loaded.state.visitors[0].profile==VisitorProfile::Freight);
+    assert(loaded.state.players[0].visitorKnowledge[0].profile==VisitorProfile::Freight);
+    assert(loaded.state.players[0].pendingVisitorReports[0].observation.profile==VisitorProfile::Freight);
+    assert(loaded.state.fleets[0].visitor.track.profile==VisitorProfile::Freight);
+    assert(loaded.state.fleets[0].pendingCommands[0].visitor->track.profile==VisitorProfile::Freight);
+    assert(loaded.strategicMessages[0].visitorProfile==VisitorProfile::Freight);
+    assert(loaded.state.players[0].acquiredEquipment==std::vector<ShipComponentType>{kVisitorGift});
+    assert(write_save_game_file(path,loaded,error)); SaveGameData roundTrip;
+    assert(read_save_game_file(path,roundTrip,error) && roundTrip.state.fleets[0].visitor.track.profile==VisitorProfile::Freight);
 }
 void save_orders_and_private_exports()
 {
@@ -70,6 +110,16 @@ void invalid_visitor_enums_and_truncated_payloads_are_rejected()
     assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
     bad=fixture(); bad.state.players[0].acquiredEquipment={static_cast<ShipComponentType>(255)};
     assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+    bad=fixture(); bad.state.visitors[0].profile=static_cast<VisitorProfile>(255);
+    assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+    bad=fixture(); bad.state.players[0].visitorKnowledge[0].profile=static_cast<VisitorProfile>(255);
+    assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+    bad=fixture(); bad.state.players[0].acquiredEquipment={kVisitorGift,kVisitorGift};
+    assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+    bad=fixture(); GameEvent invalid; invalid.id=46; invalid.turn=invalid.observedTurn=60; invalid.recipient=1;
+    invalid.kind=GameEventKind::VisitorExchangeCompleted; invalid.visitorProfile=static_cast<VisitorProfile>(255);
+    bad.strategicMessages={invalid};
+    assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
 
     auto valid=fixture(); valid.state.players[0].acquiredEquipment={kVisitorGift};
     valid.state.players[0].pendingVisitorReports.push_back({observation,VisitorReportKind::Sighted,60,61,0});
@@ -90,13 +140,20 @@ namespace suns {
 struct MainWindowTestAccess {
     static const auto& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
     static const auto& state(const MainWindow& w) { return w.state_; }
-    static void hidden(MainWindow& w) { w.state_.visitors[0].position={9999,9999}; w.state_.visitors[0].customer=1; w.rebuildScene(); }
+    static void hidden(MainWindow& w) { w.state_.visitors[0].position={9999,9999}; w.state_.visitors[0].customer=1;
+        w.state_.visitors[0].profile=VisitorProfile::Shieldwright; w.rebuildScene(); }
     static void endTurn(MainWindow& w) { w.endTurn(); }
+    static void announcedWindowEnded(MainWindow& w) { w.state_.turn=66; w.rebuildScene(); }
+    static void departureObserved(MainWindow& w) {
+        auto& x=w.state_.players[0].visitorKnowledge[0];
+        x.available=false; x.departed=true; x.observedTurn=x.receivedTurn=66; w.rebuildScene();
+    }
 };
 }
 int main(int argc,char** argv)
 {
     QApplication app(argc,argv); invalid_visitor_enums_and_truncated_payloads_are_rejected(); save_orders_and_private_exports();
+    profiles_round_trip_and_genuine_v112_defaults();
     MainWindow w; w.installVisitors(); w.startVisitorDemo();
     auto* tree=w.findChild<QTreeWidget*>("visitorContacts"); auto* send=w.findChild<QPushButton*>("interceptVisitor");
     assert(tree && tree->topLevelItemCount()==1 && send->isEnabled());
@@ -109,4 +166,35 @@ int main(int argc,char** argv)
     assert(w.findChild<QLabel*>("visitorStatus")->text().contains("blueprint received"));
     w.startVisitorDemo(); w.findChild<QPushButton*>("cancelVisitorEncounter")->click();
     assert(std::get<EncounterVisitorOrder>(MainWindowTestAccess::orders(w).back()).visitor==0);
+    w.installTurnMessages();
+    for(const auto& offer:visitor_offers()) {
+        w.startVisitorDemo(offer.profile);
+        auto* label=w.findChild<QLabel*>("visitorOffer");
+        assert(label->text().contains(offer.name) && label->text().contains(QString::fromStdString(component_spec(offer.gift).name)));
+        assert(label->text().contains("Offer available at observation year 60"));
+        assert(!w.findChild<QLabel*>("visitorPortrait")->pixmap().isNull());
+        const auto text=label->text(), advertised=tree->topLevelItem(0)->text(5);
+        MainWindowTestAccess::hidden(w); assert(label->text()==text && tree->topLevelItem(0)->text(5)==advertised);
+        w.startVisitorDemo(offer.profile); send->click(); MainWindowTestAccess::endTurn(w);
+        assert(MainWindowTestAccess::state(w).players[0].acquiredEquipment==std::vector<ShipComponentType>{offer.gift});
+        assert(label->text().contains("Offer withdrawn at observation"));
+        assert(label->text().contains(advertised)); // Keep the price and blueprint as historical terms.
+        assert(!label->text().contains("One physical exchange before"));
+        assert(!send->isEnabled());
+        auto* messages=w.findChild<QListWidget*>("turnMessagesList"); bool correct=false;
+        for(int i=0;i<messages->count();++i) correct |= messages->item(i)->text().contains(QString::fromStdString(component_spec(offer.gift).name));
+        assert(correct);
+        MainWindowTestAccess::announcedWindowEnded(w);
+        assert(label->text().contains("Offer withdrawn at observation") && label->text().contains("Departure not observed"));
+        // An announced deadline is not a delivered observation of departure.
+        w.startVisitorDemo(offer.profile); MainWindowTestAccess::announcedWindowEnded(w);
+        assert(label->text().contains("announced exchange window has ended"));
+        assert(label->text().contains("Departure not observed"));
+        assert(label->text().contains(advertised) && !send->isEnabled());
+        const auto expired=label->text(); MainWindowTestAccess::hidden(w); assert(label->text()==expired);
+        MainWindowTestAccess::departureObserved(w);
+        assert(label->text().contains("Departure observed in year 66"));
+        assert(!label->text().contains("Departure not observed"));
+        assert(label->text().contains(advertised) && !send->isEnabled());
+    }
 }

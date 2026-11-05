@@ -1,4 +1,4 @@
-# Intergalactic visitors — first playable #46 slice
+# Intergalactic visitors — encounters and offer profiles (#46)
 
 A rare neutral visitor crosses the map along a fixed physical trajectory. A
 player must detect its broadcast, bring a loaded ship to a timed rendezvous and
@@ -6,10 +6,11 @@ complete the exchange before it leaves. It is not a playable empire or a popup.
 
 ## Try it now
 
-Launch `suns --visitor-demo`, or choose **Start visitor encounter demo…** from
-the menu bar. The menu asks before replacing the current game; save first.
-The prepared single-player encounter starts in year 60 with a courier at Earth,
-50 kt Germanium in its ordinary hold, full tanks and a received visitor broadcast.
+Launch `suns --visitor-demo`, or choose a profile in **Visitor encounter demos**
+from the menu bar. The console flag uses Freight envoy. The menu asks before replacing the current game; save first.
+The default prepared single-player encounter starts in year 60 with a courier
+at Earth, 50 kt Germanium in its ordinary hold, full tanks and a received visitor
+broadcast. The other demos load their own advertised mineral mix.
 It does not alter generation or grant resources in ordinary campaigns.
 
 In **Intergalactic visitors**, select the contact/courier, keep Warp 8 and choose
@@ -19,23 +20,39 @@ The local report delivers the blueprint. Inspect **Multi Cargo Pod** in Designer
 Cancel/decline sends a normal delayed cancellation instead of accepting a trade.
 In a real campaign load cargo using the normal Cargo controls first.
 
-## One offer and one useful gift
+## Three offers, ordinary cargo and manufacture
 
-The first physical customer exchanges **50 kt Germanium** for a **Multi Cargo
-Pod blueprint**. Each visitor has one offer for the whole galaxy: another empire
-can arrive first, and a stale available offer does not reserve it. Insufficient
-Germanium consumes nothing and produces a delayed failure receipt. FleetId breaks
-ties between contacts at the same physical time. One fleet cannot be charged
-twice for the same mission.
+Each visitor advertises one fixed request and one blueprint. A generated visitor
+chooses one of these three profiles using its existing independent seed/year RNG;
+the profile is saved and never rerolled at contact or per player. Demos load the
+matching 50/60/65 kt of ordinary minerals into the same 70 kt courier.
 
-This reuses the existing Mystery Trader equipment rather than inventing another
-commodity. Multi Cargo Pod adds **250 kt cargo and 50 armour**, weighs **9 kt**,
-and costs **25 production / I-B-G 12/0/3** per installed unit. The blueprint
-unlocks access; the existing Energy 5 / Construction 11 / Electronics 5
-requirements, hull slots, mineral/production costs and ordinary manufacture still
-apply. It grants no free ship or installed equipment. This is a substantial late
-logistics option, not a random direct combat victory. Repeated copies of this
-first blueprint give no additional unlock.
+| Profile | Request | Blueprint | Existing effects |
+| --- | --- | --- | --- |
+| Freight envoy | 50 kt Germanium | Multi Cargo Pod | 250 kt cargo, 50 armour |
+| Prospector | 40 kt Ironium + 20 kt Boranium | Alien Miner | 10 remote mining units |
+| Shieldwright | 25 kt Ironium + 25 kt Boranium + 15 kt Germanium | Langston Shell | 65 armour, 125 shields |
+
+The first physical customer pays **all** requested mineral amounts together.
+If even one is short, nothing is deducted. Other cargo is retained. Each visitor
+still has one offer for the whole galaxy: a stale available offer does not reserve
+it, and another empire can arrive first. FleetId breaks simultaneous contact ties.
+One fleet cannot be charged twice for the same mission. Duplicate receipts do not
+grant a second unlock; repeated copies of a blueprint add no further benefit.
+
+A gift grants acquisition only, never research, a free ship or fitted equipment.
+Normal technology requirements, hull slots, resource/mineral costs and manufacture
+still apply. The roster uses existing Mystery Trader equipment with implemented
+cargo/mining/armour/shield effects, rather than new commodities or free combat
+ships. These prices are a starting balance, not a claim of completed playtesting.
+The short greeting, portrait and requested/offered terms belong to the selected
+received contact; the UI does not expose the hidden physical roster. All three
+profiles have prepared demos, with the same confirmation before replacing a game.
+The card labels its price/blueprint as **last known terms**, with a separate
+received available/withdrawn/departure-observed status and the announced departure
+year. Passing that year closes the announced window without inventing an observed
+departure. A completed exchange no longer leaves an invitation to trade in the
+card, while its historical terms remain visible.
 
 ## Rarity, movement and contact
 
@@ -64,7 +81,10 @@ There is no automatic supply search. Cargo is validated again at physical contac
 Ordinary active scanners and built colony radars receive the cooperative visitor
 broadcast within their actual interference/medium-adjusted ranges. The broadcast
 contains a measured position, constant velocity, announced departure and current
-offer availability. It is a separate contact class from stationary unknown
+offer availability and profile. The profile also travels in navigation tracks,
+telemetry, pending commands and exchange receipts. A delivered exchange event
+keeps its own profile, so later contacts cannot change its price/gift text.
+It is a separate contact class from stationary unknown
 landmarks. Its immutable report travels from the actual receiver using ordinary
 communications; passive/silent receivers do not invent active measurements.
 
@@ -94,14 +114,20 @@ track; its later mission-status date never refreshes the observation date.
 
 Computer empires may divert an idle, currently confirmed, connected unarmed
 transport using PlayerView, delivered contacts and conservative fuel budgeting.
-They load missing Germanium at a received owned colony through the ordinary cargo
-order and issue the same encounter order. They receive no free cargo or blueprint.
+The same existing courier policy loads every missing requested mineral at a
+received owned colony through the ordinary cargo order and issues the same
+encounter order. It skips a profile whose blueprint is already acquired; owning
+one profile does not suppress the others. They receive no free cargo or blueprint.
 Broader ship construction/staging for visitors remains future policy work.
 
 ## Persistence and remaining scope
 
-Save **v89** appends bounded **VISI** data after v88; orders **v35** adds encounter
-and cancellation. Physical visitors, received contacts, in-flight reports,
+The original save **v89** introduced bounded **VISI** data after v88; orders
+**v35** introduced encounter and cancellation. Current profiles use save
+**v113 / orders v49 / race v3**: VISI records persist the profile in physical
+visitors and every observation/mission copy; visitor GameEvents also retain it.
+All v112 and older visitor records load as the original Freight offer, without
+changing cargo, unlocks or incoming orders. Order payloads remain unchanged. Physical visitors, received contacts, in-flight reports,
 acquired blueprints, physical/telemetry missions and incoming commands remain
 separate. v88 and earlier load with empty visitor state.
 
@@ -109,10 +135,16 @@ Tests cover the complete demo, timed contact, fuel and exact cargo payment,
 insufficient cargo, competing customers, deterministic generation, immutable
 delayed commands/reports, hidden-state isolation, cancellation/manual control,
 paid AI use, full save continuation, PBEM and UI visibility.
+Profile tests cover exact/all-or-nothing I/B/G payment, three acquired blueprints,
+research gates, delayed immutable gifts, duplicate receipts, received-only AI
+cargo choices, profile-bearing host/PBEM/mission/event round trips, invalid profile
+enums, duplicate unlocks and the real v112 fixture from the unchanged f471c34
+writer (`tests/fixtures/visitor_v112_writer.cpp`, hex-encoded fixture).
 Review regressions cover delayed physical refusals, unchanged evidence age after
 navigation failures, invalid VISI report/gift enums and every truncated prefix of
 a VISI payload whose outer length remains valid.
 
-#46 stays open for additional request/gift profiles, richer dialogue/portraits,
-alternative trajectories and strategic AI preparation. Visitors are neutral and
+#46 stays open for alternative trajectories and strategic AI preparation.
+The three request/gift profiles, short greetings and distinct portraits are now
+delivered in this slice; broader AI staging remains deferred. Visitors are neutral and
 cannot be attacked in this slice. General moving/transient anomalies remain #55.

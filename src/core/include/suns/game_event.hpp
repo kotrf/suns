@@ -109,6 +109,7 @@ struct GameEvent {
     std::optional<PlanetAftermathObservation> aftermath;
     std::optional<ObjectObservation> objectObservation;
     std::optional<MediumObservation> mediumObservation;
+    VisitorProfile visitorProfile{VisitorProfile::Freight}; // Delivered offer, never a current host lookup.
 };
 
 } // namespace suns
