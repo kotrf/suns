@@ -298,21 +298,6 @@ QString arrivalActionSummary(const FleetArrivalAction& action)
     return "none";
 }
 
-GameState receivedFleetPlanningState(const GameState& state, PlayerId player)
-{
-    auto received = make_player_view(state, player).state;
-    // Outgoing commands are the owner's already sent intent, not fresh
-    // observations. Keep them before projecting Split/Merge, without
-    // restoring physical manifests or reports.
-    for (auto& fleet : received.fleets) {
-        if (fleet.owner != player) continue;
-        if (const auto* original = findFleet(state, fleet.id);
-            original && original->owner == player)
-            fleet.pendingCommands = original->pendingCommands;
-    }
-    return received;
-}
-
 bool panelOnlyOrder(const Order& order)
 {
     // Immediate fleet manifests ignore these orders. Production/research
@@ -423,11 +408,42 @@ MainWindow::~MainWindow()
 }
 
 MainWindow::MainWindow(QWidget* parent)
+    : MainWindow(std::make_shared<GameSession>(), parent)
+{}
+
+MainWindow::MainWindow(GameSessionPtr session, QWidget* parent)
     : QMainWindow(parent)
-    , galaxyConfig_()
-    , state_(generate_campaign(galaxyConfig_, {{"Terrans", RacePreset::Terran}}))
+    , session_(session ? std::move(session) : std::make_shared<GameSession>())
+    , galaxyConfig_(session_->data_.galaxyConfig)
+    , state_(session_->data_.state)
+    , planningRevision_(session_->data_.planningRevision)
+    , movementPreviewRevision_(session_->data_.movementPreviewRevision)
+    , movementPreviewPlayer_(session_->data_.movementPreviewPlayer)
+    , movementPreview_(session_->data_.movementPreview)
+    , movementPreviewBuildCount_(session_->data_.movementPreviewBuildCount)
+    , receivedPlayerState_(session_->data_.receivedPlayerState)
+    , receivedPlayerRevision_(session_->data_.receivedPlayerRevision)
+    , receivedPlayerId_(session_->data_.receivedPlayerId)
+    , fleetPlanningRevision_(session_->data_.fleetPlanningRevision)
+    , fleetPlanningState_(session_->data_.fleetPlanningState)
+    , pendingOrders_(session_->data_.pendingOrders)
+    , sessionMode_(session_->data_.sessionMode)
+    , empireSetups_(session_->data_.empireSetups)
+    , playerTokens_(session_->data_.playerTokens)
+    , inbox_(session_->data_.inbox)
+    , campaignMessages_(session_->data_.campaignMessages)
+    , campaignId_(session_->data_.campaignId)
+    , turnToken_(session_->data_.turnToken)
+    , selection_(session_->data_.selection)
+    , currentDistanceSelectionKind_(session_->data_.currentDistanceSelectionKind)
+    , currentDistanceSelectionId_(session_->data_.currentDistanceSelectionId)
+    , previousDistanceSelectionKind_(session_->data_.previousDistanceSelectionKind)
+    , previousDistanceSelectionId_(session_->data_.previousDistanceSelectionId)
+    , pendingDescriptions_(session_->data_.pendingDescriptions)
+    , currentSavePath_(session_->data_.currentSavePath)
+    , turnMessages_(session_->data_.turnMessages)
+    , readTurnMessageIds_(session_->data_.readTurnMessageIds)
 {
-    resetTurnExchangeIdentity();
     setWindowTitle("Suns!");
     setWindowIcon(applicationIcon());
     resize(1300, 840);
@@ -556,7 +572,7 @@ MainWindow::MainWindow(QWidget* parent)
         auto* item = selected.front();
         const auto kind = item->data(1).toInt();
         if (!selectWorkspaceObject(kind, item->data(0).toUInt())) return;
-        rebuildScene();
+        rebuildScene(false);
     });
 
     connect(sensorRangesCheck_, &QCheckBox::toggled, this, [this](bool checked) {
@@ -585,9 +601,14 @@ MainWindow::MainWindow(QWidget* parent)
     connect(colonizeButton_, &QPushButton::clicked, this, [this] { queueColonize(); });
     connect(endTurnButton_, &QPushButton::clicked, this, [this] { endTurn(); });
 
-    rebuildScene();
+    connect(session_.get(), &GameSession::changed, this, [this](GameSession::Change change, QObject* origin) {
+        if (origin != this && !shuttingDown_) scheduleSessionRefresh(change);
+    });
+    connect(this, &MainWindow::routeProgramContextChanged, this, [this] { session_->publishSelection(this); });
+    connect(this, &MainWindow::controlsChanged, this, [this] { session_->publishMetadata(this); });
+    rebuildScene(false);
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
-    statusBar()->showMessage("Turn 1 — Scout 1 selected; choose Warp and a destination");
+    statusBar()->showMessage(QString("Turn %1 — choose a fleet, Warp and destination").arg(qulonglong(state_.turn)));
 }
 
 const StarSystem* MainWindow::selectedStar() const
@@ -625,33 +646,8 @@ std::optional<Fleet> MainWindow::selectedFleetPlanningView() const
     return *fleet;
 }
 
-const GameState& MainWindow::fleetPlanningState() const
-{
-    if (!fleetPlanningState_ || fleetPlanningRevision_ != planningRevision_) {
-        fleetPlanningState_ = projected_cargo_order_state(receivedFleetPlanningState(state_, pendingOrders_.player), pendingOrders_);
-        for (auto& fleet : fleetPlanningState_->fleets) {
-            if (fleet.owner != pendingOrders_.player || fleet_telemetry_age(*fleetPlanningState_, fleet) != 0
-                || !fleet_has_instant_link(*fleetPlanningState_, fleet)) continue;
-            // Current local manifests include accepted intent. Re-readers must
-            // not replace the projected hold/tank with its pre-order snapshot.
-            fleet.telemetry = {};
-            fleet.telemetry = confirmed_fleet_telemetry(*fleetPlanningState_, fleet);
-        }
-        fleetPlanningRevision_ = planningRevision_;
-    }
-    return *fleetPlanningState_;
-}
-
-const GameState& MainWindow::receivedPlayerState() const
-{
-    if (!receivedPlayerState_ || receivedPlayerRevision_ != planningRevision_
-        || receivedPlayerId_ != pendingOrders_.player || receivedPlayerState_->turn != state_.turn) {
-        receivedPlayerState_ = make_player_view(state_, pendingOrders_.player).state;
-        receivedPlayerRevision_ = planningRevision_;
-        receivedPlayerId_ = pendingOrders_.player;
-    }
-    return *receivedPlayerState_;
-}
+const GameState& MainWindow::fleetPlanningState() const { return session_->plannedState(); }
+const GameState& MainWindow::receivedPlayerState() const { return session_->receivedState(); }
 
 const GameState& MainWindow::movementPlanningPreview() const
 {
@@ -1033,6 +1029,7 @@ void MainWindow::rebuildScene(bool planningStateChanged)
     renderedPlanningRevision_ = planningRevision_;
     renderedFleetSelection_ = selection_.fleet;
     updateControls(false);
+    session_->publishPlanning(GameSession::Change::Planning, this);
     refreshProductionQueue();
     emit routeProgramContextChanged();
 }
@@ -1493,6 +1490,7 @@ void MainWindow::appendPendingOrder(Order order, const QString& description)
         updateControls(false);
         refreshProductionQueue();
         emit routeProgramContextChanged();
+        session_->publishPlanning(GameSession::Change::Panels, this);
     } else rebuildScene();
     statusBar()->showMessage(description);
 }
@@ -1896,7 +1894,8 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
 
     scene_->setSceneRect(-galaxyConfig_.width / 2.0 - 55.0, -galaxyConfig_.height / 2.0 - 55.0,
         galaxyConfig_.width + 110.0, galaxyConfig_.height + 110.0);
-    rebuildScene();
+    session_->replaceDocument(this);
+    rebuildScene(false);
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 
     statusBar()->showMessage(QString("New galaxy: seed %1, %2 systems — %3 selected at Warp %4")

@@ -13,7 +13,6 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QRandomGenerator>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -24,13 +23,6 @@
 namespace suns {
 
 namespace {
-
-std::uint64_t randomTurnExchangeId()
-{
-    std::uint64_t value{};
-    while (value == 0) value = QRandomGenerator::global()->generate64();
-    return value;
-}
 
 std::uint8_t legalWarpForFleet(const GameState& state, FleetId fleetId, std::uint8_t requested)
 {
@@ -211,12 +203,6 @@ void MainWindow::openGame()
 bool MainWindow::saveGameToPath(const QString& path)
 {
     SaveGameData save = campaignSnapshot();
-    save.campaignId = campaignId_;
-    save.turnToken = turnToken_;
-    save.galaxyConfig = galaxyConfig_;
-    save.state = state_;
-    save.pendingOrders = pendingOrders_;
-    save.pendingDescriptions = pendingDescriptions_;
     save.selectedStar = selection_.star;
     save.selectedFleet = selection_.fleet;
     save.showSensorRanges = showSensorRanges_;
@@ -318,9 +304,10 @@ bool MainWindow::loadGameFromPath(const QString& path)
         galaxyConfig_.width + 110.0,
         galaxyConfig_.height + 110.0);
 
+    session_->replaceDocument(this);
     refreshShipDesignChoices();
     refreshTurnMessages();
-    rebuildScene();
+    rebuildScene(false);
     fitGalaxyView();
     updateSaveWindowTitle();
 
@@ -455,25 +442,12 @@ void MainWindow::importTurnOrders()
         5000);
 }
 
-void MainWindow::resetTurnExchangeIdentity()
-{
-    campaignId_ = randomTurnExchangeId();
-    rotateTurnExchangeToken();
-}
-
-void MainWindow::rotateTurnExchangeToken()
-{
-    turnToken_ = randomTurnExchangeId();
-    playerTokens_.clear();
-    if (sessionMode_ == SessionMode::Host) {
-        for (const auto& player : state_.players)
-            if (player.controller == PlayerController::Human) playerTokens_[player.id] = randomTurnExchangeId();
-        turnToken_ = playerTokens_.at(pendingOrders_.player);
-    }
-}
+void MainWindow::resetTurnExchangeIdentity() { session_->resetExchangeIdentity(); }
+void MainWindow::rotateTurnExchangeToken() { session_->rotateTurnToken(); }
 
 void MainWindow::updateSaveWindowTitle()
 {
+    session_->publishMetadata(this);
     const auto session = sessionMode_ == SessionMode::Host ? "Host" :
         sessionMode_ == SessionMode::PlayerTurn ? "Player turn" : "Solo";
     if (sessionMode_ != SessionMode::Solo) {

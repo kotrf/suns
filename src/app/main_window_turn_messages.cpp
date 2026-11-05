@@ -922,7 +922,7 @@ void MainWindow::installTurnMessages()
         } else if (star) {
             selectWorkspaceObject(1, starId);
         }
-        rebuildScene();
+        rebuildScene(false);
         if (battle) {
             view_->centerOn(position.x, position.y);
         } else if (ownedFleet) {
@@ -937,7 +937,8 @@ void MainWindow::installTurnMessages()
         const auto id = item->data(kEventIdRole).toULongLong();
         const auto* event = find_event(turnMessages_, id);
         if (!event) return;
-        readTurnMessageIds_.insert(id);
+        const bool newlyRead = readTurnMessageIds_.insert(id).second;
+        if (newlyRead) session_->publishMessages(this);
         item->setData(kUnreadRole, false);
         auto font = item->font();
         font.setBold(false);
@@ -995,6 +996,7 @@ void MainWindow::installTurnMessages()
     connect(clearMessages, &QPushButton::clicked, this, [this] {
         turnMessages_.clear();
         readTurnMessageIds_.clear();
+        session_->publishMessages(this);
         refreshTurnMessages();
         statusBar()->showMessage("Turn messages cleared", 1800);
     });
@@ -1020,6 +1022,7 @@ void MainWindow::appendTurnMessages(const std::vector<GameEvent>& events)
     }
 
     if (added == 0) return;
+    session_->publishMessages(this);
     refreshTurnMessages();
     turnMessagesDock_->show();
     turnMessagesDock_->raise();
@@ -1136,6 +1139,7 @@ void MainWindow::resetTurnMessages()
 {
     turnMessages_.clear();
     readTurnMessageIds_.clear();
+    session_->publishMessages(this);
     refreshTurnMessages();
     if (turnMessagesDock_) turnMessagesDock_->hide();
 }

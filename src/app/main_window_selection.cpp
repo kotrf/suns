@@ -129,21 +129,11 @@ void MainWindow::rememberMapSelection(int kind, std::uint32_t id)
 bool MainWindow::selectWorkspaceObject(int kind, std::uint32_t id)
 {
     if (id == 0) return false;
-    if (kind == kMapItemStar) {
-        if (!find_star(state_, static_cast<StarId>(id))) return false;
-        selection_.star = static_cast<StarId>(id);
-    } else if (kind == kMapItemFleet) {
-        const auto& planned = fleetPlanningState();
-        const auto fleet = std::find_if(planned.fleets.begin(), planned.fleets.end(), [id](const Fleet& candidate) {
-            return candidate.id == static_cast<FleetId>(id);
-        });
-        const auto missing = missing_fleet_contacts(state_, pendingOrders_.player);
-        if (fleet == planned.fleets.end() && std::none_of(missing.begin(), missing.end(),
-            [=](const auto& contact) { return contact.id == id; })) return false;
-        selection_.fleet = static_cast<FleetId>(id);
-    } else {
-        return false;
-    }
+    auto selected = selection_;
+    if (kind == kMapItemStar) selected.star = static_cast<StarId>(id);
+    else if (kind == kMapItemFleet) selected.fleet = static_cast<FleetId>(id);
+    else return false;
+    if (!session_->select(selected, this)) return false;
     rememberMapSelection(kind, id);
     emit routeProgramContextChanged();
     return true;

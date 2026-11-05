@@ -1,5 +1,42 @@
 # Project status and development handoff
 
+## Shared GameSession ownership (#47) — 5 November 2026
+
+The user selected #47 next. The dock/preset/non-modal UI was already implemented;
+this slice completes the retained session ownership requirement. Work uses the
+existing repository, branch codex/shared-game-session-47, verified merged main
+6ee0c6baf3bf7422450e4682d24d2f70e71aa88b, tree
+a4c4c8951cb9f3b1c7c631561498819c858c7ec6. #277/#278/#267 are merged,
+#275/#276 completed, all six Mini-2 items finished; main CI 41867803440 passed.
+Earlier open/stacked statements below are historical.
+
+GameSession owns canonical world/orders, shared selection/distance IDs, exchange
+identity/tokens/inbox, reports/read IDs/save path and all received/planning caches.
+MainWindow controllers alias that data and can attach to the same shared owner;
+independent default constructors still create independent documents. Metadata and
+identity no longer reset when another view opens. One controller performs actual
+End Turn; notifications only refresh other views. Selection and panel-only edits
+retain map items and physics caches. Peer changes coalesce outside Qt click
+handling; file replacement resets peer tool context. Existing non-modal tools,
+fog of war, delayed/sent intent, layouts and view-specific drafts remain intact.
+Canonical save snapshots avoid the previous redundant full world copy in Save.
+The [contract](shared-game-session.md) documents boundaries and acceptance.
+
+Validation: full GCC14.2/Qt6.12 Debug app/test build and **118/118 CTest
+passed in 118.21 s**. The new two-view suite exercises actual map/production/
+report widgets, coalesced selection plus panel edits, exactly one paid End Turn,
+shared PBEM identity, save/title propagation without clobbering local seed drafts,
+same-year population/order replacement, direct document observers seeing the new
+epoch before notification, live designer drafts across a peer turn, closure on
+file replacement, read marks, vanished fleets and final owner release. Planning
+cache addresses/build counts and map objects stay unchanged on selection/Add.
+All 117 existing tests, including map/workspace/live-designer, logistics,
+knowledge, PBEM, economics, old saves and layouts, also pass.
+
+Ready for review; use GitHub #47 for the current PR/head and source CI. No gameplay
+or wire-format changes: save v112 / orders v49 / race v3. #47 remains open until
+review and merge. Frozen features and deferred AI are unchanged.
+
 ## Stars! starting population and growth follow-up — 4 November 2026
 
 The user extended [#278](https://github.com/kotrf/suns/pull/278) with ordinary
