@@ -1,5 +1,27 @@
 # Project status and development handoff
 
+## PR #280 review: received offer-card status — 5 November 2026
+
+[P3](https://github.com/kotrf/suns/pull/280#discussion_r4479678276) on c1a55e7:
+after the real Prospector exchange the table reported a withdrawn offer, but the
+card still invited one exchange before year 66. A regression compiled against
+unchanged c1a55e7 failed on that missing withdrawn status (work/review280-before.log).
+
+The card now retains price/blueprint as last known terms and explicitly renders
+available, withdrawn or observed departure from the received observation. The
+announced year is separate; elapsed time means the announced window ended, not
+that departure was observed. No hidden visitor lookup was introduced. Coverage
+runs actual exchanges for all three profiles, retains historical terms, checks
+withdrawn status after the deadline as well, and contrasts an expired announcement
+with a delivered departure observation. Hidden physical mutations retain the card.
+
+GCC14.2/Qt6.12 Debug app and affected test targets built; **3/3 focused CTest
+passed in 6.18 s** (visitor core/editor and shared session). The prior source
+[CI 42008381163](https://github.com/kotrf/suns/actions/runs/42008381163) passed
+118/118 in 137.41 s; that is not a claim about the new source. Current head/new CI
+are in GitHub. #280 stays open for re-review, #46 stays open for its remaining
+scope, and gameplay/save v113/orders v49/race v3 are unchanged by this UI fix.
+
 ## #279 merged; visitor offer profiles (#46) — 5 November 2026
 
 The user explicitly authorized resolving the seven confirmed fixed #279 threads,

@@ -48,6 +48,11 @@ ships. These prices are a starting balance, not a claim of completed playtesting
 The short greeting, portrait and requested/offered terms belong to the selected
 received contact; the UI does not expose the hidden physical roster. All three
 profiles have prepared demos, with the same confirmation before replacing a game.
+The card labels its price/blueprint as **last known terms**, with a separate
+received available/withdrawn/departure-observed status and the announced departure
+year. Passing that year closes the announced window without inventing an observed
+departure. A completed exchange no longer leaves an invitation to trade in the
+card, while its historical terms remain visible.
 
 ## Rarity, movement and contact
 

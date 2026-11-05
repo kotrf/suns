@@ -148,8 +148,15 @@ void MainWindow::refreshVisitors()
     auto* offerText=findChild<QLabel*>("visitorOffer"); auto* portrait=findChild<QLabel*>("visitorPortrait");
     if(x) {
         const auto& offer=visitor_offer(x->profile);
-        offerText->setText(QString("%1 — intergalactic visitor V%2\n“%3”\n%4\nOne physical exchange before year %5; normal research and manufacturing still apply.")
-            .arg(offer.name).arg(x->id).arg(offer.greeting).arg(visitor_offer_text(x->profile)).arg(qulonglong(x->departureTurn)));
+        const QString status=x->departed
+            ?QString("Departure observed in year %1; exchange closed.").arg(qulonglong(x->observedTurn))
+            :!x->available?QString("Offer withdrawn at observation year %1; exchange closed.").arg(qulonglong(x->observedTurn))
+            :view.turn>=x->departureTurn?QString("Last observed offer: available (year %1); announced exchange window has ended.").arg(qulonglong(x->observedTurn))
+            :QString("Offer available at observation year %1; one physical exchange.").arg(qulonglong(x->observedTurn));
+        const QString departure=QString("Announced departure: year %1.").arg(qulonglong(x->departureTurn))
+            +(!x->departed && view.turn>=x->departureTurn?" Departure not observed.":"");
+        offerText->setText(QString("%1 — intergalactic visitor V%2\n“%3”\nLast known terms: %4\n%5\n%6 Normal research and manufacturing still apply.")
+            .arg(offer.name).arg(x->id).arg(offer.greeting).arg(visitor_offer_text(x->profile)).arg(status).arg(departure));
         portrait->setPixmap(visitorPortrait(x->profile)); portrait->setAccessibleName(QString("Intergalactic %1").arg(offer.name));
     } else { offerText->setText("Select a received visitor contact to read its offer."); portrait->clear(); }
     findChild<QPushButton*>("interceptVisitor")->setEnabled(f!=view.fleets.end() && x && x->available && !x->departed && view.turn<x->departureTurn

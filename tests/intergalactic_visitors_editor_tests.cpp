@@ -143,6 +143,11 @@ struct MainWindowTestAccess {
     static void hidden(MainWindow& w) { w.state_.visitors[0].position={9999,9999}; w.state_.visitors[0].customer=1;
         w.state_.visitors[0].profile=VisitorProfile::Shieldwright; w.rebuildScene(); }
     static void endTurn(MainWindow& w) { w.endTurn(); }
+    static void announcedWindowEnded(MainWindow& w) { w.state_.turn=66; w.rebuildScene(); }
+    static void departureObserved(MainWindow& w) {
+        auto& x=w.state_.players[0].visitorKnowledge[0];
+        x.available=false; x.departed=true; x.observedTurn=x.receivedTurn=66; w.rebuildScene();
+    }
 };
 }
 int main(int argc,char** argv)
@@ -166,13 +171,30 @@ int main(int argc,char** argv)
         w.startVisitorDemo(offer.profile);
         auto* label=w.findChild<QLabel*>("visitorOffer");
         assert(label->text().contains(offer.name) && label->text().contains(QString::fromStdString(component_spec(offer.gift).name)));
+        assert(label->text().contains("Offer available at observation year 60"));
         assert(!w.findChild<QLabel*>("visitorPortrait")->pixmap().isNull());
         const auto text=label->text(), advertised=tree->topLevelItem(0)->text(5);
         MainWindowTestAccess::hidden(w); assert(label->text()==text && tree->topLevelItem(0)->text(5)==advertised);
         w.startVisitorDemo(offer.profile); send->click(); MainWindowTestAccess::endTurn(w);
         assert(MainWindowTestAccess::state(w).players[0].acquiredEquipment==std::vector<ShipComponentType>{offer.gift});
+        assert(label->text().contains("Offer withdrawn at observation"));
+        assert(label->text().contains(advertised)); // Keep the price and blueprint as historical terms.
+        assert(!label->text().contains("One physical exchange before"));
+        assert(!send->isEnabled());
         auto* messages=w.findChild<QListWidget*>("turnMessagesList"); bool correct=false;
         for(int i=0;i<messages->count();++i) correct |= messages->item(i)->text().contains(QString::fromStdString(component_spec(offer.gift).name));
         assert(correct);
+        MainWindowTestAccess::announcedWindowEnded(w);
+        assert(label->text().contains("Offer withdrawn at observation") && label->text().contains("Departure not observed"));
+        // An announced deadline is not a delivered observation of departure.
+        w.startVisitorDemo(offer.profile); MainWindowTestAccess::announcedWindowEnded(w);
+        assert(label->text().contains("announced exchange window has ended"));
+        assert(label->text().contains("Departure not observed"));
+        assert(label->text().contains(advertised) && !send->isEnabled());
+        const auto expired=label->text(); MainWindowTestAccess::hidden(w); assert(label->text()==expired);
+        MainWindowTestAccess::departureObserved(w);
+        assert(label->text().contains("Departure observed in year 66"));
+        assert(!label->text().contains("Departure not observed"));
+        assert(label->text().contains(advertised) && !send->isEnabled());
     }
 }
