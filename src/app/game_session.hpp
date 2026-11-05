@@ -6,6 +6,7 @@
 #include <QStringList>
 #include <memory>
 #include <set>
+#include <utility>
 
 namespace suns {
 
@@ -40,6 +41,22 @@ signals:
 
 private:
     friend class MainWindow;
+    class DocumentUpdate {
+    public:
+        DocumentUpdate(const DocumentUpdate&) = delete;
+        DocumentUpdate& operator=(const DocumentUpdate&) = delete;
+        DocumentUpdate(DocumentUpdate&& other) noexcept
+            : session_(std::exchange(other.session_, nullptr)), origin_(other.origin_) {}
+        ~DocumentUpdate() { commit(); }
+        void commit();
+    private:
+        friend class GameSession;
+        DocumentUpdate(GameSession* session, QObject* origin) : session_(session), origin_(origin) {}
+        GameSession* session_;
+        QObject* origin_;
+    };
+    DocumentUpdate beginDocumentUpdate(QObject* origin);
+    unsigned documentUpdateDepth_{};
     struct Data {
         GalaxyConfig galaxyConfig;
         GameState state;

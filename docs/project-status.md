@@ -1,5 +1,41 @@
 # Project status and development handoff
 
+## Review fixes for #279 / #47 — 5 November 2026
+
+The review of source 3825b3d confirmed three P2 issues and one P3. Its source CI
+41981060650 failed 117/118: the new linked-view test assumed a fixed 25 ms wait
+was sufficient for two queued callbacks. The initial 118/118 record below is a
+local result, not a claim that the original source CI passed.
+
+Four dedicated regression cases were compiled against unchanged 3825b3d and each
+failed for the reviewed behavior (logs under untracked work/):
+
+- [Visitor demo](https://github.com/kotrf/suns/pull/279#discussion_r4477453260):
+  exercise the real QAction and confirmation. Demo now uses the same document
+  boundary as load/restart, closing old-world drafts in both views and resetting
+  reports, context, history and identity together.
+- [Unread reports](https://github.com/kotrf/suns/pull/279#discussion_r4477453268):
+  hidden peer with a Fleet movement filter must not consume a new FleetArrived
+  while the source reader retains an older non-fleet report. List rebuilding
+  blocks selection signals, renders without read mutation and preserves explicit
+  click/selection/unread-navigation/Show on map read actions.
+- [Partial notifications](https://github.com/kotrf/suns/pull/279#discussion_r4477453271):
+  a scoped session update suppresses Planning/Messages/Selection/Metadata while
+  load/restart/demo install their complete fields. One completed Document boundary
+  advances the epoch before publishing. Local route reset/history refresh also
+  follow installation. The direct observer verifies state, received and planned
+  populations, pending orders, selection and revision on **every** emitted signal.
+- [Local Sensors](https://github.com/kotrf/suns/pull/279#discussion_r4477453277):
+  use rebuildScene(false); retain shared revision, cache/build count and the peer's
+  map items and overlay preference.
+
+Linked-view checks now wait for observable results with a bounded deadline;
+fixed 25 ms sleeps no longer decide completion. Targeted tests and five consecutive
+runs of the session suite passed (12.95 s total). The full GCC14.2/Qt6.12 Debug
+build and all 118/118 CTest targets passed in 126.19 s. Review fixes are ready;
+consult GitHub for the current source SHA and its new CI run. Gameplay and v112/v49/v3 formats remain unchanged; #279 stays open
+for re-review and #47 closes only after merging.
+
 ## Shared GameSession ownership (#47) — 5 November 2026
 
 The user selected #47 next. The dock/preset/non-modal UI was already implemented;

@@ -238,6 +238,7 @@ bool MainWindow::loadGameFromPath(const QString& path)
         return false;
     }
 
+    auto documentUpdate = session_->beginDocumentUpdate(this);
     if (shipDesigner_) shipDesigner_->close();
     sessionMode_ = loaded.mode;
     empireSetups_.clear();
@@ -271,14 +272,12 @@ bool MainWindow::loadGameFromPath(const QString& path)
         loaded.readStrategicMessageIds.begin(), loaded.readStrategicMessageIds.end());
     pendingOrders_ = std::move(loaded.pendingOrders);
     historyRangeInitialized_ = false;
-    refreshEmpireHistory();
     std::erase_if(turnMessages_, [this](const GameEvent& event) {
         return event.recipient != pendingOrders_.player;
     });
     pendingDescriptions_ = std::move(loaded.pendingDescriptions);
     selection_.star = loaded.selectedStar;
     selection_.fleet = loaded.selectedFleet;
-    emit routeProgramContextChanged(true);
     currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
     currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
     if (selection_.star) rememberMapSelection(1, *selection_.star);
@@ -304,7 +303,9 @@ bool MainWindow::loadGameFromPath(const QString& path)
         galaxyConfig_.width + 110.0,
         galaxyConfig_.height + 110.0);
 
-    session_->replaceDocument(this);
+    documentUpdate.commit();
+    emit routeProgramContextChanged(true);
+    refreshEmpireHistory();
     refreshShipDesignChoices();
     refreshTurnMessages();
     rebuildScene(false);

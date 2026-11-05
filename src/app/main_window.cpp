@@ -577,7 +577,7 @@ MainWindow::MainWindow(GameSessionPtr session, QWidget* parent)
 
     connect(sensorRangesCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         showSensorRanges_ = checked;
-        rebuildScene();
+        rebuildScene(false);
     });
     connect(warpSpin_, &QSpinBox::valueChanged, this, [this](int) { updateControls(false); });
     connect(colonistLoadSpin_, &QSpinBox::valueChanged, this, [this](int) {
@@ -1857,11 +1857,13 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
     requested.seed = static_cast<std::uint64_t>(parsedSeed);
     if (!config) requested.starCount = static_cast<std::size_t>(starCountSpin_->value());
 
+    std::optional<GameSession::DocumentUpdate> documentUpdate;
     try {
         requested = normalized_galaxy_config(requested);
         const auto setups = empireSetups_.empty()
             ? std::vector<EmpireSetup>{{"Terrans", RacePreset::Terran}} : empireSetups_;
         auto generated = generate_campaign(requested, setups);
+        documentUpdate.emplace(session_->beginDocumentUpdate(this));
         sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
         pendingOrders_ = {1, {}};
         inbox_.clear();
@@ -1872,7 +1874,6 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
         state_ = std::move(generated);
         starCountSpin_->setValue(static_cast<int>(galaxyConfig_.starCount));
         historyRangeInitialized_ = false;
-        refreshEmpireHistory();
         resetTurnExchangeIdentity();
     } catch (const std::exception& error) {
         statusBar()->showMessage(QString("Galaxy generation failed: %1").arg(error.what()));
@@ -1884,17 +1885,18 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
     pendingDescriptions_.clear();
     selection_.star.reset();
     selection_.fleet = 1;
-    emit routeProgramContextChanged(true);
     currentDistanceSelectionKind_ = previousDistanceSelectionKind_ = 0;
     currentDistanceSelectionId_ = previousDistanceSelectionId_ = 0;
     rememberMapSelection(2, 1);
     warpControlFleetId_.reset();
     logisticsControlFleetId_.reset();
-    refreshShipDesignChoices();
 
     scene_->setSceneRect(-galaxyConfig_.width / 2.0 - 55.0, -galaxyConfig_.height / 2.0 - 55.0,
         galaxyConfig_.width + 110.0, galaxyConfig_.height + 110.0);
-    session_->replaceDocument(this);
+    documentUpdate->commit();
+    emit routeProgramContextChanged(true);
+    refreshShipDesignChoices();
+    refreshEmpireHistory();
     rebuildScene(false);
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 

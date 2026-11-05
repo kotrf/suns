@@ -46,12 +46,23 @@ Qt's current click/selection delivery.
 - File path, campaign identity, player/mode and turn-token/readiness changes
   update titles and controls in every attached view. Saving serializes one
   canonical session snapshot; opening a second view cannot rotate PBEM tokens.
-- Loading/restarting a document replaces session data, not the storage object.
+- Loading/restarting a document or starting Visitor demo replaces session data,
+  not the storage object. A scoped document update suppresses every session
+  publication while fields are installed; only its completed document boundary
+  advances the epoch and publishes changes. Even direct observers of Messages,
+  Selection or Metadata cannot see a half-installed world/orders/cache pair.
   Peers close their old-world ship drafts, cancel map target picks and reset
   view context before repainting. The session advances its epoch before the
   Document notification, so direct observers already see the replacement.
   Same-year file replacement cannot retain the old received/planning cache. Reports and read marks are shared; filters and
   transient selections inside the report reader stay local to each view.
+  Refreshing/filtering/restoring a report row only renders it; it never marks it
+  read. Explicit selection, click, unread navigation or Show on map marks it read,
+  including an already displayed row. Hidden peers therefore cannot consume
+  another view's unread reports.
+
+The Sensors checkbox redraws only its own map without advancing the shared
+revision or invalidating the planning cache.
 
 Dock placement, tool visibility, map zoom/mode, sensor-overlay visibility,
 filters and unsubmitted editor drafts remain view preferences. Existing presets,
@@ -73,3 +84,10 @@ fleets, independent sessions, closing the authoring view and final owner release
 Existing workspace, map, designer, received-data, logistics, PBEM and layout tests
 remain part of the full suite. Native multi-monitor window-manager behavior is a
 manual acceptance surface; automated tests run Qt offscreen.
+
+Review regressions exercise the real Visitor demo confirmation with an old peer
+ship draft, a hidden differently filtered report reader, a direct observer of
+**every** session signal during same-year load, and a local Sensors click. All
+four checks fail on the original PR source 3825b3d. Deferred UI assertions wait
+for their observable result with a bounded deadline, rather than treating a
+fixed 25 ms pause as proof that two queued refreshes ran.

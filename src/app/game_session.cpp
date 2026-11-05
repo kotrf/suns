@@ -102,6 +102,7 @@ bool GameSession::select(WorkspaceSelectionContext value, QObject* origin)
 }
 void GameSession::publishPlanning(Change change, QObject* origin)
 {
+    if (documentUpdateDepth_) return;
     if (publishedRevision_ != data_.planningRevision) {
         publishedRevision_ = data_.planningRevision;
         emit changed(change, origin);
@@ -111,6 +112,7 @@ void GameSession::publishPlanning(Change change, QObject* origin)
 }
 void GameSession::publishSelection(QObject* origin)
 {
+    if (documentUpdateDepth_) return;
     const std::array<std::uint64_t, 4> history{std::uint64_t(data_.currentDistanceSelectionKind), data_.currentDistanceSelectionId,
         std::uint64_t(data_.previousDistanceSelectionKind), data_.previousDistanceSelectionId};
     if (publishedSelection_ == data_.selection && publishedSelectionHistory_ == history) return;
@@ -120,6 +122,7 @@ void GameSession::publishSelection(QObject* origin)
 }
 void GameSession::publishMetadata(QObject* origin)
 {
+    if (documentUpdateDepth_) return;
     // Small document/header fields only, not a hash/copy of the campaign.
     auto stamp = QString("%1/%2/%3/%4/%5/%6/%7/%8/")
         .arg(qulonglong(data_.campaignId)).arg(qulonglong(data_.turnToken))
@@ -131,7 +134,20 @@ void GameSession::publishMetadata(QObject* origin)
     publishedMetadata_ = std::move(stamp);
     emit changed(Change::Metadata, origin);
 }
-void GameSession::publishMessages(QObject* origin) { emit changed(Change::Messages, origin); }
+void GameSession::publishMessages(QObject* origin)
+{
+    if (!documentUpdateDepth_) emit changed(Change::Messages, origin);
+}
+GameSession::DocumentUpdate GameSession::beginDocumentUpdate(QObject* origin)
+{
+    ++documentUpdateDepth_;
+    return DocumentUpdate(this, origin);
+}
+void GameSession::DocumentUpdate::commit()
+{
+    auto* session = std::exchange(session_, nullptr);
+    if (session && --session->documentUpdateDepth_ == 0) session->replaceDocument(origin_);
+}
 void GameSession::replaceDocument(QObject* origin)
 {
     ++data_.planningRevision; // Receivers may immediately query the replacement's received view.

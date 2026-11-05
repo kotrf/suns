@@ -28,6 +28,7 @@ class QGraphicsView;
 class QLabel;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QMenu;
 class QObject;
 class QPushButton;
@@ -262,6 +263,7 @@ private:
     void appendTurnMessages(const std::vector<GameEvent>& events);
     void resetTurnMessages();
     void refreshTurnMessages();
+    void displayTurnMessage(QListWidgetItem* item, bool markRead);
     void updateTurnMessagesSummary();
     void openResearchDialog();
     void refreshResearchPanel();
