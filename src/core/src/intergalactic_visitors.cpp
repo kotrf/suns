@@ -5,16 +5,28 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/survey_probes.hpp"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <random>
 
 namespace suns {
+namespace {
+constexpr std::array<VisitorOffer, 3> offers{{
+    {VisitorProfile::Freight, "Freight envoy", "We carry designs for holds larger than they seem.", {0,0,50}, ShipComponentType::MultiCargoPod},
+    {VisitorProfile::Prospector, "Prospector", "Your ores for the tools that reach them.", {40,20,0}, ShipComponentType::AlienMiner},
+    {VisitorProfile::Shieldwright, "Shieldwright", "Bring the alloys. Take the pattern of a stronger shell.", {25,25,15}, ShipComponentType::LangstonShell},
+}};
+}
+std::span<const VisitorOffer> visitor_offers() { return offers; }
+const VisitorOffer& visitor_offer(VisitorProfile profile) { return offers.at(std::size_t(profile)); }
+bool visitor_gift_valid(ShipComponentType gift)
+{ return std::any_of(offers.begin(), offers.end(), [gift](const auto& offer) { return offer.gift == gift; }); }
 Position visitor_prediction(const VisitorObservation& x, double turn)
 { const auto dt = turn - double(x.observedTurn); return {x.position.x + dt*x.velocity.x, x.position.y + dt*x.velocity.y}; }
 bool visitor_observation_valid(const VisitorObservation& x)
 {
     const auto finite = [](Position p) { return std::isfinite(p.x) && std::isfinite(p.y) && std::abs(p.x) <= 1e9 && std::abs(p.y) <= 1e9; };
-    return x.id && x.id <= 0x7fffffffU && finite(x.position) && finite(x.velocity)
+    return std::size_t(x.profile) < offers.size() && x.id && x.id <= 0x7fffffffU && finite(x.position) && finite(x.velocity)
         && distance_between({}, x.velocity) > 0 && distance_between({}, x.velocity) <= 200
         && x.observedTurn && x.departureTurn && x.departureTurn <= 1'000'000'000ULL
         && (!x.receivedTurn || x.receivedTurn >= x.observedTurn)
@@ -28,7 +40,7 @@ const VisitorObservation* known_visitor(const GameState& s, PlayerId owner, Visi
 }
 namespace {
 VisitorObservation snapshot(const IntergalacticVisitor& v, std::uint64_t turn, Position position)
-{ return {v.id, position, v.velocity, turn, 0, v.departureTurn, !v.customer && turn < v.departureTurn, turn >= v.departureTurn}; }
+{ return {v.id, position, v.velocity, turn, 0, v.departureTurn, !v.customer && turn < v.departureTurn, turn >= v.departureTurn, v.profile}; }
 bool sees(const GameState& s, const Fleet& f, Position position)
 {
     if (!fleet_has_scanner(s, f) || !fleet_active_sensors(f, s.turn)) return false;
@@ -117,8 +129,13 @@ void complete_visitor_encounter(GameState& s, Fleet& f, VisitorId id, Position c
 {
     auto v = std::find_if(s.visitors.begin(), s.visitors.end(), [&](const auto& v) { return v.id == id; });
     if (v == s.visitors.end() || f.visitor.track.id != id || s.turn >= v->departureTurn) return;
-    const bool paid = !v->customer && f.minerals.germanium >= kVisitorGermaniumPrice;
-    if (paid) { f.minerals.germanium -= kVisitorGermaniumPrice; v->customer = f.owner; }
+    const auto price = visitor_offer(v->profile).request;
+    const bool paid = !v->customer && f.minerals.ironium >= price.ironium
+        && f.minerals.boranium >= price.boranium && f.minerals.germanium >= price.germanium;
+    if (paid) {
+        f.minerals.ironium -= price.ironium; f.minerals.boranium -= price.boranium;
+        f.minerals.germanium -= price.germanium; v->customer = f.owner;
+    }
     auto x = snapshot(*v, s.turn+1, contact);
     // Contact is measured at its physical point during the elapsed year;
     // report the boundary position for a consistent dated trajectory.
@@ -138,7 +155,7 @@ void advance_visitors(GameState& s)
     const auto width = std::max(200.0, s.wormholeRules.width), height = std::max(200.0, s.wormholeRules.height);
     const auto duration = std::uint64_t(std::ceil((width+300)/121)); const bool reverse = rng()%2;
     s.visitors.push_back({s.nextVisitorId++, {(reverse?1:-1)*(width/2+150), (double(rng()%10001)/10000-0.5)*height*0.8},
-        {(reverse?-1:1)*(width+300)/double(duration), 0}, turn, turn+duration, 0});
+        {(reverse?-1:1)*(width+300)/double(duration), 0}, turn, turn+duration, 0, VisitorProfile(rng()%offers.size())});
 }
 void observe_visitors(GameState& s)
 {
@@ -184,8 +201,9 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
                 else *old=x;
             }
             if (r.kind==VisitorReportKind::Exchanged) {
-                if (std::find(p.acquiredEquipment.begin(),p.acquiredEquipment.end(),kVisitorGift)!=p.acquiredEquipment.end()) continue;
-                p.acquiredEquipment.push_back(kVisitorGift);
+                const auto gift = visitor_offer(x.profile).gift;
+                if (std::find(p.acquiredEquipment.begin(),p.acquiredEquipment.end(),gift)!=p.acquiredEquipment.end()) continue;
+                p.acquiredEquipment.push_back(gift);
             } else if (r.kind==VisitorReportKind::Sighted && !changed) continue;
             GameEvent e; e.kind = r.kind==VisitorReportKind::Exchanged ? GameEventKind::VisitorExchangeCompleted
                 : r.kind==VisitorReportKind::Failed ? GameEventKind::VisitorExchangeFailed
@@ -196,6 +214,7 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
                 e.id = (e.id ^ value)*1099511628211ULL;
             e.recipient=p.id; e.turn=s.turn; e.observedTurn=r.observedTurn; e.position=x.position;
             e.quantity=x.id;
+            e.visitorProfile=x.profile;
             if (r.kind==VisitorReportKind::Failed) e.severity=GameEventSeverity::Warning;
             events.push_back(e);
         }
@@ -206,7 +225,7 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
     }
     return events;
 }
-GameState make_visitor_demo()
+GameState make_visitor_demo(VisitorProfile profile)
 {
     auto s=make_demo_game(); s.turn=60; s.wormholeRules.spawnChancePerTurn=0;
     auto& p=s.players[0]; p.technology.levels.fill(16); p.technology.researchActive=false;
@@ -214,8 +233,8 @@ GameState make_visitor_demo()
     ShipDesign d{s.nextShipDesignId++,1,"Visitor rendezvous freighter",ShipHullType::SmallFreighter,{ShipComponentType::TransGalacticDrive,ShipComponentType::MoleScanner}};
     s.shipDesigns.push_back(d); s.fleets.resize(1); auto& f=s.fleets[0]; f.design=d.id; f.ships={{d.id,1}};
     f.name="Rendezvous courier"; f.position={0,0}; f.destination.reset(); f.arrivalAction.reset(); f.waypointQueue.clear();
-    f.colonists=0; f.minerals={0,0,50}; f.fuel=fleet_fuel_capacity(s,f); f.warp=8; f.telemetry={};
-    s.visitors={{1,{-140,0},{121,0},60,66,0}}; s.nextVisitorId=2;
+    f.colonists=0; f.minerals=visitor_offer(profile).request; f.fuel=fleet_fuel_capacity(s,f); f.warp=8; f.telemetry={};
+    s.visitors={{1,{-140,0},{121,0},60,66,0,profile}}; s.nextVisitorId=2;
     publish_fleet_telemetry(s,s.turn); deliver_due_fleet_telemetry(s); observe_visitors(s); (void)deliver_visitor_reports(s);
     return s;
 }

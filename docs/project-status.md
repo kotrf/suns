@@ -1,5 +1,44 @@
 # Project status and development handoff
 
+## #279 merged; visitor offer profiles (#46) — 5 November 2026
+
+The user explicitly authorized resolving the seven confirmed fixed #279 threads,
+merging and continuing the remaining backlog in its recorded order. All seven
+threads were resolved, then #279 squash-merged as **f471c34bf2f74ef416bbf3feb873ce977de53b9c**;
+#47 is closed as completed. Its tree **f1b580fc15c31328f1c3515edfc1f9f314d8bd01**
+is identical to source f0b2ca0 (the final 30→60 s session-test timeout correction).
+[Source CI 42001051662](https://github.com/kotrf/suns/actions/runs/42001051662)
+succeeded. [Main CI 42004522148](https://github.com/kotrf/suns/actions/runs/42004522148)
+also completed successfully on f471c34. The permission
+for routine resolution of verified fixes is durable in MEM-34; it is not a reason
+to resolve an unverified report or skip source checks.
+
+Next in the last reconciled list is #46. Work uses the existing repository and
+codex/visitor-offers-46, based on that merged main. The coherent slice adds three
+fixed mineral-request/blueprint profiles, selected by the existing independent
+visitor RNG and frozen in the physical visitor and every observation/mission/
+receipt/event copy. Payment is atomic across I/B/G; one customer consumes the
+single physical offer. Blueprint acquisition retains ordinary research/fitting/
+manufacturing costs. Existing idle-courier AI reads the advertised profile and
+loads the actual requested minerals; broader AI strategy is not resumed.
+
+The panel/map/report text uses only delivered profiles. Three short greetings,
+distinct procedural portraits and prepared demos make each offer inspectable.
+No new real-time forecasts or polling. Save **v113 / orders v49 / race v3**; all
+old visitor records default to Freight without cargo/unlock changes. The genuine
+7722-byte v112 synthetic fixture was written with unchanged f471c34-era headers,
+core and writer before implementing profiles; its provenance writer and hex data
+are tracked. Invalid profiles, duplicate gifts, old migration, PBEM hidden-state
+isolation and all nested mission/event profiles have coverage.
+
+Two visitor core/editor targets passed in **0.62 s**. Full GCC14.2/Qt6.12 Debug
+build and **118/118 CTest passed in 133.69 s**. The first full run exposed one
+stale workforce-test header assertion (112); it now expects 113 while retaining
+the unchanged genuine v107 SHA256 check. That focused test and the final complete
+run passed. The new offer panel was inspected offscreen at 1440×960. Ready for
+review; current PR/source/CI are recorded in GitHub. #46 remains open for
+alternative trajectories and strategic AI staging. #53/#63/evacuation remain frozen.
+
 ## Follow-up review fixes for #279 / #47 — 5 November 2026
 
 Re-review of source 702d1d4 confirmed the four earlier fixes and the bounded UI

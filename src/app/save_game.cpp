@@ -39,7 +39,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 112;
+constexpr quint32 kSaveFormatVersion = 113;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -1069,6 +1069,8 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
     stream << static_cast<quint32>(value.wormholeEndpoint);
     if (value.kind == GameEventKind::SpaceBattle) writeBattle(stream, value.battle);
     if (hasLossPayload(value.kind)) writeLosses(stream, value.losses);
+    if (value.kind >= GameEventKind::VisitorSighted && value.kind <= GameEventKind::VisitorDeparted)
+        writeEnum(stream, value.visitorProfile);
 }
 
 void readGameEvent(QDataStream& stream, GameEvent& value)
@@ -1154,6 +1156,9 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
         readLosses(stream, value.losses);
         if (!lossesMatchEvent(value.losses, value.kind)) markCorrupt(stream);
     }
+    if (gReadSaveFormatVersion >= 113 && value.kind >= GameEventKind::VisitorSighted
+        && value.kind <= GameEventKind::VisitorDeparted)
+        readEnum(stream, value.visitorProfile, quint8(VisitorProfile::Shieldwright));
 }
 
 void writeMessageIds(QDataStream& stream, const std::vector<std::uint64_t>& ids)

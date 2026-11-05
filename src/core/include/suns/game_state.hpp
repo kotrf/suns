@@ -79,11 +79,13 @@ struct FleetEncounterGeometry {
 };
 
 using VisitorId = std::uint32_t;
+enum class VisitorProfile : std::uint8_t { Freight, Prospector, Shieldwright };
 struct VisitorObservation {
     VisitorId id{};
     Position position, velocity;
     std::uint64_t observedTurn{}, receivedTurn{}, departureTurn{};
     bool available{true}, departed{};
+    VisitorProfile profile{VisitorProfile::Freight}; // Immutable advertised offer, carried by this observation.
 };
 enum class VisitorReportKind : std::uint8_t { Sighted, Exchanged, Failed, Departed };
 struct PendingVisitorReport {
@@ -97,6 +99,7 @@ struct IntergalacticVisitor {
     Position position, velocity;
     std::uint64_t arrivalTurn{}, departureTurn{};
     PlayerId customer{}; // Host-only: the first physical exchange consumes the offer.
+    VisitorProfile profile{VisitorProfile::Freight};
 };
 struct VisitorMission {
     VisitorObservation track; // A physically received immutable track, never a host lookup.

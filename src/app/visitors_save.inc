@@ -3,6 +3,7 @@ void writeVisitorObservation(QDataStream& out, const VisitorObservation& x)
 {
     out << quint32(x.id); writePosition(out,x.position); writePosition(out,x.velocity);
     out << quint64(x.observedTurn) << quint64(x.receivedTurn) << quint64(x.departureTurn) << quint8(x.available) << quint8(x.departed);
+    writeEnum(out,x.profile);
 }
 void readVisitorObservation(QDataStream& in, VisitorObservation& x, std::uint64_t latest)
 {
@@ -11,6 +12,7 @@ void readVisitorObservation(QDataStream& in, VisitorObservation& x, std::uint64_
     quint64 observed{},received{},departure{}; in >> observed >> received >> departure >> available >> departed;
     x.observedTurn=observed; x.receivedTurn=received; x.departureTurn=departure;
     x.available=available; x.departed=departed;
+    if(gReadSaveFormatVersion>=113 && !readEnum(in,x.profile,quint8(VisitorProfile::Shieldwright))) markCorrupt(in);
     if (available>1 || departed>1 || !visitor_observation_valid(x) || x.observedTurn>latest || x.receivedTurn>latest) markCorrupt(in);
 }
 void writeVisitorMission(QDataStream& out, const VisitorMission& m)
@@ -27,6 +29,7 @@ void writeVisitors(QDataStream& stream, const GameState& s)
     writeVector(out,s.visitors,[](QDataStream& out,const IntergalacticVisitor& v) {
         out << quint32(v.id); writePosition(out,v.position); writePosition(out,v.velocity);
         out << quint64(v.arrivalTurn) << quint64(v.departureTurn) << quint32(v.customer);
+        writeEnum(out,v.profile);
     });
     out << quint32(s.players.size());
     for(const auto& p:s.players) {
@@ -62,7 +65,8 @@ void readVisitors(QDataStream& stream, GameState& s, bool playerTurn)
     for(quint32 n=0;n<count;++n) {
         IntergalacticVisitor v; in >> v.id; readPosition(in,v.position); readPosition(in,v.velocity);
         quint64 arrival{},departure{}; in >> arrival >> departure >> v.customer; v.arrivalTurn=arrival; v.departureTurn=departure;
-        VisitorObservation x{v.id,v.position,v.velocity,std::min(s.turn,v.departureTurn),0,v.departureTurn,false,s.turn>=v.departureTurn};
+        if(gReadSaveFormatVersion>=113 && !readEnum(in,v.profile,quint8(VisitorProfile::Shieldwright))) markCorrupt(in);
+        VisitorObservation x{v.id,v.position,v.velocity,std::min(s.turn,v.departureTurn),0,v.departureTurn,false,s.turn>=v.departureTurn,v.profile};
         if(!visitor_observation_valid(x) || v.id>=s.nextVisitorId || !v.arrivalTurn || v.arrivalTurn>s.turn
             || v.departureTurn<=v.arrivalTurn || (v.customer && !find_player(s,v.customer))
             || std::find(ids.begin(),ids.end(),v.id)!=ids.end()) markCorrupt(in);
@@ -88,10 +92,12 @@ void readVisitors(QDataStream& stream, GameState& s, bool playerTurn)
                 || bool(r.transmissionFleet)!=(r.deliveryTurn==kAwaitingTransmission)) markCorrupt(in);
             p.pendingVisitorReports.push_back(r);
         }
-        if(!readCount(in,count) || count>1) { markCorrupt(stream); return; }
+        if(!readCount(in,count) || count>(gReadSaveFormatVersion>=113?visitor_offers().size():1)) { markCorrupt(stream); return; }
         for(quint32 n=0;n<count;++n) { ShipComponentType c;
             if(!readEnum(in,c,quint8(kLastShipComponent))) { markCorrupt(stream); return; }
-            if(c!=kVisitorGift) markCorrupt(in); p.acquiredEquipment.push_back(c); }
+            if((gReadSaveFormatVersion<113?c!=kVisitorGift:!visitor_gift_valid(c))
+                || std::find(p.acquiredEquipment.begin(),p.acquiredEquipment.end(),c)!=p.acquiredEquipment.end()) markCorrupt(in);
+            p.acquiredEquipment.push_back(c); }
     }
     if(!readCount(in,count) || count!=s.fleets.size()+s.pendingFleetLossContacts.size()+s.wormholeTransits.size()) { markCorrupt(stream); return; }
     const auto read=[&](Fleet& f) {

@@ -641,15 +641,20 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
         bool visitorAssigned = false;
         const auto* empire = find_player(state, view.player);
         if (!fleet_has_space_weapons(state, fleet) && !fleet_can_colonize(state, fleet)
-            && fleet.telemetry.observedTurn == state.turn && fleet_has_instant_link(state, fleet)
-            && std::find(empire->acquiredEquipment.begin(), empire->acquiredEquipment.end(), kVisitorGift) == empire->acquiredEquipment.end()) {
+            && fleet.telemetry.observedTurn == state.turn && fleet_has_instant_link(state, fleet)) {
             auto contacts = empire->visitorKnowledge;
             std::sort(contacts.begin(), contacts.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
             for (const auto& contact : contacts) if (contact.available && !contact.departed && state.turn < contact.departureTurn) {
-                const auto needed = std::max(0.0, kVisitorGermaniumPrice-fleet.minerals.germanium);
-                if (fleet_cargo_used(state, fleet)+needed > fleet_cargo_capacity(state, fleet)
-                    || (needed && (!local || local->minerals.germanium < needed))) continue;
-                auto trial = fleet; trial.minerals.germanium += needed;
+                const auto& offer = visitor_offer(contact.profile);
+                if (std::find(empire->acquiredEquipment.begin(),empire->acquiredEquipment.end(),offer.gift)!=empire->acquiredEquipment.end()) continue;
+                const MineralCargo needed{std::max(0.0,offer.request.ironium-fleet.minerals.ironium),
+                    std::max(0.0,offer.request.boranium-fleet.minerals.boranium),std::max(0.0,offer.request.germanium-fleet.minerals.germanium)};
+                const auto total = needed.ironium+needed.boranium+needed.germanium;
+                if (fleet_cargo_used(state, fleet)+total > fleet_cargo_capacity(state, fleet)
+                    || (total && (!local || local->minerals.ironium < needed.ironium
+                        || local->minerals.boranium < needed.boranium || local->minerals.germanium < needed.germanium))) continue;
+                auto trial = fleet; trial.minerals.ironium += needed.ironium;
+                trial.minerals.boranium += needed.boranium; trial.minerals.germanium += needed.germanium;
                 for (int warp = fleet_max_warp(state, trial); warp >= 1; --warp) {
                     trial.warp = std::uint8_t(warp);
                     if (!fleet_warp_valid(state, trial, trial.warp) || fleet_overdrive_damage_rate(state, trial, trial.warp)>0) continue;
@@ -658,9 +663,9 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                     auto returning = trial; returning.position = *aim;
                     if (fleet_segment_damage(state,returning,fleet.position)>1e-6) continue;
                     if (leg_fuel(state, trial, *aim)+leg_fuel(state, returning, fleet.position)>trial.fuel) continue;
-                    if (needed) plan.orders.orders.push_back(SetFleetMineralCargoOrder{local->id, fleet.id, trial.minerals});
+                    if (total) plan.orders.orders.push_back(SetFleetMineralCargoOrder{local->id, fleet.id, trial.minerals});
                     plan.orders.orders.push_back(EncounterVisitorOrder{fleet.id, contact.id, trial.warp});
-                    explain(reason, "Deliver paid Germanium to a received visitor trajectory"); visitorAssigned=true; break;
+                    explain(reason, "Deliver requested minerals to a received visitor trajectory"); visitorAssigned=true; break;
                 }
                 if (visitorAssigned) break;
             }
