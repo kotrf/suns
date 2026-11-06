@@ -1,119 +1,144 @@
-# Asymmetric empires (#50): next-trait design
+# Orbital Civilization (#50): Alternate Reality-inspired design
 
-Status: design proposal, 6 November 2026. The user requested continuing the
-recorded queue after #46; #50 is the next open, unfrozen task. Stargate Specialist
-is already implemented, including scheduled gate programmes. The next primary
-trait has not been chosen; a selection question is pending. Habitat Civilization
-is the recommended candidate below, not an implemented or approved rule set.
+Status: selected direction, 7 November 2026. The user chose a station-dwelling
+civilization inspired by Stars! Alternate Reality. This replaces the earlier
+choice between Habitat Civilization and Remote Logistics Specialist. The reserved
+`HabitatCivilization` identity is the implementation candidate; it is not yet
+playable. This PR remains a design draft, not a gameplay implementation.
 
-## Existing foundation
+## Direction supplied by the user
 
-- Generalist and Stargate Specialist are playable. Habitat Civilization and
-  Remote Logistics Specialist have stable reserved IDs and remain unavailable.
-- Environmental presets, hull families, engine access, mining access, racial
-  workforce rates, growth and research costs are separate settings. Hull access
-  does not imply the corresponding full Stars! primary racial mechanics.
-- Existing orbital habitats have a separate population, paid upkeep, emergency
-  reserves, cargo endpoints, growth, received evidence and capture/defense rules.
-  They are late-game installations: Construction 18 / Energy 16 / Biology 14,
-  4,800 work and support from a Starbase or Fortress with a shipyard.
-- Expedition bases provide mobile refueling, docking and repair. Independent
-  orbital shipyards provide staffed fixed manufacture. Neither is a mobile
-  residential civilization with a self-sustaining starting economy.
+- Population lives on orbital stations. Destruction of its inhabited station in
+  battle causes very large population losses: this is the central vulnerability.
+- Its strength is developed orbital technology and stronger station hulls. Exact
+  hull statistics, prices and research prerequisites are still balance work.
+- Mining is exclusively remote, available from the start. The starting economy
+  must include working mining ships and equipment, not a late research promise.
+- Surface gravity and temperature do not constrain this civilization's orbital
+  population; radiation must affect it. This follows the previously discussed
+  orbital direction, not an assumption that living in orbit makes radiation safe.
 
-The current main is ea7749f (#281 merged, #46 completed); its separate CI passed.
-Current formats are save v114 / orders v49 / portable race v3. Earlier numbers in
-the thematic habitat documents describe their original slices; current economy
-constants and [economy-rebalance.md](economy-rebalance.md) take precedence.
+The user's phrase was large losses, not an exact casualty percentage. Stars!
+used total loss; a question about total loss versus survivors is pending. Do not
+silently turn that reference rule into an approved Suns! percentage.
 
-## Candidate comparison
+## Checked Stars! reference and deliberate Suns! differences
 
-| Candidate | Strategic difference to design | Existing support | Main missing loop |
-| --- | --- | --- | --- |
-| Habitat Civilization | Orbital settlement and infrastructure replace favorable surface conditions as the main expansion constraint | Habitats, orbital cargo, independent yards, paid station support | Affordable founding, population growth, mineral extraction and construction from the first turn |
-| Remote Logistics Specialist | A distributed extraction fleet and delivered supplies replace a large part of local colony development | Remote mining, finite cargo/fuel, ordinary routes, mining hull access | A distinct production/extraction tradeoff beyond the existing ARM setting, plus a viable starting fleet |
+The original [Stars! Player's Guide, chapter 22](https://www.bestoldgames.net/download/games/stars/stars-win-manual.pdf#page=213)
+describes station-bound population, hull-based capacity and loss of the residents
+when the base is destroyed. It also retains environmental suitability, allows
+limited innate mining alongside mining ships, and ties production to Energy.
+Thus radiation-only suitability and strictly ship-based extraction are our chosen
+adaptations. Its other bonuses and penalties are not automatically adopted.
 
-Either candidate uses ordinary free flight and delivered commands. Neither
-requires reopening frozen transport-network #53 or exotic-material #63 work.
+The [Technical Reference Guide, starbase hulls](https://www.bestoldgames.net/download/games/stars/stars-win-guide.pdf#page=25)
+identifies Death Star as AR-exclusive; Ultra Station requires Improved Starbases.
+A stronger native hull line is the Suns! direction, not a claim that every larger
+Stars! station was exclusive to AR.
 
-## Recommended first prototype: stationary orbital civilization
+## First playable slice
 
-This is a proposed first playable slice, not the full migratory-civilization
-roadmap. Fixed orbital settlements come before moving residential habitats.
-The first implementation must include all of the following together:
+### Population belongs to the inhabited hull
 
-1. **A complete start.** Keep the normal 25,000-person starting total, with an
-   explicitly defined orbital home, actual starting infrastructure and stocks.
-   The player must be able to grow, mine, research and manufacture without first
-   unlocking the ordinary late-game habitat technologies.
-2. **Paid expansion.** A transport brings real colonists and a paid founding
-   capability. The founding package must account for housing, initial support
-   and supplies, rather than conjure a late-game station from an ordinary colony
-   module. Both another suitable world and a hostile-surface world must be
-   playable expansion choices with their real costs.
-3. **A closed material economy.** Orbital residents currently do not operate
-   surface installations. Specify whether native extraction uses real robotic
-   ground mines operated from orbit or a separate paid extraction installation.
-   Preserve actual deposits, concentrations, stocks and cargo; there is no free
-   mineral income or implicit supply service.
-4. **An explicit economic tradeoff.** Decide the role of surface residents and
-   factories. If orbit is the main economy, define its production inputs and
-   opportunity cost relative to surface factories, not just a growth multiplier.
-5. **Growth that belongs to the race.** The proposed native orbital population
-   uses the race designer's growth choice and a specified crowding rule. Ordinary
-   empires' existing late-game habitat growth remains a separate rule. Capacity,
-   minimum sustainable founding population and initial support costs must fit
-   the starting/expansion budget together.
-6. **Physical vulnerability.** Support consumes real production/minerals. Station
-   loss, reserves, attrition and evacuation reuse the established paid habitat
-   model. Define which early support structure suffices; an unresearched generic
-   Starbase is not a viable implicit starting prerequisite.
-7. **Capture and resettlement.** Preserve population physically through ordinary
-   invasion and cargo operations. Decide how a native owner uses a captured
-   surface colony and how a generalist supports a captured native habitat. No
-   unexplained conversion, teleportation or deletion of its residents.
+Native residents and capacity must be tied to the actual inhabited station.
+Larger researched, paid hulls provide room for more residents and stronger
+orbital fittings. The initial station is affordable and usable from the start;
+ordinary late-game habitat technologies cannot be its hidden prerequisite.
 
-These are design requirements, not locked balance numbers. Existing habitat
-upkeep (2 production plus 1 kt each I/B/G annually), three reserve years and
-2,000,000-person capacity are reference values, not an automatic early-race
-endowment. The implementation PR must show founding cost, capacity, growth,
-mining and support as one viable budget before enabling the reserved option.
+This differs from current `Planet::habitat`: that is a separate permanent
+installation which can survive station loss using emergency reserves. Ordinary
+empires' existing habitats keep that behavior. Their residents must not acquire
+native station-destruction casualties merely because both live in orbit.
 
-## Implementation map
+Actual battle destruction triggers the native loss once, in physical resolution.
+A paid hull upgrade/refit, temporary damage, exhausted supplies or loss of a
+shipyard module is not a battle destruction. Upgrades preserve real residents;
+refits to insufficient housing require an explicit capacity/evacuation rule.
+Already evacuated colonists aboard surviving transports are not station residents.
 
-| Area | Existing entry points | What the chosen slice must address |
-| --- | --- | --- |
-| Identity and creation | `PrimaryRaceTrait`, `generate_campaign`, `RaceSetupWidget`, portable race reader/writer | Playable validation, understandable race rules, start/restart and independent multiplayer race files |
-| Population and output | `orbital_habitats.cpp`, `production.cpp`, `economy.cpp` | Real growth/output/maintenance cycle and the explicit surface/orbit workforce policy |
-| Founding and construction | Colonization in `turn_processor.cpp`, `planetary_engineering.cpp`, stations/designs | Paid native founding and support, queue eligibility, no free late-game research |
-| Ownership and movement | Cargo/orbital endpoints, ground invasion, independent-base lifecycle | Correct counting, capture, evacuation, split/merge and transport losses |
-| Knowledge and control | PlayerView, survey/habitat evidence, received station fits, command packets | Stale evidence remains stale; no host-only completion, stock or owner lookup in UI/AI |
-| Persistence and UI | Save extensions, orders, race files, setup, System Details and cargo | Explicit version decisions, useful labels, deterministic replay and responsive algebraic estimates |
-| Computer play | Existing ordinary orders and received colony/fleet planning | A viable paid starter/expansion policy through PlayerView, without a separate omniscient economy |
+The exact casualty fraction and fate of survivors remain open. No escape-pod
+fleet, surface colony, emergency migration or automatic rescue is implied.
+Battle evidence and population loss reach HQ through ordinary delivered reports.
+Hidden combat must not refresh population panels or forecasts early.
 
-## Acceptance for the implementation PR
+### Exclusively remote mining, including owned orbital colonies
 
-- A new native campaign sustains its capital, builds a first paid colonizer and
-  establishes a second working colony using real residents and minerals.
-- A favorable surface and an unfavorable surface expose the intended strategic
-  difference; ownership alone does not produce resources.
-- Loss of support, no resupply and evacuation have bounded physical outcomes.
-  Capturing either colony type preserves the agreed ownership/population rules.
-- Generalist and Stargate Specialist campaigns retain their existing behavior.
-  Human and computer players pay the same costs and receive the same evidence.
-- Race design, imported multiplayer races, restart, host save/load, player exports
-  and turn packets preserve the chosen trait without leaking hidden state.
-- UI selection/cargo/queue actions retain the minimal-estimate performance
-  contract; no annual live simulation or new polling is added.
-- Comparative starter scenarios record population, stock, output, expansion time
-  and maintenance pressure. They establish a prototype baseline, not a claim of
-  finished competitive balance or manual playtesting.
+No native surface mines, population-powered innate extraction or free mineral
+income. Remote mining ships work both unowned planets and their owner's orbital
+colonies. Hostile ownership remains a real restriction. Ordinary races retain
+their existing mining rules; the new capability is not a global permission.
 
-## Scope boundary
+Start with an operable basic mining fit and the ability to manufacture replacements
+from year one. This means hull, mining component and legal engine availability,
+a real initial miner and fuel, enough initial I/B/G and a viable production
+budget. Early access is scoped to this race; it does not grant high research
+levels or all advanced mining equipment to every empire.
 
-The pending selection supplies the next trait's scope; its implementation will
-include the starting economy and acceptance cases together. This design does
-not select new balance values, enable either reserved ID or change current games.
-Moving residential arks, shipboard manufacture, self-replication, new
-transport automation and system engineering remain separate later slices.
-#50 remains open after a first prototype for further traits and comparative play.
+Deposits, concentration, extraction, stocks and cargo remain physical. Current
+remote mining deposits output in the planet's mineral stock; define that stock's
+availability to the native station explicitly, counting extraction exactly once.
+A destroyed miner stops extraction even when HQ still holds its older telemetry.
+Work-here orders and arrival waypoint tasks must share the same eligibility rule.
+Race design/import must handle conflicting mining restrictions explicitly.
+
+### Radiation, with no surface temperature/gravity penalty
+
+The native population's suitability/growth and supported output must be
+independent of surface temperature and gravity. Radiation remains relevant.
+The existing independent-orbit model uses stellar orbital exposure and paid
+radiation screens; reusing it is the proposed implementation baseline. Display
+orbital exposure separately from surface radiation and never imply that a surface
+magnetosphere shields the entire orbital station.
+
+Exact native radiation/growth/output curves and early protection are still
+prototype balance. Compatible race presets must be explicit; an imported
+radiation-immune preset must not quietly erase the remaining environmental
+constraint or be silently rewritten. Starter conditions and legal protection
+must be budgeted so the capital can sustain itself.
+
+### Orbital industry and founding
+
+Proposed AR-style economic identity: orbital output depends on real supported
+residents and Energy progress, with no native surface factory economy. The user
+has not selected a resource formula, efficiency coefficient or factory policy;
+these are implementation proposals rather than accepted numerical rules.
+
+Keep the normal 25,000-person total as the proposed comparison baseline. A native
+capital, initial mining ship, stocks, fuel, support and research/manufacture must
+form one playable budget. A second settlement needs transported real colonists
+and a paid orbital founding capability, including finite initial support.
+An ordinary colony module must not create a free late-game Starbase.
+
+Larger native hulls and orbital facilities require actual research and payment.
+Their advantage should be capacity, fittings/protection and a distinct research
+path, not free ships or an across-the-board technology grant. Costs, capacities,
+slots, startup output, growth and upkeep are recorded together in the first
+implementation PR. Existing habitat values are references, not automatic native
+starting endowments.
+
+## Implementation map and acceptance
+
+| Area | Existing support / required addition |
+| --- | --- |
+| Identity, setup, race files | Enable the reserved identity only with a working start; preserve other traits and explicit compatibility validation |
+| Housing and combat | Native station-resident identity/capacity; battle loss once; paid refit without casualties; ordinary habitats retain their rules |
+| Mining | Extend task authoring, waypoint arrival and extraction beyond the current unowned-only guard for this race's own orbit; basic miner available from the start |
+| Environment | Exclude surface temperature/gravity; explicit radiation and protection model in core and received UI |
+| Economy/founding | A complete paid capital-to-second-colony loop; explicit orbital output, material stocks and founding payload |
+| Ownership and cargo | Real colonists, hull capacity, capture and evacuation rules; no implicit transfer between surface, station and transports |
+| Knowledge, AI and persistence | Ordinary PlayerView/commands/reports, versioned native state, restart, independent race files, host/PBEM round trips and deterministic continuation |
+
+Acceptance must exercise an actual new campaign through first replacement miner
+and second colony, no-miner extraction stopping, owned-orbit mining, identical
+results across temperature/gravity changes, radiation exposure/protection, and
+station destruction versus ordinary refit. Delayed battle reports must preserve
+old HQ knowledge until receipt; local physical loss must occur in the battle year.
+Compare starter output/stocks and native hull upgrades against generalist and
+gate-specialist campaigns. Human and computer players pay the same costs and
+use the same received evidence; no new omniscient planning is introduced.
+
+Current game formats remain save v114 / orders v49 / portable race v3. The eventual
+implementation must decide the native-state extension/version explicitly.
+This document changes no game rules. Mobile residential arks, transport-network
+#53 and exotic-material #63 work remain outside this first stationary slice.
+#50 remains open for implementation and later comparative balance/other traits.

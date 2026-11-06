@@ -1,5 +1,34 @@
 # Project status and development handoff
 
+## #50 selected: AR-inspired Orbital Civilization — 7 November 2026
+
+The user selected the station-dwelling direction, resolving the prior trait
+choice. Stations house the population and their actual destruction in battle
+causes large casualties; stronger orbital technology/hulls provide the upside.
+Mining is exclusively remote and available from the start. Surface temperature
+and gravity do not affect the native orbital population; radiation does.
+
+The Player's Guide chapter 22 and Technical Reference Guide were checked directly.
+The [updated design](asymmetric-empires.md) separates the reference from Suns!
+choices: AR also had innate extraction and retained environmental suitability;
+Suns! uses the user's ship-only mining and radiation-only exposure direction.
+The source's total-loss rule is not assumed from the user's phrase large losses.
+A casualty-fraction/survivor question is pending; numeric balance is not selected.
+
+The draft now requires native station-resident identity rather than treating it
+as the existing separate late-game habitat. Actual battle loss is distinct from
+paid refit, ordinary damage or upkeep failure. A complete start needs an operable
+miner, replacement manufacture, paid founding, real stock/output/support and a
+radiation-safe budget. Own-orbit remote mining requires changes to the current
+unowned-only authoring/arrival/extraction guards. Existing bases supply a possible
+orbital radiation/screen model; exact native curves and economy remain proposals.
+
+PR #282 stays a documentation/design draft on the existing feature branch.
+No gameplay is enabled and no current save/race/order layout changes. File links
+and diff checks are the relevant validation; main ea7749f CI is successful.
+#50 remains open for implementation; #53/#63 and visitor AI staging stay deferred.
+Earlier unresolved trait-selection notes below are historical.
+
 ## #46 complete; next queued work is #50 design — 6 November 2026
 
 The user requested continuing the ordered queue. #281 is merged into main
