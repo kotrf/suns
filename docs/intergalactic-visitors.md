@@ -1,6 +1,6 @@
 # Intergalactic visitors — encounters and offer profiles (#46)
 
-A rare neutral visitor crosses the map along a fixed physical trajectory. A
+A rare neutral visitor crosses the map along a physical trajectory. A
 player must detect its broadcast, bring a loaded ship to a timed rendezvous and
 complete the exchange before it leaves. It is not a playable empire or a popup.
 
@@ -67,16 +67,43 @@ including in strongly rectangular galaxies. Geometry uses the actual validated
 width and height (normal campaigns allow 100–10000 ly per side), with no extra
 minimum-size padding. The nominal speed budget stays
 121 ly/year: duration is `ceil(track length / 121)`, and the constant velocity
-reaches the outer exit at that announced whole-year boundary. There are no
-turns or hidden course changes, so a measured 2D track remains predictable.
-Stable IDs, positions, velocity, arrival/departure years and the physical
-customer are saved. The historical visitor roster remains bounded at 128.
+reaches the outer exit at that announced whole-year boundary. Most tracks remain
+straight; a rare visitor can change course once as described below. Stable IDs,
+positions, velocity, arrival/departure years, the physical customer and the private
+course-change schedule are saved. The historical visitor roster remains bounded at 128.
 
-Only newly generated tracks use this rule. An already saved physical visitor,
-received observation or incoming mission keeps its exact position, velocity
-and announced window; no migration or reroll is performed. Save v113 / orders
-v49 / race v3 remain unchanged. Normal profile selection is independent of the
+Only newly generated tracks use these rules. An already saved pre-v114 physical
+visitor, received observation or incoming mission keeps its exact position, velocity
+and announced window; no migration or course change is scheduled retroactively.
+Current formats are save v114 / orders v49 / race v3. Normal profile selection is independent of the
 entry side; the three prepared demos choose directions purely for demonstration.
+
+### Rare course changes
+
+At generation, one in ten visitors is eligible for one course change. Its private
+schedule chooses an integer-year boundary within the real galaxy, with
+at least two years left on the original route; if no such boundary exists the
+visitor stays straight. This is a per-visitor choice, not an annual chance that
+would accumulate on long crossings. Existing demos and pre-v114 visitors stay
+straight. This starting balance is our implementation, not a verified Stars! table.
+
+After completing the elapsed year's movement and encounters, the visitor turns
+20–45 degrees left or right. The choice uses only galaxy seed and visitor identity,
+never player/fleet locations or cargo. The new ray is clipped to the expanded
+galaxy boundary; its remaining duration is rounded up to whole years and velocity
+adjusted down to reach that exit exactly, without exceeding the previous speed.
+The new announced departure can be earlier or later. Each year's actual movement
+remains linear, with no teleportation, second turn, or second simultaneous visitor.
+
+The scheduled date is host-only. Until an actual receiver measures the changed
+track, HQ's dated forecast and already dispatched missions retain the old velocity
+and announced window. A courier with its own active scanner can update onboard
+navigation; a newer HQ observation alone does not rewrite its existing programme.
+A missed stale intercept is legitimate. When a changed sighting reaches HQ,
+a dated **changed course — new track received** Turn Message explains that earlier
+predictions may miss. Repeated sightings do not repeat that notice. At the same
+year boundary, a measured post-turn revision wins over an older contact receipt;
+the payment and immutable gift receipt still retain their ordinary semantics.
 
 The courier's navigation solves an intercept from its received track and chosen
 Warp. It then uses ordinary movement, fuel limits, mines, radiation, damage and
@@ -94,7 +121,7 @@ There is no automatic supply search. Cargo is validated again at physical contac
 
 Ordinary active scanners and built colony radars receive the cooperative visitor
 broadcast within their actual interference/medium-adjusted ranges. The broadcast
-contains a measured position, constant velocity, announced departure and current
+contains a measured position, current segment velocity, announced departure and current
 offer availability and profile. The profile also travels in navigation tracks,
 telemetry, pending commands and exchange receipts. A delivered exchange event
 keeps its own profile, so later contacts cannot change its price/gift text.
@@ -138,8 +165,12 @@ Broader ship construction/staging for visitors remains future policy work.
 
 The original save **v89** introduced bounded **VISI** data after v88; orders
 **v35** introduced encounter and cancellation. Current profiles use save
-**v113 / orders v49 / race v3**: VISI records persist the profile in physical
+**v114 / orders v49 / race v3**: VISI records persist the profile in physical
 visitors and every observation/mission copy; visitor GameEvents also retain it.
+v114 adds the private scheduled turn and completion flag, a measured course revision
+in every observation/mission copy, and the new received course-change event. Older
+records default to no scheduled change and the original measured revision. A real
+v113 fixture, written by unchanged b7ac910, verifies profile-bearing legacy tracks.
 All v112 and older visitor records load as the original Freight offer, without
 changing cargo, unlocks or incoming orders. Order payloads remain unchanged. Physical visitors, received contacts, in-flight reports,
 acquired blueprints, physical/telemetry missions and incoming commands remain
@@ -166,6 +197,16 @@ and byte-identical real-turn continuation; an unseen changed velocity does not
 change a player export. The vertical/diagonal demos exercise the normal timed
 encounter, fuel, cargo, acquisition, delayed reports, AI and UI paths.
 
+Course-change checks replay scheduled turns across all nine map shapes, verify
+the unchanged elapsed segment, a 20–45° heading change, non-increasing speed,
+bounded whole-year exit and no second turn. A real two-year pursuit pays on the
+straight control route and misses the changed route while blind; HQ and onboard
+tracks refresh only after the appropriate measurement/delivery. Equal-year contact
+receipts cannot roll back the new revision. Host continuation before/after the turn
+is byte-identical after reload; the private schedule cannot alter player exports.
+The received notice, profile and measured revisions round-trip in knowledge,
+pending reports, navigation/telemetry/commands, player files and Turn Messages.
+
 This slice completes the original #46 acceptance: rare deterministic outsiders,
 received-only discovery, real timed interception, paid varied gifts, concise
 encounters/portraits, decline/cancellation, failure and departure reporting.
@@ -173,18 +214,3 @@ The PR closes #46 after review and merge. Strategic AI construction/staging is a
 separate deferred enhancement, not a requirement of the original visitor issue.
 Visitors remain neutral and cannot be attacked. General moving/transient anomalies
 remain #55; frozen #53/#63/evacuation are not resumed.
-
-
-## Candidate follow-up: rare course changes
-
-On 6 November 2026 the user recalled rare visitor course changes in Stars!.
-This is a follow-up idea, not behavior implemented by the current straight-track PR.
-A proposed small slice would change physical heading rarely at a year boundary,
-keeping each year's motion linear for continuous interception. The choice should
-be deterministic and independent of player/fleet locations, with bounded frequency
-and a physically recomputed exit/announced window. One active visitor remains the
-limit. Received tracks and in-flight orders retain their old prediction until a
-new real observation/report arrives; onboard navigation may refresh only through
-its own normal sensors. A newly delivered course-change report should explain why
-an earlier intercept can miss. Frequency, turn limits and persistence need their
-own acceptance checks before implementation; no new balance is committed here.

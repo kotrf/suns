@@ -1,5 +1,38 @@
 # Project status and development handoff
 
+## #281 expanded: rare visitor course changes — 6 November 2026
+
+The user explicitly chose to add rare turns to the same PR, superseding the
+separate-follow-up proposal below. At generation, 1/10 of new visitors may schedule
+one interior year-boundary turn, if the original track offers an eligible boundary
+with two years remaining. The private schedule and 20–45° left/right choice use
+only the independent physical RNG/visitor identity. After the old segment and its
+encounters complete, a new ray reaches the expanded map edge at a recomputed
+whole-year departure, without increasing speed. The one-active rule remains.
+
+Received and dispatched tracks stay stale until an actual observation/report;
+onboard refresh still requires that courier's active sensors. Delivered changed
+sightings create a dated course-change message. A measured revision distinguishes
+a post-turn boundary observation from an old-segment contact receipt with the
+same year, preserving payment and preventing a stale rollback.
+
+Save **v114**, orders v49/race v3. VISI persists the private schedule/completion
+and measured revisions in all observation/mission copies; the new GameEvent keeps
+its received profile. Pre-v114 visitors remain straight. A synthetic fixture was
+written by unchanged b7ac910 before changing the writer, preserving v113 profiles,
+pending commands and knowledge. Hidden schedules do not affect player exports.
+
+Visitor core/editor **2/2 passed in 1.19 s** after the final one-active assertion. Acceptance checks cover deterministic
+rare schedules over nine sizes, continuity and non-increasing speed, finite bounded
+exit, no second turn, one-active flights, a real paid straight control versus a
+blind changed-track miss, delayed/duplicate/old reports, local reacquisition,
+same-year contact, byte-identical continuation before/after turning, legacy v113
+and v112, received-event/profile persistence, parser rejection and UI notice text.
+Full GCC14.2/Qt6.12 Debug build and **118/118 CTest passed in 129.55 s**. Prior source b7ac910 CI
+[42191078963](https://github.com/kotrf/suns/actions/runs/42191078963) succeeded;
+the new source/CI will be recorded in GitHub. #281 stays open for re-review and
+still closes original #46 on merge. Frozen and strategic AI boundaries remain.
+
 ## #281 P3: actual galaxy dimensions; course-change idea — 6 November 2026
 
 [Review P3](https://github.com/kotrf/suns/pull/281#discussion_r4489605667) on 9dee212

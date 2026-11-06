@@ -86,6 +86,7 @@ struct VisitorObservation {
     std::uint64_t observedTurn{}, receivedTurn{}, departureTurn{};
     bool available{true}, departed{};
     VisitorProfile profile{VisitorProfile::Freight}; // Immutable advertised offer, carried by this observation.
+    bool courseChanged{}; // Measured revision; no future manoeuvre is disclosed.
 };
 enum class VisitorReportKind : std::uint8_t { Sighted, Exchanged, Failed, Departed };
 struct PendingVisitorReport {
@@ -100,6 +101,8 @@ struct IntergalacticVisitor {
     std::uint64_t arrivalTurn{}, departureTurn{};
     PlayerId customer{}; // Host-only: the first physical exchange consumes the offer.
     VisitorProfile profile{VisitorProfile::Freight};
+    std::uint64_t courseChangeTurn{}; // Host-only, at most one scheduled year-boundary turn; 0 keeps the straight route.
+    bool courseChanged{};
 };
 struct VisitorMission {
     VisitorObservation track; // A physically received immutable track, never a host lookup.

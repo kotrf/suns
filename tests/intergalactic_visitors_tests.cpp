@@ -24,8 +24,43 @@ bool crosses_core(Position start, Position end, double width, double height)
     }
     return first<=last;
 }
+void check_single_course_change(GameState s, Position size)
+{
+    const auto original=s.visitors[0]; assert(original.courseChangeTurn && !original.courseChanged);
+    const auto boundary=original.courseChangeTurn;
+    // Move to just before the scheduled boundary, preserving the old segment.
+    s.turn=boundary-1;
+    const auto age=double(s.turn-original.arrivalTurn);
+    s.visitors[0].position={original.position.x+original.velocity.x*age,original.position.y+original.velocity.y*age};
+    const auto before=s.visitors[0].position;
+    auto other=s; other.fleets.clear(); other.players.clear();
+    advance_visitors(s); advance_visitors(other); ++s.turn;
+    const auto changed=s.visitors[0];
+    assert(changed.courseChanged && changed.courseChangeTurn==boundary);
+    assert(changed.position==Position(before.x+original.velocity.x,before.y+original.velocity.y));
+    assert(changed.position==other.visitors[0].position && changed.velocity==other.visitors[0].velocity
+        && changed.departureTurn==other.visitors[0].departureTurn);
+    const auto oldSpeed=distance_between({},original.velocity), speed=distance_between({},changed.velocity);
+    assert(speed>0 && speed<=oldSpeed+1e-8);
+    const auto cosine=(original.velocity.x*changed.velocity.x+original.velocity.y*changed.velocity.y)/(oldSpeed*speed);
+    const auto angle=std::acos(std::clamp(cosine,-1.0,1.0))*180/std::acos(-1.0);
+    assert(angle>=20-1e-6 && angle<=45+1e-6);
+    const double hx=size.x/2+150,hy=size.y/2+150;
+    const Position exit{changed.position.x+changed.velocity.x*double(changed.departureTurn-boundary),
+        changed.position.y+changed.velocity.y*double(changed.departureTurn-boundary)};
+    assert(std::abs(exit.x)<=hx+1e-6 && std::abs(exit.y)<=hy+1e-6);
+    assert(std::abs(std::abs(exit.x)-hx)<1e-6 || std::abs(std::abs(exit.y)-hy)<1e-6);
+    assert(changed.departureTurn>boundary && changed.departureTurn-boundary<200);
+    s.stars.clear(); // No further arrivals during this individual flight check.
+    while(s.turn<changed.departureTurn+2) {
+        advance_visitors(s); ++s.turn;
+        assert(s.visitors.size()==1 && s.visitors[0].velocity==changed.velocity && s.visitors[0].departureTurn==changed.departureTurn);
+    }
+    assert(distance_between(s.visitors[0].position,exit)<1e-6);
+}
 void generated_paths_cross_from_every_edge_deterministically()
 {
+    unsigned total=0,turning=0;
     for(const auto size:std::array<Position,9>{{{100,100},{200,200},{400,400},{1600,240},{240,1600},
             {10000,200},{200,10000},{10000,100},{100,10000}}}) {
         auto s=generate_game({771,16,size.x,size.y,15}); auto replay=s;
@@ -36,7 +71,8 @@ void generated_paths_cross_from_every_edge_deterministically()
             advance_visitors(s); advance_visitors(replay);
             assert(s.visitors.size()==replay.visitors.size()); if(s.visitors.empty()) continue;
             const auto& v=s.visitors.front(); const auto& r=replay.visitors.front();
-            assert(v.position==r.position && v.velocity==r.velocity && v.departureTurn==r.departureTurn && v.profile==r.profile);
+            assert(v.position==r.position && v.velocity==r.velocity && v.departureTurn==r.departureTurn && v.profile==r.profile
+                && v.courseChangeTurn==r.courseChangeTurn);
             assert(v.arrivalTurn==year && v.departureTurn>year);
             const auto speed=distance_between({},v.velocity); assert(speed>0 && speed<=121+1e-8);
             const Position end{v.position.x+v.velocity.x*double(v.departureTurn-year),v.position.y+v.velocity.y*double(v.departureTurn-year)};
@@ -51,9 +87,12 @@ void generated_paths_cross_from_every_edge_deterministically()
             assert(startSide>=0 && endSide>=0 && startSide!=endSide);
             sides[startSide]=true; diagonal |= std::abs(v.velocity.x)>1e-6 && std::abs(v.velocity.y)>1e-6;
             assert(crosses_core(v.position,end,size.x,size.y)); ++samples;
+            ++total;
+            if(v.courseChangeTurn) { ++turning; check_single_course_change(s,size); }
         }
         assert(samples>0 && diagonal && std::all_of(sides.begin(),sides.end(),[](bool found){return found;}));
     }
+    assert(turning>0 && turning<total/4); // Rare per visitor, not a growing annual chance.
 }
 void demo_exchange_and_real_payment()
 {
@@ -81,6 +120,60 @@ GameState remote(VisitorProfile profile = VisitorProfile::Freight)
     auto s=make_visitor_demo(profile); auto& f=s.fleets[0]; f.position.x+=900;
     s.visitors[0].position.x+=900; s.players[0].visitorKnowledge[0].position.x+=900;
     return s;
+}
+void course_changes_keep_stale_navigation_until_real_observation()
+{
+    auto initial=remote(); initial.wormholeRules.width=2000;
+    auto& f=initial.fleets[0]; f.position={1000,0}; f.electronics.mode=EmissionMode::Passive;
+    initial.visitors[0].courseChangeTurn=61;
+    apply_visitor_command(initial,f,{initial.players[0].visitorKnowledge[0],8});
+    auto straight=initial; straight.visitors[0].courseChangeTurn=0;
+    auto changed=TurnProcessor{}.process(initial,{}); straight=TurnProcessor{}.process(straight,{});
+    assert(changed.visitors[0].courseChanged && changed.visitors[0].velocity!=initial.visitors[0].velocity);
+    assert(changed.visitors[0].position==straight.visitors[0].position); // Old year's physical movement is unchanged.
+    assert(changed.fleets[0].position==straight.fleets[0].position && !changed.visitors[0].customer);
+    assert(!known_visitor(changed,1,1)->courseChanged && !changed.fleets[0].visitor.track.courseChanged);
+    const auto stale=changed.fleets[0].visitor.track;
+    auto blind=changed; prepare_visitor_navigation(blind);
+    auto falseTruth=changed; falseTruth.visitors[0].velocity={0,-121}; falseTruth.visitors[0].departureTurn=65;
+    prepare_visitor_navigation(falseTruth);
+    assert(blind.fleets[0].destination==falseTruth.fleets[0].destination);
+    auto missed=TurnProcessor{}.process(changed,{}); auto met=TurnProcessor{}.process(straight,{});
+    assert(!missed.visitors[0].customer && missed.fleets[0].minerals.germanium==50);
+    assert(met.visitors[0].customer==1 && met.fleets[0].minerals.germanium==0);
+
+    // A new real remote measurement remains in transit; its delivery updates
+    // HQ without telepathically replacing the courier's onboard programme.
+    auto observed=changed; observed.fleets[0].electronics={};
+    observed.fleets[0].position=observed.visitors[0].position;
+    observe_visitors(observed); assert(!observed.players[0].pendingVisitorReports.empty());
+    const auto packet=observed.players[0].pendingVisitorReports.back();
+    assert(packet.observation.courseChanged && packet.deliveryTurn>observed.turn && packet.deliveryTurn!=kAwaitingTransmission);
+    assert(deliver_visitor_reports(observed).empty() && !known_visitor(observed,1,1)->courseChanged);
+    observed.turn=packet.deliveryTurn; observed.visitors.clear(); observed.fleets[0].electronics.mode=EmissionMode::Passive;
+    const auto events=deliver_visitor_reports(observed);
+    assert(events.size()==1 && events[0].kind==GameEventKind::VisitorCourseChanged);
+    assert(known_visitor(observed,1,1)->velocity==packet.observation.velocity && known_visitor(observed,1,1)->courseChanged);
+    assert(observed.fleets[0].visitor.track.velocity==stale.velocity && !observed.fleets[0].visitor.track.courseChanged);
+    observed.players[0].pendingVisitorReports.push_back(packet);
+    assert(deliver_visitor_reports(observed).empty());
+    auto old=packet; old.observation=stale; old.observation.receivedTurn=0;
+    old.observation.observedTurn=packet.observation.observedTurn; // Same-boundary pre-turn contact receipt.
+    observed.players[0].pendingVisitorReports.push_back(old);
+    assert(deliver_visitor_reports(observed).empty() && known_visitor(observed,1,1)->courseChanged);
+    // Local navigation can refresh only when its own active scanner measures it.
+    auto local=changed; local.fleets[0].electronics={}; local.fleets[0].position=local.visitors[0].position;
+    prepare_visitor_navigation(local);
+    assert(local.fleets[0].visitor.track.courseChanged && local.fleets[0].visitor.track.velocity==local.visitors[0].velocity);
+
+    // Contact during the old segment and the post-turn boundary measurement
+    // have the same dated year. The actual revised track must win either order.
+    auto contact=make_visitor_demo(); contact.visitors[0].courseChangeTurn=61;
+    const auto result=TurnProcessor{}.process_with_events(contact,{{1,{EncounterVisitorOrder{1,1,8}}}});
+    assert(result.state.visitors[0].customer==1 && result.state.fleets[0].minerals.germanium==0);
+    assert(known_visitor(result.state,1,1)->courseChanged && !known_visitor(result.state,1,1)->available);
+    assert(known_visitor(result.state,1,1)->velocity==result.state.visitors[0].velocity);
+    assert(std::any_of(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::VisitorExchangeCompleted;}));
 }
 void distinct_offers_pay_atomically_and_keep_research_requirements()
 {
@@ -299,15 +392,20 @@ void simultaneous_customers_and_spawn_are_deterministic()
     for(const auto& f:a.fleets) { const auto g=std::find_if(b.fleets.begin(),b.fleets.end(),[&](const auto& g){return g.id==f.id;}); assert(f.minerals.germanium==g->minerals.germanium && f.position==g->position); }
     assert(a.fleets[0].minerals.germanium==0 && a.fleets[1].minerals.germanium==50);
     auto generated=generate_game({771,32,400,400,15}); auto replay=generated;
-    for(std::uint64_t year=60;year<500;++year) { generated.turn=replay.turn=year; advance_visitors(generated); advance_visitors(replay); }
+    for(std::uint64_t year=60;year<500;++year) {
+        generated.turn=replay.turn=year; advance_visitors(generated); advance_visitors(replay);
+        assert(std::count_if(generated.visitors.begin(),generated.visitors.end(),[&](const auto& v){return v.departureTurn>year+1;})<=1);
+    }
     assert(!generated.visitors.empty() && generated.visitors.size()==replay.visitors.size());
     for(std::size_t n=0;n<generated.visitors.size();++n) assert(generated.visitors[n].position==replay.visitors[n].position
-        && generated.visitors[n].departureTurn==replay.visitors[n].departureTurn && generated.visitors[n].profile==replay.visitors[n].profile);
+        && generated.visitors[n].departureTurn==replay.visitors[n].departureTurn && generated.visitors[n].profile==replay.visitors[n].profile
+        && generated.visitors[n].velocity==replay.visitors[n].velocity && generated.visitors[n].courseChanged==replay.visitors[n].courseChanged);
 }
 }
 int main()
 {
     generated_paths_cross_from_every_edge_deterministically();
+    course_changes_keep_stale_navigation_until_real_observation();
     distinct_offers_pay_atomically_and_keep_research_requirements(); computers_use_received_offer_and_all_requested_minerals();
     demo_exchange_and_real_payment(); gift_and_sightings_travel_as_immutable_packets();
     physical_refusal_delivers_evidence_but_navigation_failure_keeps_its_age();

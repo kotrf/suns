@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <random>
 
 namespace suns {
@@ -41,7 +42,7 @@ const VisitorObservation* known_visitor(const GameState& s, PlayerId owner, Visi
 }
 namespace {
 VisitorObservation snapshot(const IntergalacticVisitor& v, std::uint64_t turn, Position position)
-{ return {v.id, position, v.velocity, turn, 0, v.departureTurn, !v.customer && turn < v.departureTurn, turn >= v.departureTurn, v.profile}; }
+{ return {v.id, position, v.velocity, turn, 0, v.departureTurn, !v.customer && turn < v.departureTurn, turn >= v.departureTurn, v.profile, v.courseChanged}; }
 bool sees(const GameState& s, const Fleet& f, Position position)
 {
     if (!fleet_has_scanner(s, f) || !fleet_active_sensors(f, s.turn)) return false;
@@ -79,8 +80,35 @@ IntergalacticVisitor crossing(VisitorId id, std::uint64_t turn, double width, do
     if(delta.y!=0) scale=std::min(scale,((delta.y>0?hy:-hy)-start.y)/delta.y);
     const Position travel{delta.x*scale,delta.y*scale};
     const auto duration=std::uint64_t(std::ceil(distance_between({},travel)/121));
-    return {id,start,{travel.x/double(duration),travel.y/double(duration)},turn,turn+duration,0,
+    IntergalacticVisitor v{id,start,{travel.x/double(duration),travel.y/double(duration)},turn,turn+duration,0,
         VisitorProfile(rng()%offers.size())};
+    // One in ten new visitors may turn once, at an interior year boundary.
+    // The schedule is physical host state, independent of customers/pursuers.
+    if(rng()%10==0) {
+        std::vector<std::uint64_t> candidates;
+        for(std::uint64_t age=1;age+1<duration;++age) {
+            const Position p{start.x+v.velocity.x*double(age),start.y+v.velocity.y*double(age)};
+            if(std::abs(p.x)<=width/2 && std::abs(p.y)<=height/2) candidates.push_back(turn+age);
+        }
+        if(!candidates.empty()) v.courseChangeTurn=candidates[rng()%candidates.size()];
+    }
+    return v;
+}
+void change_course(IntergalacticVisitor& v, std::uint64_t seed, double width, double height)
+{
+    std::mt19937_64 rng(seed ^ (std::uint64_t(v.id)*0x9e3779b97f4a7c15ULL)
+        ^ v.arrivalTurn ^ 0x434f55525345ULL);
+    const auto angle=(20.0+double(rng()%26))*std::numbers::pi/180*(rng()%2?1:-1);
+    const Position direction{v.velocity.x*std::cos(angle)-v.velocity.y*std::sin(angle),
+        v.velocity.x*std::sin(angle)+v.velocity.y*std::cos(angle)};
+    const double hx=width/2+150,hy=height/2+150;
+    double scale=std::numeric_limits<double>::infinity();
+    if(direction.x!=0) scale=std::min(scale,((direction.x>0?hx:-hx)-v.position.x)/direction.x);
+    if(direction.y!=0) scale=std::min(scale,((direction.y>0?hy:-hy)-v.position.y)/direction.y);
+    const auto duration=std::uint64_t(std::ceil(scale));
+    v.velocity={direction.x*scale/double(duration),direction.y*scale/double(duration)};
+    v.departureTurn=v.courseChangeTurn+duration;
+    v.courseChanged=true;
 }
 }
 std::optional<Position> visitor_intercept_destination(const Fleet& f, const VisitorObservation& x, std::uint64_t turn, std::uint8_t warp)
@@ -167,8 +195,14 @@ void complete_visitor_encounter(GameState& s, Fleet& f, VisitorId id, Position c
 void advance_visitors(GameState& s)
 {
     if (s.mediumObserver) return;
-    for (auto& v : s.visitors) if (s.turn < v.departureTurn) { v.position.x += v.velocity.x; v.position.y += v.velocity.y; }
     const auto turn = s.turn+1;
+    for (auto& v : s.visitors) if (s.turn < v.departureTurn) {
+        v.position.x += v.velocity.x; v.position.y += v.velocity.y;
+        // The elapsed year's encounter solver used the old velocity. Only the
+        // next year's segment changes, before boundary observations are made.
+        if(v.courseChangeTurn==turn && !v.courseChanged)
+            change_course(v,s.galaxySeed,s.wormholeRules.width,s.wormholeRules.height);
+    }
     if (turn < 60 || s.stars.size() < 16 || s.visitors.size() >= 128
         || std::any_of(s.visitors.begin(), s.visitors.end(), [&](const auto& v) { return v.departureTurn > turn; })) return;
     std::mt19937_64 rng(s.galaxySeed ^ (turn*0x9e3779b97f4a7c15ULL) ^ 0x56495349544f52ULL);
@@ -209,9 +243,13 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
         for (const auto& r : p.pendingVisitorReports) if (r.deliveryTurn <= s.turn) {
             auto x = r.observation; x.receivedTurn = s.turn;
             auto old = std::find_if(p.visitorKnowledge.begin(),p.visitorKnowledge.end(),[&](const auto& a){return a.id==x.id;});
-            const bool newer = old==p.visitorKnowledge.end() || x.observedTurn>old->observedTurn
-                || (x.observedTurn==old->observedTurn && ((old->available && !x.available) || (!old->departed && x.departed)));
-            const bool changed = newer && (old==p.visitorKnowledge.end() || x.available!=old->available || x.departed!=old->departed);
+            const bool newer = old==p.visitorKnowledge.end() || ((!old->courseChanged || x.courseChanged)
+                && (x.observedTurn>old->observedTurn || (x.observedTurn==old->observedTurn
+                    && ((!old->courseChanged && x.courseChanged)
+                        || ((old->available && !x.available) || (!old->departed && x.departed))))));
+            const bool courseNotice = newer && old!=p.visitorKnowledge.end() && !x.departed
+                && x.velocity!=old->velocity && r.kind==VisitorReportKind::Sighted;
+            const bool changed = newer && (old==p.visitorKnowledge.end() || x.available!=old->available || x.departed!=old->departed || courseNotice);
             // Refusals can carry a real contact measurement, while navigation
             // failures retain their old track. Freshness uses that evidence's
             // date, never the later mission-status date in r.observedTurn.
@@ -226,10 +264,11 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
             } else if (r.kind==VisitorReportKind::Sighted && !changed) continue;
             GameEvent e; e.kind = r.kind==VisitorReportKind::Exchanged ? GameEventKind::VisitorExchangeCompleted
                 : r.kind==VisitorReportKind::Failed ? GameEventKind::VisitorExchangeFailed
-                : r.kind==VisitorReportKind::Departed ? GameEventKind::VisitorDeparted : GameEventKind::VisitorSighted;
+                : r.kind==VisitorReportKind::Departed ? GameEventKind::VisitorDeparted
+                : courseNotice ? GameEventKind::VisitorCourseChanged : GameEventKind::VisitorSighted;
             e.id = 1469598103934665603ULL;
             for (const auto value : {std::uint64_t{0x56495349544f52ULL}, std::uint64_t(x.id), r.observedTurn,
-                    std::uint64_t(p.id), std::uint64_t(r.kind)})
+                    std::uint64_t(p.id), courseNotice ? std::uint64_t{4} : std::uint64_t(r.kind)})
                 e.id = (e.id ^ value)*1099511628211ULL;
             e.recipient=p.id; e.turn=s.turn; e.observedTurn=r.observedTurn; e.position=x.position;
             e.quantity=x.id;

@@ -74,7 +74,7 @@ void MainWindow::installVisitors()
     auto* hint=new QLabel("Rare neutral visitors cross the galaxy and leave. Detect their broadcasts with ordinary active scanners/radars. "
         "Bring the advertised minerals in a fleet's hold: the first physical rendezvous receives the offered blueprint. "
         "The blueprint arrives at HQ through ordinary communications; building the equipment still costs production/minerals and requires its technology. "
-        "Intercept / cancel commands also travel with delay. Forecast coordinates extrapolate a received track, and do not guarantee contact or fuel.",body);
+        "Intercept / cancel commands also travel with delay. Visitors may rarely change course. Forecast coordinates extrapolate a received track, and do not guarantee contact or fuel.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* offerRow=new QHBoxLayout;
     auto* portrait=new QLabel(body); portrait->setObjectName("visitorPortrait"); portrait->setFixedSize(76,76); offerRow->addWidget(portrait);

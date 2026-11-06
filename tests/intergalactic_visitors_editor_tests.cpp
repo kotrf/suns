@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTreeWidget>
+#include <QTextBrowser>
 #include <cassert>
 using namespace suns;
 namespace {
@@ -46,6 +47,76 @@ void generated_oblique_path_survives_save_and_continuation()
         assert(write_save_game_file(a,original,error) && write_save_game_file(b,loaded,error));
         assert(bytes(a)==bytes(b));
     }
+}
+void turning_path_round_trips_without_leaking_its_schedule()
+{
+    SaveGameData original; original.campaignId=46; original.turnToken=2; original.mode=SessionMode::Host;
+    original.playerTokens={{1,2}}; original.galaxyConfig={771,16,1600,240,15};
+    original.state=generate_campaign(original.galaxyConfig,{{"Terrans",RacePreset::Terran}}); original.pendingOrders={1,{}};
+    auto& s=original.state;
+    for(s.turn=59;s.turn<10000;++s.turn) {
+        s.visitors.clear(); advance_visitors(s);
+        if(!s.visitors.empty() && s.visitors[0].courseChangeTurn) { ++s.turn; break; }
+    }
+    assert(s.turn<10000); const auto boundary=s.visitors[0].courseChangeTurn;
+    QTemporaryDir dir; const auto a=dir.filePath("turning.suns"),b=dir.filePath("reloaded.suns");
+    QString error; SaveGameData loaded;
+    assert(write_save_game_file(a,original,error) && read_save_game_file(a,loaded,error));
+    assert(loaded.state.visitors[0].courseChangeTurn==boundary && !loaded.state.visitors[0].courseChanged);
+    assert(write_save_game_file(a,make_player_turn(original,1),error)); const auto visible=bytes(a);
+    auto hidden=original; hidden.state.visitors[0].courseChangeTurn=0; hidden.state.visitors[0].courseChanged=true;
+    assert(write_save_game_file(a,make_player_turn(hidden,1),error) && bytes(a)==visible);
+    bool turned=false;
+    for(unsigned n=0;n<200;++n) {
+        original.state=TurnProcessor{}.process(original.state,{}); loaded.state=TurnProcessor{}.process(loaded.state,{});
+        assert(write_save_game_file(a,original,error) && write_save_game_file(b,loaded,error) && bytes(a)==bytes(b));
+        if(original.state.turn==boundary) {
+            assert(original.state.visitors[0].courseChanged); turned=true;
+            assert(read_save_game_file(a,loaded,error)); // Resume after turning as well as before it.
+            assert(loaded.state.visitors[0].courseChanged && loaded.state.visitors[0].courseChangeTurn==boundary);
+        }
+        if(original.state.turn>original.state.visitors[0].departureTurn) break;
+    }
+    assert(turned && original.state.turn>original.state.visitors[0].departureTurn);
+
+    // A genuine pre-change writer preserves old routes and all profile-bearing
+    // snapshots/commands, rather than rescheduling an existing visitor on load.
+    put(a,QByteArray::fromHex(bytes(QString::fromUtf8(SUNS_TEST_FIXTURE_DIR "/visitor-v113.hex"))));
+    assert(read_save_game_file(a,loaded,error) && loaded.campaignId==46113);
+    assert(loaded.state.visitors[0].profile==VisitorProfile::Shieldwright);
+    assert(!loaded.state.visitors[0].courseChangeTurn && !loaded.state.visitors[0].courseChanged);
+    assert(!loaded.state.players[0].visitorKnowledge[0].courseChanged && !loaded.state.fleets[0].visitor.track.courseChanged);
+    assert(loaded.state.fleets[0].pendingCommands[0].visitor->track.profile==VisitorProfile::Shieldwright);
+    assert(loaded.strategicMessages[0].visitorProfile==VisitorProfile::Shieldwright);
+    const auto velocity=loaded.state.visitors[0].velocity;
+    while(loaded.state.turn<67) {
+        loaded.state=TurnProcessor{}.process(loaded.state,{});
+        assert(!loaded.state.visitors[0].courseChanged && loaded.state.visitors[0].velocity==velocity);
+    }
+}
+void changed_course_evidence_round_trips()
+{
+    auto d=fixture(VisitorProfile::Shieldwright); d.state.visitors[0].courseChangeTurn=61;
+    auto result=TurnProcessor{}.process_with_events(d.state,{}); d.state=std::move(result.state);
+    const auto notice=std::find_if(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::VisitorCourseChanged;});
+    assert(notice!=result.events.end()); d.strategicMessages={*notice};
+    auto& s=d.state; const auto observation=s.players[0].visitorKnowledge[0]; assert(observation.courseChanged);
+    auto& f=s.fleets[0]; f.position={900,0};
+    assert(submit_visitor_command(s,1,{f.id,1,8})); assert(f.pendingCommands.back().visitor);
+    apply_visitor_command(s,f,{observation,8}); f.telemetry.visitor=f.visitor;
+    auto inFlight=observation; inFlight.receivedTurn=0;
+    s.players[0].pendingVisitorReports.push_back({inFlight,VisitorReportKind::Sighted,s.turn,s.turn+2,0});
+    QTemporaryDir dir; const auto path=dir.filePath("changed-evidence.suns"); QString error; SaveGameData loaded;
+    assert(write_save_game_file(path,d,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.visitors[0].courseChanged && loaded.state.visitors[0].courseChangeTurn==61);
+    assert(loaded.state.players[0].visitorKnowledge[0].courseChanged);
+    assert(loaded.state.players[0].pendingVisitorReports.back().observation.courseChanged);
+    assert(loaded.state.fleets[0].visitor.track.courseChanged && loaded.state.fleets[0].telemetry.visitor.track.courseChanged);
+    assert(loaded.state.fleets[0].pendingCommands.back().visitor->track.courseChanged);
+    assert(loaded.strategicMessages[0].kind==GameEventKind::VisitorCourseChanged && loaded.strategicMessages[0].visitorProfile==VisitorProfile::Shieldwright);
+    assert(write_save_game_file(path,make_player_turn(d,1),error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.visitors.empty() && loaded.state.players[0].pendingVisitorReports.empty());
+    assert(loaded.state.players[0].visitorKnowledge[0].courseChanged && loaded.strategicMessages[0].kind==GameEventKind::VisitorCourseChanged);
 }
 void profiles_round_trip_and_genuine_v112_defaults()
 {
@@ -135,6 +206,15 @@ void invalid_visitor_enums_and_truncated_payloads_are_rejected()
     auto bad=fixture(); auto observation=bad.state.players[0].visitorKnowledge[0]; observation.receivedTurn=0;
     bad.state.players[0].pendingVisitorReports.push_back({observation,static_cast<VisitorReportKind>(255),60,61,0});
     assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
+
+    for(const auto change: {std::uint64_t{59},std::uint64_t{60},std::uint64_t{66},std::uint64_t{1000000001}}) {
+        bad=fixture(); bad.state.visitors[0].courseChangeTurn=change;
+        assert(write_save_game_file(path,bad,error) && !read_save_game_file(path,loaded,error));
+    }
+    bad=fixture(); bad.state.visitors[0].courseChanged=true;
+    assert(write_save_game_file(path,bad,error) && !read_save_game_file(path,loaded,error));
+    bad=fixture(); bad.state.visitors[0].courseChangeTurn=61; bad.state.visitors[0].position={9999,9999};
+    assert(write_save_game_file(path,bad,error) && !read_save_game_file(path,loaded,error));
     bad=fixture(); bad.state.players[0].acquiredEquipment={static_cast<ShipComponentType>(255)};
     assert(write_save_game_file(path,bad,error)); assert(!read_save_game_file(path,loaded,error));
     bad=fixture(); bad.state.visitors[0].profile=static_cast<VisitorProfile>(255);
@@ -170,6 +250,8 @@ struct MainWindowTestAccess {
     static void hidden(MainWindow& w) { w.state_.visitors[0].position={9999,9999}; w.state_.visitors[0].customer=1;
         w.state_.visitors[0].profile=VisitorProfile::Shieldwright; w.rebuildScene(); }
     static void endTurn(MainWindow& w) { w.endTurn(); }
+    static void turnAtNextBoundary(MainWindow& w) { w.state_.visitors[0].courseChangeTurn=w.state_.turn+1; }
+    static const auto& messages(const MainWindow& w) { return w.turnMessages_; }
     static void announcedWindowEnded(MainWindow& w) { w.state_.turn=66; w.rebuildScene(); }
     static void departureObserved(MainWindow& w) {
         auto& x=w.state_.players[0].visitorKnowledge[0];
@@ -182,6 +264,8 @@ int main(int argc,char** argv)
     QApplication app(argc,argv); invalid_visitor_enums_and_truncated_payloads_are_rejected(); save_orders_and_private_exports();
     profiles_round_trip_and_genuine_v112_defaults();
     generated_oblique_path_survives_save_and_continuation();
+    turning_path_round_trips_without_leaking_its_schedule();
+    changed_course_evidence_round_trips();
     MainWindow w; w.installVisitors(); w.startVisitorDemo();
     auto* tree=w.findChild<QTreeWidget*>("visitorContacts"); auto* send=w.findChild<QPushButton*>("interceptVisitor");
     assert(tree && tree->topLevelItemCount()==1 && send->isEnabled());
@@ -225,4 +309,16 @@ int main(int argc,char** argv)
         assert(!label->text().contains("Departure not observed"));
         assert(label->text().contains(advertised) && !send->isEnabled());
     }
+    w.startVisitorDemo(VisitorProfile::Shieldwright); MainWindowTestAccess::turnAtNextBoundary(w);
+    MainWindowTestAccess::endTurn(w);
+    const auto& events=MainWindowTestAccess::messages(w);
+    assert(std::any_of(events.begin(),events.end(),[](const auto& e){return e.kind==GameEventKind::VisitorCourseChanged;}));
+    auto* messages=w.findChild<QListWidget*>("turnMessagesList");
+    bool notice=false;
+    for(int i=0;i<messages->count();++i) if(messages->item(i)->text().contains("changed course")) {
+        notice=true; messages->setCurrentRow(i);
+        const auto text=w.findChild<QTextBrowser*>("turnMessageBody")->toPlainText();
+        assert(text.contains("receiver measured") && text.contains("Earlier predictions may miss"));
+    }
+    assert(notice);
 }
