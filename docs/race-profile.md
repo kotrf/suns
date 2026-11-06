@@ -132,6 +132,10 @@ transit and unlock paid Network and Infinity/Infinity orbital fittings. See
 constraints and Computer strategy. Habitat Civilization and Remote Logistics
 Specialist remain reserved, unavailable choices rather than placeholder bonuses.
 
+The next-trait [design and acceptance plan](asymmetric-empires.md) compares these
+two candidates and defines the complete starting economy required before either
+reserved option becomes playable. Its proposed rules are not current race effects.
+
 The Qt setup dialog calls `generate_campaign`; race mechanics and research
 validation live in the core and apply identically to every player.
 

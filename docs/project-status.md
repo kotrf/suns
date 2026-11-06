@@ -1,5 +1,32 @@
 # Project status and development handoff
 
+## #46 complete; next queued work is #50 design — 6 November 2026
+
+The user requested continuing the ordered queue. #281 is merged into main
+ea7749f7da50659f2255477fdd87ae03ede14a96, #46 closed completed, all five fixed
+threads resolved under MEM-34. The merge tree equals reviewed 337982d's
+a9eb479b141445d5881e2f8075bdf8fb79c03ecf. Source CI 42223101944 and separate main
+CI 42228852797 both succeeded. Current formats remain v114/v49/race v3.
+
+GitHub's open issues and the Notion queue agree: #50 precedes #54/#55; #53/#63
+remain frozen. Its complete gate-specialist implementation is not restarted.
+The remaining primary-trait choice is not specified by the backlog audit. An
+async selection question is pending; no answer or balance approval is inferred.
+
+[Next-trait design](asymmetric-empires.md) inventories the existing code, compares
+Habitat Civilization and Remote Logistics Specialist, recommends a stationary
+orbital first slice, and requires an entire starting/expansion budget before
+enabling it. Current habitats need late technology and a supporting Starbase;
+their residents do not operate surface mines. Changing only setup availability
+would not produce a viable new civilization. The design identifies founding,
+population/workforce, growth, paid support, capture, received knowledge, portable
+races and fair computer play as a single acceptance boundary. No new game rules
+or numerical balance are implemented. #50 remains open; further traits and
+comparative balance are still future work.
+
+Work stays in the existing /workspace/suns on codex/empire-asymmetry-50-design.
+This slice changes documentation only; no new gameplay tests are required.
+
 ## #281 review: course measurement date and identity — 6 November 2026
 
 [P3](https://github.com/kotrf/suns/pull/281#discussion_r4492655407) on c6385ba:
