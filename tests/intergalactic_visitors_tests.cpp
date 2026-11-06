@@ -164,6 +164,40 @@ void contact_receipts_announce_course_changes()
         assert(std::none_of(later.begin(),later.end(),[](const auto& e){return e.kind==GameEventKind::VisitorCourseChanged;}));
     }
 }
+void navigation_failure_dates_course_evidence_separately()
+{
+    auto s=make_visitor_demo();
+    for(auto& planet:s.planets) planet.radar=PlanetaryRadarLevel::None;
+    s.visitors[0].courseChangeTurn=61; advance_visitors(s); ++s.turn;
+    auto& f=s.fleets[0]; const auto& v=s.visitors[0];
+    assert(s.turn==61 && v.courseChanged);
+    const auto speed=distance_between({},v.velocity), range=fleet_sensor_range(s,f);
+    assert(speed>warp_distance(8) && range*0.2<speed);
+    // The courier can measure the new leg now, but is behind a faster target.
+    // No receiver will see it at the end of the elapsed year.
+    f.position={v.position.x-v.velocity.x/speed*range*0.8,v.position.y-v.velocity.y/speed*range*0.8};
+    apply_visitor_command(s,f,{s.players[0].visitorKnowledge[0],8});
+    s=TurnProcessor{}.process(s,{});
+    const auto failure=std::find_if(s.players[0].pendingVisitorReports.begin(),s.players[0].pendingVisitorReports.end(),
+        [](const auto& r){return r.kind==VisitorReportKind::Failed;});
+    assert(failure!=s.players[0].pendingVisitorReports.end()); const auto receipt=*failure;
+    assert(s.turn==62 && receipt.observation.observedTurn==61 && receipt.observedTurn==62 && receipt.deliveryTurn==63);
+    assert(!known_visitor(s,1,1)->courseChanged && !s.fleets[0].visitor.track.id);
+    // The same evidence arriving as a sighting must identify the same course
+    // notice, independently of a later mission-result date.
+    auto sighting=s; sighting.turn=receipt.deliveryTurn; sighting.fleets.clear(); sighting.visitors.clear();
+    sighting.players[0].pendingVisitorReports={receipt};
+    sighting.players[0].pendingVisitorReports[0].kind=VisitorReportKind::Sighted;
+    sighting.players[0].pendingVisitorReports[0].observedTurn=receipt.observation.observedTurn;
+    const auto direct=deliver_visitor_reports(sighting);
+    const auto result=TurnProcessor{}.process_with_events(s,{});
+    const auto course=std::find_if(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::VisitorCourseChanged;});
+    const auto ended=std::find_if(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::VisitorExchangeFailed;});
+    assert(course!=result.events.end() && ended!=result.events.end());
+    assert(course->observedTurn==61 && ended->observedTurn==62 && course->turn==63 && ended->turn==63);
+    assert(course->position==receipt.observation.position && course->id!=ended->id);
+    assert(direct.size()==1 && direct[0].kind==GameEventKind::VisitorCourseChanged && direct[0].id==course->id);
+}
 void course_duration_is_bounded_before_conversion()
 {
     for(const auto speed:{1e-7,1e-20,1e-300,1e-320}) {
@@ -468,6 +502,7 @@ int main()
 {
     generated_paths_cross_from_every_edge_deterministically();
     contact_receipts_announce_course_changes();
+    navigation_failure_dates_course_evidence_separately();
     course_duration_is_bounded_before_conversion();
     course_changes_keep_stale_navigation_until_real_observation();
     distinct_offers_pay_atomically_and_keep_research_requirements(); computers_use_received_offer_and_all_requested_minerals();

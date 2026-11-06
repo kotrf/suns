@@ -296,18 +296,18 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
                 if (old==p.visitorKnowledge.end()) p.visitorKnowledge.push_back(x);
                 else *old=x;
             }
-            const auto emit=[&](GameEventKind kind,std::uint64_t discriminator) {
+            const auto emit=[&](GameEventKind kind,std::uint64_t discriminator,std::uint64_t observedTurn) {
                 GameEvent e; e.kind=kind; e.id=1469598103934665603ULL;
-                for(const auto value:{std::uint64_t{0x56495349544f52ULL},std::uint64_t(x.id),r.observedTurn,
+                for(const auto value:{std::uint64_t{0x56495349544f52ULL},std::uint64_t(x.id),observedTurn,
                         std::uint64_t(p.id),discriminator}) e.id=(e.id^value)*1099511628211ULL;
-                e.recipient=p.id; e.turn=s.turn; e.observedTurn=r.observedTurn; e.position=x.position;
+                e.recipient=p.id; e.turn=s.turn; e.observedTurn=observedTurn; e.position=x.position;
                 e.quantity=x.id; e.visitorProfile=x.profile;
                 if(kind==GameEventKind::VisitorExchangeFailed) e.severity=GameEventSeverity::Warning;
                 events.push_back(e);
             };
             // Any accepted physical measurement can be the first evidence of a
             // turn. Do not lose that notice to the receipt's transaction kind.
-            if(courseNotice) emit(GameEventKind::VisitorCourseChanged,4);
+            if(courseNotice) emit(GameEventKind::VisitorCourseChanged,4,x.observedTurn);
             if (r.kind==VisitorReportKind::Exchanged) {
                 const auto gift = visitor_offer(x.profile).gift;
                 if (std::find(p.acquiredEquipment.begin(),p.acquiredEquipment.end(),gift)!=p.acquiredEquipment.end()) continue;
@@ -316,7 +316,7 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
             emit(r.kind==VisitorReportKind::Exchanged ? GameEventKind::VisitorExchangeCompleted
                 : r.kind==VisitorReportKind::Failed ? GameEventKind::VisitorExchangeFailed
                 : r.kind==VisitorReportKind::Departed ? GameEventKind::VisitorDeparted : GameEventKind::VisitorSighted,
-                std::uint64_t(r.kind));
+                std::uint64_t(r.kind),r.observedTurn);
         }
         std::erase_if(p.pendingVisitorReports,[&](const auto& r){
             return r.deliveryTurn<=s.turn || (r.deliveryTurn==kAwaitingTransmission && r.transmissionFleet

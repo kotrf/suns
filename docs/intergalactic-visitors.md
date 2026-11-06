@@ -114,6 +114,10 @@ predictions may miss. The transaction result remains a separate message. Later
 measurements and duplicate receipts do not repeat the course notice. At the same
 year boundary, a measured post-turn revision wins over an older contact receipt;
 the payment and immutable gift receipt still retain their ordinary semantics.
+The course notice's observation year and identity use the measurement date,
+including when that evidence travels in a later navigation-failure receipt.
+The mission-result event retains its own result year; both have the actual receipt
+year. The same measured course has the same notice ID regardless of receipt kind.
 
 The courier's navigation solves an intercept from its received track and chosen
 Warp. It then uses ordinary movement, fuel limits, mines, radiation, damage and
@@ -221,6 +225,10 @@ through a real delayed refusal (49 kt G) or paid exchange (50 kt G), with separa
 course/result messages and no repeated course notice on a later active sighting.
 Tiny-speed and near-limit schedules are checked both on load and execution; the
 visitor core tests also run with UBSan and float-cast-overflow instrumentation.
+An actual TurnProcessor navigation failure measures the new leg in year 61,
+ends in year 62 and delivers in year 63. Its course and mission events retain
+their respective observation dates, and the course ID matches the same evidence
+delivered as a sighting.
 
 This slice completes the original #46 acceptance: rare deterministic outsiders,
 received-only discovery, real timed interception, paid varied gifts, concise

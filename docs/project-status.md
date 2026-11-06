@@ -1,5 +1,26 @@
 # Project status and development handoff
 
+## #281 review: course measurement date and identity — 6 November 2026
+
+[P3](https://github.com/kotrf/suns/pull/281#discussion_r4492655407) on c6385ba:
+an active courier can measure a changed course at year 61, immediately fail
+navigation, and return a mission result dated 62 that arrives in 63. The shared
+event emitter incorrectly used the mission date for the course notice and its ID.
+The emitter now takes an explicit date: x.observedTurn for a course notice,
+r.observedTurn for the mission result. Delivery time remains the actual receipt.
+
+The real TurnProcessor regression failed against unchanged c6385ba. It now checks
+61/62/63, the frozen measurement position, distinct course/result IDs, and the same
+course ID when the identical evidence arrives as a sighting instead of a failure.
+GCC14.2/Qt6.12 Debug app/affected targets built; **4/4 focused CTest passed in
+6.95 s** (visitor core/editor, save game and GameSession).
+
+Review confirmed all prior four P3 fixes. Baseline [CI 42211929215](https://github.com/kotrf/suns/actions/runs/42211929215)
+on c6385ba passed 118/118 in 140.33 s; that precedes this new date correction.
+Current source/new CI will be recorded in GitHub. Save v114/orders v49/race v3
+remain unchanged. PR is open for re-review and closes #46 on merge; frozen and
+strategic AI boundaries stay unchanged.
+
 ## #281 repeat review: three course-change P3 fixes — 6 November 2026
 
 The prior actual-dimensions P3 is confirmed fixed. All three new findings on
