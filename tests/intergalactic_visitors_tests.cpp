@@ -26,7 +26,8 @@ bool crosses_core(Position start, Position end, double width, double height)
 }
 void generated_paths_cross_from_every_edge_deterministically()
 {
-    for(const auto size:std::array<Position,6>{{{200,200},{400,400},{1600,240},{240,1600},{10000,200},{200,10000}}}) {
+    for(const auto size:std::array<Position,9>{{{100,100},{200,200},{400,400},{1600,240},{240,1600},
+            {10000,200},{200,10000},{10000,100},{100,10000}}}) {
         auto s=generate_game({771,16,size.x,size.y,15}); auto replay=s;
         const auto hx=size.x/2+150, hy=size.y/2+150;
         std::array<bool,4> sides{}; bool diagonal=false; unsigned samples=0;

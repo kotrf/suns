@@ -63,7 +63,9 @@ in flight. A new track starts 150 ly outside any of the four edges. A seeded
 interior point in the central half of the real galaxy defines its straight ray;
 the ray is extended to a different edge of the rectangle enlarged by 150 ly.
 Thus oblique routes cross useful interior space rather than grazing a corner,
-including in strongly rectangular galaxies. The nominal speed budget stays
+including in strongly rectangular galaxies. Geometry uses the actual validated
+width and height (normal campaigns allow 100–10000 ly per side), with no extra
+minimum-size padding. The nominal speed budget stays
 121 ly/year: duration is `ceil(track length / 121)`, and the constant velocity
 reaches the outer exit at that announced whole-year boundary. There are no
 turns or hidden course changes, so a measured 2D track remains predictable.
@@ -156,8 +158,8 @@ Review regressions cover delayed physical refusals, unchanged evidence age after
 navigation failures, invalid VISI report/gift enums and every truncated prefix of
 a VISI payload whose outer length remains valid.
 
-The trajectory tests replay seeded generation across six square/rectangular
-sizes (including 50:1 aspect ratios), checking all four entry sides, a different
+The trajectory tests replay seeded generation across nine square/rectangular
+sizes (including 100×100, 10000×100 and 100×10000, up to 100:1 aspect ratios), checking all four entry sides, a different
 bounded exit, interior crossings and finite legal speed. The old horizontal-only
 source fails those acceptance checks. A generated oblique track survives save/load
 and byte-identical real-turn continuation; an unseen changed velocity does not
@@ -171,3 +173,18 @@ The PR closes #46 after review and merge. Strategic AI construction/staging is a
 separate deferred enhancement, not a requirement of the original visitor issue.
 Visitors remain neutral and cannot be attacked. General moving/transient anomalies
 remain #55; frozen #53/#63/evacuation are not resumed.
+
+
+## Candidate follow-up: rare course changes
+
+On 6 November 2026 the user recalled rare visitor course changes in Stars!.
+This is a follow-up idea, not behavior implemented by the current straight-track PR.
+A proposed small slice would change physical heading rarely at a year boundary,
+keeping each year's motion linear for continuous interception. The choice should
+be deterministic and independent of player/fleet locations, with bounded frequency
+and a physically recomputed exit/announced window. One active visitor remains the
+limit. Received tracks and in-flight orders retain their old prediction until a
+new real observation/report arrives; onboard navigation may refresh only through
+its own normal sensors. A newly delivered course-change report should explain why
+an earlier intercept can miss. Frequency, turn limits and persistence need their
+own acceptance checks before implementation; no new balance is committed here.

@@ -173,7 +173,7 @@ void advance_visitors(GameState& s)
         || std::any_of(s.visitors.begin(), s.visitors.end(), [&](const auto& v) { return v.departureTurn > turn; })) return;
     std::mt19937_64 rng(s.galaxySeed ^ (turn*0x9e3779b97f4a7c15ULL) ^ 0x56495349544f52ULL);
     if (rng()%80) return;
-    const auto width = std::max(200.0, s.wormholeRules.width), height = std::max(200.0, s.wormholeRules.height);
+    const auto width = s.wormholeRules.width, height = s.wormholeRules.height;
     s.visitors.push_back(crossing(s.nextVisitorId++,turn,width,height,rng));
 }
 void observe_visitors(GameState& s)

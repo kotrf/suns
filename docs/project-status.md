@@ -1,5 +1,28 @@
 # Project status and development handoff
 
+## #281 P3: actual galaxy dimensions; course-change idea — 6 November 2026
+
+[Review P3](https://github.com/kotrf/suns/pull/281#discussion_r4489605667) on 9dee212
+found that the inherited max(200, dimension) expanded supported 100-ly maps.
+The crossing now consumes the actual validated wormhole-rule dimensions. The
+independent geometry matrix has nine sizes, adding 100×100, 10000×100 and
+100×10000 (100:1 aspect ratios). Its new boundary assertion failed against
+unchanged 9dee212 before correction (work/review281-before.log).
+
+GCC14.2/Qt6.12 Debug app/affected targets built; **4/4 focused CTest passed
+in 6.87 s**: visitor core/editor, save game and GameSession. The original
+[source CI 42129102015](https://github.com/kotrf/suns/actions/runs/42129102015)
+passed 118/118 in 125.23 s; that is separate from this new source. Current
+head/new CI will be recorded in GitHub. No save/order/race version changes.
+
+The user also recalled rare visitor course changes in Stars!. A separate
+follow-up is proposed in the visitor contract: rare deterministic heading changes
+at year boundaries, bounded frequency, real exit/window recomputation, and old
+received predictions until a genuine observation/report arrives. No route change
+is implemented in this P3 fix. Unless the user chooses to expand #281, it remains
+a next-slice candidate. The original straight-track scope of #281 and the
+frozen/AI boundaries are unchanged.
+
 ## Visitor trajectories complete original #46 scope — 6 November 2026
 
 The user continued the recorded queue. #280 is merged as 622189f266e1c7ec90c7e9ae1475b669f43790db;
