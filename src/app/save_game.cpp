@@ -39,7 +39,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 113;
+constexpr quint32 kSaveFormatVersion = 114;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -1069,7 +1069,7 @@ void writeGameEvent(QDataStream& stream, const GameEvent& value)
     stream << static_cast<quint32>(value.wormholeEndpoint);
     if (value.kind == GameEventKind::SpaceBattle) writeBattle(stream, value.battle);
     if (hasLossPayload(value.kind)) writeLosses(stream, value.losses);
-    if (value.kind >= GameEventKind::VisitorSighted && value.kind <= GameEventKind::VisitorDeparted)
+    if (is_visitor_event(value.kind))
         writeEnum(stream, value.visitorProfile);
 }
 
@@ -1086,7 +1086,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1156,8 +1156,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
         readLosses(stream, value.losses);
         if (!lossesMatchEvent(value.losses, value.kind)) markCorrupt(stream);
     }
-    if (gReadSaveFormatVersion >= 113 && value.kind >= GameEventKind::VisitorSighted
-        && value.kind <= GameEventKind::VisitorDeparted)
+    if (gReadSaveFormatVersion >= 113 && is_visitor_event(value.kind))
         readEnum(stream, value.visitorProfile, quint8(VisitorProfile::Shieldwright));
 }
 

@@ -71,7 +71,14 @@ enum class GameEventKind {
     VisitorDeparted,
     OrbitalBaseStatus,
     FleetScrapStatus,
+    VisitorCourseChanged,
 };
+
+inline constexpr bool is_visitor_event(GameEventKind kind)
+{
+    return (kind >= GameEventKind::VisitorSighted && kind <= GameEventKind::VisitorDeparted)
+        || kind == GameEventKind::VisitorCourseChanged;
+}
 
 enum class GameEventSeverity {
     Information,

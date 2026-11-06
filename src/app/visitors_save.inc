@@ -4,6 +4,7 @@ void writeVisitorObservation(QDataStream& out, const VisitorObservation& x)
     out << quint32(x.id); writePosition(out,x.position); writePosition(out,x.velocity);
     out << quint64(x.observedTurn) << quint64(x.receivedTurn) << quint64(x.departureTurn) << quint8(x.available) << quint8(x.departed);
     writeEnum(out,x.profile);
+    out << quint8(x.courseChanged);
 }
 void readVisitorObservation(QDataStream& in, VisitorObservation& x, std::uint64_t latest)
 {
@@ -13,6 +14,10 @@ void readVisitorObservation(QDataStream& in, VisitorObservation& x, std::uint64_
     x.observedTurn=observed; x.receivedTurn=received; x.departureTurn=departure;
     x.available=available; x.departed=departed;
     if(gReadSaveFormatVersion>=113 && !readEnum(in,x.profile,quint8(VisitorProfile::Shieldwright))) markCorrupt(in);
+    if(gReadSaveFormatVersion>=114) {
+        quint8 changed{}; in >> changed; x.courseChanged=changed;
+        if(changed>1) markCorrupt(in);
+    }
     if (available>1 || departed>1 || !visitor_observation_valid(x) || x.observedTurn>latest || x.receivedTurn>latest) markCorrupt(in);
 }
 void writeVisitorMission(QDataStream& out, const VisitorMission& m)
@@ -30,6 +35,7 @@ void writeVisitors(QDataStream& stream, const GameState& s)
         out << quint32(v.id); writePosition(out,v.position); writePosition(out,v.velocity);
         out << quint64(v.arrivalTurn) << quint64(v.departureTurn) << quint32(v.customer);
         writeEnum(out,v.profile);
+        out << quint64(v.courseChangeTurn) << quint8(v.courseChanged);
     });
     out << quint32(s.players.size());
     for(const auto& p:s.players) {
@@ -66,6 +72,11 @@ void readVisitors(QDataStream& stream, GameState& s, bool playerTurn)
         IntergalacticVisitor v; in >> v.id; readPosition(in,v.position); readPosition(in,v.velocity);
         quint64 arrival{},departure{}; in >> arrival >> departure >> v.customer; v.arrivalTurn=arrival; v.departureTurn=departure;
         if(gReadSaveFormatVersion>=113 && !readEnum(in,v.profile,quint8(VisitorProfile::Shieldwright))) markCorrupt(in);
+        if(gReadSaveFormatVersion>=114) {
+            quint64 change{}; quint8 changed{}; in >> change >> changed;
+            v.courseChangeTurn=change; v.courseChanged=changed;
+            if(changed>1 || !visitor_course_schedule_valid(s,v)) markCorrupt(in);
+        }
         VisitorObservation x{v.id,v.position,v.velocity,std::min(s.turn,v.departureTurn),0,v.departureTurn,false,s.turn>=v.departureTurn,v.profile};
         if(!visitor_observation_valid(x) || v.id>=s.nextVisitorId || !v.arrivalTurn || v.arrivalTurn>s.turn
             || v.departureTurn<=v.arrivalTurn || (v.customer && !find_player(s,v.customer))

@@ -1,5 +1,144 @@
 # Project status and development handoff
 
+## #281 review: course measurement date and identity — 6 November 2026
+
+[P3](https://github.com/kotrf/suns/pull/281#discussion_r4492655407) on c6385ba:
+an active courier can measure a changed course at year 61, immediately fail
+navigation, and return a mission result dated 62 that arrives in 63. The shared
+event emitter incorrectly used the mission date for the course notice and its ID.
+The emitter now takes an explicit date: x.observedTurn for a course notice,
+r.observedTurn for the mission result. Delivery time remains the actual receipt.
+
+The real TurnProcessor regression failed against unchanged c6385ba. It now checks
+61/62/63, the frozen measurement position, distinct course/result IDs, and the same
+course ID when the identical evidence arrives as a sighting instead of a failure.
+GCC14.2/Qt6.12 Debug app/affected targets built; **4/4 focused CTest passed in
+6.95 s** (visitor core/editor, save game and GameSession).
+
+Review confirmed all prior four P3 fixes. Baseline [CI 42211929215](https://github.com/kotrf/suns/actions/runs/42211929215)
+on c6385ba passed 118/118 in 140.33 s; that precedes this new date correction.
+Current source/new CI will be recorded in GitHub. Save v114/orders v49/race v3
+remain unchanged. PR is open for re-review and closes #46 on merge; frozen and
+strategic AI boundaries stay unchanged.
+
+## #281 repeat review: three course-change P3 fixes — 6 November 2026
+
+The prior actual-dimensions P3 is confirmed fixed. All three new findings on
+7ee9e38 were reproduced: the nine-shape test failed on a same-side exit; an ordinary
+delayed EncounterVisitorOrder with a passive 49-kt G courier received the changed
+track through a refusal but no notice; and a synthetic v114 with velocity 1e-20
+loaded, then UBSan reported an out-of-range float-to-uint64 conversion.
+
+The entrance is recovered by tracing the unchanged approach backwards. The two
+signs of the seeded 20–45° turn are checked in stable order, requiring a different
+exit side. Shared load/runtime geometry validates a finite positive whole-year
+duration and departure <= 1,000,000,000 before conversion/addition. Bad schedules
+are rejected on load; invalid in-memory manoeuvres retain their finite old leg.
+Every first accepted changed measurement, including contact receipts, emits a
+separate course event before transaction/gift handling; later evidence cannot
+repeat it. Original transaction events, dates and deterministic IDs remain.
+
+GCC14.2/Qt6.12 Debug app/affected targets built; **4/4 focused CTest passed in
+7.43 s**. Expanded visitor core also passed UBSan + float-cast-overflow with
+abort-on-error, covering tiny/subnormal speeds, the maximum date, valid finite
+slow tracks, all nine geometries and real paid/refused contact receipts. Full
+GCC14.2/Qt6.12 Debug build and **118/118 CTest passed in 134.37 s**. Baseline [CI 42194439143](https://github.com/kotrf/suns/actions/runs/42194439143)
+succeeded; current source/new CI will be recorded in GitHub. Save v114/orders
+v49/race v3 stay unchanged. PR remains open for re-review, #46 closes on merge;
+frozen and strategic AI boundaries remain unchanged.
+
+## #281 expanded: rare visitor course changes — 6 November 2026
+
+The user explicitly chose to add rare turns to the same PR, superseding the
+separate-follow-up proposal below. At generation, 1/10 of new visitors may schedule
+one interior year-boundary turn, if the original track offers an eligible boundary
+with two years remaining. The private schedule and 20–45° left/right choice use
+only the independent physical RNG/visitor identity. After the old segment and its
+encounters complete, a new ray reaches the expanded map edge at a recomputed
+whole-year departure, without increasing speed. The one-active rule remains.
+
+Received and dispatched tracks stay stale until an actual observation/report;
+onboard refresh still requires that courier's active sensors. Delivered changed
+sightings create a dated course-change message. A measured revision distinguishes
+a post-turn boundary observation from an old-segment contact receipt with the
+same year, preserving payment and preventing a stale rollback.
+
+Save **v114**, orders v49/race v3. VISI persists the private schedule/completion
+and measured revisions in all observation/mission copies; the new GameEvent keeps
+its received profile. Pre-v114 visitors remain straight. A synthetic fixture was
+written by unchanged b7ac910 before changing the writer, preserving v113 profiles,
+pending commands and knowledge. Hidden schedules do not affect player exports.
+
+Visitor core/editor **2/2 passed in 1.19 s** after the final one-active assertion. Acceptance checks cover deterministic
+rare schedules over nine sizes, continuity and non-increasing speed, finite bounded
+exit, no second turn, one-active flights, a real paid straight control versus a
+blind changed-track miss, delayed/duplicate/old reports, local reacquisition,
+same-year contact, byte-identical continuation before/after turning, legacy v113
+and v112, received-event/profile persistence, parser rejection and UI notice text.
+Full GCC14.2/Qt6.12 Debug build and **118/118 CTest passed in 129.55 s**. Prior source b7ac910 CI
+[42191078963](https://github.com/kotrf/suns/actions/runs/42191078963) succeeded;
+the new source/CI will be recorded in GitHub. #281 stays open for re-review and
+still closes original #46 on merge. Frozen and strategic AI boundaries remain.
+
+## #281 P3: actual galaxy dimensions; course-change idea — 6 November 2026
+
+[Review P3](https://github.com/kotrf/suns/pull/281#discussion_r4489605667) on 9dee212
+found that the inherited max(200, dimension) expanded supported 100-ly maps.
+The crossing now consumes the actual validated wormhole-rule dimensions. The
+independent geometry matrix has nine sizes, adding 100×100, 10000×100 and
+100×10000 (100:1 aspect ratios). Its new boundary assertion failed against
+unchanged 9dee212 before correction (work/review281-before.log).
+
+GCC14.2/Qt6.12 Debug app/affected targets built; **4/4 focused CTest passed
+in 6.87 s**: visitor core/editor, save game and GameSession. The original
+[source CI 42129102015](https://github.com/kotrf/suns/actions/runs/42129102015)
+passed 118/118 in 125.23 s; that is separate from this new source. Current
+head/new CI will be recorded in GitHub. No save/order/race version changes.
+
+The user also recalled rare visitor course changes in Stars!. A separate
+follow-up is proposed in the visitor contract: rare deterministic heading changes
+at year boundaries, bounded frequency, real exit/window recomputation, and old
+received predictions until a genuine observation/report arrives. No route change
+is implemented in this P3 fix. Unless the user chooses to expand #281, it remains
+a next-slice candidate. The original straight-track scope of #281 and the
+frozen/AI boundaries are unchanged.
+
+## Visitor trajectories complete original #46 scope — 6 November 2026
+
+The user continued the recorded queue. #280 is merged as 622189f266e1c7ec90c7e9ae1475b669f43790db;
+its tree 44fb606553885e4b8a352fa1b6573fd8b0ffd723 matches reviewed 1591bd8.
+Both source CI 42018032117 and main CI 42116108385 succeeded. New work remains in
+the existing repository, branch codex/visitor-trajectories-46, on that main.
+
+New visitors enter at a seeded point 150 ly beyond any of four edges. A point
+inside the central half of the real galaxy defines a ray, clipped to its far exit
+on another boundary of the enlarged rectangle. This supports oblique crossings
+and extreme aspect ratios without corner grazes. Constant 2D velocity and the
+existing ceil(length/121) year budget remain the physical model; rarity, one-active
+limit, offers, detection, delays and continuous encounter geometry retain their
+rules. Existing visitors/tracks/missions are never regenerated. Formats stay
+save v113/orders v49/race v3. Prepared demos now exercise horizontal, vertical
+and diagonal arrivals using the same ordinary encounter code.
+
+Independent geometry checks replay years 60–9999 across six galaxy sizes (200²,
+400², 1600×240, 240×1600, 10000×200 and 200×10000), require all four starts,
+different bounded exits and central crossings, and verify finite speed/replay.
+The acceptance test failed on unchanged 622189f's horizontal-only generation.
+A real generated oblique visitor also survives save/load and byte-identical
+TurnProcessor continuation past departure; a hidden velocity change does not
+alter a player file. The original profile/paid AI/knowledge/reader tests exercise
+the rotated demos. Visitor core/editor **2/2 passed in 0.99 s**. Full
+GCC14.2/Qt6.12 Debug build and **118/118 CTest passed in 122.87 s**. The
+diagonal demo and its map forecast were inspected offscreen at 1440×960. Ready
+for review; no annual UI forecast or polling was introduced.
+
+This completes the original issue's required rare encounters, received detection,
+physical pursuit/payment, varied bounded gifts, concise flavor/portraits and
+cancel/failure/departure UX. The PR will close #46 after review/merge. Broader AI
+ship construction/staging is not an original #46 requirement and remains deferred,
+with its future boundary retained in the visitor contract. Frozen #53/#63 and
+transport evacuation remain unchanged. PR/source/CI will be recorded in GitHub.
+
 ## PR #280 review: received offer-card status — 5 November 2026
 
 [P3](https://github.com/kotrf/suns/pull/280#discussion_r4479678276) on c1a55e7:

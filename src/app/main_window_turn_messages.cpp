@@ -117,6 +117,7 @@ QString event_subject(const GameState& state, const GameEvent& event)
     QString subject;
     switch (event.kind) {
     case GameEventKind::VisitorSighted: subject=QString("Intergalactic visitor V%1 sighted; check Visitors for the dated offer/track").arg(event.quantity); break;
+    case GameEventKind::VisitorCourseChanged: subject=QString("Visitor V%1 changed course — new track received").arg(event.quantity); break;
     case GameEventKind::VisitorExchangeCompleted: subject=QString("Visitor V%1: %2 exchanged; %3 received").arg(event.quantity)
         .arg(visitor_request_text(event.visitorProfile)).arg(visitor_gift_text(event.visitorProfile)); break;
     case GameEventKind::VisitorExchangeFailed: subject=QString("Visitor V%1: encounter ended without exchange (%2 required)").arg(event.quantity).arg(visitor_request_text(event.visitorProfile)); break;
@@ -256,7 +257,7 @@ bool matches_type(const GameEvent& event, MessageTypeFilter filter)
     switch (filter) {
     case MessageTypeFilter::All: return true;
     case MessageTypeFilter::Exploration:
-        if(event.kind>=GameEventKind::VisitorSighted && event.kind<=GameEventKind::VisitorDeparted) return true;
+        if(is_visitor_event(event.kind)) return true;
         if(event.kind==GameEventKind::UnknownObjectObserved || event.objectObservation || event.mediumObservation) return true;
         return event.kind == GameEventKind::SystemSurveyed
             || event.kind == GameEventKind::PrecursorArtifactsDiscovered
@@ -390,7 +391,7 @@ QString aftermath_text(const GameEvent& event)
 
 QString event_text(const GameState& state, const GameEvent& event)
 {
-    if (event.kind>=GameEventKind::VisitorSighted && event.kind<=GameEventKind::VisitorDeparted) {
+    if (is_visitor_event(event.kind)) {
         QString text=QString("%1\nObserved year %2; received year %3.\nReported position: %4, %5.\n")
             .arg(event_subject(state,event)).arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
             .arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1);
@@ -400,6 +401,8 @@ QString event_text(const GameState& state, const GameEvent& event)
         else if (event.kind==GameEventKind::VisitorExchangeFailed)
             text+=QString("The mission ended without a successful exchange. The announced intercept window, legal Warp, an available offer and %1 at timed physical contact are required. No cargo was charged for this failed encounter.")
                 .arg(visitor_request_text(event.visitorProfile));
+        else if (event.kind==GameEventKind::VisitorCourseChanged)
+            text+="A receiver measured a changed course. Open Intergalactic visitors for the newly received trajectory and announced departure. Earlier predictions may miss the visitor. An already dispatched intercept keeps its own track until the courier observes the visitor or receives a replacement order.";
         else if (event.kind==GameEventKind::VisitorDeparted)
             text+="A receiver observed departure. The visitor has left; this is a delivered observation, distinct from an old trajectory forecast.";
         else text+=QString("Open Intergalactic visitors for the dated offer and trajectory forecast: %1. Bring the requested minerals to a physical rendezvous before the announced departure. Hidden events do not refresh old contacts.")
