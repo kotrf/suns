@@ -90,18 +90,28 @@ straight. This starting balance is our implementation, not a verified Stars! tab
 After completing the elapsed year's movement and encounters, the visitor turns
 20–45 degrees left or right. The choice uses only galaxy seed and visitor identity,
 never player/fleet locations or cargo. The new ray is clipped to the expanded
-galaxy boundary; its remaining duration is rounded up to whole years and velocity
+galaxy boundary on a different side from the entrance. The incoming straight leg
+determines that entrance by tracing backwards; the seeded rotation and its
+opposite sign are checked in stable order, rejecting a return through the entry
+side. This also handles pending v114 schedules without adding a saved field.
+The remaining duration is rounded up to whole years and velocity
 adjusted down to reach that exit exactly, without exceeding the previous speed.
 The new announced departure can be earlier or later. Each year's actual movement
 remains linear, with no teleportation, second turn, or second simultaneous visitor.
+Both loading and execution use the same geometry to require a finite positive
+exit duration and a departure no later than year 1,000,000,000, before converting
+to an integer or adding it to the turn date. Invalid pending schedules are rejected
+on load; invalid in-memory manoeuvres are cancelled while retaining the old leg.
 
 The scheduled date is host-only. Until an actual receiver measures the changed
 track, HQ's dated forecast and already dispatched missions retain the old velocity
 and announced window. A courier with its own active scanner can update onboard
 navigation; a newer HQ observation alone does not rewrite its existing programme.
-A missed stale intercept is legitimate. When a changed sighting reaches HQ,
+A missed stale intercept is legitimate. When any newly accepted measurement of a
+changed track reaches HQ, including a physical refusal or exchange receipt,
 a dated **changed course — new track received** Turn Message explains that earlier
-predictions may miss. Repeated sightings do not repeat that notice. At the same
+predictions may miss. The transaction result remains a separate message. Later
+measurements and duplicate receipts do not repeat the course notice. At the same
 year boundary, a measured post-turn revision wins over an older contact receipt;
 the payment and immutable gift receipt still retain their ordinary semantics.
 
@@ -199,13 +209,18 @@ encounter, fuel, cargo, acquisition, delayed reports, AI and UI paths.
 
 Course-change checks replay scheduled turns across all nine map shapes, verify
 the unchanged elapsed segment, a 20–45° heading change, non-increasing speed,
-bounded whole-year exit and no second turn. A real two-year pursuit pays on the
+bounded whole-year exit on a different side from entry, and no second turn. A real two-year pursuit pays on the
 straight control route and misses the changed route while blind; HQ and onboard
 tracks refresh only after the appropriate measurement/delivery. Equal-year contact
 receipts cannot roll back the new revision. Host continuation before/after the turn
 is byte-identical after reload; the private schedule cannot alter player exports.
 The received notice, profile and measured revisions round-trip in knowledge,
 pending reports, navigation/telemetry/commands, player files and Turn Messages.
+Review regressions include a passive courier receiving the changed track first
+through a real delayed refusal (49 kt G) or paid exchange (50 kt G), with separate
+course/result messages and no repeated course notice on a later active sighting.
+Tiny-speed and near-limit schedules are checked both on load and execution; the
+visitor core tests also run with UBSan and float-cast-overflow instrumentation.
 
 This slice completes the original #46 acceptance: rare deterministic outsiders,
 received-only discovery, real timed interception, paid varied gifts, concise

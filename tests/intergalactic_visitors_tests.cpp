@@ -50,6 +50,12 @@ void check_single_course_change(GameState s, Position size)
         changed.position.y+changed.velocity.y*double(changed.departureTurn-boundary)};
     assert(std::abs(exit.x)<=hx+1e-6 && std::abs(exit.y)<=hy+1e-6);
     assert(std::abs(std::abs(exit.x)-hx)<1e-6 || std::abs(std::abs(exit.y)-hy)<1e-6);
+    const auto edge=[&](Position p) {
+        if(std::abs(p.x+hx)<1e-6) return 0; if(std::abs(p.x-hx)<1e-6) return 1;
+        if(std::abs(p.y+hy)<1e-6) return 2; if(std::abs(p.y-hy)<1e-6) return 3;
+        return -1;
+    };
+    assert(edge(original.position)>=0 && edge(exit)>=0 && edge(original.position)!=edge(exit));
     assert(changed.departureTurn>boundary && changed.departureTurn-boundary<200);
     s.stars.clear(); // No further arrivals during this individual flight check.
     while(s.turn<changed.departureTurn+2) {
@@ -120,6 +126,62 @@ GameState remote(VisitorProfile profile = VisitorProfile::Freight)
     auto s=make_visitor_demo(profile); auto& f=s.fleets[0]; f.position.x+=900;
     s.visitors[0].position.x+=900; s.players[0].visitorKnowledge[0].position.x+=900;
     return s;
+}
+void contact_receipts_announce_course_changes()
+{
+    for(const auto cargo:{49.0,50.0}) {
+        auto s=remote(); s.wormholeRules.width=2000;
+        // A homeworld without radar has one-year communications and no sighting.
+        // The launch reaches the passive courier at the turn boundary; its
+        // subsequent physical receipt must be the first evidence of the new track.
+        s.stars[0].position={881,0}; for(auto& p:s.planets) p.radar=PlanetaryRadarLevel::None;
+        s.fleets[0].position={881,0}; s.fleets[0].electronics.mode=EmissionMode::Passive;
+        s.fleets[0].minerals.germanium=cargo; s.visitors[0].courseChangeTurn=61;
+        s=TurnProcessor{}.process(s,{{1,{EncounterVisitorOrder{s.fleets[0].id,1,8}}}});
+        assert(s.turn==61 && s.visitors[0].courseChanged && !known_visitor(s,1,1)->courseChanged);
+        assert(s.fleets[0].position==s.visitors[0].position);
+        s=TurnProcessor{}.process(s,{});
+        assert(s.turn==62 && !known_visitor(s,1,1)->courseChanged && !s.players[0].pendingVisitorReports.empty());
+        const auto result=TurnProcessor{}.process_with_events(s,{});
+        s=result.state;
+        const auto count=[&](GameEventKind kind){return std::count_if(result.events.begin(),result.events.end(),[&](const auto& e){return e.kind==kind;});};
+        assert(known_visitor(s,1,1)->courseChanged && known_visitor(s,1,1)->velocity==s.visitors[0].velocity);
+        assert(count(GameEventKind::VisitorCourseChanged)==1);
+        const auto receipt=cargo==49 ? GameEventKind::VisitorExchangeFailed : GameEventKind::VisitorExchangeCompleted;
+        assert(count(receipt)==1);
+        const auto notice=std::find_if(result.events.begin(),result.events.end(),[](const auto& e){return e.kind==GameEventKind::VisitorCourseChanged;});
+        const auto outcome=std::find_if(result.events.begin(),result.events.end(),[&](const auto& e){return e.kind==receipt;});
+        assert(notice->id!=outcome->id && notice->observedTurn==outcome->observedTurn && notice->turn==outcome->turn);
+        assert(s.fleets[0].minerals.germanium==(cargo==49?49:0));
+        assert(known_visitor(s,1,1)->available==(cargo==49));
+        assert(s.players[0].acquiredEquipment.size()==(cargo==49?0:1));
+        s.fleets[0].electronics={}; s.fleets[0].position=s.visitors[0].position;
+        observe_visitors(s); assert(!s.players[0].pendingVisitorReports.empty());
+        const auto followup=s.players[0].pendingVisitorReports.back();
+        assert(followup.observation.courseChanged && followup.observation.velocity==s.visitors[0].velocity);
+        s.turn=followup.deliveryTurn;
+        const auto later=deliver_visitor_reports(s);
+        assert(std::none_of(later.begin(),later.end(),[](const auto& e){return e.kind==GameEventKind::VisitorCourseChanged;}));
+    }
+}
+void course_duration_is_bounded_before_conversion()
+{
+    for(const auto speed:{1e-7,1e-20,1e-300,1e-320}) {
+        auto s=make_visitor_demo(); auto& v=s.visitors[0];
+        v.position={0,0}; v.velocity={speed,0}; v.courseChangeTurn=61;
+        assert(!visitor_course_schedule_valid(s,v));
+        advance_visitors(s);
+        assert(!v.courseChanged && !v.courseChangeTurn && v.velocity==Position(speed,0) && v.departureTurn==66);
+    }
+    auto nearLimit=make_visitor_demo(); auto& v=nearLimit.visitors[0];
+    nearLimit.turn=kMaxVisitorTurn-2; v.arrivalTurn=nearLimit.turn-1;
+    v.position={0,0}; v.velocity={121,0}; v.courseChangeTurn=kMaxVisitorTurn-1; v.departureTurn=kMaxVisitorTurn;
+    assert(!visitor_course_schedule_valid(nearLimit,v)); advance_visitors(nearLimit);
+    assert(!v.courseChanged && v.velocity==Position(121,0) && v.departureTurn==kMaxVisitorTurn);
+    auto finite=make_visitor_demo(); auto& slow=finite.visitors[0];
+    slow.position={0,0}; slow.velocity={1e-5,0}; slow.courseChangeTurn=61;
+    assert(visitor_course_schedule_valid(finite,slow)); advance_visitors(finite);
+    assert(slow.courseChanged && slow.departureTurn>61 && slow.departureTurn<=kMaxVisitorTurn);
 }
 void course_changes_keep_stale_navigation_until_real_observation()
 {
@@ -405,6 +467,8 @@ void simultaneous_customers_and_spawn_are_deterministic()
 int main()
 {
     generated_paths_cross_from_every_edge_deterministically();
+    contact_receipts_announce_course_changes();
+    course_duration_is_bounded_before_conversion();
     course_changes_keep_stale_navigation_until_real_observation();
     distinct_offers_pay_atomically_and_keep_research_requirements(); computers_use_received_offer_and_all_requested_minerals();
     demo_exchange_and_real_payment(); gift_and_sightings_travel_as_immutable_packets();

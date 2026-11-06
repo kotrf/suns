@@ -1,5 +1,31 @@
 # Project status and development handoff
 
+## #281 repeat review: three course-change P3 fixes — 6 November 2026
+
+The prior actual-dimensions P3 is confirmed fixed. All three new findings on
+7ee9e38 were reproduced: the nine-shape test failed on a same-side exit; an ordinary
+delayed EncounterVisitorOrder with a passive 49-kt G courier received the changed
+track through a refusal but no notice; and a synthetic v114 with velocity 1e-20
+loaded, then UBSan reported an out-of-range float-to-uint64 conversion.
+
+The entrance is recovered by tracing the unchanged approach backwards. The two
+signs of the seeded 20–45° turn are checked in stable order, requiring a different
+exit side. Shared load/runtime geometry validates a finite positive whole-year
+duration and departure <= 1,000,000,000 before conversion/addition. Bad schedules
+are rejected on load; invalid in-memory manoeuvres retain their finite old leg.
+Every first accepted changed measurement, including contact receipts, emits a
+separate course event before transaction/gift handling; later evidence cannot
+repeat it. Original transaction events, dates and deterministic IDs remain.
+
+GCC14.2/Qt6.12 Debug app/affected targets built; **4/4 focused CTest passed in
+7.43 s**. Expanded visitor core also passed UBSan + float-cast-overflow with
+abort-on-error, covering tiny/subnormal speeds, the maximum date, valid finite
+slow tracks, all nine geometries and real paid/refused contact receipts. Full
+GCC14.2/Qt6.12 Debug build and **118/118 CTest passed in 134.37 s**. Baseline [CI 42194439143](https://github.com/kotrf/suns/actions/runs/42194439143)
+succeeded; current source/new CI will be recorded in GitHub. Save v114/orders
+v49/race v3 stay unchanged. PR remains open for re-review, #46 closes on merge;
+frozen and strategic AI boundaries remain unchanged.
+
 ## #281 expanded: rare visitor course changes — 6 November 2026
 
 The user explicitly chose to add rare turns to the same PR, superseding the

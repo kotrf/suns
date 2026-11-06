@@ -30,7 +30,7 @@ bool visitor_observation_valid(const VisitorObservation& x)
     const auto finite = [](Position p) { return std::isfinite(p.x) && std::isfinite(p.y) && std::abs(p.x) <= 1e9 && std::abs(p.y) <= 1e9; };
     return std::size_t(x.profile) < offers.size() && x.id && x.id <= 0x7fffffffU && finite(x.position) && finite(x.velocity)
         && distance_between({}, x.velocity) > 0 && distance_between({}, x.velocity) <= 200
-        && x.observedTurn && x.departureTurn && x.departureTurn <= 1'000'000'000ULL
+        && x.observedTurn && x.departureTurn && x.departureTurn <= kMaxVisitorTurn
         && (!x.receivedTurn || x.receivedTurn >= x.observedTurn)
         && (x.departed ? x.observedTurn >= x.departureTurn && !x.available : x.observedTurn < x.departureTurn);
 }
@@ -94,22 +94,59 @@ IntergalacticVisitor crossing(VisitorId id, std::uint64_t turn, double width, do
     }
     return v;
 }
-void change_course(IntergalacticVisitor& v, std::uint64_t seed, double width, double height)
+struct RayExit { double time; unsigned side; };
+RayExit ray_exit(Position p, Position direction, double hx, double hy)
 {
+    const auto tx=direction.x==0 ? std::numeric_limits<double>::infinity()
+        : ((direction.x>0?hx:-hx)-p.x)/direction.x;
+    const auto ty=direction.y==0 ? std::numeric_limits<double>::infinity()
+        : ((direction.y>0?hy:-hy)-p.y)/direction.y;
+    return tx<=ty ? RayExit{tx,direction.x>0?1U:0U} : RayExit{ty,direction.y>0?3U:2U};
+}
+struct ChangedCourse { Position velocity; std::uint64_t departureTurn; };
+std::optional<ChangedCourse> changed_course(const IntergalacticVisitor& v, Position position,
+    std::uint64_t seed, double width, double height)
+{
+    if(!std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0
+        || !std::isfinite(position.x) || !std::isfinite(position.y)
+        || std::abs(position.x)>width/2+1e-6 || std::abs(position.y)>height/2+1e-6
+        || !std::isfinite(v.velocity.x) || !std::isfinite(v.velocity.y)
+        || !(std::hypot(v.velocity.x,v.velocity.y)>0) || v.courseChangeTurn>=kMaxVisitorTurn) return {};
+    const double hx=width/2+150,hy=height/2+150;
+    // Before the one allowed turn, the incoming segment is still straight.
+    // Trace it backwards to recover its entrance, including pending v114 saves.
+    const auto entrance=ray_exit(position,{-v.velocity.x,-v.velocity.y},hx,hy);
+    if(!std::isfinite(entrance.time) || entrance.time<=0) return {};
     std::mt19937_64 rng(seed ^ (std::uint64_t(v.id)*0x9e3779b97f4a7c15ULL)
         ^ v.arrivalTurn ^ 0x434f55525345ULL);
     const auto angle=(20.0+double(rng()%26))*std::numbers::pi/180*(rng()%2?1:-1);
-    const Position direction{v.velocity.x*std::cos(angle)-v.velocity.y*std::sin(angle),
-        v.velocity.x*std::sin(angle)+v.velocity.y*std::cos(angle)};
-    const double hx=width/2+150,hy=height/2+150;
-    double scale=std::numeric_limits<double>::infinity();
-    if(direction.x!=0) scale=std::min(scale,((direction.x>0?hx:-hx)-v.position.x)/direction.x);
-    if(direction.y!=0) scale=std::min(scale,((direction.y>0?hy:-hy)-v.position.y)/direction.y);
-    const auto duration=std::uint64_t(std::ceil(scale));
-    v.velocity={direction.x*scale/double(duration),direction.y*scale/double(duration)};
-    v.departureTurn=v.courseChangeTurn+duration;
-    v.courseChanged=true;
+    for(const auto turnAngle:{angle,-angle}) {
+        const Position direction{v.velocity.x*std::cos(turnAngle)-v.velocity.y*std::sin(turnAngle),
+            v.velocity.x*std::sin(turnAngle)+v.velocity.y*std::cos(turnAngle)};
+        const auto exit=ray_exit(position,direction,hx,hy);
+        const auto years=std::ceil(exit.time);
+        if(exit.side==entrance.side || !std::isfinite(years) || years<1
+            || years>double(kMaxVisitorTurn-v.courseChangeTurn)) continue;
+        // The bound is checked in floating point before conversion or addition.
+        const auto duration=std::uint64_t(years);
+        const Position velocity{direction.x*(exit.time/years),direction.y*(exit.time/years)};
+        if(!std::isfinite(velocity.x) || !std::isfinite(velocity.y)
+            || !(std::hypot(velocity.x,velocity.y)>0)) continue;
+        return ChangedCourse{velocity,v.courseChangeTurn+duration};
+    }
+    return {};
 }
+}
+bool visitor_course_schedule_valid(const GameState& s, const IntergalacticVisitor& v)
+{
+    if(!v.courseChangeTurn) return !v.courseChanged;
+    if(v.courseChangeTurn<=v.arrivalTurn || v.courseChangeTurn>=v.departureTurn
+        || v.courseChangeTurn>=kMaxVisitorTurn) return false;
+    if(v.courseChanged) return v.courseChangeTurn<=s.turn;
+    if(v.courseChangeTurn<=s.turn) return false;
+    const auto dt=double(v.courseChangeTurn-s.turn);
+    const Position boundary{v.position.x+v.velocity.x*dt,v.position.y+v.velocity.y*dt};
+    return changed_course(v,boundary,s.galaxySeed,s.wormholeRules.width,s.wormholeRules.height).has_value();
 }
 std::optional<Position> visitor_intercept_destination(const Fleet& f, const VisitorObservation& x, std::uint64_t turn, std::uint8_t warp)
 {
@@ -200,8 +237,11 @@ void advance_visitors(GameState& s)
         v.position.x += v.velocity.x; v.position.y += v.velocity.y;
         // The elapsed year's encounter solver used the old velocity. Only the
         // next year's segment changes, before boundary observations are made.
-        if(v.courseChangeTurn==turn && !v.courseChanged)
-            change_course(v,s.galaxySeed,s.wormholeRules.width,s.wormholeRules.height);
+        if(v.courseChangeTurn==turn && !v.courseChanged) {
+            if(const auto course=changed_course(v,v.position,s.galaxySeed,s.wormholeRules.width,s.wormholeRules.height)) {
+                v.velocity=course->velocity; v.departureTurn=course->departureTurn; v.courseChanged=true;
+            } else v.courseChangeTurn=0; // Invalid in-memory input keeps its finite old segment.
+        }
     }
     if (turn < 60 || s.stars.size() < 16 || s.visitors.size() >= 128
         || std::any_of(s.visitors.begin(), s.visitors.end(), [&](const auto& v) { return v.departureTurn > turn; })) return;
@@ -247,9 +287,8 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
                 && (x.observedTurn>old->observedTurn || (x.observedTurn==old->observedTurn
                     && ((!old->courseChanged && x.courseChanged)
                         || ((old->available && !x.available) || (!old->departed && x.departed))))));
-            const bool courseNotice = newer && old!=p.visitorKnowledge.end() && !x.departed
-                && x.velocity!=old->velocity && r.kind==VisitorReportKind::Sighted;
-            const bool changed = newer && (old==p.visitorKnowledge.end() || x.available!=old->available || x.departed!=old->departed || courseNotice);
+            const bool courseNotice = newer && old!=p.visitorKnowledge.end() && x.velocity!=old->velocity;
+            const bool statusChanged = newer && (old==p.visitorKnowledge.end() || x.available!=old->available || x.departed!=old->departed);
             // Refusals can carry a real contact measurement, while navigation
             // failures retain their old track. Freshness uses that evidence's
             // date, never the later mission-status date in r.observedTurn.
@@ -257,24 +296,27 @@ std::vector<GameEvent> deliver_visitor_reports(GameState& s)
                 if (old==p.visitorKnowledge.end()) p.visitorKnowledge.push_back(x);
                 else *old=x;
             }
+            const auto emit=[&](GameEventKind kind,std::uint64_t discriminator) {
+                GameEvent e; e.kind=kind; e.id=1469598103934665603ULL;
+                for(const auto value:{std::uint64_t{0x56495349544f52ULL},std::uint64_t(x.id),r.observedTurn,
+                        std::uint64_t(p.id),discriminator}) e.id=(e.id^value)*1099511628211ULL;
+                e.recipient=p.id; e.turn=s.turn; e.observedTurn=r.observedTurn; e.position=x.position;
+                e.quantity=x.id; e.visitorProfile=x.profile;
+                if(kind==GameEventKind::VisitorExchangeFailed) e.severity=GameEventSeverity::Warning;
+                events.push_back(e);
+            };
+            // Any accepted physical measurement can be the first evidence of a
+            // turn. Do not lose that notice to the receipt's transaction kind.
+            if(courseNotice) emit(GameEventKind::VisitorCourseChanged,4);
             if (r.kind==VisitorReportKind::Exchanged) {
                 const auto gift = visitor_offer(x.profile).gift;
                 if (std::find(p.acquiredEquipment.begin(),p.acquiredEquipment.end(),gift)!=p.acquiredEquipment.end()) continue;
                 p.acquiredEquipment.push_back(gift);
-            } else if (r.kind==VisitorReportKind::Sighted && !changed) continue;
-            GameEvent e; e.kind = r.kind==VisitorReportKind::Exchanged ? GameEventKind::VisitorExchangeCompleted
+            } else if (r.kind==VisitorReportKind::Sighted && !statusChanged) continue;
+            emit(r.kind==VisitorReportKind::Exchanged ? GameEventKind::VisitorExchangeCompleted
                 : r.kind==VisitorReportKind::Failed ? GameEventKind::VisitorExchangeFailed
-                : r.kind==VisitorReportKind::Departed ? GameEventKind::VisitorDeparted
-                : courseNotice ? GameEventKind::VisitorCourseChanged : GameEventKind::VisitorSighted;
-            e.id = 1469598103934665603ULL;
-            for (const auto value : {std::uint64_t{0x56495349544f52ULL}, std::uint64_t(x.id), r.observedTurn,
-                    std::uint64_t(p.id), courseNotice ? std::uint64_t{4} : std::uint64_t(r.kind)})
-                e.id = (e.id ^ value)*1099511628211ULL;
-            e.recipient=p.id; e.turn=s.turn; e.observedTurn=r.observedTurn; e.position=x.position;
-            e.quantity=x.id;
-            e.visitorProfile=x.profile;
-            if (r.kind==VisitorReportKind::Failed) e.severity=GameEventSeverity::Warning;
-            events.push_back(e);
+                : r.kind==VisitorReportKind::Departed ? GameEventKind::VisitorDeparted : GameEventKind::VisitorSighted,
+                std::uint64_t(r.kind));
         }
         std::erase_if(p.pendingVisitorReports,[&](const auto& r){
             return r.deliveryTurn<=s.turn || (r.deliveryTurn==kAwaitingTransmission && r.transmissionFleet

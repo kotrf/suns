@@ -75,13 +75,7 @@ void readVisitors(QDataStream& stream, GameState& s, bool playerTurn)
         if(gReadSaveFormatVersion>=114) {
             quint64 change{}; quint8 changed{}; in >> change >> changed;
             v.courseChangeTurn=change; v.courseChanged=changed;
-            if(changed>1 || (!change && changed) || (change && (change<=arrival || change>=departure
-                || (changed ? change>s.turn : change<=s.turn)))) markCorrupt(in);
-            if(change && !changed) {
-                const auto dt=double(change-s.turn);
-                const Position p{v.position.x+v.velocity.x*dt,v.position.y+v.velocity.y*dt};
-                if(std::abs(p.x)>s.wormholeRules.width/2+1e-6 || std::abs(p.y)>s.wormholeRules.height/2+1e-6) markCorrupt(in);
-            }
+            if(changed>1 || !visitor_course_schedule_valid(s,v)) markCorrupt(in);
         }
         VisitorObservation x{v.id,v.position,v.velocity,std::min(s.turn,v.departureTurn),0,v.departureTurn,false,s.turn>=v.departureTurn,v.profile};
         if(!visitor_observation_valid(x) || v.id>=s.nextVisitorId || !v.arrivalTurn || v.arrivalTurn>s.turn

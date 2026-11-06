@@ -200,6 +200,16 @@ void save_orders_and_private_exports()
     bad=fixture(); bad.state.players[0].visitorKnowledge.push_back(bad.state.players[0].visitorKnowledge[0]);
     assert(write_save_game_file(a,bad,error) && !read_save_game_file(a,loaded,error));
 }
+void invalid_course_schedules_are_rejected()
+{
+    QTemporaryDir dir; const auto path=dir.filePath("invalid-course.suns"); QString error; SaveGameData loaded;
+    for(const auto speed:{1e-20,1e-7}) {
+        auto d=fixture(); auto& v=d.state.visitors[0];
+        v.position={0,0}; v.velocity={speed,0}; v.courseChangeTurn=61;
+        assert(write_save_game_file(path,d,error));
+        assert(!read_save_game_file(path,loaded,error));
+    }
+}
 void invalid_visitor_enums_and_truncated_payloads_are_rejected()
 {
     QTemporaryDir dir; const auto path=dir.filePath("corrupt-visitors.suns"); QString error; SaveGameData loaded;
@@ -261,7 +271,8 @@ struct MainWindowTestAccess {
 }
 int main(int argc,char** argv)
 {
-    QApplication app(argc,argv); invalid_visitor_enums_and_truncated_payloads_are_rejected(); save_orders_and_private_exports();
+    QApplication app(argc,argv); invalid_course_schedules_are_rejected();
+    invalid_visitor_enums_and_truncated_payloads_are_rejected(); save_orders_and_private_exports();
     profiles_round_trip_and_genuine_v112_defaults();
     generated_oblique_path_survives_save_and_continuation();
     turning_path_round_trips_without_leaking_its_schedule();
