@@ -9,7 +9,7 @@ playable. This PR remains a design draft, not a gameplay implementation.
 ## Direction supplied by the user
 
 - Population lives on orbital stations. Destruction of its inhabited station in
-  battle causes very large population losses: this is the central vulnerability.
+  battle kills every native resident still aboard: this is the central vulnerability.
 - Its strength is developed orbital technology and stronger station hulls. Exact
   hull statistics, prices and research prerequisites are still balance work.
 - Mining is exclusively remote, available from the start. The starting economy
@@ -18,9 +18,9 @@ playable. This PR remains a design draft, not a gameplay implementation.
   population; radiation must affect it. This follows the previously discussed
   orbital direction, not an assumption that living in orbit makes radiation safe.
 
-The user's phrase was large losses, not an exact casualty percentage. Stars!
-used total loss; a question about total loss versus survivors is pending. Do not
-silently turn that reference rule into an approved Suns! percentage.
+On 7 November the user explicitly accepted the total-loss rule for residents
+remaining on a destroyed station. Residents physically evacuated beforehand
+remain on their surviving transports; an evacuation order alone is not a rescue.
 
 ## Checked Stars! reference and deliberate Suns! differences
 
@@ -56,9 +56,11 @@ shipyard module is not a battle destruction. Upgrades preserve real residents;
 refits to insufficient housing require an explicit capacity/evacuation rule.
 Already evacuated colonists aboard surviving transports are not station residents.
 
-The exact casualty fraction and fate of survivors remain open. No escape-pod
-fleet, surface colony, emergency migration or automatic rescue is implied.
-Battle evidence and population loss reach HQ through ordinary delivered reports.
+There is no post-explosion survivor pool, escape-pod fleet, surface resettlement
+or automatic rescue. Physical station loss removes its remaining native population
+exactly once; colony-loss/ownership cleanup must not leave a productive empty
+native colony. Battle evidence and population loss reach HQ through ordinary
+delivered reports.
 Hidden combat must not refresh population panels or forecasts early.
 
 ### Exclusively remote mining, including owned orbital colonies
@@ -131,8 +133,11 @@ starting endowments.
 Acceptance must exercise an actual new campaign through first replacement miner
 and second colony, no-miner extraction stopping, owned-orbit mining, identical
 results across temperature/gravity changes, radiation exposure/protection, and
-station destruction versus ordinary refit. Delayed battle reports must preserve
-old HQ knowledge until receipt; local physical loss must occur in the battle year.
+station destruction versus ordinary refit. Assert total loss of the residents
+still aboard, survival of already evacuated colonists on surviving transports,
+and no rescue from an evacuation command still in transit. Delayed battle reports
+must preserve old HQ knowledge until receipt; physical loss occurs in the battle
+year exactly once. Paid hull replacement preserves the actual residents.
 Compare starter output/stocks and native hull upgrades against generalist and
 gate-specialist campaigns. Human and computer players pay the same costs and
 use the same received evidence; no new omniscient planning is introduced.

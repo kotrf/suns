@@ -4,7 +4,7 @@
 
 The user selected the station-dwelling direction, resolving the prior trait
 choice. Stations house the population and their actual destruction in battle
-causes large casualties; stronger orbital technology/hulls provide the upside.
+kills all native residents still aboard; stronger orbital technology/hulls provide the upside.
 Mining is exclusively remote and available from the start. Surface temperature
 and gravity do not affect the native orbital population; radiation does.
 
@@ -12,8 +12,11 @@ The Player's Guide chapter 22 and Technical Reference Guide were checked directl
 The [updated design](asymmetric-empires.md) separates the reference from Suns!
 choices: AR also had innate extraction and retained environmental suitability;
 Suns! uses the user's ship-only mining and radiation-only exposure direction.
-The source's total-loss rule is not assumed from the user's phrase large losses.
-A casualty-fraction/survivor question is pending; numeric balance is not selected.
+The user subsequently explicitly agreed to total loss on 7 November: only
+residents physically evacuated before destruction survive on their surviving
+transports. Pending evacuation intent cannot rescue them. Paid hull replacement
+preserves residents; no escape-pod/survivor mechanism is introduced. The casualty
+question is resolved; hull/economy/radiation numbers remain prototype parameters.
 
 The draft now requires native station-resident identity rather than treating it
 as the existing separate late-game habitat. Actual battle loss is distinct from
@@ -23,9 +26,11 @@ radiation-safe budget. Own-orbit remote mining requires changes to the current
 unowned-only authoring/arrival/extraction guards. Existing bases supply a possible
 orbital radiation/screen model; exact native curves and economy remain proposals.
 
-PR #282 stays a documentation/design draft on the existing feature branch.
-No gameplay is enabled and no current save/race/order layout changes. File links
-and diff checks are the relevant validation; main ea7749f CI is successful.
+The user asked for design review. PR #282's design is prepared for review with
+the agreed casualty rule and acceptance cases. This remains documentation:
+gameplay is not enabled and save/race/order layouts do not change. File links and
+diff checks are the relevant validation; preceding design CI and main ea7749f CI
+are successful. Gameplay implementation is the next separate slice.
 #50 remains open for implementation; #53/#63 and visitor AI staging stay deferred.
 Earlier unresolved trait-selection notes below are historical.
 
