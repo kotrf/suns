@@ -128,6 +128,7 @@ The following are implementation requirements, not changes enabled by this PR:
 
 | Existing path | Required native behavior |
 | --- | --- |
+| `SetFleetColonistsOrder` (`Colonists aboard` final manifest) | Reject for natives before changing fleet cargo, surface population or freight records, for both loading and unloading targets. This order names a surface colony and must not be reinterpreted as a station transfer; use an explicit orbital endpoint instead |
 | `TransferCargoOrder` with colonists and a surface planet endpoint | Reject in either direction, including an owned planet; no surface-to-orbit fallback. Reject the whole exact manifest before moving minerals or people |
 | `TransferCargoOrder` with an explicit orbital population endpoint | Use the actual native resident pool only at an owned, surviving inhabited station; require co-location, real available residents and hull capacity. Keep the endpoint population-only and the exact transfer atomic; reject an absent, destroyed, hostile or full receiver |
 | `UnloadAll` with `Colonists`, or `All` while carrying colonists | Reject for a native fleet before moving any cargo. Use `OrbitalColonists` to unload residents; `All` without colonists and mineral-only transfers keep ordinary stock rules |
@@ -151,6 +152,12 @@ the attacker's normal paid founding rules. Ordinary surface-versus-surface
 invasion and ordinary independent habitats keep their existing behavior.
 Authoring, physical execution, delayed commands and PBEM validation must agree;
 rejection reports reach HQ through ordinary delivery, not hidden-state UI checks.
+The native UI must not offer the surface-only `Colonists aboard` field as a way
+to load or unload residents. Its ordinary cargo planning preview must enforce
+the same rejection as `apply_cargo_order` and host execution. Receiving a validly
+encoded old `SetFleetColonistsOrder` in a PBEM packet does not authorize it for
+this race. Check every population-writing path against the native-housing rule;
+the table is not permission for another route to write native surface residents.
 
 ### Computer-player availability is part of the first slice
 
@@ -192,12 +199,19 @@ Compare starter output/stocks and native hull upgrades against generalist and
 gate-specialist campaigns. Human and computer players pay the same costs and
 use the same received evidence; no new omniscient planning is introduced.
 
-Cargo/ownership acceptance must cover explicit `TransferCargoOrder` and arrival
+Cargo/ownership acceptance must cover `SetFleetColonistsOrder`, explicit
+`TransferCargoOrder` and arrival
 `UnloadAll` with `Colonists`, `All` and `OrbitalColonists` at owned, unowned and
 hostile worlds, including absent/destroyed/full stations, mixed minerals/colonists,
 load-back/evacuation and delayed/PBEM packets. Assert exact conservation or an
 unchanged rejected manifest, no native surface/ordinary-habitat population, no
 unpaid station or ownership change, and no invasion casualties on rejection.
+Exercise `SetFleetColonistsOrder` with final cargo targets both below and above
+the actual aboard count at an owned live station. Assert rejection and unchanged
+ship colonists/minerals, surface and station populations and freight records in
+the current-year planning preview, local execution and a real decoded PBEM
+packet. Verify that explicit orbital transfers still allow unloading and
+evacuation; disabling a surface shortcut must not disable station cargo.
 After destroying a native station, assert unowned status and require a separate
 paid founding operation before either attacker or former owner can settle again.
 

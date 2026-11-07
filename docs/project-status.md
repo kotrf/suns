@@ -1,5 +1,23 @@
 # Project status and development handoff
 
+## #282 repeat review: surface final-manifest bypass — 7 November 2026
+
+Repeat review of 31b809a confirmed both prior P2 corrections and found the
+separate `SetFleetColonistsOrder` path behind `Colonists aboard`. Its current
+`apply_cargo_order` implementation writes surface population directly, and the
+order is decoded from PBEM independently of the transfer/arrival paths.
+
+The [design](asymmetric-empires.md) now rejects native use of that surface order
+for both loading and unloading, including the planning preview and decoded PBEM.
+Acceptance requires unchanged people/minerals/freight and working explicit orbital
+unload/evacuation. Native UI authoring must not offer that surface shortcut.
+The user confirmed that station residents do not need surface landing.
+
+CI 42354006277 on 31b809a succeeded (118/118 reported in repeat review). This new
+revision is documentation only; links/diff are checked, runtime tests not rerun
+locally. Current source and CI are on GitHub. PR #282 awaits repeat design review;
+the actual playable trait remains disabled pending the full first-slice acceptance.
+
 ## #282 review: explicit cargo/ownership and Computer acceptance — 7 November 2026
 
 Both P2 findings on e6758e1 are addressed in the [design](asymmetric-empires.md).
