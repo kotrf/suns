@@ -122,8 +122,12 @@ starting endowments.
 
 For this first slice, native colonists can occupy their own inhabited station or
 their own transports, never `Planet::population` or an ordinary independent
-habitat. Use explicit orbital population endpoints/policies for station cargo;
-do not silently reinterpret the existing surface `Colonists` / `All` policies.
+habitat. On 7 November the user chose to retain the shared `UnloadAll` command
+with `Colonists` / `All`: the receiving population depends on the unloading
+empire's race. Ordinary empires unload onto the surface; native orbital empires
+unload into their own inhabited station. The UI should identify that receiver
+without requiring a separate unloading command. This supersedes the earlier
+proposal to reject those shared unloading policies for natives.
 The following are implementation requirements, not changes enabled by this PR:
 
 | Existing path | Required native behavior |
@@ -131,15 +135,28 @@ The following are implementation requirements, not changes enabled by this PR:
 | `SetFleetColonistsOrder` (`Colonists aboard` final manifest) | Reject for natives before changing fleet cargo, surface population or freight records, for both loading and unloading targets. This order names a surface colony and must not be reinterpreted as a station transfer; use an explicit orbital endpoint instead |
 | `TransferCargoOrder` with colonists and a surface planet endpoint | Reject in either direction, including an owned planet; no surface-to-orbit fallback. Reject the whole exact manifest before moving minerals or people |
 | `TransferCargoOrder` with an explicit orbital population endpoint | Use the actual native resident pool only at an owned, surviving inhabited station; require co-location, real available residents and hull capacity. Keep the endpoint population-only and the exact transfer atomic; reject an absent, destroyed, hostile or full receiver |
-| `UnloadAll` with `Colonists`, or `All` while carrying colonists | Reject for a native fleet before moving any cargo. Use `OrbitalColonists` to unload residents; `All` without colonists and mineral-only transfers keep ordinary stock rules |
-| `UnloadAll` with `OrbitalColonists` | Unload only into that owner's surviving native station, up to free hull capacity; excess remains aboard. An absent, destroyed or hostile station accepts nobody and creates no colony |
+| `UnloadAll` with `Colonists` or `All` | Resolve native colonists to that owner's surviving inhabited station, up to free hull capacity; excess remains aboard. Ordinary empires retain surface unloading. `All` processes minerals by the ordinary stock/ownership rules, independently of how many residents fit |
+| `UnloadAll` with `OrbitalColonists` | For natives, use the same station receiver and capacity checks as shared unloading; this policy is optional, not required for unloading. Ordinary empires retain their independent-habitat receiver |
 | `LoadAllAvailable` with `Colonists` / `OrbitalColonists` | Reject the surface policy for natives; the explicit orbital policy loads real native residents, subject to its reserve and transport capacity |
 | Fleet-to-fleet transfers | Keep ordinary ownership, co-location, cargo capacity and physical conservation checks; they do not establish ownership of a planet |
 
+For native shared unloading, an absent, destroyed or hostile station accepts no
+colonists; they stay aboard. A full station also leaves them aboard, and partial
+capacity transfers only the number that fits. `All` may still unload minerals
+where ordinary mineral unloading is legal; a blocked population leg does not
+discard minerals or make a legal mineral transfer fail. Hostile ownership and
+orbital-control restrictions continue to block transfers that are not legal.
+Neither a successful population transfer nor a mineral-only delivery constructs
+a station or changes ownership. Resolve the native receiver once in shared core
+logic used by authoring/preview, arrival execution and decoded PBEM commands.
+Physical execution rechecks ownership, station survival and capacity on arrival;
+an old waypoint must not fall back to surface population after station loss.
+
 Native fleets cannot conduct ground invasion in this first slice. Both explicit
-hostile `TransferCargoOrder` and arrival unloading must reject before calling
-`invade_colony`, consuming attackers or changing ownership. Add the same guard
-inside invasion resolution so imported/delayed commands cannot bypass it. There
+hostile `TransferCargoOrder` and the population leg of arrival unloading must
+reject before calling `invade_colony`, consuming attackers or changing ownership.
+Add the same guard inside invasion resolution so imported/delayed commands cannot
+bypass it. There
 is no station boarding, conversion of a captured surface colony to native housing,
 or free founding by unloading colonists. A native empire can settle a genuinely
 unowned world only through its paid orbital founding operation with real settlers.
@@ -183,7 +200,7 @@ stand in for a working native computer economy.
 | Mining | Extend task authoring, waypoint arrival and extraction beyond the current unowned-only guard for this race's own orbit; basic miner available from the start |
 | Environment | Exclude surface temperature/gravity; explicit radiation and protection model in core and received UI |
 | Economy/founding | A complete paid capital-to-second-colony loop; explicit orbital output, material stocks and founding payload |
-| Ownership and cargo | Explicit native orbital endpoints, reject surface unloading/invasion, paid founding only; destruction clears native ownership without granting a free enemy colony |
+| Ownership and cargo | Shared unloading resolves native residents to their own station; exact station transfers use orbital endpoints; no native surface population, invasion or unpaid founding |
 | Computer availability | Enable only with the Human and actual Computer startup/expansion acceptance; native population, suitability and mining planning through ordinary received orders |
 | Knowledge and persistence | Ordinary PlayerView/commands/reports, versioned native state, restart, independent race files, host/PBEM round trips and deterministic continuation |
 
@@ -212,6 +229,15 @@ ship colonists/minerals, surface and station populations and freight records in
 the current-year planning preview, local execution and a real decoded PBEM
 packet. Verify that explicit orbital transfers still allow unloading and
 evacuation; disabling a surface shortcut must not disable station cargo.
+For the shared `UnloadAll` command, compare ordinary surface settlement with
+native station unloading for both `Colonists` and `All`. Cover partial/full hull
+capacity and a station destroyed or ownership changed after the waypoint was
+authored. Assert exact population conservation, excess/blocked residents aboard,
+zero native surface residents and no founding or invasion side effects. With
+mixed cargo, check that legal mineral unloading still occurs when all or some
+colonists remain aboard, while hostile/blocked mineral transfers do not occur.
+Run these cases through preview, real arrival execution and decoded PBEM commands;
+expose their actual results to HQ only through ordinary received evidence.
 After destroying a native station, assert unowned status and require a separate
 paid founding operation before either attacker or former owner can settle again.
 

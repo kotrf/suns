@@ -1,5 +1,25 @@
 # Project status and development handoff
 
+## #282 user decision: shared native unloading — 7 November 2026
+
+The user chose to retain `UnloadAll` with `Colonists` / `All` for the orbital
+race (MEM-36). The common command resolves residents to their own surviving
+inhabited station; ordinary empires unload onto the surface. Partial capacity
+leaves excess aboard, and absent/destroyed/hostile/full receivers accept nobody.
+Legal mineral unloading under `All` remains independent of population capacity.
+
+The [design](asymmetric-empires.md) now requires shared receiver validation in
+preview/arrival/PBEM, including loss of the station after authoring, conservation,
+no surface fallback and no free founding/invasion. This supersedes earlier
+rejection of native shared unloading; separate surface-only final-manifest/exact
+transfer commands still require their documented guards. The UI identifies the
+station receiver without requiring a second unload command.
+
+This is a design-only update; the playable trait is not yet enabled. Previous
+source d2cfff8 CI 42359700772 succeeded. Local document links/diff are checked;
+no runtime tests for this revision. Current source/CI are on GitHub, #282 awaits
+repeat design review and #50 remains open for implementation.
+
 ## #282 repeat review: surface final-manifest bypass — 7 November 2026
 
 Repeat review of 31b809a confirmed both prior P2 corrections and found the
