@@ -1,5 +1,11 @@
 # Multiplayer turn exchange
 
+Save v115 preserves the native station-population kernel and its received/pending
+evidence. Older saves retain ordinary populations with empty native state;
+orders remain v49 and portable race files v3. The native civilization is still
+unavailable in campaign setup until its complete start and Computer acceptance
+pass; this format extension does not enable a partially implemented race.
+
 ## Prepare each player's race
 
 Each participant can choose **File → Race designer…** before a campaign exists.

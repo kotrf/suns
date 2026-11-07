@@ -1,6 +1,7 @@
 #include "suns/science_samples.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
+#include "suns/native_orbital.hpp"
 
 #include "suns/communications.hpp"
 #include "suns/equipment.hpp"
@@ -328,6 +329,7 @@ void apply_battle(GameState& state, const SpaceBattleReport& report)
         if(!unit->survivingShips) destroyedStations.insert(station.id);
         else station.damagePercent=std::clamp(100*(1-unit->remainingArmor/station_armor(station)),0.0,99.999999);
     }
+    for (const auto station : destroyedStations) destroy_native_orbital_population(state, station);
     std::erase_if(state.orbitalStations,[&](const auto& s) { return destroyedStations.contains(s.id); });
     std::set<FleetId> destroyed;
     for (auto& fleet : state.fleets) {

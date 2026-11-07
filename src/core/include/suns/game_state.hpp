@@ -697,6 +697,14 @@ struct OrbitalHabitat {
     bool operator==(const OrbitalHabitat&) const = default;
 };
 
+// Native orbital residents belong to one physical station, independently of
+// the ordinary empire's late-game OrbitalHabitat installation.
+struct NativeOrbitalPopulation {
+    OrbitalStationId station{};
+    std::uint64_t population{};
+    bool operator==(const NativeOrbitalPopulation&) const = default;
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -729,6 +737,7 @@ struct Planet {
     // Subsets of industry/mines, not additional buildings or workforce caps.
     std::uint32_t advancedFactories{};
     std::uint32_t advancedMines{};
+    NativeOrbitalPopulation nativeOrbit;
 };
 
 struct OrbitalStation {
@@ -761,6 +770,7 @@ struct HabitatObservation {
     std::optional<ColonyConditions> conditions;
     std::uint32_t advancedFactories{};
     std::uint32_t advancedMines{};
+    NativeOrbitalPopulation nativeOrbit;
 };
 
 struct PendingStationContact {

@@ -1,5 +1,30 @@
 # Project status and development handoff
 
+## #282 merged; #50 native population/cargo foundation — 7 November 2026
+
+Design #282 merged to main 52003e121e00cef66710abf16a799213f1870182 with the
+reviewed d31344e tree d296aee5e07b6153341f32876b16f08b70fc14cb. Source CI
+42360981612 succeeded (118/118 confirmed by review); all three fixed threads
+were resolved under MEM-34. Separate main CI 42364397607 also succeeded. Work
+continues in the existing checkout on codex/orbital-civilization-50.
+
+The first implementation adds station-linked native residents, shared/explicit
+orbital cargo, guarded surface shortcuts, battle-only total loss, refit capacity
+checks and owner-only frozen/pending evidence. Save v115 adds a bounded extension;
+orders v49/race v3 are unchanged. A real pre-change v114 writer/fixture verifies
+migration rather than editing a current file's version header.
+
+This is the population/cargo kernel, not a playable native start. Campaign/race
+setup stays disabled for both Human and Computer until the paid start/founding,
+mining/replacements, native economy/radiation/hull progression and actual Computer
+expansion acceptance pass. Housing limits on existing hulls are provisional;
+no free station or native campaign is introduced by this slice. #50 stays open,
+and frozen work remains separate. GCC 14.2 / Qt 6.12 Debug application and test
+build passed. Final full CTest passed 120/120 in 70.48 s, including native core,
+save/PBEM, genuine v114 migration, ordinary habitats, station defense/invasion and
+existing UI/performance suites. Local file links and git diff checks passed.
+Current PR source/tree and separate GitHub CI are recorded in GitHub.
+
 ## #282 user decision: shared native unloading — 7 November 2026
 
 The user chose to retain `UnloadAll` with `Colonists` / `All` for the orbital

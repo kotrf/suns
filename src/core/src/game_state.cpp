@@ -1514,6 +1514,15 @@ std::optional<PlayerId> known_planet_owner(
         [planetId](const Planet& candidate) { return candidate.id == planetId; });
     if (planetIt == state.planets.end()) return std::nullopt;
     const auto* planet = &*planetIt;
+    if (const auto* empire = find_player(state, player);
+        empire && empire->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
+        for (const auto& k : empire->surveyKnowledge) {
+            if (k.star != planet->star || k.observedOwner != player || !k.planetSnapshot || !k.planetSnapshot->habitat) continue;
+            const auto& h = *k.planetSnapshot->habitat;
+            if (h.nativeOrbit.station && !h.nativeOrbit.population && !h.station
+                && h.stationEvidenceTime % 3 == 1) return PlayerId{0};
+        }
+    }
     if (planet->owner == player) {
         if(const auto* p=find_player(state,player))
             for(const auto& k:p->surveyKnowledge) if(k.star==planet->star && k.observedOwner==player)return player;
@@ -1577,6 +1586,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
             result.habitat->radar=planet->radar;
             result.habitat->advancedFactories=planet->advancedFactories;
             result.habitat->advancedMines=planet->advancedMines;
+            result.habitat->nativeOrbit=planet->nativeOrbit;
             result.habitat->stationEvidenceTime=3*observedTurn+(observedTurn<=state.turn?2:0);
             if(const auto* station=find_orbital_station_at_planet(state,planet->id);station && station->owner==player) result.habitat->station=*station;
             result.resonanceLab = planet->resonanceLab;

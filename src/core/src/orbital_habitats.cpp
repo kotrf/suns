@@ -10,7 +10,7 @@ bool habitat_completed(const Planet& p)
     return p.engineering.kind == PlanetaryEngineeringKind::OrbitalHabitat
         && p.engineering.work == engineering_work(p.engineering.kind);
 }
-std::uint64_t total_colony_population(const Planet& p) { return p.population + p.habitat.population; }
+std::uint64_t total_colony_population(const Planet& p) { return p.population + p.habitat.population + p.nativeOrbit.population; }
 std::int64_t projected_orbital_growth(const Planet& p)
 {
     const auto n = p.habitat.population;
@@ -94,6 +94,7 @@ void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>& incomin
     auto& next=*incoming->habitat;const auto& old=*previous->habitat;
     if(old.stationEvidenceTime>next.stationEvidenceTime) {
         next.station=old.station;next.stationSupported=old.stationSupported;next.stationEvidenceTime=old.stationEvidenceTime;
+        next.nativeOrbit=old.nativeOrbit;
     }
 }
 void apply_received_station_battle(Player& player,const PendingPlayerReport& report)
@@ -107,7 +108,10 @@ void apply_received_station_battle(Player& player,const PendingPlayerReport& rep
             // Merge only delivered battle evidence. Never inspect today's host
             // station or change the population/queue observation date from an older survey.
             h.stationEvidenceTime=time;
-            if(!unit.survivingShips){h.station.reset();h.stationSupported=false;}
+            if(!unit.survivingShips){
+                if (h.nativeOrbit.station == unit.station) h.nativeOrbit.population = 0;
+                h.station.reset();h.stationSupported=false;
+            }
             else h.station->damagePercent=std::clamp(100*(1-unit.remainingArmor/station_armor(*h.station)),0.0,99.999999);
         }
     }
