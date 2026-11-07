@@ -1,5 +1,38 @@
 # Project status and development handoff
 
+## #283 review: asynchronous observation dates — 8 November 2026
+
+Review of 6e448e9 confirmed the earlier loss and simultaneous-unload fixes, then
+reproduced one P2 with a real route: unload at 170 ly in year 2, return to instant
+communications at 145 ly in year 3, receive the station update in year 4. In year
+3 the received subtotal is 20,000 residents/200 kt Ironium while physical assets
+remain 20,500/203. Reading both sources from PlayerView is insufficient to claim
+that their combined values describe one observation date.
+
+Native History now retains the oldest/newest received asset observation year and
+a synchronization flag. Differing or missing dates produce gaps in whole-empire
+population/mineral graphs, with an explanation and report-date tooltip. Colony
+and fleet records remain available. The numeric fields are received subtotals;
+consumers must honor the synchronization flag. No pending reports, hidden truth,
+or realtime forecasting are used to certify totals. Freight remains credited by
+receipt year, and older history boundaries are not rewritten after later receipt.
+
+Save v117 appends bounded provenance metadata to NORB without altering the older
+base History layout. Native pre-v117 rows retain their values with unknown date
+provenance. A genuine v116 fixture was produced by the original 6e448e9 core/save
+writer before layout changes; v114/v115 fixtures and the v107 golden prefix stay
+covered. Orders v49 and portable race v3 remain unchanged. The regression opens
+an exported PBEM turn and checks actual chart summary/hover behavior. Date bounds,
+strict flags, host/PBEM round trips, migration/continuation, older-row retention
+and counterfactual hidden-state changes are covered too.
+
+The UI regression failed on original 6e448e9. Seven focused CTest suites passed
+in 1.22 s; the full GCC 14.2 / Qt 6.12 Debug application/test build and 121/121
+CTest passed in 70.44 s. The screenshot was inspected; all 139 local documentation
+links and git diff checks passed. Previous source CI 42408566484 passed 120/120 in 134.26 s. Current
+source/tree/CI are on GitHub. PR #283 remains for repeat review; #50 is open and
+the race remains unavailable to Human/Computer pending its full playable slice.
+
 ## #283 repeat review: received fleet cargo and freight History — 7 November 2026
 
 Review of 6fad4ca confirmed both earlier P2 fixes; source CI 42375151847 passed

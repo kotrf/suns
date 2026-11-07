@@ -116,6 +116,7 @@ void genuine_v114_has_no_native_residents()
     assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-orbital-v114.suns"), legacy, error));
     assert(legacy.state.planets.front().population > 0);
     for (const auto& planet : legacy.state.planets) assert(planet.nativeOrbit == NativeOrbitalPopulation{});
+    for (const auto& player : legacy.state.players) for (const auto& h : player.history) assert(h.assetTotalsSynchronized);
     const auto next = TurnProcessor{}.process(legacy.state, {});
     const auto expected = legacy.state.planets.front().population
         + projected_population_growth(legacy.state, legacy.state.planets.front(), legacy.state.turn);
@@ -230,6 +231,76 @@ void received_missing_fleet_is_counted_once()
     const auto afterReceipt = empire_turn_statistics(state, 1);
     assert(afterReceipt.fleets == 0 && afterReceipt.population == 10'000);
     assert(same_minerals(afterReceipt.minerals, {100, 100, 100}));
+}
+void asynchronous_cargo_dates_survive_host_and_pbem()
+{
+    auto state = test::asynchronous_native_unload_fixture();
+    QTemporaryDir directory; QString error; SaveGameData loaded, exported;
+    const auto path = directory.filePath("asynchronous.suns");
+    for (int year = 1; year <= 4; ++year) {
+        std::uint64_t physicalPeople = 0; double physicalIronium = 0;
+        for (const auto& p : state.planets) if (p.owner == 1) {
+            physicalPeople += total_colony_population(p); physicalIronium += p.minerals.ironium;
+        }
+        for (const auto& f : state.fleets) if (f.owner == 1) {
+            physicalPeople += f.colonists; physicalIronium += f.minerals.ironium;
+        }
+        assert(physicalPeople == 20'500 && physicalIronium == 203);
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
+        state = loaded.state;
+        assert(write_save_game_file(path, make_player_turn(loaded, 1), error) && read_save_game_file(path, exported, error));
+        const auto& h = exported.state.players.front().history.back();
+        assert(h.assetTotalsSynchronized == (year == 1));
+        assert(h.newestAssetObservation == std::uint64_t(year));
+        if (year == 3) {
+            assert(h.population == 20'000 && h.minerals.ironium == 200 && h.oldestAssetObservation == 1);
+            assert(!h.colonistsDelivered && h.freightDelivered.ironium == 0);
+            assert(exported.state.fleets.front().colonists == 0 && exported.state.planets[1].nativeOrbit.population == 10'000);
+            // Neither hidden truth nor the contents/schedule of undelivered
+            // packets may turn this received subtotal into a certified total.
+            auto altered = state;
+            altered.planets[1].nativeOrbit.population = 1; altered.planets[1].minerals = {};
+            altered.players.front().pendingSurveyReports.clear(); altered.players.front().pendingPlayerReports.clear();
+            const auto same = empire_turn_statistics(altered, 1);
+            assert(!same.assetTotalsSynchronized && same.population == h.population
+                && same.minerals.ironium == h.minerals.ironium && same.oldestAssetObservation == h.oldestAssetObservation);
+        }
+        if (year == 4) {
+            assert(h.population == 20'500 && h.minerals.ironium == 203 && h.oldestAssetObservation == 3);
+            assert(h.colonistsDelivered == 500 && h.freightDelivered.ironium == 3);
+            const auto& old = exported.state.players.front().history[2];
+            assert(old.turn == 3 && !old.assetTotalsSynchronized && old.oldestAssetObservation == 1
+                && old.newestAssetObservation == 3 && !old.colonistsDelivered);
+        } else state = TurnProcessor{}.process(state, {});
+    }
+}
+void history_date_bounds_and_genuine_v116_migration()
+{
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto path = directory.filePath("dates.suns");
+    auto state = test::asynchronous_native_unload_fixture();
+    for (int defect = 0; defect < 3; ++defect) {
+        auto bad = state; auto& h = bad.players.front().history.back();
+        if (defect == 0) h.oldestAssetObservation = h.newestAssetObservation+1;
+        if (defect == 1) { h.assetTotalsSynchronized = false; h.newestAssetObservation = bad.turn+1; }
+        if (defect == 2) h.oldestAssetObservation = 0; // A true flag cannot certify differing dates.
+        assert(write_save_game_file(path, envelope(bad), error) && !read_save_game_file(path, loaded, error));
+    }
+    assert(write_save_game_file(path, envelope(state), error));
+    QFile file(path); assert(file.open(QIODevice::ReadOnly)); auto raw = file.readAll(); file.close();
+    raw[raw.size()-17] = char(2); // Last row's strict boolean, followed by two u64 dates.
+    assert(file.open(QIODevice::WriteOnly) && file.write(raw) == raw.size()); file.close();
+    assert(!read_save_game_file(path, loaded, error));
+    assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-orbital-v116-asynchronous.suns"), loaded, error));
+    assert(loaded.state.turn == 3 && loaded.state.players.front().history.back().population == 20'000);
+    for (const auto& h : loaded.state.players.front().history)
+        assert(!h.assetTotalsSynchronized && !h.oldestAssetObservation && !h.newestAssetObservation);
+    assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, loaded, error));
+    const auto next = TurnProcessor{}.process(loaded.state, {});
+    assert(next.players.front().history.back().population == 20'500);
+    assert(next.players.front().history.back().colonistsDelivered == 500);
+    assert(!next.players.front().history[2].assetTotalsSynchronized);
 }
 GameState battle_fixture(bool stationSnapshot)
 {
@@ -369,6 +440,7 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "asynchronous") { asynchronous_cargo_dates_survive_host_and_pbem(); history_date_bounds_and_genuine_v116_migration(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "freight") { unloading_history_waits_for_received_cargo(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "history") { history_and_pbem_wait_for_station_loss_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "first-snapshot") { destruction_before_first_snapshot_survives_reload(); return 0; }
@@ -378,6 +450,8 @@ int main(int argc, char** argv)
     genuine_v114_has_no_native_residents();
     unloading_history_waits_for_received_cargo();
     received_missing_fleet_is_counted_once();
+    asynchronous_cargo_dates_survive_host_and_pbem();
+    history_date_bounds_and_genuine_v116_migration();
     history_and_pbem_wait_for_station_loss_receipt();
     destruction_before_first_snapshot_survives_reload();
     destruction_identity_is_monotonic_and_does_not_kill_a_replacement();

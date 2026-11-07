@@ -1,12 +1,15 @@
 # Multiplayer turn exchange
 
-Save v116 preserves the native station-population kernel, its received/pending
+Save v117 preserves the native station-population kernel, its received/pending
 evidence and independently received station destruction. Native colony history
 uses delivered colony state and fleet holds, so loss cannot leak through graphs
 or PBEM exports before its report. Native freight totals are credited in the
-manifest's receiving year; delayed unloading preserves the received combined
-station/transport totals through host reload and player-turn export.
-v114/v115 files migrate without losing their known populations;
+manifest's receiving year. Population/mineral sums from observations made in
+different years are marked unsynchronized, persisted through host reload and
+player-turn export, and shown as gaps in the empire graphs. Inspect individual
+colony/fleet history for its received values. v114/v115/v116 files migrate without
+losing known populations; older native History lacks date provenance and does
+not gain an invented exact total during migration.
 orders remain v49 and portable race files v3. The native civilization is still
 unavailable in campaign setup until its complete start and Computer acceptance
 pass; this format extension does not enable a partially implemented race.

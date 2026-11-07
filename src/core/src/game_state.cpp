@@ -1914,11 +1914,36 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     // combine the old station stock with an already emptied physical hold.
     // This runs at history boundaries, never in a realtime UI prediction.
     const auto* empire = find_player(state, playerId);
-    const auto received = empire && empire->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization && !state.mediumObserver
+    const bool native = empire && empire->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization;
+    const auto received = native && !state.mediumObserver
         ? std::optional<PlayerView>(make_player_view(state, playerId)) : std::nullopt;
     const auto& colonies = received ? received->state : state;
+    const auto* knowledge = find_player(colonies, playerId);
+    bool datedAsset = false;
+    const auto observeAsset = [&](std::uint64_t observed) {
+        if (!native) return;
+        if (observed > state.turn) observed = 0;
+        if (!datedAsset) {
+            result.oldestAssetObservation = result.newestAssetObservation = observed;
+            datedAsset = true;
+        } else {
+            result.oldestAssetObservation = std::min(result.oldestAssetObservation, observed);
+            result.newestAssetObservation = std::max(result.newestAssetObservation, observed);
+        }
+        result.assetTotalsSynchronized = result.oldestAssetObservation != 0
+            && result.oldestAssetObservation == result.newestAssetObservation;
+    };
     for (const auto& planet : colonies.planets) {
         if (planet.owner != playerId) continue;
+        if (native) {
+            std::uint64_t observed{};
+            if (knowledge) for (const auto& record : knowledge->surveyKnowledge)
+                if (record.star == planet.star && record.observedOwner == playerId
+                    && record.planetSnapshot && record.planetSnapshot->habitat) {
+                    observed = record.observedTurn; break;
+                }
+            observeAsset(observed);
+        }
         result.colonyHistory.push_back({planet.id, total_colony_population(planet), planet.industry,
             planet.mines, colony_output(colonies, planet), planet.minerals});
         ++result.colonies;
@@ -1950,6 +1975,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         const auto fleet = received ? source : pendingTransit || undeliveredBattle
             || source.outpost == OutpostKind::OrbitalShipyard || source.telemetry.outpost == OutpostKind::OrbitalShipyard
             ? fleet_player_view(state, source) : source;
+        observeAsset(fleet.telemetry.observedTurn);
         ++result.fleets;
         result.population += fleet.colonists;
         result.ships += fleet_ship_count(fleet);

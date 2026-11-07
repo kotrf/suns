@@ -31,4 +31,32 @@ inline GameState native_orbital_fixture()
     set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
     return state;
 }
+inline GameState asynchronous_native_unload_fixture()
+{
+    auto state = native_orbital_fixture();
+    state.planets.front().minerals = {100, 100, 100};
+    auto remote = state.planets.front();
+    remote.id = state.planets[1].id; remote.star = state.stars[1].id;
+    remote.homeworld = false; remote.radar = PlanetaryRadarLevel::None;
+    auto station = state.orbitalStations.front();
+    station.id = state.nextOrbitalStationId++; station.planet = remote.id;
+    remote.nativeOrbit.station = station.id;
+    state.orbitalStations.push_back(station);
+    state.planets[1] = remote;
+    state.stars[1].position = {170, 0};
+    auto& fleet = state.fleets.front();
+    fleet.position = state.stars[1].position; fleet.destination = fleet.position; fleet.warp = 5;
+    fleet.arrivalAction = {FleetArrivalActionKind::UnloadAll, 0, FleetCargoKind::All};
+    fleet.waypointQueue = {{{145, 0}, 5, {}}};
+    fleet.telemetry.position = fleet.position; fleet.telemetry.destination = fleet.destination;
+    fleet.telemetry.warp = fleet.warp; fleet.telemetry.arrivalAction = fleet.arrivalAction;
+    fleet.telemetry.waypointQueue = fleet.waypointQueue;
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    set_survey_level(state, 1, remote.star, SurveyLevel::DeepSurvey, state.turn);
+    state.players.front().history.clear();
+    record_empire_turn_statistics(state);
+    assert(communication_delay_turns(state, 1, {170, 0}) == 2);
+    assert(communication_delay_turns(state, 1, {145, 0}) == 0);
+    return state;
+}
 }

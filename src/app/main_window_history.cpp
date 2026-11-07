@@ -90,6 +90,14 @@ protected:
         }
         const QRectF plot = plotRect(legendY);
         if (plot.width() < 1 || plot.height() < 1) return;
+        const bool anyValues = std::any_of(series_.begin(), series_.end(), [](const auto& s) {
+            return std::any_of(s.values.begin(), s.values.end(), [](double v) { return std::isfinite(v); });
+        });
+        if (!anyValues) {
+            painter.setPen(QColor("#9fb0c0"));
+            painter.drawText(plot, Qt::AlignCenter, "No comparable records for these years.\nHover over a year for details.");
+            return;
+        }
         double maximum = 1.0;
         for (const auto& series : series_)
             for (const double value : series.values)
@@ -484,6 +492,10 @@ void MainWindow::refreshEmpireHistory()
         shown.push_back(&snapshot);
         turns.push_back(snapshot.turn);
     }
+    if ((metric == 0 || metric == 3) && (colonyId == 0 || (comparing && compareColonyId == 0))
+        && std::any_of(shown.begin(), shown.end(), [](const auto* s) { return !s->assetTotalsSynchronized; }))
+        historySummary_->setText(historySummary_->text()
+            + " — Reports from different years or missing dates: gaps in empire totals; inspect colony/fleet records");
 
     QVector<HistorySeries> series;
     const auto appendMetric = [&](PlanetId seriesColonyId, const QString& seriesLabel, bool dashed) {
@@ -496,6 +508,14 @@ void MainWindow::refreshEmpireHistory()
                              std::function<QString(const EmpireTurnStatistics&)> exact = {}) {
             HistorySeries line{named(std::move(name)), std::move(color), {}, {}, dashed};
             for (const auto* snapshot : shown) {
+                if ((metric == 0 || metric == 3) && !snapshot->assetTotalsSynchronized) {
+                    line.values.push_back(std::numeric_limits<double>::quiet_NaN());
+                    line.exactValues.push_back(snapshot->oldestAssetObservation
+                        ? QString("No synchronized total (reports observed in years %1–%2)")
+                            .arg(qulonglong(snapshot->oldestAssetObservation)).arg(qulonglong(snapshot->newestAssetObservation))
+                        : QString("No synchronized total (observation dates unavailable)"));
+                    continue;
+                }
                 if (historyMetric_->currentIndex() == 8 && !snapshot->extractionRecorded) {
                     line.values.push_back(std::numeric_limits<double>::quiet_NaN());
                     line.exactValues.push_back("No extraction record");

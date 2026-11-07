@@ -1,5 +1,6 @@
 // v115: native station residents and their received/pending owner evidence.
 // v116: independent delivered station-destruction identities/times.
+// v117: received asset observation ranges for comparable History totals.
 constexpr quint32 kNativeOrbitalMagic = 0x4e4f5242u; // NORB
 void writeNativePopulation(QDataStream& out, const NativeOrbitalPopulation& value)
 {
@@ -60,6 +61,13 @@ void writeNativeOrbit(QDataStream& stream, const GameState& state)
         for (const auto& fact : player.stationDestructions)
             out << quint32(fact.station) << quint32(fact.planet) << quint64(fact.observedTurn);
     }
+    out << quint32(state.players.size());
+    for (const auto& player : state.players) {
+        out << quint32(player.id) << quint32(player.history.size());
+        for (const auto& h : player.history)
+            out << quint64(h.turn) << quint8(h.assetTotalsSynchronized)
+                << quint64(h.oldestAssetObservation) << quint64(h.newestAssetObservation);
+    }
     if (out.status() != QDataStream::Ok || payload.size() > 32*1024*1024) { stream.setStatus(QDataStream::WriteFailed); return; }
     stream << kNativeOrbitalMagic << quint32(payload.size());
     stream.writeRawData(payload.data(), int(payload.size()));
@@ -119,6 +127,26 @@ void readNativeOrbit(QDataStream& stream, GameState& state)
             const auto* planet = find_planet_at_star(state, record.star);
             remember_station_destruction(player, {h.nativeOrbit.station, planet ? planet->id : 0, h.stationEvidenceTime/3});
         }
+    }
+    if (gReadSaveFormatVersion >= 117) {
+        if (!readCount(in, count) || count != state.players.size()) { markCorrupt(stream); return; }
+        for (auto& player : state.players) {
+            in >> id;
+            if (id != player.id || !readCount(in, count) || count != player.history.size()) { markCorrupt(stream); return; }
+            for (auto& h : player.history) {
+                quint64 turn{}, oldest{}, newest{}; quint8 synchronized{};
+                in >> turn >> synchronized >> oldest >> newest;
+                if (turn != h.turn || synchronized > 1 || oldest > newest || newest > h.turn
+                    || (synchronized && oldest != newest)) { markCorrupt(stream); return; }
+                h.assetTotalsSynchronized = synchronized;
+                h.oldestAssetObservation = oldest; h.newestAssetObservation = newest;
+            }
+        }
+    } else {
+        // Older native rows have no provenance for their combined cargo sum.
+        // Do not retroactively certify an asynchronous subtotal as exact.
+        for (auto& player : state.players) if (player.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization)
+            for (auto& h : player.history) h.assetTotalsSynchronized = false;
     }
     if (in.status() != QDataStream::Ok || !in.atEnd()) { markCorrupt(stream); return; }
     for (auto& player : state.players) for (auto& record : player.surveyKnowledge)

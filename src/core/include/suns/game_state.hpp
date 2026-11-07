@@ -1231,6 +1231,11 @@ struct EmpireTurnStatistics {
     SpaceBattleTurnStatistics battles;
     bool battleStatisticsRecorded{}; // Initial and pre-v63 boundaries are unknown.
     std::array<OperationalLossTurnStatistics, kOperationalLossKindCount> operationalLosses;
+    // Population/mineral sums from native received assets are comparable only
+    // when their observation years agree. Values remain received subtotals;
+    // false means they must not be plotted/presented as an exact empire total.
+    bool assetTotalsSynchronized{true};
+    std::uint64_t oldestAssetObservation{}, newestAssetObservation{};
 };
 
 enum class WormholeSignature : std::uint8_t { Strong, Faint, Weak };

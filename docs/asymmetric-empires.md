@@ -26,9 +26,15 @@ native population separately. Delivered destruction is retained by station ID
 and observation time independently of any cached fit, so a later pre-battle
 snapshot cannot resurrect a station HQ had never seen. Native colony rows in
 History use the same received view as the planet panel. Fleet holds and missing
-contacts also come from that view, so a delayed unload does not combine an old
-station stock with the transport's already emptied physical hold or count a
-missing contact twice. Native freight is credited from the delivered manifest
+contacts also come from that view, with missing contacts counted once. These
+received observations can still have different dates: a returning transport can
+report its empty hold before the destination reports the unloaded residents.
+History retains the observation-year range. If dates differ or are missing,
+empire population and mineral-stock graphs show a gap and explain that no
+synchronized total is available. The stored sum remains a received subtotal,
+not an exact empire total; individual colony/fleet records remain available.
+This check uses only received evidence, never pending packets or physical truth.
+Native freight is credited from the delivered manifest
 in its receiving year, including reports already due when a host save resumes.
 Earlier observation years are not rewritten, and refreshing the boundary retains
 its already measured freight.
@@ -36,7 +42,10 @@ its already measured freight.
 Save v115 introduced bounded native population and observation records; v116
 adds the delivered destruction ledger. Real v114 files migrate with no native
 population, and real v115 files preserve population/queued evidence and migrate
-already received native tombstones. Orders v49 and portable race v3 are
+already received native tombstones. Save v117 adds bounded History date metadata;
+native rows from older versions have unavailable date provenance and are not
+retroactively certified as synchronized. Genuine v116 migration is covered too.
+Orders v49 and portable race v3 are
 unchanged. Core/save/PBEM tests use deliberately constructed native states;
 this does **not** satisfy the later new-campaign/Computer acceptance below.
 
@@ -290,7 +299,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v116 / orders v49 / portable race v3. The native
+Current game formats are save v117 / orders v49 / portable race v3. The native
 population foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.
