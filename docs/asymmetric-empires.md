@@ -118,6 +118,55 @@ slots, startup output, growth and upkeep are recorded together in the first
 implementation PR. Existing habitat values are references, not automatic native
 starting endowments.
 
+### Cargo, landing and ownership
+
+For this first slice, native colonists can occupy their own inhabited station or
+their own transports, never `Planet::population` or an ordinary independent
+habitat. Use explicit orbital population endpoints/policies for station cargo;
+do not silently reinterpret the existing surface `Colonists` / `All` policies.
+The following are implementation requirements, not changes enabled by this PR:
+
+| Existing path | Required native behavior |
+| --- | --- |
+| `TransferCargoOrder` with colonists and a surface planet endpoint | Reject in either direction, including an owned planet; no surface-to-orbit fallback. Reject the whole exact manifest before moving minerals or people |
+| `TransferCargoOrder` with an explicit orbital population endpoint | Use the actual native resident pool only at an owned, surviving inhabited station; require co-location, real available residents and hull capacity. Keep the endpoint population-only and the exact transfer atomic; reject an absent, destroyed, hostile or full receiver |
+| `UnloadAll` with `Colonists`, or `All` while carrying colonists | Reject for a native fleet before moving any cargo. Use `OrbitalColonists` to unload residents; `All` without colonists and mineral-only transfers keep ordinary stock rules |
+| `UnloadAll` with `OrbitalColonists` | Unload only into that owner's surviving native station, up to free hull capacity; excess remains aboard. An absent, destroyed or hostile station accepts nobody and creates no colony |
+| `LoadAllAvailable` with `Colonists` / `OrbitalColonists` | Reject the surface policy for natives; the explicit orbital policy loads real native residents, subject to its reserve and transport capacity |
+| Fleet-to-fleet transfers | Keep ordinary ownership, co-location, cargo capacity and physical conservation checks; they do not establish ownership of a planet |
+
+Native fleets cannot conduct ground invasion in this first slice. Both explicit
+hostile `TransferCargoOrder` and arrival unloading must reject before calling
+`invade_colony`, consuming attackers or changing ownership. Add the same guard
+inside invasion resolution so imported/delayed commands cannot bypass it. There
+is no station boarding, conversion of a captured surface colony to native housing,
+or free founding by unloading colonists. A native empire can settle a genuinely
+unowned world only through its paid orbital founding operation with real settlers.
+
+Conversely, a surviving hostile native station continues to block enemy landing.
+Its actual battle destruction kills its remaining residents and clears the native
+colony's `Planet::owner` to unowned, with ordinary colony-loss cleanup. It does
+not award the attacker a station or a populated colony. A later settlement uses
+the attacker's normal paid founding rules. Ordinary surface-versus-surface
+invasion and ordinary independent habitats keep their existing behavior.
+Authoring, physical execution, delayed commands and PBEM validation must agree;
+rejection reports reach HQ through ordinary delivery, not hidden-state UI checks.
+
+### Computer-player availability is part of the first slice
+
+Support for `PlayerController::Computer` is included. Do not enable the trait for
+either controller until both Human and Computer acceptance below passes; a shared
+trait whitelist in `generate_campaign` alone is not sufficient. Apply that gate
+consistently in setup, imported race validation, campaign creation and restart.
+
+The computer planner must source settlers from received native station residents,
+evaluate known orbital radiation/protection rather than surface Hab, and budget
+remote miners, replacements, paid founding and support instead of surface mines.
+It must issue ordinary design/build, cargo, movement, mining and founding orders
+from its received `PlayerView`, with the same costs and communication delays.
+No pre-scripted free colony, direct host mutation or omniscient target choice can
+stand in for a working native computer economy.
+
 ## Implementation map and acceptance
 
 | Area | Existing support / required addition |
@@ -127,8 +176,9 @@ starting endowments.
 | Mining | Extend task authoring, waypoint arrival and extraction beyond the current unowned-only guard for this race's own orbit; basic miner available from the start |
 | Environment | Exclude surface temperature/gravity; explicit radiation and protection model in core and received UI |
 | Economy/founding | A complete paid capital-to-second-colony loop; explicit orbital output, material stocks and founding payload |
-| Ownership and cargo | Real colonists, hull capacity, capture and evacuation rules; no implicit transfer between surface, station and transports |
-| Knowledge, AI and persistence | Ordinary PlayerView/commands/reports, versioned native state, restart, independent race files, host/PBEM round trips and deterministic continuation |
+| Ownership and cargo | Explicit native orbital endpoints, reject surface unloading/invasion, paid founding only; destruction clears native ownership without granting a free enemy colony |
+| Computer availability | Enable only with the Human and actual Computer startup/expansion acceptance; native population, suitability and mining planning through ordinary received orders |
+| Knowledge and persistence | Ordinary PlayerView/commands/reports, versioned native state, restart, independent race files, host/PBEM round trips and deterministic continuation |
 
 Acceptance must exercise an actual new campaign through first replacement miner
 and second colony, no-miner extraction stopping, owned-orbit mining, identical
@@ -141,6 +191,25 @@ year exactly once. Paid hull replacement preserves the actual residents.
 Compare starter output/stocks and native hull upgrades against generalist and
 gate-specialist campaigns. Human and computer players pay the same costs and
 use the same received evidence; no new omniscient planning is introduced.
+
+Cargo/ownership acceptance must cover explicit `TransferCargoOrder` and arrival
+`UnloadAll` with `Colonists`, `All` and `OrbitalColonists` at owned, unowned and
+hostile worlds, including absent/destroyed/full stations, mixed minerals/colonists,
+load-back/evacuation and delayed/PBEM packets. Assert exact conservation or an
+unchanged rejected manifest, no native surface/ordinary-habitat population, no
+unpaid station or ownership change, and no invasion casualties on rejection.
+After destroying a native station, assert unowned status and require a separate
+paid founding operation before either attacker or former owner can settle again.
+
+Run a real new campaign with a Computer-controlled native empire through working
+starting-miner extraction, construction of a replacement miner, station-to-ship
+settler loading and paid founding of a second working native station. Drive every
+turn through the normal computer planner and turn processor; a manually injected
+order sequence is not this acceptance test. Assert real production/mineral/fuel/
+support spending, zero surface population/mines, no extraction without a miner, and
+expansion using received orbital suitability despite adverse surface temperature/
+gravity. Include delayed/stale reports and deterministic save/reload continuation;
+the planner may not spend missing physical stocks or act on hidden changes.
 
 Current game formats remain save v114 / orders v49 / portable race v3. The eventual
 implementation must decide the native-state extension/version explicitly.

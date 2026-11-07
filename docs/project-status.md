@@ -1,5 +1,26 @@
 # Project status and development handoff
 
+## #282 review: explicit cargo/ownership and Computer acceptance — 7 November 2026
+
+Both P2 findings on e6758e1 are addressed in the [design](asymmetric-empires.md).
+Native surface cargo and invasion paths explicitly reject without partial cargo,
+casualties or ownership changes; explicit own-station orbital transfers conserve
+residents and enforce hull capacity. Station destruction clears native ownership;
+neither invasion nor unloading supplies a free orbital founding operation.
+
+Computer support is in the first playable slice, with trait availability for both
+controllers gated on a real Computer campaign through extraction, replacement
+miner construction and a second paid station via ordinary orders and received
+knowledge. The design names the current surface-population/Hab/mine planner gaps
+and adds delayed/PBEM and cargo/ownership acceptance. These are proposed first-slice
+implementation rules; the user's agreed battle-loss/refit rule is unchanged.
+
+Source e6758e1 CI 42300323444 succeeded (118/118 reported by review). This revision
+changes documentation only; local links/diff are checked, no new runtime tests.
+Current source/tree/CI are recorded in GitHub. PR #282 awaits another design
+review; #50 remains open for gameplay implementation. Earlier readiness entries
+below predate these findings.
+
 ## #50 selected: AR-inspired Orbital Civilization — 7 November 2026
 
 The user selected the station-dwelling direction, resolving the prior trait
