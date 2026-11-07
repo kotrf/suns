@@ -31,6 +31,7 @@ add_library(suns_core
     src/interstellar_medium.cpp
     src/terraforming.cpp
     src/orbital_habitats.cpp
+    src/native_orbital.cpp
     src/planetary_engineering.cpp
     src/propulsion.cpp
     src/scanners.cpp

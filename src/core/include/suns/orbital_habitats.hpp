@@ -19,5 +19,6 @@ inline constexpr std::uint8_t kHabitatReserveYears = 3;
 std::uint32_t service_orbital_habitat(const GameState&, Planet&, bool supported);
 void publish_habitat_reports(GameState&, const GameState& previous);
 void apply_received_station_battle(Player&,const PendingPlayerReport&);
-void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>&,const std::optional<PlanetSurveySnapshot>&);
+void remember_station_destruction(Player&, StationDestructionObservation);
+void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>&,const std::optional<PlanetSurveySnapshot>&,const Player&);
 }

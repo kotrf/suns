@@ -213,6 +213,20 @@ void delivered_battle_evidence_survives_late_survey_delivery()
     apply_received_station_battle(s.players[0],battle);
     assert(make_player_view(s,1).state.orbitalStations.size()==1);
 }
+void destruction_before_first_fit_keeps_ordinary_habitat_residents()
+{
+    auto state=fixture();finish(state);state.planets[0].habitat.population=200000;
+    auto incoming=capture_planet_survey(state,1,1,SurveyLevel::DeepSurvey,state.turn);
+    auto& player=state.players[0];player.surveyKnowledge.clear();
+    PendingPlayerReport battle;battle.observedTurn=state.turn+1;battle.planet=1;battle.battle.emplace();
+    SpaceBattleUnit unit;unit.owner=1;unit.station=state.orbitalStations[0].id;unit.initialShips=1;
+    battle.battle->units.push_back(unit);
+    apply_received_station_battle(player,battle);
+    assert(player.stationDestructions.size()==1);
+    merge_received_habitat_station(incoming,std::nullopt,player);
+    assert(incoming->habitat->habitat.population==200000);
+    assert(!incoming->habitat->station && !incoming->habitat->stationSupported);
+}
 void computer_builds_seeds_and_pays_through_ordinary_orders()
 {
     auto s=fixture();auto& player=s.players[0];player.controller=PlayerController::Computer;player.race.radiationImmune=true;
@@ -283,6 +297,7 @@ int main()
     annual_helpers_match_mining_before_maintenance();
     cargo_is_atomic_and_routes_can_evacuate_without_station();received_evidence_and_ai_are_not_host_truth();
     delivered_battle_evidence_survives_late_survey_delivery();
+    destruction_before_first_fit_keeps_ordinary_habitat_residents();
     computer_builds_seeds_and_pays_through_ordinary_orders();
     surface_bombardment_preserves_orbital_colony();
     orbital_only_colony_is_a_real_defender_and_capture_preserves_shell();

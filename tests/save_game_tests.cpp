@@ -231,7 +231,9 @@ void round_trip_preserves_communications_and_planning()
         ResearchField::Construction,
     };
     original.state.players.front().technology.researchAllocationPercent = 35;
-    original.state.players.front().race.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
+    // Keep this broad surface-state fixture on an unimplemented reserved ID.
+    // Native orbital identity now has housing invariants covered separately.
+    original.state.players.front().race.primaryTrait = PrimaryRaceTrait::RemoteLogisticsSpecialist;
     original.state.players.front().race.radiationTolerance = 0.91;
     original.state.players.front().race.radiationImmune = true;
     original.state.players.front().race.habitableTemperature = {18, 64};
@@ -499,7 +501,7 @@ void round_trip_preserves_communications_and_planning()
     assert(technology.queuedFocuses[0] == ResearchField::Propulsion);
     assert(technology.queuedFocuses[1] == ResearchField::Construction);
     assert(technology.researchAllocationPercent == 35);
-    assert(loaded.state.players.front().race.primaryTrait == PrimaryRaceTrait::HabitatCivilization);
+    assert(loaded.state.players.front().race.primaryTrait == PrimaryRaceTrait::RemoteLogisticsSpecialist);
     assert(loaded.state.players.front().race.radiationTolerance == 0.91);
     assert(loaded.state.players.front().race.radiationImmune);
     assert(loaded.state.players.front().race.habitableTemperature.minimum == 18);

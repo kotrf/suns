@@ -697,6 +697,14 @@ struct OrbitalHabitat {
     bool operator==(const OrbitalHabitat&) const = default;
 };
 
+// Native orbital residents belong to one physical station, independently of
+// the ordinary empire's late-game OrbitalHabitat installation.
+struct NativeOrbitalPopulation {
+    OrbitalStationId station{};
+    std::uint64_t population{};
+    bool operator==(const NativeOrbitalPopulation&) const = default;
+};
+
 struct Planet {
     PlanetId id{};
     StarId star{};
@@ -729,6 +737,7 @@ struct Planet {
     // Subsets of industry/mines, not additional buildings or workforce caps.
     std::uint32_t advancedFactories{};
     std::uint32_t advancedMines{};
+    NativeOrbitalPopulation nativeOrbit;
 };
 
 struct OrbitalStation {
@@ -761,6 +770,7 @@ struct HabitatObservation {
     std::optional<ColonyConditions> conditions;
     std::uint32_t advancedFactories{};
     std::uint32_t advancedMines{};
+    NativeOrbitalPopulation nativeOrbit;
 };
 
 struct PendingStationContact {
@@ -1371,6 +1381,15 @@ struct TransportLineReceipt {
     FleetId destinationFleet{}; // Exactly one of planet/destinationFleet identifies the receiver.
 };
 
+// A received fact, independent of whether HQ has seen a station's first fit.
+// Station IDs are never reused. Planet may be unknown in older battle reports.
+struct StationDestructionObservation {
+    OrbitalStationId station{};
+    PlanetId planet{};
+    std::uint64_t observedTurn{};
+    bool operator==(const StationDestructionObservation&) const = default;
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -1417,6 +1436,7 @@ struct Player {
     std::vector<ObjectObservation> objectKnowledge;
     std::vector<MediumObservation> mediumKnowledge;
     std::vector<std::uint64_t> receivedScientificData; // Sorted durable delivery receipts.
+    std::vector<StationDestructionObservation> stationDestructions; // Sorted by station ID; delivered only.
 };
 
 enum class FleetRole {

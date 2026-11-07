@@ -348,6 +348,7 @@ void resolve_bombardments(GameState& state, std::uint64_t turn)
             }
             if (!total_colony_population(planet)) {
                 queue_player_report(state, defender, PlayerReportKind::ColonyLost, star->position, turn, star->id, planet.id);
+                planet.nativeOrbit = {}; // Empty-colony cleanup also removes the housing link.
                 planet.owner = 0;
                 planet.radar = PlanetaryRadarLevel::None;
                 planet.homeworld = false;

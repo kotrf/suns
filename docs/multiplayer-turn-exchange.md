@@ -1,5 +1,13 @@
 # Multiplayer turn exchange
 
+Save v116 preserves the native station-population kernel, its received/pending
+evidence and independently received station destruction. Native colony history
+uses delivered colony state, so loss cannot leak through graphs or PBEM exports
+before its report. v114/v115 files migrate without losing their known populations;
+orders remain v49 and portable race files v3. The native civilization is still
+unavailable in campaign setup until its complete start and Computer acceptance
+pass; this format extension does not enable a partially implemented race.
+
 ## Prepare each player's race
 
 Each participant can choose **File → Race designer…** before a campaign exists.
