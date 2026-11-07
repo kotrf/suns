@@ -22,11 +22,16 @@ Shared `UnloadAll` handles partial native station unloading and independent
 mineral delivery. Explicit station transfers/evacuation conserve residents;
 surface exact/final-manifest orders and ordinary surface founding/invasion cannot
 bypass the native housing requirement. Received and pending owner snapshots carry
-native population separately. A delivered station destruction supersedes older
-station evidence without early disclosure of hidden loss.
+native population separately. Delivered destruction is retained by station ID
+and observation time independently of any cached fit, so a later pre-battle
+snapshot cannot resurrect a station HQ had never seen. Native colony rows in
+History use the same received view as the planet panel: colony counts, residents,
+stocks and output change on receipt, without rewriting older graph rows.
 
-Save v115 appends bounded native population and observation records; real v114
-files migrate with no native population. Orders v49 and portable race v3 are
+Save v115 introduced bounded native population and observation records; v116
+adds the delivered destruction ledger. Real v114 files migrate with no native
+population, and real v115 files preserve population/queued evidence and migrate
+already received native tombstones. Orders v49 and portable race v3 are
 unchanged. Core/save/PBEM tests use deliberately constructed native states;
 this does **not** satisfy the later new-campaign/Computer acceptance below.
 
@@ -280,7 +285,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v115 / orders v49 / portable race v3. The native
+Current game formats are save v116 / orders v49 / portable race v3. The native
 population foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

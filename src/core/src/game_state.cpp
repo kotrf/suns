@@ -1908,15 +1908,23 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     EmpireTurnStatistics result;
     result.turn = state.turn;
 
-    for (const auto& planet : state.planets) {
+    // Native colonies disappear physically with their station, but that is
+    // not a new HQ observation until its report arrives. Reuse the canonical
+    // received view for every colony asset column, not just displayed people.
+    // This runs at history boundaries, never in a realtime UI prediction.
+    const auto* empire = find_player(state, playerId);
+    const auto received = empire && empire->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization && !state.mediumObserver
+        ? std::optional<PlayerView>(make_player_view(state, playerId)) : std::nullopt;
+    const auto& colonies = received ? received->state : state;
+    for (const auto& planet : colonies.planets) {
         if (planet.owner != playerId) continue;
         result.colonyHistory.push_back({planet.id, total_colony_population(planet), planet.industry,
-            planet.mines, colony_output(state, planet), planet.minerals});
+            planet.mines, colony_output(colonies, planet), planet.minerals});
         ++result.colonies;
         result.population += total_colony_population(planet);
         result.factories += planet.industry;
         result.mines += planet.mines;
-        result.productionOutput += colony_output(state, planet);
+        result.productionOutput += colony_output(colonies, planet);
         result.minerals.ironium += planet.minerals.ironium;
         result.minerals.boranium += planet.minerals.boranium;
         result.minerals.germanium += planet.minerals.germanium;

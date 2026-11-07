@@ -2,6 +2,7 @@
 #include "native_orbital_fixture.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/orbital_habitats.hpp"
+#include "suns/combat.hpp"
 #include <QFile>
 #include <QTemporaryDir>
 #include <algorithm>
@@ -114,11 +115,152 @@ void genuine_v114_has_no_native_residents()
         + projected_population_growth(legacy.state, legacy.state.planets.front(), legacy.state.turn);
     assert(next.planets.front().population == expected && next.planets.front().owner == 1);
 }
-}
-int main()
+GameState battle_fixture(bool stationSnapshot)
 {
+    auto state = test::native_orbital_fixture();
+    auto& transport = state.fleets.front();
+    transport.position = {-1000, -1000};
+    transport.telemetry = confirmed_fleet_telemetry(state, transport);
+    state.players.push_back({2, "Attacker"});
+    state.shipDesigns.push_back({10, 2, "Attacker", ShipHullType::Destroyer,
+        {ShipComponentType::FuelMizer, ShipComponentType::AntiMatterPulverizer, ShipComponentType::Jammer50}});
+    state.nextShipDesignId = 11;
+    Fleet attacker; attacker.id = state.nextFleetId++; attacker.owner = 2;
+    attacker.design = 10; attacker.ships = {{10, 100}}; attacker.position = state.stars.front().position;
+    attacker.fuel = fleet_fuel_capacity(state, attacker);
+    attacker.telemetry = confirmed_fleet_telemetry(state, attacker);
+    state.fleets.push_back(attacker);
+    if (!stationSnapshot) {
+        queue_survey_report(state, 1, 1, 0, state.stars.front().position, state.turn+1, SurveyLevel::DeepSurvey);
+        state.players.front().pendingSurveyReports.back().deliveryTurn = state.turn+3;
+        state.players.front().surveyKnowledge.front().planetSnapshot->habitat.reset();
+    }
+    for (auto& player : state.players) player.history.clear();
+    record_empire_turn_statistics(state);
+    return state;
+}
+void history_and_pbem_wait_for_station_loss_receipt()
+{
+    auto state = battle_fixture(true);
+    assert(state.players.front().history.back().population == 10'500);
+    state = TurnProcessor{}.process(state, {});
+    assert(!state.planets.front().owner && state.orbitalStations.empty());
+    const auto report = std::find_if(state.players.front().pendingPlayerReports.begin(), state.players.front().pendingPlayerReports.end(),
+        [](const auto& r) { return r.kind == PlayerReportKind::SpaceBattle; });
+    assert(report != state.players.front().pendingPlayerReports.end() && report->deliveryTurn > state.turn);
+    const auto receipt = report->deliveryTurn;
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto path = directory.filePath("history.sunsturn");
+    const auto checkExport = [&](std::uint64_t population, std::uint32_t colonies) {
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        const auto exported = make_player_turn(host, 1);
+        assert(write_save_game_file(path, exported, error) && read_save_game_file(path, loaded, error));
+        const auto& history = loaded.state.players.front().history.back();
+        assert(loaded.state.players.front().stationDestructions.empty() == bool(colonies));
+        assert(history.population == population && history.colonies == colonies);
+        assert(history.colonyHistory.size() == colonies);
+        if (colonies) {
+            assert(loaded.state.planets.front().nativeOrbit.population == 10'000);
+            assert(history.colonyHistory.front().population == 10'000);
+            assert(history.minerals.ironium == 103);
+        }
+    };
+    checkExport(10'500, 1);
+    while (state.turn < receipt) state = TurnProcessor{}.process(state, {});
+    checkExport(500, 0);
+    // Receiving loss changes this boundary; it must not rewrite the older graph.
+    const auto old = std::find_if(loaded.state.players.front().history.begin(), loaded.state.players.front().history.end(),
+        [&](const auto& h) { return h.turn == receipt-1; });
+    assert(old != loaded.state.players.front().history.end() && old->population == 10'500 && old->colonies == 1);
+}
+void destruction_before_first_snapshot_survives_reload()
+{
+    auto state = TurnProcessor{}.process(battle_fixture(false), {});
+    const auto report = std::find_if(state.players.front().pendingPlayerReports.begin(), state.players.front().pendingPlayerReports.end(),
+        [](const auto& r) { return r.kind == PlayerReportKind::SpaceBattle; });
+    assert(report != state.players.front().pendingPlayerReports.end());
+    const auto receipt = report->deliveryTurn;
+    while (state.turn < receipt) state = TurnProcessor{}.process(state, {});
+    assert(!state.planets.front().owner && state.orbitalStations.empty());
+    assert(state.players.front().stationDestructions.size() == 1);
+    assert(!state.players.front().pendingSurveyReports.empty());
+    const auto late = state.players.front().pendingSurveyReports.back().deliveryTurn;
+    assert(late > state.turn);
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto path = directory.filePath("before-first-snapshot.suns");
+    assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
+    state = loaded.state;
+    while (state.turn < late) state = TurnProcessor{}.process(state, {});
+    assert(!state.planets.front().owner && state.orbitalStations.empty());
+    assert(known_planet_owner(state, 1, 1) == 0);
+    const auto view = make_player_view(state, 1).state;
+    assert(view.orbitalStations.empty() && !view.planets.front().nativeOrbit.population);
+    assert(write_save_game_file(path, envelope(view), error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.orbitalStations.empty() && !loaded.state.planets.front().nativeOrbit.population);
+}
+void destruction_identity_is_monotonic_and_does_not_kill_a_replacement()
+{
+    auto state = test::native_orbital_fixture();
+    auto& player = state.players.front();
+    PendingPlayerReport battle; battle.observedTurn = state.turn; battle.planet = 1; battle.battle.emplace();
+    SpaceBattleUnit unit; unit.owner = 1; unit.station = 1; unit.initialShips = 1;
+    battle.battle->units.push_back(unit);
+    apply_received_station_battle(player, battle);
+    apply_received_station_battle(player, battle);
+    assert(player.stationDestructions.size() == 1 && player.stationDestructions.front().observedTurn == state.turn);
+    // A later paid founding/replacement has a different station identity.
+    ++state.turn; state.orbitalStations.front().id = 2; state.nextOrbitalStationId = 3;
+    state.planets.front().nativeOrbit.station = 2;
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    const auto replacement = capture_planet_survey(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    auto incoming = replacement;
+    merge_received_habitat_station(incoming, std::nullopt, player);
+    assert(incoming->habitat->station->id == 2 && incoming->habitat->nativeOrbit.population == 10'000);
+    apply_received_station_battle(player, battle);
+    assert(known_planet_owner(state, 1, 1) == 1 && make_player_view(state, 1).state.orbitalStations.front().id == 2);
+}
+void ledger_round_trip_bounds_and_v115_migration()
+{
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto path = directory.filePath("receipts.suns");
+    auto state = test::native_orbital_fixture();
+    remember_station_destruction(state.players.front(), {99, 1, state.turn});
+    assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().stationDestructions == state.players.front().stationDestructions);
+    for (int defect = 0; defect < 4; ++defect) {
+        auto invalid = state;
+        auto& facts = invalid.players.front().stationDestructions;
+        if (defect == 0) facts.front().observedTurn = state.turn+1;
+        if (defect == 1) facts.front().station = 0;
+        if (defect == 2) facts.push_back(facts.front());
+        if (defect == 3) { facts.front().station = 100; facts.push_back({99, 1, state.turn}); }
+        assert(write_save_game_file(path, envelope(invalid), error) && !read_save_game_file(path, loaded, error));
+    }
+    assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-orbital-v115-loss.suns"), loaded, error));
+    assert(loaded.state.players.front().stationDestructions.size() == 1);
+    assert(!loaded.state.players.front().pendingSurveyReports.empty());
+    assert(loaded.state.players.front().pendingSurveyReports.back().planetSnapshot->habitat->nativeOrbit.population == 10'000);
+    // The migrated receipt is independent of the current cached fit too.
+    loaded.state.players.front().surveyKnowledge.front().planetSnapshot->habitat.reset();
+    // A later survey envelope carrying that old fit must be merged, rather
+    // than skipped as a duplicate of the existing same-date survey record.
+    loaded.state.players.front().pendingSurveyReports.back().observedTurn = loaded.state.turn;
+    loaded.state.turn = loaded.state.players.front().pendingSurveyReports.back().deliveryTurn;
+    (void)deliver_due_survey_reports(loaded.state);
+    assert(known_planet_owner(loaded.state, 1, 1) == 0);
+    assert(!make_player_view(loaded.state, 1).state.planets.front().nativeOrbit.population);
+}
+}
+int main(int argc, char** argv)
+{
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "history") { history_and_pbem_wait_for_station_loss_receipt(); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "first-snapshot") { destruction_before_first_snapshot_survives_reload(); return 0; }
     resident_truth_and_pending_evidence_round_trip();
     hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload();
     real_pbem_decoding_keeps_guards_and_shared_unloading();
     genuine_v114_has_no_native_residents();
+    history_and_pbem_wait_for_station_loss_receipt();
+    destruction_before_first_snapshot_survives_reload();
+    destruction_identity_is_monotonic_and_does_not_kill_a_replacement();
+    ledger_round_trip_bounds_and_v115_migration();
 }

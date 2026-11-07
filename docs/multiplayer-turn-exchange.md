@@ -1,7 +1,9 @@
 # Multiplayer turn exchange
 
-Save v115 preserves the native station-population kernel and its received/pending
-evidence. Older saves retain ordinary populations with empty native state;
+Save v116 preserves the native station-population kernel, its received/pending
+evidence and independently received station destruction. Native colony history
+uses delivered colony state, so loss cannot leak through graphs or PBEM exports
+before its report. v114/v115 files migrate without losing their known populations;
 orders remain v49 and portable race files v3. The native civilization is still
 unavailable in campaign setup until its complete start and Computer acceptance
 pass; this format extension does not enable a partially implemented race.

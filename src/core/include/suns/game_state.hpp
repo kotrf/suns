@@ -1381,6 +1381,15 @@ struct TransportLineReceipt {
     FleetId destinationFleet{}; // Exactly one of planet/destinationFleet identifies the receiver.
 };
 
+// A received fact, independent of whether HQ has seen a station's first fit.
+// Station IDs are never reused. Planet may be unknown in older battle reports.
+struct StationDestructionObservation {
+    OrbitalStationId station{};
+    PlanetId planet{};
+    std::uint64_t observedTurn{};
+    bool operator==(const StationDestructionObservation&) const = default;
+};
+
 struct Player {
     PlayerId id{};
     std::string name;
@@ -1427,6 +1436,7 @@ struct Player {
     std::vector<ObjectObservation> objectKnowledge;
     std::vector<MediumObservation> mediumKnowledge;
     std::vector<std::uint64_t> receivedScientificData; // Sorted durable delivery receipts.
+    std::vector<StationDestructionObservation> stationDestructions; // Sorted by station ID; delivered only.
 };
 
 enum class FleetRole {

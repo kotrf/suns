@@ -1,5 +1,31 @@
 # Project status and development handoff
 
+## #283 review: native History and first-snapshot destruction — 7 November 2026
+
+Both P2 findings on 1c34a36 were reproduced with real combat and saved/exported
+states. History exposed year-2 physical loss before the year-3 report, and a
+pre-battle snapshot arriving after destruction could resurrect a station when HQ
+had no prior fit. Native colony History rows now use canonical delivered state,
+including residents, colony count, stock and output. Earlier graph rows stay
+immutable when a later boundary receives loss.
+
+A sorted owner-only destruction ledger retains station identity/time even before
+its first snapshot. Receipt and snapshot merge reconcile by identity and evidence
+time; duplicate/late reports cannot resurrect the old hull or erase a newer
+replacement. Ordinary independent habitat residents survive station loss as
+before. Save v116 persists this ledger, validates order/identity/time bounds and
+migrates received v115 native tombstones without treating pending packets as
+received facts. A genuine v115-loss fixture was created from the original
+1c34a36 headers/libraries/writer before changing the layout. Orders v49/race v3
+are unchanged.
+
+Five focused core/history/save/PBEM/habitat tests passed after both regressions
+failed on 1c34a36. GCC 14.2 / Qt 6.12 Debug application/test build and final full
+CTest passed 120/120 in 72.93 s. Two local objects lacking header dependencies
+were rebuilt before that final run. File links and git diff checks passed.
+The preceding source CI 42367058289 succeeded; current source/CI are on GitHub.
+PR #283 remains for repeat review; #50 stays open and the trait stays disabled.
+
 ## #282 merged; #50 native population/cargo foundation — 7 November 2026
 
 Design #282 merged to main 52003e121e00cef66710abf16a799213f1870182 with the

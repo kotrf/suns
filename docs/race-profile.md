@@ -141,8 +141,9 @@ evacuation and paid hull replacement preserve their actual residents. The shared
 `UnloadAll` command delivers native colonists to their own inhabited station,
 subject to actual housing capacity; absent/full stations leave residents aboard.
 Economics remain prototype work; this is not yet a playable trait.
-The first native population/cargo kernel is persisted in save v115, separately
-from ordinary habitats. It does not enable this reserved identity in campaign
+The native population/cargo kernel is separate from ordinary habitats; save v116
+also retains delivered station destruction before the first received fit. It
+does not enable this reserved identity in campaign
 setup or portable race files; the complete start and Human/Computer expansion
 acceptance in the design still applies.
 

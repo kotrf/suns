@@ -1,4 +1,5 @@
 // v115: native station residents and their received/pending owner evidence.
+// v116: independent delivered station-destruction identities/times.
 constexpr quint32 kNativeOrbitalMagic = 0x4e4f5242u; // NORB
 void writeNativePopulation(QDataStream& out, const NativeOrbitalPopulation& value)
 {
@@ -53,6 +54,12 @@ void writeNativeOrbit(QDataStream& stream, const GameState& state)
             out << quint32(record.star) << quint64(record.observedTurn); writeNativeEvidence(out, record);
         }
     }
+    out << quint32(state.players.size());
+    for (const auto& player : state.players) {
+        out << quint32(player.id) << quint32(player.stationDestructions.size());
+        for (const auto& fact : player.stationDestructions)
+            out << quint32(fact.station) << quint32(fact.planet) << quint64(fact.observedTurn);
+    }
     if (out.status() != QDataStream::Ok || payload.size() > 32*1024*1024) { stream.setStatus(QDataStream::WriteFailed); return; }
     stream << kNativeOrbitalMagic << quint32(payload.size());
     stream.writeRawData(payload.data(), int(payload.size()));
@@ -88,5 +95,33 @@ void readNativeOrbit(QDataStream& stream, GameState& state)
             readNativeEvidence(in, record, player);
         }
     }
-    if (in.status() != QDataStream::Ok || !in.atEnd()) markCorrupt(stream);
+    if (gReadSaveFormatVersion >= 116) {
+        if (!readCount(in, count) || count != state.players.size()) { markCorrupt(stream); return; }
+        for (auto& player : state.players) {
+            in >> id;
+            if (id != player.id || !readCount(in, count)) { markCorrupt(stream); return; }
+            OrbitalStationId previous{};
+            for (quint32 index = 0; index < count; ++index) {
+                quint32 station{}, planet{}; quint64 observed{};
+                in >> station >> planet >> observed;
+                if (!station || station <= previous || observed > state.turn) { markCorrupt(stream); return; }
+                player.stationDestructions.push_back({station, planet, observed});
+                previous = station;
+            }
+        }
+    } else {
+        // Preserve already delivered v115 native tombstones when upgrading.
+        // Pending reports are not received facts and never seed this ledger.
+        for (auto& player : state.players) for (const auto& record : player.surveyKnowledge) {
+            if (record.observedOwner != player.id || !record.planetSnapshot || !record.planetSnapshot->habitat) continue;
+            const auto& h = *record.planetSnapshot->habitat;
+            if (!h.nativeOrbit.station || h.nativeOrbit.population || h.station || h.stationEvidenceTime % 3 != 1) continue;
+            const auto* planet = find_planet_at_star(state, record.star);
+            remember_station_destruction(player, {h.nativeOrbit.station, planet ? planet->id : 0, h.stationEvidenceTime/3});
+        }
+    }
+    if (in.status() != QDataStream::Ok || !in.atEnd()) { markCorrupt(stream); return; }
+    for (auto& player : state.players) for (auto& record : player.surveyKnowledge)
+        if (record.observedOwner == player.id)
+            merge_received_habitat_station(record.planetSnapshot, std::nullopt, player);
 }

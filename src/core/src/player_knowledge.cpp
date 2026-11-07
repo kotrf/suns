@@ -515,7 +515,7 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                 && (report.level >= SurveyLevel::OrbitalSurvey || updated->level < SurveyLevel::OrbitalSurvey))
             {
                 auto evidence=report.planetSnapshot;
-                merge_received_habitat_station(evidence,updated->planetSnapshot);
+                merge_received_habitat_station(evidence,updated->planetSnapshot,player);
                 updated->planetSnapshot=std::move(evidence);
             }
             if (updated != player.surveyKnowledge.end() && updated->planetSnapshot) {
