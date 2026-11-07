@@ -1910,7 +1910,8 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
 
     // Native colonies disappear physically with their station, but that is
     // not a new HQ observation until its report arrives. Reuse the canonical
-    // received view for every colony asset column, not just displayed people.
+    // received view for colony assets and holds, so a delayed unload cannot
+    // combine the old station stock with an already emptied physical hold.
     // This runs at history boundaries, never in a realtime UI prediction.
     const auto* empire = find_player(state, playerId);
     const auto received = empire && empire->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization && !state.mediumObserver
@@ -1930,9 +1931,10 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
         result.minerals.germanium += planet.minerals.germanium;
     }
 
-    auto knownFleets = state.fleets;
+    auto knownFleets = received ? received->state.fleets : state.fleets;
     const auto missing = missing_fleet_contacts(state, playerId);
-    knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
+    // make_player_view already includes received missing-fleet contacts.
+    if (!received) knownFleets.insert(knownFleets.end(), missing.begin(), missing.end());
     std::sort(knownFleets.begin(), knownFleets.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
     for (const auto& source : knownFleets) {
         if (source.owner != playerId || unreported_orbital_ship(state,source)) continue;
@@ -1945,7 +1947,7 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
             [&](const auto& report) { return report.battle && report.deliveryTurn > state.turn
                 && std::any_of(report.battle->units.begin(), report.battle->units.end(),
                     [&](const auto& unit) { return unit.fleet == source.id && unit.owner == playerId; }); });
-        const auto fleet = pendingTransit || undeliveredBattle
+        const auto fleet = received ? source : pendingTransit || undeliveredBattle
             || source.outpost == OutpostKind::OrbitalShipyard || source.telemetry.outpost == OutpostKind::OrbitalShipyard
             ? fleet_player_view(state, source) : source;
         ++result.fleets;
@@ -1997,7 +1999,9 @@ void record_empire_turn_statistics(
         }
         snapshot.freightRecorded = elapsedYear;
         for (const auto& delivered : freight) {
-            if (delivered.owner != player.id) continue;
+            // Native freight is measured on receipt alongside its received
+            // asset view, never from the host's physical delivery ledger.
+            if (delivered.owner != player.id || player.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) continue;
             snapshot.freightDelivered.ironium += delivered.minerals.ironium;
             snapshot.freightDelivered.boranium += delivered.minerals.boranium;
             snapshot.freightDelivered.germanium += delivered.minerals.germanium;

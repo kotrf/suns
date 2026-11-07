@@ -1,5 +1,31 @@
 # Project status and development handoff
 
+## #283 repeat review: received fleet cargo and freight History — 7 November 2026
+
+Review of 6fad4ca confirmed both earlier P2 fixes; source CI 42375151847 passed
+120/120 tests. One new P2 was reproduced with ordinary UnloadAll, an actual
+one-year communication delay and a reopened PBEM turn. The old station snapshot
+was combined with the emptied physical hold, temporarily reducing totals from
+10,500 to 10,000 residents and 103 to 100 kt Ironium. Freight was also credited
+before its manifest arrived.
+
+Native fleet assets now use the same received PlayerView as their colonies;
+already included missing contacts are not appended again. Physical freight is
+excluded from native History, which instead credits received FreightDelivered
+manifests at their receiving boundary. Packets already due when a host resumes
+are assigned to that boundary, not the newly resolved year. Ordinary empire
+freight semantics are unchanged. No save/command/race schema changes: v116/v49/v3.
+
+Regressions cover the actual waypoint unload, partial/full housing, independent
+minerals, immediate receipt, host save/load, PBEM export/reopen, current-boundary
+refresh, subsequent-year non-repetition, overdue-on-load manifests and missing
+fleet contacts counted once. The native test fixture now captures its actual
+initial transport manifest rather than retaining demo-scout telemetry.
+Four focused CTest suites passed in 0.06 s. The full GCC 14.2 / Qt 6.12
+Debug application/test build and 120/120 CTest passed in 72.04 s. All 135 local
+documentation links and git diff checks passed. Current source/CI are on GitHub.
+PR #283 remains for repeat review; #50 stays open and the trait stays disabled.
+
 ## #283 review: native History and first-snapshot destruction — 7 November 2026
 
 Both P2 findings on 1c34a36 were reproduced with real combat and saved/exported

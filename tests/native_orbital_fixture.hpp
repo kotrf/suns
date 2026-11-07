@@ -26,6 +26,7 @@ inline GameState native_orbital_fixture()
     fleet.colonists = 500; fleet.minerals = {3, 2, 1};
     fleet.fuel = fleet_fuel_capacity(state, fleet);
     assert(fleet_cargo_used(state, fleet) <= fleet_cargo_capacity(state, fleet));
+    fleet.telemetry = {};
     fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
     set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
     return state;

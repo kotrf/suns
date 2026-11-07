@@ -3018,6 +3018,28 @@ TurnResult TurnProcessor::process_with_events(
             return candidate.id == event.recipient;
         });
         if (player == next.players.end() || player->history.empty()) continue;
+        if (event.kind == GameEventKind::FreightDelivered
+            && player->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
+            // A manifest can already be due at the loaded planning boundary.
+            // Credit its receiving year, not the new year resolved below it.
+            const auto snapshot = std::find_if(player->history.begin(), player->history.end(),
+                [&](const auto& record) { return record.turn == event.turn; });
+            if (snapshot == player->history.end()) continue;
+            snapshot->freightRecorded = true;
+            snapshot->freightDelivered.ironium += event.deliveredMinerals.ironium;
+            snapshot->freightDelivered.boranium += event.deliveredMinerals.boranium;
+            snapshot->freightDelivered.germanium += event.deliveredMinerals.germanium;
+            snapshot->colonistsDelivered += event.deliveredColonists;
+            const auto colony = std::find_if(snapshot->colonyHistory.begin(), snapshot->colonyHistory.end(),
+                [&](const auto& record) { return record.planet == event.planet; });
+            if (colony != snapshot->colonyHistory.end()) {
+                colony->freightDelivered.ironium += event.deliveredMinerals.ironium;
+                colony->freightDelivered.boranium += event.deliveredMinerals.boranium;
+                colony->freightDelivered.germanium += event.deliveredMinerals.germanium;
+                colony->colonistsDelivered += event.deliveredColonists;
+            }
+            continue;
+        }
         std::optional<HistoryMilestoneKind> kind;
         switch (event.kind) {
         case GameEventKind::ColonyFounded: kind = HistoryMilestoneKind::ColonyFounded; break;

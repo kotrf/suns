@@ -25,8 +25,13 @@ bypass the native housing requirement. Received and pending owner snapshots carr
 native population separately. Delivered destruction is retained by station ID
 and observation time independently of any cached fit, so a later pre-battle
 snapshot cannot resurrect a station HQ had never seen. Native colony rows in
-History use the same received view as the planet panel: colony counts, residents,
-stocks and output change on receipt, without rewriting older graph rows.
+History use the same received view as the planet panel. Fleet holds and missing
+contacts also come from that view, so a delayed unload does not combine an old
+station stock with the transport's already emptied physical hold or count a
+missing contact twice. Native freight is credited from the delivered manifest
+in its receiving year, including reports already due when a host save resumes.
+Earlier observation years are not rewritten, and refreshing the boundary retains
+its already measured freight.
 
 Save v115 introduced bounded native population and observation records; v116
 adds the delivered destruction ledger. Real v114 files migrate with no native

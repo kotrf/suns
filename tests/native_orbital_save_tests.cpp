@@ -7,8 +7,14 @@
 #include <QTemporaryDir>
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 using namespace suns;
 namespace {
+bool same_minerals(const MineralCargo& a, const MineralCargo& b)
+{
+    return std::abs(a.ironium-b.ironium) < 1e-9 && std::abs(a.boranium-b.boranium) < 1e-9
+        && std::abs(a.germanium-b.germanium) < 1e-9;
+}
 SaveGameData envelope(GameState state)
 {
     SaveGameData save; save.state = std::move(state); save.campaignId = 115; save.turnToken = 17;
@@ -114,6 +120,116 @@ void genuine_v114_has_no_native_residents()
     const auto expected = legacy.state.planets.front().population
         + projected_population_growth(legacy.state, legacy.state.planets.front(), legacy.state.turn);
     assert(next.planets.front().population == expected && next.planets.front().owner == 1);
+}
+void unloading_history_waits_for_received_cargo()
+{
+    for (const auto residents : {10'000U, 99'900U, 100'000U}) {
+        auto state = test::native_orbital_fixture();
+        auto& planet = state.planets.front();
+        planet.nativeOrbit.population = residents;
+        planet.minerals = {100, 100, 100};
+        auto& fleet = state.fleets.front();
+        fleet.destination = fleet.position;
+        fleet.arrivalAction = {FleetArrivalActionKind::UnloadAll, 0, FleetCargoKind::All};
+        fleet.telemetry = {};
+        fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+        // Removing the capital receiver creates a real one-year report delay.
+        planet.radar = PlanetaryRadarLevel::None;
+        set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
+        assert(communication_delay_turns(state, 1, fleet.position) == 1);
+        state.players.front().history.clear();
+        record_empire_turn_statistics(state);
+        const auto initialPopulation = residents+500;
+        const auto unloaded = std::min(500U, 100'000U-residents);
+        auto result = TurnProcessor{}.process_with_events(state, {});
+        state = result.state;
+        assert(state.planets.front().nativeOrbit.population == residents+unloaded);
+        assert(state.fleets.front().colonists == 500-unloaded && state.fleets.front().minerals.ironium == 0);
+        const auto manifest = std::find_if(state.players.front().pendingPlayerReports.begin(),
+            state.players.front().pendingPlayerReports.end(), [](const auto& r) { return r.kind == PlayerReportKind::FreightDelivered; });
+        assert(manifest != state.players.front().pendingPlayerReports.end());
+        assert(manifest->observedTurn == state.turn && manifest->deliveryTurn == state.turn+1);
+        const auto receipt = manifest->deliveryTurn;
+        assert(std::none_of(result.events.begin(), result.events.end(), [](const auto& e) { return e.kind == GameEventKind::FreightDelivered; }));
+        QTemporaryDir directory; QString error; SaveGameData loaded;
+        const auto path = directory.filePath("unload.suns");
+        const auto checkHistory = [&](const GameState& observed, bool delivered) {
+            const auto& history = observed.players.front().history.back();
+            assert(history.population == initialPopulation);
+            assert(same_minerals(history.minerals, {103, 102, 101}));
+            assert(history.freightRecorded);
+            assert(history.colonistsDelivered == (delivered ? unloaded : 0));
+            assert(same_minerals(history.freightDelivered, delivered ? MineralCargo{3, 2, 1} : MineralCargo{}));
+            assert(history.colonyHistory.front().colonistsDelivered == history.colonistsDelivered);
+            assert(same_minerals(history.colonyHistory.front().freightDelivered, history.freightDelivered));
+        };
+        const auto checkExport = [&](bool delivered) {
+            auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+            const auto exported = make_player_turn(host, 1);
+            assert(write_save_game_file(path, exported, error) && read_save_game_file(path, loaded, error));
+            assert(loaded.state.planets.front().nativeOrbit.population == residents+(delivered ? unloaded : 0));
+            assert(loaded.state.fleets.front().colonists == 500-(delivered ? unloaded : 0));
+            assert(loaded.state.fleets.front().minerals.ironium == (delivered ? 0 : 3));
+            checkHistory(loaded.state, delivered);
+            // Rebuilding a received boundary must agree with its exported totals.
+            const auto rebuilt = empire_turn_statistics(loaded.state, 1);
+            assert(rebuilt.population == initialPopulation && same_minerals(rebuilt.minerals, {103, 102, 101}));
+        };
+        checkExport(false);
+        // Preserve the actual pending manifest and telemetry across host reload.
+        assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
+        state = loaded.state;
+        auto overdue = state;
+        result = TurnProcessor{}.process_with_events(state, {});
+        state = result.state;
+        assert(state.turn == receipt);
+        assert(std::count_if(result.events.begin(), result.events.end(), [](const auto& e) { return e.kind == GameEventKind::FreightDelivered; }) == 1);
+        checkExport(true);
+        record_empire_turn_statistics(state);
+        checkHistory(state, true);
+        state = TurnProcessor{}.process(state, {});
+        checkHistory(state, false);
+        std::uint64_t deliveredTotal = 0;
+        for (const auto& h : state.players.front().history) deliveredTotal += h.colonistsDelivered;
+        assert(deliveredTotal == unloaded);
+        const auto previous = std::find_if(state.players.front().history.begin(), state.players.front().history.end(),
+            [&](const auto& h) { return h.turn == receipt-1; });
+        assert(previous != state.players.front().history.end() && previous->population == initialPopulation
+            && previous->colonistsDelivered == 0 && same_minerals(previous->freightDelivered, {}));
+        // A packet already due when a saved host resumes belongs to the
+        // receiving boundary, not the new year resolved by process().
+        overdue.turn = receipt;
+        assert(write_save_game_file(path, envelope(overdue), error) && read_save_game_file(path, loaded, error));
+        const auto resumed = TurnProcessor{}.process(loaded.state, {});
+        const auto received = std::find_if(resumed.players.front().history.begin(), resumed.players.front().history.end(),
+            [&](const auto& h) { return h.turn == receipt; });
+        assert(received != resumed.players.front().history.end() && received->colonistsDelivered == unloaded
+            && same_minerals(received->freightDelivered, {3, 2, 1}));
+        assert(resumed.players.front().history.back().colonistsDelivered == 0
+            && same_minerals(resumed.players.front().history.back().freightDelivered, {}));
+    }
+    // A connected unload is already received this year and is counted once.
+    auto local = test::native_orbital_fixture();
+    local.fleets.front().destination = local.fleets.front().position;
+    local.fleets.front().arrivalAction = {FleetArrivalActionKind::UnloadAll, 0, FleetCargoKind::All};
+    const auto immediate = TurnProcessor{}.process(local, {});
+    assert(immediate.players.front().history.back().colonistsDelivered == 500);
+    assert(same_minerals(immediate.players.front().history.back().freightDelivered, {3, 2, 1}));
+}
+void received_missing_fleet_is_counted_once()
+{
+    auto state = test::native_orbital_fixture();
+    state.planets.front().minerals = {100, 100, 100};
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    state.pendingFleetLossContacts.push_back({state.fleets.front(), state.turn+1});
+    state.fleets.clear();
+    const auto history = empire_turn_statistics(state, 1);
+    assert(history.fleets == 1 && history.ships == 3 && history.population == 10'500);
+    assert(same_minerals(history.minerals, {103, 102, 101}));
+    ++state.turn;
+    const auto afterReceipt = empire_turn_statistics(state, 1);
+    assert(afterReceipt.fleets == 0 && afterReceipt.population == 10'000);
+    assert(same_minerals(afterReceipt.minerals, {100, 100, 100}));
 }
 GameState battle_fixture(bool stationSnapshot)
 {
@@ -253,12 +369,15 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "freight") { unloading_history_waits_for_received_cargo(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "history") { history_and_pbem_wait_for_station_loss_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "first-snapshot") { destruction_before_first_snapshot_survives_reload(); return 0; }
     resident_truth_and_pending_evidence_round_trip();
     hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload();
     real_pbem_decoding_keeps_guards_and_shared_unloading();
     genuine_v114_has_no_native_residents();
+    unloading_history_waits_for_received_cargo();
+    received_missing_fleet_is_counted_once();
     history_and_pbem_wait_for_station_loss_receipt();
     destruction_before_first_snapshot_survives_reload();
     destruction_identity_is_monotonic_and_does_not_kill_a_replacement();
