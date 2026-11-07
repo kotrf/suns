@@ -132,6 +132,16 @@ transit and unlock paid Network and Infinity/Infinity orbital fittings. See
 constraints and Computer strategy. Habitat Civilization and Remote Logistics
 Specialist remain reserved, unavailable choices rather than placeholder bonuses.
 
+The selected next-trait [design and acceptance plan](asymmetric-empires.md) is an
+Alternate Reality-inspired orbital civilization: station-bound population,
+catastrophic battle loss, stronger orbital hulls, remote mining from the start,
+and radiation sensitivity without surface temperature/gravity penalties. Battle
+destruction kills all native residents remaining aboard; prior physical
+evacuation and paid hull replacement preserve their actual residents. The shared
+`UnloadAll` command delivers native colonists to their own inhabited station,
+subject to actual housing capacity; absent/full stations leave residents aboard.
+Economics remain prototype work; this is not yet a playable trait.
+
 The Qt setup dialog calls `generate_campaign`; race mechanics and research
 validation live in the core and apply identically to every player.
 

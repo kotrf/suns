@@ -1,5 +1,125 @@
 # Project status and development handoff
 
+## #282 user decision: shared native unloading — 7 November 2026
+
+The user chose to retain `UnloadAll` with `Colonists` / `All` for the orbital
+race (MEM-36). The common command resolves residents to their own surviving
+inhabited station; ordinary empires unload onto the surface. Partial capacity
+leaves excess aboard, and absent/destroyed/hostile/full receivers accept nobody.
+Legal mineral unloading under `All` remains independent of population capacity.
+
+The [design](asymmetric-empires.md) now requires shared receiver validation in
+preview/arrival/PBEM, including loss of the station after authoring, conservation,
+no surface fallback and no free founding/invasion. This supersedes earlier
+rejection of native shared unloading; separate surface-only final-manifest/exact
+transfer commands still require their documented guards. The UI identifies the
+station receiver without requiring a second unload command.
+
+This is a design-only update; the playable trait is not yet enabled. Previous
+source d2cfff8 CI 42359700772 succeeded. Local document links/diff are checked;
+no runtime tests for this revision. Current source/CI are on GitHub, #282 awaits
+repeat design review and #50 remains open for implementation.
+
+## #282 repeat review: surface final-manifest bypass — 7 November 2026
+
+Repeat review of 31b809a confirmed both prior P2 corrections and found the
+separate `SetFleetColonistsOrder` path behind `Colonists aboard`. Its current
+`apply_cargo_order` implementation writes surface population directly, and the
+order is decoded from PBEM independently of the transfer/arrival paths.
+
+The [design](asymmetric-empires.md) now rejects native use of that surface order
+for both loading and unloading, including the planning preview and decoded PBEM.
+Acceptance requires unchanged people/minerals/freight and working explicit orbital
+unload/evacuation. Native UI authoring must not offer that surface shortcut.
+The user confirmed that station residents do not need surface landing.
+
+CI 42354006277 on 31b809a succeeded (118/118 reported in repeat review). This new
+revision is documentation only; links/diff are checked, runtime tests not rerun
+locally. Current source and CI are on GitHub. PR #282 awaits repeat design review;
+the actual playable trait remains disabled pending the full first-slice acceptance.
+
+## #282 review: explicit cargo/ownership and Computer acceptance — 7 November 2026
+
+Both P2 findings on e6758e1 are addressed in the [design](asymmetric-empires.md).
+Native surface cargo and invasion paths explicitly reject without partial cargo,
+casualties or ownership changes; explicit own-station orbital transfers conserve
+residents and enforce hull capacity. Station destruction clears native ownership;
+neither invasion nor unloading supplies a free orbital founding operation.
+
+Computer support is in the first playable slice, with trait availability for both
+controllers gated on a real Computer campaign through extraction, replacement
+miner construction and a second paid station via ordinary orders and received
+knowledge. The design names the current surface-population/Hab/mine planner gaps
+and adds delayed/PBEM and cargo/ownership acceptance. These are proposed first-slice
+implementation rules; the user's agreed battle-loss/refit rule is unchanged.
+
+Source e6758e1 CI 42300323444 succeeded (118/118 reported by review). This revision
+changes documentation only; local links/diff are checked, no new runtime tests.
+Current source/tree/CI are recorded in GitHub. PR #282 awaits another design
+review; #50 remains open for gameplay implementation. Earlier readiness entries
+below predate these findings.
+
+## #50 selected: AR-inspired Orbital Civilization — 7 November 2026
+
+The user selected the station-dwelling direction, resolving the prior trait
+choice. Stations house the population and their actual destruction in battle
+kills all native residents still aboard; stronger orbital technology/hulls provide the upside.
+Mining is exclusively remote and available from the start. Surface temperature
+and gravity do not affect the native orbital population; radiation does.
+
+The Player's Guide chapter 22 and Technical Reference Guide were checked directly.
+The [updated design](asymmetric-empires.md) separates the reference from Suns!
+choices: AR also had innate extraction and retained environmental suitability;
+Suns! uses the user's ship-only mining and radiation-only exposure direction.
+The user subsequently explicitly agreed to total loss on 7 November: only
+residents physically evacuated before destruction survive on their surviving
+transports. Pending evacuation intent cannot rescue them. Paid hull replacement
+preserves residents; no escape-pod/survivor mechanism is introduced. The casualty
+question is resolved; hull/economy/radiation numbers remain prototype parameters.
+
+The draft now requires native station-resident identity rather than treating it
+as the existing separate late-game habitat. Actual battle loss is distinct from
+paid refit, ordinary damage or upkeep failure. A complete start needs an operable
+miner, replacement manufacture, paid founding, real stock/output/support and a
+radiation-safe budget. Own-orbit remote mining requires changes to the current
+unowned-only authoring/arrival/extraction guards. Existing bases supply a possible
+orbital radiation/screen model; exact native curves and economy remain proposals.
+
+The user asked for design review. PR #282's design is prepared for review with
+the agreed casualty rule and acceptance cases. This remains documentation:
+gameplay is not enabled and save/race/order layouts do not change. File links and
+diff checks are the relevant validation; preceding design CI and main ea7749f CI
+are successful. Gameplay implementation is the next separate slice.
+#50 remains open for implementation; #53/#63 and visitor AI staging stay deferred.
+Earlier unresolved trait-selection notes below are historical.
+
+## #46 complete; next queued work is #50 design — 6 November 2026
+
+The user requested continuing the ordered queue. #281 is merged into main
+ea7749f7da50659f2255477fdd87ae03ede14a96, #46 closed completed, all five fixed
+threads resolved under MEM-34. The merge tree equals reviewed 337982d's
+a9eb479b141445d5881e2f8075bdf8fb79c03ecf. Source CI 42223101944 and separate main
+CI 42228852797 both succeeded. Current formats remain v114/v49/race v3.
+
+GitHub's open issues and the Notion queue agree: #50 precedes #54/#55; #53/#63
+remain frozen. Its complete gate-specialist implementation is not restarted.
+The remaining primary-trait choice is not specified by the backlog audit. An
+async selection question is pending; no answer or balance approval is inferred.
+
+[Next-trait design](asymmetric-empires.md) inventories the existing code, compares
+Habitat Civilization and Remote Logistics Specialist, recommends a stationary
+orbital first slice, and requires an entire starting/expansion budget before
+enabling it. Current habitats need late technology and a supporting Starbase;
+their residents do not operate surface mines. Changing only setup availability
+would not produce a viable new civilization. The design identifies founding,
+population/workforce, growth, paid support, capture, received knowledge, portable
+races and fair computer play as a single acceptance boundary. No new game rules
+or numerical balance are implemented. #50 remains open; further traits and
+comparative balance are still future work.
+
+Work stays in the existing /workspace/suns on codex/empire-asymmetry-50-design.
+This slice changes documentation only; no new gameplay tests are required.
+
 ## #281 review: course measurement date and identity — 6 November 2026
 
 [P3](https://github.com/kotrf/suns/pull/281#discussion_r4492655407) on c6385ba:
