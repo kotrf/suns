@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
+#include <QImage>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QSettings>
@@ -64,4 +65,31 @@ int main(int argc, char** argv)
         scope->setCurrentIndex(scope->findData(quint32(0))); app.processEvents();
         dialog->grab().save("/tmp/suns-native-asynchronous-history.png");
     }
+    // An ordinary empire can have a confirmed event without any current
+    // fleet-damage measurement. Rendering that event and the year labels
+    // must remain independent of the availability of numeric series.
+    auto ordinary = suns::make_demo_game();
+    ordinary.fleets.resize(1);
+    ordinary.fleets.front().position = {420, 0};
+    ordinary.fleets.front().destination.reset();
+    ordinary.players.front().history.clear();
+    suns::record_empire_turn_statistics(ordinary);
+    assert(ordinary.players.front().history.back().fleetHistory.empty());
+    const auto renderDamage = [&] {
+        suns::MainWindowTestAccess::installHistory(window, ordinary);
+        metric->setCurrentIndex(13);
+        scope->setCurrentIndex(scope->findData(quint32(0)));
+        app.processEvents();
+        return chart->grab().toImage();
+    };
+    const auto withoutEvent = renderDamage();
+    ordinary.players.front().history.back().milestones.push_back({901, ordinary.turn,
+        suns::HistoryMilestoneKind::ResearchCompleted, 0, suns::ResearchField::Energy, 2});
+    const auto withEvent = renderDamage();
+    assert(withEvent != withoutEvent);
+    if (app.arguments().contains("--capture")) dialog->grab().save("/tmp/suns-history-empty-with-event.png");
+    ordinary.players.front().history.back().milestones.clear();
+    ordinary.players.front().history.back().turn = ++ordinary.turn;
+    const auto nextYear = renderDamage();
+    assert(nextYear != withoutEvent);
 }

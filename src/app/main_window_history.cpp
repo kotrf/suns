@@ -96,7 +96,7 @@ protected:
         if (!anyValues) {
             painter.setPen(QColor("#9fb0c0"));
             painter.drawText(plot, Qt::AlignCenter, "No comparable records for these years.\nHover over a year for details.");
-            return;
+            // Confirmed events and year labels remain meaningful without measurements.
         }
         double maximum = 1.0;
         for (const auto& series : series_)
@@ -104,7 +104,7 @@ protected:
                 if (std::isfinite(value)) maximum = std::max(maximum, value);
 
         painter.setPen(QColor("#34485b"));
-        for (int tick = 0; tick <= 4; ++tick) {
+        for (int tick = 0; anyValues && tick <= 4; ++tick) {
             const double y = plot.bottom() - plot.height() * tick / 4.0;
             painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
             painter.setPen(QColor("#9fb0c0"));
@@ -112,6 +112,7 @@ protected:
                 QString::number(maximum * tick / 4.0, 'g', 4));
             painter.setPen(QColor("#34485b"));
         }
+        if (!anyValues) painter.drawLine(plot.bottomLeft(), plot.bottomRight());
 
         const auto xAt = [&](int index) {
             return plot.left() + plot.width() * (turns_.size() == 1

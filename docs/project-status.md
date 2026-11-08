@@ -1,5 +1,21 @@
 # Project status and development handoff
 
+## #283 review: event markers without measurements — 8 November 2026
+
+Review of 757704c confirmed the asynchronous-totals P2 fix; source CI 42425919251
+passed 121/121. One nonblocking P3 remained: the no-values paint return also hid
+the year axis and confirmed event markers, including ordinary empires. The chart
+now keeps those independently available records alongside its empty-data message,
+while omitting the quantitative scale when there are no measured values.
+
+A Qt rendering regression failed on 757704c: an out-of-contact ordinary fleet's
+damage chart looked identical with/without Energy 2 completed. Both event and
+year-label image comparisons now pass, together with the native PBEM gap/tooltip
+checks and existing tool-window suite. GCC 14.2 / Qt 6.12 Debug application build
+and 2/2 focused UI CTest passed in 1.10 s; the screenshot was inspected. Formats
+remain v117/v49/race v3. PR #283 is for repeat review; #50 stays open and the race
+remains disabled. Current source/tree/CI are on GitHub.
+
 ## #283 review: asynchronous observation dates — 8 November 2026
 
 Review of 6e448e9 confirmed the earlier loss and simultaneous-unload fixes, then
