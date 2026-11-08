@@ -1,5 +1,131 @@
 # Project status and development handoff
 
+## #283 review: event markers without measurements — 8 November 2026
+
+Review of 757704c confirmed the asynchronous-totals P2 fix; source CI 42425919251
+passed 121/121. One nonblocking P3 remained: the no-values paint return also hid
+the year axis and confirmed event markers, including ordinary empires. The chart
+now keeps those independently available records alongside its empty-data message,
+while omitting the quantitative scale when there are no measured values.
+
+A Qt rendering regression failed on 757704c: an out-of-contact ordinary fleet's
+damage chart looked identical with/without Energy 2 completed. Both event and
+year-label image comparisons now pass, together with the native PBEM gap/tooltip
+checks and existing tool-window suite. GCC 14.2 / Qt 6.12 Debug application build
+and 2/2 focused UI CTest passed in 1.10 s; the screenshot was inspected. Formats
+remain v117/v49/race v3. PR #283 is for repeat review; #50 stays open and the race
+remains disabled. Current source/tree/CI are on GitHub.
+
+## #283 review: asynchronous observation dates — 8 November 2026
+
+Review of 6e448e9 confirmed the earlier loss and simultaneous-unload fixes, then
+reproduced one P2 with a real route: unload at 170 ly in year 2, return to instant
+communications at 145 ly in year 3, receive the station update in year 4. In year
+3 the received subtotal is 20,000 residents/200 kt Ironium while physical assets
+remain 20,500/203. Reading both sources from PlayerView is insufficient to claim
+that their combined values describe one observation date.
+
+Native History now retains the oldest/newest received asset observation year and
+a synchronization flag. Differing or missing dates produce gaps in whole-empire
+population/mineral graphs, with an explanation and report-date tooltip. Colony
+and fleet records remain available. The numeric fields are received subtotals;
+consumers must honor the synchronization flag. No pending reports, hidden truth,
+or realtime forecasting are used to certify totals. Freight remains credited by
+receipt year, and older history boundaries are not rewritten after later receipt.
+
+Save v117 appends bounded provenance metadata to NORB without altering the older
+base History layout. Native pre-v117 rows retain their values with unknown date
+provenance. A genuine v116 fixture was produced by the original 6e448e9 core/save
+writer before layout changes; v114/v115 fixtures and the v107 golden prefix stay
+covered. Orders v49 and portable race v3 remain unchanged. The regression opens
+an exported PBEM turn and checks actual chart summary/hover behavior. Date bounds,
+strict flags, host/PBEM round trips, migration/continuation, older-row retention
+and counterfactual hidden-state changes are covered too.
+
+The UI regression failed on original 6e448e9. Seven focused CTest suites passed
+in 1.22 s; the full GCC 14.2 / Qt 6.12 Debug application/test build and 121/121
+CTest passed in 70.44 s. The screenshot was inspected; all 139 local documentation
+links and git diff checks passed. Previous source CI 42408566484 passed 120/120 in 134.26 s. Current
+source/tree/CI are on GitHub. PR #283 remains for repeat review; #50 is open and
+the race remains unavailable to Human/Computer pending its full playable slice.
+
+## #283 repeat review: received fleet cargo and freight History — 7 November 2026
+
+Review of 6fad4ca confirmed both earlier P2 fixes; source CI 42375151847 passed
+120/120 tests. One new P2 was reproduced with ordinary UnloadAll, an actual
+one-year communication delay and a reopened PBEM turn. The old station snapshot
+was combined with the emptied physical hold, temporarily reducing totals from
+10,500 to 10,000 residents and 103 to 100 kt Ironium. Freight was also credited
+before its manifest arrived.
+
+Native fleet assets now use the same received PlayerView as their colonies;
+already included missing contacts are not appended again. Physical freight is
+excluded from native History, which instead credits received FreightDelivered
+manifests at their receiving boundary. Packets already due when a host resumes
+are assigned to that boundary, not the newly resolved year. Ordinary empire
+freight semantics are unchanged. No save/command/race schema changes: v116/v49/v3.
+
+Regressions cover the actual waypoint unload, partial/full housing, independent
+minerals, immediate receipt, host save/load, PBEM export/reopen, current-boundary
+refresh, subsequent-year non-repetition, overdue-on-load manifests and missing
+fleet contacts counted once. The native test fixture now captures its actual
+initial transport manifest rather than retaining demo-scout telemetry.
+Four focused CTest suites passed in 0.06 s. The full GCC 14.2 / Qt 6.12
+Debug application/test build and 120/120 CTest passed in 72.04 s. All 135 local
+documentation links and git diff checks passed. Current source/CI are on GitHub.
+PR #283 remains for repeat review; #50 stays open and the trait stays disabled.
+
+## #283 review: native History and first-snapshot destruction — 7 November 2026
+
+Both P2 findings on 1c34a36 were reproduced with real combat and saved/exported
+states. History exposed year-2 physical loss before the year-3 report, and a
+pre-battle snapshot arriving after destruction could resurrect a station when HQ
+had no prior fit. Native colony History rows now use canonical delivered state,
+including residents, colony count, stock and output. Earlier graph rows stay
+immutable when a later boundary receives loss.
+
+A sorted owner-only destruction ledger retains station identity/time even before
+its first snapshot. Receipt and snapshot merge reconcile by identity and evidence
+time; duplicate/late reports cannot resurrect the old hull or erase a newer
+replacement. Ordinary independent habitat residents survive station loss as
+before. Save v116 persists this ledger, validates order/identity/time bounds and
+migrates received v115 native tombstones without treating pending packets as
+received facts. A genuine v115-loss fixture was created from the original
+1c34a36 headers/libraries/writer before changing the layout. Orders v49/race v3
+are unchanged.
+
+Five focused core/history/save/PBEM/habitat tests passed after both regressions
+failed on 1c34a36. GCC 14.2 / Qt 6.12 Debug application/test build and final full
+CTest passed 120/120 in 72.93 s. Two local objects lacking header dependencies
+were rebuilt before that final run. File links and git diff checks passed.
+The preceding source CI 42367058289 succeeded; current source/CI are on GitHub.
+PR #283 remains for repeat review; #50 stays open and the trait stays disabled.
+
+## #282 merged; #50 native population/cargo foundation — 7 November 2026
+
+Design #282 merged to main 52003e121e00cef66710abf16a799213f1870182 with the
+reviewed d31344e tree d296aee5e07b6153341f32876b16f08b70fc14cb. Source CI
+42360981612 succeeded (118/118 confirmed by review); all three fixed threads
+were resolved under MEM-34. Separate main CI 42364397607 also succeeded. Work
+continues in the existing checkout on codex/orbital-civilization-50.
+
+The first implementation adds station-linked native residents, shared/explicit
+orbital cargo, guarded surface shortcuts, battle-only total loss, refit capacity
+checks and owner-only frozen/pending evidence. Save v115 adds a bounded extension;
+orders v49/race v3 are unchanged. A real pre-change v114 writer/fixture verifies
+migration rather than editing a current file's version header.
+
+This is the population/cargo kernel, not a playable native start. Campaign/race
+setup stays disabled for both Human and Computer until the paid start/founding,
+mining/replacements, native economy/radiation/hull progression and actual Computer
+expansion acceptance pass. Housing limits on existing hulls are provisional;
+no free station or native campaign is introduced by this slice. #50 stays open,
+and frozen work remains separate. GCC 14.2 / Qt 6.12 Debug application and test
+build passed. Final full CTest passed 120/120 in 70.48 s, including native core,
+save/PBEM, genuine v114 migration, ordinary habitats, station defense/invasion and
+existing UI/performance suites. Local file links and git diff checks passed.
+Current PR source/tree and separate GitHub CI are recorded in GitHub.
+
 ## #282 user decision: shared native unloading — 7 November 2026
 
 The user chose to retain `UnloadAll` with `Colonists` / `All` for the orbital

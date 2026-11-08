@@ -10,7 +10,7 @@ bool habitat_completed(const Planet& p)
     return p.engineering.kind == PlanetaryEngineeringKind::OrbitalHabitat
         && p.engineering.work == engineering_work(p.engineering.kind);
 }
-std::uint64_t total_colony_population(const Planet& p) { return p.population + p.habitat.population; }
+std::uint64_t total_colony_population(const Planet& p) { return p.population + p.habitat.population + p.nativeOrbit.population; }
 std::int64_t projected_orbital_growth(const Planet& p)
 {
     const auto n = p.habitat.population;
@@ -88,27 +88,68 @@ std::uint32_t net_colony_output(const GameState& state,const Planet& planet,
     const auto gross=colony_output(state, forecast);
     return gross-std::min(gross,paid);
 }
-void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>& incoming,const std::optional<PlanetSurveySnapshot>& previous)
+void remember_station_destruction(Player& player, StationDestructionObservation observation)
 {
-    if(!incoming || !incoming->habitat || !previous || !previous->habitat) return;
-    auto& next=*incoming->habitat;const auto& old=*previous->habitat;
-    if(old.stationEvidenceTime>next.stationEvidenceTime) {
-        next.station=old.station;next.stationSupported=old.stationSupported;next.stationEvidenceTime=old.stationEvidenceTime;
+    if (!observation.station) return;
+    auto& facts = player.stationDestructions;
+    const auto at = std::lower_bound(facts.begin(), facts.end(), observation.station,
+        [](const auto& fact, auto station) { return fact.station < station; });
+    if (at == facts.end() || at->station != observation.station) facts.insert(at, observation);
+    else {
+        at->observedTurn = std::max(at->observedTurn, observation.observedTurn);
+        if (!at->planet) at->planet = observation.planet;
     }
+}
+namespace {
+void apply_station_destruction(const Player& player, HabitatObservation& evidence)
+{
+    const auto station = evidence.station ? evidence.station->id : evidence.nativeOrbit.station;
+    const auto at = std::lower_bound(player.stationDestructions.begin(), player.stationDestructions.end(), station,
+        [](const auto& fact, auto id) { return fact.station < id; });
+    if (at == player.stationDestructions.end() || at->station != station) return;
+    const auto time = 3*at->observedTurn+1;
+    if (time <= evidence.stationEvidenceTime) return;
+    if (evidence.nativeOrbit.station == station) evidence.nativeOrbit.population = 0;
+    evidence.station.reset(); evidence.stationSupported = false; evidence.stationEvidenceTime = time;
+}
+}
+void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>& incoming,
+    const std::optional<PlanetSurveySnapshot>& previous,const Player& player)
+{
+    if(!incoming || !incoming->habitat) return;
+    auto& next=*incoming->habitat;
+    if(previous && previous->habitat && previous->habitat->stationEvidenceTime>next.stationEvidenceTime) {
+        const auto& old=*previous->habitat;
+        next.station=old.station;next.stationSupported=old.stationSupported;next.stationEvidenceTime=old.stationEvidenceTime;
+        next.nativeOrbit=old.nativeOrbit;
+    }
+    // A delivered loss may predate HQ's first fit/population snapshot. The
+    // durable ID/time receipt must still defeat a late pre-battle packet.
+    apply_station_destruction(player, next);
 }
 void apply_received_station_battle(Player& player,const PendingPlayerReport& report)
 {
     if(!report.battle) return;
     const auto time=3*report.observedTurn+1;
     for(const auto& unit:report.battle->units) if(unit.owner==player.id && unit.station) {
+        if (!unit.survivingShips) {
+            // A battle's location may cover several nearby systems/stations.
+            // Bind a planet only from a received fit of this exact station.
+            PlanetId planet{};
+            for (const auto& record : player.surveyKnowledge) if (record.planetSnapshot && record.planetSnapshot->habitat) {
+                const auto& fit = record.planetSnapshot->habitat->station;
+                if (fit && fit->id == unit.station) { planet = fit->planet; break; }
+            }
+            remember_station_destruction(player, {unit.station, planet, report.observedTurn});
+        }
         for(auto& record:player.surveyKnowledge) if(record.observedOwner==player.id && record.planetSnapshot && record.planetSnapshot->habitat) {
             auto& h=*record.planetSnapshot->habitat;
+            if (!unit.survivingShips) { apply_station_destruction(player, h); continue; }
             if(!h.station || h.station->id!=unit.station || time<=h.stationEvidenceTime) continue;
             // Merge only delivered battle evidence. Never inspect today's host
             // station or change the population/queue observation date from an older survey.
             h.stationEvidenceTime=time;
-            if(!unit.survivingShips){h.station.reset();h.stationSupported=false;}
-            else h.station->damagePercent=std::clamp(100*(1-unit.remainingArmor/station_armor(*h.station)),0.0,99.999999);
+            h.station->damagePercent=std::clamp(100*(1-unit.remainingArmor/station_armor(*h.station)),0.0,99.999999);
         }
     }
 }

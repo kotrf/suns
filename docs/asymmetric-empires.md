@@ -4,7 +4,55 @@ Status: selected direction, 7 November 2026. The user chose a station-dwelling
 civilization inspired by Stars! Alternate Reality. This replaces the earlier
 choice between Habitat Civilization and Remote Logistics Specialist. The reserved
 `HabitatCivilization` identity is the implementation candidate; it is not yet
-playable. This PR remains a design draft, not a gameplay implementation.
+playable. The reviewed design was merged in
+[PR #282](https://github.com/kotrf/suns/pull/282); implementation proceeds in
+reviewable stages without enabling an incomplete race.
+
+## Implementation stage 1: station residents and cargo
+
+The first implementation supplies `NativeOrbitalPopulation`, separate from the
+ordinary late-game habitat, with a physical station ID and real people. Battle
+destruction clears native residents/ownership exactly once; already evacuated
+transport cargo is unaffected. Station refits preserve the ID/residents and
+reject a smaller hull that cannot house them. Prototype housing for the existing
+Dock / Starbase / Fortress is 100,000 / 500,000 / 2,000,000; these are initial
+kernel limits, not a completed native hull/technology balance.
+
+Shared `UnloadAll` handles partial native station unloading and independent
+mineral delivery. Explicit station transfers/evacuation conserve residents;
+surface exact/final-manifest orders and ordinary surface founding/invasion cannot
+bypass the native housing requirement. Received and pending owner snapshots carry
+native population separately. Delivered destruction is retained by station ID
+and observation time independently of any cached fit, so a later pre-battle
+snapshot cannot resurrect a station HQ had never seen. Native colony rows in
+History use the same received view as the planet panel. Fleet holds and missing
+contacts also come from that view, with missing contacts counted once. These
+received observations can still have different dates: a returning transport can
+report its empty hold before the destination reports the unloaded residents.
+History retains the observation-year range. If dates differ or are missing,
+empire population and mineral-stock graphs show a gap and explain that no
+synchronized total is available. The stored sum remains a received subtotal,
+not an exact empire total; individual colony/fleet records remain available.
+This check uses only received evidence, never pending packets or physical truth.
+Native freight is credited from the delivered manifest
+in its receiving year, including reports already due when a host save resumes.
+Earlier observation years are not rewritten, and refreshing the boundary retains
+its already measured freight.
+
+Save v115 introduced bounded native population and observation records; v116
+adds the delivered destruction ledger. Real v114 files migrate with no native
+population, and real v115 files preserve population/queued evidence and migrate
+already received native tombstones. Save v117 adds bounded History date metadata;
+native rows from older versions have unavailable date provenance and are not
+retroactively certified as synchronized. Genuine v116 migration is covered too.
+Orders v49 and portable race v3 are
+unchanged. Core/save/PBEM tests use deliberately constructed native states;
+this does **not** satisfy the later new-campaign/Computer acceptance below.
+
+Campaign setup and race files still reject this identity for both controllers.
+Next stages must deliver the paid start/founding economy, native growth/radiation,
+remote mining/replacements, advanced hull progression and Computer expansion.
+The full first-playable acceptance remains the gate for enabling the trait.
 
 ## Direction supplied by the user
 
@@ -251,8 +299,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats remain save v114 / orders v49 / portable race v3. The eventual
-implementation must decide the native-state extension/version explicitly.
-This document changes no game rules. Mobile residential arks, transport-network
+Current game formats are save v117 / orders v49 / portable race v3. The native
+population foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

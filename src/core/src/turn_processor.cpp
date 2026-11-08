@@ -1,6 +1,7 @@
 #include "suns/transport_lines.hpp"
 #include "suns/fleet_recycling.hpp"
 #include "suns/orbital_habitats.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/survey_probes.hpp"
@@ -397,6 +398,7 @@ struct CargoEndpointRef {
     Fleet* fleet{};
     Position position;
     bool orbital{};
+    bool nativeOrbit{};
 };
 
 std::optional<CargoEndpointRef> resolve_cargo_endpoint(
@@ -413,14 +415,16 @@ std::optional<CargoEndpointRef> resolve_cargo_endpoint(
         const auto* star = find_star(state, planet->star);
         if (!star) return std::nullopt;
         if(endpoint.orbital) {
-            if(planet->owner!=player || !habitat_completed(*planet)) return std::nullopt;
+            if(planet->owner!=player || (native_orbital_race(state, player)
+                ? !native_orbital_station(state, *planet) : !habitat_completed(*planet))) return std::nullopt;
             if(state.mediumObserver) {
                 const auto* owner=find_player(state,player);
                 const auto evidence=owner?std::find_if(owner->surveyKnowledge.begin(),owner->surveyKnowledge.end(),[&](const auto& k){return k.star==planet->star;}):std::vector<SystemSurveyKnowledge>::const_iterator{};
                 if(!owner || evidence==owner->surveyKnowledge.end() || evidence->observedTurn!=state.turn || !evidence->planetSnapshot || !evidence->planetSnapshot->habitat) return std::nullopt;
             }
         }
-        return CargoEndpointRef{&*planet, nullptr, star->position,endpoint.orbital};
+        return CargoEndpointRef{&*planet, nullptr, star->position,endpoint.orbital,
+            endpoint.orbital && native_orbital_race(state, player)};
     }
 
     const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
@@ -506,6 +510,7 @@ std::uint64_t proportional_population_loss(std::uint64_t losses,std::uint64_t gr
 bool invade_colony(
     GameState& state, Fleet& fleet, Planet& planet, std::uint64_t attackingPopulation)
 {
+    if (native_orbital_race(state, fleet.owner)) return false;
     if (attackingPopulation == 0 || attackingPopulation > fleet.colonists
         || planet.owner == 0 || planet.owner == fleet.owner
         || !fleet_at_planet(state, fleet, planet)) {
@@ -589,7 +594,9 @@ bool invade_colony(
 
 std::uint64_t& endpoint_colonists(const CargoEndpointRef& endpoint)
 {
-    return endpoint.planet ? (endpoint.orbital?endpoint.planet->habitat.population:endpoint.planet->population) : endpoint.fleet->colonists;
+    if (!endpoint.planet) return endpoint.fleet->colonists;
+    if (endpoint.nativeOrbit) return endpoint.planet->nativeOrbit.population;
+    return endpoint.orbital ? endpoint.planet->habitat.population : endpoint.planet->population;
 }
 
 MineralCargo& endpoint_minerals(CargoEndpointRef& endpoint)
@@ -616,11 +623,19 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
         return false;
     }
     if (!valid_mineral_cargo(order.minerals)) return false;
+    if (order.colonists && native_orbital_race(state, player)
+        && ((source->planet && !source->nativeOrbit) || (destination->planet && !destination->nativeOrbit))) return false;
     if(source->orbital || destination->orbital) {
         if(mineral_cargo_mass(order.minerals)>epsilon) return false;
         if(source->planet && destination->planet && (!engineering_station_available(state,*source->planet)
             || !engineering_operation_available(state,*source->planet))) return false;
-        if(destination->orbital && order.colonists>kOrbitalPopulationCapacity-destination->planet->habitat.population) return false;
+        if(destination->orbital) {
+            const auto capacity = destination->nativeOrbit
+                ? native_orbital_capacity(native_orbital_station(state, *destination->planet)->hull)
+                : kOrbitalPopulationCapacity;
+            const auto residents = endpoint_colonists(*destination);
+            if (residents > capacity || order.colonists > capacity-residents) return false;
+        }
     }
 
     const bool enemyDestination = destination->planet
@@ -721,6 +736,9 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
 bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     const std::optional<ProductionTemplate>& colonyPlan)
 {
+    // Native founding needs a paid inhabited station; the surface operation is
+    // never a fallback while that later implementation is unavailable.
+    if (native_orbital_race(state, fleet.owner)) return false;
     if (colonyPlan && !production_template_valid(*colonyPlan)) return false;
     // A manual founding order cannot dismantle a fleet to evade an armed
     // hostile encounter already present at the planning boundary.
@@ -864,6 +882,15 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (!colony) return false;
             const bool orbital=action.cargo==FleetCargoKind::OrbitalColonists;
+            if (native_orbital_race(state, fleet.owner)) {
+                if (!orbital || !native_orbital_station(state, *colony)) return false;
+                auto& population = colony->nativeOrbit.population;
+                if (population <= action.reservePopulation) return false;
+                const auto load = std::min(population-action.reservePopulation,
+                    static_cast<std::uint64_t>(std::floor(freeSpace*kColonistsPerCargoUnit+0.000001)));
+                population -= load; fleet.colonists += load;
+                return false;
+            }
             if(orbital && !habitat_completed(*colony)) return false;
             auto& population=orbital?colony->habitat.population:colony->population;
             const auto reserve=orbital?action.reservePopulation:std::max<std::uint64_t>(1,action.reservePopulation);
@@ -952,14 +979,25 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
                 action.cargo==FleetCargoKind::Boranium?fleet.minerals.boranium:fleet.minerals.germanium;
             if(targeted && !visit && amount>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}
         };
-        if(action.cargo==FleetCargoKind::OrbitalColonists) {
+        const bool native = native_orbital_race(state, fleet.owner);
+        if (native && (action.cargo==FleetCargoKind::Colonists || action.cargo==FleetCargoKind::All
+            || action.cargo==FleetCargoKind::OrbitalColonists)) {
+            auto* colony = friendly_colony_at_fleet(state, fleet);
+            if (colony && !hostile_station_blocks_landing(state, fleet, *colony)) {
+                const auto amount = unload_native_orbital_colonists(state, *colony, fleet);
+                record_freight_delivery(freight, *colony, {}, amount);
+            }
+            // All still processes legal minerals, independently of housing.
+            if (action.cargo!=FleetCargoKind::All) return false;
+        }
+        if(!native && action.cargo==FleetCargoKind::OrbitalColonists) {
             auto* colony=friendly_colony_at_fleet(state,fleet);
             if(!colony || !habitat_completed(*colony) || hostile_station_blocks_landing(state,fleet,*colony)) return false;
             const auto unload=std::min(fleet.colonists,kOrbitalPopulationCapacity-colony->habitat.population);
             colony->habitat.population+=unload; fleet.colonists-=unload;
             record_freight_delivery(freight,*colony,{},unload); return false;
         }
-        if (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All) {
+        if (!native && (action.cargo == FleetCargoKind::Colonists || action.cargo == FleetCargoKind::All)) {
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (colony) {
                 if (fleet.colonists > 0 && hostile_station_blocks_landing(state, fleet, *colony)) return false;
@@ -988,6 +1026,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
             if(aboard>0){fleet.arrivalAction=action;fleet.destination=fleet.position;}return false;
         }
         if (surface == state.planets.end()) {waitForDemand();return false;}
+        if (native && action.cargo==FleetCargoKind::All && hostile_station_blocks_landing(state,fleet,*surface)) return false;
         if(targeted && (surface->owner!=fleet.owner || surface->id!=action.transportDestination)) {
             waitForDemand();return false;
         }
@@ -2234,6 +2273,7 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
     std::visit([&](const auto& concreteOrder) {
         using T = std::decay_t<decltype(concreteOrder)>;
         if constexpr (std::is_same_v<T, SetFleetColonistsOrder>) {
+                        if (native_orbital_race(next, player)) return;
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == player;
                         });
@@ -2978,6 +3018,28 @@ TurnResult TurnProcessor::process_with_events(
             return candidate.id == event.recipient;
         });
         if (player == next.players.end() || player->history.empty()) continue;
+        if (event.kind == GameEventKind::FreightDelivered
+            && player->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
+            // A manifest can already be due at the loaded planning boundary.
+            // Credit its receiving year, not the new year resolved below it.
+            const auto snapshot = std::find_if(player->history.begin(), player->history.end(),
+                [&](const auto& record) { return record.turn == event.turn; });
+            if (snapshot == player->history.end()) continue;
+            snapshot->freightRecorded = true;
+            snapshot->freightDelivered.ironium += event.deliveredMinerals.ironium;
+            snapshot->freightDelivered.boranium += event.deliveredMinerals.boranium;
+            snapshot->freightDelivered.germanium += event.deliveredMinerals.germanium;
+            snapshot->colonistsDelivered += event.deliveredColonists;
+            const auto colony = std::find_if(snapshot->colonyHistory.begin(), snapshot->colonyHistory.end(),
+                [&](const auto& record) { return record.planet == event.planet; });
+            if (colony != snapshot->colonyHistory.end()) {
+                colony->freightDelivered.ironium += event.deliveredMinerals.ironium;
+                colony->freightDelivered.boranium += event.deliveredMinerals.boranium;
+                colony->freightDelivered.germanium += event.deliveredMinerals.germanium;
+                colony->colonistsDelivered += event.deliveredColonists;
+            }
+            continue;
+        }
         std::optional<HistoryMilestoneKind> kind;
         switch (event.kind) {
         case GameEventKind::ColonyFounded: kind = HistoryMilestoneKind::ColonyFounded; break;

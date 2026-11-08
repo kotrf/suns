@@ -1,4 +1,5 @@
 #include "suns/orbital_habitats.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/mobile_base.hpp"
 #include "main_window.hpp"
 #include "application_icon.hpp"
@@ -1131,7 +1132,7 @@ void MainWindow::updateControls(bool refreshReceivedState)
             const QSignalBlocker blocker(colonistLoadSpin_);
             colonistLoadSpin_->setMaximum(std::max(0, maxColonists));
         }
-        colonistLoadSpin_->setEnabled(maxColonists > 0);
+        colonistLoadSpin_->setEnabled(maxColonists > 0 && !native_orbital_race(state_, fleet->owner));
     } else {
         warpSpin_->setEnabled(false);
         colonistLoadSpin_->setEnabled(false);
@@ -1688,6 +1689,7 @@ void MainWindow::queueProduction(ProductionKind kind)
 
 void MainWindow::queueColonists()
 {
+    if (native_orbital_race(state_, pendingOrders_.player)) return;
     const auto* planet = selectedFriendlyColonyForFleet();
     const auto* fleet = selectedFleet();
     if (!planet || !fleet) return;

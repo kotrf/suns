@@ -16,6 +16,7 @@
 #include "suns/orbital_bases.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/orbital_habitats.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/exotic_materials.hpp"
@@ -39,7 +40,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 114;
+constexpr quint32 kSaveFormatVersion = 117;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2384,6 +2385,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "engineering_queue_save.inc"
 #include "field_science_completion_save.inc"
 #include "orbital_habitats_save.inc"
+#include "native_orbital_save.inc"
 #include "orbital_bases_save.inc"
 #include "colony_conditions_save.inc"
 #include "transport_lines_save.inc"
@@ -3304,6 +3306,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeSurfaceMinerals(stream,data.state);
     writeEconomy(stream,data.state);
     writePopulationRules(stream,data.state);
+    writeNativeOrbit(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3440,6 +3443,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if(version>=111) readEconomy(stream,loaded.state);
     if(version>=112) readPopulationRules(stream,loaded.state);
     else for (auto& player : loaded.state.players) player.race.populationGrowthRate = 10;
+    if(version>=115) readNativeOrbit(stream,loaded.state);
     loaded.galaxyConfig.slowResearch = loaded.state.slowResearch;
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn

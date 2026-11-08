@@ -566,6 +566,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         // Ownership does not deliver remote construction telemetry. Both the
         // installation and its remaining queue work come from the same packet.
         known.habitat = {};
+        known.nativeOrbit = {};
         known.advancedFactories = 0;
         known.advancedMines = 0;
         // Owned remote construction is known only through delivered reports.
@@ -614,6 +615,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
             if(evidence!=player->surveyKnowledge.end() && evidence->observedOwner==playerId && evidence->planetSnapshot && evidence->planetSnapshot->habitat) {
                 const auto& h=*evidence->planetSnapshot->habitat;
                 known.habitat=h.habitat; known.population=h.surfacePopulation; known.industry=h.industry; known.minerals=h.minerals;
+                known.nativeOrbit=h.nativeOrbit;
                 known.mines=h.mines; known.productionQueue=h.queue;
                 known.advancedFactories=h.advancedFactories; known.advancedMines=h.advancedMines;
                 known.radar=h.radar;
