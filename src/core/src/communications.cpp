@@ -8,6 +8,7 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/production.hpp"
+#include "suns/mining.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -343,12 +344,13 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
 
     if (!fleet_can_remote_mine(state, fleet)) return false;
 
-    const auto atUncolonizedPlanet = std::any_of(
+    const auto atMiningSite = std::any_of(
         state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
             const auto* star = find_star(state, planet.star);
-            return planet.owner == 0 && star && same_position(star->position, fleet.position);
+            return remote_mining_site_available(state, fleet.owner, planet)
+                && star && same_position(star->position, fleet.position);
         });
-    if (!atUncolonizedPlanet) return false;
+    if (!atMiningSite) return false;
     pause_probe(fleet); fleet.visitor = {};
     fleet.task = FleetTask::RemoteMining;
     return true;

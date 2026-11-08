@@ -31,6 +31,26 @@ inline GameState native_orbital_fixture()
     set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
     return state;
 }
+inline GameState native_orbital_miner_fixture()
+{
+    auto state = native_orbital_fixture();
+    auto& player = state.players.front();
+    player.technology.levels[static_cast<std::size_t>(ResearchField::Construction)] = 2;
+    player.technology.levels[static_cast<std::size_t>(ResearchField::Electronics)] = 1;
+    state.shipDesigns.push_back({90, 1, "Orbital miner", ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5, ShipComponentType::RoboMiniMiner}});
+    state.nextShipDesignId = 91;
+    auto& fleet = state.fleets.front();
+    fleet.design = 90; fleet.ships = {{90, 2}}; fleet.colonists = 0; fleet.minerals = {};
+    fleet.fuel = fleet_fuel_capacity(state, fleet);
+    fleet.telemetry = {}; fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+    state.planets.front().minerals = {100, 100, 100};
+    state.planets.front().observedConcentration = MineralCargo{100, 50, 25};
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    player.history.clear(); record_empire_turn_statistics(state);
+    assert(fleet_can_remote_mine(state, fleet));
+    return state;
+}
 inline GameState asynchronous_native_unload_fixture()
 {
     auto state = native_orbital_fixture();

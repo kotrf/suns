@@ -2,6 +2,7 @@
 #include "suns/fleet_recycling.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
+#include "suns/mining.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/survey_probes.hpp"
@@ -626,7 +627,10 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
     if (order.colonists && native_orbital_race(state, player)
         && ((source->planet && !source->nativeOrbit) || (destination->planet && !destination->nativeOrbit))) return false;
     if(source->orbital || destination->orbital) {
-        if(mineral_cargo_mass(order.minerals)>epsilon) return false;
+        // A native station uses its world's one shared mineral stock. Ordinary
+        // independent habitats still expose only their resident transfer here.
+        if(mineral_cargo_mass(order.minerals)>epsilon
+            && ((source->orbital && !source->nativeOrbit) || (destination->orbital && !destination->nativeOrbit))) return false;
         if(source->planet && destination->planet && (!engineering_station_available(state,*source->planet)
             || !engineering_operation_available(state,*source->planet))) return false;
         if(destination->orbital) {
@@ -699,13 +703,13 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
     return true;
 }
 
-std::vector<RemoteExtraction> mine_uncolonized_planets(GameState& state)
+std::vector<RemoteExtraction> mine_remote_sites(GameState& state)
 {
     std::vector<RemoteExtraction> extraction;
     for (const auto& fleet : state.fleets) {
         if (fleet.task != FleetTask::RemoteMining) continue;
         for (auto& planet : state.planets) {
-            if (planet.owner != 0 || !fleet_at_planet(state, fleet, planet)) continue;
+            if (!remote_mining_site_available(state, fleet.owner, planet) || !fleet_at_planet(state, fleet, planet)) continue;
             for (const auto& stack : fleet_ship_stacks(fleet)) {
                 const auto* design = find_ship_design(state, stack.design);
                 if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
@@ -723,6 +727,29 @@ std::vector<RemoteExtraction> mine_uncolonized_planets(GameState& state)
         }
     }
     return extraction;
+}
+
+void publish_native_mining_output(GameState& state, std::vector<RemoteExtraction> extraction)
+{
+    std::erase_if(extraction, [&](const auto& x) { return !native_orbital_race(state, x.owner); });
+    std::sort(extraction.begin(), extraction.end(), [](const auto& a, const auto& b) {
+        return std::tie(a.owner, a.planet) < std::tie(b.owner, b.planet);
+    });
+    for (std::size_t index = 0; index < extraction.size();) {
+        const auto owner = extraction[index].owner; const auto planetId = extraction[index].planet;
+        MineralCargo minerals;
+        do {
+            minerals.ironium += extraction[index].minerals.ironium;
+            minerals.boranium += extraction[index].minerals.boranium;
+            minerals.germanium += extraction[index].minerals.germanium;
+            ++index;
+        } while (index < extraction.size() && extraction[index].owner == owner && extraction[index].planet == planetId);
+        const auto* planet = find_planet(state, planetId);
+        const auto* star = planet ? find_star(state, planet->star) : nullptr;
+        if (star) queue_player_report(state, owner, PlayerReportKind::RemoteMiningOutput,
+            star->position, state.turn+1, star->id, planetId, 0, 0, ProductionKind::Mine,
+            0, ResearchField::Construction, 0, minerals);
+    }
 }
 
 Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
@@ -1097,7 +1124,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     case FleetArrivalActionKind::RemoteMining: {
         if (!fleet_can_remote_mine(state, fleet)) return false;
         const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [&](const Planet& candidate) {
-            return candidate.owner == 0 && fleet_at_planet(state, fleet, candidate);
+            return remote_mining_site_available(state, fleet.owner, candidate) && fleet_at_planet(state, fleet, candidate);
         });
         if (planet == state.planets.end()) return false;
         fleet.task = FleetTask::RemoteMining;
@@ -2887,7 +2914,10 @@ TurnResult TurnProcessor::process_with_events(
     }
 
     for(auto& planet:next.planets) decay_planet_contamination(planet);
-    const auto remoteExtraction = mine_uncolonized_planets(next);
+    const auto remoteExtraction = mine_remote_sites(next);
+    // Emit while the actual mining source can still transmit/share its
+    // observation. Later movement or combat cannot invent a transmitter.
+    publish_native_mining_output(next, remoteExtraction);
     mine_xenocrystals(next);
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
@@ -3018,6 +3048,25 @@ TurnResult TurnProcessor::process_with_events(
             return candidate.id == event.recipient;
         });
         if (player == next.players.end() || player->history.empty()) continue;
+        if (event.kind == GameEventKind::RemoteMiningOutput
+            && player->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
+            const auto snapshot = std::find_if(player->history.begin(), player->history.end(),
+                [&](const auto& h) { return h.turn == event.turn; });
+            if (snapshot == player->history.end()) continue;
+            snapshot->remoteExtractionRecorded = true;
+            snapshot->remoteExtraction.ironium += event.deliveredMinerals.ironium;
+            snapshot->remoteExtraction.boranium += event.deliveredMinerals.boranium;
+            snapshot->remoteExtraction.germanium += event.deliveredMinerals.germanium;
+            const auto site = std::find_if(snapshot->remoteMineHistory.begin(), snapshot->remoteMineHistory.end(),
+                [&](const auto& x) { return x.planet == event.planet; });
+            if (site == snapshot->remoteMineHistory.end()) snapshot->remoteMineHistory.push_back({event.planet, event.deliveredMinerals});
+            else {
+                site->extraction.ironium += event.deliveredMinerals.ironium;
+                site->extraction.boranium += event.deliveredMinerals.boranium;
+                site->extraction.germanium += event.deliveredMinerals.germanium;
+            }
+            continue;
+        }
         if (event.kind == GameEventKind::FreightDelivered
             && player->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
             // A manifest can already be due at the loaded planning boundary.

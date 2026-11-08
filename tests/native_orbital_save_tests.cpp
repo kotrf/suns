@@ -302,6 +302,55 @@ void history_date_bounds_and_genuine_v116_migration()
     assert(next.players.front().history.back().colonistsDelivered == 500);
     assert(!next.players.front().history[2].assetTotalsSynchronized);
 }
+void native_mining_manifests_and_v117_migration()
+{
+    auto state = test::native_orbital_miner_fixture();
+    state.planets.front().radar = PlanetaryRadarLevel::None;
+    state.fleets.front().task = state.fleets.front().telemetry.task = FleetTask::RemoteMining;
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    state = TurnProcessor{}.process(state, {});
+    assert(state.planets.front().minerals.ironium == 108);
+    assert(state.players.front().history.back().remoteExtraction.ironium == 0);
+    const auto mining = std::find_if(state.players.front().pendingPlayerReports.begin(), state.players.front().pendingPlayerReports.end(),
+        [](const auto& r) { return r.kind == PlayerReportKind::RemoteMiningOutput; });
+    assert(mining != state.players.front().pendingPlayerReports.end() && mining->deliveredMinerals.ironium == 8);
+    assert(mining->deliveryTurn == state.turn+1);
+    QTemporaryDir directory; QString error; SaveGameData loaded, reopened;
+    const auto path = directory.filePath("mining.suns");
+    auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+    assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
+    const auto checkExport = [&](const SaveGameData& data, double expected) {
+        assert(write_save_game_file(path, make_player_turn(data, 1), error) && read_save_game_file(path, reopened, error));
+        assert(reopened.state.players.front().pendingPlayerReports.empty());
+        assert(reopened.state.players.front().history.back().remoteExtraction.ironium == expected);
+    };
+    checkExport(loaded, 0);
+    auto dueOnLoad = loaded.state; ++dueOnLoad.turn;
+    const auto overdue = TurnProcessor{}.process(dueOnLoad, {});
+    assert(overdue.players.front().history[2].turn == 3 && overdue.players.front().history[2].remoteExtraction.ironium == 8);
+    assert(overdue.players.front().history.back().remoteExtraction.ironium == 0);
+    const auto received = TurnProcessor{}.process_with_events(loaded.state, {});
+    host.state = received.state; host.strategicMessages = received.events;
+    checkExport(host, 8);
+    assert(std::any_of(reopened.strategicMessages.begin(), reopened.strategicMessages.end(), [](const auto& e) {
+        return e.kind == GameEventKind::RemoteMiningOutput && e.deliveredMinerals.ironium == 8 && e.observedTurn == 2 && e.turn == 3;
+    }));
+    assert(reopened.state.players.front().history[1].remoteExtraction.ironium == 0);
+    // Order wire format remains v49; the decoder feeds the same physical rule.
+    TurnOrderFileData packet{118, 1, 17, {1, {SetRemoteMiningOrder{1, true}}}, {"Remote mining"}};
+    const auto orderPath = directory.filePath("mining.sunsorders"); TurnOrderFileData decoded;
+    assert(write_turn_order_file(orderPath, packet, error) && read_turn_order_file(orderPath, decoded, error));
+    assert(TurnProcessor{}.process(test::native_orbital_miner_fixture(), {decoded.orders}).planets.front().minerals.ironium == 108);
+
+    assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-mining-v117.suns"), loaded, error));
+    assert(loaded.state.players.front().history.back().remoteExtraction.ironium == 8);
+    assert(!loaded.state.players.front().history.back().remoteExtractionRecorded);
+    assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, loaded, error));
+    const auto continued = TurnProcessor{}.process(loaded.state, {});
+    assert(continued.players.front().history.back().remoteExtractionRecorded);
+    assert(continued.players.front().history.back().remoteExtraction.ironium == 8);
+    assert(!continued.players.front().history[1].remoteExtractionRecorded);
+}
 GameState battle_fixture(bool stationSnapshot)
 {
     auto state = test::native_orbital_fixture();
@@ -452,6 +501,7 @@ int main(int argc, char** argv)
     received_missing_fleet_is_counted_once();
     asynchronous_cargo_dates_survive_host_and_pbem();
     history_date_bounds_and_genuine_v116_migration();
+    native_mining_manifests_and_v117_migration();
     history_and_pbem_wait_for_station_loss_receipt();
     destruction_before_first_snapshot_survives_reload();
     destruction_identity_is_monotonic_and_does_not_kill_a_replacement();

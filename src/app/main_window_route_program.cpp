@@ -6,6 +6,8 @@
 #include "suns/strategic_operations.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/production.hpp"
+#include "suns/mining.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/stations.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/campaign.hpp"
@@ -717,8 +719,12 @@ bool MainWindow::startSelectedFleetWorkHere(FleetArrivalAction action)
         const auto* star = findStarAtPosition(state_, fleet.position);
         const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
         const auto owner = planet ? known_planet_owner(state_, fleet.owner, planet->id) : std::nullopt;
-        if (!owner || *owner != 0) {
-            statusBar()->showMessage("Remote Mining requires a reported unowned planet at the fleet's position.", 5000);
+        const auto& received = receivedPlayerState();
+        const auto* known = star ? find_planet_at_star(received, star->id) : nullptr;
+        if (!owner || !known || !remote_mining_site_available(received, fleet.owner, *known)) {
+            statusBar()->showMessage(native_orbital_race(received, fleet.owner)
+                ? "Remote Mining requires a reported unowned world or your own orbital colony at this position."
+                : "Remote Mining requires a reported unowned planet at the fleet's position.", 5000);
             return false;
         }
         // Keep Stop before the native task: only Stop cancels older packets.
@@ -862,8 +868,12 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         }
         const auto* planet = find_planet_at_star(state_, star->id);
         const auto owner = planet ? known_planet_owner(state_, fleet->owner, planet->id) : std::nullopt;
-        if (owner && *owner != 0) {
-            statusBar()->showMessage("Remote Mining cannot target a reported colony", 3000);
+        const auto& received = receivedPlayerState();
+        const auto* known = find_planet_at_star(received, star->id);
+        if (owner && (!known || !remote_mining_site_available(received, fleet->owner, *known))) {
+            statusBar()->showMessage(native_orbital_race(received, fleet->owner)
+                ? "Remote Mining needs an unowned world or your own orbital colony"
+                : "Remote Mining cannot target a reported colony", 3000);
             return false;
         }
     }
@@ -1163,8 +1173,13 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
     }
     if (action.kind == FleetArrivalActionKind::RemoteMining) {
         const auto owner = planet ? known_planet_owner(state_, fleet.owner, planet->id) : std::nullopt;
-        if (!star || (owner && *owner != 0) || !fleet_can_remote_mine(fleetPlanningState(), fleet)) {
-            statusBar()->showMessage("Remote Mining needs a mining fleet and a system without a reported colony", 4000);
+        const auto& received = receivedPlayerState();
+        const auto* known = star ? find_planet_at_star(received, star->id) : nullptr;
+        if (!star || (owner && (!known || !remote_mining_site_available(received, fleet.owner, *known)))
+            || !fleet_can_remote_mine(fleetPlanningState(), fleet)) {
+            statusBar()->showMessage(native_orbital_race(received, fleet.owner)
+                ? "Remote Mining needs a mining fleet at an unowned world or your own orbital colony"
+                : "Remote Mining needs a mining fleet and a system without a reported colony", 4000);
             return false;
         }
     }

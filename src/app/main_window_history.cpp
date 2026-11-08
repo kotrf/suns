@@ -476,6 +476,8 @@ void MainWindow::refreshEmpireHistory()
     if (metric == 22)
         historySummary_->setText(historySummary_->text()
             + " — Received reports only; undetected opponent actions remain unknown");
+    if (remoteMetric && player->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization)
+        historySummary_->setText(historySummary_->text() + " — Confirmed mining output, by report receipt year");
     if (followingMap && colonyId == 0) {
         historySummary_->setText(fleetMetric
             ? "Select a recorded fleet on the map to view its history."

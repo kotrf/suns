@@ -1,5 +1,48 @@
 # Project status and development handoff
 
+## #283 merged; #50 native owned-orbit mining — 8 November 2026
+
+The user authorized merge and continuation. PR #283 merged as ef71c253153bc0228cbc377bc7c35c7a1f1740d0,
+tree 9b5963ef8aed73a144e9eda2a0313c7da8b6f0b6, matching reviewed 88abe3a. The latest
+review confirmed P3 and found no new issues; source CI 42519826411 passed 121/121.
+All five confirmed-fixed threads were resolved under MEM-34. Separate main CI
+42521693412 succeeded. Work continues in the existing checkout on
+codex/native-orbital-mining-50.
+
+The next #50 slice supplies one remote-site rule for neutral worlds and a native
+empire's own live inhabited station. Work-here authoring, route authoring,
+stationary command delivery, arrival, physical extraction and rate projection
+share that rule. Known hostile colonies and ordinary owned surface worlds remain
+ineligible. UI admission and rate estimates use received state; execution rechecks
+physical ownership at delivery. Native surface/population-powered extraction is
+explicitly zero.
+
+Output is deposited once in Planet::minerals, never the miner's hold. The native
+orbital cargo endpoint accesses that shared stock; ordinary independent habitats
+retain their resident-only orbital endpoint. Native mining manifests use normal
+communications, including passive/silent outboxes. They are emitted when mining
+actually occurs, before later movement/combat, and History credits them by receipt
+year rather than the hidden physical extraction year. Past rows remain unchanged.
+Save v118 admits the new report/event enums; no base payload/order/race layout is
+changed. Native pre-v118 extraction rows retain amounts but have no certified
+receipt measurement. A genuine v117 fixture was generated with the merged old
+core/save writer before introducing those manifests. Orders v49/race v3 remain.
+
+The initial owned-work regression failed on merged #283. Core tests now cover
+start/stop, arrival timing, normal/hostile ownership, unavailable equipment,
+absence of innate output, real battle loss, delayed task revalidation, report
+delay and collection of ore without duplicate accounting. UI checks cover owned
+work-here and route editing, unchanged admission/rates after hidden ownership
+change, and rejection after new hostile evidence. Host/PBEM tests cover pending
+and delivered manifests, receipt-year boundaries, unchanged order v49 and genuine
+v117 migration. The full GCC14.2/Qt6.12 Debug application build and **122/122 CTest
+in 72.42 s** passed. Screenshot inspected; 139 local links and diff checked.
+Starter mining access/ship/budget, paid founding,
+native growth/radiation/output, stronger hulls and actual Computer expansion are
+not completed by these constructed fixtures; the trait stays disabled for both
+controllers and #50 remains open. #53/#63 remain frozen. Current PR/source/CI are
+on GitHub.
+
 ## #283 review: event markers without measurements — 8 November 2026
 
 Review of 757704c confirmed the asynchronous-totals P2 fix; source CI 42425919251

@@ -51,7 +51,7 @@ int main()
     original.pendingOrders = {1, {}};
     assert(write_save_game_file(path, original, error));
     auto current = bytes(path);
-    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 117); }
+    { QDataStream in(current); quint32 magic{}, version{}; in >> magic >> version; assert(version == 118); }
     QByteArray workforceMarker; { QDataStream out(&workforceMarker, QIODevice::WriteOnly); out << quint32{0x5746524b}; }
     const auto extension = current.lastIndexOf(workforceMarker); assert(extension > 0);
     { QDataStream in(current.mid(extension)); quint32 magic{}, count{}; in >> magic >> count; assert(magic == 0x5746524b && count == 1); }
