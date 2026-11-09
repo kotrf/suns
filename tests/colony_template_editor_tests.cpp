@@ -3,6 +3,7 @@
 #include "route_program_dock.hpp"
 #include "suns/communications.hpp"
 #include "suns/production.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -51,6 +52,16 @@ struct MainWindowTestAccess {
         w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear(); w.rebuildScene();
     }
     static void colonize(MainWindow& w) { w.queueColonize(); }
+    static void nativeFixture(MainWindow& w) {
+        w.state_ = test::native_orbital_founding_fixture();
+        w.state_.planets[1].environment = {0, 100, 20};
+        w.selection_.fleet = w.state_.fleets.back().id; w.selection_.star = w.state_.planets[1].star;
+        w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear(); w.rebuildScene();
+    }
+    static bool overcrowded(MainWindow& w) {
+        auto fleet = w.state_.fleets.back(); fleet.ships.front().count = 50; fleet.colonists = 100'001;
+        return w.confirmFleetColonization(fleet, w.state_.planets[1], false);
+    }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
 };
 }
@@ -146,4 +157,36 @@ int main(int argc, char** argv)
     answer.stop();
     const auto& direct = std::get<suns::ColonizePlanetOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
     assert(direct.colonyPlan == suns::colony_development_presets().front());
+    suns::MainWindowTestAccess::nativeFixture(window);
+    bool sawStation = false, sawPlan = false;
+    QTimer nativeAnswer;
+    QObject::connect(&nativeAnswer, &QTimer::timeout, &window, [&] {
+        if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            sawStation = true;
+            const auto text = warning->informativeText();
+            assert(warning->windowTitle() == "Confirm orbital colony founding");
+            assert(text.contains("Residents transferred to station: 1000 / 100000"));
+            assert(text.contains("Prepaid seed stock: I 10 / B 10 / G 10"));
+            assert(text.contains("excluding prepaid deployment: I 11 / B 5 / G 10"));
+            assert(text.contains("including cargo: I 24 / B 17 / G 21"));
+            assert(!text.contains("Population will decline") && !text.contains("Colonists landed"));
+            if (app.arguments().contains("--capture")) assert(warning->grab().save("/tmp/suns-native-founding-confirmation.png"));
+            warning->button(QMessageBox::Yes)->click();
+        } else if (auto* choice = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            choice && choice->objectName() == "colonizePlanDialog") {
+            sawPlan = true;
+            bool explainsKit = false;
+            for (auto* label : choice->findChildren<QLabel*>())
+                explainsKit |= label->text().contains("paid construction module includes");
+            assert(explainsKit);
+            choice->accept();
+        }
+    });
+    nativeAnswer.start(10);
+    suns::MainWindowTestAccess::colonize(window);
+    nativeAnswer.stop();
+    assert(sawStation && sawPlan);
+    const auto& nativeOrder = std::get<suns::ColonizePlanetOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
+    assert(nativeOrder.fleet == 2 && nativeOrder.planet == 2 && !nativeOrder.colonyPlan);
+    assert(!suns::MainWindowTestAccess::overcrowded(window));
 }

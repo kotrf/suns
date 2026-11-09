@@ -67,6 +67,68 @@ void paid_start_and_replacement_survive_host_and_pbem()
     assert(write_save_game_file(path, envelope(state), error));
     QFile afterFile(path); assert(afterFile.open(QIODevice::ReadOnly)); assert(afterFile.readAll() == before);
 }
+void paid_founding_orders_and_received_evidence_survive_reload()
+{
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto savePath = directory.filePath("orbital-founding.suns");
+    const auto packetPath = directory.filePath("orbital-founding.sunsorders");
+    for (const bool arrival : {false, true}) {
+        auto state = test::native_orbital_founding_fixture();
+        const auto id = state.fleets.back().id, target = state.planets[1].id;
+        const Order order = arrival ? Order{MoveFleetOrder{id, state.fleets.back().position, 5,
+            {FleetArrivalActionKind::Colonize}}} : Order{ColonizePlanetOrder{id, target}};
+        TurnOrderFileData packet{115, state.turn, 17, {1, {order}}, {"Found orbital colony"}};
+        assert(write_turn_order_file(packetPath, packet, error)); TurnOrderFileData decoded;
+        assert(read_turn_order_file(packetPath, decoded, error));
+        assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
+        const auto expected = TurnProcessor{}.process(state, {decoded.orders});
+        state = TurnProcessor{}.process(loaded.state, {decoded.orders});
+        assert(state.orbitalStations.size() == 2 && state.fleets.size() == 1);
+        assert(state.planets[1].nativeOrbit == expected.planets[1].nativeOrbit);
+        assert(same_minerals(state.planets[1].minerals, {24, 17, 21}));
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        assert(write_save_game_file(savePath, make_player_turn(host, 1), error) && read_save_game_file(savePath, loaded, error));
+        assert(loaded.state.planets[1].nativeOrbit.population == 1000 && !loaded.state.planets[1].population);
+        assert(native_orbital_station(loaded.state, loaded.state.planets[1]));
+        assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+        assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
+        const auto resumed = TurnProcessor{}.process(loaded.state, {decoded.orders});
+        assert(resumed.orbitalStations.size() == 2 && same_minerals(resumed.planets[1].minerals, state.planets[1].minerals));
+    }
+
+    auto state = test::native_orbital_founding_fixture();
+    const auto& fleet = state.fleets.back();
+    const auto id = fleet.id, target = state.planets[1].id;
+    const Position remote{400, 0}; state.stars[1].position = remote;
+    const PlayerOrders travel{1, {MoveFleetOrder{id, remote, 5, {FleetArrivalActionKind::Colonize}}}};
+    // Fly the actual ship, preserving its real received/in-transit telemetry.
+    for (unsigned year = 0; year < 40 && !find_planet(state, target)->nativeOrbit.station; ++year)
+        state = TurnProcessor{}.process(state, year == 0 ? std::vector<PlayerOrders>{travel} : std::vector<PlayerOrders>{});
+    assert(find_planet(state, target)->nativeOrbit.population == 1000);
+    const auto& reports = state.players.front().pendingPlayerReports;
+    const auto founding = std::find_if(reports.begin(), reports.end(), [](const auto& r) { return r.kind == PlayerReportKind::ColonyFounded; });
+    assert(founding != reports.end() && founding->deliveryTurn > state.turn);
+    const auto receiptYear = founding->deliveryTurn;
+    const auto exportBoundary = [&] {
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        assert(write_save_game_file(savePath, make_player_turn(host, 1), error) && read_save_game_file(savePath, loaded, error));
+    };
+    exportBoundary();
+    assert(known_planet_owner(loaded.state, 1, target) == 0);
+    assert(!find_planet(loaded.state, target)->nativeOrbit.population);
+    assert(!find_orbital_station_at_planet(loaded.state, target));
+    assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+    assert(std::any_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [=](const auto& f) { return f.id == id; }));
+    assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
+    state = loaded.state;
+    while (state.turn <= receiptYear+1) state = TurnProcessor{}.process(state, {});
+    exportBoundary();
+    assert(known_planet_owner(loaded.state, 1, target) == 1);
+    assert(find_planet(loaded.state, target)->nativeOrbit.population == 1000);
+    assert(find_orbital_station_at_planet(loaded.state, target));
+    assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+    assert(std::none_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [=](const auto& f) { return f.id == id; }));
+}
 void resident_truth_and_pending_evidence_round_trip()
 {
     auto state = test::native_orbital_fixture();
@@ -597,6 +659,7 @@ int main(int argc, char** argv)
     if (argc == 2 && QString::fromLatin1(argv[1]) == "history") { history_and_pbem_wait_for_station_loss_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "first-snapshot") { destruction_before_first_snapshot_survives_reload(); return 0; }
     paid_start_and_replacement_survive_host_and_pbem();
+    paid_founding_orders_and_received_evidence_survive_reload();
     resident_truth_and_pending_evidence_round_trip();
     hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload();
     real_pbem_decoding_keeps_guards_and_shared_unloading();

@@ -1426,6 +1426,8 @@ void MainWindow::updateControls(bool refreshReceivedState)
     loadColonistsButton_->setText(canLoad ? "Cargo updates immediately" : "Dock at a friendly colony to load");
 
     const auto* colonizer = selectedColonyShipAtSelectedStar();
+    colonizeButton_->setText(native_orbital_race(state_, pendingOrders_.player)
+        ? "Found orbital colony with selected fleet" : "Colonize selected world with selected ship");
     colonizeButton_->setEnabled(star != nullptr
         && survey_level(state_, pendingOrders_.player, star->id) >= SurveyLevel::OrbitalSurvey
         && planet != nullptr
@@ -1731,7 +1733,9 @@ void MainWindow::queueColonize()
     program.setObjectName("colonizePlanDialog");
     program.setWindowTitle("Colony development program");
     auto* layout = new QVBoxLayout(&program);
-    auto* explanation = new QLabel("Choose the program carried by this Colonize order. None leaves an empty queue; no radar will be scheduled automatically.", &program);
+    auto* explanation = new QLabel(native_orbital_race(state_, ship->owner)
+        ? "Choose the orbital colony's program. The paid construction module includes its Dock, services, full receiver and initial mineral stock. None leaves an empty queue."
+        : "Choose the program carried by this Colonize order. None leaves an empty queue; no radar will be scheduled automatically.", &program);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
     auto* plan = new ColonyPlanCombo(&program);
@@ -1754,6 +1758,11 @@ bool MainWindow::confirmFleetColonization(
     const Fleet& fleet, const Planet& planet, bool scheduledRoute)
 {
     const auto received = make_player_view(state_, pendingOrders_.player).state;
+    const bool native = native_orbital_race(received, fleet.owner);
+    if (native && fleet.colonists > native_orbital_capacity(OrbitalStationHullType::OrbitalDock)) {
+        statusBar()->showMessage("The founding Dock can house at most 100,000 residents. Split off the excess before founding.", 5000);
+        return false;
+    }
     const auto habitability = known_planet_habitability(
         received, pendingOrders_.player, planet.id).value_or(0);
     QStringList composition;
@@ -1765,14 +1774,41 @@ bool MainWindow::confirmFleetColonization(
     }
 
     const auto salvage = fleet_colonization_salvage(state_, fleet);
+    const auto supplies = native ? native_orbital_founding_kit().supplies : MineralCargo{};
     const MineralCargo delivered{
-        fleet.minerals.ironium + salvage.ironium,
-        fleet.minerals.boranium + salvage.boranium,
-        fleet.minerals.germanium + salvage.germanium,
+        fleet.minerals.ironium + salvage.ironium + supplies.ironium,
+        fleet.minerals.boranium + salvage.boranium + supplies.boranium,
+        fleet.minerals.germanium + salvage.germanium + supplies.germanium,
     };
 
     QMessageBox warning(this);
     warning.setIcon(QMessageBox::Warning);
+    if (native) {
+        warning.setObjectName("nativeOrbitalFoundingConfirmation");
+        warning.setStyleSheet("QMessageBox#nativeOrbitalFoundingConfirmation { background: #0d141d; color: #d4e3f0; }");
+        warning.setTextFormat(Qt::PlainText);
+        warning.setWindowTitle("Confirm orbital colony founding");
+        warning.setText(QString("Found an inhabited Orbital Dock at %1 with the entire fleet %2?")
+            .arg(QString::fromStdString(planet.name)).arg(QString::fromStdString(fleet.name)));
+        warning.setInformativeText(QString(
+            "All %1 ship(s) will be dismantled and Fleet %2 will cease to exist.\n\n"
+            "Ships: %3\nResidents transferred to station: %4 / 100000 capacity\n"
+            "Prepaid assets: Orbital Dock, Shipyard, Refueling Depot and full receiver.\n"
+            "Prepaid seed stock: I %5 / B %6 / G %7\n"
+            "33% ship salvage, excluding prepaid deployment: I %8 / B %9 / G %10\n"
+            "Total added to colony, including cargo: I %11 / B %12 / G %13\n\n"
+            "No residents land on the surface. Fuel and production points are not recovered.%14")
+            .arg(fleet_ship_count(fleet)).arg(fleet.id).arg(composition.join(", "))
+            .arg(static_cast<qulonglong>(fleet.colonists))
+            .arg(supplies.ironium).arg(supplies.boranium).arg(supplies.germanium)
+            .arg(salvage.ironium).arg(salvage.boranium).arg(salvage.germanium)
+            .arg(delivered.ironium).arg(delivered.boranium).arg(delivered.germanium)
+            .arg(scheduledRoute ? "\n\nRoute preview: cargo and residents may change before arrival. Founding rechecks the world, station, cargo and housing locally."
+                : ""));
+        warning.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
+        warning.setDefaultButton(QMessageBox::Cancel);
+        return warning.exec() == QMessageBox::Yes;
+    }
     warning.setWindowTitle("Confirm fleet colonization");
     warning.setText(QString("Colonize %1 with the entire fleet %2?")
         .arg(QString::fromStdString(planet.name))

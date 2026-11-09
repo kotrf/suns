@@ -1152,11 +1152,14 @@ double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet
 
 bool fleet_can_colonize(const GameState& state, const Fleet& fleet)
 {
+    if (native_orbital_race(state, fleet.owner)) return fleet_can_found_native_orbit(state, fleet);
     if (fleet.outpost != OutpostKind::None) return false;
     const auto stacks = fleet_ship_stacks(fleet);
     return std::any_of(stacks.begin(), stacks.end(), [&](const FleetShipStack& stack) {
         const auto* design = find_ship_design(state, stack.design);
-        return design && ship_design_can_colonize(*design);
+        return design && std::any_of(design->components.begin(), design->components.end(), [](auto component) {
+            return component != ShipComponentType::OrbitalConstructionModule && component_spec(component).enablesColonization;
+        });
     });
 }
 

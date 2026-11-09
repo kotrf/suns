@@ -1,5 +1,42 @@
 # Project status and development handoff
 
+## Paid native orbital founding (#50), dependent on #285 — 9 November 2026
+
+User requested the next stage. Startup PR #285 remains open at `b530098`;
+its source CI 42631805031 succeeded and no review existed at the start of this
+stage. Main stays `0922375`. Work uses the existing checkout and branch
+`codex/native-orbital-founding-50`, based on #285; no startup merge was performed.
+
+The existing Orbital Construction Module now prepays a Dock with services,
+full receiver and 10/10/10 kt finite seed stock. The complete module costs
+60 work / 44/34/37 kt, and a Quick Jump 5 Colony Ship costs 83 / 57/34/53.
+Ordinary manual/terminal Colonize orders transfer actual transported residents
+into the paid Dock, dismantling the whole fleet. Native capacity, world, station,
+cargo and armed-encounter checks reject before consumption. Ordinary colonizers
+and shared unloading cannot create native housing. Extra kits and repeated
+consumed FleetIds cannot duplicate deployment stock or salvage paid assets.
+
+A real remote journey/export regression exposed physical station fallback before
+the founding report and disappearance of its residents from received totals.
+Native station lookup now requires a received fit; its received source-fleet
+contact lasts until the founding receipt. Existing v118 contact/survey records
+preserve this through host reload and PBEM. Orders v49 / race v3 stay unchanged.
+The Qt confirmation identifies station housing, seed supplies and adjusted
+salvage, without surface-Hab warnings or future-year simulation.
+
+Full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.30 s**
+passed; focused core/save/Qt tests passed **3/3 in 0.60 s**. Coverage includes
+paid manufacture/loading/flight/founding, two decoded PBEM order paths,
+overcapacity/conflicting assets, mixed kits, no free unload founding, received
+evidence before/after a remote founding receipt and ordinary-race regression.
+The dialog's final dark background is separately checked in the Qt capture.
+
+This prepared-host slice does not enable a campaign or satisfy Computer
+acceptance. Next: native radiation/protection, support/growth, paid advanced
+hull progression and actual Computer startup → replacement → paid second colony.
+#50 remains open; #53/#63 remain frozen. See
+[stage 4 costs and boundaries](asymmetric-empires.md); current PR/source/CI are in GitHub.
+
 ## Native startup and replacement economy (#50) — 9 November 2026
 
 PR #284 merged as main `092237560a905a6601f38d0af34bfafa1f44fbef`, tree

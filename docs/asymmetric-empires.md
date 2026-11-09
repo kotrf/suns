@@ -50,8 +50,8 @@ unchanged. Core/save/PBEM tests use deliberately constructed native states;
 this does **not** satisfy the later new-campaign/Computer acceptance below.
 
 Campaign setup and race files still reject this identity for both controllers.
-Stage 3 below supplies a paid startup kernel and replacement manufacture.
-Next stages must deliver paid founding, native growth/radiation and support,
+Stages 3–4 below supply paid startup, replacement manufacture and orbital founding.
+Next stages must deliver native growth/radiation and support,
 advanced hull progression and actual Computer startup/expansion.
 The full first-playable acceptance remains the gate for enabling the trait.
 
@@ -94,7 +94,7 @@ written with the merged #283 writer before this format change, verifies migratio
 and continued received accounting. Constructed core/UI/host/PBEM fixtures do not
 replace the full paid new-campaign/Computer acceptance below.
 
-## Implementation stage 3: paid startup and replacement manufacture
+## Implementation stage 3: paid startup and replacement manufacture (PR #285)
 
 `initialize_native_orbital_start` constructs an empty native empire's capital on
 the authoritative first-turn host state. It takes an explicit endowment and
@@ -154,6 +154,70 @@ extraction. Tests use real host turns, decoded PBEM orders, save/reload and
 received-state output after an unseen station loss. Formats stay v118/v49/v3;
 no new serialized startup allowance is introduced. These prepared-host fixtures
 do not substitute for the actual Human/Computer campaign acceptance below.
+
+## Implementation stage 4: paid orbital founding
+
+The existing `OrbitalConstructionModule` now provides native orbital founding
+through ordinary `ColonizePlanetOrder` and the terminal Colonize waypoint. Only
+`HabitatCivilization` gains its racial access; an ordinary Colonization Module
+still cannot create a native colony, and other empires cannot use the orbital
+module to bypass their surface rules. The startup PR #285 remains separately
+reviewable; this stage is developed on top of it without merging it first.
+
+The reference module retains its catalog base of 20 work, I/B/G 20/15/15 and
+50 kt. Suns! adds a prepaid deployment bill at manufacture:
+
+| Included deployment asset | Work | Ironium / Boranium / Germanium (kt) |
+| --- | --- | --- |
+| Dock with Shipyard and Refueling Depot | 24 | 12 / 6 / 8 |
+| Full planetary receiver | 16 | 2 / 3 / 4 |
+| Finite initial mineral stock | — | 10 / 10 / 10 |
+| Added deployment bill | 40 | 24 / 19 / 22 |
+| Complete operational module, including reference base | 60 | 44 / 34 / 37 |
+| Colony Ship hull + Quick Jump 5 + complete module | 83 | 57 / 34 / 53 |
+
+Prices derive from the ordinary station/receiver functions and are charged by
+normal ship production. A new kit-bearing Colony Ship takes two years at the
+50-resource capital. The initial stock is real finite I/B/G, carried inside the
+prepaid kit rather than generated each year. Native life-support consumption,
+reserve policy, radiation and growth are still the next stage; these supplies
+must not be described as unlimited protection or a completed support system.
+
+Founding consumes the entire fleet, transfers exactly its transported residents
+into one Dock (maximum 100,000), and deploys its paid services and receiver. It
+creates no surface or ordinary-habitat population, free Starbase/Fortress, research
+level, miner or selected colony build program. Explicit ordinary colony-plan
+copies still work. The native operation does not claim surface precursor research.
+The target must be unowned, without another station, residents or an independent
+engineering project. Cargo limits, orbit, hostile armed encounters and station
+control are rechecked physically; zero residents, excess residents, exhausted or
+colliding station IDs and invalid plans reject before consuming the fleet.
+An impossible arrival keeps its terminal Colonize task retryable. Shared unload
+and exact cargo transfer still require an existing station and cannot found one.
+
+Cargo minerals are deposited in full. One kit contributes its prepaid 10/10/10
+stock; its deployed assets and stock are excluded from the fleet's one-third
+mineral salvage. This exclusion applies to every carried orbital module, so
+extra kits dismantled with the terminal fleet cannot refund prepaid assets.
+Only the remaining ordinary hull/module material enters that salvage formula.
+One unloaded Colony Ship therefore adds I/B/G 21/15/20, including its seed stock;
+with cargo 3/2/1 it adds 24/17/21. Replaying its consumed FleetId cannot deploy or
+credit a second kit. The confirmation shows station residents, housing, paid
+assets, seed stock and the adjusted salvage; it does not warn about surface Hab.
+
+The new colony supplies its dated survey/founding reports through normal
+communications. Before receipt, native station lookup cannot fall back to the
+new physical hull. A received source-fleet contact remains until the founding
+receipt retires it, preserving old cargo/population instead of revealing the
+physical dismantling early. Both the pending contact and colony snapshots use
+existing save v118 records; orders v49 and race v3 remain unchanged. Host reload,
+real decoded manual/waypoint PBEM orders and export before/after receipt exercise
+this boundary. No annual simulation is added to authoring or confirmation.
+
+This remains a prepared-host founding slice. Campaign setup/import/restart stay
+closed to Human and Computer pending native radiation/protection, support/growth,
+paid advanced hull progression and actual Computer startup → replacement → paid
+second-colony acceptance. A test driving ordinary orders is not that AI acceptance.
 
 ## Direction supplied by the user
 

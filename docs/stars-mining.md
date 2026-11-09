@@ -33,8 +33,10 @@ output. Minerals remain in the surface stockpile for transports to collect.
 
 This imports equipment progression. Suns! retains its current colony mine output,
 surface-stockpile logistics and persistent terminal route task. Mineral depletion,
-Alternate Reality mining on owned planets, ARM bonus starting ships and Orbital
-Adjuster terraforming are outside this slice.
+ARM bonus starting ships and Orbital Adjuster terraforming are outside this
+catalog slice. The subsequent [native orbital implementation](asymmetric-empires.md)
+adds owned-orbit mining, a funded starter and paid replacement/founding kernels;
+the trait remains unavailable in campaign setup pending full playable acceptance.
 
 ## Compatibility
 

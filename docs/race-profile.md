@@ -145,9 +145,12 @@ The native population/cargo kernel is separate from ordinary habitats. Owned-orb
 remote mining uses the world's shared mineral stock; native surface/innate mining
 is zero. The paid startup kernel budgets a basic mining fit, fuel, station and
 stocks; narrow native MiniMiner/Robo-Mini-Miner access permits ordinary paid
-replacement manufacture without granting research levels. Prototype output uses
-station residents and Energy; radiation, support, growth and paid founding remain
-unfinished, so setup is still gated. Save v118 also retains delivered station destruction before the first
+replacement manufacture without granting research levels. The Orbital Construction
+Module prepays a Dock/receiver and finite mineral stock; ordinary Colonize orders
+transfer transported residents into that housing and consume the fleet. Its paid
+deployment is excluded from salvage. Prototype output uses station residents and
+Energy; radiation, support and growth remain unfinished, so setup is still gated.
+Save v118 also retains delivered station destruction before the first
 received fit and mining manifests credited in their receipt year. It
 does not enable this reserved identity in campaign
 setup or portable race files; the complete start and Human/Computer expansion
