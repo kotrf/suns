@@ -103,6 +103,9 @@ occupied world, an already initialized empire or a player-view call rejects
 without changing state. This is a construction kernel for the later campaign
 integration; it does not bypass the still-closed setup/import/restart whitelist.
 It neither provides paid founding nor demonstrates a playable Computer campaign.
+Orbit occupancy includes both ordinary orbital stations and deployed independent
+shipyards stored as fleets. A neutral surface does not make an occupied orbit
+available; startup rejects before changing either installation, stocks or IDs.
 
 The prototype grant covers 25,000 real residents in an Orbital Dock (100,000
 capacity), Shipyard and Refueling Depot services, a full planetary receiver and
@@ -218,12 +221,24 @@ into one Dock (maximum 100,000), and deploys its paid services and receiver. It
 creates no surface or ordinary-habitat population, free Starbase/Fortress, research
 level, miner or selected colony build program. Explicit ordinary colony-plan
 copies still work. The native operation does not claim surface precursor research.
-The target must be unowned, without another station, residents or an independent
-engineering project. Cargo limits, orbit, hostile armed encounters and station
+The target must be unowned, without another station, a deployed independent
+shipyard, residents or an independent engineering project. Cargo limits, orbit, hostile armed encounters and station
 control are rechecked physically; zero residents, excess residents, exhausted or
 colliding station IDs and invalid plans reject before consuming the fleet.
+Carried plans must be both structurally valid and applicable to the owner's race
+before either manual or waypoint founding changes anything. Both plan pickers
+omit incompatible saved templates; a legacy incompatible order copy remains
+visible and disabled until the user explicitly replaces it or chooses None.
 An impossible arrival keeps its terminal Colonize task retryable. Shared unload
 and exact cargo transfer still require an existing station and cannot found one.
+
+Waypoint authoring checks received ownership, including in a host document:
+an unseen founding cannot reveal itself by rejecting a destination earlier than
+the same player's PBEM turn. Receipt of ownership makes both editors refuse it.
+Current residents are a preview for scheduled founding. An over-capacity manifest
+warns that the excess must be unloaded or split before arrival, allowing a route
+that first unloads into existing housing. Direct founding and actual arrival
+still enforce the Dock limit of 100,000; no future cargo simulation runs in the UI.
 
 Cargo minerals are deposited in full. One kit contributes its prepaid 10/10/10
 stock; its deployed assets and stock are excluded from the fleet's one-third

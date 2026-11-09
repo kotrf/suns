@@ -410,7 +410,8 @@ void attachRouteProgramDock(MainWindow& window)
     form->addRow("Destination", destinationCombo);
     form->addRow("Warp", warpRow);
     form->addRow("On arrival", actionCombo);
-    auto* colonyPlan = new ColonyPlanCombo(waypointGroup);
+    auto* colonyPlan = new ColonyPlanCombo(waypointGroup,
+        [&window](const auto& value) { return window.colonyPlanApplicableForOrders(value); });
     colonyPlan->setObjectName("routeColonyPlanCombo");
     colonyPlan->setTemplates(window.colonyTemplatesForOrders());
     auto* planRow = new QWidget(waypointGroup);

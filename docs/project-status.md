@@ -1,5 +1,50 @@
 # Project status and development handoff
 
+## Startup/founding review: occupancy, plans and honest waypoint authoring — 10 November 2026
+
+Parent #285 is `25a673d48237576b6bc807659c32c263bc8cda81`, tree
+`64d93f9688d5330e7dd666f9fc80096547f42deb`: local 124/124 in 125.38 s;
+source CI 42718317833 succeeded. Its occupied-orbit startup fix is merged into
+#286 alongside the four findings from reviews 5833865845/5834053316 on `edfe41c`.
+All five findings were reproduced against the affected source before fixes.
+
+Native founding rejects an existing deployed independent shipyard and a racially
+inapplicable carried plan before consuming the fleet, in both manual and terminal
+waypoint paths. Both UI plan pickers filter incompatible saved templates; legacy
+copies stay visible and disabled, preserving their intent until explicit replacement.
+Normal saved/deleted/renamed plan copies and ordinary surface founding remain covered.
+Appending Colonize uses received ownership, matching host/PBEM before and after a
+real 400 ly founding receipt. Scheduled over-capacity is a preview warning, allowing
+an earlier unloading stop; direct founding and actual arrival keep their strict limit.
+The Qt-authored route actually unloads 10,000 residents into available housing and
+founds the next Dock with 90,001. No future cargo simulation was introduced.
+
+The full merged GCC14.2/Qt6.12 Debug build and **125/125 CTest in 124.05 s** passed;
+focused founding core/Qt suites passed **2/2 in 0.95 s**. 138 local documentation
+links and diff checked. Current #286 source/CI are in GitHub. Both PRs remain open
+for repeat review; no PR merge or thread resolution is performed by this request.
+Main remains `0922375`, save v118 / orders v49 / race v3 and the native setup gate
+are unchanged. #50 stays open, #53/#63 stay frozen.
+
+## #285 occupied-orbit startup review — 10 November 2026
+
+Review 5834064968 on `241881e` reported a P3: a neutral surface with another
+player's deployed independent shipyard accepted a native startup, creating two
+orbital installations. Reproduced with the ordinary first-turn Deploy command;
+the otherwise identical host starts successfully when the yard is removed.
+Startup now checks `orbital_base_at` before any mutation, matching station
+construction's occupancy rule. The regression preserves the existing yard,
+residents, cargo, knowledge, designs and all identity counters on rejection.
+
+Full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.38 s**
+passed. Previous source CIs 42708044839 (#285, 124/124) and 42709755665
+(#286, 125/125) succeeded. This parent fix also belongs in dependent #286;
+its four new founding review findings are being handled in that branch.
+Current publication/CI are in GitHub. No PR merge or thread resolution is
+performed for this request. Main remains `0922375`; save v118 / orders v49 /
+race v3 and minimal realtime estimates are unchanged. #50 stays open, native
+Human/Computer setup stays gated, and #53/#63 remain frozen.
+
 ## Repeat startup review integrated into paid founding — 10 November 2026 (MSK)
 
 Published #285 is `241881e719fdbd79d45fb7022a4b33ce0692fc88`, tree

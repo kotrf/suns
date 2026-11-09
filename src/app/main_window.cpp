@@ -1747,7 +1747,8 @@ void MainWindow::queueColonize()
         : "Choose the program carried by this Colonize order. None leaves an empty queue; no radar will be scheduled automatically.", &program);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
-    auto* plan = new ColonyPlanCombo(&program);
+    auto* plan = new ColonyPlanCombo(&program,
+        [this](const auto& value) { return colonyPlanApplicableForOrders(value); });
     plan->setObjectName("colonizePlanCombo");
     plan->setTemplates(colonyTemplatesForOrders());
     layout->addWidget(plan);
@@ -1768,7 +1769,8 @@ bool MainWindow::confirmFleetColonization(
 {
     const auto received = make_player_view(state_, pendingOrders_.player).state;
     const bool native = native_orbital_race(received, fleet.owner);
-    if (native && fleet.colonists > native_orbital_capacity(OrbitalStationHullType::OrbitalDock)) {
+    const bool overCapacity = native && fleet.colonists > native_orbital_capacity(OrbitalStationHullType::OrbitalDock);
+    if (overCapacity && !scheduledRoute) {
         statusBar()->showMessage("The founding Dock can house at most 100,000 residents. Split off the excess before founding.", 5000);
         return false;
     }
@@ -1814,6 +1816,9 @@ bool MainWindow::confirmFleetColonization(
             .arg(delivered.ironium).arg(delivered.boranium).arg(delivered.germanium)
             .arg(scheduledRoute ? "\n\nRoute preview: cargo and residents may change before arrival. Founding rechecks the world, station, cargo and housing locally."
                 : ""));
+        if (scheduledRoute && overCapacity)
+            warning.setInformativeText(warning.informativeText()
+                + "\nCurrent residents exceed the Dock's capacity. Unload or split off the excess before arrival.");
         warning.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
         warning.setDefaultButton(QMessageBox::Cancel);
         return warning.exec() == QMessageBox::Yes;

@@ -119,6 +119,7 @@ public:
     void openFleetSummaryDialog();
     void openColonyTemplates();
     [[nodiscard]] std::vector<ProductionTemplate> colonyTemplatesForOrders() const;
+    [[nodiscard]] bool colonyPlanApplicableForOrders(const ProductionTemplate& plan) const;
 
     // Replace the constructor's legacy synchronous scene-selection callback
     // with a deferred rebuild. Rebuilding QGraphicsScene while Qt is still

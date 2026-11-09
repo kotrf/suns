@@ -1,6 +1,8 @@
 #include "native_orbital_fixture.hpp"
+#include "orbital_base_fixture.hpp"
 #include "suns/equipment.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/production.hpp"
 #include "suns/stations.hpp"
 #include <algorithm>
 #include <cassert>
@@ -13,6 +15,11 @@ bool same_minerals(const MineralCargo& a, const MineralCargo& b)
 {
     return std::abs(a.ironium-b.ironium) < 1e-8 && std::abs(a.boranium-b.boranium) < 1e-8
         && std::abs(a.germanium-b.germanium) < 1e-8;
+}
+bool same_ships(const Fleet& a, const Fleet& b)
+{
+    return a.ships.size() == b.ships.size() && std::equal(a.ships.begin(),a.ships.end(),b.ships.begin(),
+        [](const auto& x,const auto& y){return x.design == y.design && x.count == y.count;});
 }
 void kit_is_funded_at_manufacture_and_trait_specific()
 {
@@ -135,11 +142,86 @@ void mixed_fleet_supplies_are_not_minted_from_repeated_kits()
     const auto report = std::find_if(mixed.events.begin(), mixed.events.end(), [](const auto& e) { return e.kind == GameEventKind::ColonyFounded; });
     assert(report != mixed.events.end() && report->shipDesign == 90);
 }
-}
-int main()
+void deployed_shipyards_block_both_founding_paths()
 {
+    for (const bool arrival : {false, true}) for (const PlayerId owner : {1U, 2U}) {
+        auto state = test::native_orbital_founding_fixture();
+        const auto founder = state.fleets.back();
+        const auto target = state.planets[1].id;
+        if (owner == 2) state.players.push_back({2, "Other empire"});
+        auto yardWorld = orbital_test::world();
+        auto design = *find_ship_design(yardWorld, 200);
+        design.id = state.nextShipDesignId++; design.owner = owner;
+        state.shipDesigns.push_back(design);
+        auto yard = yardWorld.fleets.front();
+        yard.id = state.nextFleetId++; yard.owner = owner; yard.design = design.id;
+        yard.ships = {{design.id, 1}}; yard.position = founder.position; yard.telemetry = {};
+        state.fleets.push_back(yard);
+        apply_orbital_base_command(state, state.fleets.back(), {OrbitalBaseAction::Deploy, target});
+        assert(orbital_base_at(state, target) && !state.planets[1].owner);
+        assert(!find_orbital_station_at_planet(state, target));
+        const Order order = arrival ? Order{MoveFleetOrder{founder.id, founder.position, 5,
+            {FleetArrivalActionKind::Colonize}}} : Order{ColonizePlanetOrder{founder.id, target}};
+        const auto next = TurnProcessor{}.process(state, {{1, {order}}});
+        assert(!find_planet(next, target)->owner && !find_planet(next, target)->nativeOrbit.station);
+        assert(next.orbitalStations.size() == state.orbitalStations.size()
+            && next.nextOrbitalStationId == state.nextOrbitalStationId);
+        assert(orbital_base_at(next, target) && orbital_base_at(next, target)->id == yard.id);
+        const auto survivor = std::find_if(next.fleets.begin(), next.fleets.end(),
+            [&](const auto& f) { return f.id == founder.id; });
+        assert(survivor != next.fleets.end() && survivor->colonists == founder.colonists
+            && same_minerals(survivor->minerals, founder.minerals) && same_ships(*survivor,founder));
+    }
+}
+void incompatible_carried_plans_reject_before_founding()
+{
+    for (const bool arrival : {false, true}) {
+        for (const auto kind : {ProductionKind::Factory, ProductionKind::Mine, ProductionKind::AdvancedFactory,
+            ProductionKind::AdvancedMine, ProductionKind::UpgradeFactory, ProductionKind::UpgradeMine,
+            ProductionKind::ReconstructFactory, ProductionKind::ReconstructMine}) {
+            auto state = test::native_orbital_founding_fixture();
+            const auto founder = state.fleets.back(); const auto target = state.planets[1].id;
+            ProductionTemplate plan{"Surface first", {{ProductionKind::LocalRadar,production_cost(ProductionKind::LocalRadar)},
+                {kind, production_cost(kind)}}};
+            // Reconstruction is already structurally excluded from templates;
+            // the other six kinds require the native applicability guard.
+            assert(production_template_valid(plan) == !reconstruction_kind(kind));
+            FleetArrivalAction action{FleetArrivalActionKind::Colonize}; action.colonyPlan = plan;
+            const Order order = arrival ? Order{MoveFleetOrder{founder.id, founder.position, 5, action}}
+                : Order{ColonizePlanetOrder{founder.id, target, plan}};
+            const auto next = TurnProcessor{}.process(state, {{1, {order}}});
+            const auto* world = find_planet(next, target);
+            assert(!world->owner && !world->nativeOrbit.station && world->productionQueue.empty());
+            assert(same_minerals(world->minerals, state.planets[1].minerals));
+            assert(next.orbitalStations.size() == state.orbitalStations.size()
+                && next.nextOrbitalStationId == state.nextOrbitalStationId);
+            const auto survivor = std::find_if(next.fleets.begin(), next.fleets.end(),
+                [&](const auto& f) { return f.id == founder.id; });
+            assert(survivor != next.fleets.end() && survivor->colonists == founder.colonists
+                && same_minerals(survivor->minerals, founder.minerals) && same_ships(*survivor,founder));
+        }
+        auto state = test::native_orbital_founding_fixture();
+        state.planets[1].minerals = {100, 100, 100};
+        const auto founder = state.fleets.back();
+        ProductionTemplate plan{"Receiver", {{ProductionKind::LocalRadar,production_cost(ProductionKind::LocalRadar)}}};
+        assert(production_template_valid(plan));
+        FleetArrivalAction action{FleetArrivalActionKind::Colonize}; action.colonyPlan = plan;
+        const Order order = arrival ? Order{MoveFleetOrder{founder.id, founder.position, 5, action}}
+            : Order{ColonizePlanetOrder{founder.id, state.planets[1].id, plan}};
+        const auto next = TurnProcessor{}.process(state, {{1, {order}}});
+        assert(next.planets[1].nativeOrbit.population == 1000 && next.planets[1].radar == PlanetaryRadarLevel::Full);
+        assert(next.planets[1].productionQueue.empty()); // The prepaid full receiver already satisfies this plan.
+    }
+}
+}
+int main(int argc, char** argv)
+{
+    if (argc == 2 && std::string(argv[1]) == "orbit") { deployed_shipyards_block_both_founding_paths(); return 0; }
+    if (argc == 2 && std::string(argv[1]) == "plan") { incompatible_carried_plans_reject_before_founding(); return 0; }
     kit_is_funded_at_manufacture_and_trait_specific();
     paid_manufacture_transport_and_arrival_found_a_second_colony();
     manual_and_arrival_paths_share_guards();
     mixed_fleet_supplies_are_not_minted_from_repeated_kits();
+    deployed_shipyards_block_both_founding_paths();
+    incompatible_carried_plans_reject_before_founding();
 }

@@ -753,7 +753,9 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     const std::optional<ProductionTemplate>& colonyPlan)
 {
     const bool native = native_orbital_race(state, fleet.owner);
-    if (colonyPlan && !production_template_valid(*colonyPlan)) return false;
+    const auto* player = find_player(state, fleet.owner);
+    if (colonyPlan && (!production_template_valid(*colonyPlan) || !player
+        || !production_template_applicable(player->race.primaryTrait, *colonyPlan))) return false;
     // A manual founding order cannot dismantle a fleet to evade an armed
     // hostile encounter already present at the planning boundary.
     if (std::any_of(state.fleets.begin(), state.fleets.end(), [&](const auto& other) {
@@ -771,7 +773,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     if (hostile_station_blocks_landing(state, fleet, planet)) return false;
     if (native && (planet.population || planet.habitat.population || planet.nativeOrbit.station
         || planet.nativeOrbit.population || planet.engineering.kind != PlanetaryEngineeringKind::None
-        || find_orbital_station_at_planet(state, planet.id)
+        || find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state, planet.id)
         || fleet.colonists > native_orbital_capacity(OrbitalStationHullType::OrbitalDock)
         || !state.nextOrbitalStationId || state.nextOrbitalStationId == std::numeric_limits<OrbitalStationId>::max()
         || find_orbital_station(state, state.nextOrbitalStationId))) return false;

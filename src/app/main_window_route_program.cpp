@@ -844,6 +844,10 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
         statusBar()->showMessage("Selected ship design has no colonization module", 3000);
         return false;
     }
+    if (arrivalAction.colonyPlan && !colonyPlanApplicableForOrders(*arrivalAction.colonyPlan)) {
+        statusBar()->showMessage("This colony plan is unavailable to this civilization", 4000);
+        return false;
+    }
     if (arrivalAction.kind == FleetArrivalActionKind::Refuel) {
         const auto* planet = find_planet_at_star(state_, star->id);
         if (!planet || !colony_has_orbital_service(
@@ -856,7 +860,7 @@ bool MainWindow::appendSelectedStarWaypoint(std::uint8_t warp, FleetArrivalActio
     if (arrivalAction.kind == FleetArrivalActionKind::Colonize) {
         const auto* planet = find_planet_at_star(state_, star->id);
         if (planet && survey_level(state_, fleet->owner, star->id) >= SurveyLevel::OrbitalSurvey
-            && planet->owner != 0) {
+            && known_planet_owner(state_, fleet->owner, planet->id).value_or(0) != 0) {
             statusBar()->showMessage("Selected destination has no unowned world to colonize", 3000);
             return false;
         }
@@ -992,6 +996,8 @@ bool MainWindow::appendRouteWaypoint(
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet || !fleet_warp_valid(state_, *fleet, warp)) return false;
+    if (arrivalAction.colonyPlan && (arrivalAction.kind != FleetArrivalActionKind::Colonize
+        || !colonyPlanApplicableForOrders(*arrivalAction.colonyPlan))) return false;
     if (const auto error = fleet_work_order_error(state_, *fleet, destination, arrivalAction.kind); !error.empty()) {
         statusBar()->showMessage(QString::fromStdString(error), 5000);
         return false;
@@ -1127,7 +1133,7 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
     auto& leg = legs[index];
     if (leg.arrivalAction == action) return true;
     if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
-        || !production_template_valid(*action.colonyPlan))) return false;
+        || !colonyPlanApplicableForOrders(*action.colonyPlan))) return false;
 
     const bool terminal = terminal_arrival_action(action.kind);
     if (terminal && (index + 1 != legs.size() || route->repeatOrders)) {

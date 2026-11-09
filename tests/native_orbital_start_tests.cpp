@@ -1,4 +1,5 @@
 #include "native_orbital_fixture.hpp"
+#include "orbital_base_fixture.hpp"
 #include "suns/mining.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
@@ -200,6 +201,37 @@ void starts_require_actual_nonzero_output()
         }
     }
 }
+void a_deployed_independent_shipyard_blocks_start_atomically()
+{
+    auto state = orbital_test::world();
+    state.planets[1].minerals = {};
+    Player native{2, "New orbital empire"};
+    native.race = race_preset(RacePreset::Terran);
+    native.race.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
+    state.players.push_back(native);
+    orbital_test::deploy(state);
+    const auto home = state.planets[1].id;
+    assert(state.turn == 1 && !state.planets[1].owner);
+    assert(orbital_base_at(state, home) && !find_orbital_station_at_planet(state, home));
+
+    // The otherwise identical prepared host is valid without the deployed yard.
+    auto vacant = state; vacant.fleets.clear();
+    assert(initialize_native_orbital_start(vacant, 2, home, native_orbital_start_budget()));
+    const auto before = state;
+    assert(!initialize_native_orbital_start(state, 2, home, native_orbital_start_budget()));
+    assert(!state.planets[1].owner && !state.planets[1].nativeOrbit.station);
+    assert(!state.planets[1].nativeOrbit.population && same_minerals(state.planets[1].minerals, {}));
+    assert(state.orbitalStations.empty() && state.fleets.size() == before.fleets.size());
+    const auto* yard = orbital_base_at(state, home);
+    assert(yard && yard->owner == 1 && yard->id == before.fleets.front().id);
+    assert(yard->colonists == before.fleets.front().colonists
+        && same_minerals(yard->minerals, before.fleets.front().minerals));
+    assert(state.shipDesigns.size() == before.shipDesigns.size());
+    assert(state.nextFleetId == before.nextFleetId && state.nextShipDesignId == before.nextShipDesignId
+        && state.nextOrbitalStationId == before.nextOrbitalStationId);
+    assert(state.players.back().history.empty() && state.players.back().surveyKnowledge.empty());
+    assert(state.stars[1].stellarClass == before.stars[1].stellarClass);
+}
 void native_surface_industry_never_spends_work_or_minerals()
 {
     auto state = started(); state.players.front().technology.researchActive = false;
@@ -247,6 +279,7 @@ void native_surface_industry_never_spends_work_or_minerals()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && std::string(argv[1]) == "occupied-orbit") { a_deployed_independent_shipyard_blocks_start_atomically(); return 0; }
     if (argc == 2 && std::string(argv[1]) == "minimum") { starts_require_actual_nonzero_output(); return 0; }
     if (argc == 2 && std::string(argv[1]) == "industry") { native_surface_industry_never_spends_work_or_minerals(); return 0; }
     starter_is_paid_legal_and_observed();
@@ -255,5 +288,6 @@ int main(int argc, char** argv)
     income_requires_supported_real_residents_and_energy();
     undersupply_and_invalid_starts_are_atomic();
     starts_require_actual_nonzero_output();
+    a_deployed_independent_shipyard_blocks_start_atomically();
     native_surface_industry_never_spends_work_or_minerals();
 }
