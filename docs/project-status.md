@@ -1,5 +1,30 @@
 # Project status and development handoff
 
+## #285 repeat review: explicit campaign intent and cheap queue skips — 10 November 2026 (MSK)
+
+Reviews 5832950665 and 5833013783 on `9f32816` confirmed the previous four
+fixes and reported a P2 and P3. Both were reproduced before implementation
+changes. A supported File → New campaign now validates its proposed empires
+independently of the loaded unavailable race, committing those settings only
+after generation succeeds. Refused Restart preserves the game, orders, save
+path, title and explanatory status; menu fit and file detachment require success.
+
+The bounded production estimate shares the host's racial applicability rule.
+Stale native surface industry, including Annual rules, is a free Currently
+skipped row, preserving the following miner's four-turn estimate and every
+input index for reorder/cancel. Unknown earlier work remains uncertain. No
+future-year simulation was introduced.
+
+Full GCC14.2/Qt6.12 Debug build and **124/124 CTest in 129.08 s** passed.
+Regression coverage uses the actual File New campaign dialog, Restart QAction,
+save-path/title retention, all eight incompatible industry kinds, actual Qt
+queue reordering/cancellation and four host turns completing the paid miner.
+Previous source CI 42676434534 (#285, 124/124) and 42677876109 (#286, 125/125)
+are successful. New publication/CI and propagation to dependent #286 are tracked
+in GitHub and subsequent checkpoints. Save v118 / orders v49 / race v3 remain
+unchanged. Neither PR nor review threads are closed by this request. #50 remains
+open, native Human/Computer setup is gated, and #53/#63 remain frozen.
+
 ## #285 review fixes: project identity, viable startup, industry and restart — 9 November 2026
 
 Review 5827903909 on `b530098` reported one P2 and three P3s. All four were

@@ -143,20 +143,8 @@ bool MainWindow::installSaveMenuBootstrap()
             QTimer::singleShot(0, this, [this] { updateSaveWindowTitle(); });
         });
 
-        // Starting/restarting a galaxy deliberately detaches the current file,
-        // preventing a later Ctrl+S from silently replacing the old campaign.
-        for (auto* menuAction : menuBar()->actions()) {
-            auto* menu = menuAction->menu();
-            if (!menu || QString(menu->title()).remove('&') != "Game") continue;
-            for (auto* action : menu->actions()) {
-                if (action->text() == "New galaxy…" || action->text() == "Restart current galaxy") {
-                    connect(action, &QAction::triggered, this, [this] {
-                        currentSavePath_.clear();
-                        updateSaveWindowTitle();
-                    });
-                }
-            }
-        }
+        // Successful creation detaches the old file inside newGalaxy(). A
+        // refused menu action must keep its save path and document title.
 
         updateSaveWindowTitle();
     });

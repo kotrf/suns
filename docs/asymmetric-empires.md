@@ -163,6 +163,18 @@ including when a temporary projected ID collides with another empire's project.
 Loading a native host preserves its actual primary trait in restart setup;
 Restart explicitly refuses a reserved trait instead of rebuilding it as Generalist.
 
+That refusal applies to reusing the current empire setup. File → New campaign
+supplies explicit new empire settings and validates them independently of the
+loaded civilization. Only successful generation commits those settings, detaches
+the old file and permits menu viewport fitting; refusal preserves the save path,
+title and explanatory status. The native trait itself is still unavailable.
+
+The cheap queue estimate applies the same racial applicability test as the host.
+An old native surface row is shown as skipped and reserves no work or minerals,
+even when it was an annual rule. It does not obscure the following miner's fixed
+estimate. Rows retain their original positions for cancel/reorder commands;
+free skips never restore an already uncertain prefix or simulate future years.
+
 With the default zero research allocation, a newly designed replacement miner
 costs 153 work and 58 / 0 / 14 kt through ordinary design/production orders. It
 completes after four years of 50 work while the original extracts 4 / 2 / 1 kt

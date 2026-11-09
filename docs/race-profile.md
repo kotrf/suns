@@ -150,6 +150,8 @@ actual output reject atomically. Native surface factories/mines, their advanced
 forms, upgrades and reconstruction are unavailable in production/templates; stale
 rows retire without spending. Loading preserves the primary trait, and Restart
 refuses an unavailable civilization instead of changing it to Generalist.
+An explicit New campaign with supported new empire settings remains available;
+failed creation/restart preserves the current save association and refusal status.
 Prototype output uses
 station residents and Energy; radiation, support, growth and paid founding remain
 unfinished, so setup is still gated. Save v118 also retains delivered station destruction before the first
