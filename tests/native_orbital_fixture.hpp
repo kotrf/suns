@@ -5,6 +5,25 @@
 #include <cassert>
 
 namespace suns::test {
+// Prepared host input for the startup kernel, not a playable native campaign.
+inline GameState empty_native_orbital_start()
+{
+    auto state = generate_game(GalaxyConfig{});
+    state.wormholeRules.spawnChancePerTurn = 0;
+    state.players.clear(); state.fleets.clear(); state.shipDesigns.clear(); state.orbitalStations.clear();
+    state.nextFleetId = 1; state.nextShipDesignId = 1; state.nextOrbitalStationId = 1;
+    for (auto& planet : state.planets) {
+        const auto id = planet.id, star = planet.star;
+        const auto name = planet.name; const auto environment = planet.environment;
+        planet = {}; planet.id = id; planet.star = star; planet.name = name; planet.environment = environment;
+    }
+    Player player{1, "Orbital civilization"};
+    player.race = race_preset(RacePreset::Terran);
+    player.race.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
+    state.players.push_back(player);
+    state.planets.front().observedConcentration = MineralCargo{100, 50, 25};
+    return state;
+}
 inline GameState native_orbital_fixture()
 {
     auto state = make_demo_game();

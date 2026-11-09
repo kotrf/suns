@@ -50,11 +50,12 @@ unchanged. Core/save/PBEM tests use deliberately constructed native states;
 this does **not** satisfy the later new-campaign/Computer acceptance below.
 
 Campaign setup and race files still reject this identity for both controllers.
-Next stages must deliver the paid start/founding economy, starter mining access
-and replacements, native growth/radiation, advanced hull progression and Computer expansion.
+Stage 3 below supplies a paid startup kernel and replacement manufacture.
+Next stages must deliver paid founding, native growth/radiation and support,
+advanced hull progression and actual Computer startup/expansion.
 The full first-playable acceptance remains the gate for enabling the trait.
 
-## Implementation stage 2: owned-orbit mining and received manifests
+## Implementation stage 2: owned-orbit mining and received manifests (merged #284)
 
 One site rule permits neutral worlds for ordinary miners and additionally an
 owned world with a live native inhabited station for this civilization. Work-here,
@@ -92,6 +93,67 @@ A genuine v117 file,
 written with the merged #283 writer before this format change, verifies migration
 and continued received accounting. Constructed core/UI/host/PBEM fixtures do not
 replace the full paid new-campaign/Computer acceptance below.
+
+## Implementation stage 3: paid startup and replacement manufacture
+
+`initialize_native_orbital_start` constructs an empty native empire's capital on
+the authoritative first-turn host state. It takes an explicit endowment and
+returns the actual asset bill. Insufficient work, minerals or population, an
+occupied world, an already initialized empire or a player-view call rejects
+without changing state. This is a construction kernel for the later campaign
+integration; it does not bypass the still-closed setup/import/restart whitelist.
+It neither provides paid founding nor demonstrates a playable Computer campaign.
+
+The prototype grant covers 25,000 real residents in an Orbital Dock (100,000
+capacity), Shipyard and Refueling Depot services, a full planetary receiver and
+one working MiniMiner with Quick Jump 5 and one Robo-Mini-Miner. Its 210 mg tank
+starts full, and its reported task is Remote Mining at the capital. Surface
+population/factories/mines and ordinary habitats start empty. Its initial home
+snapshot, fleet telemetry and History agree; other players' observations are not
+refreshed by this construction operation.
+
+| Asset | Work | Ironium / Boranium / Germanium (kt) |
+| --- | --- | --- |
+| Orbital Dock, including its two standard services | 24 | 12 / 6 / 8 |
+| Full planetary receiver | 16 | 2 / 3 / 4 |
+| MiniMiner hull + Quick Jump 5 + Robo-Mini-Miner | 153 | 58 / 0 / 14 |
+| Total initial asset bill | 193 | 72 / 9 / 26 |
+| Liquid stock after paying the bill | — | 100 / 100 / 100 |
+
+The default mineral endowment is therefore 172 / 109 / 126 kt, with 193 work
+reserved for initial assets. Costs are calculated from the ordinary station,
+radar and ship price functions; the receipt records what was consumed. Setup
+work is an initial construction allowance, not a recurring income or a stored
+production bank. Population and a full initial fuel tank are explicit separate
+setup grants, as in ordinary campaign starts. This is a larger declared asset
+endowment than an ordinary scout start, not a claim of final comparative balance.
+
+Native residents produce `floor(sqrt(min(residents, hull capacity) *
+(min(Energy, 26) + 1) / 10))` work per year, using integer arithmetic. At 25,000
+residents this gives 50 at Energy 0 and 100 at Energy 3. The `+1` prevents an
+Energy-zero research/manufacturing deadlock. Only residents linked to an owned,
+surviving station contribute; surface assets do not. Temperature and gravity do
+not change this output. Radiation, protection, growth and support are still
+pending and this formula is a reviewable prototype, not the completed native
+environmental economy. Native population does not grow in this stage.
+
+The existing generalist start still yields 29 resources (25 population + four
+operating factories). Native early access grants only MiniMiner and
+Robo-Mini-Miner through shared availability checks; Quick Jump 5 is already
+legal at level zero. No Construction/Electronics level, Advanced Remote Mining
+flag, advanced miner or unrelated hull is granted. Conflicting Basic Remote
+Mining, a radiation-immune profile and a profile without environment rules reject
+explicitly at startup instead of being silently changed.
+
+With the default zero research allocation, a newly designed replacement miner
+costs 153 work and 58 / 0 / 14 kt through ordinary design/production orders. It
+completes after four years of 50 work while the original extracts 4 / 2 / 1 kt
+per year at concentrations 100 / 50 / 25. The ending stock is 58 / 108 / 90 kt;
+the new hull needs its own mining task. Removing the original stops its actual
+extraction. Tests use real host turns, decoded PBEM orders, save/reload and
+received-state output after an unseen station loss. Formats stay v118/v49/v3;
+no new serialized startup allowance is introduced. These prepared-host fixtures
+do not substitute for the actual Human/Computer campaign acceptance below.
 
 ## Direction supplied by the user
 

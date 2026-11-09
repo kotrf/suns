@@ -12,6 +12,7 @@
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
 #include "suns/equipment.hpp"
+#include "suns/native_orbital.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -238,8 +239,12 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
 
 bool research_unlock_available(const GameState& state, PlayerId player, const ResearchUnlock& unlock)
 {
-    if (!research_unlock_applicable(state, player, unlock)
-        || technology_level(state, player, unlock.field) < unlock.level) return false;
+    if (!research_unlock_applicable(state, player, unlock)) return false;
+    // A native economy has no surface mines. Its basic replacement miner is
+    // an explicit racial access grant, not extra Construction/Electronics levels.
+    if (native_orbital_race(state, player) && !find_player(state, player)->race.basicRemoteMining
+        && (unlock.component == ShipComponentType::RoboMiniMiner || unlock.hull == ShipHullType::MiniMiner)) return true;
+    if (technology_level(state, player, unlock.field) < unlock.level) return false;
     for (std::size_t field = 0; field < kResearchFieldCount; ++field)
         if (technology_level(state, player, static_cast<ResearchField>(field)) < unlock.extraLevels[field])
             return false;
@@ -300,6 +305,7 @@ bool ship_hull_access_applicable(const GameState& state, PlayerId player, ShipHu
 bool ship_hull_available_to_player(const GameState& state, PlayerId player, ShipHullType hull)
 {
     if (!ship_hull_access_applicable(state, player, hull)) return false;
+    if (native_orbital_race(state, player) && hull == ShipHullType::MiniMiner) return true;
     if (hull == ShipHullType::SurveyProbe && technology_level(state, player, ResearchField::Electronics) < 18) return false;
     if (const auto* reference = reference_hull(hull))
         return technology_level(state, player, ResearchField::Construction) >= reference->constructionLevel;

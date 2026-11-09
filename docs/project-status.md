@@ -1,5 +1,42 @@
 # Project status and development handoff
 
+## Native startup and replacement economy (#50) — 9 November 2026
+
+PR #284 merged as main `092237560a905a6601f38d0af34bfafa1f44fbef`, tree
+`46a6c70281fb4f0ad151cee48a478c95bdf87f8d`, exactly the reviewed `62f31e4` tree.
+Review 5825691221 was clean; all six confirmed-fixed threads were resolved at
+the authorized merge under MEM-34. Source CI 42612184928 and main CI 42624373395
+both succeeded (122/122). Work continues in the existing `/workspace/suns`,
+branch `codex/native-orbital-start-50`.
+
+Station residents previously generated zero production, preventing replacement
+manufacture. The native prototype now derives output from residents and Energy
+using deterministic integer square root: 50 resources/year at 25,000/Energy 0,
+100 at Energy 3, capped by the live inhabited hull. Surface assets and T/G do
+not contribute. Ordinary generalist startup still yields 29. Native access to
+MiniMiner/Robo-Mini-Miner is narrow; no research level or ARM flag is granted.
+
+An atomic first-turn host construction kernel consumes the ordinary initial
+asset bill: 193 work and 72/9/26 kt for Dock/services, Full receiver and one
+working Quick Jump 5/Robo-Mini-Miner. The declared default endowment leaves
+100/100/100 kt in stock, with 25,000 station residents and a full 210 mg tank.
+It rejects insufficient budgets, incompatible profiles, player views and repeat
+starts. Ordinary design and production orders build a paid replacement in four
+years while mining supplies real stocks. Removing the original stops extraction.
+
+The full GCC14.2/Qt6.12 Debug application build and **123/123 CTest in 125.74 s**
+passed. Coverage includes ordinary replacement orders, exact work/mineral costs,
+narrow technology access, real mining/no-miner turns, atomic rejection,
+host reload, decoded PBEM orders and received output after unseen station loss.
+Save v118 / orders v49 / race v3 stay unchanged. See
+[stage 3 budget and limits](asymmetric-empires.md).
+
+This is a prepared-host startup kernel, not new-campaign integration or actual
+Computer startup/expansion acceptance. Human/Computer setup/import/restart stay
+closed. Next: paid founding, native radiation/protection/growth/support, hull
+progression and actual Computer startup → replacement → paid second colony.
+#50 stays open; #53/#63 remain frozen. Current source/PR/CI are in GitHub.
+
 ## #284 repeat review: evacuation link, History sites and map — 9 November 2026
 
 Review 5825137484 on 011e9d4 confirmed all three prior fixes. Its source CI

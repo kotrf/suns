@@ -54,7 +54,8 @@ void eligibility_and_arrival()
     assert(!remote_mining_site_available(noStation, 1, noStation.planets.front()));
     auto innate = state; innate.planets.front().population = 25'000; innate.planets.front().mines = 100;
     assert(mineral_cargo_mass(projected_mineral_mining(innate, innate.planets.front())) == 0);
-    auto missingEquipment = state; missingEquipment.players.front().technology.levels[std::size_t(ResearchField::Construction)] = 0;
+    auto missingEquipment = state;
+    missingEquipment.shipDesigns.back().components = {ShipComponentType::QuickJump5};
     missingEquipment.fleets.front().task = FleetTask::RemoteMining;
     assert(TurnProcessor{}.process(missingEquipment, {}).planets.front().minerals.ironium == 100);
 
