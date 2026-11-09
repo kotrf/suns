@@ -61,6 +61,14 @@ Apply only when the shared command-phase projection reaches both displayed
 manifests. A simultaneous swap that cannot fit in either sequential order is
 rejected rather than partly applied.
 
+The command-boundary projection rechecks the current communications link for
+each ordinary dockside cargo order, just as the host does. Earlier transfers can
+change that link: evacuating the last capital-station residents removes its
+radar root. A mixed evacuation/ore swap can therefore require unloading ore
+before evacuating people. The editor tries that feasible order; it cannot promise
+a later transfer that the resulting network will reject. This stays a bounded
+current-order check, without simulating an elapsed year.
+
 Accepted local transfers immediately update the current-turn plan in cargo,
 System Status/Minerals, colony output and the empire summary. Received population
 remains available in detailed information; the compact Population line marks a

@@ -362,7 +362,8 @@ void MainWindow::refreshEmpireHistory()
         if (fleetMetric) {
             for (const auto& fleet : snapshot.fleetHistory) knownFleets.insert(fleet.fleet);
         } else if (remoteMetric) {
-            for (const auto& site : snapshot.remoteMineHistory) knownSites.insert(site.planet);
+            if (snapshot.remoteExtractionRecorded)
+                for (const auto& site : snapshot.remoteMineHistory) knownSites.insert(site.planet);
         } else {
             for (const auto& colony : snapshot.colonyHistory) knownSites.insert(colony.planet);
         }

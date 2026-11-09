@@ -7,6 +7,8 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QListWidget>
 #include <QGraphicsTextItem>
 #include <QGraphicsLineItem>
 #include <QPushButton>
@@ -29,6 +31,14 @@ struct MainWindowTestAccess {
     static QStringList descriptions(const MainWindow& w) { return w.pendingDescriptions_; }
     static QString fleetSummary(const MainWindow& w) { return w.selectedFleetPanelSummary(); }
     static QString planetSummary(const MainWindow& w) { return w.selectedPlanetPanelSummary(); }
+    static void installReport(MainWindow& w, const GameState& s, const GameEvent& report) {
+        install(w, s); w.selection_ = {}; w.resetTurnMessages(); w.appendTurnMessages({report});
+        w.view_->setSceneRect(-1'000, -1'000, 2'000, 2'000);
+        w.view_->resetTransform(); w.view_->scale(4, 4);
+    }
+    static QPointF mapCenter(const MainWindow& w) { return w.view_->mapToScene(w.view_->viewport()->rect().center()); }
+    static std::optional<FleetId> selectedFleet(const MainWindow& w) { return w.selection_.fleet; }
+    static const GameEvent& report(const MainWindow& w) { return w.turnMessages_.front(); }
 };
 }
 
@@ -61,6 +71,40 @@ const Fleet& miner(const GameState& s) {
 void chooseMining(MainWindow& w) {
     auto* combo = w.findChild<QComboBox*>("routeArrivalActionCombo"); assert(combo);
     combo->setCurrentIndex(combo->findData(int(FleetArrivalActionKind::RemoteMining))); settle();
+}
+void mining_report_points_to_its_world()
+{
+    auto state = test::native_orbital_miner_fixture();
+    state.stars[1].position = {20, 25};
+    state.planets[1].observedConcentration = MineralCargo{100, 50, 25};
+    auto& fleet = state.fleets.front(); fleet.position = {20, 25}; fleet.task = FleetTask::RemoteMining;
+    fleet.telemetry = {}; fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+    const auto mining = TurnProcessor{}.process_with_events(state, {});
+    const auto report = std::find_if(mining.events.begin(), mining.events.end(), [](const auto& e) { return e.kind == GameEventKind::RemoteMiningOutput; });
+    assert(report != mining.events.end() && report->fleet == 1 && report->star == 2);
+    auto moved = TurnProcessor{}.process(mining.state, {{1, {MoveFleetOrder{1, {60, 25}, 5}}}});
+    moved = TurnProcessor{}.process(moved, {});
+    assert(same_position(moved.fleets.front().position, {60, 25}));
+    MainWindow window; attachRouteProgramDock(window); window.installUiPolish(); window.installTurnMessages();
+    window.resize(1'100, 800); window.show(); settle();
+    MainWindowTestAccess::installReport(window, moved, *report); settle();
+    auto* list = window.findChild<QListWidget*>("turnMessagesList");
+    auto* button = window.findChild<QPushButton*>("showTurnMessageOnMap");
+    assert(list && list->count() == 1 && button); list->setCurrentRow(0); button->click(); settle();
+    const auto center = MainWindowTestAccess::mapCenter(window);
+    assert(std::hypot(center.x()-20, center.y()-25) < 1);
+    assert(MainWindowTestAccess::report(window).fleet == 1);
+    auto withoutStar = *report; withoutStar.star = 0;
+    MainWindowTestAccess::installReport(window, moved, withoutStar); settle();
+    list->setCurrentRow(0); button->click(); settle();
+    const auto fallback = MainWindowTestAccess::mapCenter(window);
+    assert(std::hypot(fallback.x()-20, fallback.y()-25) < 1);
+    auto arrival = *report; arrival.kind = GameEventKind::FleetArrived;
+    MainWindowTestAccess::installReport(window, moved, arrival); settle();
+    list->setCurrentRow(0); button->click(); settle();
+    const auto fleetCenter = MainWindowTestAccess::mapCenter(window);
+    assert(std::hypot(fleetCenter.x()-60, fleetCenter.y()-25) < 1);
+    assert(MainWindowTestAccess::selectedFleet(window) == std::optional<FleetId>{1});
 }
 void nativeOrbitalMining(MainWindow& w)
 {
@@ -345,4 +389,5 @@ int main(int argc, char** argv) {
     }
     stopThenMineCancelsSentNavigation(w);
     nativeOrbitalMining(w);
+    mining_report_points_to_its_world();
 }

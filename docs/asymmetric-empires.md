@@ -79,6 +79,10 @@ miner destroyed later that year has already worked, but cannot work next year.
 History credits only delivered manifests in their receipt year; refreshing a
 boundary does not count them again or rewrite the observation year. Fleet/planet
 panels identify rate estimates as based on last reported tasks.
+Mining report map navigation uses the recorded world/position rather than the
+source fleet's later location. Local History site selectors, including comparison
+and Follow map, use only recorded extraction rows; retaining a legacy host amount
+does not expose its unconfirmed site.
 
 Save v118 accepts the new report/event kinds without changing the base payload,
 orders v49 or portable race v3. Pre-v118 native extraction amounts are retained

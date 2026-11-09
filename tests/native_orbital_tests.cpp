@@ -10,6 +10,28 @@
 #include <stdexcept>
 using namespace suns;
 namespace {
+void cargo_projection_rechecks_the_link_after_evacuation()
+{
+    const auto state = test::native_capital_evacuation_fixture();
+    const TransferCargoOrder evacuate{{1, 0, true}, {0, 1}, 1'000, {}};
+    const TransferCargoOrder unload{{0, 1}, {1, 0, true}, 0, {3, 0, 0}};
+    for (const bool unloadFirst : {false, true}) {
+        PlayerOrders orders{1, unloadFirst ? std::vector<Order>{unload, evacuate} : std::vector<Order>{evacuate, unload}};
+        const auto preview = projected_cargo_order_state(state, orders);
+        const auto actual = TurnProcessor{}.process(state, {orders});
+        assert(actual.fleets.front().colonists == 1'000 && actual.planets.front().nativeOrbit.population == 0);
+        assert(actual.planets.front().minerals.ironium == (unloadFirst ? 103 : 100));
+        assert(preview.planets.front().minerals.ironium == actual.planets.front().minerals.ironium);
+        assert(preview.fleets.front().minerals.ironium == actual.fleets.front().minerals.ironium);
+        assert(communication_delay_turns(preview, 1, preview.fleets.front().position) > 0);
+        assert(preview.turn == state.turn && state.planets.front().nativeOrbit.population == 1'000);
+    }
+    const PlayerOrders exactMinerals{1, {evacuate, SetFleetMineralCargoOrder{1, 1, {}}}};
+    const auto preview = projected_cargo_order_state(state, exactMinerals);
+    const auto actual = TurnProcessor{}.process(state, {exactMinerals});
+    assert(preview.fleets.front().minerals.ironium == actual.fleets.front().minerals.ironium);
+    assert(preview.fleets.front().minerals.ironium == 3);
+}
 GameState arrival(GameState state, FleetCargoKind cargo, FleetArrivalActionKind kind = FleetArrivalActionKind::UnloadAll)
 {
     const auto& fleet = state.fleets.front();
@@ -162,6 +184,7 @@ void abandoned_station_cleanup_cannot_leave_a_dangling_housing_link()
 }
 int main()
 {
+    cargo_projection_rechecks_the_link_after_evacuation();
     shared_unload_obeys_station_capacity_and_keeps_minerals_independent();
     exact_station_transfers_and_surface_bypasses();
     refits_preserve_residents_and_reject_insufficient_housing();

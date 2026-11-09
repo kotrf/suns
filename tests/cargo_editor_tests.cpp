@@ -24,6 +24,12 @@
 
 namespace suns {
 struct MainWindowTestAccess {
+    static void installCapitalEvacuation(MainWindow& w)
+    {
+        w.state_ = test::native_capital_evacuation_fixture();
+        w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear();
+        w.selection_.star = 1; w.selection_.fleet = 1; w.rebuildScene();
+    }
     static void installNative(MainWindow& w, std::uint64_t residents = 10'000, std::uint64_t passengers = 0)
     {
         w.state_ = test::native_orbital_fixture();
@@ -231,6 +237,26 @@ int main(int argc, char** argv)
             dialog->reject();
         });
         native.openCargoManifestDialog();
+        suns::MainWindowTestAccess::installCapitalEvacuation(native);
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+            auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+            source->setCurrentIndex(source->findText("Fleet", Qt::MatchStartsWith));
+            destination->setCurrentIndex(destination->findText("Orbital station", Qt::MatchStartsWith));
+            dialog->findChild<QSpinBox*>("cargoColonistSpin")->setValue(-1'000);
+            dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0")->setValue(3);
+            auto* accept = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+            assert(accept->isEnabled()); accept->click();
+        });
+        native.openCargoManifestDialog();
+        const auto evacuation = suns::MainWindowTestAccess::orders(native);
+        assert(evacuation.orders.size() == 2);
+        const auto& first = std::get<suns::TransferCargoOrder>(evacuation.orders.front());
+        assert(first.source.fleet == 1 && first.minerals.ironium == 3);
+        const auto evacuated = suns::TurnProcessor{}.process(suns::MainWindowTestAccess::state(native), {evacuation});
+        assert(evacuated.planets.front().nativeOrbit.population == 0 && evacuated.planets.front().minerals.ironium == 103);
+        assert(evacuated.fleets.front().colonists == 1'000 && evacuated.fleets.front().minerals.ironium == 0);
     }
     suns::MainWindow window;
     suns::MainWindowTestAccess::install(window);

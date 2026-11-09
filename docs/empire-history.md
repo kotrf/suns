@@ -41,6 +41,15 @@ zero; initial and pre-42 years are unknown gaps. The Remote extraction chart
 supports empire totals, individual previously mined worlds, Follow map, and
 comparison between these scopes without revealing other players' operations.
 
+The native orbital civilization's v118 series credits delivered mining manifests
+in their receipt year. Only rows with `remoteExtractionRecorded` can contribute
+mined-world choices to the scope, comparison or Follow map controls. Unrecorded
+v117 amounts/site IDs may remain in the host archive without becoming UI choices;
+player exports omit them. A later received row makes its site selectable normally.
+**Show on map** for a mining report centers its world or recorded position, even
+if the source miner has moved. The source fleet ID remains part of the report's
+communications and identity; normal movement reports still focus their fleet.
+
 Save format 40 stores compact milestones for a player's delivered colony-founded,
 colony-lost and research-level reports. The chart marks the delivery year with
 colored vertical lines; hover to see the event and, if different, its observation

@@ -1,5 +1,37 @@
 # Project status and development handoff
 
+## #284 repeat review: evacuation link, History sites and map — 9 November 2026
+
+Review 5825137484 on 011e9d4 confirmed all three prior fixes. Its source CI
+42604101592 succeeded with 122/122 tests. The new P2 and two P3s were reproduced
+on that source in core and actual Qt controls before changing production code.
+
+Dockside cargo now shares one current-link admission rule between host execution
+and command-boundary projection, rechecked after every preceding order. Fully
+evacuating the radar capital can remove its network root while another living
+colony remains without radar. The editor detects the broken first sequence and
+selects ore unloading before evacuation; preview and real execution agree.
+Legacy mineral-manifest orders use the same check. Existing mobile-base routing
+and received-state planning boundaries are retained without annual simulation.
+
+Remote-extraction scope, comparison and Follow map admit sites only from recorded
+rows. Genuine v117 host archives stay intact and unknown sites match the player
+export's empty choices; a newly received mining row makes the site available.
+Mining Show on map uses its recorded system/position while retaining the source
+fleet ID for transmission and identity. A moved miner cannot drag that historical
+world report along; missing-star fallback and normal fleet-arrival focus are tested.
+
+12/12 focused CTest passed in 2.36 s, including Cargo, communications, mobile bases,
+native history/save, received population and real report navigation. The existing
+remote-population fixture now checks host rejection outside communications and
+retains its stale-report population assertions after restoring a known live link.
+The full GCC14.2/Qt6.12 Debug application build and **122/122 CTest in 73.80 s**
+passed. 139 local documentation links and diff checked.
+Formats remain save v118 / orders v49 / race v3. PR #284 stays open for repeat
+review and threads await an authorized merge. Native paid startup/founding,
+economy/growth/radiation/hulls and actual Computer acceptance remain incomplete;
+#50 stays open, the trait stays disabled, and #53/#63 remain frozen.
+
 ## #284 review: mining source, Cargo and legacy export — 9 November 2026
 
 Review 5824506446 on b808664 reported one P2 and two P3s. Source CI 42530957705

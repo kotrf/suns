@@ -79,4 +79,20 @@ inline GameState asynchronous_native_unload_fixture()
     assert(communication_delay_turns(state, 1, {145, 0}) == 0);
     return state;
 }
+
+inline GameState native_capital_evacuation_fixture()
+{
+    auto state = asynchronous_native_unload_fixture();
+    state.planets.front().nativeOrbit.population = 1'000;
+    state.planets.front().minerals = {100, 100, 100};
+    auto& fleet = state.fleets.front();
+    fleet.position = state.stars.front().position;
+    fleet.destination.reset(); fleet.arrivalAction = {}; fleet.waypointQueue.clear();
+    fleet.colonists = 0; fleet.minerals = {3, 0, 0};
+    fleet.telemetry = {}; fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+    set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
+    state.players.front().history.clear(); record_empire_turn_statistics(state);
+    assert(communication_delay_turns(state, 1, fleet.position) == 0);
+    return state;
+}
 }

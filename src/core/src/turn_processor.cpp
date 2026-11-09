@@ -2280,6 +2280,30 @@ void grow_colonies(GameState& state)
     }
 }
 
+bool cargo_order_has_local_link(const GameState& state, PlayerId player, const Order& order)
+{
+    const auto local = [&](FleetId id) {
+        const auto* fleet = find_service_fleet(state, id);
+        return !id || (fleet && fleet->owner == player
+            && communication_delay_turns(state, player, fleet->position) == 0);
+    };
+    return std::visit([&](const auto& cargo) {
+        using T = std::decay_t<decltype(cargo)>;
+        if constexpr (std::is_same_v<T, TransferCargoOrder>) {
+            const auto base = [&](FleetId id) {
+                const auto* fleet = find_service_fleet(state, id);
+                return fleet && mobile_base_hulls(state, *fleet) > 0;
+            };
+            // Mobile-base service keeps its deferred delivery path. Ordinary
+            // dockside cargo rechecks the current network for every order.
+            return base(cargo.source.fleet) || base(cargo.destination.fleet)
+                || (local(cargo.source.fleet) && local(cargo.destination.fleet));
+        } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>
+            || std::is_same_v<T, SetFleetMineralCargoOrder>) return local(cargo.fleet);
+        else return false;
+    }, order);
+}
+
 // Apply exactly the same cargo validation at the planning boundary and in
 // the UI preview. This must not run mining, research, population growth or a
 // whole year merely to display the previously queued ship manifest.
@@ -2510,7 +2534,8 @@ GameState project_order_boundary(const GameState& current, const PlayerOrders& p
         } else if (std::holds_alternative<SetFleetColonistsOrder>(order)
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)) {
-            apply_cargo_order(projected, pending.player, order, unusedFreight);
+            if (cargo_order_has_local_link(projected, pending.player, order))
+                apply_cargo_order(projected, pending.player, order, unusedFreight);
         }
     }
     return projected;
@@ -2866,16 +2891,7 @@ TurnResult TurnProcessor::process_with_events(
                     } else if constexpr (std::is_same_v<T, SetFleetColonistsOrder>
                         || std::is_same_v<T, SetFleetMineralCargoOrder>
                         || std::is_same_v<T, TransferCargoOrder>) {
-                        const auto local=[&](FleetId id) {
-                            const auto* f=find_service_fleet(next,id);
-                            return !id || (f && f->owner==submission.player && communication_delay_turns(next,submission.player,f->position)==0);
-                        };
-                        if constexpr(std::is_same_v<T,TransferCargoOrder>) {
-                            const auto* a=find_service_fleet(next,concreteOrder.source.fleet);
-                            const auto* b=find_service_fleet(next,concreteOrder.destination.fleet);
-                            const bool base=(a && mobile_base_hulls(next,*a)) || (b && mobile_base_hulls(next,*b));
-                            if(!base && (!local(concreteOrder.source.fleet) || !local(concreteOrder.destination.fleet)))return;
-                        } else if(!local(concreteOrder.fleet))return;
+                        if (!cargo_order_has_local_link(next, submission.player, order)) return;
                         if constexpr (std::is_same_v<T, TransferCargoOrder>) {
                             const auto involvesBase = [&](FleetId id) {
                                 const auto* f = find_service_fleet(next, id);

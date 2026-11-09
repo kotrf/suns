@@ -931,10 +931,13 @@ void MainWindow::installTurnMessages()
             return candidate.id == event->fleet;
         });
         const bool ownedFleet = fleet != state_.fleets.end() && fleet->owner == pendingOrders_.player;
+        // Mining output belongs to its recorded world. Keep the source fleet
+        // ID for communications/identity without following its later voyage.
+        const bool focusFleet = ownedFleet && event->kind != GameEventKind::RemoteMiningOutput;
         // Preserve the report's system as the star context even if its fleet
         // has travelled since the event was recorded.
         if (star && ownedFleet) selection_.star = starId;
-        if (ownedFleet) {
+        if (focusFleet) {
             selectWorkspaceObject(2, fleet->id);
         } else if (star) {
             selectWorkspaceObject(1, starId);
@@ -942,7 +945,7 @@ void MainWindow::installTurnMessages()
         rebuildScene(false);
         if (battle) {
             view_->centerOn(position.x, position.y);
-        } else if (ownedFleet) {
+        } else if (focusFleet) {
             const auto visible = fleet_player_view(state_, *fleet);
             view_->centerOn(visible.position.x, visible.position.y);
         } else if (star) view_->centerOn(star->position.x, star->position.y);
