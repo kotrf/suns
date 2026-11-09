@@ -1,5 +1,33 @@
 # Project status and development handoff
 
+## #285 review fixes: project identity, viable startup, industry and restart — 9 November 2026
+
+Review 5827903909 on `b530098` reported one P2 and three P3s. All four were
+reproduced against that source with real core turns and Qt controls before
+implementation changes; the previous source CI 42631805031 was green (123/123).
+
+Production list, button and selection now use the received design projection.
+Owner-scoped names identify pending designs and survive a temporary ID matching
+a foreign project. Saving and reopening Designer still recheck fresh access
+before deferred refresh. Custom startup must actually produce work at its
+current Energy, rejecting zero-output budgets atomically. Native basic/advanced
+factories/mines, upgrades and reconstruction are inapplicable in single/batch
+orders and planning; incompatible templates reject before changing the queue.
+Stale partly built, paid and automated rows retire before spending/completion.
+The UI omits these choices and keeps ordinary production available. Load retains
+the primary trait; Restart refuses an unavailable civilization without changing
+the game, pending orders or exchange identity.
+
+The full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.41 s**
+passed. Final startup/Qt/live-access tests passed 3/3 in 0.84 s, preserving live
+research/acquisition checks. New tests use actual one/two-draft Designer saves,
+foreign-ID collisions, decoded PBEM industry orders, template applicability,
+Native→Generalist control restoration and real host load/restart. Formats remain
+save v118 / orders v49 / race v3. These fixes also belong in dependent #286;
+current propagation/source/CI are in GitHub. No PR merge or thread resolution
+is performed for this review request. #50 stays open, native setup stays gated,
+and #53/#63 stay frozen.
+
 ## Native startup and replacement economy (#50) — 9 November 2026
 
 PR #284 merged as main `092237560a905a6601f38d0af34bfafa1f44fbef`, tree

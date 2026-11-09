@@ -145,7 +145,12 @@ The native population/cargo kernel is separate from ordinary habitats. Owned-orb
 remote mining uses the world's shared mineral stock; native surface/innate mining
 is zero. The paid startup kernel budgets a basic mining fit, fuel, station and
 stocks; narrow native MiniMiner/Robo-Mini-Miner access permits ordinary paid
-replacement manufacture without granting research levels. Prototype output uses
+replacement manufacture without granting research levels. Custom starts with zero
+actual output reject atomically. Native surface factories/mines, their advanced
+forms, upgrades and reconstruction are unavailable in production/templates; stale
+rows retire without spending. Loading preserves the primary trait, and Restart
+refuses an unavailable civilization instead of changing it to Generalist.
+Prototype output uses
 station residents and Energy; radiation, support, growth and paid founding remain
 unfinished, so setup is still gated. Save v118 also retains delivered station destruction before the first
 received fit and mining manifests credited in their receipt year. It

@@ -10,6 +10,8 @@
 
 #include <QDockWidget>
 #include <QComboBox>
+#include <QListView>
+#include <QStandardItemModel>
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QSpinBox>
@@ -250,6 +252,22 @@ void MainWindow::refreshProductionControls()
     auto* apply = findChild<QPushButton*>("productionTemplateApply");
     if (!kind || !add || !amount || !templates || !apply) return;
 
+    const auto* owner = find_player(state_, pendingOrders_.player);
+    const auto trait = owner ? owner->race.primaryTrait : PrimaryRaceTrait::Generalist;
+    {
+        const QSignalBlocker block(kind);
+        auto* model = qobject_cast<QStandardItemModel*>(kind->model());
+        auto* view = qobject_cast<QListView*>(kind->view());
+        int first = -1;
+        for (int i = 0; i < kind->count(); ++i) {
+            const bool applicable = production_kind_applicable(trait, ProductionKind(kind->itemData(i).toInt()));
+            if (model) model->item(i)->setEnabled(applicable);
+            if (view) view->setRowHidden(i, !applicable);
+            if (applicable && first < 0) first = i;
+        }
+        if (!production_kind_applicable(trait, ProductionKind(kind->currentData().toInt()))) kind->setCurrentIndex(first);
+    }
+
     const auto selected = ProductionKind(kind->currentData().toInt());
     const auto available = selected == ProductionKind::CleanupContamination ? productionControls_.cleanupUnits
         : selected == ProductionKind::ReconstructFactory ? productionControls_.ruinedFactories
@@ -269,7 +287,10 @@ void MainWindow::refreshProductionControls()
     // Never transiently disable a usable button: doing so cancels a real
     // press/release that straddles a panel update.
     add->setEnabled(productionControls_.friendlyColony && allowed);
-    apply->setEnabled(productionControls_.friendlyColony && templates->currentIndex() > 0);
+    const bool compatibleTemplate = templates->currentData(Qt::UserRole + 1).toBool();
+    apply->setEnabled(productionControls_.friendlyColony && templates->currentIndex() > 0 && compatibleTemplate);
+    apply->setToolTip(templates->currentIndex() > 0 && !compatibleTemplate
+        ? "This template includes surface factories or mines that this civilization cannot operate." : QString{});
     if (industry_upgrade_kind(selected)) {
         add->setToolTip(QString("Convert an existing basic installation; total buildings and workforce limit stay unchanged. %1 unreserved basic units remain.").arg(qulonglong(available)));
     } else if (reconstruction_kind(selected)) {
@@ -335,6 +356,9 @@ void MainWindow::refreshProductionQueue()
             templateName->setCurrentIndex(std::max(0, templateName->findText(name)));
             templateName->setProperty("templateNames", names);
         }
+        for (int i = 0; i < int(forecastPlayer->productionTemplates.size()); ++i)
+            templateName->setItemData(i + 1, production_template_applicable(forecastPlayer->race.primaryTrait,
+                forecastPlayer->productionTemplates[std::size_t(i)]), Qt::UserRole + 1);
     }
     productionControls_.canTerraform = next_terraforming_environment(forecastState, pendingOrders_.player, *planet).has_value();
     productionControls_.canBuildDefenses = colony_defenses_available(forecastState, pendingOrders_.player)
