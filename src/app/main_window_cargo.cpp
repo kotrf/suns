@@ -4,6 +4,7 @@
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
 #include "suns/mobile_base.hpp"
+#include "suns/native_orbital.hpp"
 
 #include <QAction>
 #include <QComboBox>
@@ -38,6 +39,8 @@ struct CargoEndpointView {
     const Planet* planet{};
     const Fleet* fleet{};
     QString name;
+    bool nativeOrbit{};
+    std::uint64_t housingCapacity{kOrbitalPopulationCapacity};
 };
 
 struct MineralControl {
@@ -54,12 +57,14 @@ double mineralValue(const MineralCargo& minerals, int index)
 
 std::uint64_t endpointColonists(const CargoEndpointView& endpoint)
 {
-    return endpoint.planet ? (endpoint.endpoint.orbital?endpoint.planet->habitat.population:endpoint.planet->population) : endpoint.fleet->colonists;
+    if (!endpoint.planet) return endpoint.fleet->colonists;
+    if (!endpoint.endpoint.orbital) return endpoint.planet->population;
+    return endpoint.nativeOrbit ? endpoint.planet->nativeOrbit.population : endpoint.planet->habitat.population;
 }
 
 MineralCargo endpointMinerals(const CargoEndpointView& endpoint)
 {
-    if(endpoint.endpoint.orbital) return {};
+    if(endpoint.endpoint.orbital && !endpoint.nativeOrbit) return {};
     return endpoint.planet ? endpoint.planet->minerals : endpoint.fleet->minerals;
 }
 
@@ -186,8 +191,13 @@ void MainWindow::openCargoManifestDialog()
             QString("%1 — %2").arg(prefix, QString::fromStdString(planet->name)),
         });
     }
-    if(const auto* p=star ? find_planet_at_star(planned,star->id) : nullptr;p && p->owner==pendingOrders_.player && habitat_completed(*p))
-        endpoints.push_back({{p->id,0,true},p,nullptr,QString("Orbital settlement — %1").arg(QString::fromStdString(p->name))});
+    if (const auto* p = star ? find_planet_at_star(planned, star->id) : nullptr; p && p->owner == pendingOrders_.player) {
+        const auto* native = native_orbital_station(planned, *p);
+        if (native || habitat_completed(*p))
+            endpoints.push_back({{p->id, 0, true}, p, nullptr,
+                QString(native ? "Orbital station — %1" : "Orbital settlement — %1").arg(QString::fromStdString(p->name)),
+                native != nullptr, native ? native_orbital_capacity(native->hull) : kOrbitalPopulationCapacity});
+    }
     for (const auto& fleet : planned.fleets) {
         if (fleet.owner != pendingOrders_.player || !same_position(fleet.position, *position)
             || fleet_telemetry_age(planned, fleet) != 0 || !fleet_has_instant_link(planned, fleet)) continue;
@@ -259,6 +269,11 @@ void MainWindow::openCargoManifestDialog()
     // cargo. Reopening the window must still show Planet -> selected Fleet,
     // with the existing manifest clearly visible on the right.
     sourceCombo->setCurrentIndex(0);
+    for (int row = 0; row < sourceCombo->count(); ++row)
+        if (endpoints[std::size_t(sourceCombo->itemData(row).toInt())].nativeOrbit) {
+            sourceCombo->setCurrentIndex(row);
+            break;
+        }
     const auto rebuildDestinations = [&](int preferred) {
         const QSignalBlocker blocker(destinationCombo);
         destinationCombo->clear();
@@ -378,7 +393,8 @@ void MainWindow::openCargoManifestDialog()
         const auto& destination = endpoints[static_cast<std::size_t>(destinationIndex)];
         const bool invasion = destination.planet && destination.planet->owner != 0
             && destination.planet->owner != pendingOrders_.player;
-        const bool orbital = source.endpoint.orbital || destination.endpoint.orbital;
+        const bool residentOnly = (source.endpoint.orbital && !source.nativeOrbit)
+            || (destination.endpoint.orbital && !destination.nativeOrbit);
         const bool fuelAvailable = source.fleet && destination.fleet
             && !mobile_base_hulls(planned, *source.fleet) && !mobile_base_hulls(planned, *destination.fleet);
         {
@@ -406,13 +422,18 @@ void MainWindow::openCargoManifestDialog()
                 - fleet_cargo_used(planned, *endpoint.fleet)) : std::numeric_limits<double>::infinity();
         };
         const auto peopleAvailable = [&](const CargoEndpointView& from, const CargoEndpointView& to) {
+            if (native_orbital_race(planned, pendingOrders_.player)
+                && ((from.planet && !from.nativeOrbit) || (to.planet && !to.nativeOrbit))) return std::uint64_t{0};
             auto people = endpointColonists(from);
             if (from.planet) {
                 if (from.planet->owner != pendingOrders_.player) return std::uint64_t{0};
                 if (!from.endpoint.orbital && !from.planet->habitat.population && !to.endpoint.orbital && people) --people;
             }
             if (to.planet && !to.planet->owner) return std::uint64_t{0};
-            if (to.endpoint.orbital) people = std::min(people, kOrbitalPopulationCapacity - to.planet->habitat.population);
+            if (to.endpoint.orbital) {
+                const auto residents = endpointColonists(to);
+                people = std::min(people, to.housingCapacity > residents ? to.housingCapacity-residents : 0);
+            }
             return people;
         };
         const auto peopleLimit = [](std::uint64_t available, double hold) {
@@ -438,20 +459,20 @@ void MainWindow::openCargoManifestDialog()
             const auto selected = transferMinerals();
             const double otherCargo = double(colonistSpin->value()) / kColonistsPerCargoUnit
                 + mass(selected) - mineralValue(selected, index);
-            const int forward = invasion || orbital ? 0 : sliderMaximum(std::min(
+            const int forward = invasion || residentOnly ? 0 : sliderMaximum(std::min(
                 mineralValue(endpointMinerals(source), index), std::max(0.0, destinationRoom - otherCargo)));
-            const int back = invasion || orbital ? 0 : sliderMaximum(std::min(
+            const int back = invasion || residentOnly ? 0 : sliderMaximum(std::min(
                 mineralValue(endpointMinerals(destination), index), std::max(0.0, sourceRoom + otherCargo)));
             const auto& control = mineralControls[index];
             const QSignalBlocker sliderBlock(control.slider), spinBlock(control.spin);
             control.spin->setRange(-double(back) / kMineralScale, double(forward) / kMineralScale);
             const auto holdScale = destination.fleet ? destinationRoom
                 : source.fleet ? fleet_cargo_capacity(planned, *source.fleet) : colonist_cargo_mass(kOrbitalPopulationCapacity);
-            control.slider->setRange(-back, invasion || orbital ? 0
+            control.slider->setRange(-back, invasion || residentOnly ? 0
                 : std::max(forward, sliderMaximum(std::max(0.0, holdScale - otherCargo))));
             control.slider->setValue(int(std::lround(control.spin->value() * kMineralScale)));
-            control.slider->setEnabled(!invasion && !orbital);
-            control.spin->setEnabled(!invasion && !orbital);
+            control.slider->setEnabled(!invasion && !residentOnly);
+            control.spin->setEnabled(!invasion && !residentOnly);
             control.slider->setToolTip("Positive loads the destination; negative returns minerals to the source.");
         }
         const auto colonists = std::int64_t(colonistSpin->value());
@@ -481,7 +502,7 @@ void MainWindow::openCargoManifestDialog()
             receivedMinerals[index]->setRange(sliderMaximum(before + control.spin->minimum()),
                 sliderMaximum(before + control.spin->maximum()));
             receivedMinerals[index]->setValue(sliderMaximum(before + control.spin->value()));
-            receivedMinerals[index]->setEnabled(!invasion && !orbital);
+            receivedMinerals[index]->setEnabled(!invasion && !residentOnly);
             receivedMinerals[index]->setToolTip("Destination stock after this transfer; drag left to return minerals.");
         }
         sourceBefore->setText(QString("<b>Current source (including queued orders):</b> %1").arg(cargoValues(sourcePeople, sourceStock)));
@@ -515,7 +536,7 @@ void MainWindow::openCargoManifestDialog()
                 .arg(fleet_cargo_capacity(planned, *destination.fleet), 0, 'f', 2)
                 .arg(fleet_gross_mass(planned, *destination.fleet) + addedMass, 0, 'f', 2));
         } else capacitySummary->setText(destination.endpoint.orbital
-            ? QString("<b>Orbital housing:</b> %1 / %2 residents after transfer").arg(qulonglong(destinationAfterPeople)).arg(qulonglong(kOrbitalPopulationCapacity))
+            ? QString("<b>Orbital housing:</b> %1 / %2 residents after transfer").arg(qulonglong(destinationAfterPeople)).arg(qulonglong(destination.housingCapacity))
             : "<b>Destination hold:</b> planetary surface has no cargo-capacity limit.");
 
         draftTransfers.clear();
@@ -535,7 +556,8 @@ void MainWindow::openCargoManifestDialog()
             if (draftFuel) orders.orders.push_back(*draftFuel);
             const auto validated = projected_cargo_order_state(planned, orders);
             const auto matches = [&](const CargoEndpointView& endpoint, std::uint64_t people, const MineralCargo& stock) {
-                CargoEndpointView actual{endpoint.endpoint};
+                CargoEndpointView actual = endpoint;
+                actual.planet = nullptr; actual.fleet = nullptr;
                 if (endpoint.fleet) {
                     const auto fleet = std::find_if(validated.fleets.begin(), validated.fleets.end(),
                         [&](const auto& f) { return f.id == endpoint.fleet->id; });

@@ -480,6 +480,13 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
     state.mediumObserver=playerId;
     // Do not export the generation seed or global allocation counters.
     Player own = *player;
+    if (own.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization)
+        for (auto& history : own.history) if (!history.remoteExtractionRecorded) {
+            // Migration retains unreceived legacy amounts in the host save,
+            // but neither those amounts nor their sites are player evidence.
+            history.remoteExtraction = {};
+            history.remoteMineHistory.clear();
+        }
     own.pendingSurveyReports.clear();
     own.pendingPlayerReports.clear();
     own.pendingVisitorReports.clear();

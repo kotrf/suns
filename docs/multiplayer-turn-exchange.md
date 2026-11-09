@@ -14,6 +14,10 @@ credited from delivered mining manifests in their receipt year, including report
 already due at a resumed boundary. Pending manifests stay host-only; actual ore
 remains in the world's one shared stock. Pre-v118 native extraction amounts lack
 receipt provenance and remain unrecorded, including the genuine v117 fixture.
+The host keeps those archived amounts, while PlayerView and player-turn files
+clear unrecorded extraction amounts and site details. Received mining rows remain.
+Source-bound mining outboxes also survive host reload without being transmitted
+by a co-located unrelated fleet or exported before receipt.
 Orders remain v49 and portable race files v3. The native civilization is still
 unavailable in campaign setup until its complete start and Computer acceptance
 pass; this format extension does not enable a partially implemented race.

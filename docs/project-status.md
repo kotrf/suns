@@ -1,5 +1,35 @@
 # Project status and development handoff
 
+## #284 review: mining source, Cargo and legacy export — 9 November 2026
+
+Review 5824506446 on b808664 reported one P2 and two P3s. Source CI 42530957705
+succeeded with 122/122 tests. All three findings were reproduced on that source:
+neutral-world extraction appeared in History via a transmitting bystander,
+the native station was absent from the Cargo editor, and genuine-v117 physical
+extraction remained in the exported player history despite its unrecorded flag.
+
+Mining now combines stacks per actual miner and queues its manifest with that
+fleet ID during the mining phase. Passive/Radio silence outboxes stay with their
+source even alongside an unrelated transmitter; mixed fleets cannot combine
+unreceived ore into received output. Distinct miners retain distinct report IDs.
+Waking the real source releases its stored output; losing it does not hand its
+unsent report to a bystander. Friendly-colony local exchange still works.
+
+Cargo offers the live native station as an endpoint and default source, with its
+real residents, shared world stock and hull housing capacity. Mixed people/ore
+orders and same-turn reversal use the existing bounded order projection; native
+surface population paths remain disabled. Independent habitat mineral fields
+retain their original restrictions. PlayerView redacts only unrecorded native
+extraction amounts/site details, retaining host archives and received history.
+Genuine v117 and v118 host/player exports are covered, without a format bump.
+
+The full GCC14.2/Qt6.12 Debug application build and **122/122 CTest in 75.03 s**
+passed; 9/9 focused tests passed in 0.75 s. The styled Cargo screenshot was
+inspected; 145 local documentation links and diff checked. PR #284 remains open for repeat review;
+review threads await an authorized merge. Native startup/economy/founding and
+actual Computer acceptance remain incomplete; #50 stays open and the trait is
+disabled for both controllers. #53/#63 remain frozen. Current source/CI are on GitHub.
+
 ## #283 merged; #50 native owned-orbit mining — 8 November 2026
 
 The user authorized merge and continuation. PR #283 merged as ef71c253153bc0228cbc377bc7c35c7a1f1740d0,

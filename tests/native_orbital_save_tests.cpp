@@ -345,11 +345,61 @@ void native_mining_manifests_and_v117_migration()
     assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-mining-v117.suns"), loaded, error));
     assert(loaded.state.players.front().history.back().remoteExtraction.ironium == 8);
     assert(!loaded.state.players.front().history.back().remoteExtractionRecorded);
+    assert(loaded.state.players.front().history.back().remoteMineHistory.size() == 1);
+    const auto playerView = make_player_view(loaded.state, 1).state;
+    assert(playerView.players.front().history.back().remoteExtraction.ironium == 0);
+    assert(playerView.players.front().history.back().remoteMineHistory.empty());
+    auto migratedHost = loaded; migratedHost.mode = SessionMode::Host; migratedHost.playerTokens = {{1, 17}};
+    checkExport(migratedHost, 0);
+    assert(!reopened.state.players.front().history.back().remoteExtractionRecorded);
+    assert(reopened.state.players.front().history.back().remoteMineHistory.empty());
+    // Redaction applies only to the player's copy, never the host's evidence.
+    assert(loaded.state.players.front().history.back().remoteExtraction.ironium == 8);
+    assert(loaded.state.players.front().history.back().remoteMineHistory.front().planet == 2);
     assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, loaded, error));
     const auto continued = TurnProcessor{}.process(loaded.state, {});
     assert(continued.players.front().history.back().remoteExtractionRecorded);
     assert(continued.players.front().history.back().remoteExtraction.ironium == 8);
     assert(!continued.players.front().history[1].remoteExtractionRecorded);
+    const auto continuedView = make_player_view(continued, 1).state;
+    assert(continuedView.players.front().history.back().remoteExtractionRecorded);
+    assert(continuedView.players.front().history.back().remoteExtraction.ironium == 8);
+    assert(continuedView.players.front().history[1].remoteExtraction.ironium == 0);
+    assert(continuedView.players.front().history[1].remoteMineHistory.empty());
+}
+void silent_mining_source_survives_host_round_trip()
+{
+    auto state = test::native_orbital_miner_fixture();
+    state.stars[1].position = {10, 0};
+    state.planets[1].minerals = {}; state.planets[1].observedConcentration = MineralCargo{100, 50, 25};
+    auto& miner = state.fleets.front(); miner.position = {10, 0}; miner.task = FleetTask::RemoteMining;
+    const auto minerId = miner.id;
+    miner.telemetry = {};
+    miner.telemetry = confirmed_fleet_telemetry(state, miner);
+    miner.electronics = miner.telemetry.electronics = {EmissionMode::RadioSilence, 20};
+    auto other = test::native_orbital_fixture().fleets.front();
+    other.id = state.nextFleetId++; other.position = {10, 0};
+    other.telemetry = {};
+    other.telemetry = confirmed_fleet_telemetry(state, other); state.fleets.push_back(other);
+    state = TurnProcessor{}.process(state, {});
+    QTemporaryDir dir; QString error; SaveGameData loaded, playerTurn;
+    const auto path = dir.filePath("silent-mining.suns");
+    auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+    assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
+    const auto held = std::find_if(loaded.state.players.front().pendingPlayerReports.begin(), loaded.state.players.front().pendingPlayerReports.end(),
+        [](const auto& r) { return r.kind == PlayerReportKind::RemoteMiningOutput; });
+    assert(held != loaded.state.players.front().pendingPlayerReports.end());
+    assert(held->fleet == minerId && held->transmissionFleet == minerId && held->deliveryTurn == kAwaitingTransmission);
+    assert(write_save_game_file(path, make_player_turn(loaded, 1), error) && read_save_game_file(path, playerTurn, error));
+    assert(playerTurn.state.players.front().pendingPlayerReports.empty());
+    assert(playerTurn.state.players.front().history.back().remoteExtraction.ironium == 0);
+    auto awake = loaded.state; awake.fleets.front().electronics = {}; awake.fleets.front().task = FleetTask::None;
+    dispatch_fleet_report_outbox(awake);
+    const auto result = TurnProcessor{}.process_with_events(awake, {});
+    assert(result.state.players.front().history[1].remoteExtraction.ironium == 8);
+    assert(std::any_of(result.events.begin(), result.events.end(), [](const auto& e) {
+        return e.kind == GameEventKind::RemoteMiningOutput && e.fleet == 1 && e.deliveredMinerals.ironium == 8;
+    }));
 }
 GameState battle_fixture(bool stationSnapshot)
 {
@@ -502,6 +552,7 @@ int main(int argc, char** argv)
     asynchronous_cargo_dates_survive_host_and_pbem();
     history_date_bounds_and_genuine_v116_migration();
     native_mining_manifests_and_v117_migration();
+    silent_mining_source_survives_host_round_trip();
     history_and_pbem_wait_for_station_loss_receipt();
     destruction_before_first_snapshot_survives_reload();
     destruction_identity_is_monotonic_and_does_not_kill_a_replacement();

@@ -93,7 +93,16 @@ and finite deposits use delivered, dated evidence.
 
 ## Orbital habitat integration (#56)
 
-Orbital habitats add a separate population-only endpoint and an Orbital colonists arrival policy. Existing Colonists/All policies retain their surface meaning. Exact transfers conserve real people and respect shared hold/mass, orbital capacity and current received evidence. Emergency evacuation can remove the last orbital resident after station loss; local surface/orbit shuttles need support. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.
+Orbital habitats add a separate population-only endpoint and an Orbital colonists arrival policy. For ordinary empires, existing Colonists/All policies retain their surface meaning. Exact transfers conserve real people and respect shared hold/mass, orbital capacity and current received evidence. Emergency evacuation can remove the last orbital resident after station loss; local surface/orbit shuttles need support. See [orbital habitats](orbital-habitats.md) for the complete rules and save v94 / orders v38.
+
+The reserved native orbital civilization has a separate station endpoint in
+**Transfer cargo**. It exposes the received station residents, its actual hull's
+housing capacity and the world's one shared mineral stock. The same exact order
+can move people and minerals, and signed amounts can return earlier transfers in
+the current-turn plan. Its station is the default source when available. Surface
+population fields remain unavailable to natives; ordinary independent habitats
+keep population-only endpoints. This kernel does not enable the incomplete race;
+see [its staged implementation](asymmetric-empires.md).
 
 ## Shared transport lines (#53)
 

@@ -70,8 +70,10 @@ habitats retain resident-only orbital endpoints. Native surface/innate extractio
 is zero, including malformed states containing surface population or mines.
 No initial ship, technology level or free output is granted by this kernel.
 
-Native output produces one aggregated `RemoteMiningOutput` manifest per owner,
-world and year through normal communications. It is queued at the mining phase,
+Native output combines a miner's stacks into one `RemoteMiningOutput` manifest
+per mining fleet, world and year through normal communications. Its source fleet
+ID is retained: a transmitting bystander at a neutral world cannot release a
+silent miner's outbox. A friendly colony still forwards a local upload. It is queued at the mining phase,
 before movement/combat can remove its real source. Mining precedes combat: a
 miner destroyed later that year has already worked, but cannot work next year.
 History credits only delivered manifests in their receipt year; refreshing a
@@ -80,7 +82,9 @@ panels identify rate estimates as based on last reported tasks.
 
 Save v118 accepts the new report/event kinds without changing the base payload,
 orders v49 or portable race v3. Pre-v118 native extraction amounts are retained
-but marked unrecorded because they lack receipt provenance. A genuine v117 file,
+but marked unrecorded because they lack receipt provenance. PlayerView/PBEM omit
+those unrecorded amounts and site details; the host retains its archived values.
+A genuine v117 file,
 written with the merged #283 writer before this format change, verifies migration
 and continued received accounting. Constructed core/UI/host/PBEM fixtures do not
 replace the full paid new-campaign/Computer acceptance below.

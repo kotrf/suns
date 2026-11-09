@@ -1,6 +1,7 @@
 #include "native_orbital_fixture.hpp"
 #include "suns/mining.hpp"
 #include "suns/combat.hpp"
+#include "suns/strategic_operations.hpp"
 #include <algorithm>
 #include <cassert>
 
@@ -111,6 +112,83 @@ void received_manifests_only()
     assert(delayed.fleets.front().task == FleetTask::None);
     assert(delayed.players.front().history.back().remoteExtraction.ironium == 0);
 }
+GameState neutral_miner()
+{
+    auto state = test::native_orbital_miner_fixture();
+    auto& site = state.planets[1]; site.minerals = {};
+    site.observedConcentration = MineralCargo{100, 50, 25};
+    state.stars[1].position = {10, 0};
+    auto& miner = state.fleets.front(); miner.position = {10, 0};
+    miner.task = FleetTask::RemoteMining;
+    miner.telemetry = {};
+    miner.telemetry = confirmed_fleet_telemetry(state, miner);
+    set_survey_level(state, 1, site.star, SurveyLevel::DeepSurvey, state.turn);
+    state.players.front().history.clear(); record_empire_turn_statistics(state);
+    assert(communication_delay_turns(state, 1, miner.position) == 0);
+    return state;
+}
+void mining_reports_keep_their_physical_source()
+{
+    for (const auto mode : {EmissionMode::Passive, EmissionMode::RadioSilence}) {
+        for (const bool bystander : {false, true}) {
+            auto state = neutral_miner();
+            state.fleets.front().electronics = {mode, mode == EmissionMode::RadioSilence ? 20u : 0u};
+            if (bystander) {
+                auto other = test::native_orbital_fixture().fleets.front();
+                other.id = state.nextFleetId++; other.position = {10, 0};
+                other.telemetry = {};
+                other.telemetry = confirmed_fleet_telemetry(state, other);
+                state.fleets.push_back(other);
+            }
+            const auto result = TurnProcessor{}.process_with_events(state, {});
+            state = result.state;
+            assert(state.planets[1].minerals.ironium == 8);
+            assert(state.players.front().history.back().remoteExtraction.ironium == 0);
+            assert(std::none_of(result.events.begin(), result.events.end(), [](const auto& e) { return e.kind == GameEventKind::RemoteMiningOutput; }));
+            const auto pending = std::find_if(state.players.front().pendingPlayerReports.begin(), state.players.front().pendingPlayerReports.end(),
+                [](const auto& r) { return r.kind == PlayerReportKind::RemoteMiningOutput; });
+            assert(pending != state.players.front().pendingPlayerReports.end());
+            assert(pending->transmissionFleet == 1 && pending->deliveryTurn == kAwaitingTransmission);
+            assert(make_player_view(state, 1).state.players.front().history.back().remoteExtraction.ironium == 0);
+
+            auto lost = state;
+            std::erase_if(lost.fleets, [](const auto& f) { return f.id == 1; });
+            const auto afterLoss = TurnProcessor{}.process_with_events(lost, {});
+            assert(afterLoss.state.players.front().history.back().remoteExtraction.ironium == 0);
+            assert(std::none_of(afterLoss.events.begin(), afterLoss.events.end(), [](const auto& e) { return e.kind == GameEventKind::RemoteMiningOutput; }));
+
+            // Waking the actual source releases its already mined output in
+            // the receipt year, without mining again or rewriting year one.
+            state.fleets.front().task = FleetTask::None;
+            apply_electronics_program(state.fleets.front(), {});
+            dispatch_fleet_report_outbox(state);
+            const auto received = TurnProcessor{}.process_with_events(state, {});
+            assert(received.state.players.front().history[1].remoteExtraction.ironium == 8);
+            assert(received.state.players.front().history.back().remoteExtraction.ironium == 0);
+            assert(received.state.players.front().history.front().remoteExtraction.ironium == 0);
+        }
+        auto owned = test::native_orbital_miner_fixture();
+        owned.fleets.front().task = FleetTask::RemoteMining;
+        owned.fleets.front().electronics = {mode, mode == EmissionMode::RadioSilence ? 20u : 0u};
+        assert(TurnProcessor{}.process(owned, {}).players.front().history.back().remoteExtraction.ironium == 8);
+    }
+    for (const bool silent : {false, true}) {
+        auto state = neutral_miner();
+        if (silent) state.fleets.front().electronics = {EmissionMode::RadioSilence, 20};
+        auto second = state.fleets.front(); second.id = state.nextFleetId++;
+        second.electronics = {}; second.telemetry = confirmed_fleet_telemetry(state, second);
+        state.fleets.push_back(second);
+        const auto result = TurnProcessor{}.process_with_events(state, {});
+        assert(result.state.planets[1].minerals.ironium == 16);
+        assert(result.state.players.front().history.back().remoteExtraction.ironium == (silent ? 8 : 16));
+        std::vector<GameEvent> reports;
+        for (const auto& e : result.events) if (e.kind == GameEventKind::RemoteMiningOutput) reports.push_back(e);
+        assert(reports.size() == (silent ? 1 : 2));
+        for (const auto& e : reports) assert(e.deliveredMinerals.ironium == 8);
+        if (silent) assert(reports.front().fleet == second.id);
+        else assert(reports[0].id != reports[1].id && reports[0].fleet != reports[1].fleet);
+    }
+}
 void destroyed_physical_miner_stops()
 {
     auto state = test::native_orbital_miner_fixture();
@@ -130,5 +208,6 @@ void destroyed_physical_miner_stops()
 }
 int main()
 {
+    mining_reports_keep_their_physical_source();
     owned_output_and_stock_access(); eligibility_and_arrival(); received_manifests_only(); destroyed_physical_miner_stops();
 }

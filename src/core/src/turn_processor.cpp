@@ -710,6 +710,7 @@ std::vector<RemoteExtraction> mine_remote_sites(GameState& state)
         if (fleet.task != FleetTask::RemoteMining) continue;
         for (auto& planet : state.planets) {
             if (!remote_mining_site_available(state, fleet.owner, planet) || !fleet_at_planet(state, fleet, planet)) continue;
+            MineralCargo fleetOutput;
             for (const auto& stack : fleet_ship_stacks(fleet)) {
                 const auto* design = find_ship_design(state, stack.design);
                 if (!design || !ship_design_available_to_player(state, fleet.owner, *design)
@@ -720,36 +721,24 @@ std::vector<RemoteExtraction> mine_remote_sites(GameState& state)
                 planet.minerals.ironium += output.ironium;
                 planet.minerals.boranium += output.boranium;
                 planet.minerals.germanium += output.germanium;
+                fleetOutput.ironium += output.ironium;
+                fleetOutput.boranium += output.boranium;
+                fleetOutput.germanium += output.germanium;
                 if (mineral_cargo_mass(output) > 0.0)
                     extraction.push_back({planet.id, fleet.owner, output});
             }
+            // Keep each miner's output with its actual source. Another fleet
+            // at a neutral world cannot transmit a silent miner's outbox.
+            // A friendly colony may still receive it through local exchange.
+            if (native_orbital_race(state, fleet.owner) && mineral_cargo_mass(fleetOutput) > 0.0)
+                if (const auto* star = find_star(state, planet.star))
+                    queue_player_report(state, fleet.owner, PlayerReportKind::RemoteMiningOutput,
+                        star->position, state.turn+1, star->id, planet.id, fleet.id, 0, ProductionKind::Mine,
+                        0, ResearchField::Construction, 0, fleetOutput);
             break;
         }
     }
     return extraction;
-}
-
-void publish_native_mining_output(GameState& state, std::vector<RemoteExtraction> extraction)
-{
-    std::erase_if(extraction, [&](const auto& x) { return !native_orbital_race(state, x.owner); });
-    std::sort(extraction.begin(), extraction.end(), [](const auto& a, const auto& b) {
-        return std::tie(a.owner, a.planet) < std::tie(b.owner, b.planet);
-    });
-    for (std::size_t index = 0; index < extraction.size();) {
-        const auto owner = extraction[index].owner; const auto planetId = extraction[index].planet;
-        MineralCargo minerals;
-        do {
-            minerals.ironium += extraction[index].minerals.ironium;
-            minerals.boranium += extraction[index].minerals.boranium;
-            minerals.germanium += extraction[index].minerals.germanium;
-            ++index;
-        } while (index < extraction.size() && extraction[index].owner == owner && extraction[index].planet == planetId);
-        const auto* planet = find_planet(state, planetId);
-        const auto* star = planet ? find_star(state, planet->star) : nullptr;
-        if (star) queue_player_report(state, owner, PlayerReportKind::RemoteMiningOutput,
-            star->position, state.turn+1, star->id, planetId, 0, 0, ProductionKind::Mine,
-            0, ResearchField::Construction, 0, minerals);
-    }
 }
 
 Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
@@ -2914,10 +2903,9 @@ TurnResult TurnProcessor::process_with_events(
     }
 
     for(auto& planet:next.planets) decay_planet_contamination(planet);
+    // Mine and queue source-bound reports before movement/combat can remove
+    // their real transmitter. Already transmitted output survives its loss.
     const auto remoteExtraction = mine_remote_sites(next);
-    // Emit while the actual mining source can still transmit/share its
-    // observation. Later movement or combat cannot invent a transmitter.
-    publish_native_mining_output(next, remoteExtraction);
     mine_xenocrystals(next);
     advance_wormholes(next);
     resolve_wormhole_approaches(next);
