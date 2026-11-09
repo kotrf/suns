@@ -79,6 +79,9 @@ std::optional<NativeOrbitalStartReceipt> initialize_native_orbital_start(
     star.stellarClass = StarClass::Yellow; star.variability = {};
     next.orbitalStations.push_back({stationId, owner, home, "Inhabited Orbital Dock",
         OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}});
+    // Reject a resource deadlock while all mutations are still in the private
+    // candidate. Native population does not grow in this implementation stage.
+    if (!native_orbital_output(next, colony)) return {};
     next.shipDesigns.push_back(miner); ++next.nextShipDesignId;
     Fleet fleet; fleet.id = next.nextFleetId++; fleet.owner = owner; fleet.design = miner.id;
     fleet.name = "Orbital Miner"; fleet.ships = {{miner.id, 1}}; fleet.position = star.position;

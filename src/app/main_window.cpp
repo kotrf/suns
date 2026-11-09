@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
+#include "suns/production.hpp"
 #include "suns/mobile_base.hpp"
 #include "main_window.hpp"
 #include "application_icon.hpp"
@@ -680,12 +681,12 @@ void MainWindow::refreshShipDesignChoices()
 {
     if (!shipDesignCombo_) return;
 
-    const auto previous = shipDesignCombo_->currentData().toUInt();
+    const auto previous = shipDesignCombo_->currentData(Qt::UserRole + 1).toString();
     const QSignalBlocker blocker(shipDesignCombo_);
     shipDesignCombo_->clear();
 
     int restoreIndex = -1;
-    const auto planning = planned_ship_design_state(state_, pendingOrders_);
+    const auto planning = planned_ship_design_state(receivedPlayerState(), pendingOrders_);
     for (const auto& design : planning.shipDesigns) {
         if (design.owner != pendingOrders_.player) continue;
         const auto index = shipDesignCombo_->count();
@@ -698,10 +699,11 @@ void MainWindow::refreshShipDesignChoices()
                               .arg(ship_design_fuel_capacity(design), 0, 'f', 0)
                               .arg(ship_design_cargo_capacity(design), 0, 'f', 0);
         shipDesignCombo_->addItem(text, static_cast<unsigned int>(design.id));
+        shipDesignCombo_->setItemData(index, QString::fromStdString(design.name), Qt::UserRole + 1);
         const auto minerals = ship_design_mineral_cost(design);
         shipDesignCombo_->setItemData(index, QString("Minerals: I %1 / B %2 / G %3 kt; charged on completion")
             .arg(minerals.ironium).arg(minerals.boranium).arg(minerals.germanium), Qt::ToolTipRole);
-        if (design.id == previous) restoreIndex = index;
+        if (QString::fromStdString(design.name) == previous) restoreIndex = index;
     }
 
     if (restoreIndex >= 0) shipDesignCombo_->setCurrentIndex(restoreIndex);
@@ -1389,10 +1391,12 @@ void MainWindow::updateControls(bool refreshReceivedState)
         : "Plot course + Load All on arrival");
 
     const bool ownedColony = surveyed && planet != nullptr && planet->owner == pendingOrders_.player;
-    buildFactoryButton_->setEnabled(ownedColony);
+    const auto* buildOwner = find_player(received, pendingOrders_.player);
+    buildFactoryButton_->setEnabled(ownedColony && buildOwner
+        && production_kind_applicable(buildOwner->race.primaryTrait, ProductionKind::Factory));
     designShipButton_->setEnabled(true);
 
-    const auto planning = planned_ship_design_state(received, pendingOrders_);
+    const auto planning = planned_ship_design_state(receivedPlayerState(), pendingOrders_);
     const bool stationExists = ownedColony && colony_has_orbital_service(
         planning, planet->id, pendingOrders_.player, OrbitalStationModule::Shipyard);
     shipDesignCombo_->setEnabled(stationExists && shipDesignCombo_->count() > 0);
@@ -1551,6 +1555,8 @@ void MainWindow::openShipDesigner()
         design.owner = pendingOrders_.player;
         design.hull = draft.hull;
         design.components = draft.components;
+        // Saving is an admission boundary: recheck current received access
+        // even before a deferred controls/availability refresh has run.
         const auto planning = planned_ship_design_state(
             make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
         if (!ship_design_available_to_player(planning, pendingOrders_.player, design))
@@ -1577,7 +1583,7 @@ void MainWindow::openShipDesigner()
             QString("Save ship design %1")
                 .arg(QString::fromStdString(draft.name)));
         refreshShipDesignChoices();
-        const auto planning = planned_ship_design_state(state_, pendingOrders_);
+        const auto planning = planned_ship_design_state(receivedPlayerState(), pendingOrders_);
         const auto it = std::find_if(planning.shipDesigns.begin(), planning.shipDesigns.end(), [&](const ShipDesign& design) {
             return design.owner == pendingOrders_.player && design.name == draft.name;
         });
@@ -1662,7 +1668,7 @@ void MainWindow::queueFleetLoadAll()
 void MainWindow::queueShipDesign()
 {
     const auto* star = selectedStar();
-    const auto planning = planned_ship_design_state(make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+    const auto planning = planned_ship_design_state(receivedPlayerState(), pendingOrders_);
     const auto* planet = star ? find_planet_at_star(planning, star->id) : nullptr;
     if (!star || !is_surveyed(planning, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
 
@@ -1672,9 +1678,10 @@ void MainWindow::queueShipDesign()
         || !colony_has_orbital_service(planning, planet->id, pendingOrders_.player,
             OrbitalStationModule::Shipyard)) return;
 
+    const auto* stored = find_ship_design(state_, design->id);
+    const bool persisted = stored && stored->owner == pendingOrders_.player && stored->name == design->name;
     appendPendingOrder(QueueShipDesignOrder{planet->id,
-            find_ship_design(state_, design->id) ? design->id : 0,
-            find_ship_design(state_, design->id) ? std::string{} : design->name},
+            persisted ? stored->id : 0, persisted ? std::string{} : design->name},
         QString("Queue %1 at %2 — cost %3")
             .arg(QString::fromStdString(design->name)).arg(QString::fromStdString(planet->name)).arg(ship_design_cost(*design)));
 }
@@ -1684,6 +1691,8 @@ void MainWindow::queueProduction(ProductionKind kind)
     const auto* star = selectedStar();
     const auto* planet = selectedPlanet();
     if (!star || !is_surveyed(state_, pendingOrders_.player, star->id) || !planet || planet->owner != pendingOrders_.player) return;
+    if (const auto* player = find_player(state_, pendingOrders_.player);
+        player && !production_kind_applicable(player->race.primaryTrait, kind)) return;
 
     appendPendingOrder(QueueProductionOrder{planet->id, kind},
         QString("Queue %1 at %2").arg(productionName(kind)).arg(QString::fromStdString(planet->name)));
@@ -1886,6 +1895,13 @@ void MainWindow::endTurn()
 
 void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
 {
+    if (std::any_of(state_.players.begin(), state_.players.end(), [](const auto& player) {
+        return player.race.primaryTrait != PrimaryRaceTrait::Generalist
+            && player.race.primaryTrait != PrimaryRaceTrait::StargateSpecialist;
+    })) {
+        statusBar()->showMessage("This primary race trait is not playable yet. Restart is unavailable; use File → New campaign to choose a different civilization.", 5000);
+        return;
+    }
     if (sessionMode_ == SessionMode::PlayerTurn && empireSetups_.empty()) {
         statusBar()->showMessage("A player turn cannot restart the host's galaxy. Use File → New campaign.", 5000);
         return;

@@ -1,5 +1,52 @@
 # Project status and development handoff
 
+## Startup review fixes propagated into founding #286 — 9 November 2026
+
+#285 is updated to `9f32816447fdf77130d40f583e9980048b38be2a`, tested tree
+`15f7aacba9443af297fa3f842540add16daf2f40`. Its full GCC14.2/Qt6.12 Debug build
+and 124/124 CTest passed in 125.41 s; source CI 42676434534 was started.
+The same fixes are merged into dependent `codex/native-orbital-founding-50`
+on top of `f9c807a`. Documentation conflicts preserved both stages and history.
+Paid founding, its received contact boundary and ordinary-race behavior remain.
+
+The full merged application build and **125/125 CTest in 123.26 s** passed,
+including the actual Designer/Production review regressions, immediate live
+access rechecks, decoded PBEM, host load/restart and paid colony founding.
+466 local documentation links and diff checked. Save v118 / orders v49 / race v3
+are unchanged. Both PRs remain open for repeat review; no PR merge or review
+thread resolution is performed. Main `0922375` is unchanged. Current #286
+source/CI are in GitHub. #50 stays open and native setup stays gated; remaining
+work is radiation/protection, support/growth, paid advanced hulls and actual
+Computer startup → replacement → paid second-colony acceptance. #53/#63 stay frozen.
+
+## #285 review fixes: project identity, viable startup, industry and restart — 9 November 2026
+
+Review 5827903909 on `b530098` reported one P2 and three P3s. All four were
+reproduced against that source with real core turns and Qt controls before
+implementation changes; the previous source CI 42631805031 was green (123/123).
+
+Production list, button and selection now use the received design projection.
+Owner-scoped names identify pending designs and survive a temporary ID matching
+a foreign project. Saving and reopening Designer still recheck fresh access
+before deferred refresh. Custom startup must actually produce work at its
+current Energy, rejecting zero-output budgets atomically. Native basic/advanced
+factories/mines, upgrades and reconstruction are inapplicable in single/batch
+orders and planning; incompatible templates reject before changing the queue.
+Stale partly built, paid and automated rows retire before spending/completion.
+The UI omits these choices and keeps ordinary production available. Load retains
+the primary trait; Restart refuses an unavailable civilization without changing
+the game, pending orders or exchange identity.
+
+The full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.41 s**
+passed. Final startup/Qt/live-access tests passed 3/3 in 0.84 s, preserving live
+research/acquisition checks. New tests use actual one/two-draft Designer saves,
+foreign-ID collisions, decoded PBEM industry orders, template applicability,
+Native→Generalist control restoration and real host load/restart. Formats remain
+save v118 / orders v49 / race v3. These fixes also belong in dependent #286;
+current propagation/source/CI are in GitHub. No PR merge or thread resolution
+is performed for this review request. #50 stays open, native setup stays gated,
+and #53/#63 stay frozen.
+
 ## Paid native orbital founding (#50), dependent on #285 — 9 November 2026
 
 User requested the next stage. Startup PR #285 remains open at `b530098`;

@@ -65,9 +65,24 @@ bool production_batch_valid(const QueueProductionBatchOrder& order)
     return order.automation == ProductionAutomation::None || order.automation == ProductionAutomation::Annual;
 }
 
+bool production_kind_applicable(PrimaryRaceTrait trait, ProductionKind kind)
+{
+    if (trait != PrimaryRaceTrait::HabitatCivilization) return true;
+    return kind != ProductionKind::Factory && kind != ProductionKind::Mine
+        && kind != ProductionKind::AdvancedFactory && kind != ProductionKind::AdvancedMine
+        && !industry_upgrade_kind(kind) && !reconstruction_kind(kind);
+}
+bool production_template_applicable(PrimaryRaceTrait trait, const ProductionTemplate& value)
+{
+    return std::all_of(value.items.begin(), value.items.end(), [=](const auto& item) {
+        return production_kind_applicable(trait, item.kind);
+    });
+}
 bool apply_production_batch(const GameState& state, Planet& planet, const QueueProductionBatchOrder& order)
 {
     if (planet.id != order.colony || !production_batch_valid(order)) return false;
+    if (const auto* player = find_player(state, planet.owner);
+        player && !production_kind_applicable(player->race.primaryTrait, order.kind)) return false;
     if (industry_upgrade_kind(order.kind) && order.quantity > industry_upgrade_available(planet, order.kind)) return false;
     if (order.kind == ProductionKind::ResonanceLaboratory) return apply_resonance_order(state, planet, {planet.id});
     if (engineering_kind(order.kind)) return apply_planetary_engineering_order(state,planet,
@@ -134,7 +149,8 @@ bool apply_production_template(Planet& planet, const Player& player, const std::
     if (planet.owner != player.id) return false;
     const auto found = std::find_if(player.productionTemplates.begin(), player.productionTemplates.end(),
         [&](const auto& value) { return value.name == name; });
-    if (found == player.productionTemplates.end() || !production_template_valid(*found)) return false;
+    if (found == player.productionTemplates.end() || !production_template_valid(*found)
+        || !production_template_applicable(player.race.primaryTrait, *found)) return false;
     std::erase_if(planet.productionQueue, [](const auto& item) { return item.automation != ProductionAutomation::None; });
     planet.productionQueue.insert(planet.productionQueue.end(), found->items.begin(), found->items.end());
     return true;
@@ -234,6 +250,9 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     while (index < queue.size()) {
         const auto origin = origins[index];
         const auto industrialKind = queue[index].kind;
+        if (player && !production_kind_applicable(player->race.primaryTrait, industrialKind)) {
+            erase(index); continue;
+        }
         const bool factoryBuild = industrialKind == ProductionKind::Factory || industrialKind == ProductionKind::AdvancedFactory;
         const bool mineBuild = industrialKind == ProductionKind::Mine || industrialKind == ProductionKind::AdvancedMine;
         if (industry_upgrade_kind(industrialKind) || factoryBuild || mineBuild) {

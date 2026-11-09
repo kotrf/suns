@@ -33,6 +33,9 @@ struct ColonyProductionResolution {
 [[nodiscard]] ColonyProductionResolution resolve_colony_production(
     const GameState& state, Planet& planet, bool hasShipyard, std::optional<bool> engineeringSupport = std::nullopt);
 [[nodiscard]] bool production_batch_valid(const QueueProductionBatchOrder& order);
+// Structural racial applicability, independent of research and mineral budgets.
+[[nodiscard]] bool production_kind_applicable(PrimaryRaceTrait, ProductionKind);
+[[nodiscard]] bool production_template_applicable(PrimaryRaceTrait, const ProductionTemplate&);
 bool apply_production_batch(const GameState& state, Planet& planet, const QueueProductionBatchOrder& order);
 [[nodiscard]] bool production_template_valid(const ProductionTemplate& value);
 // Suggestions only: never installed or selected implicitly in a new campaign.

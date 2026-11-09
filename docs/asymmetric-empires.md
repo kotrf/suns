@@ -112,6 +112,12 @@ population/factories/mines and ordinary habitats start empty. Its initial home
 snapshot, fleet telemetry and History agree; other players' observations are not
 refreshed by this construction operation.
 
+An accepted custom startup must have nonzero actual orbital output at its current
+Energy level. With Energy 0, 1–9 residents reject atomically; 10 can produce one
+resource. Higher Energy uses the same output function rather than an unrelated
+population minimum. Before population growth is enabled, a zero-output station
+cannot recover through either manufacture or research.
+
 | Asset | Work | Ironium / Boranium / Germanium (kt) |
 | --- | --- | --- |
 | Orbital Dock, including its two standard services | 24 | 12 / 6 / 8 |
@@ -144,6 +150,18 @@ legal at level zero. No Construction/Electronics level, Advanced Remote Mining
 flag, advanced miner or unrelated hull is granted. Conflicting Basic Remote
 Mining, a radiation-immune profile and a profile without environment rules reject
 explicitly at startup instead of being silently changed.
+
+Native surface factories/mines, their advanced forms, upgrades and reconstruction
+are structurally inapplicable. Host single/batch orders and planning reject them;
+templates containing such rows reject atomically, including defaults. Stale
+partially built, fully paid or automated rows retire before spending or completion.
+Production hides/disables these choices; ordinary empires keep their installations.
+
+Ship Designer, Production choices, availability and queue resolution share the
+received design projection. Pending choices retain their owner-scoped name,
+including when a temporary projected ID collides with another empire's project.
+Loading a native host preserves its actual primary trait in restart setup;
+Restart explicitly refuses a reserved trait instead of rebuilding it as Generalist.
 
 With the default zero research allocation, a newly designed replacement miner
 costs 153 work and 58 / 0 / 14 kt through ordinary design/production orders. It

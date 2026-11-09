@@ -2813,6 +2813,8 @@ TurnResult TurnProcessor::process_with_events(
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
                         });
                         if (planet == next.planets.end()) return;
+                        if (const auto* owner = find_player(next, submission.player);
+                            owner && !production_kind_applicable(owner->race.primaryTrait, concreteOrder.kind)) return;
 
                         if (concreteOrder.kind == ProductionKind::AdvancedFactory || concreteOrder.kind == ProductionKind::AdvancedMine
                             || industry_upgrade_kind(concreteOrder.kind)) {

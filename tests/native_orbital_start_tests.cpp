@@ -2,6 +2,7 @@
 #include "suns/mining.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
+#include "suns/production.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -178,12 +179,81 @@ void undersupply_and_invalid_starts_are_atomic()
     assert(state.fleets.size() == 1 && state.planets.front().nativeOrbit.population == kInitialHomePopulation);
     assert(same_minerals(state.planets.front().minerals, {100, 100, 100}) && !state.planets[1].owner);
 }
-}
-int main()
+void starts_require_actual_nonzero_output()
 {
+    for (const auto energy : {0U, 1U, 9U}) for (const auto residents : {1U, 4U, 5U, 9U, 10U}) {
+        auto state = test::empty_native_orbital_start();
+        state.players.front().technology.levels[std::size_t(ResearchField::Energy)] = energy;
+        auto budget = native_orbital_start_budget(); budget.population = residents;
+        const bool viable = residents*(energy+1) >= 10;
+        const auto receipt = initialize_native_orbital_start(state, 1, state.planets.front().id, budget);
+        assert(bool(receipt) == viable);
+        if (!viable) {
+            assert(state.fleets.empty() && state.orbitalStations.empty() && state.shipDesigns.empty());
+            assert(state.nextFleetId == 1 && state.nextShipDesignId == 1 && state.nextOrbitalStationId == 1);
+            assert(!state.planets.front().owner && state.players.front().surveyKnowledge.empty() && state.players.front().history.empty());
+        } else {
+            assert(colony_output(state, state.planets.front()) > 0);
+            state = TurnProcessor{}.process(state, {{1, {SetResearchPlanOrder{ResearchField::Energy, {}, false},
+                QueueShipDesignOrder{state.planets.front().id, receipt->minerDesign}}}});
+            assert(state.planets.front().productionQueue.front().remainingCost < 153);
+        }
+    }
+}
+void native_surface_industry_never_spends_work_or_minerals()
+{
+    auto state = started(); state.players.front().technology.researchActive = false;
+    const std::vector<ProductionKind> unsupported{ProductionKind::Factory, ProductionKind::Mine,
+        ProductionKind::AdvancedFactory, ProductionKind::AdvancedMine, ProductionKind::UpgradeFactory,
+        ProductionKind::UpgradeMine, ProductionKind::ReconstructFactory, ProductionKind::ReconstructMine};
+    auto& home = state.planets.front();
+    home.industry = home.mines = 10; home.warDamage.factoriesDestroyed = home.warDamage.minesDestroyed = 10;
+    for (const auto kind : unsupported) {
+        auto trial = state;
+        PlayerOrders orders{1, {QueueProductionOrder{home.id, kind},
+            QueueProductionBatchOrder{home.id, kind, 2}}};
+        const auto planned = planned_production_state(trial, orders);
+        assert(planned.planets.front().productionQueue.empty());
+        const auto idle = TurnProcessor{}.process(trial, {});
+        const auto result = TurnProcessor{}.process(trial, {orders});
+        assert(result.planets.front().productionQueue.empty());
+        assert(result.planets.front().industry == home.industry && result.planets.front().mines == home.mines);
+        assert(same_minerals(result.planets.front().minerals, idle.planets.front().minerals));
+        // Loaded/stale, partly built, automated and fully paid rows also retire
+        // before consuming another resource or completing a surface installation.
+        trial.planets.front().productionQueue = {{kind, 0}, {kind, 1}};
+        if (kind == ProductionKind::Factory || kind == ProductionKind::Mine
+            || kind == ProductionKind::AdvancedFactory || kind == ProductionKind::AdvancedMine)
+            trial.planets.front().productionQueue.push_back({kind, production_cost(kind), 0, ProductionAutomation::Annual, 2});
+        const auto resumed = TurnProcessor{}.process(trial, {});
+        assert(resumed.planets.front().productionQueue.empty());
+        assert(resumed.planets.front().industry == home.industry && resumed.planets.front().mines == home.mines);
+        assert(same_minerals(resumed.planets.front().minerals, idle.planets.front().minerals));
+    }
+    ProductionTemplate surface{"Surface", {{ProductionKind::Factory, production_cost(ProductionKind::Factory)}}};
+    auto& player = state.players.front(); player.productionTemplates = {surface};
+    assert(production_template_valid(surface));
+    assert(!apply_production_template(home, player, surface.name));
+    assert(planned_production_state(state, {1, {ApplyProductionTemplateOrder{home.id, surface.name}}})
+        .planets.front().productionQueue.empty());
+    player.productionTemplates.front().defaultForNewColonies = true;
+    apply_default_production_template(state, home); assert(home.productionQueue.empty());
+    auto ordinary = state; ordinary.players.front().race.primaryTrait = PrimaryRaceTrait::Generalist;
+    ordinary.planets.front().population = 25'000;
+    assert(apply_production_template(ordinary.planets.front(), ordinary.players.front(), surface.name));
+    const auto built = TurnProcessor{}.process(ordinary, {});
+    assert(built.planets.front().industry == home.industry+1);
+}
+}
+int main(int argc, char** argv)
+{
+    if (argc == 2 && std::string(argv[1]) == "minimum") { starts_require_actual_nonzero_output(); return 0; }
+    if (argc == 2 && std::string(argv[1]) == "industry") { native_surface_industry_never_spends_work_or_minerals(); return 0; }
     starter_is_paid_legal_and_observed();
     early_access_is_narrow_and_does_not_unlock_campaigns();
     ordinary_orders_manufacture_a_paid_replacement();
     income_requires_supported_real_residents_and_energy();
     undersupply_and_invalid_starts_are_atomic();
+    starts_require_actual_nonzero_output();
+    native_surface_industry_never_spends_work_or_minerals();
 }
