@@ -1,5 +1,24 @@
 # Project status and development handoff
 
+## #285 occupied-orbit startup review — 10 November 2026
+
+Review 5834064968 on `241881e` reported a P3: a neutral surface with another
+player's deployed independent shipyard accepted a native startup, creating two
+orbital installations. Reproduced with the ordinary first-turn Deploy command;
+the otherwise identical host starts successfully when the yard is removed.
+Startup now checks `orbital_base_at` before any mutation, matching station
+construction's occupancy rule. The regression preserves the existing yard,
+residents, cargo, knowledge, designs and all identity counters on rejection.
+
+Full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.38 s**
+passed. Previous source CIs 42708044839 (#285, 124/124) and 42709755665
+(#286, 125/125) succeeded. This parent fix also belongs in dependent #286;
+its four new founding review findings are being handled in that branch.
+Current publication/CI are in GitHub. No PR merge or thread resolution is
+performed for this request. Main remains `0922375`; save v118 / orders v49 /
+race v3 and minimal realtime estimates are unchanged. #50 stays open, native
+Human/Computer setup stays gated, and #53/#63 remain frozen.
+
 ## #285 repeat review: explicit campaign intent and cheap queue skips — 10 November 2026 (MSK)
 
 Reviews 5832950665 and 5833013783 on `9f32816` confirmed the previous four

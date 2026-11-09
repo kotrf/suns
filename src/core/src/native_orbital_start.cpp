@@ -3,6 +3,7 @@
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
+#include "suns/orbital_bases.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -46,7 +47,7 @@ std::optional<NativeOrbitalStartReceipt> initialize_native_orbital_start(
         || planet->minerals.ironium || planet->minerals.boranium || planet->minerals.germanium
         || !player->race.environmentBased || player->race.radiationImmune || player->race.basicRemoteMining
         || !player->history.empty() || !player->surveyKnowledge.empty()
-        || find_orbital_station_at_planet(state, home)) return {};
+        || find_orbital_station_at_planet(state, home) || orbital_base_at(state, home)) return {};
     if (std::any_of(state.planets.begin(), state.planets.end(), [=](const auto& p) { return p.owner == owner; })
         || std::any_of(state.fleets.begin(), state.fleets.end(), [=](const auto& f) { return f.owner == owner; })
         || std::any_of(state.orbitalStations.begin(), state.orbitalStations.end(), [=](const auto& s) { return s.owner == owner; })

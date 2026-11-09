@@ -103,6 +103,9 @@ occupied world, an already initialized empire or a player-view call rejects
 without changing state. This is a construction kernel for the later campaign
 integration; it does not bypass the still-closed setup/import/restart whitelist.
 It neither provides paid founding nor demonstrates a playable Computer campaign.
+Orbit occupancy includes both ordinary orbital stations and deployed independent
+shipyards stored as fleets. A neutral surface does not make an occupied orbit
+available; startup rejects before changing either installation, stocks or IDs.
 
 The prototype grant covers 25,000 real residents in an Orbital Dock (100,000
 capacity), Shipyard and Refueling Depot services, a full planetary receiver and
