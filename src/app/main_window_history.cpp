@@ -362,7 +362,8 @@ void MainWindow::refreshEmpireHistory()
         if (fleetMetric) {
             for (const auto& fleet : snapshot.fleetHistory) knownFleets.insert(fleet.fleet);
         } else if (remoteMetric) {
-            for (const auto& site : snapshot.remoteMineHistory) knownSites.insert(site.planet);
+            if (snapshot.remoteExtractionRecorded)
+                for (const auto& site : snapshot.remoteMineHistory) knownSites.insert(site.planet);
         } else {
             for (const auto& colony : snapshot.colonyHistory) knownSites.insert(colony.planet);
         }
@@ -476,6 +477,8 @@ void MainWindow::refreshEmpireHistory()
     if (metric == 22)
         historySummary_->setText(historySummary_->text()
             + " — Received reports only; undetected opponent actions remain unknown");
+    if (remoteMetric && player->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization)
+        historySummary_->setText(historySummary_->text() + " — Confirmed mining output, by report receipt year");
     if (followingMap && colonyId == 0) {
         historySummary_->setText(fleetMetric
             ? "Select a recorded fleet on the map to view its history."

@@ -165,6 +165,9 @@ add_executable(suns_remote_mining_tests
 target_link_libraries(suns_remote_mining_tests PRIVATE Suns::Core)
 
 add_test(NAME suns_remote_mining_tests COMMAND suns_remote_mining_tests)
+add_executable(suns_native_remote_mining_tests native_remote_mining_tests.cpp)
+target_link_libraries(suns_native_remote_mining_tests PRIVATE Suns::Core)
+add_test(NAME suns_native_remote_mining_tests COMMAND suns_native_remote_mining_tests)
 
 add_executable(suns_fleet_management_tests
     fleet_management_tests.cpp
@@ -249,6 +252,7 @@ add_test(NAME suns_fleet_recycling_tests COMMAND suns_fleet_recycling_tests)
 if(SUNS_BUILD_APP)
     add_executable(suns_native_orbital_history_editor_tests native_orbital_history_editor_tests.cpp)
     target_link_libraries(suns_native_orbital_history_editor_tests PRIVATE suns_app_ui)
+    target_compile_definitions(suns_native_orbital_history_editor_tests PRIVATE SUNS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_test(NAME suns_native_orbital_history_editor_tests COMMAND suns_native_orbital_history_editor_tests)
     set_tests_properties(suns_native_orbital_history_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     add_executable(suns_native_orbital_save_tests native_orbital_save_tests.cpp)

@@ -219,6 +219,11 @@ QString event_subject(const GameState& state, const GameEvent& event)
     case GameEventKind::FreightDelivered:
         subject = QString("Cargo delivered to %1").arg(planetName);
         break;
+    case GameEventKind::RemoteMiningOutput:
+        subject = QString("Remote mining at %1: I %2 / B %3 / G %4 kt")
+            .arg(planetName).arg(event.deliveredMinerals.ironium, 0, 'f', 2)
+            .arg(event.deliveredMinerals.boranium, 0, 'f', 2).arg(event.deliveredMinerals.germanium, 0, 'f', 2);
+        break;
     case GameEventKind::EnemyFleetDetected:
         subject = event.contact?QString("%1 contact %2 detected").arg(contact_quality_name(event.contact->quality)).arg(event.fleet)
             : QString("Enemy fleet %1 detected").arg(event.fleet);
@@ -471,7 +476,11 @@ QString event_text(const GameState& state, const GameEvent& event)
         : QString("Fleet %1").arg(event.fleet);
 
     QString text;
-    if ((event.kind >= GameEventKind::Bombardment && event.kind <= GameEventKind::EmissionDetected)
+    if (event.kind == GameEventKind::RemoteMiningOutput) {
+        text = event_subject(state, event) + QString("\nObserved turn %1; received turn %2.\n"
+            "Ore was added to the world's mineral stockpile, not the miner's hold. History records this report in its receiving year.")
+            .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn));
+    } else if ((event.kind >= GameEventKind::Bombardment && event.kind <= GameEventKind::EmissionDetected)
         || event.kind==GameEventKind::PlanetaryAftermath) {
         text = event_subject(state,event) + QString("\nObserved turn %1; received turn %2.\nPosition: %3, %4.")
             .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
@@ -922,10 +931,13 @@ void MainWindow::installTurnMessages()
             return candidate.id == event->fleet;
         });
         const bool ownedFleet = fleet != state_.fleets.end() && fleet->owner == pendingOrders_.player;
+        // Mining output belongs to its recorded world. Keep the source fleet
+        // ID for communications/identity without following its later voyage.
+        const bool focusFleet = ownedFleet && event->kind != GameEventKind::RemoteMiningOutput;
         // Preserve the report's system as the star context even if its fleet
         // has travelled since the event was recorded.
         if (star && ownedFleet) selection_.star = starId;
-        if (ownedFleet) {
+        if (focusFleet) {
             selectWorkspaceObject(2, fleet->id);
         } else if (star) {
             selectWorkspaceObject(1, starId);
@@ -933,7 +945,7 @@ void MainWindow::installTurnMessages()
         rebuildScene(false);
         if (battle) {
             view_->centerOn(position.x, position.y);
-        } else if (ownedFleet) {
+        } else if (focusFleet) {
             const auto visible = fleet_player_view(state_, *fleet);
             view_->centerOn(visible.position.x, visible.position.y);
         } else if (star) view_->centerOn(star->position.x, star->position.y);

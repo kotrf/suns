@@ -3,6 +3,7 @@
 #include "save_game.hpp"
 #include "suns/communications.hpp"
 #include "suns/reconnaissance.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -23,6 +24,25 @@
 
 namespace suns {
 struct MainWindowTestAccess {
+    static void installCapitalEvacuation(MainWindow& w)
+    {
+        w.state_ = test::native_capital_evacuation_fixture();
+        w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear();
+        w.selection_.star = 1; w.selection_.fleet = 1; w.rebuildScene();
+    }
+    static void installNative(MainWindow& w, std::uint64_t residents = 10'000, std::uint64_t passengers = 0)
+    {
+        w.state_ = test::native_orbital_fixture();
+        w.state_.planets.front().nativeOrbit.population = residents;
+        w.state_.fleets.front().colonists = passengers; w.state_.fleets.front().minerals = {};
+        w.state_.fleets.front().telemetry = {};
+        w.state_.fleets.front().telemetry = confirmed_fleet_telemetry(w.state_, w.state_.fleets.front());
+        w.state_.planets.front().minerals = {108, 104, 102};
+        set_survey_level(w.state_, 1, 1, SurveyLevel::DeepSurvey, w.state_.turn);
+        w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear();
+        w.selection_.star = 1; w.selection_.fleet = w.state_.fleets.front().id;
+        w.rebuildScene();
+    }
     static void install(MainWindow& w)
     {
         w.state_ = make_demo_game();
@@ -158,6 +178,86 @@ struct MainWindowTestAccess {
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    {
+        suns::MainWindow native;
+        suns::attachRouteProgramDock(native); native.installUiPolish();
+        suns::MainWindowTestAccess::installNative(native);
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+            auto* iron = dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0");
+            auto* people = dialog->findChild<QSpinBox*>("cargoColonistSpin");
+            const auto row = source->findText("Orbital station", Qt::MatchStartsWith); assert(row >= 0);
+            source->setCurrentIndex(row);
+            assert(iron->isEnabled() && people->maximum() > 0);
+            assert(dialog->findChild<QLabel*>("cargoSourceBeforeLabel")->text().contains("colonists 10000"));
+            assert(dialog->findChild<QLabel*>("cargoDestinationBeforeLabel")->text().contains("colonists 0"));
+            people->setValue(100); iron->setValue(3);
+            auto* accept = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+            assert(accept->isEnabled());
+            if (app.arguments().contains("--capture")) dialog->grab().save("/tmp/suns-native-cargo-review284.png");
+            accept->click();
+        });
+        native.openCargoManifestDialog();
+        const auto& orders = suns::MainWindowTestAccess::orders(native);
+        assert(orders.orders.size() == 1);
+        const auto& order = std::get<suns::TransferCargoOrder>(orders.orders.front());
+        assert(order.source.orbital && order.source.planet == 1 && order.destination.fleet == 1);
+        assert(order.colonists == 100 && order.minerals.ironium == 3);
+        const auto next = suns::TurnProcessor{}.process(suns::MainWindowTestAccess::state(native), {orders});
+        assert(next.planets.front().nativeOrbit.population == 9'900 && next.planets.front().minerals.ironium == 105);
+        assert(next.fleets.front().colonists == 100 && next.fleets.front().minerals.ironium == 3);
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            assert(dialog->findChild<QComboBox*>("cargoSourceCombo")->currentText().startsWith("Orbital station"));
+            dialog->findChild<QSpinBox*>("cargoColonistSpin")->setValue(-100);
+            dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0")->setValue(-3);
+            auto* accept = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+            assert(accept->isEnabled()); accept->click();
+        });
+        native.openCargoManifestDialog();
+        const auto& returned = suns::MainWindowTestAccess::orders(native);
+        assert(returned.orders.size() == 2);
+        const auto restored = suns::TurnProcessor{}.process(suns::MainWindowTestAccess::state(native), {returned});
+        assert(restored.planets.front().nativeOrbit.population == 10'000 && restored.planets.front().minerals.ironium == 108);
+        assert(restored.fleets.front().colonists == 0 && restored.fleets.front().minerals.ironium == 0);
+
+        suns::MainWindowTestAccess::installNative(native, 99'950, 500);
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+            auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+            source->setCurrentIndex(source->findText("Fleet", Qt::MatchStartsWith));
+            destination->setCurrentIndex(destination->findText("Orbital station", Qt::MatchStartsWith));
+            auto* people = dialog->findChild<QSpinBox*>("cargoColonistSpin");
+            assert(people->maximum() == 50);
+            assert(dialog->findChild<QLabel*>("cargoCapacityLabel")->text().contains("/ 100000 residents"));
+            destination->setCurrentIndex(destination->findText("Planetary surface", Qt::MatchStartsWith));
+            assert(people->maximum() == 0 && people->minimum() == 0);
+            dialog->reject();
+        });
+        native.openCargoManifestDialog();
+        suns::MainWindowTestAccess::installCapitalEvacuation(native);
+        QTimer::singleShot(0, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
+            auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+            auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+            source->setCurrentIndex(source->findText("Fleet", Qt::MatchStartsWith));
+            destination->setCurrentIndex(destination->findText("Orbital station", Qt::MatchStartsWith));
+            dialog->findChild<QSpinBox*>("cargoColonistSpin")->setValue(-1'000);
+            dialog->findChild<QDoubleSpinBox*>("cargoMineralSpin0")->setValue(3);
+            auto* accept = dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+            assert(accept->isEnabled()); accept->click();
+        });
+        native.openCargoManifestDialog();
+        const auto evacuation = suns::MainWindowTestAccess::orders(native);
+        assert(evacuation.orders.size() == 2);
+        const auto& first = std::get<suns::TransferCargoOrder>(evacuation.orders.front());
+        assert(first.source.fleet == 1 && first.minerals.ironium == 3);
+        const auto evacuated = suns::TurnProcessor{}.process(suns::MainWindowTestAccess::state(native), {evacuation});
+        assert(evacuated.planets.front().nativeOrbit.population == 0 && evacuated.planets.front().minerals.ironium == 103);
+        assert(evacuated.fleets.front().colonists == 1'000 && evacuated.fleets.front().minerals.ironium == 0);
+    }
     suns::MainWindow window;
     suns::MainWindowTestAccess::install(window);
     QTimer::singleShot(0, [&] {

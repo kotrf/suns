@@ -8,7 +8,7 @@ playable. The reviewed design was merged in
 [PR #282](https://github.com/kotrf/suns/pull/282); implementation proceeds in
 reviewable stages without enabling an incomplete race.
 
-## Implementation stage 1: station residents and cargo
+## Implementation stage 1: station residents and cargo (merged #283)
 
 The first implementation supplies `NativeOrbitalPopulation`, separate from the
 ordinary late-game habitat, with a physical station ID and real people. Battle
@@ -50,9 +50,48 @@ unchanged. Core/save/PBEM tests use deliberately constructed native states;
 this does **not** satisfy the later new-campaign/Computer acceptance below.
 
 Campaign setup and race files still reject this identity for both controllers.
-Next stages must deliver the paid start/founding economy, native growth/radiation,
-remote mining/replacements, advanced hull progression and Computer expansion.
+Next stages must deliver the paid start/founding economy, starter mining access
+and replacements, native growth/radiation, advanced hull progression and Computer expansion.
 The full first-playable acceptance remains the gate for enabling the trait.
+
+## Implementation stage 2: owned-orbit mining and received manifests
+
+One site rule permits neutral worlds for ordinary miners and additionally an
+owned world with a live native inhabited station for this civilization. Work-here,
+waypoint authoring, delayed task delivery, arrival and actual extraction use the
+same eligibility rule; authoring and rate estimates use received knowledge while
+execution rechecks physical ownership. Hostile worlds, ordinary owned surface
+colonies and independent habitats do not acquire this mining permission.
+
+Output goes once into the world's existing mineral stock, not the miner's hold.
+The native orbital cargo endpoint can collect or return these minerals under the
+usual ownership, co-location and cargo-capacity checks. Ordinary independent
+habitats retain resident-only orbital endpoints. Native surface/innate extraction
+is zero, including malformed states containing surface population or mines.
+No initial ship, technology level or free output is granted by this kernel.
+
+Native output combines a miner's stacks into one `RemoteMiningOutput` manifest
+per mining fleet, world and year through normal communications. Its source fleet
+ID is retained: a transmitting bystander at a neutral world cannot release a
+silent miner's outbox. A friendly colony still forwards a local upload. It is queued at the mining phase,
+before movement/combat can remove its real source. Mining precedes combat: a
+miner destroyed later that year has already worked, but cannot work next year.
+History credits only delivered manifests in their receipt year; refreshing a
+boundary does not count them again or rewrite the observation year. Fleet/planet
+panels identify rate estimates as based on last reported tasks.
+Mining report map navigation uses the recorded world/position rather than the
+source fleet's later location. Local History site selectors, including comparison
+and Follow map, use only recorded extraction rows; retaining a legacy host amount
+does not expose its unconfirmed site.
+
+Save v118 accepts the new report/event kinds without changing the base payload,
+orders v49 or portable race v3. Pre-v118 native extraction amounts are retained
+but marked unrecorded because they lack receipt provenance. PlayerView/PBEM omit
+those unrecorded amounts and site details; the host retains its archived values.
+A genuine v117 file,
+written with the merged #283 writer before this format change, verifies migration
+and continued received accounting. Constructed core/UI/host/PBEM fixtures do not
+replace the full paid new-campaign/Computer acceptance below.
 
 ## Direction supplied by the user
 
@@ -125,8 +164,8 @@ budget. Early access is scoped to this race; it does not grant high research
 levels or all advanced mining equipment to every empire.
 
 Deposits, concentration, extraction, stocks and cargo remain physical. Current
-remote mining deposits output in the planet's mineral stock; define that stock's
-availability to the native station explicitly, counting extraction exactly once.
+remote mining deposits output in the planet's mineral stock, shared with the
+native station and counted exactly once. Stage 2 supplies its orbital cargo access.
 A destroyed miner stops extraction even when HQ still holds its older telemetry.
 Work-here orders and arrival waypoint tasks must share the same eligibility rule.
 Race design/import must handle conflicting mining restrictions explicitly.
@@ -182,7 +221,7 @@ The following are implementation requirements, not changes enabled by this PR:
 | --- | --- |
 | `SetFleetColonistsOrder` (`Colonists aboard` final manifest) | Reject for natives before changing fleet cargo, surface population or freight records, for both loading and unloading targets. This order names a surface colony and must not be reinterpreted as a station transfer; use an explicit orbital endpoint instead |
 | `TransferCargoOrder` with colonists and a surface planet endpoint | Reject in either direction, including an owned planet; no surface-to-orbit fallback. Reject the whole exact manifest before moving minerals or people |
-| `TransferCargoOrder` with an explicit orbital population endpoint | Use the actual native resident pool only at an owned, surviving inhabited station; require co-location, real available residents and hull capacity. Keep the endpoint population-only and the exact transfer atomic; reject an absent, destroyed, hostile or full receiver |
+| `TransferCargoOrder` with an explicit orbital population endpoint | Use the actual native resident pool only at an owned, surviving inhabited station; require co-location, real available residents and hull capacity. Native stations also access the world's shared mineral stock; ordinary independent habitats remain population-only. Keep the exact manifest atomic; reject an absent, destroyed, hostile or full receiver |
 | `UnloadAll` with `Colonists` or `All` | Resolve native colonists to that owner's surviving inhabited station, up to free hull capacity; excess remains aboard. Ordinary empires retain surface unloading. `All` processes minerals by the ordinary stock/ownership rules, independently of how many residents fit |
 | `UnloadAll` with `OrbitalColonists` | For natives, use the same station receiver and capacity checks as shared unloading; this policy is optional, not required for unloading. Ordinary empires retain their independent-habitat receiver |
 | `LoadAllAvailable` with `Colonists` / `OrbitalColonists` | Reject the surface policy for natives; the explicit orbital policy loads real native residents, subject to its reserve and transport capacity |
@@ -299,7 +338,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v117 / orders v49 / portable race v3. The native
-population foundation does not enable a playable race. Mobile residential arks, transport-network
+Current game formats are save v118 / orders v49 / portable race v3. The native
+population/mining foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

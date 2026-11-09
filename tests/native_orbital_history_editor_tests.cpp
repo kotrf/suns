@@ -19,6 +19,7 @@ struct MainWindowTestAccess {
         w.state_ = std::move(state); w.pendingOrders_ = {1, {}};
         w.openEmpireHistory();
     }
+    static const GameState& state(const MainWindow& w) { return w.state_; }
 };
 }
 int main(int argc, char** argv)
@@ -26,6 +27,24 @@ int main(int argc, char** argv)
     QApplication app(argc, argv);
     QTemporaryDir directory; QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, directory.path());
+    {
+        suns::SaveGameData legacy; QString error;
+        assert(suns::read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-mining-v117.suns"), legacy, error));
+        suns::MainWindow archived;
+        suns::MainWindowTestAccess::installHistory(archived, legacy.state);
+        auto* metric = archived.findChild<QComboBox*>("historyMetric");
+        auto* scope = archived.findChild<QComboBox*>("historyScope");
+        auto* comparison = archived.findChild<QComboBox*>("historyCompare");
+        assert(metric && scope && comparison); metric->setCurrentIndex(10);
+        assert(scope->findData(quint32{2}) == -1 && comparison->findData(quint32{2}) == -1);
+        const auto& raw = suns::MainWindowTestAccess::state(archived).players.front().history.back();
+        assert(!raw.remoteExtractionRecorded && raw.remoteExtraction.ironium == 8 && raw.remoteMineHistory.size() == 1);
+        suns::MainWindowTestAccess::installHistory(archived, suns::make_player_view(legacy.state, 1).state);
+        assert(scope->findData(quint32{2}) == -1 && comparison->findData(quint32{2}) == -1);
+        const auto received = suns::TurnProcessor{}.process(legacy.state, {});
+        suns::MainWindowTestAccess::installHistory(archived, received);
+        assert(scope->findData(quint32{2}) >= 0 && comparison->findData(quint32{2}) >= 0);
+    }
     auto state = suns::test::asynchronous_native_unload_fixture();
     state = suns::TurnProcessor{}.process(state, {});
     state = suns::TurnProcessor{}.process(state, {});

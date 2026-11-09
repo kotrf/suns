@@ -258,6 +258,11 @@ QString MainWindow::selectedPlanetPanelSummary() const
             lines << "Orbital station: <span style='color:#e4b77d'><b>none</b></span> • ships cannot be built or refueled";
         }
         lines << QString("Production: <b>%1</b>").arg(productionLine(received, *planet));
+        if (empire && empire->race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
+            const auto remote = remoteMiningAtPlanet(received, pendingOrders_.player, *planet);
+            lines << QString("Remote mining estimate — I %1 / B %2 / G %3 per turn (last reported tasks)")
+                .arg(remote.ironium, 0, 'f', 2).arg(remote.boranium, 0, 'f', 2).arg(remote.germanium, 0, 'f', 2);
+        }
     } else if (knownOwner == pendingOrders_.player) {
         lines << "<span style='color:#85d5a5'><b>Your colony at last report</b></span>";
         lines << "Current colony details unavailable until the system is scanned again.";
@@ -334,14 +339,15 @@ QString MainWindow::selectedFleetPanelSummary() const
     }
 
     if (fleet->task == FleetTask::RemoteMining) {
-        const auto* star = findStarAtPosition(state_, fleet->position);
-        const auto* planet = star ? find_planet_at_star(state_, star->id) : nullptr;
+        const auto& received = receivedPlayerState();
+        const auto* star = findStarAtPosition(received, fleet->position);
+        const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
         if (planet) {
             MineralCargo yield;
             for (const auto& stack : fleet_ship_stacks(*fleet)) {
-                const auto* stackDesign = find_ship_design(state_, stack.design);
+                const auto* stackDesign = find_ship_design(received, stack.design);
                 if (!stackDesign || !ship_design_can_remote_mine(*stackDesign)) continue;
-                const auto perShip = projected_remote_mining(state_, *planet, *stackDesign);
+                const auto perShip = projected_remote_mining(received, *planet, *stackDesign);
                 yield.ironium += perShip.ironium * stack.count;
                 yield.boranium += perShip.boranium * stack.count;
                 yield.germanium += perShip.germanium * stack.count;

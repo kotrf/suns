@@ -58,6 +58,12 @@ friendly orbital colony, propagation starts from that dispatch position.
 Already transmitted packets continue to arrive after TX is disabled.
 Save v73 preserves this distinction; player turn exports omit unsent reports.
 
+Native remote-mining manifests keep their actual mining fleet as source and
+combine only that fleet's stacks for the same world/year. A transmitting fleet
+nearby cannot publish a passive or radio-silent miner's output. A friendly colony
+may still accept its local upload. History counts output in the manifest's
+receiving year; already transmitted reports can arrive after their source is lost.
+
 ## Telemetry and player knowledge
 
 The simulation keeps the authoritative `Fleet` state, but player-facing information is represented by a confirmed `FleetTelemetry` snapshot and packets that are still in transit.

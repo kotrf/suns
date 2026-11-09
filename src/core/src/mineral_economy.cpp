@@ -3,6 +3,7 @@
 #include "suns/propulsion.hpp"
 #include "suns/scanners.hpp"
 #include "suns/mining.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/equipment.hpp"
 #include "suns/planetary_engineering.hpp"
 
@@ -158,7 +159,7 @@ MineralCargo planet_mineral_concentration(const GameState& state, const Planet& 
 
 MineralCargo projected_mineral_mining(const GameState& state, const Planet& planet)
 {
-    if (planet.owner == 0 || planet.population == 0) return {};
+    if (planet.owner == 0 || planet.population == 0 || native_orbital_race(state, planet.owner)) return {};
     const auto concentration = planet_mineral_concentration(state, planet);
 
     // Population supplies a small baseline extraction workforce. Dedicated
@@ -177,7 +178,7 @@ MineralCargo projected_mineral_mining(const GameState& state, const Planet& plan
 
 MineralCargo projected_remote_mining(const GameState& state, const Planet& planet, const ShipDesign& design)
 {
-    if (planet.owner != 0) return {};
+    if (!remote_mining_site_available(state, design.owner, planet)) return {};
     const auto extractionUnits = ship_design_remote_mining_rate(design);
     if (extractionUnits == 0) return {};
     const auto concentration = planet_mineral_concentration(state, planet);

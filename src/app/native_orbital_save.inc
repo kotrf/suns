@@ -1,6 +1,7 @@
 // v115: native station residents and their received/pending owner evidence.
 // v116: independent delivered station-destruction identities/times.
 // v117: received asset observation ranges for comparable History totals.
+// v118: native mining manifests are received events, not physical History output.
 constexpr quint32 kNativeOrbitalMagic = 0x4e4f5242u; // NORB
 void writeNativePopulation(QDataStream& out, const NativeOrbitalPopulation& value)
 {
@@ -149,6 +150,9 @@ void readNativeOrbit(QDataStream& stream, GameState& state)
             for (auto& h : player.history) h.assetTotalsSynchronized = false;
     }
     if (in.status() != QDataStream::Ok || !in.atEnd()) { markCorrupt(stream); return; }
+    if (gReadSaveFormatVersion < 118)
+        for (auto& player : state.players) if (player.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization)
+            for (auto& h : player.history) h.remoteExtractionRecorded = false;
     for (auto& player : state.players) for (auto& record : player.surveyKnowledge)
         if (record.observedOwner == player.id)
             merge_received_habitat_station(record.planetSnapshot, std::nullopt, player);

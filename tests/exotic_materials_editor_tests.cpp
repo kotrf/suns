@@ -448,6 +448,7 @@ void system_population_uses_one_received_baseline(MainWindow& w)
     s.planets[1].owner = 1; s.planets[1].population = 1000000; s.planets[1].homeworld = true;
     s.planets[1].radar = PlanetaryRadarLevel::Full; s.stars[1].position = {0, 0};
     set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
+    set_survey_level(s, 1, 2, SurveyLevel::DeepSurvey, s.turn);
     ++s.turn; colony.population = 110000;
     s.fleets[0].position = s.stars[0].position;
     s.fleets[0].telemetry.position = s.fleets[0].position;
@@ -457,7 +458,16 @@ void system_population_uses_one_received_baseline(MainWindow& w)
     assert(!info.contains("Queued cargo:"));
     assert(info.contains("Population received: 100000 /"));
     assert(info.contains("Population report: year 10 (age 1)"));
+    const PlayerOrders load{1, {TransferCargoOrder{{1, 0}, {0, 1}, 100, {}}}};
+    assert(communication_delay_turns(s, 1, s.fleets[0].position) > 0);
+    MainWindowTestAccess::load(w, s, load.orders);
+    assert(!MainWindowTestAccess::systemInfo(w).contains("Queued cargo:"));
+    assert(TurnProcessor{}.process(s, {load}).fleets[0].colonists == 0);
+    // Reconnect the same stale colony/manifest to the received capital mesh.
+    // A valid local load must still use the 100000-person report, not truth.
+    s.stars[0].position = s.fleets[0].position = s.fleets[0].telemetry.position = {100, 0};
     const auto received = make_player_view(s, 1).state;
+    assert(communication_delay_turns(received, 1, received.fleets[0].position) == 0);
     const auto& baseline = *find_planet(received, 1);
     const auto growth = projected_population_growth(received, baseline, s.turn);
     MainWindowTestAccess::load(w, s, {TransferCargoOrder{{1, 0}, {0, 1}, 100, {}}});

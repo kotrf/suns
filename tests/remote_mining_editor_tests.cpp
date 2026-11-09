@@ -2,10 +2,13 @@
 #include "route_program_dock.hpp"
 #include "save_game.hpp"
 #include "suns/communications.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <QApplication>
 #include <QComboBox>
 #include <QGraphicsScene>
+#include <QGraphicsView>
+#include <QListWidget>
 #include <QGraphicsTextItem>
 #include <QGraphicsLineItem>
 #include <QPushButton>
@@ -19,13 +22,23 @@
 
 namespace suns {
 struct MainWindowTestAccess {
-    static void install(MainWindow& w, const GameState& s) {
+    static void install(MainWindow& w, const GameState& s, StarId star = 2) {
         w.state_ = s; w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear();
-        w.selection_.fleet = 1; w.selection_.star = 2;
+        w.selection_.fleet = 1; w.selection_.star = star;
         w.rebuildScene(); emit w.routeProgramContextChanged(true);
     }
     static PlayerOrders orders(const MainWindow& w) { return w.pendingOrders_; }
     static QStringList descriptions(const MainWindow& w) { return w.pendingDescriptions_; }
+    static QString fleetSummary(const MainWindow& w) { return w.selectedFleetPanelSummary(); }
+    static QString planetSummary(const MainWindow& w) { return w.selectedPlanetPanelSummary(); }
+    static void installReport(MainWindow& w, const GameState& s, const GameEvent& report) {
+        install(w, s); w.selection_ = {}; w.resetTurnMessages(); w.appendTurnMessages({report});
+        w.view_->setSceneRect(-1'000, -1'000, 2'000, 2'000);
+        w.view_->resetTransform(); w.view_->scale(4, 4);
+    }
+    static QPointF mapCenter(const MainWindow& w) { return w.view_->mapToScene(w.view_->viewport()->rect().center()); }
+    static std::optional<FleetId> selectedFleet(const MainWindow& w) { return w.selection_.fleet; }
+    static const GameEvent& report(const MainWindow& w) { return w.turnMessages_.front(); }
 };
 }
 
@@ -58,6 +71,83 @@ const Fleet& miner(const GameState& s) {
 void chooseMining(MainWindow& w) {
     auto* combo = w.findChild<QComboBox*>("routeArrivalActionCombo"); assert(combo);
     combo->setCurrentIndex(combo->findData(int(FleetArrivalActionKind::RemoteMining))); settle();
+}
+void mining_report_points_to_its_world()
+{
+    auto state = test::native_orbital_miner_fixture();
+    state.stars[1].position = {20, 25};
+    state.planets[1].observedConcentration = MineralCargo{100, 50, 25};
+    auto& fleet = state.fleets.front(); fleet.position = {20, 25}; fleet.task = FleetTask::RemoteMining;
+    fleet.telemetry = {}; fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+    const auto mining = TurnProcessor{}.process_with_events(state, {});
+    const auto report = std::find_if(mining.events.begin(), mining.events.end(), [](const auto& e) { return e.kind == GameEventKind::RemoteMiningOutput; });
+    assert(report != mining.events.end() && report->fleet == 1 && report->star == 2);
+    auto moved = TurnProcessor{}.process(mining.state, {{1, {MoveFleetOrder{1, {60, 25}, 5}}}});
+    moved = TurnProcessor{}.process(moved, {});
+    assert(same_position(moved.fleets.front().position, {60, 25}));
+    MainWindow window; attachRouteProgramDock(window); window.installUiPolish(); window.installTurnMessages();
+    window.resize(1'100, 800); window.show(); settle();
+    MainWindowTestAccess::installReport(window, moved, *report); settle();
+    auto* list = window.findChild<QListWidget*>("turnMessagesList");
+    auto* button = window.findChild<QPushButton*>("showTurnMessageOnMap");
+    assert(list && list->count() == 1 && button); list->setCurrentRow(0); button->click(); settle();
+    const auto center = MainWindowTestAccess::mapCenter(window);
+    assert(std::hypot(center.x()-20, center.y()-25) < 1);
+    assert(MainWindowTestAccess::report(window).fleet == 1);
+    auto withoutStar = *report; withoutStar.star = 0;
+    MainWindowTestAccess::installReport(window, moved, withoutStar); settle();
+    list->setCurrentRow(0); button->click(); settle();
+    const auto fallback = MainWindowTestAccess::mapCenter(window);
+    assert(std::hypot(fallback.x()-20, fallback.y()-25) < 1);
+    auto arrival = *report; arrival.kind = GameEventKind::FleetArrived;
+    MainWindowTestAccess::installReport(window, moved, arrival); settle();
+    list->setCurrentRow(0); button->click(); settle();
+    const auto fleetCenter = MainWindowTestAccess::mapCenter(window);
+    assert(std::hypot(fleetCenter.x()-60, fleetCenter.y()-25) < 1);
+    assert(MainWindowTestAccess::selectedFleet(window) == std::optional<FleetId>{1});
+}
+void nativeOrbitalMining(MainWindow& w)
+{
+    auto s = test::native_orbital_miner_fixture();
+    MainWindowTestAccess::install(w, s, 1); settle(); chooseMining(w);
+    auto* here = w.findChild<QPushButton*>("routeWorkHereButton"); assert(here);
+    here->click(); settle();
+    auto orders = MainWindowTestAccess::orders(w);
+    assert(orders.orders.size() == 1 && std::holds_alternative<SetRemoteMiningOrder>(orders.orders.front()));
+    const auto active = TurnProcessor{}.process(s, {orders});
+    assert(active.planets.front().minerals.ironium == 108);
+    MainWindowTestAccess::install(w, active, 1); settle();
+    assert(MainWindowTestAccess::planetSummary(w).contains("Remote mining estimate — I 8.00"));
+    if (QApplication::arguments().contains("--capture")) { w.show(); settle(); w.grab().save("/tmp/suns-owned-native-mining.png"); }
+    auto route = s; route.fleets.front().position = {-25, 0}; route.fleets.front().telemetry.position = {-25, 0};
+    MainWindowTestAccess::install(w, route, 1); settle();
+    assert(w.appendSelectedStarWaypoint(5, {FleetArrivalActionKind::RemoteMining}));
+    assert(w.setSelectedFleetRouteProgramLegAction(0, {}));
+    assert(w.setSelectedFleetRouteProgramLegAction(0, {FleetArrivalActionKind::RemoteMining}));
+
+    // A hidden replacement by an enemy surface colony does not change HQ's
+    // admission or displayed rate until new observations arrive. Execution
+    // checks the real ownership and rejects the work at the hostile world.
+    auto hidden = s; hidden.players.push_back({2, "Other"});
+    destroy_native_orbital_population(hidden, hidden.orbitalStations.front().id);
+    hidden.orbitalStations.clear(); hidden.planets.front().owner = 2; hidden.planets.front().population = 25'000;
+    hidden.fleets.front().telemetry.task = FleetTask::RemoteMining;
+    MainWindowTestAccess::install(w, hidden, 1); settle();
+    assert(MainWindowTestAccess::fleetSummary(w).contains("I 8.00"));
+    assert(w.startSelectedFleetWorkHere({FleetArrivalActionKind::RemoteMining}));
+    auto denied = TurnProcessor{}.process(hidden, {MainWindowTestAccess::orders(w)});
+    assert(denied.fleets.front().task == FleetTask::None);
+    assert(denied.players.front().history.back().remoteExtraction.ironium == 0);
+    auto hiddenRoute = hidden; hiddenRoute.fleets.front().position = {-25, 0};
+    hiddenRoute.fleets.front().telemetry.position = {-25, 0}; hiddenRoute.fleets.front().telemetry.task = FleetTask::None;
+    MainWindowTestAccess::install(w, hiddenRoute, 1); settle();
+    assert(w.appendSelectedStarWaypoint(5, {FleetArrivalActionKind::RemoteMining}));
+    assert(w.setSelectedFleetRouteProgramLegAction(0, {}));
+    assert(w.setSelectedFleetRouteProgramLegAction(0, {FleetArrivalActionKind::RemoteMining}));
+    set_survey_level(hidden, 1, 1, SurveyLevel::DeepSurvey, hidden.turn);
+    MainWindowTestAccess::install(w, hidden, 1); settle();
+    assert(!w.startSelectedFleetWorkHere({FleetArrivalActionKind::RemoteMining}));
+    assert(!w.appendSelectedStarWaypoint(5, {FleetArrivalActionKind::RemoteMining}));
 }
 
 void stopThenMineCancelsSentNavigation(MainWindow& w) {
@@ -298,4 +388,6 @@ int main(int argc, char** argv) {
         assert(w.setSelectedFleetRouteProgramLegAction(0, {FleetArrivalActionKind::RemoteMining}));
     }
     stopThenMineCancelsSentNavigation(w);
+    nativeOrbitalMining(w);
+    mining_report_points_to_its_world();
 }

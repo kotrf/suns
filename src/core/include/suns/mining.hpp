@@ -24,5 +24,8 @@ struct MiningTechnology {
 [[nodiscard]] ShipComponentSpec mining_component_spec(const MiningTechnology& technology);
 [[nodiscard]] bool player_uses_legacy_mining(const GameState& state, PlayerId player);
 [[nodiscard]] double ship_design_remote_mining_rate(const ShipDesign& design);
+// Normal remote mining uses neutral worlds. Native orbital empires may also
+// work their own live station's world; hostile ownership never qualifies.
+[[nodiscard]] bool remote_mining_site_available(const GameState&, PlayerId, const Planet&);
 
 } // namespace suns

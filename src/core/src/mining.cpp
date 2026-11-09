@@ -1,5 +1,6 @@
 #include "suns/mining.hpp"
 #include "suns/hulls.hpp"
+#include "suns/native_orbital.hpp"
 
 #include <algorithm>
 #include <array>
@@ -55,6 +56,11 @@ double ship_design_remote_mining_rate(const ShipDesign& design)
     double rate = 0;
     for (const auto component : design.components) rate += component_spec(component).remoteMiningUnits;
     return rate;
+}
+
+bool remote_mining_site_available(const GameState& state, PlayerId player, const Planet& planet)
+{
+    return planet.owner == 0 || (planet.owner == player && native_orbital_station(state, planet));
 }
 
 } // namespace suns

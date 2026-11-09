@@ -2044,7 +2044,7 @@ void record_empire_turn_statistics(
         }
         snapshot.remoteExtractionRecorded = elapsedYear;
         for (const auto& mined : remoteExtraction) {
-            if (mined.owner != player.id) continue;
+            if (mined.owner != player.id || player.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) continue;
             snapshot.remoteExtraction.ironium += mined.minerals.ironium;
             snapshot.remoteExtraction.boranium += mined.minerals.boranium;
             snapshot.remoteExtraction.germanium += mined.minerals.germanium;
