@@ -255,10 +255,10 @@ void MainWindow::newCampaign()
     layout->addWidget(&buttons);
     dialog.resize(1380, 640);
     if (dialog.exec() != QDialog::Accepted) return;
-    empireSetups_.clear();
-    for (int row = 0; row < count.value(); ++row) empireSetups_.push_back(raceAtRow(row));
+    std::vector<EmpireSetup> empires;
+    for (int row = 0; row < count.value(); ++row) empires.push_back(raceAtRow(row));
     seedEdit_->setText(seed.text());
-    newGalaxy(galaxy.config(seed.text().toULongLong()));
+    newGalaxy(galaxy.config(seed.text().toULongLong()), std::move(empires));
 }
 
 SaveGameData MainWindow::campaignSnapshot() const { return session_->snapshot(); }

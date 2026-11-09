@@ -2,14 +2,21 @@
 #include "ship_designer_dialog.hpp"
 #include "native_orbital_fixture.hpp"
 #include <QApplication>
+#include <QAction>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
+#include <QSpinBox>
+#include <QTableWidget>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QToolButton>
+#include <QTreeWidget>
 #include <cassert>
 
 namespace suns {
@@ -36,6 +43,7 @@ struct MainWindowTestAccess {
     static void restart(MainWindow& w) { w.newGalaxy(); }
     static auto campaign(const MainWindow& w) { return w.campaignId_; }
     static auto token(const MainWindow& w) { return w.turnToken_; }
+    static QString path(const MainWindow& w) { return w.currentSavePath_; }
     static void surfaceTemplate(MainWindow& w, bool ordinary = false) {
         if (ordinary) w.state_ = generate_campaign({}, {{"Terrans"}});
         w.state_.players.front().productionTemplates = {{"Surface", {{ProductionKind::Factory, kFactoryCost}}}};
@@ -43,6 +51,18 @@ struct MainWindowTestAccess {
         w.selection_.star = w.state_.planets.front().star; w.rebuildScene(); w.refreshProductionQueue();
     }
     static bool factoryButtonEnabled(const MainWindow& w) { return w.buildFactoryButton_->isEnabled(); }
+    static void staleIndustry(MainWindow& w) {
+        auto& p = w.state_.planets.front();
+        p.productionQueue = {{ProductionKind::Factory, kFactoryCost, 0, ProductionAutomation::Annual, 1000},
+            {ProductionKind::ColonyShip, ship_design_cost(w.state_.shipDesigns.front()), w.state_.shipDesigns.front().id}};
+        w.state_.players.front().technology.researchActive = false;
+        w.state_.players.front().surveyKnowledge.clear(); w.state_.players.front().surveyedStars.clear();
+        set_survey_level(w.state_,1,p.star,SurveyLevel::DeepSurvey,w.state_.turn);
+        w.rebuildScene(); w.refreshProductionQueue();
+    }
+    static QTreeWidget* production(MainWindow& w) { return w.productionQueueTree_; }
+    static void moveUp(MainWindow& w) { w.moveSelectedProductionItem(-1); }
+    static void remove(MainWindow& w) { w.removeSelectedProductionItem(); }
 };
 }
 using namespace suns;
@@ -116,7 +136,7 @@ void native_industry_is_unavailable_in_the_actual_production_panel()
     for (int i=0; i<kinds->count(); ++i)
         assert(kinds->model()->flags(kinds->model()->index(i,0)) & Qt::ItemIsEnabled);
 }
-void loaded_native_start_cannot_restart_as_a_generalist()
+void loaded_native_start_cannot_restart_as_a_generalist(bool throughMenu = false)
 {
     auto state = test::empty_native_orbital_start();
     assert(initialize_native_orbital_start(state, 1, state.planets.front().id, native_orbital_start_budget()));
@@ -126,9 +146,15 @@ void loaded_native_start_cannot_restart_as_a_generalist()
     QTemporaryDir dir; QString error; const auto path = dir.filePath("native-host.suns");
     assert(write_save_game_file(path, save, error));
     SaveGameData decoded; assert(read_save_game_file(path, decoded, error));
-    MainWindow w; assert(MainWindowTestAccess::load(w,path));
+    MainWindow w; w.installUiPolish(); assert(MainWindowTestAccess::load(w,path));
+    QCoreApplication::processEvents();
     const auto campaign = MainWindowTestAccess::campaign(w), token = MainWindowTestAccess::token(w);
-    MainWindowTestAccess::restart(w);
+    const auto loadedPath = MainWindowTestAccess::path(w), loadedTitle = w.windowTitle();
+    if (throughMenu) {
+        QAction* restart = nullptr;
+        for (auto* action : w.findChildren<QAction*>()) if (action->text() == "Restart current galaxy") restart = action;
+        assert(restart); restart->trigger();
+    } else MainWindowTestAccess::restart(w);
     const auto& after = MainWindowTestAccess::state(w);
     assert(after.players.front().race.primaryTrait == PrimaryRaceTrait::HabitatCivilization);
     assert(after.planets.front().nativeOrbit.population == kInitialHomePopulation && !after.planets.front().population);
@@ -136,6 +162,58 @@ void loaded_native_start_cannot_restart_as_a_generalist()
     assert(MainWindowTestAccess::campaign(w) == campaign && MainWindowTestAccess::token(w) == token);
     assert(MainWindowTestAccess::orders(w).orders.size() == 1);
     assert(w.statusBar()->currentMessage().contains("not playable", Qt::CaseInsensitive));
+    assert(MainWindowTestAccess::path(w) == loadedPath && w.windowTitle() == loadedTitle);
+}
+void a_loaded_native_host_can_create_an_explicit_generalist_campaign()
+{
+    MainWindow w; MainWindowTestAccess::setup(w);
+    SaveGameData save; save.state = MainWindowTestAccess::state(w); save.mode = SessionMode::Host;
+    save.campaignId = 285; save.turnToken = 17; save.playerTokens = {{1,17}}; save.pendingOrders = {1,{}};
+    QTemporaryDir dir; QString error; const auto path = dir.filePath("replace-native.suns");
+    assert(write_save_game_file(path,save,error)); assert(MainWindowTestAccess::load(w,path));
+    QCoreApplication::processEvents();
+    bool submitted = false;
+    QTimer::singleShot(0, &w, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog && dialog->objectName() == "newCampaignDialog");
+        dialog->findChild<QSpinBox*>("campaignEmpireCount")->setValue(1);
+        auto* table = dialog->findChild<QTableWidget*>("campaignEmpiresTable"); assert(table);
+        table->item(0,0)->setText("Fresh Terrans");
+        auto* trait = qobject_cast<QComboBox*>(table->cellWidget(0,8)); assert(trait);
+        trait->setCurrentIndex(trait->findData(int(PrimaryRaceTrait::Generalist)));
+        submitted = true; dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    });
+    auto* action = w.findChild<QAction*>("newCampaignAction"); assert(action); action->trigger();
+    assert(submitted);
+    const auto& fresh = MainWindowTestAccess::state(w);
+    assert(fresh.players.size() == 1 && fresh.players.front().name == "Fresh Terrans");
+    assert(fresh.players.front().race.primaryTrait == PrimaryRaceTrait::Generalist);
+    assert(fresh.planets.front().population == kInitialHomePopulation && !fresh.planets.front().nativeOrbit.population);
+    assert(MainWindowTestAccess::orders(w).orders.empty());
+    assert(MainWindowTestAccess::campaign(w) != 285 && MainWindowTestAccess::token(w) != 17);
+    assert(MainWindowTestAccess::path(w).isEmpty() && !w.windowTitle().contains("replace-native.suns"));
+}
+void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
+{
+    MainWindow w; MainWindowTestAccess::setup(w); MainWindowTestAccess::staleIndustry(w);
+    auto* tree = MainWindowTestAccess::production(w); assert(tree && tree->topLevelItemCount() == 2);
+    assert(tree->topLevelItem(0)->text(3) == "Currently skipped");
+    assert(tree->topLevelItem(1)->text(3).contains("(+4)"));
+    assert(tree->topLevelItem(0)->data(0,Qt::UserRole).toUInt() == 0);
+    assert(tree->topLevelItem(1)->data(0,Qt::UserRole).toUInt() == 1);
+    auto resolved = MainWindowTestAccess::state(w);
+    for (int i=0; i<4; ++i) resolved = TurnProcessor{}.process(resolved,{});
+    assert(resolved.fleets.size() == 2 && !resolved.planets.front().industry);
+    assert(resolved.planets.front().minerals.germanium == 90);
+    tree->setCurrentItem(tree->topLevelItem(1)); MainWindowTestAccess::moveUp(w);
+    const auto* reorder = std::get_if<ReorderProductionQueueOrder>(&MainWindowTestAccess::orders(w).orders.back());
+    assert(reorder && reorder->fromIndex == 1 && reorder->toIndex == 0);
+    assert(tree->topLevelItem(0)->text(3).contains("(+4)") && tree->topLevelItem(1)->text(3) == "Currently skipped");
+    MainWindowTestAccess::remove(w);
+    const auto& orders = MainWindowTestAccess::orders(w);
+    const auto* cancel = std::get_if<CancelProductionOrder>(&orders.orders.back()); assert(cancel && cancel->index == 0);
+    resolved = TurnProcessor{}.process(MainWindowTestAccess::state(w),{orders});
+    assert(resolved.fleets.size() == 1 && resolved.planets.front().productionQueue.empty());
 }
 }
 int main(int argc,char** argv)
@@ -149,4 +227,7 @@ int main(int argc,char** argv)
     if (mode.isEmpty() || mode=="design-foreign") designer_selection_queues_the_same_pending_project(false, true);
     if (mode.isEmpty() || mode=="industry") native_industry_is_unavailable_in_the_actual_production_panel();
     if (mode.isEmpty() || mode=="restart") loaded_native_start_cannot_restart_as_a_generalist();
+    if (mode.isEmpty() || mode=="restart-menu") loaded_native_start_cannot_restart_as_a_generalist(true);
+    if (mode.isEmpty() || mode=="new-campaign") a_loaded_native_host_can_create_an_explicit_generalist_campaign();
+    if (mode.isEmpty() || mode=="stale-queue") stale_surface_rows_do_not_hide_miner_eta_or_shift_commands();
 }

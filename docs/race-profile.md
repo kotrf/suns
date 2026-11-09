@@ -150,6 +150,8 @@ actual output reject atomically. Native surface factories/mines, their advanced
 forms, upgrades and reconstruction are unavailable in production/templates; stale
 rows retire without spending. Loading preserves the primary trait, and Restart
 refuses an unavailable civilization instead of changing it to Generalist.
+An explicit New campaign with supported new empire settings remains available;
+failed creation/restart preserves the current save association and refusal status.
 The Orbital Construction
 Module prepays a Dock/receiver and finite mineral stock; ordinary Colonize orders
 transfer transported residents into that housing and consume the fleet. Its paid

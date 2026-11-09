@@ -239,7 +239,8 @@ private:
     void queueColonists();
     void queueColonize();
     void endTurn();
-    void newGalaxy(std::optional<GalaxyConfig> config = std::nullopt);
+    bool newGalaxy(std::optional<GalaxyConfig> config = std::nullopt,
+        std::optional<std::vector<EmpireSetup>> empires = std::nullopt);
     void newCampaign();
     void openRaceDesigner();
     void openComputerDecisions();

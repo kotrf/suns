@@ -1893,25 +1893,25 @@ void MainWindow::endTurn()
         .arg(static_cast<qulonglong>(state_.turn)));
 }
 
-void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
+bool MainWindow::newGalaxy(std::optional<GalaxyConfig> config, std::optional<std::vector<EmpireSetup>> empires)
 {
-    if (std::any_of(state_.players.begin(), state_.players.end(), [](const auto& player) {
+    if (!empires && std::any_of(state_.players.begin(), state_.players.end(), [](const auto& player) {
         return player.race.primaryTrait != PrimaryRaceTrait::Generalist
             && player.race.primaryTrait != PrimaryRaceTrait::StargateSpecialist;
     })) {
         statusBar()->showMessage("This primary race trait is not playable yet. Restart is unavailable; use File → New campaign to choose a different civilization.", 5000);
-        return;
+        return false;
     }
-    if (sessionMode_ == SessionMode::PlayerTurn && empireSetups_.empty()) {
+    if (!empires && sessionMode_ == SessionMode::PlayerTurn && empireSetups_.empty()) {
         statusBar()->showMessage("A player turn cannot restart the host's galaxy. Use File → New campaign.", 5000);
-        return;
+        return false;
     }
     cancelRouteProgramMapTargetPick();
     bool ok = false;
     const auto parsedSeed = seedEdit_->text().trimmed().toULongLong(&ok);
     if (!ok) {
         statusBar()->showMessage("Invalid seed — enter an unsigned integer");
-        return;
+        return false;
     }
 
     GalaxyConfig requested = config.value_or(galaxyConfig_);
@@ -1921,10 +1921,11 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
     std::optional<GameSession::DocumentUpdate> documentUpdate;
     try {
         requested = normalized_galaxy_config(requested);
-        const auto setups = empireSetups_.empty()
+        const auto setups = empires ? *empires : empireSetups_.empty()
             ? std::vector<EmpireSetup>{{"Terrans", RacePreset::Terran}} : empireSetups_;
         auto generated = generate_campaign(requested, setups);
         documentUpdate.emplace(session_->beginDocumentUpdate(this));
+        if (empires) empireSetups_ = std::move(*empires);
         sessionMode_ = generated.players.size() > 1 ? SessionMode::Host : SessionMode::Solo;
         pendingOrders_ = {1, {}};
         inbox_.clear();
@@ -1938,7 +1939,7 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
         resetTurnExchangeIdentity();
     } catch (const std::exception& error) {
         statusBar()->showMessage(QString("Galaxy generation failed: %1").arg(error.what()));
-        return;
+        return false;
     }
 
     pendingOrders_ = PlayerOrders{1, {}};
@@ -1961,10 +1962,12 @@ void MainWindow::newGalaxy(std::optional<GalaxyConfig> config)
     rebuildScene(false);
     view_->fitInView(scene_->sceneRect(), Qt::KeepAspectRatio);
 
+    updateSaveWindowTitle();
     statusBar()->showMessage(QString("New galaxy: seed %1, %2 systems — %3 selected at Warp %4")
         .arg(static_cast<qulonglong>(state_.galaxySeed)).arg(static_cast<qulonglong>(state_.stars.size()))
         .arg(QString::fromStdString(state_.fleets.front().name))
         .arg(state_.fleets.front().warp));
+    return true;
 }
 
 } // namespace suns

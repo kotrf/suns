@@ -1,5 +1,6 @@
 #include "simple_production_estimate.hpp"
 #include "suns/production.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -300,8 +301,34 @@ void free_skips_never_restore_an_uncertain_prefix()
 }
 } // namespace
 
-int main()
+void native_surface_rows_preserve_fixed_estimates_and_row_indices()
 {
+    auto state = test::empty_native_orbital_start();
+    assert(initialize_native_orbital_start(state,1,state.planets.front().id,native_orbital_start_budget()));
+    const auto& planet = state.planets.front();
+    const ProductionItem miner{ProductionKind::ColonyShip,153,state.shipDesigns.front().id};
+    for (const auto kind : {ProductionKind::Factory,ProductionKind::Mine,ProductionKind::AdvancedFactory,
+        ProductionKind::AdvancedMine,ProductionKind::UpgradeFactory,ProductionKind::UpgradeMine,
+        ProductionKind::ReconstructFactory,ProductionKind::ReconstructMine}) {
+        for (const auto mode : {ProductionAutomation::None,ProductionAutomation::Annual}) {
+            if (!production_batch_valid({planet.id,kind,1000,mode})) continue;
+            const std::vector<ProductionItem> queue{{kind,1,0,mode,1000},miner};
+            const auto estimates = simple_production_estimates(state,planet,queue,50,{58,0,14},true);
+            assert(estimates.size() == queue.size());
+            assert(estimates[0].status == SimpleProductionStatus::Skipped && estimates[0].remainingWork == 0);
+            assert(estimates[0].effectiveQuantity == 0 && estimates[0].skippedQuantity == 1000);
+            assert(estimates[1].status == SimpleProductionStatus::Approximate && estimates[1].completionTurn == state.turn+4);
+        }
+    }
+    const auto uncertain = simple_production_estimates(state,planet,
+        {{ProductionKind::ColonyShip,153,999},{ProductionKind::Factory,5},miner},50,{100,100,100},true);
+    assert(uncertain[0].status == SimpleProductionStatus::Unavailable);
+    assert(uncertain[1].status == SimpleProductionStatus::Skipped);
+    assert(uncertain[2].status == SimpleProductionStatus::EarlierUncertain);
+}
+int main(int argc, char** argv)
+{
+    if (argc == 2 && std::string(argv[1]) == "native") { native_surface_rows_preserve_fixed_estimates_and_row_indices(); return 0; }
     fixed_rate_and_priority();
     annual_and_nonlinear_prefixes();
     mineral_and_production_limits();
@@ -313,4 +340,5 @@ int main()
     installed_and_duplicate_radars_do_not_reserve_extra_work();
     invalid_stations_are_free_skips_and_do_not_create_a_shipyard();
     free_skips_never_restore_an_uncertain_prefix();
+    native_surface_rows_preserve_fixed_estimates_and_row_indices();
 }

@@ -638,14 +638,12 @@ void MainWindow::installUiPolish()
             return;
         }
         seedEdit_->setText(seed->text());
-        newGalaxy(galaxy->config(seed->text().toULongLong()));
-        fitGalaxyView();
+        if (newGalaxy(galaxy->config(seed->text().toULongLong()))) fitGalaxyView();
     });
 
     auto* restartAction = gameMenu->addAction("Restart current galaxy");
     connect(restartAction, &QAction::triggered, this, [this] {
-        newGalaxy();
-        fitGalaxyView();
+        if (newGalaxy()) fitGalaxyView();
     });
 
     auto* fleetMenu = menuBar()->addMenu("&Fleet");
