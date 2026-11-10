@@ -3,6 +3,7 @@
 #include "suns/game_state.hpp"
 #include "suns/stations.hpp"
 #include "suns/orbital_bases.hpp"
+#include "suns/production.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -30,7 +31,7 @@ struct SimpleProductionEstimate {
 // A display estimate, not a future-turn simulation. The caller supplies the
 // current production rate and received available minerals; neither increases
 // while walking the queue. No growth, future mining, upkeep or new technology
-// is predicted. Unknown/annual work prevents dates for the following prefix.
+// is predicted. Applicable unknown/annual work prevents dates for the following prefix.
 inline std::vector<SimpleProductionEstimate> simple_production_estimates(
     const GameState& state, const Planet& planet, const std::vector<ProductionItem>& queue,
     std::uint32_t productionPerYear, MineralCargo availableMinerals,
@@ -47,6 +48,7 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
     bool stationExists = shipyardAvailable || find_orbital_station_at_planet(state, planet.id)
         || orbital_base_at(state, planet.id);
     const auto maximum = std::numeric_limits<std::uint64_t>::max();
+    const auto* owner = find_player(state, planet.owner);
     for (const auto& item : queue) {
         SimpleProductionEstimate estimate;
         const bool automatic = item.automation != ProductionAutomation::None;
@@ -58,7 +60,8 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
             : mineBuild ? std::numeric_limits<std::uint32_t>::max() - mines : maximum;
         // These are the resolver's current, free-retirement predicates. Retired
         // work must neither reserve minerals nor make a known prefix uncertain.
-        const bool skipped = item.kind == ProductionKind::Research || item.quantity == 0
+        const bool skipped = (owner && !production_kind_applicable(owner->race.primaryTrait, item.kind))
+            || item.kind == ProductionKind::Research || item.quantity == 0
             || (prefixKnown && !automatic && !eligible)
             || (item.kind == ProductionKind::OrbitalStation && (item.station
                 ? !station_construction_valid(state, planet, *item.station) : stationExists))
@@ -153,7 +156,7 @@ inline const char* simple_production_estimate_reason(SimpleProductionStatus stat
     case SimpleProductionStatus::MissingShipyard: return "A shipyard is required.";
     case SimpleProductionStatus::EarlierUncertain: return "Earlier work has no simple completion estimate.";
     case SimpleProductionStatus::Overflow: return "Completion exceeds the supported date range.";
-    case SimpleProductionStatus::Skipped: return "Currently skipped without spending work or minerals under the received technology, cap, radar or station conditions.";
+    case SimpleProductionStatus::Skipped: return "Currently skipped without spending work or minerals under this civilization's rules and received technology, cap, radar or station conditions.";
     case SimpleProductionStatus::InactiveAnnualRule: return "Annual rule currently does no work at the defense cap; it remains active for future turns and conditions.";
     }
     return "No simple completion estimate.";

@@ -21,6 +21,52 @@ SaveGameData envelope(GameState state)
     save.pendingOrders = {1, {}};
     return save;
 }
+void paid_start_and_replacement_survive_host_and_pbem()
+{
+    auto state = test::empty_native_orbital_start();
+    const auto home = state.planets.front().id;
+    const auto receipt = initialize_native_orbital_start(state, 1, home, native_orbital_start_budget());
+    assert(receipt);
+    auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto path = directory.filePath("paid-start.suns");
+    assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().technology.levels == state.players.front().technology.levels);
+    assert(loaded.state.planets.front().nativeOrbit == state.planets.front().nativeOrbit);
+    assert(same_minerals(loaded.state.planets.front().minerals, {100, 100, 100}));
+    assert(loaded.state.fleets.front().task == FleetTask::RemoteMining);
+    assert(loaded.state.fleets.front().fuel == state.fleets.front().fuel);
+    const auto exported = make_player_turn(loaded, 1);
+    assert(write_save_game_file(path, exported, error) && read_save_game_file(path, loaded, error));
+    assert(colony_output(loaded.state, loaded.state.planets.front()) == 50);
+    assert(loaded.state.players.front().history.front().productionOutput == 50);
+    assert(ship_design_available_to_player(loaded.state, 1, loaded.state.shipDesigns.front()));
+    const auto ordersPath = directory.filePath("replacement.sunsorders");
+    TurnOrderFileData packet{host.campaignId, state.turn, host.turnToken,
+        {1, {QueueShipDesignOrder{home, receipt->minerDesign}}}, {"Build replacement"}};
+    assert(write_turn_order_file(ordersPath, packet, error)); TurnOrderFileData decoded;
+    assert(read_turn_order_file(ordersPath, decoded, error));
+    auto uninterrupted = state;
+    for (unsigned year = 0; year < 4; ++year) {
+        const auto orders = year == 0 ? std::vector<PlayerOrders>{decoded.orders} : std::vector<PlayerOrders>{};
+        state = TurnProcessor{}.process(state, orders);
+        uninterrupted = TurnProcessor{}.process(uninterrupted, orders);
+        assert(state.fleets.size() == uninterrupted.fleets.size());
+        assert(state.planets.front().nativeOrbit == uninterrupted.planets.front().nativeOrbit);
+        assert(same_minerals(state.planets.front().minerals, uninterrupted.planets.front().minerals));
+        assert(state.players.front().technology.progress == uninterrupted.players.front().technology.progress);
+        assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
+        state = loaded.state;
+    }
+    assert(state.turn == 5 && state.fleets.size() == 2 && state.planets.front().productionQueue.empty());
+    assert(same_minerals(state.planets.front().minerals, {58, 108, 90}));
+    // A rejected repeat must leave even serialized host evidence unchanged.
+    assert(write_save_game_file(path, envelope(state), error));
+    QFile beforeFile(path); assert(beforeFile.open(QIODevice::ReadOnly)); const auto before = beforeFile.readAll(); beforeFile.close();
+    assert(!initialize_native_orbital_start(state, 1, home, native_orbital_start_budget()));
+    assert(write_save_game_file(path, envelope(state), error));
+    QFile afterFile(path); assert(afterFile.open(QIODevice::ReadOnly)); assert(afterFile.readAll() == before);
+}
 void resident_truth_and_pending_evidence_round_trip()
 {
     auto state = test::native_orbital_fixture();
@@ -60,17 +106,22 @@ void resident_truth_and_pending_evidence_round_trip()
 void hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload()
 {
     auto state = test::native_orbital_fixture();
+    const auto initialView = make_player_view(state, 1);
+    const auto receivedOutput = colony_output(initialView.state, initialView.state.planets.front());
     const auto station = state.orbitalStations.front().id;
     const auto residents = state.planets.front().nativeOrbit;
     destroy_native_orbital_population(state, station); state.orbitalStations.clear();
+    assert(colony_output(state, state.planets.front()) == 0);
     auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
     auto exported = make_player_turn(host, 1);
     assert(exported.state.planets.front().nativeOrbit == residents);
+    assert(colony_output(exported.state, exported.state.planets.front()) == receivedOutput && receivedOutput > 0);
     assert(exported.state.players.front().pendingSurveyReports.empty());
     QTemporaryDir directory; QString error; SaveGameData loaded;
     const auto path = directory.filePath("native.sunsturn");
     assert(write_save_game_file(path, exported, error) && read_save_game_file(path, loaded, error));
     assert(loaded.state.planets.front().nativeOrbit == residents);
+    assert(colony_output(loaded.state, loaded.state.planets.front()) == receivedOutput);
 
     PendingPlayerReport report; report.kind = PlayerReportKind::SpaceBattle;
     report.observedTurn = state.turn+1; report.battle.emplace();
@@ -81,7 +132,9 @@ void hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload()
     assert(known_planet_owner(state, 1, 1) == 0);
     assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
     assert(known_planet_owner(loaded.state, 1, 1) == 0);
-    assert(!make_player_view(loaded.state, 1).state.planets.front().nativeOrbit.population);
+    const auto received = make_player_view(loaded.state, 1);
+    assert(!received.state.planets.front().nativeOrbit.population);
+    assert(colony_output(received.state, received.state.planets.front()) == 0);
 }
 void real_pbem_decoding_keeps_guards_and_shared_unloading()
 {
@@ -543,6 +596,7 @@ int main(int argc, char** argv)
     if (argc == 2 && QString::fromLatin1(argv[1]) == "freight") { unloading_history_waits_for_received_cargo(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "history") { history_and_pbem_wait_for_station_loss_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "first-snapshot") { destruction_before_first_snapshot_survives_reload(); return 0; }
+    paid_start_and_replacement_survive_host_and_pbem();
     resident_truth_and_pending_evidence_round_trip();
     hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload();
     real_pbem_decoding_keeps_guards_and_shared_unloading();

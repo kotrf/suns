@@ -1,5 +1,114 @@
 # Project status and development handoff
 
+## #285 occupied-orbit startup review — 10 November 2026
+
+Review 5834064968 on `241881e` reported a P3: a neutral surface with another
+player's deployed independent shipyard accepted a native startup, creating two
+orbital installations. Reproduced with the ordinary first-turn Deploy command;
+the otherwise identical host starts successfully when the yard is removed.
+Startup now checks `orbital_base_at` before any mutation, matching station
+construction's occupancy rule. The regression preserves the existing yard,
+residents, cargo, knowledge, designs and all identity counters on rejection.
+
+Full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.38 s**
+passed. Previous source CIs 42708044839 (#285, 124/124) and 42709755665
+(#286, 125/125) succeeded. This parent fix also belongs in dependent #286;
+its four new founding review findings are being handled in that branch.
+Current publication/CI are in GitHub. No PR merge or thread resolution is
+performed for this request. Main remains `0922375`; save v118 / orders v49 /
+race v3 and minimal realtime estimates are unchanged. #50 stays open, native
+Human/Computer setup stays gated, and #53/#63 remain frozen.
+
+## #285 repeat review: explicit campaign intent and cheap queue skips — 10 November 2026 (MSK)
+
+Reviews 5832950665 and 5833013783 on `9f32816` confirmed the previous four
+fixes and reported a P2 and P3. Both were reproduced before implementation
+changes. A supported File → New campaign now validates its proposed empires
+independently of the loaded unavailable race, committing those settings only
+after generation succeeds. Refused Restart preserves the game, orders, save
+path, title and explanatory status; menu fit and file detachment require success.
+
+The bounded production estimate shares the host's racial applicability rule.
+Stale native surface industry, including Annual rules, is a free Currently
+skipped row, preserving the following miner's four-turn estimate and every
+input index for reorder/cancel. Unknown earlier work remains uncertain. No
+future-year simulation was introduced.
+
+Full GCC14.2/Qt6.12 Debug build and **124/124 CTest in 129.08 s** passed.
+Regression coverage uses the actual File New campaign dialog, Restart QAction,
+save-path/title retention, all eight incompatible industry kinds, actual Qt
+queue reordering/cancellation and four host turns completing the paid miner.
+Previous source CI 42676434534 (#285, 124/124) and 42677876109 (#286, 125/125)
+are successful. New publication/CI and propagation to dependent #286 are tracked
+in GitHub and subsequent checkpoints. Save v118 / orders v49 / race v3 remain
+unchanged. Neither PR nor review threads are closed by this request. #50 remains
+open, native Human/Computer setup is gated, and #53/#63 remain frozen.
+
+## #285 review fixes: project identity, viable startup, industry and restart — 9 November 2026
+
+Review 5827903909 on `b530098` reported one P2 and three P3s. All four were
+reproduced against that source with real core turns and Qt controls before
+implementation changes; the previous source CI 42631805031 was green (123/123).
+
+Production list, button and selection now use the received design projection.
+Owner-scoped names identify pending designs and survive a temporary ID matching
+a foreign project. Saving and reopening Designer still recheck fresh access
+before deferred refresh. Custom startup must actually produce work at its
+current Energy, rejecting zero-output budgets atomically. Native basic/advanced
+factories/mines, upgrades and reconstruction are inapplicable in single/batch
+orders and planning; incompatible templates reject before changing the queue.
+Stale partly built, paid and automated rows retire before spending/completion.
+The UI omits these choices and keeps ordinary production available. Load retains
+the primary trait; Restart refuses an unavailable civilization without changing
+the game, pending orders or exchange identity.
+
+The full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.41 s**
+passed. Final startup/Qt/live-access tests passed 3/3 in 0.84 s, preserving live
+research/acquisition checks. New tests use actual one/two-draft Designer saves,
+foreign-ID collisions, decoded PBEM industry orders, template applicability,
+Native→Generalist control restoration and real host load/restart. Formats remain
+save v118 / orders v49 / race v3. These fixes also belong in dependent #286;
+current propagation/source/CI are in GitHub. No PR merge or thread resolution
+is performed for this review request. #50 stays open, native setup stays gated,
+and #53/#63 stay frozen.
+
+## Native startup and replacement economy (#50) — 9 November 2026
+
+PR #284 merged as main `092237560a905a6601f38d0af34bfafa1f44fbef`, tree
+`46a6c70281fb4f0ad151cee48a478c95bdf87f8d`, exactly the reviewed `62f31e4` tree.
+Review 5825691221 was clean; all six confirmed-fixed threads were resolved at
+the authorized merge under MEM-34. Source CI 42612184928 and main CI 42624373395
+both succeeded (122/122). Work continues in the existing `/workspace/suns`,
+branch `codex/native-orbital-start-50`.
+
+Station residents previously generated zero production, preventing replacement
+manufacture. The native prototype now derives output from residents and Energy
+using deterministic integer square root: 50 resources/year at 25,000/Energy 0,
+100 at Energy 3, capped by the live inhabited hull. Surface assets and T/G do
+not contribute. Ordinary generalist startup still yields 29. Native access to
+MiniMiner/Robo-Mini-Miner is narrow; no research level or ARM flag is granted.
+
+An atomic first-turn host construction kernel consumes the ordinary initial
+asset bill: 193 work and 72/9/26 kt for Dock/services, Full receiver and one
+working Quick Jump 5/Robo-Mini-Miner. The declared default endowment leaves
+100/100/100 kt in stock, with 25,000 station residents and a full 210 mg tank.
+It rejects insufficient budgets, incompatible profiles, player views and repeat
+starts. Ordinary design and production orders build a paid replacement in four
+years while mining supplies real stocks. Removing the original stops extraction.
+
+The full GCC14.2/Qt6.12 Debug application build and **123/123 CTest in 125.74 s**
+passed. Coverage includes ordinary replacement orders, exact work/mineral costs,
+narrow technology access, real mining/no-miner turns, atomic rejection,
+host reload, decoded PBEM orders and received output after unseen station loss.
+Save v118 / orders v49 / race v3 stay unchanged. See
+[stage 3 budget and limits](asymmetric-empires.md).
+
+This is a prepared-host startup kernel, not new-campaign integration or actual
+Computer startup/expansion acceptance. Human/Computer setup/import/restart stay
+closed. Next: paid founding, native radiation/protection/growth/support, hull
+progression and actual Computer startup → replacement → paid second colony.
+#50 stays open; #53/#63 remain frozen. Current source/PR/CI are in GitHub.
+
 ## #284 repeat review: evacuation link, History sites and map — 9 November 2026
 
 Review 5825137484 on 011e9d4 confirmed all three prior fixes. Its source CI

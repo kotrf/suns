@@ -3,6 +3,7 @@
 #include "suns/game_state.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/orbital_habitats.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -1878,6 +1879,7 @@ ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet)
 
 std::uint32_t colony_output(const GameState& state, const Planet& planet)
 {
+    if (native_orbital_race(state, planet.owner)) return native_orbital_output(state, planet);
     if (planet.owner == 0 || (planet.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !total_colony_population(planet))) return 0;
     const auto orbital=habitat_completed(planet) && planet.engineering.operational
         && planet.habitat.service==HabitatService::Normal?planet.habitat.population:0;
