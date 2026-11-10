@@ -38,6 +38,13 @@ Logistics tasks are one-shot. Remote Mining, Lay minefields, Sweep hostile mines
 
 Moving-target turn resolution and rendezvous semantics are specified in [Moving fleet targets](moving-fleet-targets.md).
 
+Colonize destination checks use received ownership in both host and PBEM editors.
+The carried colony plan must be applicable to the empire before founding consumes
+the fleet; unavailable legacy copies remain visible until explicitly replaced.
+For native orbital founding, a scheduled manifest above the Dock's 100,000 limit
+is a warning: an earlier unloading stop may reduce it. Direct founding and the
+actual arrival enforce capacity; waypoint authoring does not simulate future cargo.
+
 ## Dynamic logistics
 
 Arrival actions remain policies rather than precomputed amounts. `LoadAllAvailable` and `UnloadAll` select one cargo type: Colonists, Ironium, Boranium or Germanium. They evaluate the real population or planetary surface stockpile and the shared free cargo space only when the ship actually arrives.

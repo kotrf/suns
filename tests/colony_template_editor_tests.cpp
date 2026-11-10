@@ -3,6 +3,7 @@
 #include "route_program_dock.hpp"
 #include "suns/communications.hpp"
 #include "suns/production.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -15,8 +16,11 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStatusBar>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QTreeWidget>
+#include <algorithm>
 #include <cassert>
 
 namespace suns {
@@ -51,7 +55,31 @@ struct MainWindowTestAccess {
         w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear(); w.rebuildScene();
     }
     static void colonize(MainWindow& w) { w.queueColonize(); }
+    static void nativeFixture(MainWindow& w) {
+        w.state_ = test::native_orbital_founding_fixture();
+        w.state_.planets[1].environment = {0, 100, 20};
+        w.selection_.fleet = w.state_.fleets.back().id; w.selection_.star = w.state_.planets[1].star;
+        w.pendingOrders_ = {1, {}}; w.pendingDescriptions_.clear(); w.rebuildScene();
+    }
+    static bool overcrowded(MainWindow& w) {
+        auto fleet = w.state_.fleets.back(); fleet.ships.front().count = 50; fleet.colonists = 100'001;
+        return w.confirmFleetColonization(fleet, w.state_.planets[1], false);
+    }
     static const PlayerOrders& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static const GameState& game(const MainWindow& w) { return w.state_; }
+    static void select(MainWindow& w, FleetId fleet, StarId star) {
+        w.selection_.fleet = fleet; w.selection_.star = star; w.rebuildScene();
+    }
+    static void replace(MainWindow& w, GameState state) {
+        w.state_ = std::move(state); w.pendingOrders_ = {1,{}}; w.pendingDescriptions_.clear();
+        select(w,w.state_.fleets.back().id,w.state_.planets[1].star);
+    }
+    static bool load(MainWindow& w, const QString& path) { return w.loadGameFromPath(path); }
+    static void nativePlans(MainWindow& w) {
+        nativeFixture(w);
+        w.state_.players.front().productionTemplates = {colony_development_presets().front(),
+            {"Receiver plan", {{ProductionKind::LocalRadar,production_cost(ProductionKind::LocalRadar)}}}};
+    }
 };
 }
 
@@ -62,9 +90,126 @@ void settle()
     loop.exec();
 }
 
+namespace {
+using namespace suns;
+void native_plan_choices_are_applicable(bool route)
+{
+    MainWindow w; MainWindowTestAccess::nativePlans(w);
+    if (route) {
+        attachRouteProgramDock(w); w.show(); settle();
+        auto* combo = static_cast<ColonyPlanCombo*>(w.findChild<QComboBox*>("routeColonyPlanCombo"));
+        assert(combo && combo->findText("Fast Link") < 0 && combo->findText("Receiver plan") > 0);
+        ProductionTemplate legacy{"Legacy surface plan", {{ProductionKind::Factory,kFactoryCost}}};
+        combo->setPlan(legacy);
+        assert(combo->plan() == legacy && combo->currentText().contains("unavailable",Qt::CaseInsensitive));
+        assert(!(combo->model()->flags(combo->model()->index(combo->currentIndex(),0)) & Qt::ItemIsEnabled));
+        combo->setCurrentIndex(0); assert(!combo->plan());
+        return;
+    }
+    bool sawPlan = false;
+    QTimer answer;
+    QObject::connect(&answer,&QTimer::timeout,&w,[&] {
+        if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+            warning->button(QMessageBox::Yes)->click();
+        else if (auto* choice = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            choice && choice->objectName() == "colonizePlanDialog") {
+            sawPlan = true;
+            auto* plans = choice->findChild<QComboBox*>("colonizePlanCombo");
+            assert(plans && plans->findText("Fast Link") < 0 && plans->findText("Receiver plan") > 0);
+            plans->setCurrentIndex(plans->findText("Receiver plan")); choice->accept();
+        }
+    });
+    answer.start(1); MainWindowTestAccess::colonize(w); answer.stop();
+    assert(sawPlan);
+    const auto& order = std::get<ColonizePlanetOrder>(MainWindowTestAccess::orders(w).orders.back());
+    assert(order.colonyPlan && order.colonyPlan->name == "Receiver plan");
+}
+void colonize_waypoints_use_received_ownership()
+{
+    auto state = test::native_orbital_founding_fixture();
+    const auto source = state.fleets.back().id, target = state.planets[1].id;
+    auto second = state.fleets.back(); second.id = state.nextFleetId++;
+    second.position = state.stars.front().position; second.telemetry = {};
+    state.fleets.push_back(second);
+    state.fleets.back().telemetry = confirmed_fleet_telemetry(state,state.fleets.back());
+    const Position remote{400,0}; state.stars[1].position = remote;
+    const PlayerOrders travel{1,{MoveFleetOrder{source,remote,5,{FleetArrivalActionKind::Colonize}}}};
+    for (unsigned year=0;year<40 && !state.planets[1].nativeOrbit.station;++year)
+        state = TurnProcessor{}.process(state,year==0?std::vector<PlayerOrders>{travel}:std::vector<PlayerOrders>{});
+    assert(state.planets[1].owner == 1 && known_planet_owner(state,1,target) == 0);
+    const auto report = std::find_if(state.players.front().pendingPlayerReports.begin(),
+        state.players.front().pendingPlayerReports.end(),[](const auto& r){return r.kind == PlayerReportKind::ColonyFounded;});
+    assert(report != state.players.front().pendingPlayerReports.end() && report->deliveryTurn > state.turn);
+    const auto due = report->deliveryTurn;
+    QTemporaryDir dir; QString error;
+    for (const bool delivered : {false,true}) {
+        if (delivered) while (state.turn<=due+1) state=TurnProcessor{}.process(state,{});
+        for (const bool pbem : {true,false}) {
+            SaveGameData save; save.state=state; save.mode=SessionMode::Host;
+            save.pendingOrders={1,{}}; save.campaignId=286; save.turnToken=17; save.playerTokens={{1,17}};
+            const auto path=dir.filePath(pbem?"player.suns":"host.suns");
+            assert(write_save_game_file(path,pbem?make_player_turn(save,1):save,error));
+            MainWindow w; assert(MainWindowTestAccess::load(w,path));
+            MainWindowTestAccess::select(w,second.id,state.planets[1].star);
+            assert(known_planet_owner(MainWindowTestAccess::game(w),1,target) == (delivered?1:0));
+            bool confirmed=false;
+            QTimer answer;
+            QObject::connect(&answer,&QTimer::timeout,&w,[&] {
+                auto* warning=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); assert(warning);
+                confirmed=true; warning->button(QMessageBox::Yes)->click();
+            });
+            answer.start(1);
+            const bool accepted=w.appendSelectedStarWaypoint(5,{FleetArrivalActionKind::Colonize},false);
+            answer.stop();
+            assert(accepted == !delivered && confirmed == !delivered);
+            if (delivered) assert(w.statusBar()->currentMessage().contains("unowned"));
+            else assert(MainWindowTestAccess::move(w)
+                && MainWindowTestAccess::move(w)->arrivalAction.kind == FleetArrivalActionKind::Colonize);
+        }
+    }
+}
+void an_unloading_route_can_plan_before_the_housing_limit_is_met()
+{
+    auto state=test::native_orbital_founding_fixture();
+    state.planets.front().nativeOrbit.population=90'000;
+    auto& fleet=state.fleets.back(); const auto id=fleet.id;
+    fleet.ships.front().count=50; fleet.colonists=100'001;
+    fleet.position=state.stars.front().position; fleet.fuel=fleet_fuel_capacity(state,fleet);
+    fleet.telemetry={}; fleet.telemetry=confirmed_fleet_telemetry(state,fleet);
+    assert(fleet_cargo_used(state,fleet)<=fleet_cargo_capacity(state,fleet));
+    MainWindow w; MainWindowTestAccess::replace(w,state);
+    MainWindowTestAccess::select(w,id,state.planets.front().star);
+    assert(w.appendSelectedStarWaypoint(5,{FleetArrivalActionKind::UnloadAll,0,FleetCargoKind::Colonists},false));
+    MainWindowTestAccess::select(w,id,state.planets[1].star);
+    bool confirmed=false;
+    QTimer answer;
+    QObject::connect(&answer,&QTimer::timeout,&w,[&] {
+        auto* warning=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); assert(warning);
+        assert(warning->informativeText().contains("100001 / 100000"));
+        assert(warning->informativeText().contains("before arrival",Qt::CaseInsensitive));
+        confirmed=true; warning->button(QMessageBox::Yes)->click();
+    });
+    answer.start(1); const bool accepted=w.appendSelectedStarWaypoint(5,{FleetArrivalActionKind::Colonize},false); answer.stop();
+    assert(accepted && confirmed);
+    const auto* move=MainWindowTestAccess::move(w);
+    assert(move && move->arrivalAction.kind == FleetArrivalActionKind::UnloadAll
+        && move->queuedWaypoints.size()==1 && move->queuedWaypoints.back().arrivalAction.kind==FleetArrivalActionKind::Colonize);
+    auto result=TurnProcessor{}.process(state,{MainWindowTestAccess::orders(w)});
+    assert(result.planets.front().nativeOrbit.population==100'000);
+    for(unsigned year=0;year<4 && !result.planets[1].nativeOrbit.station;++year)
+        result=TurnProcessor{}.process(result,{});
+    assert(result.planets[1].nativeOrbit.population==90'001);
+    assert(std::none_of(result.fleets.begin(),result.fleets.end(),[&](const auto& f){return f.id==id;}));
+}
+}
+
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    if (app.arguments().contains("plans-manual")) { native_plan_choices_are_applicable(false); return 0; }
+    if (app.arguments().contains("plans-route")) { native_plan_choices_are_applicable(true); return 0; }
+    if (app.arguments().contains("ownership")) { colonize_waypoints_use_received_ownership(); return 0; }
+    if (app.arguments().contains("unloading")) { an_unloading_route_can_plan_before_the_housing_limit_is_met(); return 0; }
     suns::MainWindow window;
     window.installDeferredMapSelectionHandler();
     suns::attachRouteProgramDock(window);
@@ -146,4 +291,40 @@ int main(int argc, char** argv)
     answer.stop();
     const auto& direct = std::get<suns::ColonizePlanetOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
     assert(direct.colonyPlan == suns::colony_development_presets().front());
+    suns::MainWindowTestAccess::nativeFixture(window);
+    bool sawStation = false, sawPlan = false;
+    QTimer nativeAnswer;
+    QObject::connect(&nativeAnswer, &QTimer::timeout, &window, [&] {
+        if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            sawStation = true;
+            const auto text = warning->informativeText();
+            assert(warning->windowTitle() == "Confirm orbital colony founding");
+            assert(text.contains("Residents transferred to station: 1000 / 100000"));
+            assert(text.contains("Prepaid seed stock: I 10 / B 10 / G 10"));
+            assert(text.contains("excluding prepaid deployment: I 11 / B 5 / G 10"));
+            assert(text.contains("including cargo: I 24 / B 17 / G 21"));
+            assert(!text.contains("Population will decline") && !text.contains("Colonists landed"));
+            if (app.arguments().contains("--capture")) assert(warning->grab().save("/tmp/suns-native-founding-confirmation.png"));
+            warning->button(QMessageBox::Yes)->click();
+        } else if (auto* choice = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            choice && choice->objectName() == "colonizePlanDialog") {
+            sawPlan = true;
+            bool explainsKit = false;
+            for (auto* label : choice->findChildren<QLabel*>())
+                explainsKit |= label->text().contains("paid construction module includes");
+            assert(explainsKit);
+            choice->accept();
+        }
+    });
+    nativeAnswer.start(10);
+    suns::MainWindowTestAccess::colonize(window);
+    nativeAnswer.stop();
+    assert(sawStation && sawPlan);
+    const auto& nativeOrder = std::get<suns::ColonizePlanetOrder>(suns::MainWindowTestAccess::orders(window).orders.back());
+    assert(nativeOrder.fleet == 2 && nativeOrder.planet == 2 && !nativeOrder.colonyPlan);
+    assert(!suns::MainWindowTestAccess::overcrowded(window));
+    native_plan_choices_are_applicable(false);
+    native_plan_choices_are_applicable(true);
+    colonize_waypoints_use_received_ownership();
+    an_unloading_route_can_plan_before_the_housing_limit_is_met();
 }

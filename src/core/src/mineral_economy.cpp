@@ -59,7 +59,14 @@ MineralCargo componentMineralCost(ShipComponentType type)
     if (const auto* engine = propulsion_technology(type)) return engine->minerals;
     if (const auto* scanner = scanner_technology(type)) return scanner->minerals;
     if (const auto* miner = mining_technology(type)) return miner->minerals;
-    if (const auto* equipment = equipment_technology(type)) return equipment->minerals;
+    if (const auto* equipment = equipment_technology(type)) {
+        auto cost = equipment->minerals;
+        if (type == ShipComponentType::OrbitalConstructionModule) {
+            const auto kit = native_orbital_founding_kit().minerals;
+            cost.ironium += kit.ironium; cost.boranium += kit.boranium; cost.germanium += kit.germanium;
+        }
+        return cost;
+    }
     switch (type) {
     case ShipComponentType::FuelDepotKit:            return {40, 20, 30};
     case ShipComponentType::DeepSpaceRelayKit:       return {25, 10, 50};
@@ -215,14 +222,22 @@ MineralCargo fleet_colonization_salvage(const GameState& state, const Fleet& fle
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         const auto* design = find_ship_design(state, stack.design);
         if (!design) continue;
-        const auto cost = ship_design_mineral_cost(*design);
+        auto cost = ship_design_mineral_cost(*design);
+        if (native_orbital_race(state, fleet.owner)) {
+            // Every carried kit was prepaid. One is deployed; extra kits are
+            // lost with this terminal fleet, never refunded as ordinary scrap.
+            const auto kit = native_orbital_founding_kit().minerals;
+            const auto count = std::count(design->components.begin(), design->components.end(),
+                ShipComponentType::OrbitalConstructionModule);
+            subtract_minerals(cost, {kit.ironium*count, kit.boranium*count, kit.germanium*count});
+        }
         constructionMinerals.ironium += cost.ironium * stack.count;
         constructionMinerals.boranium += cost.boranium * stack.count;
         constructionMinerals.germanium += cost.germanium * stack.count;
     }
 
-    // A new colony has no starbase, so dismantling follows the Stars!-style
-    // one-third recovery rule. Each mineral is rounded down independently.
+    // Ordinary hull/material recovery keeps the one-third rule. Native prepaid
+    // deployment assets were excluded above. Round each mineral independently.
     return {
         std::floor(constructionMinerals.ironium / 3.0),
         std::floor(constructionMinerals.boranium / 3.0),

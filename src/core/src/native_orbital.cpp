@@ -1,5 +1,6 @@
 #include "suns/native_orbital.hpp"
 #include "suns/campaign.hpp"
+#include "suns/stations.hpp"
 #include <algorithm>
 
 namespace suns {
@@ -40,6 +41,32 @@ std::uint32_t native_orbital_output(const GameState& state, const Planet& planet
         else high = mid;
     }
     return static_cast<std::uint32_t>(low);
+}
+NativeOrbitalFoundingKit native_orbital_founding_kit()
+{
+    const StationLoadout dock;
+    const auto station = station_mineral_cost(dock);
+    const auto receiver = production_item_mineral_cost(GameState{}, {ProductionKind::PlanetaryRadar});
+    const MineralCargo supplies{10, 10, 10};
+    return {station_build_cost(dock) + production_cost(ProductionKind::PlanetaryRadar),
+        {station.ironium + receiver.ironium + supplies.ironium,
+         station.boranium + receiver.boranium + supplies.boranium,
+         station.germanium + receiver.germanium + supplies.germanium}, supplies};
+}
+bool ship_design_can_found_native_orbit(const ShipDesign& design)
+{
+    return std::find(design.components.begin(), design.components.end(),
+        ShipComponentType::OrbitalConstructionModule) != design.components.end();
+}
+bool fleet_can_found_native_orbit(const GameState& state, const Fleet& fleet)
+{
+    if (!native_orbital_race(state, fleet.owner) || fleet.outpost != OutpostKind::None) return false;
+    const auto stacks = fleet_ship_stacks(fleet);
+    return std::any_of(stacks.begin(), stacks.end(), [&](const auto& stack) {
+        const auto* design = find_ship_design(state, stack.design);
+        return design && ship_design_can_found_native_orbit(*design)
+            && ship_design_valid(*design) && ship_design_available_to_player(state, fleet.owner, *design);
+    });
 }
 std::uint64_t unload_native_orbital_colonists(GameState& state, Planet& planet, Fleet& fleet)
 {

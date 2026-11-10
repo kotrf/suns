@@ -50,8 +50,9 @@ Transport Cloaking currently accepts only the four unarmed reference freighter
 hulls, and the project must not contain weapons or bombs.
 
 Claim Adjuster, Alternate Reality and Interstellar Traveler are not selectable
-race families yet. Their dedicated devices are listed with an explicit unmet
-race requirement. Mystery Trader items require an already owned design with
+race families yet. The native orbital kernel activates its Orbital Construction
+Module for `HabitatCivilization` prepared-host states while setup remains closed;
+the other reserved devices retain unmet requirements. Mystery Trader items require an already owned design with
 that device; researching their listed levels alone never grants them. Acquisition,
 trade, full PRT/LRT behavior, regenerating-shield traits and miniaturization are
 separate work.
@@ -68,7 +69,8 @@ separate work.
 | Guns, torpedoes, computers, jammers, capacitors, jets | Active in automatic combat using the documented Suns! tactical rules |
 | Bombs / mine layers | Active stationary missions: bombing, mine laying and beam sweeping |
 | Cloaks / tachyon detection | Diminishing-return fleet cloaking and tachyon counter-detection |
-| Orbital Adjuster / AR construction / Jump Gate | Access and fitting data only; no operational special action |
+| Orbital Construction Module | Native paid founding: Dock/services, receiver, real transported residents and finite initial I/B/G; complete operational price includes a Suns! deployment bill |
+| Orbital Adjuster / Jump Gate | Access and fitting data only; no operational special action |
 
 Weapon cards expose power, battle-board range, initiative and accuracy.
 Computers reduce torpedo **inaccuracy**; they do not add flat accuracy points.
@@ -76,6 +78,12 @@ Jets affect battle movement, not strategic Warp. Shield-only beams, gatling
 beams, missiles, smart bombs and minefield types retain separate metadata.
 Alien multifunction special effects beyond the explicitly exposed ratings
 remain future work. Cards state which system is not yet operational.
+
+The orbital module's reference base remains 20 work and I/B/G 20/15/15. Its
+Suns! operational price is 60 work and I/B/G 44/34/37, including the ordinary-priced
+Dock, full receiver and 10 kt of each initial mineral. Deployed assets and initial
+stock are excluded from colonization salvage. See the
+[native founding budget and availability gate](asymmetric-empires.md).
 
 ## Designer and compatibility
 

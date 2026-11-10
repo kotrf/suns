@@ -3,6 +3,9 @@
 #include "suns/game_state.hpp"
 #include <QComboBox>
 #include <QSignalBlocker>
+#include <QStandardItemModel>
+#include <algorithm>
+#include <functional>
 #include <utility>
 
 namespace suns {
@@ -10,7 +13,9 @@ namespace suns {
 // Each entry owns its value, including a carried copy of a renamed/deleted plan.
 class ColonyPlanCombo final : public QComboBox {
 public:
-    explicit ColonyPlanCombo(QWidget* parent = nullptr) : QComboBox(parent)
+    using PlanAllowed = std::function<bool(const ProductionTemplate&)>;
+    explicit ColonyPlanCombo(QWidget* parent = nullptr, PlanAllowed allowed = {})
+        : QComboBox(parent), allowed_(std::move(allowed))
     {
         setMinimumContentsLength(14);
         setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -27,7 +32,7 @@ public:
 
     void setTemplates(std::vector<ProductionTemplate> templates)
     {
-        if (templates_ == templates) return;
+        // Applicability can change even when the saved library is identical.
         const auto selected = plan();
         templates_ = std::move(templates);
         setPlan(selected);
@@ -39,6 +44,7 @@ public:
         clear();
         addItem("None — empty queue");
         entries_ = templates_;
+        std::erase_if(entries_, [this](const auto& plan) { return !isAllowed(plan); });
         int selected = 0;
         for (std::size_t i = 0; i < entries_.size(); ++i) {
             addItem(QString::fromStdString(entries_[i].name));
@@ -46,13 +52,22 @@ public:
         }
         if (value && selected == 0) {
             entries_.push_back(*value);
-            addItem(QString::fromStdString(value->name) + " (order copy)");
+            const bool available = isAllowed(*value);
+            addItem(QString::fromStdString(value->name)
+                + (available ? " (order copy)" : " (unavailable order copy)"));
             selected = count() - 1;
+            if (!available) {
+                if (auto* items = qobject_cast<QStandardItemModel*>(model()))
+                    items->item(selected)->setEnabled(false);
+                setItemData(selected, "This carried plan is unavailable to this civilization. Choose None or a compatible plan.", Qt::ToolTipRole);
+            }
         }
         setCurrentIndex(selected);
     }
 
 private:
+    [[nodiscard]] bool isAllowed(const ProductionTemplate& value) const { return !allowed_ || allowed_(value); }
+    PlanAllowed allowed_;
     std::vector<ProductionTemplate> templates_;
     std::vector<ProductionTemplate> entries_;
 };

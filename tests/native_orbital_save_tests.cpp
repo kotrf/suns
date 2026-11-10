@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 using namespace suns;
 namespace {
 bool same_minerals(const MineralCargo& a, const MineralCargo& b)
@@ -66,6 +67,163 @@ void paid_start_and_replacement_survive_host_and_pbem()
     assert(!initialize_native_orbital_start(state, 1, home, native_orbital_start_budget()));
     assert(write_save_game_file(path, envelope(state), error));
     QFile afterFile(path); assert(afterFile.open(QIODevice::ReadOnly)); assert(afterFile.readAll() == before);
+}
+void paid_founding_orders_and_received_evidence_survive_reload()
+{
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto savePath = directory.filePath("orbital-founding.suns");
+    const auto packetPath = directory.filePath("orbital-founding.sunsorders");
+    for (const bool arrival : {false, true}) {
+        auto state = test::native_orbital_founding_fixture();
+        const auto id = state.fleets.back().id, target = state.planets[1].id;
+        const Order order = arrival ? Order{MoveFleetOrder{id, state.fleets.back().position, 5,
+            {FleetArrivalActionKind::Colonize}}} : Order{ColonizePlanetOrder{id, target}};
+        TurnOrderFileData packet{115, state.turn, 17, {1, {order}}, {"Found orbital colony"}};
+        assert(write_turn_order_file(packetPath, packet, error)); TurnOrderFileData decoded;
+        assert(read_turn_order_file(packetPath, decoded, error));
+        assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
+        const auto expected = TurnProcessor{}.process(state, {decoded.orders});
+        state = TurnProcessor{}.process(loaded.state, {decoded.orders});
+        assert(state.orbitalStations.size() == 2 && state.fleets.size() == 1);
+        assert(state.planets[1].nativeOrbit == expected.planets[1].nativeOrbit);
+        assert(same_minerals(state.planets[1].minerals, {24, 17, 21}));
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        assert(write_save_game_file(savePath, make_player_turn(host, 1), error) && read_save_game_file(savePath, loaded, error));
+        assert(loaded.state.planets[1].nativeOrbit.population == 1000 && !loaded.state.planets[1].population);
+        assert(native_orbital_station(loaded.state, loaded.state.planets[1]));
+        assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+        assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
+        const auto resumed = TurnProcessor{}.process(loaded.state, {decoded.orders});
+        assert(resumed.orbitalStations.size() == 2 && same_minerals(resumed.planets[1].minerals, state.planets[1].minerals));
+    }
+
+    auto state = test::native_orbital_founding_fixture();
+    const auto& fleet = state.fleets.back();
+    const auto id = fleet.id, target = state.planets[1].id;
+    const Position remote{400, 0}; state.stars[1].position = remote;
+    const PlayerOrders travel{1, {MoveFleetOrder{id, remote, 5, {FleetArrivalActionKind::Colonize}}}};
+    // Fly the actual ship, preserving its real received/in-transit telemetry.
+    for (unsigned year = 0; year < 40 && !find_planet(state, target)->nativeOrbit.station; ++year)
+        state = TurnProcessor{}.process(state, year == 0 ? std::vector<PlayerOrders>{travel} : std::vector<PlayerOrders>{});
+    assert(find_planet(state, target)->nativeOrbit.population == 1000);
+    const auto& reports = state.players.front().pendingPlayerReports;
+    const auto founding = std::find_if(reports.begin(), reports.end(), [](const auto& r) { return r.kind == PlayerReportKind::ColonyFounded; });
+    assert(founding != reports.end() && founding->deliveryTurn > state.turn);
+    const auto receiptYear = founding->deliveryTurn;
+    const auto exportBoundary = [&] {
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        assert(write_save_game_file(savePath, make_player_turn(host, 1), error) && read_save_game_file(savePath, loaded, error));
+    };
+    exportBoundary();
+    assert(known_planet_owner(loaded.state, 1, target) == 0);
+    assert(!find_planet(loaded.state, target)->nativeOrbit.population);
+    assert(!find_orbital_station_at_planet(loaded.state, target));
+    assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+    assert(std::any_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [=](const auto& f) { return f.id == id; }));
+    assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
+    state = loaded.state;
+    while (state.turn <= receiptYear+1) state = TurnProcessor{}.process(state, {});
+    exportBoundary();
+    assert(known_planet_owner(loaded.state, 1, target) == 1);
+    assert(find_planet(loaded.state, target)->nativeOrbit.population == 1000);
+    assert(find_orbital_station_at_planet(loaded.state, target));
+    assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+    assert(std::none_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [=](const auto& f) { return f.id == id; }));
+}
+void reconnected_founding_is_counted_once_before_the_original_receipt()
+{
+    auto state = test::native_orbital_founding_fixture();
+    const auto founder = state.fleets.back().id, target = state.planets[1].id;
+    state.stars[1].position = {400,0};
+    state.players.front().technology.levels[std::size_t(ResearchField::Electronics)] = 5;
+    const auto relayDesign = state.nextShipDesignId++;
+    state.shipDesigns.push_back({relayDesign,1,"Mobile relay",ShipHullType::Scout,
+        {ShipComponentType::FusionDrive,ShipComponentType::RelayArray}});
+    assert(ship_design_valid(state.shipDesigns.back()) && ship_design_available_to_player(state,1,state.shipDesigns.back()));
+    Fleet relay; relay.id = state.nextFleetId++; relay.owner = 1; relay.design = relayDesign;
+    relay.name = "Mobile relay"; relay.ships = {{relayDesign,1}}; relay.position = {50,0}; relay.warp = 5;
+    relay.fuel = fleet_fuel_capacity(state,relay); state.fleets.push_back(relay);
+    state.fleets.back().telemetry = confirmed_fleet_telemetry(state,state.fleets.back());
+    const PlayerOrders travel{1,{MoveFleetOrder{founder,{400,0},5,{FleetArrivalActionKind::Colonize}}}};
+    for (unsigned year=0;year<40 && !state.planets[1].nativeOrbit.station;++year)
+        state = TurnProcessor{}.process(state,year==0?std::vector<PlayerOrders>{travel}:std::vector<PlayerOrders>{});
+    assert(state.planets[1].nativeOrbit.population == 1000);
+    const auto founding = std::find_if(state.players.front().pendingPlayerReports.begin(),state.players.front().pendingPlayerReports.end(),
+        [&](const auto& r){return r.kind == PlayerReportKind::ColonyFounded && r.fleet == founder;});
+    assert(founding != state.players.front().pendingPlayerReports.end() && founding->deliveryTurn > state.turn+1);
+    const auto due = founding->deliveryTurn;
+    assert(communication_delay_turns(state,1,{400,0}) > 0 && known_planet_owner(state,1,target) == 0);
+    const auto original = std::find_if(state.pendingFleetLossContacts.begin(),state.pendingFleetLossContacts.end(),
+        [&](const auto& c){return c.lastContact.id == founder;});
+    assert(original != state.pendingFleetLossContacts.end());
+    // Another missing fleet at the same site must not be retired by this receipt.
+    auto unrelated = *original; unrelated.lastContact.id = state.nextFleetId++;
+    unrelated.lastContact.colonists = unrelated.lastContact.telemetry.colonists = 0;
+    unrelated.lastContact.minerals = unrelated.lastContact.telemetry.minerals = {};
+    unrelated.lastContact.telemetryInTransit.clear();
+    unrelated.deliveryTurn = due+3;
+    const auto unrelatedId = unrelated.lastContact.id;
+    state.pendingFleetLossContacts.push_back(unrelated);
+
+    QTemporaryDir dir; QString error; SaveGameData loaded;
+    const auto residents = [](const GameState& view) {
+        std::uint64_t total=0;
+        for (const auto& p:view.planets) if(p.owner==1) total+=total_colony_population(p);
+        for (const auto& f:view.fleets) if(f.owner==1) total+=f.colonists;
+        return total;
+    };
+    const auto checkBoundary = [&](const GameState& candidate,bool dockReceived) {
+        auto host=envelope(candidate); host.mode=SessionMode::Host; host.playerTokens={{1,17}};
+        const auto pbem=dir.filePath("reconnected-player.suns"), save=dir.filePath("reconnected-host.suns");
+        assert(write_save_game_file(pbem,make_player_turn(host,1),error) && read_save_game_file(pbem,loaded,error));
+        if (residents(loaded.state)!=kInitialHomePopulation)
+            std::fprintf(stderr,"PBEM turn %llu, received dock %d: residents %llu, History %llu\n",
+                static_cast<unsigned long long>(candidate.turn),int(dockReceived),
+                static_cast<unsigned long long>(residents(loaded.state)),
+                static_cast<unsigned long long>(loaded.state.players.front().history.back().population));
+        assert(residents(loaded.state)==kInitialHomePopulation);
+        assert(loaded.state.players.front().history.back().population==kInitialHomePopulation);
+        assert((find_planet(loaded.state,target)->nativeOrbit.population==1000)==dockReceived);
+        assert(std::any_of(loaded.state.fleets.begin(),loaded.state.fleets.end(),
+            [&](const auto& f){return f.id==founder;}) == !dockReceived);
+        assert(std::any_of(loaded.state.fleets.begin(),loaded.state.fleets.end(),
+            [&](const auto& f){return f.id==unrelatedId;}));
+        assert(write_save_game_file(save,host,error) && read_save_game_file(save,loaded,error));
+        const auto view=make_player_view(loaded.state,1);
+        assert(residents(view.state)==kInitialHomePopulation && empire_turn_statistics(loaded.state,1).population==kInitialHomePopulation);
+        const auto missing=missing_fleet_contacts(loaded.state,1);
+        assert(std::any_of(missing.begin(),missing.end(),[&](const auto& f){return f.id==founder;}) == !dockReceived);
+        assert(std::any_of(missing.begin(),missing.end(),[&](const auto& f){return f.id==unrelatedId;}));
+        return loaded.state;
+    };
+    state=checkBoundary(state,false); // Reload the host before restoring the link.
+    auto disconnected=TurnProcessor{}.process(state,{});
+    assert(disconnected.turn<due); (void)checkBoundary(disconnected,false);
+    auto reconnected=TurnProcessor{}.process_with_events(state,{{1,{MoveFleetOrder{relay.id,{75,0},5}}}});
+    state=reconnected.state;
+    assert(state.turn<due && communication_delay_turns(state,1,{400,0})==0);
+    assert(std::none_of(reconnected.events.begin(),reconnected.events.end(),
+        [](const auto& e){return e.kind==GameEventKind::ColonyFounded;}));
+    state=checkBoundary(state,true);
+    const auto pending=std::find_if(state.players.front().pendingPlayerReports.begin(),state.players.front().pendingPlayerReports.end(),
+        [&](const auto& r){return r.kind==PlayerReportKind::ColonyFounded && r.fleet==founder;});
+    assert(pending!=state.players.front().pendingPlayerReports.end() && pending->deliveryTurn==due);
+    auto lostAgain=TurnProcessor{}.process(state,{{1,{MoveFleetOrder{relay.id,{50,0},5}}}});
+    assert(communication_delay_turns(lostAgain,1,{400,0})>0);
+    (void)checkBoundary(lostAgain,true); // A later outage must not resurrect the founder.
+    for (auto* branch : {&state,&disconnected}) {
+        std::size_t receipts=0;
+        while(branch->turn<due) {
+            auto result=TurnProcessor{}.process_with_events(*branch,{});
+            receipts+=std::count_if(result.events.begin(),result.events.end(),
+                [](const auto& e){return e.kind==GameEventKind::ColonyFounded;});
+            *branch=std::move(result.state);
+        }
+        assert(receipts==1); (void)checkBoundary(*branch,true);
+        auto after=TurnProcessor{}.process_with_events(*branch,{});
+        assert(std::none_of(after.events.begin(),after.events.end(),
+            [](const auto& e){return e.kind==GameEventKind::ColonyFounded;}));
+    }
 }
 void resident_truth_and_pending_evidence_round_trip()
 {
@@ -592,11 +750,14 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "reconnect") { reconnected_founding_is_counted_once_before_the_original_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "asynchronous") { asynchronous_cargo_dates_survive_host_and_pbem(); history_date_bounds_and_genuine_v116_migration(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "freight") { unloading_history_waits_for_received_cargo(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "history") { history_and_pbem_wait_for_station_loss_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "first-snapshot") { destruction_before_first_snapshot_survives_reload(); return 0; }
     paid_start_and_replacement_survive_host_and_pbem();
+    paid_founding_orders_and_received_evidence_survive_reload();
+    reconnected_founding_is_counted_once_before_the_original_receipt();
     resident_truth_and_pending_evidence_round_trip();
     hidden_loss_is_frozen_in_export_and_delivered_loss_survives_reload();
     real_pbem_decoding_keeps_guards_and_shared_unloading();

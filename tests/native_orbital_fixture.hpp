@@ -50,6 +50,28 @@ inline GameState native_orbital_fixture()
     set_survey_level(state, 1, planet.star, SurveyLevel::DeepSurvey, state.turn);
     return state;
 }
+inline GameState native_orbital_founding_fixture()
+{
+    auto state = empty_native_orbital_start();
+    assert(initialize_native_orbital_start(state, 1, state.planets.front().id, native_orbital_start_budget()));
+    state.players.front().technology.researchActive = false;
+    state.planets.front().nativeOrbit.population -= 1000;
+    state.shipDesigns.push_back({90, 1, "Orbital Settler", ShipHullType::ColonyShip,
+        {ShipComponentType::QuickJump5, ShipComponentType::OrbitalConstructionModule}});
+    state.nextShipDesignId = 91;
+    state.stars[1].position = {25, 0};
+    Fleet fleet; fleet.id = state.nextFleetId++; fleet.owner = 1; fleet.design = 90;
+    fleet.name = "Orbital Settler"; fleet.ships = {{90, 1}}; fleet.position = state.stars[1].position;
+    fleet.warp = 5; fleet.colonists = 1000; fleet.minerals = {3, 2, 1};
+    fleet.fuel = fleet_fuel_capacity(state, fleet);
+    state.fleets.push_back(fleet);
+    state.fleets.back().telemetry = confirmed_fleet_telemetry(state, state.fleets.back());
+    state.players.front().surveyKnowledge.clear(); state.players.front().surveyedStars.clear();
+    set_survey_level(state, 1, state.planets[1].star, SurveyLevel::GeologicalSurvey, state.turn);
+    set_survey_level(state, 1, state.planets.front().star, SurveyLevel::DeepSurvey, state.turn);
+    state.players.front().history.clear(); record_empire_turn_statistics(state);
+    return state;
+}
 inline GameState native_orbital_miner_fixture()
 {
     auto state = native_orbital_fixture();

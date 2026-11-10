@@ -64,6 +64,13 @@ std::vector<ProductionTemplate> MainWindow::colonyTemplatesForOrders() const
     return planned.productionTemplates;
 }
 
+bool MainWindow::colonyPlanApplicableForOrders(const ProductionTemplate& plan) const
+{
+    const auto* player = find_player(state_, pendingOrders_.player);
+    return player && production_template_valid(plan)
+        && production_template_applicable(player->race.primaryTrait, plan);
+}
+
 void MainWindow::openColonyTemplates()
 {
     if (colonyTemplatesDialog_) {

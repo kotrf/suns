@@ -11,6 +11,17 @@ namespace suns {
 // Surface factories/population never contribute. Radiation/support comes next.
 [[nodiscard]] std::uint32_t native_orbital_output(const GameState&, const Planet&);
 
+// Added to the reference construction module price at ship manufacture.
+// The station/receiver are deployed once; finite seed stock is not salvage.
+struct NativeOrbitalFoundingKit {
+    std::uint32_t production{};
+    MineralCargo minerals;
+    MineralCargo supplies;
+};
+[[nodiscard]] NativeOrbitalFoundingKit native_orbital_founding_kit();
+[[nodiscard]] bool ship_design_can_found_native_orbit(const ShipDesign&);
+[[nodiscard]] bool fleet_can_found_native_orbit(const GameState&, const Fleet&);
+
 struct NativeOrbitalStartBudget {
     std::uint64_t population{kInitialHomePopulation};
     std::uint32_t production{};

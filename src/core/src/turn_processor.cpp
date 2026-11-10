@@ -752,10 +752,10 @@ Planet* friendly_colony_at_fleet(GameState& state, const Fleet& fleet)
 bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     const std::optional<ProductionTemplate>& colonyPlan)
 {
-    // Native founding needs a paid inhabited station; the surface operation is
-    // never a fallback while that later implementation is unavailable.
-    if (native_orbital_race(state, fleet.owner)) return false;
-    if (colonyPlan && !production_template_valid(*colonyPlan)) return false;
+    const bool native = native_orbital_race(state, fleet.owner);
+    const auto* player = find_player(state, fleet.owner);
+    if (colonyPlan && (!production_template_valid(*colonyPlan) || !player
+        || !production_template_applicable(player->race.primaryTrait, *colonyPlan))) return false;
     // A manual founding order cannot dismantle a fleet to evade an armed
     // hostile encounter already present at the planning boundary.
     if (std::any_of(state.fleets.begin(), state.fleets.end(), [&](const auto& other) {
@@ -771,12 +771,23 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     if (fleet.xenocrystal > kMaximumXenocrystal - planet.xenocrystal.surface) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
     if (hostile_station_blocks_landing(state, fleet, planet)) return false;
+    if (native && (planet.population || planet.habitat.population || planet.nativeOrbit.station
+        || planet.nativeOrbit.population || planet.engineering.kind != PlanetaryEngineeringKind::None
+        || find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state, planet.id)
+        || fleet.colonists > native_orbital_capacity(OrbitalStationHullType::OrbitalDock)
+        || !state.nextOrbitalStationId || state.nextOrbitalStationId == std::numeric_limits<OrbitalStationId>::max()
+        || find_orbital_station(state, state.nextOrbitalStationId))) return false;
 
     const auto stacks = fleet_ship_stacks(fleet);
     const auto colonizer = std::find_if(stacks.begin(), stacks.end(),
         [&](const FleetShipStack& stack) {
             const auto* design = find_ship_design(state, stack.design);
-            return design && ship_design_can_colonize(*design);
+            return design && (native ? ship_design_can_found_native_orbit(*design)
+                && ship_design_valid(*design) && ship_design_available_to_player(state, fleet.owner, *design)
+                : std::any_of(design->components.begin(), design->components.end(), [](auto component) {
+                    return component != ShipComponentType::OrbitalConstructionModule
+                        && component_spec(component).enablesColonization;
+                }));
         });
     if (colonizer == stacks.end()) return false;
     const auto colonizerDesign = colonizer->design;
@@ -785,19 +796,33 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     planet.owner = fleet.owner;
     planet.radar = PlanetaryRadarLevel::None;
     planet.homeworld = false;
-    planet.population = fleet.colonists;
+    if (native) {
+        const auto id = state.nextOrbitalStationId++;
+        state.orbitalStations.push_back({id, fleet.owner, planet.id, "Inhabited Orbital Dock",
+            OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}});
+        planet.population = 0; planet.industry = 0; planet.mines = 0;
+        planet.advancedFactories = 0; planet.advancedMines = 0;
+        planet.habitat = {};
+        planet.nativeOrbit = {id, fleet.colonists};
+        planet.radar = PlanetaryRadarLevel::Full;
+        const auto supplies = native_orbital_founding_kit().supplies;
+        planet.minerals.ironium += supplies.ironium;
+        planet.minerals.boranium += supplies.boranium;
+        planet.minerals.germanium += supplies.germanium;
+    } else planet.population = fleet.colonists;
     planet.minerals.ironium += fleet.minerals.ironium + salvage.ironium;
     planet.minerals.boranium += fleet.minerals.boranium + salvage.boranium;
     planet.minerals.germanium += fleet.minerals.germanium + salvage.germanium;
     (void)unload_science_samples(state, planet, fleet, state.turn + 1);
     (void)move_xenocrystals(fleet.xenocrystal, planet.xenocrystal.surface, fleet.xenocrystal);
-    // Settlers inherit the physical surviving installations and war damage.
+    // Ordinary settlers inherit surviving surface installations. Native
+    // deployment supplies its paid orbital assets; physical war damage remains.
     planet.productionQueue.clear();
-    // Founding does not imply a radar or an automatic build programme. Nearby
-    // colonies may be controlled through the existing homeworld radar field;
-    // remote colonies use only an explicitly assigned autonomous template.
+    // Ordinary founding supplies no radar. Native founding has its prepaid
+    // receiver; neither kind silently selects an autonomous build programme.
     if (colonyPlan) planet.productionQueue = colonyPlan->items;
     planet.productionWaitingForMinerals = false;
+    planet.productionWaitingForShipyard = false;
     const auto* foundedStar=find_star(state,planet.star);
     if(foundedStar) queue_survey_report(state,fleet.owner,planet.star,0,foundedStar->position,
         state.turn+1,SurveyLevel::GeologicalSurvey);
@@ -813,9 +838,18 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
             planet.id,
             fleet.id,
             colonizerDesign);
+        if (native && fleet.telemetry.observedTurn) {
+            const auto* empire = find_player(state, fleet.owner);
+            const auto due = empire->pendingPlayerReports.back().deliveryTurn;
+            if (due > state.turn + 1) {
+                auto contact = fleet;
+                contact.pendingCommands.clear();
+                state.pendingFleetLossContacts.push_back({std::move(contact), due});
+            }
+        }
 
         auto& artifacts = planet.precursorArtifacts;
-        if (artifacts.present && !artifacts.claimed) {
+        if (!native && artifacts.present && !artifacts.claimed) {
             artifacts.claimed = true;
             artifacts.discoveredBy = fleet.owner;
             const auto* player = find_player(state, fleet.owner);

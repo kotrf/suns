@@ -152,9 +152,12 @@ rows retire without spending. Loading preserves the primary trait, and Restart
 refuses an unavailable civilization instead of changing it to Generalist.
 An explicit New campaign with supported new empire settings remains available;
 failed creation/restart preserves the current save association and refusal status.
-Prototype output uses
-station residents and Energy; radiation, support, growth and paid founding remain
-unfinished, so setup is still gated. Save v118 also retains delivered station destruction before the first
+The Orbital Construction
+Module prepays a Dock/receiver and finite mineral stock; ordinary Colonize orders
+transfer transported residents into that housing and consume the fleet. Its paid
+deployment is excluded from salvage. Prototype output uses station residents and
+Energy; radiation, support and growth remain unfinished, so setup is still gated.
+Save v118 also retains delivered station destruction before the first
 received fit and mining manifests credited in their receipt year. It
 does not enable this reserved identity in campaign
 setup or portable race files; the complete start and Human/Computer expansion

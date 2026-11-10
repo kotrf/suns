@@ -1,5 +1,6 @@
 #include "suns/equipment.hpp"
 #include "suns/hulls.hpp"
+#include "suns/native_orbital.hpp"
 
 #include <algorithm>
 #include <sstream>
@@ -161,6 +162,10 @@ ShipComponentSpec equipment_component_spec(const EquipmentTechnology& entry)
     auto spec = entry.effects;
     spec.type = entry.component; spec.name = entry.name; spec.kind = entry.kind;
     spec.mass = entry.mass; spec.buildCost = entry.cost;
+    if (entry.component == ShipComponentType::OrbitalConstructionModule) {
+        spec.enablesColonization = true;
+        spec.buildCost += native_orbital_founding_kit().production;
+    }
     return spec;
 }
 
@@ -182,7 +187,9 @@ bool equipment_access_applicable(const GameState& state, PlayerId player, const 
         return access == HullAccess::InnerStrength || access == HullAccess::SpaceDemolition;
     case EquipmentAccess::ClaimAdjuster:
     case EquipmentAccess::InterstellarTraveler:
-    case EquipmentAccess::AlternateReality: return false; // These races do not exist yet.
+        return false; // These races do not exist yet.
+    case EquipmentAccess::AlternateReality:
+        return native_orbital_race(state, player);
     case EquipmentAccess::MysteryTrader:
         if (std::find(owner->acquiredEquipment.begin(), owner->acquiredEquipment.end(), entry.component) != owner->acquiredEquipment.end()) return true;
         return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const auto& design) {
@@ -205,7 +212,7 @@ std::string equipment_access_requirement(const EquipmentTechnology& entry)
     case EquipmentAccess::HyperExpansion: text = "Hyper Expansion"; break;
     case EquipmentAccess::InnerStrengthOrSpaceDemolition: text = "Inner Strength or Space Demolition"; break;
     case EquipmentAccess::ClaimAdjuster: text = "Claim Adjuster (not available yet)"; break;
-    case EquipmentAccess::AlternateReality: text = "Alternate Reality (not available yet)"; break;
+    case EquipmentAccess::AlternateReality: text = "Orbital Civilization"; break;
     case EquipmentAccess::InterstellarTraveler: text = "Interstellar Traveler (not available yet)"; break;
     case EquipmentAccess::MysteryTrader: text = "Mystery Trader acquisition"; break;
     }
@@ -281,7 +288,10 @@ std::string equipment_effect_description(const EquipmentTechnology& entry)
         out << "Active in automatic space combat. Different empires are hostile in the current rules.\n";
     if (entry.component == ShipComponentType::JumpGate) out << "Ship jump gates are not implemented yet.\n";
     if (entry.component == ShipComponentType::OrbitalAdjuster) out << "Orbital terraforming is not implemented yet.\n";
-    if (entry.component == ShipComponentType::OrbitalConstructionModule) out << "Alternate Reality colonization is not implemented yet.\n";
+    if (entry.component == ShipComponentType::OrbitalConstructionModule)
+        out << "Native orbital founding: dismantles the entire fleet, housing its transported residents in a 100,000-person Dock.\n"
+            << "Suns! assembly price includes Dock/services, full receiver and 10 kt each of I/B/G seed supplies.\n"
+            << "The deployed station/receiver and seed supplies are excluded from ship salvage.\n";
     if (entry.access == EquipmentAccess::MysteryTrader) out << "Requires acquisition; ordinary research alone never grants this item. Additional alien special effects are not implemented yet.\n";
     return out.str();
 }

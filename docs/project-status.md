@@ -1,5 +1,57 @@
 # Project status and development handoff
 
+## #286 early reconnect: publish the Dock and retire its founder together — 10 November 2026
+
+Review 5840625492 on `ea66870` confirmed all four preceding founding fixes and
+reported a P2. A normal founding voyage to 400 ly followed by a Relay Array move
+from 50 to 75 ly reproduced 26,000 residents in both exported/reloaded PBEM and
+History instead of the physical 25,000. Fresh station evidence arrived before the
+original ColonyFounded message while the consumed fleet still contributed cargo.
+
+Received native station evidence now durably retires only its specific source
+fleet, linked by the pending founding report's fleet/planet and observation date,
+at the same knowledge boundary. No physical station lookup removes an unreported
+source early. The message retains its original date and is delivered exactly once.
+Host/PBEM reload, a subsequent outage and an unrelated missing contact at the same
+site are covered; without reconnecting, the old fleet remains the sole received
+representation until the normal receipt. No new serialized fields or forecasts
+were introduced; save v118 / orders v49 / race v3 remain unchanged.
+
+The full GCC14.2/Qt6.12 Debug application build and **125/125 CTest in 124.38 s**
+passed, including the new end-to-end reconnect regression and all prior founding,
+template, orbital-base replacement and received-history tests. Diff and local
+documentation links checked. Previous `ea66870` CI 42720692614 succeeded; parent
+#285 `25a673d` / CI 42718317833 is unchanged and successful. Current #286 source/CI
+are in GitHub. Both PRs remain open for repeat review, with no thread resolution
+or PR merge performed. Main remains `0922375`, #50 stays open, native setup stays
+gated, and #53/#63 remain frozen.
+
+## Startup/founding review: occupancy, plans and honest waypoint authoring — 10 November 2026
+
+Parent #285 is `25a673d48237576b6bc807659c32c263bc8cda81`, tree
+`64d93f9688d5330e7dd666f9fc80096547f42deb`: local 124/124 in 125.38 s;
+source CI 42718317833 succeeded. Its occupied-orbit startup fix is merged into
+#286 alongside the four findings from reviews 5833865845/5834053316 on `edfe41c`.
+All five findings were reproduced against the affected source before fixes.
+
+Native founding rejects an existing deployed independent shipyard and a racially
+inapplicable carried plan before consuming the fleet, in both manual and terminal
+waypoint paths. Both UI plan pickers filter incompatible saved templates; legacy
+copies stay visible and disabled, preserving their intent until explicit replacement.
+Normal saved/deleted/renamed plan copies and ordinary surface founding remain covered.
+Appending Colonize uses received ownership, matching host/PBEM before and after a
+real 400 ly founding receipt. Scheduled over-capacity is a preview warning, allowing
+an earlier unloading stop; direct founding and actual arrival keep their strict limit.
+The Qt-authored route actually unloads 10,000 residents into available housing and
+founds the next Dock with 90,001. No future cargo simulation was introduced.
+
+The full merged GCC14.2/Qt6.12 Debug build and **125/125 CTest in 124.05 s** passed;
+focused founding core/Qt suites passed **2/2 in 0.95 s**. 138 local documentation
+links and diff checked. Current #286 source/CI are in GitHub. Both PRs remain open
+for repeat review; no PR merge or thread resolution is performed by this request.
+Main remains `0922375`, save v118 / orders v49 / race v3 and the native setup gate
+are unchanged. #50 stays open, #53/#63 stay frozen.
+
 ## #285 occupied-orbit startup review — 10 November 2026
 
 Review 5834064968 on `241881e` reported a P3: a neutral surface with another
@@ -18,6 +70,25 @@ Current publication/CI are in GitHub. No PR merge or thread resolution is
 performed for this request. Main remains `0922375`; save v118 / orders v49 /
 race v3 and minimal realtime estimates are unchanged. #50 stays open, native
 Human/Computer setup stays gated, and #53/#63 remain frozen.
+
+## Repeat startup review integrated into paid founding — 10 November 2026 (MSK)
+
+Published #285 is `241881e719fdbd79d45fb7022a4b33ce0692fc88`, tree
+`ce13323f5c59df0c453ce384c3d0fb96cb495863`; local 124/124 passed in
+129.08 s and source CI 42708044839 is running. A normal merge onto dependent
+#286's `1ac0aa1` carries both repeat-review fixes while preserving paid founding,
+received station/fleet evidence and all documentation history. Shared review
+implementations and regression files exactly match the tested parent.
+
+The complete merged GCC14.2/Qt6.12 Debug build and **125/125 CTest in 123.29 s**
+passed, including the actual New campaign/Restart menu and save association,
+cheap native queue skips with working reorder/cancel, four-turn paid replacement,
+paid orbital founding and delayed-receipt PBEM boundaries. 140 local documentation
+links and diff checked. Current #286 source/CI are in GitHub. Both PRs remain
+open for repeat review; no thread resolution or PR merge was requested.
+Save v118 / orders v49 / race v3 and minimal realtime estimates are unchanged.
+Main remains `0922375`, #50 stays open, native setup/import/restart remain gated,
+and #53/#63 remain frozen.
 
 ## #285 repeat review: explicit campaign intent and cheap queue skips — 10 November 2026 (MSK)
 
@@ -43,6 +114,25 @@ are successful. New publication/CI and propagation to dependent #286 are tracked
 in GitHub and subsequent checkpoints. Save v118 / orders v49 / race v3 remain
 unchanged. Neither PR nor review threads are closed by this request. #50 remains
 open, native Human/Computer setup is gated, and #53/#63 remain frozen.
+
+## Startup review fixes propagated into founding #286 — 9 November 2026
+
+#285 is updated to `9f32816447fdf77130d40f583e9980048b38be2a`, tested tree
+`15f7aacba9443af297fa3f842540add16daf2f40`. Its full GCC14.2/Qt6.12 Debug build
+and 124/124 CTest passed in 125.41 s; source CI 42676434534 was started.
+The same fixes are merged into dependent `codex/native-orbital-founding-50`
+on top of `f9c807a`. Documentation conflicts preserved both stages and history.
+Paid founding, its received contact boundary and ordinary-race behavior remain.
+
+The full merged application build and **125/125 CTest in 123.26 s** passed,
+including the actual Designer/Production review regressions, immediate live
+access rechecks, decoded PBEM, host load/restart and paid colony founding.
+466 local documentation links and diff checked. Save v118 / orders v49 / race v3
+are unchanged. Both PRs remain open for repeat review; no PR merge or review
+thread resolution is performed. Main `0922375` is unchanged. Current #286
+source/CI are in GitHub. #50 stays open and native setup stays gated; remaining
+work is radiation/protection, support/growth, paid advanced hulls and actual
+Computer startup → replacement → paid second-colony acceptance. #53/#63 stay frozen.
 
 ## #285 review fixes: project identity, viable startup, industry and restart — 9 November 2026
 
@@ -71,6 +161,43 @@ save v118 / orders v49 / race v3. These fixes also belong in dependent #286;
 current propagation/source/CI are in GitHub. No PR merge or thread resolution
 is performed for this review request. #50 stays open, native setup stays gated,
 and #53/#63 stay frozen.
+
+## Paid native orbital founding (#50), dependent on #285 — 9 November 2026
+
+User requested the next stage. Startup PR #285 remains open at `b530098`;
+its source CI 42631805031 succeeded and no review existed at the start of this
+stage. Main stays `0922375`. Work uses the existing checkout and branch
+`codex/native-orbital-founding-50`, based on #285; no startup merge was performed.
+
+The existing Orbital Construction Module now prepays a Dock with services,
+full receiver and 10/10/10 kt finite seed stock. The complete module costs
+60 work / 44/34/37 kt, and a Quick Jump 5 Colony Ship costs 83 / 57/34/53.
+Ordinary manual/terminal Colonize orders transfer actual transported residents
+into the paid Dock, dismantling the whole fleet. Native capacity, world, station,
+cargo and armed-encounter checks reject before consumption. Ordinary colonizers
+and shared unloading cannot create native housing. Extra kits and repeated
+consumed FleetIds cannot duplicate deployment stock or salvage paid assets.
+
+A real remote journey/export regression exposed physical station fallback before
+the founding report and disappearance of its residents from received totals.
+Native station lookup now requires a received fit; its received source-fleet
+contact lasts until the founding receipt. Existing v118 contact/survey records
+preserve this through host reload and PBEM. Orders v49 / race v3 stay unchanged.
+The Qt confirmation identifies station housing, seed supplies and adjusted
+salvage, without surface-Hab warnings or future-year simulation.
+
+Full GCC14.2/Qt6.12 Debug application build and **124/124 CTest in 125.30 s**
+passed; focused core/save/Qt tests passed **3/3 in 0.60 s**. Coverage includes
+paid manufacture/loading/flight/founding, two decoded PBEM order paths,
+overcapacity/conflicting assets, mixed kits, no free unload founding, received
+evidence before/after a remote founding receipt and ordinary-race regression.
+The dialog's final dark background is separately checked in the Qt capture.
+
+This prepared-host slice does not enable a campaign or satisfy Computer
+acceptance. Next: native radiation/protection, support/growth, paid advanced
+hull progression and actual Computer startup → replacement → paid second colony.
+#50 remains open; #53/#63 remain frozen. See
+[stage 4 costs and boundaries](asymmetric-empires.md); current PR/source/CI are in GitHub.
 
 ## Native startup and replacement economy (#50) — 9 November 2026
 

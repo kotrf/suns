@@ -276,6 +276,19 @@ bool complete_station_construction(GameState& s, const Planet& p, const StationC
 }
 const OrbitalStation* known_orbital_station(const GameState& s,PlayerId owner,PlanetId planet)
 {
+    if (native_orbital_race(s, owner)) {
+        // A paid remote founding can create physical housing before HQ learns
+        // ownership. An absent received fit must not fall back to that hull.
+        const auto* empire = find_player(s, owner);
+        const auto* world = find_planet(s, planet);
+        if (world) for (const auto& record : empire->surveyKnowledge)
+            if (record.star == world->star && record.observedOwner == owner
+                && record.planetSnapshot && record.planetSnapshot->habitat) {
+                const auto& observation = *record.planetSnapshot->habitat;
+                return observation.station ? &*observation.station : nullptr;
+            }
+        return nullptr;
+    }
     const PendingStationContact* earliest=nullptr;
     for(const auto& c:s.pendingStationContacts) if(c.lastContact.owner==owner && c.lastContact.planet==planet && c.deliveryTurn>s.turn)
         if(!earliest || c.observedTurn<earliest->observedTurn) earliest=&c;
