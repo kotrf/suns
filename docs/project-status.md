@@ -1,5 +1,31 @@
 # Project status and development handoff
 
+## #286 early reconnect: publish the Dock and retire its founder together — 10 November 2026
+
+Review 5840625492 on `ea66870` confirmed all four preceding founding fixes and
+reported a P2. A normal founding voyage to 400 ly followed by a Relay Array move
+from 50 to 75 ly reproduced 26,000 residents in both exported/reloaded PBEM and
+History instead of the physical 25,000. Fresh station evidence arrived before the
+original ColonyFounded message while the consumed fleet still contributed cargo.
+
+Received native station evidence now durably retires only its specific source
+fleet, linked by the pending founding report's fleet/planet and observation date,
+at the same knowledge boundary. No physical station lookup removes an unreported
+source early. The message retains its original date and is delivered exactly once.
+Host/PBEM reload, a subsequent outage and an unrelated missing contact at the same
+site are covered; without reconnecting, the old fleet remains the sole received
+representation until the normal receipt. No new serialized fields or forecasts
+were introduced; save v118 / orders v49 / race v3 remain unchanged.
+
+The full GCC14.2/Qt6.12 Debug application build and **125/125 CTest in 124.38 s**
+passed, including the new end-to-end reconnect regression and all prior founding,
+template, orbital-base replacement and received-history tests. Diff and local
+documentation links checked. Previous `ea66870` CI 42720692614 succeeded; parent
+#285 `25a673d` / CI 42718317833 is unchanged and successful. Current #286 source/CI
+are in GitHub. Both PRs remain open for repeat review, with no thread resolution
+or PR merge performed. Main remains `0922375`, #50 stays open, native setup stays
+gated, and #53/#63 remain frozen.
+
 ## Startup/founding review: occupancy, plans and honest waypoint authoring — 10 November 2026
 
 Parent #285 is `25a673d48237576b6bc807659c32c263bc8cda81`, tree

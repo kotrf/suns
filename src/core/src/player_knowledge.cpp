@@ -563,15 +563,24 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
                 && updated->planetSnapshot && updated->planetSnapshot->habitat) {
                 const auto& habitat = *updated->planetSnapshot->habitat;
                 if (habitat.station && habitat.station->owner == player.id) {
-                    // A newer received station proves replacement of the old
-                    // anchored base in this planet's single orbital slot.
-                    // Retire the contact durably, even if the station is later
-                    // lost. The recovery/cargo report keeps its own delivery date.
+                    // A received station can prove a conversion before its
+                    // original operational report arrives. Retire only that
+                    // source durably; later outages must not resurrect it.
+                    // Recovery/founding messages keep their own delivery dates.
                     std::erase_if(state.pendingFleetLossContacts, [&](const auto& loss) {
+                        if (loss.lastContact.owner != player.id) return false;
                         const auto& known = loss.lastContact.telemetry;
-                        return loss.lastContact.owner == player.id && known.outpost == OutpostKind::OrbitalShipyard
+                        if (known.outpost == OutpostKind::OrbitalShipyard
                             && known.orbitalBase.planet == habitat.station->planet
-                            && habitat.stationEvidenceTime / 3 > known.observedTurn;
+                            && habitat.stationEvidenceTime / 3 > known.observedTurn) return true;
+                        if (habitat.nativeOrbit.station != habitat.station->id) return false;
+                        return std::any_of(player.pendingPlayerReports.begin(),player.pendingPlayerReports.end(),
+                            [&](const auto& founding) {
+                                return founding.kind == PlayerReportKind::ColonyFounded
+                                    && founding.fleet == loss.lastContact.id
+                                    && founding.planet == habitat.station->planet
+                                    && founding.observedTurn <= habitat.stationEvidenceTime / 3;
+                            });
                     });
                 }
             }

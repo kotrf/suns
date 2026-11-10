@@ -251,11 +251,16 @@ credit a second kit. The confirmation shows station residents, housing, paid
 assets, seed stock and the adjusted salvage; it does not warn about surface Hab.
 
 The new colony supplies its dated survey/founding reports through normal
-communications. Before receipt, native station lookup cannot fall back to the
-new physical hull. A received source-fleet contact remains until the founding
-receipt retires it, preserving old cargo/population instead of revealing the
-physical dismantling early. Both the pending contact and colony snapshots use
-existing save v118 records; orders v49 and race v3 remain unchanged. Host reload,
+communications. Before received station evidence, native station lookup cannot
+fall back to the new physical hull. The old fleet remains the sole received
+representation of its cargo/population until founding evidence arrives. If a
+restored mesh delivers the new native station snapshot before ColonyFounded,
+that same knowledge boundary durably retires the specific source fleet linked
+by the pending founding report and its observation date. Unrelated missing
+contacts at the same site remain. The operational message keeps its original
+delivery date, and a later outage cannot resurrect the consumed source. Both
+the pending contact and colony snapshots use existing save v118 records;
+orders v49 and race v3 remain unchanged. Host reload,
 real decoded manual/waypoint PBEM orders and export before/after receipt exercise
 this boundary. No annual simulation is added to authoring or confirmation.
 
