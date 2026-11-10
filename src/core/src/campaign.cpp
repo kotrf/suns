@@ -602,9 +602,14 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 known.engineering.invested={snapshot.engineering.work*0.1,snapshot.engineering.work*0.05,snapshot.engineering.work*0.1};
                 if(snapshot.environment) known.environment=*snapshot.environment;
                 known.naturalEnvironment=snapshot.naturalEnvironment;
-                known.observedHabitability.reset();
-                known.observedHabitability=player_planet_habitability(state,playerId,known,state.turn);
-                known.habitability=*known.observedHabitability;
+                // Native safety was already calculated from the received fit.
+                // Stations/native residents have not been restored in this view
+                // yet, so a native recalculation here would assume a bare Dock.
+                if (!native_orbital_race(host, playerId)) {
+                    known.observedHabitability.reset();
+                    known.observedHabitability=player_planet_habitability(state,playerId,known,state.turn);
+                    known.habitability=*known.observedHabitability;
+                }
                 if(snapshot.engineeringQueueIndex) {
                     const auto priorLab=snapshot.resonanceQueueIndex && *snapshot.resonanceQueueIndex<*snapshot.engineeringQueueIndex;
                     const auto index=std::min<std::size_t>(*snapshot.engineeringQueueIndex-std::uint32_t(priorLab),known.productionQueue.size());

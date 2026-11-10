@@ -111,6 +111,7 @@ void native_industry_is_unavailable_in_the_actual_production_panel()
         const auto kind = ProductionKind(kinds->itemData(i).toInt());
         if (kind == ProductionKind::Factory || kind == ProductionKind::Mine
             || kind == ProductionKind::AdvancedFactory || kind == ProductionKind::AdvancedMine
+            || kind == ProductionKind::Terraforming
             || industry_upgrade_kind(kind) || reconstruction_kind(kind))
             assert(!(kinds->model()->flags(kinds->model()->index(i,0)) & Qt::ItemIsEnabled));
     }

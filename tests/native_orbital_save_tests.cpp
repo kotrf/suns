@@ -4,6 +4,8 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/combat.hpp"
 #include "suns/stations.hpp"
+#include "suns/production.hpp"
+#include "suns/terraforming.hpp"
 #include <QFile>
 #include <QTemporaryDir>
 #include <algorithm>
@@ -22,6 +24,104 @@ SaveGameData envelope(GameState state)
     SaveGameData save; save.state = std::move(state); save.campaignId = 115; save.turnToken = 17;
     save.pendingOrders = {1, {}};
     return save;
+}
+void native_terraforming_cannot_delay_a_lifesaving_refit()
+{
+    QString error; SaveGameData legacy;
+    assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-orbital-v118-radiation.suns"), legacy, error));
+    auto state = legacy.state;
+    auto& player = state.players.front();
+    auto& levels = player.technology.levels;
+    levels[std::size_t(ResearchField::Energy)] = 2;
+    levels[std::size_t(ResearchField::Biology)] = 1;
+    levels[std::size_t(ResearchField::Propulsion)] = 1;
+    levels[std::size_t(ResearchField::Weapons)] = 1;
+    player.technology.researchActive = false;
+    auto& colony = state.planets.front();
+    colony.environment = {50, 50, 25}; colony.naturalEnvironment = colony.environment;
+    const auto id = colony.id;
+    assert(colony_output(state, colony) == 86);
+    assert(race_habitability(player.race, colony.environment, 1) == 96);
+    assert(next_terraforming_environment(state, 1, colony));
+    assert(player_planet_habitability(state, 1, colony, state.turn) == -25);
+    const StationConstruction fit{{OrbitalStationHullType::OrbitalDock,
+        {ShipComponentType::BulkRadiationScreen}, true, true}, state.orbitalStations.front().id};
+    const auto control = TurnProcessor{}.process(state, {{1, {QueueStationOrder{id, fit}}}});
+    assert(control.planets.front().productionQueue.empty());
+    assert(control.planets.front().nativeOrbit.population == 25'000);
+    assert(station_radiation_screen(control.orbitalStations.front()) == 20);
+    QTemporaryDir directory; const auto path = directory.filePath("terraform.sunsorders");
+    TurnOrderFileData packet{118, state.turn, 17, {1, {
+        QueueProductionOrder{id, ProductionKind::Terraforming},
+        QueueProductionBatchOrder{id, ProductionKind::Terraforming, 100, ProductionAutomation::MinTerraform},
+        QueueProductionBatchOrder{id, ProductionKind::Terraforming, 100, ProductionAutomation::MaxTerraform},
+        QueueStationOrder{id, fit}}}, {"Terraform", "Min Terraform", "Max Terraform", "Refit"}};
+    assert(write_turn_order_file(path, packet, error)); TurnOrderFileData decoded;
+    assert(read_turn_order_file(path, decoded, error));
+    const auto submitted = TurnProcessor{}.process(state, {decoded.orders});
+    if (submitted.planets.front().nativeOrbit.population != 25'000)
+        std::fprintf(stderr, "Native Terraform regression: %llu residents, screen %u\n",
+            static_cast<unsigned long long>(submitted.planets.front().nativeOrbit.population),
+            unsigned(station_radiation_screen(submitted.orbitalStations.front())));
+    assert(submitted.planets.front().nativeOrbit.population == 25'000);
+    assert(station_radiation_screen(submitted.orbitalStations.front()) == 20);
+    const auto planned = planned_production_state(state, decoded.orders);
+    assert(planned.planets.front().productionQueue.size() == 1);
+    for (const auto automation : {ProductionAutomation::None, ProductionAutomation::MinTerraform, ProductionAutomation::MaxTerraform}) {
+        auto stale = state;
+        stale.planets.front().productionQueue = {
+            {ProductionKind::Terraforming, 0}, {ProductionKind::Terraforming, 1, 0, ProductionAutomation::None, 1, true},
+            {ProductionKind::Terraforming, kTerraformingCost, 0, automation, 100}};
+        const auto resumed = TurnProcessor{}.process(stale, {{1, {QueueStationOrder{id, fit}}}});
+        assert(resumed.planets.front().productionQueue.empty());
+        assert(resumed.planets.front().nativeOrbit.population == 25'000);
+        assert(station_radiation_screen(resumed.orbitalStations.front()) == 20);
+        assert(resumed.planets.front().environment.temperature == colony.environment.temperature);
+        assert(resumed.planets.front().environment.gravity == colony.environment.gravity);
+        assert(resumed.planets.front().environment.radiation == colony.environment.radiation);
+        assert(same_minerals(resumed.planets.front().minerals, control.planets.front().minerals));
+    }
+    ProductionTemplate program{"Surface", {{ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 100}}};
+    player.productionTemplates = {program};
+    assert(production_template_valid(program));
+    assert(!apply_production_template(colony, player, program.name));
+    player.productionTemplates.front().defaultForNewColonies = true;
+    apply_default_production_template(state, colony);
+    assert(colony.productionQueue.empty());
+    auto ordinary = state;
+    ordinary.players.front().race.primaryTrait = PrimaryRaceTrait::Generalist;
+    ordinary.planets.front().population = 86'000;
+    assert(apply_production_template(ordinary.planets.front(), ordinary.players.front(), program.name));
+    const auto surface = TurnProcessor{}.process(ordinary, {{1, {QueueProductionOrder{id, ProductionKind::Mine}}}});
+    assert(surface.planets.front().environment.temperature == colony.environment.temperature);
+    assert(surface.planets.front().environment.radiation == colony.environment.radiation);
+    assert(surface.planets.front().mines == colony.mines + 1); // Ordinary Min Terraform still stops at a habitable surface.
+}
+void native_pbem_keeps_the_received_station_safety_fields()
+{
+    auto state = test::empty_native_orbital_start();
+    assert(initialize_native_orbital_start(state, 1, state.planets.front().id, native_orbital_start_budget()));
+    QTemporaryDir directory; const auto path = directory.filePath("received-safety.suns");
+    QString error; SaveGameData loaded;
+    const auto check = [&](const GameState& physical, int expected) {
+        const auto verify = [&](const GameState& received) {
+            const auto& colony = received.planets.front();
+            assert(known_planet_habitability(received, 1, colony.id) == expected);
+            assert(colony.observedHabitability == expected && colony.habitability == expected);
+        };
+        verify(make_player_view(physical, 1).state);
+        auto host = envelope(physical); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        assert(write_save_game_file(path, make_player_turn(host, 1), error) && read_save_game_file(path, loaded, error));
+        verify(loaded.state);
+        verify(make_player_view(loaded.state, 1).state);
+    };
+    check(state, 100);
+    state.orbitalStations.front().components.clear();
+    assert(native_orbital_radiation_status(state, state.planets.front())->annualLoss == 250);
+    check(state, 100); // A hidden loss of protection must not rewrite the received fields.
+    ++state.turn;
+    set_survey_level(state, 1, state.planets.front().star, SurveyLevel::DeepSurvey, state.turn);
+    check(state, -25);
 }
 void genuine_v118_and_radiation_round_trip()
 {
@@ -824,6 +924,10 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-terraform") { native_terraforming_cannot_delay_a_lifesaving_refit(); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-safety") { native_pbem_keeps_the_received_station_safety_fields(); return 0; }
+    native_terraforming_cannot_delay_a_lifesaving_refit();
+    native_pbem_keeps_the_received_station_safety_fields();
     genuine_v118_and_radiation_round_trip();
     delayed_radiation_receipts_preserve_observation_and_received_fit();
     if (argc == 2 && QString::fromLatin1(argv[1]) == "reconnect") { reconnected_founding_is_counted_once_before_the_original_receipt(); return 0; }

@@ -70,6 +70,7 @@ bool production_kind_applicable(PrimaryRaceTrait trait, ProductionKind kind)
     if (trait != PrimaryRaceTrait::HabitatCivilization) return true;
     return kind != ProductionKind::Factory && kind != ProductionKind::Mine
         && kind != ProductionKind::AdvancedFactory && kind != ProductionKind::AdvancedMine
+        && kind != ProductionKind::Terraforming
         && !industry_upgrade_kind(kind) && !reconstruction_kind(kind);
 }
 bool production_template_applicable(PrimaryRaceTrait trait, const ProductionTemplate& value)
