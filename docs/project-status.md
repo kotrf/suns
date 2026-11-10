@@ -1,5 +1,42 @@
 # Project status and development handoff
 
+## #50: native orbital radiation and paid screens — 10 November 2026
+
+The previous paid startup/founding PRs #285/#286 are merged into main
+`24994bc577905a6f74c77ea031dc353f109036a4`. Its tree
+`cdbf826a12a0a1cb68d454fbc9377d23c1db1258` is the exact reviewed #286 source;
+all 12 confirmed-fixed review threads were resolved at the user-authorized
+merge. Source CI 42718317833 / 42823081547 and main CI 42827649171 succeeded.
+The existing repository/work directory was retained.
+
+Branch `codex/native-orbital-radiation-50` implements the next
+[stage](asymmetric-empires.md#implementation-stage-5-radiation-and-paid-station-protection).
+Stellar background minus one paid 20/40/60 screen determines exposure; the race's
+maximum radiation value is the dose tolerance. Whole-person annual losses use
+the existing independent-orbit formula, after actual cargo/combat/completed fits.
+Surface T/G/radiation, magnetospheres and luminosity do not alter native dose.
+Empty live stations survive; combat destruction still kills remaining residents.
+Bulk has native early access without research grants; stronger screens keep
+normal gates. The protected default capital pays 243 work / I112 B19 G36,
+leaving 100/100/100 stock and 25,000 residents. Existing founding kits keep their
+unshielded assets and old 60-work module / 83-work ship cost: no unpaid protection
+is added to older fleets. Quiet-star founding or paid station refitting is required.
+
+Received-only system/station/designer/founding displays show dose, protection and
+cheap current-condition casualties. A queued refit is not operational protection.
+Save v119 appends radiation-loss kinds using the existing 64-bit loss payload and
+delayed colony channel; orders v49 and race v3 stay unchanged. A genuine v118
+file was generated with the unchanged main writer before the format change;
+old unprotected residents take their first new dose without gifted screens.
+The complete GCC14.2/Qt6.12 Debug build and **126/126 CTest in 79.00 s**
+passed, including real paid founding/refit, old-file migration, host/PBEM delayed
+receipts and actual Qt station dialogs. Captured station/preview screenshots,
+local documentation links and diff were checked.
+The new slice is for review; it is not merged or a playable native campaign.
+Next remain support/growth, paid advanced hull progression and actual
+Human/Computer campaign startup → replacement → paid second-colony acceptance.
+#50 stays open, native setup/import/restart are gated, #53/#63 frozen.
+
 ## #286 early reconnect: publish the Dock and retire its founder together — 10 November 2026
 
 Review 5840625492 on `ea66870` confirmed all four preceding founding fixes and

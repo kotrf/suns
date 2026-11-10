@@ -51,7 +51,7 @@ this does **not** satisfy the later new-campaign/Computer acceptance below.
 
 Campaign setup and race files still reject this identity for both controllers.
 Stages 3–4 below supply paid startup, replacement manufacture and orbital founding.
-Next stages must deliver native growth/radiation and support,
+Next stages must deliver native growth and support,
 advanced hull progression and actual Computer startup/expansion.
 The full first-playable acceptance remains the gate for enabling the trait.
 
@@ -94,7 +94,7 @@ written with the merged #283 writer before this format change, verifies migratio
 and continued received accounting. Constructed core/UI/host/PBEM fixtures do not
 replace the full paid new-campaign/Computer acceptance below.
 
-## Implementation stage 3: paid startup and replacement manufacture (PR #285)
+## Implementation stage 3: paid startup and replacement manufacture (merged #285)
 
 `initialize_native_orbital_start` constructs an empty native empire's capital on
 the authoritative first-turn host state. It takes an explicit endowment and
@@ -108,7 +108,7 @@ shipyards stored as fleets. A neutral surface does not make an occupied orbit
 available; startup rejects before changing either installation, stocks or IDs.
 
 The prototype grant covers 25,000 real residents in an Orbital Dock (100,000
-capacity), Shipyard and Refueling Depot services, a full planetary receiver and
+capacity), a basic radiation screen, Shipyard and Refueling Depot services, a full planetary receiver and
 one working MiniMiner with Quick Jump 5 and one Robo-Mini-Miner. Its 210 mg tank
 starts full, and its reported task is Remote Mining at the capital. Surface
 population/factories/mines and ordinary habitats start empty. Its initial home
@@ -124,12 +124,13 @@ cannot recover through either manufacture or research.
 | Asset | Work | Ironium / Boranium / Germanium (kt) |
 | --- | --- | --- |
 | Orbital Dock, including its two standard services | 24 | 12 / 6 / 8 |
+| Bulk Radiation Screen (stage 5) | 50 | 40 / 10 / 10 |
 | Full planetary receiver | 16 | 2 / 3 / 4 |
 | MiniMiner hull + Quick Jump 5 + Robo-Mini-Miner | 153 | 58 / 0 / 14 |
-| Total initial asset bill | 193 | 72 / 9 / 26 |
+| Total initial asset bill | 243 | 112 / 19 / 36 |
 | Liquid stock after paying the bill | — | 100 / 100 / 100 |
 
-The default mineral endowment is therefore 172 / 109 / 126 kt, with 193 work
+The default mineral endowment is therefore 212 / 119 / 136 kt, with 243 work
 reserved for initial assets. Costs are calculated from the ordinary station,
 radar and ship price functions; the receipt records what was consumed. Setup
 work is an initial construction allowance, not a recurring income or a stored
@@ -142,13 +143,13 @@ Native residents produce `floor(sqrt(min(residents, hull capacity) *
 residents this gives 50 at Energy 0 and 100 at Energy 3. The `+1` prevents an
 Energy-zero research/manufacturing deadlock. Only residents linked to an owned,
 surviving station contribute; surface assets do not. Temperature and gravity do
-not change this output. Radiation, protection, growth and support are still
-pending and this formula is a reviewable prototype, not the completed native
-environmental economy. Native population does not grow in this stage.
+not change this output. Stage 5 applies annual radiation casualties to real
+residents, reducing the following year's output. Growth and support are still
+pending; this formula remains a prototype. Native population does not grow yet.
 
 The existing generalist start still yields 29 resources (25 population + four
-operating factories). Native early access grants only MiniMiner and
-Robo-Mini-Miner through shared availability checks; Quick Jump 5 is already
+operating factories). Native early access grants MiniMiner,
+Robo-Mini-Miner and the stage-5 Bulk Radiation Screen through shared availability checks; Quick Jump 5 is already
 legal at level zero. No Construction/Electronics level, Advanced Remote Mining
 flag, advanced miner or unrelated hull is granted. Conflicting Basic Remote
 Mining, a radiation-immune profile and a profile without environment rules reject
@@ -188,14 +189,15 @@ received-state output after an unseen station loss. Formats stay v118/v49/v3;
 no new serialized startup allowance is introduced. These prepared-host fixtures
 do not substitute for the actual Human/Computer campaign acceptance below.
 
-## Implementation stage 4: paid orbital founding
+## Implementation stage 4: paid orbital founding (merged #286)
 
 The existing `OrbitalConstructionModule` now provides native orbital founding
 through ordinary `ColonizePlanetOrder` and the terminal Colonize waypoint. Only
 `HabitatCivilization` gains its racial access; an ordinary Colonization Module
 still cannot create a native colony, and other empires cannot use the orbital
-module to bypass their surface rules. The startup PR #285 remains separately
-reviewable; this stage is developed on top of it without merging it first.
+module to bypass their surface rules. Both startup #285 and founding #286 are
+merged in main `24994bc`; their exact reviewed source tree is retained. Founding kits keep their existing unshielded assets and prices; station
+protection is installed through a separate paid refit.
 
 The reference module retains its catalog base of 20 work, I/B/G 20/15/15 and
 50 kt. Suns! adds a prepaid deployment bill at manufacture:
@@ -213,7 +215,7 @@ Prices derive from the ordinary station/receiver functions and are charged by
 normal ship production. A new kit-bearing Colony Ship takes two years at the
 50-resource capital. The initial stock is real finite I/B/G, carried inside the
 prepaid kit rather than generated each year. Native life-support consumption,
-reserve policy, radiation and growth are still the next stage; these supplies
+reserve policy and growth are still future work; these supplies
 must not be described as unlimited protection or a completed support system.
 
 Founding consumes the entire fleet, transfers exactly its transported residents
@@ -265,9 +267,92 @@ real decoded manual/waypoint PBEM orders and export before/after receipt exercis
 this boundary. No annual simulation is added to authoring or confirmation.
 
 This remains a prepared-host founding slice. Campaign setup/import/restart stay
-closed to Human and Computer pending native radiation/protection, support/growth,
+closed to Human and Computer pending native support/growth,
 paid advanced hull progression and actual Computer startup → replacement → paid
 second-colony acceptance. A test driving ordinary orders is not that AI acceptance.
+
+## Implementation stage 5: radiation and paid station protection
+
+Native residents now receive one annual stellar dose after cargo, combat and
+completed station projects, before the final colony snapshot is published. The
+existing independent-orbit model supplies the prototype balance: Blue-white /
+White / Yellow-white / Yellow / Orange / Red stars have background radiation
+90 / 75 / 60 / 45 / 30 / 20. Surface temperature, gravity, surface radiation,
+magnetospheres, Biology adaptation and stellar luminosity cycles do not change
+orbital exposure. This is a maximum tolerated dose model, not the surface comfort
+range: the race's radiation **maximum** is its orbital tolerance; its minimum
+is not a requirement to irradiate residents.
+
+`exposure = max(0, background - screen protection)`
+
+`annual losses = ceil(residents * min(max(exposure - tolerance, 0), 100) / 500)`
+
+Losses are whole people, at most 20% per year, with overflow-safe integer
+arithmetic. Safe doses cause no radiation casualties. The UI safety score is
+100 for a safe dose, otherwise `-min(100, 5 * excess)`; the explicit dose and
+resident loss estimate accompany it. There is no separate radiation output
+penalty or native growth/support system in this slice: fewer actual residents
+reduce next year's existing output. An emptied surviving station keeps its hull
+and ownership; actual combat destruction retains the catastrophic-loss rule.
+
+Stations of this civilization may fit **one** existing screen in a defense slot:
+Bulk / Composite / Advanced give 20 / 40 / 60 protection. Screens do not stack;
+armor/shields compete for the remaining defense slots. Bulk has narrow native
+early access without research levels. Composite still requires Construction 18
+and Biology 10; Advanced requires Energy 16, Construction 22 and Biology 14.
+Their catalog work/mineral prices are unchanged. Ordinary stations do not acquire
+screen slots/access; independent habitats and fleet-based shipyards retain their
+own rules and fitted protection.
+
+The default paid startup includes Bulk (50 work, I/B/G 40/10/10). Yellow
+background 45 becomes dose 25, safe for the default radiation maximum 40. The
+updated stage-3 table includes this real screen bill. An explicitly unshielded
+custom starter pays only for installed assets and must actually be safe at its
+normalized Yellow capital; unsafe or unaffordable starts reject atomically,
+without changing the race or granting hardware. Advanced starter screens require
+their normal tech. Population, starting stock and miner/replacement costs remain
+unchanged by this protection purchase.
+
+Existing Orbital Construction kits retain their unshielded Dock and their old
+60 work / I44 B34 G37 module price (83 / I57 B34 G53 for a Quick Jump 5 Colony
+Ship). No serialized payment marker distinguishes old and new kit manufacture,
+so adding a screen to deployment would grant unpaid hardware to legacy fleets.
+Founding therefore installs no screen. Choose a quiet star or fund a subsequent
+station refit; unsafe founding can lose residents in its first year, and the
+confirmation previews that dose. Candidate suitability uses this actual bare
+founding fit, while an owned capital uses its received fitted screen. Kit salvage
+and finite seed stocks keep their existing rules and values.
+
+A refit pays the full resulting fit (a Bulk-fitted Dock is 74 work and I/B/G
+52/16/18). The old fit continues operating until completion. Completion preserves
+station identity/residents and supplies the new protection before that year's
+dose; an unfinished or mineral-blocked refit does not. Actual evacuation before
+the dose reduces the exposed resident base. There is no free screen retrofit for
+old saves or existing founding kits.
+
+`NativeOrbitalRadiationLoss` uses the existing delayed colony report channel,
+64-bit resident-loss payload and observation/receipt dates. Physical changes
+stay hidden until their normal colony snapshots/reports arrive, including host
+reload and PBEM export. Received suitability uses the received own station fit;
+settlement candidates use the paid founding kit. Station Details, System Details,
+the station designer and founding confirmation show received exposure/protection
+and a scalar current-condition casualty estimate. They never advance a future
+year; pending refits are previews, not installed protection. Surface Hab and
+terraforming are not advertised as native orbital protection.
+
+Save **v119** appends the report/event kinds without new serialized fields;
+orders v49 and race v3 remain unchanged. The genuine
+`tests/fixtures/native-orbital-v118-radiation.suns` was produced by the unmodified
+v118 writer at main `24994bc` before this change. It loads as an unprotected Dock
+with 25,000 residents, loses 250 on the next Yellow year, and survives a real paid
+refit/order-file round trip without gifting hardware. Its source generator is
+kept beside the fixture and must be rebuilt against that old revision.
+
+Prepared-host, arithmetic, real queue/refit, old-file, delayed report and Qt
+received-fit regressions cover this stage. Human/Computer campaign creation,
+import and restart remain gated. Next: life support and native growth, paid
+advanced hull progression, then actual Human/Computer startup → replacement →
+second-colony acceptance and comparative balance. #50 stays open; #53/#63 frozen.
 
 ## Direction supplied by the user
 
@@ -351,7 +436,7 @@ Race design/import must handle conflicting mining restrictions explicitly.
 The native population's suitability/growth and supported output must be
 independent of surface temperature and gravity. Radiation remains relevant.
 The existing independent-orbit model uses stellar orbital exposure and paid
-radiation screens; reusing it is the proposed implementation baseline. Display
+radiation screens; stage 5 reuses this baseline. Display
 orbital exposure separately from surface radiation and never imply that a surface
 magnetosphere shields the entire orbital station.
 
@@ -514,7 +599,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v118 / orders v49 / portable race v3. The native
+Current game formats are save v119 / orders v49 / portable race v3. The native
 population/mining foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

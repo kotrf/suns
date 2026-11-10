@@ -224,6 +224,10 @@ QString event_subject(const GameState& state, const GameEvent& event)
             .arg(planetName).arg(event.deliveredMinerals.ironium, 0, 'f', 2)
             .arg(event.deliveredMinerals.boranium, 0, 'f', 2).arg(event.deliveredMinerals.germanium, 0, 'f', 2);
         break;
+    case GameEventKind::NativeOrbitalRadiationLoss:
+        subject = QString("%1: orbital radiation, %2 residents lost")
+            .arg(planetName).arg(qulonglong(event.deliveredColonists));
+        break;
     case GameEventKind::EnemyFleetDetected:
         subject = event.contact?QString("%1 contact %2 detected").arg(contact_quality_name(event.contact->quality)).arg(event.fleet)
             : QString("Enemy fleet %1 detected").arg(event.fleet);
@@ -476,7 +480,12 @@ QString event_text(const GameState& state, const GameEvent& event)
         : QString("Fleet %1").arg(event.fleet);
 
     QString text;
-    if (event.kind == GameEventKind::RemoteMiningOutput) {
+    if (event.kind == GameEventKind::NativeOrbitalRadiationLoss) {
+        text = event_subject(state, event) + QString("\nObserved turn %1; received turn %2.\n"
+            "These residents were lost aboard the inhabited station. Refit a stronger radiation screen or evacuate. "
+            "Protection changes only when the paid refit completes.")
+            .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn));
+    } else if (event.kind == GameEventKind::RemoteMiningOutput) {
         text = event_subject(state, event) + QString("\nObserved turn %1; received turn %2.\n"
             "Ore was added to the world's mineral stockpile, not the miner's hold. History records this report in its receiving year.")
             .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn));

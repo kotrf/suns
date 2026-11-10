@@ -28,6 +28,7 @@ inline GameState native_orbital_fixture()
 {
     auto state = make_demo_game();
     state.wormholeRules.spawnChancePerTurn = 0;
+    state.stars.front().stellarClass = StarClass::Orange; // Safe legacy, unshielded station.
     auto& player = state.players.front();
     player.race.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
     player.technology.researchActive = false;
@@ -60,6 +61,7 @@ inline GameState native_orbital_founding_fixture()
         {ShipComponentType::QuickJump5, ShipComponentType::OrbitalConstructionModule}});
     state.nextShipDesignId = 91;
     state.stars[1].position = {25, 0};
+    state.stars[1].stellarClass = StarClass::Orange; // Safe orbit for the existing unshielded founding kit.
     Fleet fleet; fleet.id = state.nextFleetId++; fleet.owner = 1; fleet.design = 90;
     fleet.name = "Orbital Settler"; fleet.ships = {{90, 1}}; fleet.position = state.stars[1].position;
     fleet.warp = 5; fleet.colonists = 1000; fleet.minerals = {3, 2, 1};
@@ -105,6 +107,7 @@ inline GameState asynchronous_native_unload_fixture()
     state.orbitalStations.push_back(station);
     state.planets[1] = remote;
     state.stars[1].position = {170, 0};
+    state.stars[1].stellarClass = StarClass::Orange; // Unshielded received-station fixture.
     auto& fleet = state.fleets.front();
     fleet.position = state.stars[1].position; fleet.destination = fleet.position; fleet.warp = 5;
     fleet.arrivalAction = {FleetArrivalActionKind::UnloadAll, 0, FleetCargoKind::All};

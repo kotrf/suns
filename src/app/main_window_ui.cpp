@@ -2,6 +2,7 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/campaign.hpp"
+#include "suns/native_orbital.hpp"
 #include "galaxy_setup_widget.hpp"
 #include "map_marker_items.hpp"
 #include "toolbar_icons.hpp"
@@ -849,7 +850,13 @@ void MainWindow::installUiPolish()
                 race.habitableRadiation,
                 "Radiation (higher is more severe)");
             if (auto* label = findChild<QLabel*>("planetTerraformingPotential")) {
-                if (player && player->race.environmentBased) {
+                if (native_orbital_race(environmentState, pendingOrders_.player)) {
+                    const auto safety = known_planet_habitability(environmentState, pendingOrders_.player, environmentPlanet->id);
+                    label->setText(QString("Orbital radiation safety: %1%").arg(safety.value_or(0)));
+                    label->setToolTip("Radiation screens protect station residents from stellar radiation. Surface temperature, gravity and terraforming do not affect orbital radiation.");
+                    for (auto* bar : {planetTemperatureBar_, planetGravityBar_, planetRadiationBar_})
+                        if (bar) bar->setToolTip("Surface environment only; this civilization lives aboard orbital stations.");
+                } else if (player && player->race.environmentBased) {
                     const auto limits = terraforming_limits(environmentState, pendingOrders_.player);
                     const auto potential = terraforming_potential(environmentState, pendingOrders_.player, *environmentPlanet);
                     const auto current = player_planet_habitability(environmentState, pendingOrders_.player, *environmentPlanet, state_.turn);

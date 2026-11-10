@@ -799,7 +799,8 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     if (native) {
         const auto id = state.nextOrbitalStationId++;
         state.orbitalStations.push_back({id, fleet.owner, planet.id, "Inhabited Orbital Dock",
-            OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}});
+            OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot},
+            native_orbital_founding_loadout().components});
         planet.population = 0; planet.industry = 0; planet.mines = 0;
         planet.advancedFactories = 0; planet.advancedMines = 0;
         planet.habitat = {};
@@ -2306,6 +2307,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 void grow_colonies(GameState& state)
 {
     for (auto& planet : state.planets) {
+        if (native_orbital_race(state, planet.owner)) continue; // Native support/growth is the next slice.
         planet.habitat.population+=projected_orbital_growth(planet);
         const auto change = projected_population_growth(state, planet, state.turn);
         if (change >= 0) planet.population += static_cast<std::uint64_t>(change);
@@ -3023,6 +3025,17 @@ TurnResult TurnProcessor::process_with_events(
     for (const auto& [player, fuel] : baseFuel) (void)transfer_mobile_base_fuel(next, player, fuel, next.turn + 1);
     service_orbital_bases(next, next.turn + 1);
     service_mobile_bases(next, next.turn + 1);
+    // One annual dose on real residents after cargo, combat and completed refits.
+    // Radiation is not hull destruction; an empty live station can be resupplied.
+    for (auto& planet : next.planets) {
+        const auto dose = native_orbital_radiation_status(next, planet);
+        if (!dose || !dose->annualLoss) continue;
+        planet.nativeOrbit.population -= dose->annualLoss;
+        if (const auto* star = find_star(next, planet.star))
+            queue_player_report(next, planet.owner, PlayerReportKind::NativeOrbitalRadiationLoss,
+                star->position, next.turn + 1, planet.star, planet.id, 0, 0, ProductionKind::OrbitalStation,
+                0, ResearchField::Electronics, 0, {}, dose->annualLoss);
+    }
     refresh_planetary_engineering(next);
     grow_colonies(next);
     refresh_planetary_engineering(next);

@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
+#include "native_orbital_ui.hpp"
 #include "suns/production.hpp"
 #include "suns/mobile_base.hpp"
 #include "main_window.hpp"
@@ -1199,7 +1200,8 @@ void MainWindow::updateControls(bool refreshReceivedState)
         const auto variabilityLine = variability.isEmpty()
             ? QString{}
             : QString("<br><b>%1</b>").arg(variability);
-        const auto habitabilityLine = QString("Habitability: <b>%1%2%</b>%3")
+        const bool native = native_orbital_race(received, pendingOrders_.player);
+        const auto habitabilityLine = QString(native ? "Orbital radiation safety: <b>%1%2%</b>%3" : "Habitability: <b>%1%2%</b>%3")
             .arg(estimated ? "~" : "")
             .arg(knownHabitability)
             .arg(variabilityLine);
@@ -1218,7 +1220,21 @@ void MainWindow::updateControls(bool refreshReceivedState)
                 : "<br>Deep survey complete — no unexamined unusual sites";
         }
         QString populationLine;
-        if (planet->owner == pendingOrders_.player) {
+        if (native && planet->owner == pendingOrders_.player) {
+            const auto& receivedPlanet = *find_planet(received, planet->id);
+            const auto* planned = find_planet(receivedEconomy, planet->id);
+            const auto* station = native_orbital_station(received, receivedPlanet);
+            populationLine = QString("Orbital residents received: %1 / %2; after accepted orders: %3.<br>")
+                .arg(qulonglong(receivedPlanet.nativeOrbit.population))
+                .arg(qulonglong(station ? native_orbital_capacity(station->hull) : 0))
+                .arg(qulonglong(planned ? planned->nativeOrbit.population : receivedPlanet.nativeOrbit.population));
+            if (const auto dose = native_orbital_radiation_status(received, receivedPlanet))
+                populationLine += native_orbital_radiation_text(*dose).toHtmlEscaped().replace("\n", "<br>") + "<br>";
+            if (const auto observation = known_xenocrystal(received, pendingOrders_.player, planet->id))
+                populationLine += QString("Population report: year %1 (age %2)<br>")
+                    .arg(qulonglong(observation->observedTurn))
+                    .arg(qulonglong(received.turn - std::min(received.turn, observation->observedTurn)));
+        } else if (planet->owner == pendingOrders_.player) {
             // Compare intentions with the same received baseline. Physical
             // population may have changed while this report was in transit.
             const auto& receivedPlanet = *find_planet(received, planet->id);
@@ -1277,6 +1293,13 @@ void MainWindow::updateControls(bool refreshReceivedState)
                 .arg(static_cast<qulonglong>(approximatePopulation))
                 .arg(estimatedChange >= 0 ? "+" : "")
                 .arg(static_cast<qlonglong>(estimatedChange));
+        } else if (native) {
+            populationLine = QString("Founding Dock capacity: %1 residents.<br>")
+                .arg(qulonglong(native_orbital_capacity(OrbitalStationHullType::OrbitalDock)));
+            if (const auto dose = native_orbital_radiation_status(received, pendingOrders_.player,
+                planet->star, 0, native_orbital_founding_loadout()))
+                populationLine += QString("Founding radiation protection %1; orbital exposure %2 / tolerance %3.<br>")
+                    .arg(dose->protection).arg(dose->exposure).arg(dose->tolerance);
         } else {
             populationLine = QString("%1 population capacity: %2<br>")
                                  .arg(estimated ? "Estimated" : "Potential")
@@ -1816,6 +1839,9 @@ bool MainWindow::confirmFleetColonization(
             .arg(delivered.ironium).arg(delivered.boranium).arg(delivered.germanium)
             .arg(scheduledRoute ? "\n\nRoute preview: cargo and residents may change before arrival. Founding rechecks the world, station, cargo and housing locally."
                 : ""));
+        if (const auto dose = native_orbital_radiation_status(received, fleet.owner, planet.star,
+            fleet.colonists, native_orbital_founding_loadout()))
+            warning.setInformativeText(warning.informativeText() + "\n\n" + native_orbital_radiation_text(*dose));
         if (scheduledRoute && overCapacity)
             warning.setInformativeText(warning.informativeText()
                 + "\nCurrent residents exceed the Dock's capacity. Unload or split off the excess before arrival.");

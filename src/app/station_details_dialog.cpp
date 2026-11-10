@@ -1,5 +1,6 @@
 #include "station_details_dialog.hpp"
 #include "suns/stations.hpp"
+#include "suns/orbital_bases.hpp"
 
 #include <QDialogButtonBox>
 #include <QFrame>
@@ -19,7 +20,7 @@ int componentGroup(ShipComponentType component)
 {
     const auto kind = component_spec(component).kind;
     if (kind == ShipComponentKind::BeamWeapon || kind == ShipComponentKind::Torpedo) return 0;
-    if (kind == ShipComponentKind::Armor || kind == ShipComponentKind::Shield) return 1;
+    if (kind == ShipComponentKind::Armor || kind == ShipComponentKind::Shield || radiation_screen_protection(component)) return 1;
     return 2;
 }
 
@@ -31,7 +32,7 @@ QString componentName(ShipComponentType component)
 
 QGroupBox* fittingGroup(const OrbitalStation& station, int group, int capacity, int columns, QWidget* parent)
 {
-    const std::array names{"Weapons", "Armor / shields", "Electronics"};
+    const std::array names{"Weapons", "Defenses", "Electronics"};
     std::vector<ShipComponentType> fitted;
     for (auto component : station.components) if (componentGroup(component) == group) fitted.push_back(component);
     auto* box = new QGroupBox(QString("%1 — %2 / %3").arg(names[group]).arg(fitted.size()).arg(capacity), parent);
@@ -62,6 +63,8 @@ QGroupBox* fittingGroup(const OrbitalStation& station, int group, int capacity, 
             const auto info = component_spec(fitted[i]);
             cell->setToolTip(QString("%1\nArmor %2 • Shields %3\nWeapon power %4 • Range %5")
                 .arg(componentName(fitted[i])).arg(info.armor).arg(info.shields).arg(info.weaponPower).arg(info.weaponRange));
+            if (const auto protection = radiation_screen_protection(fitted[i]))
+                cell->setToolTip(cell->toolTip() + QString("\nRadiation protection: %1 (one screen per station)").arg(protection));
             if (const auto* gate = stargate_spec(fitted[i])) cell->setToolTip(cell->toolTip()
                 + QString("\nGate range: %1 ly • Maximum mass: %2 kt")
                     .arg(gate->rangeLy == 0 ? QString("Unlimited") : QString::number(gate->rangeLy))
@@ -110,7 +113,8 @@ QIcon stationIcon(OrbitalStationHullType hull)
     return icon;
 }
 
-StationDetailsDialog::StationDetailsDialog(const OrbitalStation& station, std::uint64_t turn, QWidget* parent)
+StationDetailsDialog::StationDetailsDialog(const OrbitalStation& station, std::uint64_t turn, QWidget* parent,
+    const QString& radiationText)
     : QDialog(parent)
 {
     setObjectName("stationDetailsDialog");
@@ -139,6 +143,11 @@ StationDetailsDialog::StationDetailsDialog(const OrbitalStation& station, std::u
     summary->setObjectName("stationDetailsSummary"); summary->setWordWrap(true); layout->addWidget(summary);
     auto* knowledge = new QLabel(QString("Received station data • Player turn %1. Unreported changes are not shown.").arg(turn), this);
     knowledge->setObjectName("stationDetailsKnowledge"); knowledge->setWordWrap(true); layout->addWidget(knowledge);
+    if (!radiationText.isEmpty()) {
+        auto* radiation = new QLabel(radiationText, this);
+        radiation->setObjectName("stationRadiationStatus"); radiation->setTextFormat(Qt::PlainText);
+        radiation->setWordWrap(true); layout->addWidget(radiation);
+    }
 
     auto* scroll = new QScrollArea(this); scroll->setObjectName("stationFitScroll"); scroll->setWidgetResizable(true);
     auto* deck = new QWidget(scroll); deck->setObjectName("stationFitDeck");

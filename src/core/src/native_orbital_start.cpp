@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 namespace suns {
 namespace {
@@ -15,11 +16,18 @@ ShipDesign starter_miner(PlayerId owner, ShipDesignId id)
     return {id, owner, "Orbital Miner", ShipHullType::MiniMiner,
         {ShipComponentType::QuickJump5, ShipComponentType::RoboMiniMiner}};
 }
-NativeOrbitalStartBudget asset_bill()
+StationLoadout starting_dock(std::optional<ShipComponentType> screen)
+{
+    StationLoadout fit;
+    if (screen) fit.components.push_back(*screen);
+    return fit;
+}
+NativeOrbitalStartBudget asset_bill(std::optional<ShipComponentType> screen)
 {
     NativeOrbitalStartBudget bill;
     const auto miner = starter_miner(1, 1);
-    const StationLoadout dock;
+    const auto dock = starting_dock(screen);
+    bill.radiationScreen = screen;
     const GameState prices;
     const auto receiver = production_item_mineral_cost(prices, {ProductionKind::PlanetaryRadar});
     const auto hull = station_mineral_cost(dock), ship = ship_design_mineral_cost(miner);
@@ -29,9 +37,10 @@ NativeOrbitalStartBudget asset_bill()
     return bill;
 }
 }
-NativeOrbitalStartBudget native_orbital_start_budget()
+NativeOrbitalStartBudget native_orbital_start_budget(std::optional<ShipComponentType> screen)
 {
-    auto budget = asset_bill();
+    if (screen && !radiation_screen_protection(*screen)) throw std::invalid_argument("Not a radiation screen");
+    auto budget = asset_bill(screen);
     budget.minerals.ironium += 100; budget.minerals.boranium += 100; budget.minerals.germanium += 100;
     return budget;
 }
@@ -58,9 +67,11 @@ std::optional<NativeOrbitalStartReceipt> initialize_native_orbital_start(
         || find_ship_design(state, state.nextShipDesignId)
         || std::any_of(state.orbitalStations.begin(), state.orbitalStations.end(), [&](const auto& s) { return s.id == state.nextOrbitalStationId; })) return {};
     const auto miner = starter_miner(owner, state.nextShipDesignId);
+    if (budget.radiationScreen && !radiation_screen_protection(*budget.radiationScreen)) return {};
+    const auto fit = starting_dock(budget.radiationScreen);
     if (!ship_design_valid(miner) || !ship_design_available_to_player(state, owner, miner)
-        || !station_loadout_available(state, owner, StationLoadout{})) return {};
-    const auto bill = asset_bill();
+        || !station_loadout_available(state, owner, fit)) return {};
+    const auto bill = asset_bill(budget.radiationScreen);
     const auto sufficient = [](double have, double need) { return std::isfinite(have) && have >= need; };
     if (!budget.population || budget.population > native_orbital_capacity(OrbitalStationHullType::OrbitalDock)
         || budget.production < bill.production || !sufficient(budget.minerals.ironium, bill.minerals.ironium)
@@ -79,10 +90,12 @@ std::optional<NativeOrbitalStartReceipt> initialize_native_orbital_start(
         budget.minerals.boranium-bill.minerals.boranium, budget.minerals.germanium-bill.minerals.germanium};
     star.stellarClass = StarClass::Yellow; star.variability = {};
     next.orbitalStations.push_back({stationId, owner, home, "Inhabited Orbital Dock",
-        OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}});
+        OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}, fit.components});
     // Reject a resource deadlock while all mutations are still in the private
     // candidate. Native population does not grow in this implementation stage.
     if (!native_orbital_output(next, colony)) return {};
+    const auto radiation = native_orbital_radiation_status(next, colony);
+    if (!radiation || radiation->annualLoss) return {};
     next.shipDesigns.push_back(miner); ++next.nextShipDesignId;
     Fleet fleet; fleet.id = next.nextFleetId++; fleet.owner = owner; fleet.design = miner.id;
     fleet.name = "Orbital Miner"; fleet.ships = {{miner.id, 1}}; fleet.position = star.position;

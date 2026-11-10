@@ -240,6 +240,7 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
 bool research_unlock_available(const GameState& state, PlayerId player, const ResearchUnlock& unlock)
 {
     if (!research_unlock_applicable(state, player, unlock)) return false;
+    if (native_orbital_race(state, player) && unlock.component == ShipComponentType::BulkRadiationScreen) return true;
     // A native economy has no surface mines. Its basic replacement miner is
     // an explicit racial access grant, not extra Construction/Electronics levels.
     if (native_orbital_race(state, player) && !find_player(state, player)->race.basicRemoteMining
@@ -341,6 +342,7 @@ std::int32_t race_habitability(
 std::int32_t player_planet_habitability(
     const GameState& state, PlayerId player, const Planet& planet, std::uint64_t turn)
 {
+    if (native_orbital_race(state, player)) return native_orbital_habitability(state, player, planet);
     if (planet.observedHabitability) return *planet.observedHabitability;
     const auto* empire = find_player(state, player);
     const auto baseline = empire && empire->race.environmentBased

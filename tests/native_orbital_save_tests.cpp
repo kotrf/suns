@@ -3,6 +3,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/combat.hpp"
+#include "suns/stations.hpp"
 #include <QFile>
 #include <QTemporaryDir>
 #include <algorithm>
@@ -21,6 +22,76 @@ SaveGameData envelope(GameState state)
     SaveGameData save; save.state = std::move(state); save.campaignId = 115; save.turnToken = 17;
     save.pendingOrders = {1, {}};
     return save;
+}
+void genuine_v118_and_radiation_round_trip()
+{
+    QString error; SaveGameData loaded;
+    assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-orbital-v118-radiation.suns"), loaded, error));
+    assert(loaded.state.turn == 2 && loaded.state.planets.front().nativeOrbit.population == 25'000);
+    assert(loaded.state.orbitalStations.front().components.empty()); // Migration gifts no hardware.
+    const auto processed = TurnProcessor{}.process_with_events(loaded.state, {});
+    assert(processed.state.planets.front().nativeOrbit.population == 24'750);
+    auto host = envelope(processed.state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+    host.strategicMessages = processed.events;
+    QTemporaryDir directory; const auto path = directory.filePath("radiation.suns");
+    assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
+    const auto event = std::find_if(loaded.strategicMessages.begin(), loaded.strategicMessages.end(), [](const auto& e) {
+        return e.kind == GameEventKind::NativeOrbitalRadiationLoss;
+    });
+    assert(event != loaded.strategicMessages.end() && event->deliveredColonists == 250 && event->observedTurn == 3);
+    assert(loaded.state.orbitalStations.front().components.empty());
+    const StationLoadout fit{OrbitalStationHullType::OrbitalDock, {ShipComponentType::BulkRadiationScreen}, true, true};
+    TurnOrderFileData packet{host.campaignId, loaded.state.turn, host.turnToken,
+        {1, {QueueStationOrder{loaded.state.planets.front().id, {fit, loaded.state.orbitalStations.front().id}}}}, {"Fit radiation screen"}};
+    const auto orders = directory.filePath("screen.sunsorders"); TurnOrderFileData decoded;
+    assert(write_turn_order_file(orders, packet, error) && read_turn_order_file(orders, decoded, error));
+    auto state = TurnProcessor{}.process(loaded.state, {decoded.orders});
+    assert(state.planets.front().nativeOrbit.population == 24'502);
+    assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
+    state = TurnProcessor{}.process(loaded.state, {});
+    assert(station_radiation_screen(state.orbitalStations.front()) == 20);
+    assert(state.planets.front().nativeOrbit.population == 24'502);
+    host.state = state;
+    assert(write_save_game_file(path, make_player_turn(host, 1), error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.planets.front().nativeOrbit.population == 24'502);
+    assert(station_radiation_screen(loaded.state.orbitalStations.front()) == 20);
+}
+void delayed_radiation_receipts_preserve_observation_and_received_fit()
+{
+    auto state = test::asynchronous_native_unload_fixture();
+    auto& fleet = state.fleets.front();
+    fleet.position = state.stars.front().position; fleet.destination.reset(); fleet.arrivalAction.reset(); fleet.waypointQueue.clear();
+    fleet.telemetry = {}; fleet.telemetry = confirmed_fleet_telemetry(state, fleet);
+    state.stars[1].stellarClass = StarClass::BlueWhite;
+    set_survey_level(state, 1, state.planets[1].star, SurveyLevel::DeepSurvey, state.turn);
+    QTemporaryDir directory; const auto path = directory.filePath("delayed-radiation.suns");
+    QString error; SaveGameData loaded, exported;
+    bool received = false;
+    for (unsigned year = 0; year < 3; ++year) {
+        const auto next = TurnProcessor{}.process_with_events(state, {});
+        auto host = envelope(next.state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        host.strategicMessages = next.events;
+        assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
+        state = loaded.state;
+        assert(write_save_game_file(path, make_player_turn(loaded, 1), error) && read_save_game_file(path, exported, error));
+        const auto* known = find_planet(exported.state, state.planets[1].id); assert(known);
+        if (year < 2) {
+            assert(known->nativeOrbit.population == 10'000);
+            assert(known_orbital_station(exported.state, 1, known->id)->components.empty());
+            assert(std::none_of(exported.strategicMessages.begin(), exported.strategicMessages.end(), [](const auto& e) {
+                return e.kind == GameEventKind::NativeOrbitalRadiationLoss;
+            }));
+        } else {
+            const auto report = std::find_if(exported.strategicMessages.begin(), exported.strategicMessages.end(), [](const auto& e) {
+                return e.kind == GameEventKind::NativeOrbitalRadiationLoss;
+            });
+            assert(report != exported.strategicMessages.end() && report->observedTurn == 2 && report->turn == 4);
+            assert(report->deliveredColonists == 1000 && known->nativeOrbit.population == 9000);
+            received = true;
+        }
+        if (year == 0) state.orbitalStations.back().components = {ShipComponentType::AdvancedRadiationScreen};
+    }
+    assert(received);
 }
 void paid_start_and_replacement_survive_host_and_pbem()
 {
@@ -508,6 +579,9 @@ void history_date_bounds_and_genuine_v116_migration()
     for (const auto& h : loaded.state.players.front().history)
         assert(!h.assetTotalsSynchronized && !h.oldestAssetObservation && !h.newestAssetObservation);
     assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, loaded, error));
+    // Keep this observation-date migration scenario in safe unshielded orbits;
+    // the genuine v118 test above covers new radiation after an old-file load.
+    for (auto& star : loaded.state.stars) star.stellarClass = StarClass::Orange;
     const auto next = TurnProcessor{}.process(loaded.state, {});
     assert(next.players.front().history.back().population == 20'500);
     assert(next.players.front().history.back().colonistsDelivered == 500);
@@ -750,6 +824,8 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    genuine_v118_and_radiation_round_trip();
+    delayed_radiation_receipts_preserve_observation_and_received_fit();
     if (argc == 2 && QString::fromLatin1(argv[1]) == "reconnect") { reconnected_founding_is_counted_once_before_the_original_receipt(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "asynchronous") { asynchronous_cargo_dates_survive_host_and_pbem(); history_date_bounds_and_genuine_v116_migration(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "freight") { unloading_history_waits_for_received_cargo(); return 0; }
