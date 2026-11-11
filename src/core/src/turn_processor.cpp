@@ -23,6 +23,7 @@
 #include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/production.hpp"
+#include "suns/production_template_edits.hpp"
 #include "suns/terraforming.hpp"
 
 #include <algorithm>
@@ -2863,7 +2864,7 @@ TurnResult TurnProcessor::process_with_events(
                             (void)apply_production_template(*planet, *player, concreteOrder.name);
                     } else if constexpr (std::is_same_v<T, SetProductionTemplateOrder>) {
                         if (auto* player = mutable_player(next, submission.player))
-                            (void)set_production_template(*player, concreteOrder);
+                            index += apply_production_template_edit(*player, submission.orders, index) - 1;
                     } else if constexpr (std::is_same_v<T, SetColonyResearchOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;

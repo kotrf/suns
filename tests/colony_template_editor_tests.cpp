@@ -100,6 +100,40 @@ void settle()
 
 namespace {
 using namespace suns;
+void legacy_rename_preview_keeps_the_original_program()
+{
+    for (bool pbem : {false, true}) {
+        MainWindow w; MainWindowTestAccess::nativeFixture(w);
+        auto state = MainWindowTestAccess::game(w);
+        const ProductionTemplate source{"Radar only", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+        const ProductionTemplate neighbor{"Other default", {{ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)}}, true};
+        state.players.front().productionTemplates = {source, neighbor};
+        auto renamed = source; renamed.name = "Radar revised";
+        renamed.items.push_back({ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1});
+        const PlayerOrders orders{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{renamed}}};
+        const QStringList descriptions{"Rename old program", "Save new program"};
+        SaveGameData host; host.state = state; host.mode = SessionMode::Host; host.pendingOrders = {1, {}};
+        host.campaignId = 287; host.turnToken = 17; host.playerTokens = {{1, 17}};
+        auto archived = pbem ? make_player_turn(host, 1) : host;
+        archived.pendingOrders = orders; archived.pendingDescriptions = descriptions;
+        QTemporaryDir directory; QString error; const auto path = directory.filePath("legacy-rename.suns");
+        assert(write_save_game_file(path, archived, error) && MainWindowTestAccess::load(w, path));
+        assert(w.colonyTemplatesForOrders() == state.players.front().productionTemplates);
+        w.openColonyTemplates(); w.show(); settle();
+        auto* dialog = w.findChild<QDialog*>("colonyTemplatesDialog"); assert(dialog);
+        auto* list = dialog->findChild<QListWidget*>("colonyTemplateList"); assert(list && list->count() == 2);
+        list->setCurrentRow(0);
+        auto* name = dialog->findChild<QLineEdit*>("colonyTemplateName");
+        name->setText("Radar retained");
+        auto* save = dialog->findChild<QPushButton*>("colonyTemplateSave"); assert(save->isEnabled());
+        save->click();
+        auto valid = source; valid.name = "Radar retained";
+        const std::vector<ProductionTemplate> expected{neighbor, valid};
+        assert(w.colonyTemplatesForOrders() == expected);
+        assert(TurnProcessor{}.process(host.state, {MainWindowTestAccess::orders(w)}).players.front().productionTemplates == expected);
+    }
+}
+
 void native_template_editor_blocks_bad_steps_and_repairs_legacy_programs()
 {
     {
@@ -278,6 +312,7 @@ void an_unloading_route_can_plan_before_the_housing_limit_is_met()
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    if (app.arguments().contains("legacy-rename")) { legacy_rename_preview_keeps_the_original_program(); return 0; }
     if (app.arguments().contains("native-template")) { native_template_editor_blocks_bad_steps_and_repairs_legacy_programs(); return 0; }
     if (app.arguments().contains("plans-manual")) { native_plan_choices_are_applicable(false); return 0; }
     if (app.arguments().contains("plans-route")) { native_plan_choices_are_applicable(true); return 0; }
@@ -401,4 +436,5 @@ int main(int argc, char** argv)
     colonize_waypoints_use_received_ownership();
     an_unloading_route_can_plan_before_the_housing_limit_is_met();
     native_template_editor_blocks_bad_steps_and_repairs_legacy_programs();
+    legacy_rename_preview_keeps_the_original_program();
 }

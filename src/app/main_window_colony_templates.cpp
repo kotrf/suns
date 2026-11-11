@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/production.hpp"
+#include "suns/production_template_edits.hpp"
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -60,9 +61,8 @@ std::vector<ProductionTemplate> MainWindow::colonyTemplatesForOrders() const
     planned.id = player->id;
     planned.race = player->race;
     planned.productionTemplates = player->productionTemplates;
-    for (const auto& order : pendingOrders_.orders)
-        if (const auto* edit = std::get_if<SetProductionTemplateOrder>(&order))
-            (void)set_production_template(planned, *edit);
+    for (std::size_t index = 0; index < pendingOrders_.orders.size();)
+        index += apply_production_template_edit(planned, pendingOrders_.orders, index);
     return planned.productionTemplates;
 }
 

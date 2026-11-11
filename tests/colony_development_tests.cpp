@@ -175,6 +175,39 @@ void native_template_saves_reject_inapplicable_work_and_allow_legacy_repair()
     assert(ordinary.productionTemplates.front() == legacy);
 }
 
+void template_delete_save_pairs_commit_together()
+{
+    auto state = test::native_orbital_founding_fixture();
+    const ProductionTemplate source{"Radar only", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+    const ProductionTemplate neighbor{"Other default", {{ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)}}, true};
+    state.players.front().productionTemplates = {source, neighbor};
+    const auto original = state.players.front().productionTemplates;
+    auto invalid = source; invalid.name = "Radar revised"; invalid.defaultForNewColonies = true;
+    invalid.items.push_back({ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1});
+    PlayerOrders rejected{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{invalid}, SetResearchAllocationOrder{17}}};
+    const auto actual = TurnProcessor{}.process(state, {rejected});
+    assert(actual.players.front().productionTemplates == original);
+    assert(actual.players.front().technology.researchAllocationPercent == 17);
+    const auto planned = planned_production_state(state, rejected);
+    assert(planned.players.front().productionTemplates == original);
+    assert(planned.players.front().technology.researchAllocationPercent == 17);
+    auto valid = source; valid.name = invalid.name;
+    const PlayerOrders accepted{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{valid}}};
+    const std::vector<ProductionTemplate> renamed{neighbor, valid};
+    assert(TurnProcessor{}.process(state, {accepted}).players.front().productionTemplates == renamed);
+    assert(planned_production_state(state, accepted).players.front().productionTemplates == renamed);
+    const auto deleted = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{{source.name}, true}, SetResearchAllocationOrder{17}}}});
+    assert(deleted.players.front().productionTemplates == std::vector<ProductionTemplate>{neighbor});
+    auto full = state;
+    for (unsigned i = 2; i < 16; ++i) { auto extra = source; extra.name = "Extra " + std::to_string(i); full.players.front().productionTemplates.push_back(extra); }
+    const auto replaced = TurnProcessor{}.process(full, {accepted});
+    assert(replaced.players.front().productionTemplates.size() == 16);
+    assert(replaced.players.front().productionTemplates.back() == valid);
+    const PlayerOrders missing{1, {SetProductionTemplateOrder{{"Missing"}, true}, SetProductionTemplateOrder{valid}}};
+    const auto created = TurnProcessor{}.process(state, {missing});
+    assert(created.players.front().productionTemplates.size() == 3 && created.players.front().productionTemplates.back() == valid);
+}
+
 int main()
 {
     shared_templates_accept_batches_and_reject_unsafe_steps();
@@ -183,4 +216,5 @@ int main()
     delayed_terminal_plan_is_frozen_after_edit_and_delete();
     invalid_programs_never_consume_the_fleet_or_queue_work();
     native_template_saves_reject_inapplicable_work_and_allow_legacy_repair();
+    template_delete_save_pairs_commit_together();
 }

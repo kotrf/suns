@@ -1,5 +1,33 @@
 # Project status and development handoff
 
+## #287 rename P3: commit legacy delete/save pairs atomically — 11 November 2026
+
+Review [5856614863](https://github.com/kotrf/suns/pull/287#pullrequestreview-5856614863)
+on `95be160` confirmed archive reopening and found a pending-rename regression.
+The old editor emits a source deletion followed by a replacement save; strict
+admission rejected a newly incompatible replacement after deleting the source.
+The loss was reproduced in physical execution, saved host/PBEM drafts, decoded
+turn-order packets and the actual Qt library preview.
+
+A shared bounded-library helper treats adjacent delete/save orders with an
+existing source as one transaction. Both edits run on a small candidate library;
+failure preserves every original entry and default flag. Host execution, planned
+production and the template editor use the same helper. A valid rename still
+fits a full 16-entry library. Standalone deletion and a missing-source delete
+followed by a valid create retain their behavior; subsequent orders keep their
+original positions. The loaded draft can then be repaired through the editor.
+
+GCC14.2/Qt6.12 Debug focused builds and **9/9 CTest in 4.60 s** passed, covering
+core, general saves, route programs/regressions, native startup/save/Qt review,
+colony development and the template editor. Source CI 42992674062 on `95be160`
+succeeded, 126/126; the new source/full CI are recorded in GitHub. Diff and local
+links are checked before publication. Save119/orders49/race3 remain unchanged;
+no world copy or future-turn simulation is added to the editor.
+
+PR #287 stays open for repeat review, with no merge or thread resolution.
+Main `24994bc`, #50 open, native setup/import/restart gated, #53/#63 frozen.
+Next remains support/growth, paid hulls and actual Human/Computer expansion.
+
 ## #287 archive P2: restore legacy programs without command admission — 11 November 2026
 
 Review [5856129176](https://github.com/kotrf/suns/pull/287#pullrequestreview-5856129176)

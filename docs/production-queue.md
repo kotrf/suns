@@ -106,6 +106,14 @@ Racial admission belongs to new editing/execution commands; those guards remain
 active after loading. Host/PBEM files and legacy drafts can therefore be reopened
 and repaired through the editor without accepting new incompatible saves.
 
+Renaming uses the existing adjacent delete/save order pair. When the source
+exists, host execution and both pending previews apply the pair atomically to
+a bounded candidate library. If the replacement is rejected, the original
+entries and default flags survive. Valid renames work at the 16-entry limit.
+Standalone deletion remains available; a missing-source deletion does not block
+the next create. Other orders keep their original ordering and indices. This
+also protects loaded legacy drafts without changing the save/order formats.
+
 Save v59 adds the bounded production extension and physical natural baselines;
 turn-order v17 adds batch, template-edit and template-apply orders. Earlier
 supported formats remain readable.

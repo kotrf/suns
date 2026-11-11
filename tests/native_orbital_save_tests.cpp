@@ -25,6 +25,41 @@ SaveGameData envelope(GameState state)
     save.pendingOrders = {1, {}};
     return save;
 }
+void saved_rename_pairs_preserve_the_source_on_rejection(bool pbem)
+{
+    auto host = envelope(test::native_orbital_founding_fixture());
+    host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+    const ProductionTemplate source{"Radar only", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+    const ProductionTemplate neighbor{"Other default", {{ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)}}, true};
+    host.state.players.front().productionTemplates = {source, neighbor};
+    const auto original = host.state.players.front().productionTemplates;
+    auto renamed = source; renamed.name = "Radar revised";
+    renamed.items.push_back({ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1});
+    const PlayerOrders orders{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{renamed}}};
+    auto archived = pbem ? make_player_turn(host, 1) : host;
+    archived.pendingOrders = orders; archived.pendingDescriptions = {"Rename old program", "Save new program"};
+    QTemporaryDir directory; QString error; SaveGameData loaded;
+    const auto path = directory.filePath("pending-rename.suns");
+    assert(write_save_game_file(path, archived, error) && read_save_game_file(path, loaded, error));
+    const auto orderPath = directory.filePath("rename.sunsorders");
+    TurnOrderFileData packet{host.campaignId, host.state.turn, host.turnToken, loaded.pendingOrders, loaded.pendingDescriptions};
+    assert(write_turn_order_file(orderPath, packet, error)); TurnOrderFileData decoded;
+    assert(read_turn_order_file(orderPath, decoded, error));
+    auto coordinator = host;
+    coordinator.state.players.push_back({2, "Local host"}); coordinator.playerTokens[2] = 18;
+    coordinator.pendingOrders = {2, {}};
+    assert(validate_turn_submission(coordinator, decoded).isEmpty());
+    const auto actual = TurnProcessor{}.process(host.state, {decoded.orders});
+    assert(actual.players.front().productionTemplates == original);
+    assert(planned_production_state(loaded.state, loaded.pendingOrders).players.front().productionTemplates == original);
+    auto continued = host; continued.state = actual;
+    assert(write_save_game_file(path, continued, error) && read_save_game_file(path, loaded, error));
+    assert(loaded.state.players.front().productionTemplates == original);
+    auto valid = source; valid.name = renamed.name;
+    decoded.orders.orders.back() = SetProductionTemplateOrder{valid};
+    const auto accepted = TurnProcessor{}.process(host.state, {decoded.orders});
+    assert(accepted.players.front().productionTemplates == std::vector<ProductionTemplate>({neighbor, valid}));
+}
 void legacy_native_template_archives_remain_loadable(bool pbem)
 {
     auto state = test::native_orbital_founding_fixture();
@@ -984,6 +1019,10 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-rename-host") { saved_rename_pairs_preserve_the_source_on_rejection(false); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-rename-pbem") { saved_rename_pairs_preserve_the_source_on_rejection(true); return 0; }
+    saved_rename_pairs_preserve_the_source_on_rejection(false);
+    saved_rename_pairs_preserve_the_source_on_rejection(true);
     if (argc == 2 && QString::fromLatin1(argv[1]) == "review-legacy-host") { legacy_native_template_archives_remain_loadable(false); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "review-legacy-pbem") { legacy_native_template_archives_remain_loadable(true); return 0; }
     legacy_native_template_archives_remain_loadable(false);

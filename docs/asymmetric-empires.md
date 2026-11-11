@@ -369,6 +369,13 @@ programs from old v119 files remain loadable, while malformed steps, duplicate
 names, multiple defaults and oversized libraries are rejected. Existing host and
 PBEM archives reopen for repair/deletion; new inapplicable edits still reject.
 
+Legacy pending renames are adjacent delete/save orders. A shared helper applies
+the pair atomically when the source exists: if the replacement is inapplicable,
+the original library and all default flags remain intact. Host execution,
+planned production and the actual Qt preview agree, including saved host/PBEM
+drafts and decoded turn-order files. Valid renames, standalone deletion and
+later orders remain available without copying world history or simulating years.
+
 Save **v119** appends the report/event kinds without new serialized fields;
 orders v49 and race v3 remain unchanged. The genuine
 `tests/fixtures/native-orbital-v118-radiation.suns` was produced by the unmodified
