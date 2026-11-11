@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "station_details_dialog.hpp"
+#include "native_orbital_ui.hpp"
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
@@ -39,7 +40,9 @@ void MainWindow::openStationDetails()
     const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
     const auto* station = planet ? find_orbital_station_at_planet(received, planet->id) : nullptr;
     if (!station) return;
-    StationDetailsDialog dialog(*station, received.turn, this);
+    const auto dose = native_orbital_radiation_status(received, *planet);
+    StationDetailsDialog dialog(*station, received.turn, this,
+        dose ? native_orbital_radiation_text(*dose) : QString{});
     dialog.exec();
 }
 
@@ -49,6 +52,8 @@ void MainWindow::openStationDesigner()
     if(!selected || selected->owner!=pendingOrders_.player) return;
     const PlanetId planetId=selected->id;
     const auto known=make_player_view(state_,pendingOrders_.player).state;
+    const auto* receivedPlanet = find_planet(known, planetId);
+    const bool native = native_orbital_race(known, pendingOrders_.player);
     if (orbital_base_at(known,planetId)) {
         installOrbitalBases();
         if (auto* panel=findChild<QDockWidget*>("orbitalBasesDock")) { panel->show(); panel->raise(); }
@@ -94,6 +99,7 @@ void MainWindow::openStationDesigner()
     defense->setText(QString("Colony defenses: %1 / %2. Population protection %3%; installation protection %4%. Build defenses in the Production batch selector (Energy 1; each costs 5 production, I 2 / B 1 / G 1).")
         .arg(selected->defenses).arg(kMaximumColonyDefenses).arg(colony_defense_coverage(*selected)*100,0,'f',1)
         .arg(colony_defense_coverage(*selected)*50,0,'f',1)); layout->addWidget(defense);
+    defense->setVisible(!native); // Surface defenses do not shelter station residents.
     auto* buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,&dialog);
     auto* queue=buttons->button(QDialogButtonBox::Ok); queue->setObjectName("queueStationFit"); queue->setText(work.refitStation ? "Queue refit" : "Queue construction");
     layout->addWidget(buttons);
@@ -121,6 +127,10 @@ void MainWindow::openStationDesigner()
                 .arg(gateLimits(*gate), find_player(known,pendingOrders_.player)->race.primaryTrait == PrimaryRaceTrait::StargateSpecialist
                     ? "Minerals and colonists are allowed; loaded mass counts."
                     : "Generalist: no minerals or colonists aboard."));
+        if (receivedPlanet) if (const auto dose = native_orbital_radiation_status(known,
+            pendingOrders_.player, receivedPlanet->star, receivedPlanet->nativeOrbit.population, fit))
+            preview->setText(preview->text() + "\n" + native_orbital_radiation_text(*dose)
+                + "\nThis protection takes effect when construction or refitting completes.");
         queue->setEnabled(available && !existingQueued);
     };
     std::function<void(const StationLoadout&)> populate;
@@ -129,9 +139,9 @@ void MainWindow::openStationDesigner()
         const auto& spec=station_hull_spec(fit.hull);
         const auto category=[](ShipComponentType c) { const auto k=component_spec(c).kind;
             return k==ShipComponentKind::BeamWeapon || k==ShipComponentKind::Torpedo ? 0
-                : k==ShipComponentKind::Armor || k==ShipComponentKind::Shield ? 1 : 2; };
+                : k==ShipComponentKind::Armor || k==ShipComponentKind::Shield || radiation_screen_protection(c) ? 1 : 2; };
         const int capacities[]{spec.weapons,spec.defenses,spec.electronics};
-        const QString names[]{"Weapon","Armor / shield","Electronics"};
+        const QString names[]{"Weapon","Defense","Electronics"};
         for(int group=0;group<3;++group) {
             std::vector<ShipComponentType> fitted;
             for(auto c:fit.components) if(category(c)==group) fitted.push_back(c);
@@ -145,12 +155,15 @@ void MainWindow::openStationDesigner()
                     const bool available = gate ? stargate_component_available(known,pendingOrders_.player,c)
                             && fit.hull >= gate->minimumHull
                         : component_available_to_player(known,pendingOrders_.player,c);
-                    if(station_component_supported(c) && category(c)==group
+                    if(station_component_supported(c) && (native || !radiation_screen_protection(c)) && category(c)==group
                         && (available || (slot<int(fitted.size()) && fitted[slot]==c))) {
                         const auto info=component_spec(c);
                         choice->addItem(gate ? QString::fromUtf8(gate->name) : QString::fromStdString(info.name),int(c));
                         choice->setItemData(choice->count()-1,QString("Armor %1 • Shields %2 • Weapon power %3, range %4 • Production %5")
                             .arg(info.armor).arg(info.shields).arg(info.weaponPower).arg(info.weaponRange).arg(info.buildCost),Qt::ToolTipRole);
+                        if (const auto protection = radiation_screen_protection(c))
+                            choice->setItemData(choice->count()-1, QString("Radiation protection %1. One screen per station; occupies a defense slot. Cost %2 production.")
+                                .arg(protection).arg(info.buildCost), Qt::ToolTipRole);
                         if (gate) choice->setItemData(choice->count()-1,
                             QString("%1 • Energy %2 / Electronics %3 / Construction %4. %5\nBoth owned endpoints must support the distance and loaded gross fleet mass.")
                                 .arg(gateLimits(*gate)).arg(gate->energy).arg(gate->electronics).arg(gate->construction)

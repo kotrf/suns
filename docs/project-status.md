@@ -1,5 +1,181 @@
 # Project status and development handoff
 
+## #287 independent-Delete P3: persist explicit Rename intent — 11 November 2026
+
+Review [5858323183](https://github.com/kotrf/suns/pull/287#pullrequestreview-5858323183)
+on `1d0ca99` confirmed the previous rename fix and found adjacent independent
+Delete/Save actions were incorrectly rolled back together. Core execution,
+host/PBEM saved drafts, a real order packet and the Qt preview reproduced it.
+
+Only an explicit rename-source flag now starts the bounded atomic transaction.
+An independent Delete still executes when the following Save is rejected, and
+an orphan rename cannot remove its source. The editor sets the flag directly.
+Legacy pending drafts and packets recover intent from the exact descriptions
+emitted by the old editor; adjacency alone never implies Rename. Save **v120**
+and orders **v50** persist the flag even in host inboxes without descriptions.
+Portable race v3 is unchanged. Older inbox-only ambiguity and reimport recovery
+are documented in [production templates](production-queue.md#production-templates).
+
+Six genuine save119/orders49 fixtures were produced by the unmodified writer
+and headers at `1d0ca99`, with source generator/provenance/hashes retained.
+Tests distinguish Delete/Rename in both host/player files and packets, cover
+modern opaque descriptions, imported inbox save/reload, valid subsequent
+renames, default preservation, orphan renames and real Qt loading/repair.
+GCC14.2/Qt6.12 Debug focused **3/3 CTest in 3.40 s** passed.
+The complete Debug build and **126/126 CTest in 177.11 s** passed. Prior source CI 42999800441 succeeded, 126/126;
+the new source/full CI are recorded in GitHub. Diff and local links are checked
+before publication. No future-turn UI forecasts or hidden-state access added.
+
+PR #287 stays open for repeat review, with no merge or thread resolution.
+Main `24994bc`, #50 open, native setup/import/restart gated, #53/#63 frozen.
+Next remains support/growth, paid hulls and actual Human/Computer expansion.
+
+## #287 rename P3: commit legacy delete/save pairs atomically — 11 November 2026
+
+Review [5856614863](https://github.com/kotrf/suns/pull/287#pullrequestreview-5856614863)
+on `95be160` confirmed archive reopening and found a pending-rename regression.
+The old editor emits a source deletion followed by a replacement save; strict
+admission rejected a newly incompatible replacement after deleting the source.
+The loss was reproduced in physical execution, saved host/PBEM drafts, decoded
+turn-order packets and the actual Qt library preview.
+
+A shared bounded-library helper treats adjacent delete/save orders with an
+existing source as one transaction. Both edits run on a small candidate library;
+failure preserves every original entry and default flag. Host execution, planned
+production and the template editor use the same helper. A valid rename still
+fits a full 16-entry library. Standalone deletion and a missing-source delete
+followed by a valid create retain their behavior; subsequent orders keep their
+original positions. The loaded draft can then be repaired through the editor.
+
+GCC14.2/Qt6.12 Debug focused builds and **9/9 CTest in 4.60 s** passed, covering
+core, general saves, route programs/regressions, native startup/save/Qt review,
+colony development and the template editor. Source CI 42992674062 on `95be160`
+succeeded, 126/126; the new source/full CI are recorded in GitHub. Diff and local
+links are checked before publication. Save119/orders49/race3 remain unchanged;
+no world copy or future-turn simulation is added to the editor.
+
+PR #287 stays open for repeat review, with no merge or thread resolution.
+Main `24994bc`, #50 open, native setup/import/restart gated, #53/#63 frozen.
+Next remains support/growth, paid hulls and actual Human/Computer expansion.
+
+## #287 archive P2: restore legacy programs without command admission — 11 November 2026
+
+Review [5856129176](https://github.com/kotrf/suns/pull/287#pullrequestreview-5856129176)
+on `a0d9993` confirmed editor/host admission and found a save-loader regression.
+The loader reused the stricter new-command setter, rejecting structurally valid
+old native programs as a damaged strategic archive. Both host and PBEM failures
+were reproduced. The v119 writer is unchanged from `af5e466`.
+
+The production extension now restores entries directly after structural, name,
+16-entry and single-default validation, preserving original flags. New command
+admission stays strict. Tests exercise manual/Min/Max Terraform and factory
+archives, old pending edits, repair/delete/re-save, host/PBEM reopening through
+the actual MainWindow and continued rejection of incompatible new edits.
+Malformed quantities, duplicate names, multiple defaults and 17-entry libraries
+remain rejected. Ordinary save coverage is included.
+
+GCC14.2/Qt6.12 Debug focused builds and **6/6 CTest in 3.48 s** passed, including
+the general save suite and native startup/save/Qt/colony regressions. Prior
+source CI 42988530950 succeeded. New source/full CI are recorded in GitHub.
+Diff and local links are checked before publication. The existing repository
+and branches remain; main `24994bc`, save119/orders49/race3/write-layout unchanged.
+PR #287 stays open for repeat review, with no merge or thread resolution.
+#50 open, native setup/import/restart gated, #53/#63 frozen. Next remains
+support/growth, paid hull progression and actual Human/Computer expansion.
+
+## #287 repeat-review P3: validate program edits before saving — 11 November 2026
+
+Review [5855636724](https://github.com/kotrf/suns/pull/287#pullrequestreview-5855636724)
+on `af5e466` confirmed both prior fixes and found a native Min Terraform-only
+program could still be saved into the library. Host and actual Qt regressions
+reproduced that behavior before the fix.
+
+Template creation/editing now uses canonical racial applicability in the editor
+and SetProductionTemplateOrder. Unavailable step choices cannot be added or
+updated, incompatible drafts cannot be saved, and existing rows explain how to
+remove/replace them. Legacy programs remain readable/deletable and can be
+repaired under the same name; invalid edits preserve the library/default flags.
+Pending library reconstruction copies the actual owner's race. Ordinary programs
+retain their choices. No future-year estimate or persistence field is added.
+
+The GCC14.2/Qt6.12 Debug build of focused targets and **5/5 CTest in 3.14 s**
+passed: colony development/editor plus native startup, save/PBEM and review UI.
+The new source's full validation runs in GitHub CI. Previous source CI
+42898904298 succeeded with 126/126. The restored environment reused the existing
+repository and installed Qt6.12 cache; the old local work branch is retained.
+Diff and local documentation links are checked before publication. PR #287 stays
+open for repeat review; no threads are resolved or PR merged. Source/CI are in
+GitHub, main remains `24994bc`, save119/orders49/race3 unchanged. #50 open,
+native setup/import/restart gated, #53/#63 frozen. Next: support/growth, paid
+advanced hulls, then actual Human/Computer startup-to-second-colony acceptance.
+
+## #287 review: native Terraform and received PBEM safety — 10 November 2026
+
+Review [5845127935](https://github.com/kotrf/suns/pull/287#pullrequestreview-5845127935)
+on `279a114` reported a P2 production delay and a P3 PBEM field mismatch. Both
+were reproduced before the fixes. Genuine v118 input with a bare Yellow Dock,
+surface Hab 96 and 86 output lost 250 residents because Terraform/Min/Max spent
+36 work ahead of a 74-work screen refit. Received Bulk safety queried as 100 but
+was overwritten to -25 in both persisted planet fields before view reconstruction.
+
+The shared production applicability guard now excludes native terraforming:
+manual/Min/Max orders and templates reject, UI choices hide, old partial/paid/
+autogenerated/automatic rows retire before spending and cheap ETA skips them.
+The same annual production can finish the paid screen before radiation, keeping
+all 25,000 residents. Ordinary Min Terraform retains its surface stopping rule.
+PlayerView keeps native safety already computed from received station evidence;
+PBEM export/load and repeated view construction preserve matching fields, including
+before and after receipt of a hidden screen loss. No physical-fit fallback is added.
+
+Regressions use the genuine v118 fixture, decoded PBEM orders, persisted queues,
+manual/Min/Max variants, explicit/default templates, ordinary controls and the
+actual Qt production picker. Prior source CI 42848197808 succeeded with 126/126.
+The complete GCC14.2/Qt6.12 Debug build and **126/126 CTest in 71.51 s**
+passed; the focused host/PBEM/Qt checks also passed 4/4. Diff and 147 local
+documentation links were checked.
+New source/CI are recorded in GitHub. PR #287 remains open for repeat review;
+no review threads are resolved before the requested merge. Save v119/orders49/
+race3, the minimal realtime model and main `24994bc` remain unchanged. #50 stays
+open, native setup/import/restart gated, #53/#63 frozen. Next: support/growth,
+paid hull progression and real Human/Computer startup-to-second-colony acceptance.
+
+## #50: native orbital radiation and paid screens — 10 November 2026
+
+The previous paid startup/founding PRs #285/#286 are merged into main
+`24994bc577905a6f74c77ea031dc353f109036a4`. Its tree
+`cdbf826a12a0a1cb68d454fbc9377d23c1db1258` is the exact reviewed #286 source;
+all 12 confirmed-fixed review threads were resolved at the user-authorized
+merge. Source CI 42718317833 / 42823081547 and main CI 42827649171 succeeded.
+The existing repository/work directory was retained.
+
+Branch `codex/native-orbital-radiation-50` implements the next
+[stage](asymmetric-empires.md#implementation-stage-5-radiation-and-paid-station-protection).
+Stellar background minus one paid 20/40/60 screen determines exposure; the race's
+maximum radiation value is the dose tolerance. Whole-person annual losses use
+the existing independent-orbit formula, after actual cargo/combat/completed fits.
+Surface T/G/radiation, magnetospheres and luminosity do not alter native dose.
+Empty live stations survive; combat destruction still kills remaining residents.
+Bulk has native early access without research grants; stronger screens keep
+normal gates. The protected default capital pays 243 work / I112 B19 G36,
+leaving 100/100/100 stock and 25,000 residents. Existing founding kits keep their
+unshielded assets and old 60-work module / 83-work ship cost: no unpaid protection
+is added to older fleets. Quiet-star founding or paid station refitting is required.
+
+Received-only system/station/designer/founding displays show dose, protection and
+cheap current-condition casualties. A queued refit is not operational protection.
+Save v119 appends radiation-loss kinds using the existing 64-bit loss payload and
+delayed colony channel; orders v49 and race v3 stay unchanged. A genuine v118
+file was generated with the unchanged main writer before the format change;
+old unprotected residents take their first new dose without gifted screens.
+The complete GCC14.2/Qt6.12 Debug build and **126/126 CTest in 79.00 s**
+passed, including real paid founding/refit, old-file migration, host/PBEM delayed
+receipts and actual Qt station dialogs. Captured station/preview screenshots,
+local documentation links and diff were checked.
+The new slice is for review; it is not merged or a playable native campaign.
+Next remain support/growth, paid advanced hull progression and actual
+Human/Computer campaign startup → replacement → paid second-colony acceptance.
+#50 stays open, native setup/import/restart are gated, #53/#63 frozen.
+
 ## #286 early reconnect: publish the Dock and retire its founder together — 10 November 2026
 
 Review 5840625492 on `ea66870` confirmed all four preceding founding fixes and

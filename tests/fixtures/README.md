@@ -23,6 +23,30 @@ core archive and Qt6::Core, and pass the desired fixture path as its one argumen
 Do not build this writer against current headers: its purpose is preserving the
 previous release's layout and recipes.
 
+## Template intent fixtures
+
+The six `template-intent-*` files are synthetic data produced by
+`template_intent_v119_writer.cpp` against the unmodified writer, headers and
+core at `1d0ca997883ce3328143efc8b62630ebb7652424`, GCC14.2 / Qt6.12 with
+QDataStream Qt6.4 encoding. Rebuild the generator against that revision, never
+the current writer. These are genuine save119/orders49 files, not modern
+payloads with renamed version headers.
+
+Host/player saves and order packets carry the same adjacent Delete/Save payload.
+The descriptions distinguish a real Rename from two independent editor actions.
+The new reader must preserve a rejected rename's source and honor an independent
+Delete before the rejected Save. Tests also cover the resulting modern inbox
+round trip, where display descriptions are no longer available.
+
+| Fixture | SHA-256 |
+| --- | --- |
+| template-intent-v119-host-delete.suns | `4f21aecdaf7dca3c4df4056c0cd4b7e81c4e411cc60ebc9eb6712bd0fe109d50` |
+| template-intent-v119-host-rename.suns | `03533c9f9dc01ade9293737a917ba45a045978acc37ad7543d7637a99915e661` |
+| template-intent-v119-player-delete.suns | `24da20b2e580574b60ea069d6da66f63814ef2191359d7b6df7a879e5bc8a011` |
+| template-intent-v119-player-rename.suns | `2120c03c731fa22fffbc7213eb9a576b8c75e2dbcc65170557456a19f42fd242` |
+| template-intent-v49-delete.sunsorders | `42636e06ed74a4f5d4dff663732573e02a8cbc1e5d57d09ba59e7e09d13255d3` |
+| template-intent-v49-rename.sunsorders | `cc760c90a0696d013050bf4c1236b5016924c1dee3d31dc7932d3a6de4c47505` |
+
 ## Population follow-up fixture
 
 `population-v111.suns` was written by `population_v111_writer.cpp` compiled with

@@ -90,6 +90,7 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::FreightDelivered: return GameEventKind::FreightDelivered;
     case PlayerReportKind::TransportLineDelivery: return GameEventKind::FreightDelivered;
     case PlayerReportKind::RemoteMiningOutput: return GameEventKind::RemoteMiningOutput;
+    case PlayerReportKind::NativeOrbitalRadiationLoss: return GameEventKind::NativeOrbitalRadiationLoss;
     case PlayerReportKind::EnemyFleetDetected: return GameEventKind::EnemyFleetDetected;
     case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
     case PlayerReportKind::FleetMobilityRestored: return GameEventKind::FleetMobilityRestored;
@@ -129,7 +130,8 @@ GameEventKind event_kind(PlayerReportKind kind)
 
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
-    if (kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
+    if (kind == PlayerReportKind::NativeOrbitalRadiationLoss
+        || kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
         || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
     return kind == PlayerReportKind::OrbitalBaseStatus || kind == PlayerReportKind::EngineeringPaused || kind == PlayerReportKind::OutpostDeploymentFailed || kind == PlayerReportKind::OutpostFuelExhausted
@@ -205,7 +207,8 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     // A receiving colony gets one aggregated freight report per year.
     // The manifest is part of the stable identity even when replaying a turn.
     if (report.kind == PlayerReportKind::FreightDelivered || report.kind == PlayerReportKind::StargateTransit
-        || report.kind == PlayerReportKind::RemoteMiningOutput) {
+        || report.kind == PlayerReportKind::RemoteMiningOutput
+        || report.kind == PlayerReportKind::NativeOrbitalRadiationLoss) {
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.ironium));
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.boranium));
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.germanium));

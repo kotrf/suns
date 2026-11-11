@@ -156,8 +156,11 @@ The Orbital Construction
 Module prepays a Dock/receiver and finite mineral stock; ordinary Colonize orders
 transfer transported residents into that housing and consume the fleet. Its paid
 deployment is excluded from salvage. Prototype output uses station residents and
-Energy; radiation, support and growth remain unfinished, so setup is still gated.
-Save v118 also retains delivered station destruction before the first
+Energy. Native radiation and paid 20/40/60 station screens now use stellar
+exposure and the race's maximum radiation tolerance; surface temperature/gravity
+and surface terraforming do not alter that dose. Annual casualties reduce real
+residents. Support and growth remain unfinished, so setup is still gated.
+Save v119 adds delayed native radiation-loss reports and also retains delivered station destruction before the first
 received fit and mining manifests credited in their receipt year. It
 does not enable this reserved identity in campaign
 setup or portable race files; the complete start and Human/Computer expansion

@@ -1623,6 +1623,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
 std::optional<std::int32_t> known_planet_habitability(
     const GameState& state, PlayerId player, PlanetId planetId)
 {
+    if (native_orbital_race(state, player)) return known_native_orbital_habitability(state, player, planetId);
     const auto planet = std::find_if(state.planets.begin(), state.planets.end(), [planetId](const Planet& candidate) {
         return candidate.id == planetId;
     });

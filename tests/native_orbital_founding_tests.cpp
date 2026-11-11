@@ -56,6 +56,7 @@ void paid_manufacture_transport_and_arrival_found_a_second_colony()
     state.planets[1].precursorArtifacts.researchPoints = 100;
     const auto destination = Position{state.stars.front().position.x+25, state.stars.front().position.y};
     state.stars[1].position = destination;
+    state.stars[1].stellarClass = StarClass::Orange;
     const PlayerOrders build{1, {SetResearchPlanOrder{ResearchField::Energy, {}, false},
         CreateShipDesignOrder{"Orbital Settler", ShipHullType::ColonyShip,
             {ShipComponentType::QuickJump5, ShipComponentType::OrbitalConstructionModule}},
@@ -77,6 +78,7 @@ void paid_manufacture_transport_and_arrival_found_a_second_colony()
     assert(state.fleets.size() == 1 && state.orbitalStations.size() == 2);
     const auto* station = native_orbital_station(state, *colony);
     assert(station && station->hull == OrbitalStationHullType::OrbitalDock);
+    assert(station->components.empty()); // Existing kits never acquire an unpaid radiation screen.
     assert(colony->radar == PlanetaryRadarLevel::Full && !colony->homeworld);
     assert(colony_has_orbital_service(state, target, 1, OrbitalStationModule::Shipyard));
     assert(colony_has_orbital_service(state, target, 1, OrbitalStationModule::RefuelingDepot));

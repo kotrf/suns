@@ -40,11 +40,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 118;
+constexpr quint32 kSaveFormatVersion = 120;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 49;
+constexpr quint32 kTurnOrderFormatVersion = 50;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -1087,7 +1087,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 119 ? GameEventKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1691,7 +1691,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 119 ? PlayerReportKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36
@@ -2341,13 +2341,22 @@ void readProductionExtension(QDataStream& stream, GameState& value)
         if (id != player.id || legacy > 1 || !readCount(data, count) || count > 16) { markCorrupt(stream); return; }
         player.race.legacyBiologyAdaptation = legacy != 0;
         bool hasDefault = false;
+        std::vector<ProductionTemplate> restored;
+        restored.reserve(count);
         for (quint32 i = 0; i < count; ++i) {
             ProductionTemplate entry;
             readProductionTemplate(data, entry);
-            if ((entry.defaultForNewColonies && hasDefault) || !set_production_template(player, {entry})
-                || player.productionTemplates.size() != i + 1) { markCorrupt(stream); return; }
+            // Restore archive invariants. Racial admission is checked when new
+            // orders execute; legacy programs remain available for repair.
+            if (data.status() != QDataStream::Ok || !production_template_valid(entry)
+                || (entry.defaultForNewColonies && hasDefault)
+                || std::any_of(restored.begin(), restored.end(), [&](const auto& prior) { return prior.name == entry.name; })) {
+                markCorrupt(stream); return;
+            }
             hasDefault |= entry.defaultForNewColonies;
+            restored.push_back(std::move(entry));
         }
+        player.productionTemplates = std::move(restored);
     }
     if (!readCount(data, count) || count != value.planets.size()) { markCorrupt(stream); return; }
     for (auto& planet : value.planets) {
@@ -2629,9 +2638,10 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << quint32(concrete.quantity);
             writeEnum(stream, concrete.automation);
         } else if constexpr (std::is_same_v<T, SetProductionTemplateOrder>) {
+            if (concrete.renameSource && !concrete.remove) { stream.setStatus(QDataStream::WriteFailed); return; }
             stream << quint8{19};
             writeProductionTemplate(stream, concrete.value);
-            stream << quint8(concrete.remove);
+            stream << quint8(concrete.remove) << quint8(concrete.renameSource);
         } else if constexpr (std::is_same_v<T, ApplyProductionTemplateOrder>) {
             stream << quint8{20} << quint32(concrete.colony);
             writeString(stream, concrete.name);
@@ -3027,10 +3037,12 @@ bool readOrder(QDataStream& stream, Order& order)
         if (gReadSaveFormatVersion < 59) { markCorrupt(stream); return false; }
         SetProductionTemplateOrder value;
         readProductionTemplate(stream, value.value);
-        quint8 remove{};
+        quint8 remove{}, rename{};
         stream >> remove;
+        if (gReadSaveFormatVersion >= 120) stream >> rename;
         value.remove = remove != 0;
-        if (remove > 1 || (remove == 0 && !production_template_valid(value.value))
+        value.renameSource = rename != 0;
+        if (remove > 1 || rename > 1 || (rename && !remove) || (remove == 0 && !production_template_valid(value.value))
             || value.value.name.empty() || value.value.name.size() > 80) { markCorrupt(stream); return false; }
         order = std::move(value);
         return stream.status() == QDataStream::Ok;
@@ -3195,6 +3207,21 @@ void readDescriptions(QDataStream& stream, QStringList& values)
         QString value;
         stream >> value;
         values.push_back(value);
+    }
+}
+
+// Old order payloads did not distinguish Rename from an independent Delete.
+// Recover only the exact pair emitted by the editor, before any order removal.
+// Modern files carry the semantic flag, including inboxes without descriptions.
+void restoreLegacyTemplateRenameIntent(PlayerOrders& value, const QStringList& descriptions)
+{
+    for (std::size_t index = 0; index + 1 < value.orders.size(); ++index) {
+        auto* source = std::get_if<SetProductionTemplateOrder>(&value.orders[index]);
+        const auto* replacement = std::get_if<SetProductionTemplateOrder>(&value.orders[index + 1]);
+        if (source && source->remove && replacement && !replacement->remove
+            && descriptions[qsizetype(index)] == "Rename colony template " + QString::fromStdString(source->value.name)
+            && descriptions[qsizetype(index + 1)] == "Save colony template " + QString::fromStdString(replacement->value.name))
+            source->renameSource = true;
     }
 }
 
@@ -3457,6 +3484,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "The Suns! save file has an inconsistent planning-order section.";
         return false;
     }
+    if (version < 120) restoreLegacyTemplateRenameIntent(loaded.pendingOrders, loaded.pendingDescriptions);
     for (auto index = loaded.pendingOrders.orders.size(); index > 0; --index) {
         const auto& order = loaded.pendingOrders.orders[index - 1];
         const bool obsolete = std::holds_alternative<SetColonyResearchOrder>(order)
@@ -3639,7 +3667,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);
@@ -3656,6 +3684,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
         errorMessage = "The Suns! turn-order file has an inconsistent description section.";
         return false;
     }
+    if (version < 50) restoreLegacyTemplateRenameIntent(loaded.orders, loaded.descriptions);
 
     data = std::move(loaded);
     return true;

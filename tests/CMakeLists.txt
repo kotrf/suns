@@ -29,6 +29,9 @@ add_test(NAME suns_native_orbital_start_tests COMMAND suns_native_orbital_start_
 add_executable(suns_native_orbital_founding_tests native_orbital_founding_tests.cpp)
 target_link_libraries(suns_native_orbital_founding_tests PRIVATE Suns::Core)
 add_test(NAME suns_native_orbital_founding_tests COMMAND suns_native_orbital_founding_tests)
+add_executable(suns_native_orbital_radiation_tests native_orbital_radiation_tests.cpp)
+target_link_libraries(suns_native_orbital_radiation_tests PRIVATE Suns::Core)
+add_test(NAME suns_native_orbital_radiation_tests COMMAND suns_native_orbital_radiation_tests)
 
 add_executable(suns_route_regression_tests route_regression_tests.cpp)
 target_link_libraries(suns_route_regression_tests PRIVATE Suns::Core)
@@ -471,6 +474,7 @@ add_test(NAME suns_colony_development_tests COMMAND suns_colony_development_test
 if(SUNS_BUILD_APP)
     add_executable(suns_colony_template_editor_tests colony_template_editor_tests.cpp)
     target_link_libraries(suns_colony_template_editor_tests PRIVATE suns_app_ui)
+    target_compile_definitions(suns_colony_template_editor_tests PRIVATE SUNS_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     add_test(NAME suns_colony_template_editor_tests COMMAND suns_colony_template_editor_tests)
     set_tests_properties(suns_colony_template_editor_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)

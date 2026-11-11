@@ -905,6 +905,7 @@ enum class PlayerReportKind {
     TransportLineDelivery,
     FleetScrapStatus,
     RemoteMiningOutput,
+    NativeOrbitalRadiationLoss,
 };
 
 // A report is an immutable observation, independent of surviving objects and

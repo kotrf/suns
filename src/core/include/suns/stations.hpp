@@ -55,6 +55,7 @@ bool preview_stargate_transfer(GameState&, PlayerId, const GateFleetOrder&);
 [[nodiscard]] MineralCargo station_mineral_cost(const StationLoadout&);
 [[nodiscard]] double station_armor(const OrbitalStation&);
 [[nodiscard]] double station_shields(const OrbitalStation&);
+[[nodiscard]] std::uint8_t station_radiation_screen(const OrbitalStation&);
 [[nodiscard]] bool station_has_weapons(const OrbitalStation&);
 [[nodiscard]] bool station_construction_valid(const GameState&, const Planet&, const StationConstruction&);
 bool queue_station_construction(GameState&, PlayerId, const QueueStationOrder&);

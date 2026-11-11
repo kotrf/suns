@@ -76,6 +76,9 @@ struct QueueProductionBatchOrder {
 struct SetProductionTemplateOrder {
     ProductionTemplate value;
     bool remove{};
+    // Delete half of an explicit rename; commits with the following save.
+    // Persisted since save120/orders50; legacy imports restore editor intent.
+    bool renameSource{};
 };
 
 struct ApplyProductionTemplateOrder {

@@ -2,8 +2,10 @@
 #include "station_details_dialog.hpp"
 #include "suns/communications.hpp"
 #include "suns/stations.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QEventLoop>
@@ -17,6 +19,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QTableWidget>
 #include <QToolButton>
 #include <cassert>
 #include <functional>
@@ -35,6 +38,7 @@ struct MainWindowTestAccess {
     }
     static void deselect(MainWindow& window) { window.selection_.star.reset(); window.rebuildScene(); }
     static auto orderCount(const MainWindow& window) { return window.pendingOrders_.orders.size(); }
+    static void designer(MainWindow& window) { window.openStationDesigner(); }
 };
 } // namespace suns
 
@@ -217,4 +221,47 @@ int main(int argc, char** argv)
     assert(button->isVisible());
     MainWindowTestAccess::deselect(window); settle();
     assert(!button->isVisible());
+
+    auto native = test::empty_native_orbital_start();
+    assert(initialize_native_orbital_start(native, 1, native.planets.front().id, native_orbital_start_budget()));
+    MainWindowTestAccess::load(window, native); settle();
+    inspect(button, [&](QDialog* dialog) {
+        assert(equipment(dialog, 1, 0) == "Bulk Radiation Screen");
+        const auto* radiation = dialog->findChild<QLabel*>("stationRadiationStatus");
+        assert(radiation && radiation->text().contains("background 45 - protection 20 = exposure 25"));
+        assert(radiation->text().contains("0 residents / year"));
+        if (capture) dialog->grab().save("/tmp/suns-native-radiation-details.png");
+    });
+    native.orbitalStations.front().components = {ShipComponentType::AdvancedRadiationScreen};
+    native.planets.front().nativeOrbit.population = 12'000;
+    ++native.turn;
+    for (bool exported : {false, true}) {
+        MainWindowTestAccess::load(window, exported ? make_player_view(native, 1).state : native); settle();
+        inspect(button, [&](QDialog* dialog) {
+            assert(equipment(dialog, 1, 0) == "Bulk Radiation Screen");
+            assert(dialog->findChild<QLabel*>("stationRadiationStatus")->text().contains("protection 20"));
+        });
+    }
+    // Preview uses only received residents/fit. It remains a cheap scalar calculation.
+    QTimer::singleShot(40, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog && dialog->objectName() == "stationDesignerDialog");
+        auto* table = dialog->findChild<QTableWidget*>("stationFittingTable"); assert(table);
+        auto* defense = qobject_cast<QComboBox*>(table->cellWidget(2, 1)); assert(defense);
+        assert(defense->currentData().toInt() == int(ShipComponentType::BulkRadiationScreen));
+        assert(defense->findData(int(ShipComponentType::AdvancedRadiationScreen)) == -1);
+        defense->setCurrentIndex(defense->findData(-1));
+        auto* preview = dialog->findChild<QLabel*>("stationFitPreview"); assert(preview);
+        assert(preview->text().contains("exposure 45") && preview->text().contains("250 residents / year"));
+        assert(preview->text().contains("Cost 24 production"));
+        if (capture) dialog->grab().save("/tmp/suns-native-radiation-preview.png");
+        dialog->reject();
+    });
+    MainWindowTestAccess::designer(window);
+    set_survey_level(native, 1, native.planets.front().star, SurveyLevel::DeepSurvey, native.turn);
+    MainWindowTestAccess::load(window, native); settle();
+    inspect(button, [&](QDialog* dialog) {
+        assert(equipment(dialog, 1, 0) == "Advanced Radiation Screen");
+        assert(dialog->findChild<QLabel*>("stationRadiationStatus")->text().contains("protection 60"));
+    });
 }

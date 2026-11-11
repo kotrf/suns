@@ -2,6 +2,7 @@
 #include "main_window.hpp"
 #include "mineral_stock_panel.hpp"
 #include "station_details_dialog.hpp"
+#include "native_orbital_ui.hpp"
 #include "suns/campaign.hpp"
 #include "suns/production.hpp"
 #include "suns/stations.hpp"
@@ -313,10 +314,19 @@ void MainWindow::refreshColonyWorkspace()
             const auto habitability = known_planet_habitability(received, pendingOrders_.player, planet->id);
             const auto ownership = own ? QString("Your colony") : !owner ? QString("Owner unknown")
                 : *owner == 0 ? QString("Uncolonized") : QString("Empire %1").arg(*owner);
-            lines << ownership + (habitability ? QString(" • Hab %1%2%").arg(
+            const bool native = native_orbital_race(received, pendingOrders_.player);
+            lines << ownership + (habitability ? QString(native ? " • Orbital safety %1%2%" : " • Hab %1%2%").arg(
                 survey_level(received, pendingOrders_.player, star->id) == SurveyLevel::BasicScan ? "~" : "").arg(*habitability) : "");
             if (own) {
-                lines << QString("Population: %1 / %2%3").arg(planet->population)
+                if (native) {
+                    status->setToolTip("Orbital residents are protected by the station's received radiation screen. Surface factories, mines and environment do not determine their radiation dose.");
+                    const auto* station = native_orbital_station(received, *observed);
+                    lines << QString("Orbital residents: %1 / %2%3").arg(qulonglong(planet->nativeOrbit.population))
+                        .arg(qulonglong(station ? native_orbital_capacity(station->hull) : 0))
+                        .arg(planet->nativeOrbit.population != observed->nativeOrbit.population ? " (after cargo)" : "");
+                    if (const auto dose = native_orbital_radiation_status(received, *observed))
+                        lines << native_orbital_radiation_text(*dose).toHtmlEscaped().replace("\n", "<br>");
+                } else lines << QString("Population: %1 / %2%3").arg(planet->population)
                     .arg(population_capacity(planned, *planet, received.turn))
                     .arg(planet->population != observed->population ? " (after cargo)" : "");
                 if(habitat_completed(*planet)) lines << QString("Orbit: %1 / %2; reserve %3 years").arg(qulonglong(planet->habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity)).arg(planet->habitat.reserveYears);
@@ -324,30 +334,32 @@ void MainWindow::refreshColonyWorkspace()
                     .arg(planet->radar == PlanetaryRadarLevel::Full ? "Full" :
                          planet->radar == PlanetaryRadarLevel::Local ? "Local" : "None")
                     .arg(planetary_radar_range(planet->radar), 0, 'f', 0);
-                const auto workforce = colony_workforce(planned, *planet);
-                lines << QString("Factories: %1 active / %2 built (max %3)")
-                    .arg(workforce.operatingFactories).arg(planet->industry).arg(workforce.factoryLimit);
-                lines << QString("Mines: %1 active / %2 built (max %3)")
-                    .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit);
-                const auto* empire = find_player(received, pendingOrders_.player);
-                lines << QString("Advanced: %1 / %2 factories active • %3 / %4 mines active (included above)")
-                    .arg(workforce.operatingAdvancedFactories).arg(planet->advancedFactories)
-                    .arg(workforce.operatingAdvancedMines).arg(planet->advancedMines);
-                status->setToolTip(QString("Population operates factories and mines independently. Per 10,000 surface colonists: %1 factories and %2 mines. Excess buildings remain idle.")
-                    .arg(empire ? empire->race.factoriesPerTenThousand : kDefaultWorkforceRate)
-                    .arg(empire ? empire->race.minesPerTenThousand : kDefaultWorkforceRate));
-                const auto& damage=planet->warDamage;
-                if(planet->aftermathKnownLocally && damage.lastBombardmentTurn) {
-                    lines << QString("War ruins: %1 factories / %2 mines • last bombardment year %3")
-                        .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructFactory)))
-                        .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructMine))).arg(qulonglong(damage.lastBombardmentTurn));
-                    lines << QString("Reconstructed: %1 factories / %2 mines • use Reconstruct factories/mines in Production")
-                        .arg(qulonglong(damage.factoriesReconstructed)).arg(qulonglong(damage.minesReconstructed));
+                if (!native) {
+                    const auto workforce = colony_workforce(planned, *planet);
+                    lines << QString("Factories: %1 active / %2 built (max %3)")
+                        .arg(workforce.operatingFactories).arg(planet->industry).arg(workforce.factoryLimit);
+                    lines << QString("Mines: %1 active / %2 built (max %3)")
+                        .arg(workforce.operatingMines).arg(planet->mines).arg(workforce.mineLimit);
+                    const auto* empire = find_player(received, pendingOrders_.player);
+                    lines << QString("Advanced: %1 / %2 factories active • %3 / %4 mines active (included above)")
+                        .arg(workforce.operatingAdvancedFactories).arg(planet->advancedFactories)
+                        .arg(workforce.operatingAdvancedMines).arg(planet->advancedMines);
+                    status->setToolTip(QString("Population operates factories and mines independently. Per 10,000 surface colonists: %1 factories and %2 mines. Excess buildings remain idle.")
+                        .arg(empire ? empire->race.factoriesPerTenThousand : kDefaultWorkforceRate)
+                        .arg(empire ? empire->race.minesPerTenThousand : kDefaultWorkforceRate));
+                    const auto& damage=planet->warDamage;
+                    if(planet->aftermathKnownLocally && damage.lastBombardmentTurn) {
+                        lines << QString("War ruins: %1 factories / %2 mines • last bombardment year %3")
+                            .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructFactory)))
+                            .arg(qulonglong(reconstruction_remaining(*planet,ProductionKind::ReconstructMine))).arg(qulonglong(damage.lastBombardmentTurn));
+                        lines << QString("Reconstructed: %1 factories / %2 mines • use Reconstruct factories/mines in Production")
+                            .arg(qulonglong(damage.factoriesReconstructed)).arg(qulonglong(damage.minesReconstructed));
+                    }
+                    if(planet->aftermathKnownLocally && (damage.contamination || damage.lastCleanupTurn))
+                        lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
+                            .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
+                            .arg((damage.contamination+1)/2);
                 }
-                if(planet->aftermathKnownLocally && (damage.contamination || damage.lastCleanupTurn))
-                    lines << QString("Contamination: %1/100 • Hab penalty %2 points • decay 2/year • %3 years to clear. Cleanup: up to 10 for 6 resources + B/G 1/1 kt.")
-                        .arg(damage.contamination).arg(contamination_habitability_penalty(received,pendingOrders_.player,*planet))
-                        .arg((damage.contamination+1)/2);
                 lines << QString("Resources: %1 / year • Orbit: %2").arg(net_colony_output(planned,*planet,
                     projected_mineral_mining(received, *observed)))
                     .arg(find_orbital_station_at_planet(received, planet->id) ? "station" : "no station");

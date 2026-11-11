@@ -1,5 +1,6 @@
 #include "suns/communications.hpp"
 #include "suns/production.hpp"
+#include "native_orbital_fixture.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -141,6 +142,79 @@ void invalid_programs_never_consume_the_fleet_or_queue_work()
     assert(result.planets[1].owner == 2 && result.fleets.size() == 1);
 }
 
+void native_template_saves_reject_inapplicable_work_and_allow_legacy_repair()
+{
+    auto state = test::native_orbital_founding_fixture();
+    const ProductionTemplate legacy{"Legacy", {{ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1}}};
+    ProductionTemplate receiver{"Receiver", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+    receiver.defaultForNewColonies = true;
+    state.players.front().productionTemplates = {legacy, receiver};
+    const auto original = state.players.front().productionTemplates;
+    for (auto mode : {ProductionAutomation::None, ProductionAutomation::MinTerraform, ProductionAutomation::MaxTerraform}) {
+        for (bool overwrite : {false, true}) {
+            ProductionTemplate invalid{overwrite ? legacy.name : "New Terraform",
+                {{ProductionKind::Terraforming, kTerraformingCost, 0, mode, 1}}};
+            invalid.defaultForNewColonies = true;
+            assert(production_template_valid(invalid));
+            const PlayerOrders save{1, {SetProductionTemplateOrder{invalid}}};
+            const auto actual = TurnProcessor{}.process(state, {save});
+            assert(actual.players.front().productionTemplates == original);
+            const auto planned = planned_production_state(state, save);
+            assert(planned.players.front().productionTemplates == original);
+        }
+    }
+    auto repaired = legacy; repaired.items = receiver.items;
+    const PlayerOrders repair{1, {SetProductionTemplateOrder{repaired}}};
+    const auto fixed = TurnProcessor{}.process(state, {repair});
+    assert(fixed.players.front().productionTemplates.front() == repaired);
+    assert(fixed.players.front().productionTemplates.back() == receiver);
+    const auto deleted = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{legacy, true}}}});
+    assert(deleted.players.front().productionTemplates == std::vector<ProductionTemplate>{receiver});
+    auto ordinary = state.players.front(); ordinary.race.primaryTrait = PrimaryRaceTrait::Generalist;
+    assert(set_production_template(ordinary, SetProductionTemplateOrder{legacy}));
+    assert(ordinary.productionTemplates.front() == legacy);
+}
+
+void template_delete_save_pairs_commit_together()
+{
+    auto state = test::native_orbital_founding_fixture();
+    const ProductionTemplate source{"Radar only", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+    const ProductionTemplate neighbor{"Other default", {{ProductionKind::PlanetaryRadar, production_cost(ProductionKind::PlanetaryRadar)}}, true};
+    state.players.front().productionTemplates = {source, neighbor};
+    const auto original = state.players.front().productionTemplates;
+    auto invalid = source; invalid.name = "Radar revised"; invalid.defaultForNewColonies = true;
+    invalid.items.push_back({ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1});
+    const PlayerOrders independent{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{invalid}, SetResearchAllocationOrder{17}}};
+    const std::vector<ProductionTemplate> afterDelete{neighbor};
+    assert(TurnProcessor{}.process(state, {independent}).players.front().productionTemplates == afterDelete);
+    assert(planned_production_state(state, independent).players.front().productionTemplates == afterDelete);
+    PlayerOrders rejected{1, {SetProductionTemplateOrder{{source.name}, true, true}, SetProductionTemplateOrder{invalid}, SetResearchAllocationOrder{17}}};
+    const auto actual = TurnProcessor{}.process(state, {rejected});
+    assert(actual.players.front().productionTemplates == original);
+    assert(actual.players.front().technology.researchAllocationPercent == 17);
+    const auto planned = planned_production_state(state, rejected);
+    assert(planned.players.front().productionTemplates == original);
+    assert(planned.players.front().technology.researchAllocationPercent == 17);
+    auto valid = source; valid.name = invalid.name;
+    const PlayerOrders accepted{1, {SetProductionTemplateOrder{{source.name}, true, true}, SetProductionTemplateOrder{valid}}};
+    const std::vector<ProductionTemplate> renamed{neighbor, valid};
+    assert(TurnProcessor{}.process(state, {accepted}).players.front().productionTemplates == renamed);
+    assert(planned_production_state(state, accepted).players.front().productionTemplates == renamed);
+    const auto deleted = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{{source.name}, true}, SetResearchAllocationOrder{17}}}});
+    assert(deleted.players.front().productionTemplates == std::vector<ProductionTemplate>{neighbor});
+    const PlayerOrders orphan{1, {SetProductionTemplateOrder{{source.name}, true, true}, SetResearchAllocationOrder{17}}};
+    assert(TurnProcessor{}.process(state, {orphan}).players.front().productionTemplates == original);
+    assert(planned_production_state(state, orphan).players.front().productionTemplates == original);
+    auto full = state;
+    for (unsigned i = 2; i < 16; ++i) { auto extra = source; extra.name = "Extra " + std::to_string(i); full.players.front().productionTemplates.push_back(extra); }
+    const auto replaced = TurnProcessor{}.process(full, {accepted});
+    assert(replaced.players.front().productionTemplates.size() == 16);
+    assert(replaced.players.front().productionTemplates.back() == valid);
+    const PlayerOrders missing{1, {SetProductionTemplateOrder{{"Missing"}, true}, SetProductionTemplateOrder{valid}}};
+    const auto created = TurnProcessor{}.process(state, {missing});
+    assert(created.players.front().productionTemplates.size() == 3 && created.players.front().productionTemplates.back() == valid);
+}
+
 int main()
 {
     shared_templates_accept_batches_and_reject_unsafe_steps();
@@ -148,4 +222,6 @@ int main()
     no_plan_means_empty_even_with_a_mutable_default();
     delayed_terminal_plan_is_frozen_after_edit_and_delete();
     invalid_programs_never_consume_the_fleet_or_queue_work();
+    native_template_saves_reject_inapplicable_work_and_allow_legacy_repair();
+    template_delete_save_pairs_commit_together();
 }

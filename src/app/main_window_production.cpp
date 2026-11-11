@@ -290,7 +290,7 @@ void MainWindow::refreshProductionControls()
     const bool compatibleTemplate = templates->currentData(Qt::UserRole + 1).toBool();
     apply->setEnabled(productionControls_.friendlyColony && templates->currentIndex() > 0 && compatibleTemplate);
     apply->setToolTip(templates->currentIndex() > 0 && !compatibleTemplate
-        ? "This template includes surface factories or mines that this civilization cannot operate." : QString{});
+        ? "This template includes surface factories, mines or terraforming that do not apply to this civilization." : QString{});
     if (industry_upgrade_kind(selected)) {
         add->setToolTip(QString("Convert an existing basic installation; total buildings and workforce limit stay unchanged. %1 unreserved basic units remain.").arg(qulonglong(available)));
     } else if (reconstruction_kind(selected)) {

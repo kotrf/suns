@@ -42,23 +42,30 @@ std::uint8_t orbital_screen(const GameState& s, const Fleet& f)
 {
     std::uint8_t protection = 0;
     for (auto stack : fleet_ship_stacks(f)) if (const auto* d = find_ship_design(s, stack.design))
-        for (auto c : d->components) {
-            if (c == ShipComponentType::BulkRadiationScreen) protection = std::max<int>(protection, 20);
-            if (c == ShipComponentType::CompositeRadiationScreen) protection = std::max<int>(protection, 40);
-            if (c == ShipComponentType::AdvancedRadiationScreen) protection = std::max<int>(protection, 60);
-        }
+        for (auto c : d->components) protection = std::max(protection, radiation_screen_protection(c));
     return protection;
+}
+std::uint8_t radiation_screen_protection(ShipComponentType component)
+{
+    switch (component) {
+    case ShipComponentType::BulkRadiationScreen: return 20;
+    case ShipComponentType::CompositeRadiationScreen: return 40;
+    case ShipComponentType::AdvancedRadiationScreen: return 60;
+    default: return 0;
+    }
+}
+std::uint64_t orbital_radiation_casualties(std::uint64_t residents, std::uint8_t exposure, std::uint8_t tolerance)
+{
+    const auto excess = std::clamp(int(exposure) - int(tolerance), 0, 100);
+    // ceil(residents * excess / 500), without multiplying the full resident count.
+    return (residents / 500) * excess + ((residents % 500) * excess + 499) / 500;
 }
 std::uint64_t orbital_radiation_losses(const GameState& s, const Fleet& f)
 {
     const auto* owner = find_player(s, f.owner);
     if (!owner || owner->race.radiationImmune) return 0;
     const auto exposure = std::max(0, int(f.orbitalBase.background) - orbital_screen(s, f));
-    const auto excess = std::max(0, exposure - int(owner->race.habitableRadiation.maximum));
-    if (!excess || !f.colonists) return 0;
-    // 0.2% per excess unit/year, capped at 20%; ceil in whole people.
-    const auto rate = std::min(excess, 100);
-    return (f.colonists / 500) * rate + ((f.colonists % 500) * rate + 499) / 500;
+    return orbital_radiation_casualties(f.colonists, exposure, owner->race.habitableRadiation.maximum);
 }
 MineralCargo orbital_base_recovery(const GameState& s, const Fleet& f)
 {

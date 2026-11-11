@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "suns/production_template_edits.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
@@ -70,6 +71,7 @@ bool production_kind_applicable(PrimaryRaceTrait trait, ProductionKind kind)
     if (trait != PrimaryRaceTrait::HabitatCivilization) return true;
     return kind != ProductionKind::Factory && kind != ProductionKind::Mine
         && kind != ProductionKind::AdvancedFactory && kind != ProductionKind::AdvancedMine
+        && kind != ProductionKind::Terraforming
         && !industry_upgrade_kind(kind) && !reconstruction_kind(kind);
 }
 bool production_template_applicable(PrimaryRaceTrait trait, const ProductionTemplate& value)
@@ -128,6 +130,7 @@ std::vector<ProductionTemplate> colony_development_presets()
 
 bool set_production_template(Player& player, const SetProductionTemplateOrder& order)
 {
+    if (order.renameSource && !order.remove) return false;
     auto found = std::find_if(player.productionTemplates.begin(), player.productionTemplates.end(),
         [&](const auto& value) { return value.name == order.value.name; });
     if (order.remove) {
@@ -136,12 +139,36 @@ bool set_production_template(Player& player, const SetProductionTemplateOrder& o
         return true;
     }
     if (!production_template_valid(order.value)
+        || !production_template_applicable(player.race.primaryTrait, order.value)
         || (found == player.productionTemplates.end() && player.productionTemplates.size() >= 16)) return false;
     if (order.value.defaultForNewColonies)
         for (auto& value : player.productionTemplates) value.defaultForNewColonies = false;
     if (found == player.productionTemplates.end()) player.productionTemplates.push_back(order.value);
     else *found = order.value;
     return true;
+}
+
+std::size_t apply_production_template_edit(Player& player, const std::vector<Order>& orders, std::size_t index)
+{
+    if (index >= orders.size()) return 1;
+    const auto* edit = std::get_if<SetProductionTemplateOrder>(&orders[index]);
+    if (!edit) return 1;
+    if (edit->remove && edit->renameSource) {
+        if (index + 1 >= orders.size()) return 1;
+        const auto* replacement = std::get_if<SetProductionTemplateOrder>(&orders[index + 1]);
+        if (replacement && !replacement->remove) {
+            Player candidate;
+            candidate.id = player.id; candidate.race = player.race;
+            candidate.productionTemplates = player.productionTemplates;
+            if (set_production_template(candidate, *edit)) {
+                if (set_production_template(candidate, *replacement))
+                    player.productionTemplates = std::move(candidate.productionTemplates);
+                return 2;
+            }
+        } else return 1;
+    }
+    (void)set_production_template(player, *edit);
+    return 1;
 }
 
 bool apply_production_template(Planet& planet, const Player& player, const std::string& name)
@@ -378,7 +405,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
 GameState planned_production_state(const GameState& state, const PlayerOrders& pending)
 {
     auto result = planned_ship_design_state(state, pending);
-    for (const auto& order : pending.orders) std::visit([&](const auto& value) {
+    for (std::size_t orderIndex = 0; orderIndex < pending.orders.size(); ++orderIndex) std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, SetResearchAllocationOrder> || std::is_same_v<T, SetResearchPlanOrder>) {
             // Forecast settings must follow the research orders accepted by End Turn.
@@ -406,7 +433,8 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
         } else if constexpr (std::is_same_v<T, SetProductionTemplateOrder>) {
             const auto player = std::find_if(result.players.begin(), result.players.end(),
                 [&](const auto& entry) { return entry.id == pending.player; });
-            if (player != result.players.end()) (void)set_production_template(*player, value);
+            if (player != result.players.end())
+                orderIndex += apply_production_template_edit(*player, pending.orders, orderIndex) - 1;
         } else if constexpr (std::is_same_v<T, QueueProductionBatchOrder> || std::is_same_v<T, ApplyProductionTemplateOrder>
             || std::is_same_v<T, QueueProductionOrder> || std::is_same_v<T, QueueShipDesignOrder>
             || std::is_same_v<T, ReorderProductionQueueOrder> || std::is_same_v<T, CancelProductionOrder>) {
@@ -446,7 +474,7 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
                 }
             }
         }
-    }, order);
+    }, pending.orders[orderIndex]);
     return result;
 }
 

@@ -30,8 +30,8 @@ void starter_is_paid_legal_and_observed()
         state.players.front().controller = controller;
         const auto levels = state.players.front().technology.levels;
         const auto receipt = initialize_native_orbital_start(state, 1, state.planets.front().id, native_orbital_start_budget());
-        assert(receipt && receipt->productionSpent == 193);
-        assert(same_minerals(receipt->mineralsSpent, {72, 9, 26}));
+        assert(receipt && receipt->productionSpent == 243);
+        assert(same_minerals(receipt->mineralsSpent, {112, 19, 36}));
         const auto& home = state.planets.front();
         assert(home.owner == 1 && !home.population && !home.industry && !home.mines);
         assert(!home.advancedFactories && !home.advancedMines && !home.habitat.population);

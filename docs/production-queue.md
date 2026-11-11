@@ -90,6 +90,39 @@ by fleet arrival actions. **Delete** removes the stored template without removin
 rules already applied to colonies. Templates are player scoped, persist in saves
 and player turn exports, and their changes travel in turn-order packets.
 
+Saving a program also checks whether all its steps apply to the owner's
+civilization. The editor disables inapplicable choices, blocks adding/updating
+such a step and explains why an incompatible draft cannot be saved. The host
+rejects the same edit before changing the library or its default flags. Pending
+library edits use the real race profile. Existing incompatible programs remain
+readable and deletable; their marked steps can be removed or replaced before
+saving a repaired program. Normal programs of other civilizations retain their
+existing choices.
+
+Archive loading restores structurally valid programs even when their steps no
+longer apply to the saved civilization. It validates the 16-entry limit, unique
+names and at most one default directly, preserving the saved entries/flags.
+Racial admission belongs to new editing/execution commands; those guards remain
+active after loading. Host/PBEM files and legacy drafts can therefore be reopened
+and repaired through the editor without accepting new incompatible saves.
+
+Renaming explicitly marks the delete half of its adjacent delete/save pair.
+When the source exists, host execution and both pending previews apply that
+marked pair atomically to a bounded candidate library. If the replacement is
+rejected, original entries/default flags survive. An ordinary Delete followed
+by an unrelated Save remains independent, even when the Save is rejected.
+An orphan rename cannot delete the source. Valid renames work at the 16-entry
+limit; a missing-source deletion does not block the next create. Other orders
+keep their original ordering and indices.
+
+Save **v120** and turn-order **v50** persist the rename-source flag, including
+the host inbox where descriptions are absent. Earlier supported files remain
+readable. Legacy pending drafts/order packets recover intent only from the
+exact old editor-generated Rename/Save descriptions; Delete is never inferred
+to be Rename merely from adjacency. A pre-v120 inbox alone has no descriptions
+and cannot recover that distinction: its unmarked actions remain independent.
+Reimporting the original packet recovers the legacy editor's rename intent.
+
 Save v59 adds the bounded production extension and physical natural baselines;
 turn-order v17 adds batch, template-edit and template-apply orders. Earlier
 supported formats remain readable.

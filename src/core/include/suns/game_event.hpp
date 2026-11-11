@@ -73,6 +73,7 @@ enum class GameEventKind {
     FleetScrapStatus,
     VisitorCourseChanged,
     RemoteMiningOutput,
+    NativeOrbitalRadiationLoss,
 };
 
 inline constexpr bool is_visitor_event(GameEventKind kind)

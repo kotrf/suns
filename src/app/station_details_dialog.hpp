@@ -12,7 +12,8 @@ QIcon stationIcon(OrbitalStationHullType hull);
 // never a physical host station or an unfinished production loadout.
 class StationDetailsDialog final : public QDialog {
 public:
-    StationDetailsDialog(const OrbitalStation& station, std::uint64_t turn, QWidget* parent = nullptr);
+    StationDetailsDialog(const OrbitalStation& station, std::uint64_t turn, QWidget* parent = nullptr,
+        const QString& radiationText = {});
 };
 
 } // namespace suns

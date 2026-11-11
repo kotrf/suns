@@ -30,7 +30,12 @@ Select an owned colony and use **Station…** to inspect, build or refit its
 station. The dialog shows armor, shields, damage, technology requirements and
 production/mineral costs. Equipment choices reuse the ship catalog and its
 technology/racial access gates. Stations accept beams/torpedoes, armor/shields
-and combat electronics. Engines, bombs, scanners and cloaks are excluded.
+and combat electronics. The [native orbital civilization](asymmetric-empires.md#implementation-stage-5-radiation-and-paid-station-protection) may also fit one
+Bulk/Composite/Advanced Radiation Screen in a defense slot (20/40/60 protection).
+Bulk has native early access; the stronger tiers retain normal technology gates.
+The designer previews stellar dose/losses using received residents and the draft
+fit; Station Details and System Details show the received operational fit.
+An unfinished refit provides no new protection, and the complete fit is paid. Engines, bombs, scanners and cloaks are excluded.
 
 These hulls and prices are initial Suns! balance, rather than reproduced Stars!
 station statistics:
