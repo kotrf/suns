@@ -184,7 +184,11 @@ void template_delete_save_pairs_commit_together()
     const auto original = state.players.front().productionTemplates;
     auto invalid = source; invalid.name = "Radar revised"; invalid.defaultForNewColonies = true;
     invalid.items.push_back({ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1});
-    PlayerOrders rejected{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{invalid}, SetResearchAllocationOrder{17}}};
+    const PlayerOrders independent{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{invalid}, SetResearchAllocationOrder{17}}};
+    const std::vector<ProductionTemplate> afterDelete{neighbor};
+    assert(TurnProcessor{}.process(state, {independent}).players.front().productionTemplates == afterDelete);
+    assert(planned_production_state(state, independent).players.front().productionTemplates == afterDelete);
+    PlayerOrders rejected{1, {SetProductionTemplateOrder{{source.name}, true, true}, SetProductionTemplateOrder{invalid}, SetResearchAllocationOrder{17}}};
     const auto actual = TurnProcessor{}.process(state, {rejected});
     assert(actual.players.front().productionTemplates == original);
     assert(actual.players.front().technology.researchAllocationPercent == 17);
@@ -192,12 +196,15 @@ void template_delete_save_pairs_commit_together()
     assert(planned.players.front().productionTemplates == original);
     assert(planned.players.front().technology.researchAllocationPercent == 17);
     auto valid = source; valid.name = invalid.name;
-    const PlayerOrders accepted{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{valid}}};
+    const PlayerOrders accepted{1, {SetProductionTemplateOrder{{source.name}, true, true}, SetProductionTemplateOrder{valid}}};
     const std::vector<ProductionTemplate> renamed{neighbor, valid};
     assert(TurnProcessor{}.process(state, {accepted}).players.front().productionTemplates == renamed);
     assert(planned_production_state(state, accepted).players.front().productionTemplates == renamed);
     const auto deleted = TurnProcessor{}.process(state, {{1, {SetProductionTemplateOrder{{source.name}, true}, SetResearchAllocationOrder{17}}}});
     assert(deleted.players.front().productionTemplates == std::vector<ProductionTemplate>{neighbor});
+    const PlayerOrders orphan{1, {SetProductionTemplateOrder{{source.name}, true, true}, SetResearchAllocationOrder{17}}};
+    assert(TurnProcessor{}.process(state, {orphan}).players.front().productionTemplates == original);
+    assert(planned_production_state(state, orphan).players.front().productionTemplates == original);
     auto full = state;
     for (unsigned i = 2; i < 16; ++i) { auto extra = source; extra.name = "Extra " + std::to_string(i); full.players.front().productionTemplates.push_back(extra); }
     const auto replaced = TurnProcessor{}.process(full, {accepted});

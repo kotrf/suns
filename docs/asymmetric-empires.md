@@ -369,15 +369,19 @@ programs from old v119 files remain loadable, while malformed steps, duplicate
 names, multiple defaults and oversized libraries are rejected. Existing host and
 PBEM archives reopen for repair/deletion; new inapplicable edits still reject.
 
-Legacy pending renames are adjacent delete/save orders. A shared helper applies
-the pair atomically when the source exists: if the replacement is inapplicable,
-the original library and all default flags remain intact. Host execution,
-planned production and the actual Qt preview agree, including saved host/PBEM
-drafts and decoded turn-order files. Valid renames, standalone deletion and
-later orders remain available without copying world history or simulating years.
+Pending renames explicitly mark the source half of an adjacent delete/save pair.
+A shared helper applies only that marked pair atomically: if the replacement is
+inapplicable, the original library/default flags remain intact. An independent
+Delete followed by a rejected Save still deletes its source. Host execution,
+planned production and the actual Qt preview agree, including genuine v119/v49
+drafts/packets whose editor-generated descriptions restore intent. Modern
+save120/orders50 persist the flag even in host inboxes without descriptions.
+Valid renames, standalone deletion and later orders remain available without
+copying world history or simulating years.
 
-Save **v119** appends the report/event kinds without new serialized fields;
-orders v49 and race v3 remain unchanged. The genuine
+Save v119 appended the report/event kinds without new serialized fields.
+Save **v120** / orders **v50** add the explicit template-rename intent; race v3
+remains unchanged. The genuine
 `tests/fixtures/native-orbital-v118-radiation.suns` was produced by the unmodified
 v118 writer at main `24994bc` before this change. It loads as an unprotected Dock
 with 25,000 residents, loses 250 on the next Yellow year, and survives a real paid
@@ -635,7 +639,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v119 / orders v49 / portable race v3. The native
+Current game formats are save v120 / orders v50 / portable race v3. The native
 population/mining foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

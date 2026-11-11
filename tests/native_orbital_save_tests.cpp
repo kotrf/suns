@@ -25,7 +25,7 @@ SaveGameData envelope(GameState state)
     save.pendingOrders = {1, {}};
     return save;
 }
-void saved_rename_pairs_preserve_the_source_on_rejection(bool pbem)
+void saved_template_edits_respect_intent(bool pbem, bool rename, bool legacy)
 {
     auto host = envelope(test::native_orbital_founding_fixture());
     host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
@@ -35,26 +35,43 @@ void saved_rename_pairs_preserve_the_source_on_rejection(bool pbem)
     const auto original = host.state.players.front().productionTemplates;
     auto renamed = source; renamed.name = "Radar revised";
     renamed.items.push_back({ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1});
-    const PlayerOrders orders{1, {SetProductionTemplateOrder{{source.name}, true}, SetProductionTemplateOrder{renamed}}};
+    PlayerOrders orders{1, {SetProductionTemplateOrder{{source.name}, true, rename}, SetProductionTemplateOrder{renamed}}};
     auto archived = pbem ? make_player_turn(host, 1) : host;
-    archived.pendingOrders = orders; archived.pendingDescriptions = {"Rename old program", "Save new program"};
+    archived.pendingOrders = orders;
+    archived.pendingDescriptions = {(rename ? "Rename colony template " : "Delete colony template ") + QString::fromStdString(source.name),
+        "Save colony template " + QString::fromStdString(renamed.name)};
+    // Current intent survives independently of display text, including inboxes.
+    if (!legacy) archived.pendingDescriptions = {"Localized action", "Localized save"};
     QTemporaryDir directory; QString error; SaveGameData loaded;
-    const auto path = directory.filePath("pending-rename.suns");
-    assert(write_save_game_file(path, archived, error) && read_save_game_file(path, loaded, error));
-    const auto orderPath = directory.filePath("rename.sunsorders");
+    const QString action = rename ? "rename" : "delete";
+    const QString fixtures = QStringLiteral(SUNS_SOURCE_DIR "/tests/fixtures/");
+    const auto path = legacy ? fixtures + "template-intent-v119-" + (pbem ? "player-" : "host-") + action + ".suns"
+        : directory.filePath("pending-template.suns");
+    if (!legacy) assert(write_save_game_file(path, archived, error));
+    assert(read_save_game_file(path, loaded, error));
+    const auto orderPath = legacy ? fixtures + "template-intent-v49-" + action + ".sunsorders"
+        : directory.filePath("template.sunsorders");
     TurnOrderFileData packet{host.campaignId, host.state.turn, host.turnToken, loaded.pendingOrders, loaded.pendingDescriptions};
-    assert(write_turn_order_file(orderPath, packet, error)); TurnOrderFileData decoded;
+    if (!legacy) assert(write_turn_order_file(orderPath, packet, error));
+    TurnOrderFileData decoded;
     assert(read_turn_order_file(orderPath, decoded, error));
     auto coordinator = host;
     coordinator.state.players.push_back({2, "Local host"}); coordinator.playerTokens[2] = 18;
     coordinator.pendingOrders = {2, {}};
     assert(validate_turn_submission(coordinator, decoded).isEmpty());
     const auto actual = TurnProcessor{}.process(host.state, {decoded.orders});
-    assert(actual.players.front().productionTemplates == original);
-    assert(planned_production_state(loaded.state, loaded.pendingOrders).players.front().productionTemplates == original);
+    const auto expected = rename ? original : std::vector<ProductionTemplate>{neighbor};
+    assert(actual.players.front().productionTemplates == expected);
+    assert(planned_production_state(loaded.state, loaded.pendingOrders).players.front().productionTemplates == expected);
+    coordinator.inbox = {decoded.orders}; SaveGameData inboxReload;
+    const auto inboxPath = directory.filePath("host-inbox.suns");
+    assert(write_save_game_file(inboxPath, coordinator, error) && read_save_game_file(inboxPath, inboxReload, error));
+    assert(inboxReload.inbox.size() == 1);
+    assert(TurnProcessor{}.process(inboxReload.state, inboxReload.inbox).players.front().productionTemplates == expected);
     auto continued = host; continued.state = actual;
-    assert(write_save_game_file(path, continued, error) && read_save_game_file(path, loaded, error));
-    assert(loaded.state.players.front().productionTemplates == original);
+    const auto continuedPath = directory.filePath("continued.suns");
+    assert(write_save_game_file(continuedPath, continued, error) && read_save_game_file(continuedPath, loaded, error));
+    assert(loaded.state.players.front().productionTemplates == expected);
     auto valid = source; valid.name = renamed.name;
     decoded.orders.orders.back() = SetProductionTemplateOrder{valid};
     const auto accepted = TurnProcessor{}.process(host.state, {decoded.orders});
@@ -81,7 +98,7 @@ void legacy_native_template_archives_remain_loadable(bool pbem)
         host.pendingDescriptions = {"Legacy template edit"};
         const auto packet = pbem ? make_player_turn(host, 1) : host;
         assert(write_save_game_file(path, packet, error));
-        // The v119 writer is unchanged from af5e466, where these libraries were accepted.
+        // Current files also preserve structurally valid legacy libraries.
         const bool read = read_save_game_file(path, loaded, error);
         if (!read) std::fprintf(stderr, "Legacy %s template: %s\n", pbem ? "PBEM" : "host", qPrintable(error));
         assert(read);
@@ -816,7 +833,7 @@ void native_mining_manifests_and_v117_migration()
         return e.kind == GameEventKind::RemoteMiningOutput && e.deliveredMinerals.ironium == 8 && e.observedTurn == 2 && e.turn == 3;
     }));
     assert(reopened.state.players.front().history[1].remoteExtraction.ironium == 0);
-    // Order wire format remains v49; the decoder feeds the same physical rule.
+    // The current order decoder feeds the same physical rule.
     TurnOrderFileData packet{118, 1, 17, {1, {SetRemoteMiningOrder{1, true}}}, {"Remote mining"}};
     const auto orderPath = directory.filePath("mining.sunsorders"); TurnOrderFileData decoded;
     assert(write_turn_order_file(orderPath, packet, error) && read_turn_order_file(orderPath, decoded, error));
@@ -1019,10 +1036,12 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
-    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-rename-host") { saved_rename_pairs_preserve_the_source_on_rejection(false); return 0; }
-    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-rename-pbem") { saved_rename_pairs_preserve_the_source_on_rejection(true); return 0; }
-    saved_rename_pairs_preserve_the_source_on_rejection(false);
-    saved_rename_pairs_preserve_the_source_on_rejection(true);
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-rename-host") { saved_template_edits_respect_intent(false, true, true); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-rename-pbem") { saved_template_edits_respect_intent(true, true, true); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-delete-host") { saved_template_edits_respect_intent(false, false, true); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-delete-pbem") { saved_template_edits_respect_intent(true, false, true); return 0; }
+    for (bool pbem : {false, true}) for (bool rename : {false, true}) for (bool legacy : {false, true})
+        saved_template_edits_respect_intent(pbem, rename, legacy);
     if (argc == 2 && QString::fromLatin1(argv[1]) == "review-legacy-host") { legacy_native_template_archives_remain_loadable(false); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "review-legacy-pbem") { legacy_native_template_archives_remain_loadable(true); return 0; }
     legacy_native_template_archives_remain_loadable(false);

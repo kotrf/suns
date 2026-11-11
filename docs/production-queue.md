@@ -106,13 +106,22 @@ Racial admission belongs to new editing/execution commands; those guards remain
 active after loading. Host/PBEM files and legacy drafts can therefore be reopened
 and repaired through the editor without accepting new incompatible saves.
 
-Renaming uses the existing adjacent delete/save order pair. When the source
-exists, host execution and both pending previews apply the pair atomically to
-a bounded candidate library. If the replacement is rejected, the original
-entries and default flags survive. Valid renames work at the 16-entry limit.
-Standalone deletion remains available; a missing-source deletion does not block
-the next create. Other orders keep their original ordering and indices. This
-also protects loaded legacy drafts without changing the save/order formats.
+Renaming explicitly marks the delete half of its adjacent delete/save pair.
+When the source exists, host execution and both pending previews apply that
+marked pair atomically to a bounded candidate library. If the replacement is
+rejected, original entries/default flags survive. An ordinary Delete followed
+by an unrelated Save remains independent, even when the Save is rejected.
+An orphan rename cannot delete the source. Valid renames work at the 16-entry
+limit; a missing-source deletion does not block the next create. Other orders
+keep their original ordering and indices.
+
+Save **v120** and turn-order **v50** persist the rename-source flag, including
+the host inbox where descriptions are absent. Earlier supported files remain
+readable. Legacy pending drafts/order packets recover intent only from the
+exact old editor-generated Rename/Save descriptions; Delete is never inferred
+to be Rename merely from adjacency. A pre-v120 inbox alone has no descriptions
+and cannot recover that distinction: its unmarked actions remain independent.
+Reimporting the original packet recovers the legacy editor's rename intent.
 
 Save v59 adds the bounded production extension and physical natural baselines;
 turn-order v17 adds batch, template-edit and template-apply orders. Earlier

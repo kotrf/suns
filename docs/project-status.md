@@ -1,5 +1,35 @@
 # Project status and development handoff
 
+## #287 independent-Delete P3: persist explicit Rename intent — 11 November 2026
+
+Review [5858323183](https://github.com/kotrf/suns/pull/287#pullrequestreview-5858323183)
+on `1d0ca99` confirmed the previous rename fix and found adjacent independent
+Delete/Save actions were incorrectly rolled back together. Core execution,
+host/PBEM saved drafts, a real order packet and the Qt preview reproduced it.
+
+Only an explicit rename-source flag now starts the bounded atomic transaction.
+An independent Delete still executes when the following Save is rejected, and
+an orphan rename cannot remove its source. The editor sets the flag directly.
+Legacy pending drafts and packets recover intent from the exact descriptions
+emitted by the old editor; adjacency alone never implies Rename. Save **v120**
+and orders **v50** persist the flag even in host inboxes without descriptions.
+Portable race v3 is unchanged. Older inbox-only ambiguity and reimport recovery
+are documented in [production templates](production-queue.md#production-templates).
+
+Six genuine save119/orders49 fixtures were produced by the unmodified writer
+and headers at `1d0ca99`, with source generator/provenance/hashes retained.
+Tests distinguish Delete/Rename in both host/player files and packets, cover
+modern opaque descriptions, imported inbox save/reload, valid subsequent
+renames, default preservation, orphan renames and real Qt loading/repair.
+GCC14.2/Qt6.12 Debug focused **3/3 CTest in 3.40 s** passed.
+The complete Debug build and **126/126 CTest in 177.11 s** passed. Prior source CI 42999800441 succeeded, 126/126;
+the new source/full CI are recorded in GitHub. Diff and local links are checked
+before publication. No future-turn UI forecasts or hidden-state access added.
+
+PR #287 stays open for repeat review, with no merge or thread resolution.
+Main `24994bc`, #50 open, native setup/import/restart gated, #53/#63 frozen.
+Next remains support/growth, paid hulls and actual Human/Computer expansion.
+
 ## #287 rename P3: commit legacy delete/save pairs atomically — 11 November 2026
 
 Review [5856614863](https://github.com/kotrf/suns/pull/287#pullrequestreview-5856614863)

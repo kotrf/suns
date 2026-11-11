@@ -130,6 +130,7 @@ std::vector<ProductionTemplate> colony_development_presets()
 
 bool set_production_template(Player& player, const SetProductionTemplateOrder& order)
 {
+    if (order.renameSource && !order.remove) return false;
     auto found = std::find_if(player.productionTemplates.begin(), player.productionTemplates.end(),
         [&](const auto& value) { return value.name == order.value.name; });
     if (order.remove) {
@@ -152,7 +153,8 @@ std::size_t apply_production_template_edit(Player& player, const std::vector<Ord
     if (index >= orders.size()) return 1;
     const auto* edit = std::get_if<SetProductionTemplateOrder>(&orders[index]);
     if (!edit) return 1;
-    if (edit->remove && index + 1 < orders.size()) {
+    if (edit->remove && edit->renameSource) {
+        if (index + 1 >= orders.size()) return 1;
         const auto* replacement = std::get_if<SetProductionTemplateOrder>(&orders[index + 1]);
         if (replacement && !replacement->remove) {
             Player candidate;
@@ -163,7 +165,7 @@ std::size_t apply_production_template_edit(Player& player, const std::vector<Ord
                     player.productionTemplates = std::move(candidate.productionTemplates);
                 return 2;
             }
-        }
+        } else return 1;
     }
     (void)set_production_template(player, *edit);
     return 1;

@@ -359,7 +359,7 @@ void MainWindow::openColonyTemplates()
         if (!save->isEnabled() || !production_template_applicable(currentTrait(), draft->value)) return;
         draft->value.defaultForNewColonies = false;
         if (!draft->source.empty() && draft->source != draft->value.name)
-            appendPendingOrder(SetProductionTemplateOrder{{draft->source}, true}, "Rename colony template " + QString::fromStdString(draft->source));
+            appendPendingOrder(SetProductionTemplateOrder{{draft->source}, true, true}, "Rename colony template " + QString::fromStdString(draft->source));
         appendPendingOrder(SetProductionTemplateOrder{draft->value}, "Save colony template " + QString::fromStdString(draft->value.name));
         draft->source = draft->value.name;
         draft->saved = colonyTemplatesForOrders();
