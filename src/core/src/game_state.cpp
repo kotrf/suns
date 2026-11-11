@@ -4,6 +4,7 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
+#include "suns/native_orbital_support.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/unknown_objects.hpp"
@@ -1856,6 +1857,7 @@ std::int64_t projected_population_growth(const Planet& planet)
 std::int64_t projected_population_growth(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
+    if (native_orbital_race(state, planet.owner)) return projected_native_population_change(state, planet);
     const auto* player = find_player(state, planet.owner);
     return surface_population_growth(planet, current_planet_habitability(state, planet, turn),
         population_capacity(state, planet, turn),
@@ -1942,21 +1944,27 @@ EmpireTurnStatistics empire_turn_statistics(const GameState& state, PlayerId pla
     for (const auto& planet : colonies.planets) {
         if (planet.owner != playerId) continue;
         if (native) {
-            std::uint64_t observed{};
+            std::uint64_t observed{}, stationObserved{};
             if (knowledge) for (const auto& record : knowledge->surveyKnowledge)
                 if (record.star == planet.star && record.observedOwner == playerId
                     && record.planetSnapshot && record.planetSnapshot->habitat) {
-                    observed = record.observedTurn; break;
+                    observed = record.observedTurn;
+                    stationObserved = record.planetSnapshot->habitat->stationEvidenceTime / 3; break;
                 }
             observeAsset(observed);
+            if (planet.nativeOrbit.servicedTurn) observeAsset(planet.nativeOrbit.servicedTurn);
+            if (stationObserved) observeAsset(stationObserved);
         }
+        const auto output = native && planet.nativeOrbit.servicedTurn
+            ? (native_orbital_station(colonies, planet) ? planet.nativeOrbit.productionAvailable : 0)
+            : colony_output(colonies, planet);
         result.colonyHistory.push_back({planet.id, total_colony_population(planet), planet.industry,
-            planet.mines, colony_output(colonies, planet), planet.minerals});
+            planet.mines, output, planet.minerals});
         ++result.colonies;
         result.population += total_colony_population(planet);
         result.factories += planet.industry;
         result.mines += planet.mines;
-        result.productionOutput += colony_output(colonies, planet);
+        result.productionOutput += output;
         result.minerals.ironium += planet.minerals.ironium;
         result.minerals.boranium += planet.minerals.boranium;
         result.minerals.germanium += planet.minerals.germanium;

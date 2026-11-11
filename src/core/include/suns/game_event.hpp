@@ -74,6 +74,9 @@ enum class GameEventKind {
     VisitorCourseChanged,
     RemoteMiningOutput,
     NativeOrbitalRadiationLoss,
+    NativeOrbitalSupportRestored,
+    NativeOrbitalReserveUsed,
+    NativeOrbitalSupportFailure,
 };
 
 inline constexpr bool is_visitor_event(GameEventKind kind)

@@ -1,5 +1,6 @@
 #include "suns/production.hpp"
 #include "suns/production_template_edits.hpp"
+#include "suns/native_orbital_support.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
@@ -217,7 +218,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
     if (planet.owner == 0) return result;
     const auto* player = find_player(state, planet.owner);
-    const auto upkeep=service_orbital_habitat(state,planet,result.engineeringSupport);
+    const auto upkeep=native_orbital_race(state, planet.owner) ? service_native_orbit(state, planet)
+        : service_orbital_habitat(state,planet,result.engineeringSupport);
     const auto gross=colony_output(state, planet);
     const auto output=gross-std::min(gross,upkeep);
     const bool researchActive = player && player->technology.researchActive;

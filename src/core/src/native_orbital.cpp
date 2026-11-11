@@ -27,7 +27,7 @@ const OrbitalStation* native_orbital_station(const GameState& state, const Plane
     return station && station->id == planet.nativeOrbit.station && station->owner == planet.owner
         && station->damagePercent >= 0 && station->damagePercent < 100 ? station : nullptr;
 }
-std::uint32_t native_orbital_output(const GameState& state, const Planet& planet)
+std::uint32_t native_orbital_potential_output(const GameState& state, const Planet& planet)
 {
     const auto* station = native_orbital_station(state, planet);
     if (!station) return 0;
@@ -42,6 +42,11 @@ std::uint32_t native_orbital_output(const GameState& state, const Planet& planet
         else high = mid;
     }
     return static_cast<std::uint32_t>(low);
+}
+std::uint32_t native_orbital_output(const GameState& state, const Planet& planet)
+{
+    if (planet.nativeOrbit.servicedTurn && planet.nativeOrbit.service != HabitatService::Normal) return 0;
+    return native_orbital_potential_output(state, planet);
 }
 StationLoadout native_orbital_founding_loadout()
 {

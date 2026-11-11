@@ -2,6 +2,7 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
+#include "suns/native_orbital_support.hpp"
 #include <algorithm>
 
 namespace suns {
@@ -83,6 +84,7 @@ std::int64_t projected_orbital_growth(const GameState& state,const Planet& plane
 std::uint32_t net_colony_output(const GameState& state,const Planet& planet,
     std::optional<MineralCargo> firstTurnMining)
 {
+    if (native_orbital_race(state, planet.owner)) return native_orbital_support_quote(state, planet).output;
     auto forecast=after_ordinary_mining(state,planet,firstTurnMining);
     const auto paid=service_orbital_habitat(state,forecast,engineering_station_available(state,forecast));
     const auto gross=colony_output(state, forecast);
@@ -118,6 +120,16 @@ void merge_received_habitat_station(std::optional<PlanetSurveySnapshot>& incomin
 {
     if(!incoming || !incoming->habitat) return;
     auto& next=*incoming->habitat;
+    if (previous && previous->habitat) {
+        const auto& old = *previous->habitat;
+        // A completed native annual packet is one economic observation.
+        // Older pre-production scans from the same year may add survey detail,
+        // but cannot combine its newborn people with unspent old stocks/queue.
+        if (old.nativeOrbit.growthAppliedTurn
+            && old.nativeOrbit.growthAppliedTurn >= next.stationEvidenceTime / 3
+            && old.nativeOrbit.growthAppliedTurn > next.nativeOrbit.growthAppliedTurn)
+            next = old;
+    }
     if(previous && previous->habitat && previous->habitat->stationEvidenceTime>next.stationEvidenceTime) {
         const auto& old=*previous->habitat;
         next.station=old.station;next.stationSupported=old.stationSupported;next.stationEvidenceTime=old.stationEvidenceTime;

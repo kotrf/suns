@@ -324,8 +324,13 @@ void MainWindow::refreshColonyWorkspace()
                     lines << QString("Orbital residents: %1 / %2%3").arg(qulonglong(planet->nativeOrbit.population))
                         .arg(qulonglong(station ? native_orbital_capacity(station->hull) : 0))
                         .arg(planet->nativeOrbit.population != observed->nativeOrbit.population ? " (after cargo)" : "");
-                    if (const auto dose = native_orbital_radiation_status(received, *observed))
-                        lines << native_orbital_radiation_text(*dose).toHtmlEscaped().replace("\n", "<br>");
+                    if (const auto dose = native_orbital_radiation_status(received, *observed)) {
+                        lines << QString("Radiation: %1 - %2 = %3; tolerance %4.<br>Approx. radiation losses: %5 / year.")
+                            .arg(dose->background).arg(dose->protection).arg(dose->exposure).arg(dose->tolerance)
+                            .arg(qulonglong(dose->annualLoss));
+                        status->setToolTip(native_orbital_radiation_text(*dose) + "\n" + native_orbital_support_text(planned, *planet));
+                    }
+                    lines << native_orbital_support_text(planned, *planet, true).toHtmlEscaped().replace("\n", "<br>");
                 } else lines << QString("Population: %1 / %2%3").arg(planet->population)
                     .arg(population_capacity(planned, *planet, received.turn))
                     .arg(planet->population != observed->population ? " (after cargo)" : "");

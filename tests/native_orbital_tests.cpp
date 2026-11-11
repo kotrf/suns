@@ -50,7 +50,8 @@ void shared_unload_obeys_station_capacity_and_keeps_minerals_independent()
             assert(!next.planets.front().population && !next.planets.front().habitat.population);
             assert(total_colony_population(next.planets.front()) + next.fleets.front().colonists == 100'500-free);
             assert(next.fleets.front().minerals.ironium == (cargo == FleetCargoKind::All ? 0 : 3));
-            assert(next.planets.front().minerals.ironium == stock.ironium + (cargo == FleetCargoKind::All ? 3 : 0));
+            assert(next.planets.front().minerals.ironium + next.planets.front().nativeOrbit.mineralUnitsPaid
+                == stock.ironium + (cargo == FleetCargoKind::All ? 3 : 0));
         }
     }
     auto missing = test::native_orbital_fixture();
@@ -77,7 +78,9 @@ void exact_station_transfers_and_surface_bypasses()
     const auto loaded = projected_cargo_order_state(preview, {1, {TransferCargoOrder{{1, 0, true}, {0, fleet}, 100, {}}}});
     assert(loaded.planets.front().nativeOrbit == state.planets.front().nativeOrbit && loaded.fleets.front().colonists == 500);
     const auto executed = TurnProcessor{}.process(state, {{1, {unload}}});
-    assert(executed.planets.front().nativeOrbit == preview.planets.front().nativeOrbit);
+    assert(executed.planets.front().nativeOrbit.station == preview.planets.front().nativeOrbit.station);
+    assert(executed.planets.front().nativeOrbit.population - executed.planets.front().nativeOrbit.populationGrown
+        + executed.planets.front().nativeOrbit.populationLost == preview.planets.front().nativeOrbit.population);
     assert(executed.fleets.front().colonists == preview.fleets.front().colonists);
     for (const Order order : {Order{SetFleetColonistsOrder{1, fleet, 0}}, Order{SetFleetColonistsOrder{1, fleet, 600}},
         Order{TransferCargoOrder{{0, fleet}, {1, 0}, 100, {1, 0, 0}}},
@@ -85,7 +88,9 @@ void exact_station_transfers_and_surface_bypasses()
         const auto plan = projected_cargo_order_state(state, {1, {order}});
         const auto host = TurnProcessor{}.process(state, {{1, {order}}});
         for (const auto* checked : {&plan, &host}) {
-            assert(checked->planets.front().nativeOrbit == state.planets.front().nativeOrbit);
+            const auto& residents = checked->planets.front().nativeOrbit;
+            assert(residents.station == state.planets.front().nativeOrbit.station);
+            assert(residents.population - residents.populationGrown + residents.populationLost == state.planets.front().nativeOrbit.population);
             assert(!checked->planets.front().population && checked->fleets.front().colonists == 500);
             assert(checked->fleets.front().minerals.ironium == 3);
         }
@@ -99,7 +104,8 @@ void exact_station_transfers_and_surface_bypasses()
     assert(evacuated.planets.front().nativeOrbit.station == state.planets.front().nativeOrbit.station);
     const auto loadedAtArrival = arrival(state, FleetCargoKind::OrbitalColonists, FleetArrivalActionKind::LoadAllAvailable);
     assert(loadedAtArrival.fleets.front().colonists > 500);
-    assert(loadedAtArrival.planets.front().nativeOrbit.population + loadedAtArrival.fleets.front().colonists == 10'500);
+    assert(loadedAtArrival.planets.front().nativeOrbit.population + loadedAtArrival.fleets.front().colonists
+        - loadedAtArrival.planets.front().nativeOrbit.populationGrown + loadedAtArrival.planets.front().nativeOrbit.populationLost == 10'500);
     assert(arrival(state, FleetCargoKind::Colonists, FleetArrivalActionKind::LoadAllAvailable).fleets.front().colonists == 500);
     // Ordinary colonization cannot create a free surface/native settlement.
     auto empty = state; empty.planets.front().owner = 0; empty.planets.front().nativeOrbit = {}; empty.orbitalStations.clear();

@@ -56,7 +56,8 @@ int main(int argc, char** argv)
     suns::SaveGameData loaded; assert(suns::read_save_game_file(path, loaded, error));
     const auto& row = loaded.state.players.front().history.back();
     assert(!row.assetTotalsSynchronized && row.oldestAssetObservation == 1 && row.newestAssetObservation == 3);
-    assert(row.population == 20'000 && row.minerals.ironium == 200);
+    assert(row.population == state.planets.front().nativeOrbit.population + 10'000);
+    assert(row.minerals.ironium == state.planets.front().minerals.ironium + 100);
     suns::MainWindow window;
     suns::MainWindowTestAccess::installHistory(window, loaded.state);
     auto* dialog = window.findChild<QDialog*>("empireHistoryDialog"); assert(dialog);
@@ -75,7 +76,7 @@ int main(int argc, char** argv)
             Qt::NoButton, Qt::NoButton, Qt::NoModifier);
         QApplication::sendEvent(chart, &hover);
         assert(QToolTip::text().contains("No synchronized total"));
-        assert(!QToolTip::text().contains("Population: 20000"));
+        assert(!QToolTip::text().contains(QString("Population: %1").arg(row.population)));
         QToolTip::hideText();
     }
     scope->setCurrentIndex(scope->findData(quint32(2))); app.processEvents();

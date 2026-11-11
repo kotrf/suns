@@ -302,7 +302,7 @@ void an_unloading_route_can_plan_before_the_housing_limit_is_met()
     assert(result.planets.front().nativeOrbit.population==100'000);
     for(unsigned year=0;year<4 && !result.planets[1].nativeOrbit.station;++year)
         result=TurnProcessor{}.process(result,{});
-    assert(result.planets[1].nativeOrbit.population==90'001);
+    assert(result.planets[1].nativeOrbit.population-result.planets[1].nativeOrbit.populationGrown==90'001);
     assert(std::none_of(result.fleets.begin(),result.fleets.end(),[&](const auto& f){return f.id==id;}));
 }
 }

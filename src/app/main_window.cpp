@@ -1230,6 +1230,8 @@ void MainWindow::updateControls(bool refreshReceivedState)
                 .arg(qulonglong(planned ? planned->nativeOrbit.population : receivedPlanet.nativeOrbit.population));
             if (const auto dose = native_orbital_radiation_status(received, receivedPlanet))
                 populationLine += native_orbital_radiation_text(*dose).toHtmlEscaped().replace("\n", "<br>") + "<br>";
+            populationLine += native_orbital_support_text(receivedEconomy, planned ? *planned : receivedPlanet)
+                .toHtmlEscaped().replace("\n", "<br>") + "<br>";
             if (const auto observation = known_xenocrystal(received, pendingOrders_.player, planet->id))
                 populationLine += QString("Population report: year %1 (age %2)<br>")
                     .arg(qulonglong(observation->observedTurn))

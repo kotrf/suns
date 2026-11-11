@@ -1,6 +1,6 @@
 # Multiplayer turn exchange
 
-Save v120 preserves the native station-population/mining kernel, its received/pending
+Save v121 preserves the native station-population/mining kernel, its received/pending
 evidence and independently received station destruction. Native colony history
 uses delivered colony state and fleet holds, so loss cannot leak through graphs
 or PBEM exports before its report. Native freight totals are credited in the
@@ -18,7 +18,10 @@ The host keeps those archived amounts, while PlayerView and player-turn files
 clear unrecorded extraction amounts and site details. Received mining rows remain.
 Source-bound mining outboxes also survive host reload without being transmitted
 by a co-located unrelated fleet or exported before receipt.
-Save v120 / orders v50 preserve explicit colony-template Rename intent. Old
+Save v121 adds paid native support, kit counts and growth to physical/received
+records, with ordinary dated delivery. Genuine v120 files migrate without free
+kits or retrospective annual debits. Save v120 / orders v50 preserve explicit
+colony-template Rename intent. Old
 pending drafts and packets recover it from their original Rename/Save
 descriptions; an ordinary Delete and following Save execute independently.
 The flag survives importing, saving and reopening the host inbox, which retains
@@ -91,7 +94,7 @@ The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 Save v31 introduced session mode, host inbox, player tokens, racial environment
 rules and projected observations; controller integration arrived in v67/orders
 v21. Earlier saves retain their legacy defaults. Current saves/orders are
-v120/v50; portable race files use their own v3 schema.
+v121/v50; portable race files use their own v3 schema.
 Multiplayer clients should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;
 a restart creates a new campaign identity.

@@ -1,5 +1,40 @@
 # Project status and development handoff
 
+## #50 paid native life support and population growth — 11 November 2026
+
+Base main is `99b47dedb7fe6beb107d4c8507095aabecb35d2c`, after the user-authorized
+#287 merge. The final [Conversation verification](https://github.com/kotrf/suns/pull/287#issuecomment-6796385000)
+checked source `a15c175` with no new findings; the merge tree exactly matches it.
+All six fixed discussions are resolved under MEM-34 and [main CI 43033209126](https://github.com/kotrf/suns/actions/runs/43033209126) succeeded.
+
+Branch `codex/native-orbital-support-growth-50` adds prototype annual native
+upkeep, paid finite emergency kits, partial-coverage casualties and race-rate
+growth within real hull housing and orbital radiation safety. One kit covers
+up to 25,000 residents for one bill: 1/1/1 kt and up to 2 work, with surplus
+assembly at full price toward three current bills. Immigrants cannot multiply
+the reserve; tiny colonies can devote all work to basic support and grow.
+Research/manufacture use the actual remaining work. Growth follows refit,
+deferred cargo and radiation; late arrivals cannot enlarge the paid allowance.
+
+Closing economic packets carry stocks, annual net work, paid kits and births
+together through ordinary communications. Earlier scans of the same year cannot
+split that record; following-year scans still arrive normally. Received History
+keeps dated asset provenance and battle-loss identity. UI quotes use scalar
+current received conditions only. No multi-year forecasting or timer is added.
+
+Save121 persists support/growth records and three report kinds. Orders50 and
+race3 are unchanged. Genuine v120 host/player fixtures were created by the
+unmodified `99b47de` writer before changing its layout; migration grants no kits.
+See [stage 6](asymmetric-empires.md#implementation-stage-6-paid-life-support-and-native-growth)
+for prices, formulas, ordering and test boundaries. The full GCC14.2/Qt6.12 Debug build and 128/128 CTest passed in 178.07 s; the final Qt capture shows the compact summary and all mineral rows.
+Prepared for review; the source PR and its CI are tracked on this branch in GitHub.
+
+This is still prepared-host acceptance: #50 remains open and Human/Computer
+native setup/import/restart stay gated. Next: paid advanced station hulls,
+then actual Human/Computer startup → miner replacement → paid second colony
+acceptance and balance. #53/#63 remain frozen. Existing work files and older
+local branches are preserved.
+
 ## #287 independent-Delete P3: persist explicit Rename intent — 11 November 2026
 
 Review [5858323183](https://github.com/kotrf/suns/pull/287#pullrequestreview-5858323183)

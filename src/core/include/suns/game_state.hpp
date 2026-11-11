@@ -702,6 +702,13 @@ struct OrbitalHabitat {
 struct NativeOrbitalPopulation {
     OrbitalStationId station{};
     std::uint64_t population{};
+    // Paid kits, each supporting up to 25,000 residents for one annual bill.
+    std::uint16_t reserveUnits{};
+    HabitatService service{HabitatService::Empty};
+    std::uint64_t servicedTurn{};
+    std::uint32_t productionPaid{}, productionAvailable{};
+    std::uint16_t mineralUnitsPaid{};
+    std::uint64_t populationLost{}, growthEligiblePopulation{}, growthAppliedTurn{}, populationGrown{};
     bool operator==(const NativeOrbitalPopulation&) const = default;
 };
 
@@ -906,6 +913,9 @@ enum class PlayerReportKind {
     FleetScrapStatus,
     RemoteMiningOutput,
     NativeOrbitalRadiationLoss,
+    NativeOrbitalSupportRestored,
+    NativeOrbitalReserveUsed,
+    NativeOrbitalSupportFailure,
 };
 
 // A report is an immutable observation, independent of surviving objects and

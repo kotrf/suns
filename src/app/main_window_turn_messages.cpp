@@ -228,6 +228,15 @@ QString event_subject(const GameState& state, const GameEvent& event)
         subject = QString("%1: orbital radiation, %2 residents lost")
             .arg(planetName).arg(qulonglong(event.deliveredColonists));
         break;
+    case GameEventKind::NativeOrbitalSupportRestored:
+        subject = QString("%1: orbital life support operational").arg(planetName);
+        break;
+    case GameEventKind::NativeOrbitalReserveUsed:
+        subject = QString("%1: emergency life-support reserve in use").arg(planetName);
+        break;
+    case GameEventKind::NativeOrbitalSupportFailure:
+        subject = QString("%1: life-support shortage, %2 residents lost").arg(planetName).arg(qulonglong(event.deliveredColonists));
+        break;
     case GameEventKind::EnemyFleetDetected:
         subject = event.contact?QString("%1 contact %2 detected").arg(contact_quality_name(event.contact->quality)).arg(event.fleet)
             : QString("Enemy fleet %1 detected").arg(event.fleet);
@@ -480,7 +489,16 @@ QString event_text(const GameState& state, const GameEvent& event)
         : QString("Fleet %1").arg(event.fleet);
 
     QString text;
-    if (event.kind == GameEventKind::NativeOrbitalRadiationLoss) {
+    if (event.kind == GameEventKind::NativeOrbitalSupportRestored || event.kind == GameEventKind::NativeOrbitalReserveUsed
+        || event.kind == GameEventKind::NativeOrbitalSupportFailure) {
+        text = event_subject(state, event) + QString("\nObserved turn %1; received turn %2.\n"
+            "Paid I/B/G: %3 / %4 / %5 kt. Remaining reserve: %6 support kits.\n"
+            "One kit covers up to 25,000 residents for one annual bill. Reserve operation stops growth and production. "
+            "Each year, 10% of residents without supplies or kits are lost. Deliver minerals or evacuate before stocks run out.")
+            .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn))
+            .arg(event.deliveredMinerals.ironium).arg(event.deliveredMinerals.boranium).arg(event.deliveredMinerals.germanium)
+            .arg(event.quantity);
+    } else if (event.kind == GameEventKind::NativeOrbitalRadiationLoss) {
         text = event_subject(state, event) + QString("\nObserved turn %1; received turn %2.\n"
             "These residents were lost aboard the inhabited station. Refit a stronger radiation screen or evacuate. "
             "Protection changes only when the paid refit completes.")

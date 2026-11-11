@@ -41,8 +41,9 @@ void MainWindow::openStationDetails()
     const auto* station = planet ? find_orbital_station_at_planet(received, planet->id) : nullptr;
     if (!station) return;
     const auto dose = native_orbital_radiation_status(received, *planet);
+    const auto support = native_orbital_support_text(received, *planet);
     StationDetailsDialog dialog(*station, received.turn, this,
-        dose ? native_orbital_radiation_text(*dose) : QString{});
+        (dose ? native_orbital_radiation_text(*dose) : QString{}) + (support.isEmpty() ? QString{} : "\n" + support));
     dialog.exec();
 }
 

@@ -32,6 +32,7 @@ add_library(suns_core
     src/terraforming.cpp
     src/orbital_habitats.cpp
     src/native_orbital.cpp
+    src/native_orbital_support.cpp
     src/native_orbital_start.cpp
     src/planetary_engineering.cpp
     src/propulsion.cpp

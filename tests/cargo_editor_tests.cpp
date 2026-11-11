@@ -205,7 +205,8 @@ int main(int argc, char** argv)
         assert(order.source.orbital && order.source.planet == 1 && order.destination.fleet == 1);
         assert(order.colonists == 100 && order.minerals.ironium == 3);
         const auto next = suns::TurnProcessor{}.process(suns::MainWindowTestAccess::state(native), {orders});
-        assert(next.planets.front().nativeOrbit.population == 9'900 && next.planets.front().minerals.ironium == 105);
+        assert(next.planets.front().nativeOrbit.population - next.planets.front().nativeOrbit.populationGrown == 9'900
+            && next.planets.front().minerals.ironium + next.planets.front().nativeOrbit.mineralUnitsPaid == 105);
         assert(next.fleets.front().colonists == 100 && next.fleets.front().minerals.ironium == 3);
         QTimer::singleShot(0, [&] {
             auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget()); assert(dialog);
@@ -219,7 +220,8 @@ int main(int argc, char** argv)
         const auto& returned = suns::MainWindowTestAccess::orders(native);
         assert(returned.orders.size() == 2);
         const auto restored = suns::TurnProcessor{}.process(suns::MainWindowTestAccess::state(native), {returned});
-        assert(restored.planets.front().nativeOrbit.population == 10'000 && restored.planets.front().minerals.ironium == 108);
+        assert(restored.planets.front().nativeOrbit.population - restored.planets.front().nativeOrbit.populationGrown == 10'000
+            && restored.planets.front().minerals.ironium + restored.planets.front().nativeOrbit.mineralUnitsPaid == 108);
         assert(restored.fleets.front().colonists == 0 && restored.fleets.front().minerals.ironium == 0);
 
         suns::MainWindowTestAccess::installNative(native, 99'950, 500);

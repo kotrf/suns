@@ -17,6 +17,7 @@
 #include "suns/planetary_engineering.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
+#include "suns/native_orbital_support.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/exotic_materials.hpp"
@@ -40,7 +41,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 120;
+constexpr quint32 kSaveFormatVersion = 121;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -1087,7 +1088,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     qint32 quantity{};
     quint8 technologyLevel{};
     stream >> id >> turn >> observedTurn >> recipient;
-    const auto newestEventKind = gReadSaveFormatVersion >= 119 ? GameEventKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
+    const auto newestEventKind = gReadSaveFormatVersion >= 121 ? GameEventKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? GameEventKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? GameEventKind::RemoteMiningOutput : gReadSaveFormatVersion >= 114 ? GameEventKind::VisitorCourseChanged : gReadSaveFormatVersion >= 109 ? GameEventKind::FleetScrapStatus : gReadSaveFormatVersion >= 97 ? GameEventKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 89 ? GameEventKind::VisitorDeparted : gReadSaveFormatVersion >= 87 ? GameEventKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? GameEventKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? GameEventKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? GameEventKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? GameEventKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? GameEventKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? GameEventKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? GameEventKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? GameEventKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? GameEventKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? GameEventKind::SpaceBattle : gReadSaveFormatVersion >= 54
         ? GameEventKind::WormholeCollapsed : gReadSaveFormatVersion >= 53
         ? GameEventKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
         ? GameEventKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
@@ -1691,7 +1692,7 @@ void readPlayer(QDataStream& stream, Player& value)
     value.pendingPlayerReports.reserve(count);
     for (quint32 index = 0; index < count; ++index) {
         PendingPlayerReport report;
-        const auto newestReportKind = gReadSaveFormatVersion >= 119 ? PlayerReportKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
+        const auto newestReportKind = gReadSaveFormatVersion >= 121 ? PlayerReportKind::NativeOrbitalSupportFailure : gReadSaveFormatVersion >= 119 ? PlayerReportKind::NativeOrbitalRadiationLoss : gReadSaveFormatVersion >= 118 ? PlayerReportKind::RemoteMiningOutput : gReadSaveFormatVersion >= 109 ? PlayerReportKind::FleetScrapStatus : gReadSaveFormatVersion >= 104 ? PlayerReportKind::TransportLineDelivery : gReadSaveFormatVersion >= 97 ? PlayerReportKind::OrbitalBaseStatus : gReadSaveFormatVersion >= 87 ? PlayerReportKind::ResonanceProjectStatus : gReadSaveFormatVersion >= 86 ? PlayerReportKind::SampleHoldFull : gReadSaveFormatVersion >= 85 ? PlayerReportKind::LandingBlocked : gReadSaveFormatVersion >= 82 ? PlayerReportKind::OutpostFuelExhausted : gReadSaveFormatVersion >= 81 ? PlayerReportKind::StargateTransitFailed : gReadSaveFormatVersion >= 80 ? PlayerReportKind::InterstellarMediumObserved : gReadSaveFormatVersion >= 79 ? PlayerReportKind::UnknownObjectObserved : gReadSaveFormatVersion >= 78 ? PlayerReportKind::PlanetaryAftermath : gReadSaveFormatVersion >= 66 ? PlayerReportKind::SensorInterferenceChanged : gReadSaveFormatVersion >= 62 ? PlayerReportKind::EmissionDetected : gReadSaveFormatVersion >= 61 ? PlayerReportKind::SpaceBattle : gReadSaveFormatVersion >= 53
             ? PlayerReportKind::FleetMobilityRestored : gReadSaveFormatVersion >= 46
             ? PlayerReportKind::EnemyFleetLost : gReadSaveFormatVersion >= 44
             ? PlayerReportKind::FreightDelivered : gReadSaveFormatVersion >= 36

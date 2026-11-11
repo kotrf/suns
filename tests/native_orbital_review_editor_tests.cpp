@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QLineEdit>
+#include <QLabel>
 #include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
@@ -61,6 +62,11 @@ struct MainWindowTestAccess {
         w.rebuildScene(); w.refreshProductionQueue();
     }
     static QTreeWidget* production(MainWindow& w) { return w.productionQueueTree_; }
+    static void workspace(MainWindow& w) { w.installColonyWorkspace(); w.rebuildScene(); }
+    static void hiddenShortage(MainWindow& w) {
+        auto& p = w.state_.planets.front(); p.minerals = {}; p.nativeOrbit.reserveUnits = 0;
+        p.nativeOrbit.service = HabitatService::Failing; w.rebuildScene();
+    }
     static void moveUp(MainWindow& w) { w.moveSelectedProductionItem(-1); }
     static void remove(MainWindow& w) { w.removeSelectedProductionItem(); }
 };
@@ -130,12 +136,25 @@ void native_industry_is_unavailable_in_the_actual_production_panel()
     assert(read_turn_order_file(path, decoded, error));
     const auto resolved = TurnProcessor{}.process(state,{decoded.orders});
     assert(resolved.planets.front().productionQueue.empty() && !resolved.planets.front().industry && !resolved.planets.front().mines);
-    assert(resolved.planets.front().minerals.germanium == 101);
+    assert(resolved.planets.front().minerals.germanium + resolved.planets.front().nativeOrbit.mineralUnitsPaid == 101);
     MainWindowTestAccess::surfaceTemplate(w, true);
     assert(MainWindowTestAccess::factoryButtonEnabled(w));
     assert(apply->isEnabled());
     for (int i=0; i<kinds->count(); ++i)
         assert(kinds->model()->flags(kinds->model()->index(i,0)) & Qt::ItemIsEnabled);
+}
+void life_support_is_visible_and_received()
+{
+    MainWindow w; MainWindowTestAccess::setup(w);
+    MainWindowTestAccess::workspace(w);
+    QCoreApplication::processEvents();
+    auto* status = w.findChild<QLabel*>("colonyStatusSummary"); assert(status);
+    const auto before = status->text();
+    assert(before.contains("Life support") && before.contains("Population change"));
+    MainWindowTestAccess::hiddenShortage(w); QCoreApplication::processEvents();
+    assert(status->text() == before);
+    const auto capture = qEnvironmentVariable("SUNS_SUPPORT_SCREENSHOT");
+    if (!capture.isEmpty()) { w.resize(1440, 900); QCoreApplication::processEvents(); assert(w.grab().save(capture)); }
 }
 void loaded_native_start_cannot_restart_as_a_generalist(bool throughMenu = false)
 {
@@ -203,9 +222,13 @@ void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
     assert(tree->topLevelItem(0)->data(0,Qt::UserRole).toUInt() == 0);
     assert(tree->topLevelItem(1)->data(0,Qt::UserRole).toUInt() == 1);
     auto resolved = MainWindowTestAccess::state(w);
-    for (int i=0; i<4; ++i) resolved = TurnProcessor{}.process(resolved,{});
+    unsigned paidSupport = 0;
+    for (int i=0; i<4; ++i) {
+        resolved = TurnProcessor{}.process(resolved,{});
+        paidSupport += resolved.planets.front().nativeOrbit.mineralUnitsPaid;
+    }
     assert(resolved.fleets.size() == 2 && !resolved.planets.front().industry);
-    assert(resolved.planets.front().minerals.germanium == 90);
+    assert(resolved.planets.front().minerals.germanium + paidSupport == 90);
     tree->setCurrentItem(tree->topLevelItem(1)); MainWindowTestAccess::moveUp(w);
     const auto* reorder = std::get_if<ReorderProductionQueueOrder>(&MainWindowTestAccess::orders(w).orders.back());
     assert(reorder && reorder->fromIndex == 1 && reorder->toIndex == 0);
@@ -231,4 +254,5 @@ int main(int argc,char** argv)
     if (mode.isEmpty() || mode=="restart-menu") loaded_native_start_cannot_restart_as_a_generalist(true);
     if (mode.isEmpty() || mode=="new-campaign") a_loaded_native_host_can_create_an_explicit_generalist_campaign();
     if (mode.isEmpty() || mode=="stale-queue") stale_surface_rows_do_not_hide_miner_eta_or_shift_commands();
+    if (mode.isEmpty() || mode=="support") life_support_is_visible_and_received();
 }

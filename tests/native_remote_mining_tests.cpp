@@ -11,21 +11,23 @@ void owned_output_and_stock_access()
 {
     auto state = test::native_orbital_miner_fixture();
     const auto idle = TurnProcessor{}.process(state, {});
-    assert(idle.planets.front().minerals.ironium == 100);
+    assert(idle.planets.front().minerals.ironium + idle.planets.front().nativeOrbit.mineralUnitsPaid == 100);
     const auto next = TurnProcessor{}.process(state, {{1, {SetRemoteMiningOrder{state.fleets.front().id, true}}}});
     assert(next.fleets.front().task == FleetTask::RemoteMining);
-    assert(next.planets.front().minerals.ironium == 108);
-    assert(next.planets.front().minerals.boranium == 104);
-    assert(next.planets.front().minerals.germanium == 102);
+    const auto paid = next.planets.front().nativeOrbit.mineralUnitsPaid;
+    assert(next.planets.front().minerals.ironium + paid == 108);
+    assert(next.planets.front().minerals.boranium + paid == 104);
+    assert(next.planets.front().minerals.germanium + paid == 102);
     assert(mineral_cargo_mass(next.fleets.front().minerals) == 0);
     assert(next.players.front().history.back().extraction.ironium == 0);
     assert(next.players.front().history.back().remoteExtraction.ironium == 8);
     assert(next.players.front().history.back().remoteMineHistory.size() == 1);
     auto again = TurnProcessor{}.process(next, {});
-    assert(again.planets.front().minerals.ironium == 116);
+    assert(again.planets.front().minerals.ironium + again.planets.front().nativeOrbit.mineralUnitsPaid
+        == next.planets.front().minerals.ironium + 8);
     assert(again.players.front().history.back().remoteExtraction.ironium == 8);
     const auto stopped = TurnProcessor{}.process(again, {{1, {SetRemoteMiningOrder{1, false}}}});
-    assert(stopped.planets.front().minerals.ironium == 116);
+    assert(stopped.planets.front().minerals.ironium + stopped.planets.front().nativeOrbit.mineralUnitsPaid == again.planets.front().minerals.ironium);
     assert(stopped.players.front().history.back().remoteExtraction.ironium == 0);
 
     // The mined stock is usable through the existing orbital cargo endpoint,
@@ -37,7 +39,8 @@ void owned_output_and_stock_access()
     collected.fleets.push_back(hauler);
     collected = TurnProcessor{}.process(collected, {{1, {SetRemoteMiningOrder{1, false},
         TransferCargoOrder{{1, 0, true}, {0, hauler.id}, 0, {3, 0, 0}}}}});
-    assert(collected.planets.front().minerals.ironium == 105 && collected.fleets.back().minerals.ironium == 3);
+    assert(collected.planets.front().minerals.ironium + collected.planets.front().nativeOrbit.mineralUnitsPaid
+        == next.planets.front().minerals.ironium-3 && collected.fleets.back().minerals.ironium == 3);
     assert(collected.players.front().history.back().remoteExtraction.ironium == 0);
 }
 void eligibility_and_arrival()
@@ -57,13 +60,15 @@ void eligibility_and_arrival()
     auto missingEquipment = state;
     missingEquipment.shipDesigns.back().components = {ShipComponentType::QuickJump5};
     missingEquipment.fleets.front().task = FleetTask::RemoteMining;
-    assert(TurnProcessor{}.process(missingEquipment, {}).planets.front().minerals.ironium == 100);
+    const auto absent = TurnProcessor{}.process(missingEquipment, {});
+    assert(absent.planets.front().minerals.ironium + absent.planets.front().nativeOrbit.mineralUnitsPaid == 100);
 
     state.fleets.front().position = {-25, 0}; state.fleets.front().telemetry.position = {-25, 0};
     const auto arrived = TurnProcessor{}.process(state, {{1, {MoveFleetOrder{1, {0, 0}, 5, {FleetArrivalActionKind::RemoteMining}}}}});
     assert(arrived.fleets.front().task == FleetTask::RemoteMining);
-    assert(arrived.planets.front().minerals.ironium == 100); // Travel is not a full mining year.
-    assert(TurnProcessor{}.process(arrived, {}).planets.front().minerals.ironium == 108);
+    assert(arrived.planets.front().minerals.ironium + arrived.planets.front().nativeOrbit.mineralUnitsPaid == 100); // No travel-year mining.
+    const auto worked = TurnProcessor{}.process(arrived, {});
+    assert(worked.planets.front().minerals.ironium + worked.planets.front().nativeOrbit.mineralUnitsPaid == arrived.planets.front().minerals.ironium+8);
 }
 GameState remote_site()
 {
@@ -83,7 +88,7 @@ void received_manifests_only()
 {
     auto state = remote_site();
     auto resolved = TurnProcessor{}.process_with_events(state, {}); state = resolved.state;
-    assert(state.planets[1].minerals.ironium == 108);
+    assert(state.planets[1].minerals.ironium + state.planets[1].nativeOrbit.mineralUnitsPaid == 108);
     assert(state.players.front().history.back().remoteExtraction.ironium == 0);
     assert(std::none_of(resolved.events.begin(), resolved.events.end(), [](const auto& e) { return e.kind == GameEventKind::RemoteMiningOutput; }));
     const auto report = std::find_if(state.players.front().pendingPlayerReports.begin(), state.players.front().pendingPlayerReports.end(),
