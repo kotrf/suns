@@ -2341,13 +2341,22 @@ void readProductionExtension(QDataStream& stream, GameState& value)
         if (id != player.id || legacy > 1 || !readCount(data, count) || count > 16) { markCorrupt(stream); return; }
         player.race.legacyBiologyAdaptation = legacy != 0;
         bool hasDefault = false;
+        std::vector<ProductionTemplate> restored;
+        restored.reserve(count);
         for (quint32 i = 0; i < count; ++i) {
             ProductionTemplate entry;
             readProductionTemplate(data, entry);
-            if ((entry.defaultForNewColonies && hasDefault) || !set_production_template(player, {entry})
-                || player.productionTemplates.size() != i + 1) { markCorrupt(stream); return; }
+            // Restore archive invariants. Racial admission is checked when new
+            // orders execute; legacy programs remain available for repair.
+            if (data.status() != QDataStream::Ok || !production_template_valid(entry)
+                || (entry.defaultForNewColonies && hasDefault)
+                || std::any_of(restored.begin(), restored.end(), [&](const auto& prior) { return prior.name == entry.name; })) {
+                markCorrupt(stream); return;
+            }
             hasDefault |= entry.defaultForNewColonies;
+            restored.push_back(std::move(entry));
         }
+        player.productionTemplates = std::move(restored);
     }
     if (!readCount(data, count) || count != value.planets.size()) { markCorrupt(stream); return; }
     for (auto& planet : value.planets) {

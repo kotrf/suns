@@ -363,6 +363,12 @@ marked unavailable; existing programs can still be deleted or repaired by
 removing/replacing those steps. Pending edits keep the owner's actual race,
 and rejected edits cannot replace a legacy entry or clear another default.
 
+The archive reader restores templates by structural validation rather than
+executing SetProductionTemplateOrder. Structurally valid native Terraform/industry
+programs from old v119 files remain loadable, while malformed steps, duplicate
+names, multiple defaults and oversized libraries are rejected. Existing host and
+PBEM archives reopen for repair/deletion; new inapplicable edits still reject.
+
 Save **v119** appends the report/event kinds without new serialized fields;
 orders v49 and race v3 remain unchanged. The genuine
 `tests/fixtures/native-orbital-v118-radiation.suns` was produced by the unmodified

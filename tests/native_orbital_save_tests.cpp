@@ -25,6 +25,66 @@ SaveGameData envelope(GameState state)
     save.pendingOrders = {1, {}};
     return save;
 }
+void legacy_native_template_archives_remain_loadable(bool pbem)
+{
+    auto state = test::native_orbital_founding_fixture();
+    const std::vector<ProductionItem> oldSteps{
+        {ProductionKind::Terraforming, kTerraformingCost},
+        {ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1},
+        {ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MaxTerraform, 1},
+        {ProductionKind::Factory, production_cost(ProductionKind::Factory)}};
+    const ProductionTemplate receiver{"Receiver", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+    QTemporaryDir directory; const auto path = directory.filePath(pbem ? "legacy-player.suns" : "legacy-host.suns");
+    QString error; SaveGameData loaded;
+    for (const auto& step : oldSteps) {
+        const ProductionTemplate legacy{"Legacy program", {step}, true};
+        assert(production_template_valid(legacy));
+        assert(!production_template_applicable(PrimaryRaceTrait::HabitatCivilization, legacy));
+        state.players.front().productionTemplates = {legacy, receiver};
+        auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+        host.pendingOrders = {1, {SetProductionTemplateOrder{legacy}}}; // Old unsent edits are readable too.
+        host.pendingDescriptions = {"Legacy template edit"};
+        const auto packet = pbem ? make_player_turn(host, 1) : host;
+        assert(write_save_game_file(path, packet, error));
+        // The v119 writer is unchanged from af5e466, where these libraries were accepted.
+        const bool read = read_save_game_file(path, loaded, error);
+        if (!read) std::fprintf(stderr, "Legacy %s template: %s\n", pbem ? "PBEM" : "host", qPrintable(error));
+        assert(read);
+        assert(loaded.state.players.front().productionTemplates == state.players.front().productionTemplates);
+        assert(loaded.state.players.front().race.primaryTrait == PrimaryRaceTrait::HabitatCivilization);
+        const auto before = loaded.state.players.front().productionTemplates;
+        assert(!set_production_template(loaded.state.players.front(), {legacy}));
+        assert(loaded.state.players.front().productionTemplates == before);
+        auto repaired = legacy; repaired.items = receiver.items;
+        assert(set_production_template(loaded.state.players.front(), {repaired}));
+        assert(loaded.state.players.front().productionTemplates.front() == repaired);
+        assert(write_save_game_file(path, loaded, error) && read_save_game_file(path, loaded, error));
+        assert(loaded.state.players.front().productionTemplates.front() == repaired);
+        assert(set_production_template(loaded.state.players.front(), {{legacy.name}, true}));
+        assert(loaded.state.players.front().productionTemplates == std::vector<ProductionTemplate>{receiver});
+    }
+}
+void restored_template_libraries_still_reject_damaged_structure()
+{
+    auto host = envelope(test::native_orbital_founding_fixture());
+    host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
+    const ProductionTemplate legacy{"Legacy", {{ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1}}};
+    const ProductionTemplate receiver{"Receiver", {{ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}};
+    QTemporaryDir directory; const auto path = directory.filePath("malformed-library.suns");
+    QString error; SaveGameData loaded;
+    for (unsigned defect = 0; defect < 4; ++defect) {
+        auto& programs = host.state.players.front().productionTemplates;
+        programs = {legacy, receiver};
+        if (defect == 0) programs[1].name = legacy.name;
+        if (defect == 1) for (auto& program : programs) program.defaultForNewColonies = true;
+        if (defect == 2) programs.front().items.front().quantity = 0;
+        if (defect == 3) for (unsigned i = 2; i <= 16; ++i) {
+            auto extra = receiver; extra.name = "Extra " + std::to_string(i); programs.push_back(extra);
+        }
+        assert(write_save_game_file(path, host, error));
+        assert(!read_save_game_file(path, loaded, error));
+    }
+}
 void native_terraforming_cannot_delay_a_lifesaving_refit()
 {
     QString error; SaveGameData legacy;
@@ -924,6 +984,11 @@ void ledger_round_trip_bounds_and_v115_migration()
 }
 int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-legacy-host") { legacy_native_template_archives_remain_loadable(false); return 0; }
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-legacy-pbem") { legacy_native_template_archives_remain_loadable(true); return 0; }
+    legacy_native_template_archives_remain_loadable(false);
+    legacy_native_template_archives_remain_loadable(true);
+    restored_template_libraries_still_reject_damaged_structure();
     if (argc == 2 && QString::fromLatin1(argv[1]) == "review-terraform") { native_terraforming_cannot_delay_a_lifesaving_refit(); return 0; }
     if (argc == 2 && QString::fromLatin1(argv[1]) == "review-safety") { native_pbem_keeps_the_received_station_safety_fields(); return 0; }
     native_terraforming_cannot_delay_a_lifesaving_refit();

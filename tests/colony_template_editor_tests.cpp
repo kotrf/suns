@@ -125,6 +125,15 @@ void native_template_editor_blocks_bad_steps_and_repairs_legacy_programs()
     for (bool replace : {false, true}) {
         MainWindow w; MainWindowTestAccess::legacyTemplate(w);
         assert(w.colonyTemplatesForOrders().size() == 1); // Pending legacy-incompatible edits use the real race.
+        SaveGameData host; host.state = MainWindowTestAccess::game(w); host.mode = SessionMode::Host;
+        host.pendingOrders = MainWindowTestAccess::orders(w); host.campaignId = 287;
+        host.pendingDescriptions = {"Legacy template edit"};
+        host.turnToken = 17; host.playerTokens = {{1, 17}};
+        QTemporaryDir directory; QString error; const auto path = directory.filePath("legacy-program.suns");
+        assert(write_save_game_file(path, replace ? make_player_turn(host, 1) : host, error));
+        SaveGameData decoded; assert(read_save_game_file(path, decoded, error));
+        assert(MainWindowTestAccess::load(w, path));
+        assert(w.colonyTemplatesForOrders().size() == 1);
         w.openColonyTemplates(); w.show(); settle();
         auto* dialog = w.findChild<QDialog*>("colonyTemplatesDialog"); assert(dialog);
         auto* list = dialog->findChild<QListWidget*>("colonyTemplateList");
@@ -150,7 +159,7 @@ void native_template_editor_blocks_bad_steps_and_repairs_legacy_programs()
         assert(repaired.size() == 1 && repaired.front().name == "Legacy Terraform");
         assert(repaired.front().items.size() == (replace ? 2 : 1));
         assert(production_template_applicable(PrimaryRaceTrait::HabitatCivilization, repaired.front()));
-        const auto actual = TurnProcessor{}.process(MainWindowTestAccess::game(w), {MainWindowTestAccess::orders(w)});
+        const auto actual = TurnProcessor{}.process(host.state, {MainWindowTestAccess::orders(w)});
         assert(actual.players.front().productionTemplates == repaired);
     }
 }

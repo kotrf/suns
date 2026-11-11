@@ -1,5 +1,30 @@
 # Project status and development handoff
 
+## #287 archive P2: restore legacy programs without command admission — 11 November 2026
+
+Review [5856129176](https://github.com/kotrf/suns/pull/287#pullrequestreview-5856129176)
+on `a0d9993` confirmed editor/host admission and found a save-loader regression.
+The loader reused the stricter new-command setter, rejecting structurally valid
+old native programs as a damaged strategic archive. Both host and PBEM failures
+were reproduced. The v119 writer is unchanged from `af5e466`.
+
+The production extension now restores entries directly after structural, name,
+16-entry and single-default validation, preserving original flags. New command
+admission stays strict. Tests exercise manual/Min/Max Terraform and factory
+archives, old pending edits, repair/delete/re-save, host/PBEM reopening through
+the actual MainWindow and continued rejection of incompatible new edits.
+Malformed quantities, duplicate names, multiple defaults and 17-entry libraries
+remain rejected. Ordinary save coverage is included.
+
+GCC14.2/Qt6.12 Debug focused builds and **6/6 CTest in 3.48 s** passed, including
+the general save suite and native startup/save/Qt/colony regressions. Prior
+source CI 42988530950 succeeded. New source/full CI are recorded in GitHub.
+Diff and local links are checked before publication. The existing repository
+and branches remain; main `24994bc`, save119/orders49/race3/write-layout unchanged.
+PR #287 stays open for repeat review, with no merge or thread resolution.
+#50 open, native setup/import/restart gated, #53/#63 frozen. Next remains
+support/growth, paid hull progression and actual Human/Computer expansion.
+
 ## #287 repeat-review P3: validate program edits before saving — 11 November 2026
 
 Review [5855636724](https://github.com/kotrf/suns/pull/287#pullrequestreview-5855636724)

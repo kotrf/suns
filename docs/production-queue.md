@@ -99,6 +99,13 @@ readable and deletable; their marked steps can be removed or replaced before
 saving a repaired program. Normal programs of other civilizations retain their
 existing choices.
 
+Archive loading restores structurally valid programs even when their steps no
+longer apply to the saved civilization. It validates the 16-entry limit, unique
+names and at most one default directly, preserving the saved entries/flags.
+Racial admission belongs to new editing/execution commands; those guards remain
+active after loading. Host/PBEM files and legacy drafts can therefore be reopened
+and repaired through the editor without accepting new incompatible saves.
+
 Save v59 adds the bounded production extension and physical natural baselines;
 turn-order v17 adds batch, template-edit and template-apply orders. Earlier
 supported formats remain readable.
