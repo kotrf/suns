@@ -1,5 +1,31 @@
 # Project status and development handoff
 
+## #287 repeat-review P3: validate program edits before saving — 11 November 2026
+
+Review [5855636724](https://github.com/kotrf/suns/pull/287#pullrequestreview-5855636724)
+on `af5e466` confirmed both prior fixes and found a native Min Terraform-only
+program could still be saved into the library. Host and actual Qt regressions
+reproduced that behavior before the fix.
+
+Template creation/editing now uses canonical racial applicability in the editor
+and SetProductionTemplateOrder. Unavailable step choices cannot be added or
+updated, incompatible drafts cannot be saved, and existing rows explain how to
+remove/replace them. Legacy programs remain readable/deletable and can be
+repaired under the same name; invalid edits preserve the library/default flags.
+Pending library reconstruction copies the actual owner's race. Ordinary programs
+retain their choices. No future-year estimate or persistence field is added.
+
+The GCC14.2/Qt6.12 Debug build of focused targets and **5/5 CTest in 3.14 s**
+passed: colony development/editor plus native startup, save/PBEM and review UI.
+The new source's full validation runs in GitHub CI. Previous source CI
+42898904298 succeeded with 126/126. The restored environment reused the existing
+repository and installed Qt6.12 cache; the old local work branch is retained.
+Diff and local documentation links are checked before publication. PR #287 stays
+open for repeat review; no threads are resolved or PR merged. Source/CI are in
+GitHub, main remains `24994bc`, save119/orders49/race3 unchanged. #50 open,
+native setup/import/restart gated, #53/#63 frozen. Next: support/growth, paid
+advanced hulls, then actual Human/Computer startup-to-second-colony acceptance.
+
 ## #287 review: native Terraform and received PBEM safety — 10 November 2026
 
 Review [5845127935](https://github.com/kotrf/suns/pull/287#pullrequestreview-5845127935)

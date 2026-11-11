@@ -137,6 +137,7 @@ bool set_production_template(Player& player, const SetProductionTemplateOrder& o
         return true;
     }
     if (!production_template_valid(order.value)
+        || !production_template_applicable(player.race.primaryTrait, order.value)
         || (found == player.productionTemplates.end() && player.productionTemplates.size() >= 16)) return false;
     if (order.value.defaultForNewColonies)
         for (auto& value : player.productionTemplates) value.defaultForNewColonies = false;

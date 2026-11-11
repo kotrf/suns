@@ -356,6 +356,13 @@ capital would keep screen 20 and queried safety 100 but serialize -25 in its
 habitability/observedHabitability fields. PBEM round trips preserve consistent
 fields before a hidden protection loss and update them only on receipt.
 
+Native template creation/editing enforces the same applicability rule before an
+order is queued and on the host. Terraform-only drafts cannot be saved into an
+unusable library entry. Inapplicable choices are disabled and old steps are
+marked unavailable; existing programs can still be deleted or repaired by
+removing/replacing those steps. Pending edits keep the owner's actual race,
+and rejected edits cannot replace a legacy entry or clear another default.
+
 Save **v119** appends the report/event kinds without new serialized fields;
 orders v49 and race v3 remain unchanged. The genuine
 `tests/fixtures/native-orbital-v118-radiation.suns` was produced by the unmodified

@@ -80,6 +80,14 @@ struct MainWindowTestAccess {
         w.state_.players.front().productionTemplates = {colony_development_presets().front(),
             {"Receiver plan", {{ProductionKind::LocalRadar,production_cost(ProductionKind::LocalRadar)}}}};
     }
+    static void legacyTemplate(MainWindow& w) {
+        nativeFixture(w);
+        w.state_.players.front().productionTemplates = {{"Legacy Terraform", {
+            {ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1},
+            {ProductionKind::LocalRadar, production_cost(ProductionKind::LocalRadar)}}}};
+        w.pendingOrders_.orders.push_back(SetProductionTemplateOrder{{"Rejected pending edit", {
+            {ProductionKind::Terraforming, kTerraformingCost, 0, ProductionAutomation::MinTerraform, 1}}}});
+    }
 };
 }
 
@@ -92,6 +100,61 @@ void settle()
 
 namespace {
 using namespace suns;
+void native_template_editor_blocks_bad_steps_and_repairs_legacy_programs()
+{
+    {
+        MainWindow w; MainWindowTestAccess::nativeFixture(w);
+        w.openColonyTemplates(); w.show(); settle();
+        auto* dialog = w.findChild<QDialog*>("colonyTemplatesDialog"); assert(dialog);
+        auto* name = dialog->findChild<QLineEdit*>("colonyTemplateName");
+        auto* kind = dialog->findChild<QComboBox*>("colonyTemplateStepKind");
+        auto* mode = dialog->findChild<QComboBox*>("colonyTemplateStepMode");
+        auto* add = dialog->findChild<QPushButton*>("colonyTemplateStepAdd");
+        auto* save = dialog->findChild<QPushButton*>("colonyTemplateSave");
+        name->setText("Unsuitable program");
+        const auto index = kind->findData(int(ProductionKind::Terraforming)); assert(index >= 0);
+        kind->setCurrentIndex(index);
+        mode->setCurrentIndex(mode->findData(int(ProductionAutomation::MinTerraform)));
+        add->click();
+        assert(!save->isEnabled()); // The old editor accepted a new Min Terraform-only program here.
+        assert(!add->isEnabled());
+        assert(!(kind->model()->flags(kind->model()->index(index, 0)) & Qt::ItemIsEnabled));
+        save->click();
+        assert(MainWindowTestAccess::orders(w).orders.empty() && w.colonyTemplatesForOrders().empty());
+    }
+    for (bool replace : {false, true}) {
+        MainWindow w; MainWindowTestAccess::legacyTemplate(w);
+        assert(w.colonyTemplatesForOrders().size() == 1); // Pending legacy-incompatible edits use the real race.
+        w.openColonyTemplates(); w.show(); settle();
+        auto* dialog = w.findChild<QDialog*>("colonyTemplatesDialog"); assert(dialog);
+        auto* list = dialog->findChild<QListWidget*>("colonyTemplateList");
+        auto* steps = dialog->findChild<QTreeWidget*>("colonyTemplateSteps");
+        auto* kind = dialog->findChild<QComboBox*>("colonyTemplateStepKind");
+        auto* mode = dialog->findChild<QComboBox*>("colonyTemplateStepMode");
+        auto* save = dialog->findChild<QPushButton*>("colonyTemplateSave");
+        list->setCurrentRow(0);
+        assert(steps->topLevelItemCount() == 2 && !save->isEnabled());
+        assert(dialog->findChild<QLabel*>("colonyTemplateStatus")->text().contains("unavailable", Qt::CaseInsensitive));
+        steps->setCurrentItem(steps->topLevelItem(0));
+        assert(steps->topLevelItem(0)->text(0).contains("unavailable", Qt::CaseInsensitive));
+        auto* remove = dialog->findChild<QPushButton*>("colonyTemplateStepRemove");
+        auto* update = dialog->findChild<QPushButton*>("colonyTemplateStepUpdate");
+        assert(remove->isEnabled() && !update->isEnabled());
+        if (replace) {
+            kind->setCurrentIndex(kind->findData(int(ProductionKind::PlanetaryRadar)));
+            mode->setCurrentIndex(mode->findData(int(ProductionAutomation::None)));
+            assert(update->isEnabled()); update->click();
+        } else remove->click();
+        assert(save->isEnabled()); save->click();
+        const auto repaired = w.colonyTemplatesForOrders();
+        assert(repaired.size() == 1 && repaired.front().name == "Legacy Terraform");
+        assert(repaired.front().items.size() == (replace ? 2 : 1));
+        assert(production_template_applicable(PrimaryRaceTrait::HabitatCivilization, repaired.front()));
+        const auto actual = TurnProcessor{}.process(MainWindowTestAccess::game(w), {MainWindowTestAccess::orders(w)});
+        assert(actual.players.front().productionTemplates == repaired);
+    }
+}
+
 void native_plan_choices_are_applicable(bool route)
 {
     MainWindow w; MainWindowTestAccess::nativePlans(w);
@@ -206,6 +269,7 @@ void an_unloading_route_can_plan_before_the_housing_limit_is_met()
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    if (app.arguments().contains("native-template")) { native_template_editor_blocks_bad_steps_and_repairs_legacy_programs(); return 0; }
     if (app.arguments().contains("plans-manual")) { native_plan_choices_are_applicable(false); return 0; }
     if (app.arguments().contains("plans-route")) { native_plan_choices_are_applicable(true); return 0; }
     if (app.arguments().contains("ownership")) { colonize_waypoints_use_received_ownership(); return 0; }
@@ -327,4 +391,5 @@ int main(int argc, char** argv)
     native_plan_choices_are_applicable(true);
     colonize_waypoints_use_received_ownership();
     an_unloading_route_can_plan_before_the_housing_limit_is_met();
+    native_template_editor_blocks_bad_steps_and_repairs_legacy_programs();
 }

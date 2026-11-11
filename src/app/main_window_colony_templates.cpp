@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStandardItemModel>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -57,6 +58,7 @@ std::vector<ProductionTemplate> MainWindow::colonyTemplatesForOrders() const
     if (!player) return {};
     Player planned;
     planned.id = player->id;
+    planned.race = player->race;
     planned.productionTemplates = player->productionTemplates;
     for (const auto& order : pendingOrders_.orders)
         if (const auto* edit = std::get_if<SetProductionTemplateOrder>(&order))
@@ -79,6 +81,10 @@ void MainWindow::openColonyTemplates()
         colonyTemplatesDialog_->activateWindow();
         return;
     }
+    const auto currentTrait = [this] {
+        const auto* player = find_player(state_, pendingOrders_.player);
+        return player ? player->race.primaryTrait : PrimaryRaceTrait::Generalist;
+    };
     auto* dialog = new QDialog(this);
     colonyTemplatesDialog_ = dialog;
     dialog->setObjectName("colonyTemplatesDialog");
@@ -146,6 +152,15 @@ void MainWindow::openColonyTemplates()
     for (auto value : {ProductionKind::Factory, ProductionKind::Mine, ProductionKind::AdvancedFactory, ProductionKind::AdvancedMine, ProductionKind::UpgradeFactory, ProductionKind::UpgradeMine, ProductionKind::LocalRadar,
             ProductionKind::PlanetaryRadar, ProductionKind::Terraforming, ProductionKind::ColonyDefense})
         kind->addItem(stepName(value), int(value));
+    int firstAvailableKind = -1;
+    auto* kindModel = qobject_cast<QStandardItemModel*>(kind->model());
+    for (int i = 0; i < kind->count(); ++i) {
+        const bool available = production_kind_applicable(currentTrait(), ProductionKind(kind->itemData(i).toInt()));
+        if (kindModel) kindModel->item(i)->setEnabled(available);
+        kind->setItemData(i, available ? QString{} : "Unavailable to this civilization.", Qt::ToolTipRole);
+        if (available && firstAvailableKind < 0) firstAvailableKind = i;
+    }
+    kind->setCurrentIndex(firstAvailableKind);
     auto* quantity = new QSpinBox(dialog);
     quantity->setObjectName("colonyTemplateStepQuantity");
     quantity->setRange(1, kMaximumProductionBatch);
@@ -183,6 +198,18 @@ void MainWindow::openColonyTemplates()
     };
     const auto draft = std::make_shared<Draft>();
     draft->saved = colonyTemplatesForOrders();
+    const auto stepApplicable = [=] {
+        return kind->currentIndex() >= 0
+            && production_kind_applicable(currentTrait(), ProductionKind(kind->currentData().toInt()));
+    };
+    const auto refreshStepButtons = [=] {
+        const int selected = steps->indexOfTopLevelItem(steps->currentItem());
+        const bool available = stepApplicable();
+        add->setEnabled(draft->value.items.size() < 64 && available);
+        update->setEnabled(selected >= 0 && std::size_t(selected) < draft->value.items.size() && available);
+        const auto hint = available ? QString{} : "Choose a step available to this civilization.";
+        add->setToolTip(hint); update->setToolTip(hint);
+    };
     const auto rebuildList = [=] {
         const QSignalBlocker blocked(list);
         list->clear();
@@ -204,9 +231,11 @@ void MainWindow::openColonyTemplates()
             if (radar < 0 && (item.kind == ProductionKind::LocalRadar || item.kind == ProductionKind::PlanetaryRadar)) radar = int(i);
             const auto minerals = production_item_mineral_cost(state, item);
             const auto q = double(item.quantity);
-            new QTreeWidgetItem(steps, {stepName(item.kind), QString::number(item.quantity), modeName(item.automation),
+            const bool available = production_kind_applicable(currentTrait(), item.kind);
+            auto* row = new QTreeWidgetItem(steps, {stepName(item.kind) + (available ? "" : " (unavailable)"), QString::number(item.quantity), modeName(item.automation),
                 QString::number(std::uint64_t(production_cost(item.kind)) * item.quantity),
                 QString("%1 / %2 / %3").arg(minerals.ironium*q, 0, 'f', 1).arg(minerals.boranium*q, 0, 'f', 1).arg(minerals.germanium*q, 0, 'f', 1)});
+            if (!available) row->setToolTip(0, "Remove or replace this step before saving the program.");
         }
         if (selected >= 0 && selected < steps->topLevelItemCount()) {
             steps->setCurrentItem(steps->topLevelItem(selected));
@@ -219,17 +248,19 @@ void MainWindow::openColonyTemplates()
             return value.name == draft->value.name && value.name != draft->source;
         });
         const bool full = draft->source.empty() && draft->saved.size() >= 16;
-        save->setEnabled(production_template_valid(draft->value) && !conflict && !full);
+        const bool applicable = production_template_applicable(currentTrait(), draft->value);
+        save->setEnabled(production_template_valid(draft->value) && applicable && !conflict && !full);
+        save->setToolTip(applicable ? QString{} : "Remove or replace unavailable steps before saving.");
         removeTemplate->setEnabled(!draft->source.empty());
         duplicate->setEnabled(!draft->value.items.empty());
-        add->setEnabled(draft->value.items.size() < 64);
         up->setEnabled(selected > 0);
         down->setEnabled(selected >= 0 && selected + 1 < steps->topLevelItemCount());
         removeStep->setEnabled(selected >= 0);
-        update->setEnabled(selected >= 0);
+        refreshStepButtons();
         status->setText(draft->value.name.empty() ? "Name the template and add production steps before saving."
             : draft->value.name.size() > 80 ? "Choose a shorter template name."
             : draft->value.items.empty() ? "Add at least one production step."
+            : !applicable ? "This program contains steps unavailable to this civilization. Remove or replace them before saving."
             : conflict ? "That name is already used. Choose another name."
             : full ? "The library contains 16 templates. Delete one before saving a new template."
             : radar < 0 ? "No radar in this program. The colony may remain offline until radar or a ship relay connects it."
@@ -264,6 +295,7 @@ void MainWindow::openColonyTemplates()
         mode->setCurrentIndex(std::max(0, mode->findData(previous)));
         const bool radar = selected == ProductionKind::LocalRadar || selected == ProductionKind::PlanetaryRadar;
         quantity->setMaximum(radar ? 1 : kMaximumProductionBatch);
+        refreshStepButtons();
     };
     connect(kind, &QComboBox::currentIndexChanged, dialog, syncModes);
     syncModes();
@@ -281,7 +313,7 @@ void MainWindow::openColonyTemplates()
         mode->setCurrentIndex(mode->findData(int(item.automation)));
         up->setEnabled(row > 0);
         down->setEnabled(row + 1 < steps->topLevelItemCount());
-        removeStep->setEnabled(true); update->setEnabled(true);
+        removeStep->setEnabled(true); refreshStepButtons();
     });
     connect(name, &QLineEdit::textChanged, dialog, [=] { render(steps->indexOfTopLevelItem(steps->currentItem())); });
     connect(list, &QListWidget::currentRowChanged, dialog, [=](int row) {
@@ -304,12 +336,12 @@ void MainWindow::openColonyTemplates()
         loadDraft(value, {});
     });
     connect(add, &QPushButton::clicked, dialog, [=] {
-        if (draft->value.items.size() >= 64) return;
+        if (draft->value.items.size() >= 64 || !stepApplicable()) return;
         draft->value.items.push_back(readStep()); render(int(draft->value.items.size()) - 1);
     });
     connect(update, &QPushButton::clicked, dialog, [=] {
         const int row = steps->indexOfTopLevelItem(steps->currentItem());
-        if (row >= 0 && std::size_t(row) < draft->value.items.size()) { draft->value.items[std::size_t(row)] = readStep(); render(row); }
+        if (row >= 0 && std::size_t(row) < draft->value.items.size() && stepApplicable()) { draft->value.items[std::size_t(row)] = readStep(); render(row); }
     });
     const auto move = [=](int offset) {
         const int row = steps->indexOfTopLevelItem(steps->currentItem());
@@ -324,7 +356,7 @@ void MainWindow::openColonyTemplates()
         draft->value.items.erase(draft->value.items.begin() + row); render(std::min(row, int(draft->value.items.size()) - 1));
     });
     connect(save, &QPushButton::clicked, dialog, [=, this] {
-        if (!save->isEnabled()) return;
+        if (!save->isEnabled() || !production_template_applicable(currentTrait(), draft->value)) return;
         draft->value.defaultForNewColonies = false;
         if (!draft->source.empty() && draft->source != draft->value.name)
             appendPendingOrder(SetProductionTemplateOrder{{draft->source}, true}, "Rename colony template " + QString::fromStdString(draft->source));

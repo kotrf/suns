@@ -90,6 +90,15 @@ by fleet arrival actions. **Delete** removes the stored template without removin
 rules already applied to colonies. Templates are player scoped, persist in saves
 and player turn exports, and their changes travel in turn-order packets.
 
+Saving a program also checks whether all its steps apply to the owner's
+civilization. The editor disables inapplicable choices, blocks adding/updating
+such a step and explains why an incompatible draft cannot be saved. The host
+rejects the same edit before changing the library or its default flags. Pending
+library edits use the real race profile. Existing incompatible programs remain
+readable and deletable; their marked steps can be removed or replaced before
+saving a repaired program. Normal programs of other civilizations retain their
+existing choices.
+
 Save v59 adds the bounded production extension and physical natural baselines;
 turn-order v17 adds batch, template-edit and template-apply orders. Earlier
 supported formats remain readable.
