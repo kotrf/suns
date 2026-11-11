@@ -1,5 +1,29 @@
 # Project status and development handoff
 
+## #288 review P2: pause paid completions without native support — 12 November 2026
+
+[Review 5866688902](https://github.com/kotrf/suns/pull/288#pullrequestreview-5866688902)
+on `48e19db` found that Reserve stations could finish a manual order whose work
+was already paid once minerals arrived. The new regression manufactures through
+four actual years, saves/reloads the host with a zero-work Orbital Miner waiting
+for ironium, then delivers I and withdraws B through decoded ordinary orders.
+It fails before the fix: Reserve spends two kits, produces zero work and still
+finishes the ship. Source CI [43058388987](https://github.com/kotrf/suns/actions/runs/43058388987)
+succeeded, 128/128; the review also reported 25/25 local checks.
+
+The shared resolver now pauses applicable native queue items until Normal
+service. It retains paid work and queue origins, charges no project materials
+and emits no completion while paused. Tests cover Reserve/Failing/Empty,
+host/PBEM reload during the pause, another paused year, one completion after
+real resupply and a supplied control with all new work allocated to research.
+The gate does not treat zero available work as a general shutdown.
+
+The two targeted CTest passed in 0.11 s; the complete GCC14.2/Qt6.12 Debug build and 128/128 CTest passed in 163.40 s. Formats121/50/race3 are unchanged; no new UI simulation
+is added. #288 remains open for re-review, its thread stays open until a
+user-authorized merge. Main `99b47de`, #50 open, native setup/import/restart
+gated and #53/#63 frozen. Next: paid hull progression, then actual
+Human/Computer startup → replacement → paid second-colony acceptance.
+
 ## #50 paid native life support and population growth — 11 November 2026
 
 Base main is `99b47dedb7fe6beb107d4c8507095aabecb35d2c`, after the user-authorized

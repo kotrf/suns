@@ -437,6 +437,14 @@ penalty for a nearly affordable bill. The same resolver can recover next year
 after real supplies arrive; its potential-output calculation ignores the prior
 failure state. Atomic annual guards prevent duplicate billing/loss/growth.
 
+Applicable queue items also require Normal service to finish. Reserve, Failing
+and empty native stations retain already paid work without consuming project
+materials, materializing ships or reporting completion. Restoring Normal service
+allows that same project to finish, including when its remaining work is zero.
+This is a service gate, not a zero-work gate: a supplied colony may complete paid
+work while allocating all new output to research. Queue origin indices remain
+intact for forecasts and cancellation; the other civilizations' rules are unchanged.
+
 At 25,000 residents and Energy 0, gross work is 50. The first normal bill plus
 one reserve kit uses **4 work and 2/2/2 kt**, leaving 46 work before research and
 construction. At 100,000 residents, four units plus four reserve kits cost

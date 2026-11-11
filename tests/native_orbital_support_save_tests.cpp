@@ -3,6 +3,7 @@
 #include "native_orbital_ui.hpp"
 #include "suns/native_orbital_support.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/production.hpp"
 #include <QTemporaryDir>
 #include <algorithm>
 #include <cassert>
@@ -13,6 +14,78 @@ SaveGameData legacy_host()
     SaveGameData host; QString error;
     assert(read_save_game_file(QStringLiteral(SUNS_SOURCE_DIR "/tests/fixtures/native-support-v120-host.suns"), host, error));
     return host;
+}
+void paid_manufacture_waits_for_resupply_after_host_reload()
+{
+    SaveGameData host; host.mode = SessionMode::Host;
+    host.campaignId = 288; host.turnToken = 17; host.playerTokens = {{1, 17}};
+    host.pendingOrders = {1, {}}; host.state = test::empty_native_orbital_start();
+    auto budget = native_orbital_start_budget(); budget.minerals.ironium -= 45;
+    const auto started = initialize_native_orbital_start(host.state, 1, host.state.planets.front().id, budget);
+    assert(started);
+    host.state.players.front().technology.researchActive = false;
+    const auto home = host.state.planets.front().id;
+    // Prepared transport assets carry real cargo; all subsequent changes use orders.
+    const auto design = host.state.nextShipDesignId++;
+    host.state.shipDesigns.push_back({design, 1, "Supply transport", ShipHullType::SmallFreighter,
+        {ShipComponentType::QuickJump5}});
+    assert(ship_design_valid(host.state.shipDesigns.back()));
+    Fleet transport; transport.id = host.state.nextFleetId++; transport.owner = 1; transport.design = design;
+    transport.name = "Supply transport"; transport.ships = {{design, 2}};
+    transport.position = host.state.stars.front().position; transport.minerals = {20, 0, 0};
+    transport.fuel = fleet_fuel_capacity(host.state, transport);
+    transport.telemetry = confirmed_fleet_telemetry(host.state, transport);
+    host.state.fleets.push_back(transport);
+    const PlayerOrders build{1, {SetRemoteMiningOrder{started->minerFleet, false},
+        QueueShipDesignOrder{home, started->minerDesign}}};
+    for (unsigned year = 0; year < 4; ++year)
+        host.state = TurnProcessor{}.process(host.state, year ? std::vector<PlayerOrders>{} : std::vector<PlayerOrders>{build});
+    const auto& waiting = host.state.planets.front();
+    assert(host.state.turn == 5 && waiting.productionQueue.size() == 1);
+    assert(waiting.productionQueue.front().remainingCost == 0 && waiting.productionWaitingForMinerals);
+    assert(waiting.minerals.ironium == 42 && waiting.nativeOrbit.reserveUnits == 6);
+    const auto paidQueue = waiting.productionQueue;
+    const auto boranium = waiting.minerals.boranium;
+    QTemporaryDir dir; QString error; SaveGameData loaded;
+    const auto save = dir.filePath("waiting.suns"), orders = dir.filePath("resupply.sunsorders");
+    assert(write_save_game_file(save, host, error) && read_save_game_file(save, loaded, error)); host = loaded;
+    const TransferCargoOrder deliver{{0, transport.id}, {home, 0}, 0, {20, 0, 0}};
+    const TransferCargoOrder removeB{{home, 0}, {0, transport.id}, 0, {0, boranium, 0}};
+    TurnOrderFileData packet{host.campaignId, host.state.turn, host.turnToken,
+        {1, {deliver, removeB}}, {"Deliver ironium", "Load boranium"}};
+    assert(write_turn_order_file(orders, packet, error)); TurnOrderFileData decoded;
+    assert(read_turn_order_file(orders, decoded, error));
+    const auto paused = TurnProcessor{}.process_with_events(host.state, {decoded.orders});
+    const auto& p = paused.state.planets.front();
+    assert(p.nativeOrbit.service == HabitatService::Reserve && p.nativeOrbit.productionAvailable == 0);
+    assert(p.nativeOrbit.reserveUnits == 4 && p.minerals.ironium == 62);
+    assert(p.productionQueue == paidQueue && paused.state.fleets.size() == 2);
+    const auto completed = [&](const auto& result) {
+        return std::count_if(result.events.begin(), result.events.end(), [&](const auto& e) {
+            return e.kind == GameEventKind::ProductionCompleted && e.planet == home;
+        });
+    };
+    assert(completed(paused) == 0);
+    const auto normal = TurnProcessor{}.process_with_events(host.state, {{1, {deliver}}});
+    assert(normal.state.planets.front().nativeOrbit.service == HabitatService::Normal);
+    assert(normal.state.planets.front().productionQueue.empty() && normal.state.fleets.size() == 3 && completed(normal) == 1);
+    host.state = paused.state;
+    assert(write_save_game_file(save, host, error) && read_save_game_file(save, loaded, error)); host = loaded;
+    assert(write_save_game_file(save, make_player_turn(host, 1), error) && read_save_game_file(save, loaded, error));
+    assert(loaded.state.planets.front().productionQueue == paidQueue);
+    assert(loaded.state.planets.front().nativeOrbit.service == HabitatService::Reserve);
+    const auto stillPaused = TurnProcessor{}.process_with_events(host.state, {});
+    assert(stillPaused.state.planets.front().productionQueue == paidQueue && completed(stillPaused) == 0);
+    host.state = stillPaused.state;
+    assert(write_save_game_file(save, host, error) && read_save_game_file(save, loaded, error)); host = loaded;
+    packet.turn = host.state.turn; packet.orders = {1, {TransferCargoOrder{{0, transport.id}, {home, 0}, 0, {0, 20, 0}}}};
+    packet.descriptions = {"Restore life support"};
+    assert(write_turn_order_file(orders, packet, error) && read_turn_order_file(orders, decoded, error));
+    const auto resumed = TurnProcessor{}.process_with_events(host.state, {decoded.orders});
+    assert(resumed.state.planets.front().nativeOrbit.service == HabitatService::Normal);
+    assert(resumed.state.planets.front().productionQueue.empty() && resumed.state.fleets.size() == 3 && completed(resumed) == 1);
+    assert(resumed.state.planets.front().minerals.ironium == 0); // The preserved work is charged materials exactly once.
+    assert(TurnProcessor{}.process(resumed.state, {}).fleets.size() == 3);
 }
 void legacy_files_pay_their_first_bill_without_free_kits()
 {
@@ -130,8 +203,12 @@ void shortages_remain_hidden_until_the_dated_report_arrives()
     assert(restored.strategicMessages.back().deliveredColonists == loss);
 }
 }
-int main()
+int main(int argc, char** argv)
 {
+    if (argc == 2 && QString::fromLatin1(argv[1]) == "review-reserve-production") {
+        paid_manufacture_waits_for_resupply_after_host_reload(); return 0;
+    }
+    paid_manufacture_waits_for_resupply_after_host_reload();
     legacy_files_pay_their_first_bill_without_free_kits();
     host_player_and_continuation_keep_the_exact_annual_record();
     malformed_support_records_are_rejected();

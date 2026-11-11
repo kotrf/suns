@@ -218,7 +218,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
     if (planet.owner == 0) return result;
     const auto* player = find_player(state, planet.owner);
-    const auto upkeep=native_orbital_race(state, planet.owner) ? service_native_orbit(state, planet)
+    const bool native = native_orbital_race(state, planet.owner);
+    const auto upkeep=native ? service_native_orbit(state, planet)
         : service_orbital_habitat(state,planet,result.engineeringSupport);
     const auto gross=colony_output(state, planet);
     const auto output=gross-std::min(gross,upkeep);
@@ -282,6 +283,9 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         if (player && !production_kind_applicable(player->race.primaryTrait, industrialKind)) {
             erase(index); continue;
         }
+        // Paid work stays queued, but completion also needs an operating colony.
+        // Zero available work alone must not block a normally supplied station.
+        if (native && planet.nativeOrbit.service != HabitatService::Normal) break;
         const bool factoryBuild = industrialKind == ProductionKind::Factory || industrialKind == ProductionKind::AdvancedFactory;
         const bool mineBuild = industrialKind == ProductionKind::Mine || industrialKind == ProductionKind::AdvancedMine;
         if (industry_upgrade_kind(industrialKind) || factoryBuild || mineBuild) {

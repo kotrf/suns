@@ -2,6 +2,7 @@
 #include "suns/native_orbital_support.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/production.hpp"
 #include <cassert>
 using namespace suns;
 
@@ -90,6 +91,32 @@ void late_arrivals_do_not_expand_the_paid_growth_allowance()
     grow_native_orbit(state, p);
     assert(p.nativeOrbit.populationGrown == 100 && p.nativeOrbit.population == 25'100);
 }
+void paid_orders_need_normal_service_even_without_remaining_work()
+{
+    for (unsigned scenario = 0; scenario < 3; ++scenario) {
+        auto state = capital(); auto& planet = state.planets.front();
+        planet.nativeOrbit.reserveUnits = scenario == 0 ? 2 : 0;
+        if (scenario == 2) planet.nativeOrbit.population = 0;
+        planet.minerals = {100, 0, 100};
+        planet.productionQueue = {{ProductionKind::ColonyShip, 0, state.shipDesigns.front().id}};
+        const auto paid = planet.productionQueue;
+        const auto stopped = resolve_colony_production(state, planet, true);
+        assert(stopped.completions.empty() && stopped.researchPoints == 0 && planet.productionQueue == paid);
+        assert(stopped.queueOrigins == std::vector<std::size_t>{0});
+        assert(planet.minerals.ironium == 100 && planet.minerals.germanium == 100);
+        assert(planet.nativeOrbit.service == (scenario == 0 ? HabitatService::Reserve
+            : scenario == 1 ? HabitatService::Failing : HabitatService::Empty));
+        if (scenario == 2) continue;
+        ++state.turn; planet.minerals.boranium = 100;
+        state.players.front().technology.researchActive = true;
+        state.players.front().technology.researchAllocationPercent = 100;
+        const auto resumed = resolve_colony_production(state, planet, true);
+        assert(planet.nativeOrbit.service == HabitatService::Normal);
+        // Zero work left after research is different from a support shutdown.
+        assert(resumed.researchPoints == planet.nativeOrbit.productionAvailable && resumed.researchPoints > 0);
+        assert(resumed.completions.size() == 1 && planet.productionQueue.empty());
+    }
+}
 void older_same_year_scans_cannot_split_a_completed_economic_packet()
 {
     auto state = capital(); auto& p = state.planets.front();
@@ -117,5 +144,6 @@ int main()
     reserves_are_paid_units_and_only_uncovered_people_die();
     growth_uses_race_capacity_and_orbital_dose();
     late_arrivals_do_not_expand_the_paid_growth_allowance();
+    paid_orders_need_normal_service_even_without_remaining_work();
     older_same_year_scans_cannot_split_a_completed_economic_packet();
 }
