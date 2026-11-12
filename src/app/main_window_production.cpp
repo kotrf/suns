@@ -87,7 +87,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
 
 std::vector<ProductionItem> MainWindow::plannedProductionQueue(const Planet& planet) const
 {
-    const auto planned = planned_production_state(projected_cargo_order_state(receivedPlayerState(), pendingOrders_), pendingOrders_);
+    const auto planned = planned_production_state(receivedPlayerState(), pendingOrders_);
     const auto found = std::find_if(planned.planets.begin(), planned.planets.end(),
         [&](const auto& candidate) { return candidate.id == planet.id; });
     return found == planned.planets.end() ? std::vector<ProductionItem>{} : found->productionQueue;
@@ -336,7 +336,7 @@ void MainWindow::refreshProductionQueue()
     productionQueuePlanet_ = planet->id;
     productionControls_.friendlyColony = true;
     const auto received = receivedPlayerState();
-    const auto forecastState = planned_production_state(projected_cargo_order_state(received, pendingOrders_), pendingOrders_);
+    const auto forecastState = planned_production_state(received, pendingOrders_);
     const auto* beforeCargo = find_planet(received, planet->id);
     const auto firstTurnMining = beforeCargo ? projected_mineral_mining(received, *beforeCargo) : MineralCargo{};
     const auto projectedPlanet = std::find_if(forecastState.planets.begin(), forecastState.planets.end(),

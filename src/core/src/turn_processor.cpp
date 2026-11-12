@@ -1,4 +1,5 @@
 #include "suns/transport_lines.hpp"
+#include "order_boundary_preview.hpp"
 #include "suns/fleet_recycling.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
@@ -2531,15 +2532,16 @@ namespace {
 struct PlannedSplitReference { std::size_t order{}; FleetId fleet{}; };
 
 // UI/AI callers supply a PlayerView: command validation must not inspect host truth.
-GameState project_order_boundary(const GameState& current, const PlayerOrders& pending,
-    std::vector<PlannedSplitReference>* splits = nullptr)
+GameState project_order_boundary(GameState projected, const PlayerOrders& pending,
+    std::vector<PlannedSplitReference>* splits = nullptr,
+    const detail::PlanningOrderPreview& beforeOrder = {})
 {
-    GameState projected = current;
     for (auto& p : projected.planets)
-        p.xenocrystal = known_xenocrystal(current, pending.player, p.id).value_or(XenocrystalObservation{}).site;
+        p.xenocrystal = known_xenocrystal(projected, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
     for (std::size_t index = 0; index < pending.orders.size(); ++index) {
+        if (beforeOrder) beforeOrder(projected, index);
         const auto& order = pending.orders[index];
         const auto nextFleet = projected.nextFleetId;
         if (apply_fleet_command_order(projected, pending.player, order, gated, true)) {
@@ -2621,6 +2623,12 @@ bool remap_fleet_references(Order& order, const std::map<FleetId, FleetId>& alia
 GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending)
 {
     return project_order_boundary(current, pending);
+}
+
+GameState detail::project_order_boundary_state(GameState current, const PlayerOrders& pending,
+    const PlanningOrderPreview& beforeOrder)
+{
+    return project_order_boundary(std::move(current), pending, nullptr, beforeOrder);
 }
 
 GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending)

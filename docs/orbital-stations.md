@@ -72,6 +72,10 @@ intact until residents fit; no one is deleted to complete the project. New
 housing activates only on paid completion. The existing support/radiation/growth
 phases still run normally.
 
+The production preview admits each refit at its position in the submitted
+order list. Later unloading can cause a housing wait, but retains that row and
+its index for Remove/Move up/Move down. Earlier cargo still changes admission.
+
 Shipyard service permits ship production and repairs docked friendly fleets by
 20 damage percentage points per year. It does not automatically repair the
 station itself. Refueling service supports dockside and arrival refueling.

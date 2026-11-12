@@ -541,6 +541,12 @@ pauses and retains its work/origins until evacuation makes space. Cheap UI
 estimates show the housing wait and withhold following completion dates; there
 is no future-year simulation or polling.
 
+The production preview replays local cargo and queue edits in submission order.
+Cargo before a refit changes admission; later accepted unloading preserves the
+already admitted refit and its queue index, while the final housing estimate
+shows the wait. Cancel/reorder therefore target the same row as the host. The
+shared order-boundary replay uses one state copy and does not calculate a year.
+
 Save **v122** / orders **v51** append the two hull identities without changing
 the native population/service record; race v3 is unchanged. All station channels
 use the same validity rules, including Bastion's 40-component fit. Genuine

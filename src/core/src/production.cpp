@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "order_boundary_preview.hpp"
 #include "suns/production_template_edits.hpp"
 #include "suns/native_orbital_support.hpp"
 #include "suns/orbital_bases.hpp"
@@ -413,8 +414,11 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
 
 GameState planned_production_state(const GameState& state, const PlayerOrders& pending)
 {
-    auto result = planned_ship_design_state(state, pending);
-    for (std::size_t orderIndex = 0; orderIndex < pending.orders.size(); ++orderIndex) std::visit([&](const auto& value) {
+    // Start from received state, not an already cargo-projected state. Admission
+    // uses each order's boundary; later cargo affects final housing/stock but
+    // cannot retroactively erase an accepted project or shift queue indices.
+    return detail::project_order_boundary_state(planned_ship_design_state(state, pending), pending,
+        [&](GameState& result, std::size_t& orderIndex) { std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, SetResearchAllocationOrder> || std::is_same_v<T, SetResearchPlanOrder>) {
             // Forecast settings must follow the research orders accepted by End Turn.
@@ -483,8 +487,7 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
                 }
             }
         }
-    }, pending.orders[orderIndex]);
-    return result;
+    }, pending.orders[orderIndex]); });
 }
 
 } // namespace suns

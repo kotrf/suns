@@ -2,6 +2,7 @@
 #include "native_orbital_fixture.hpp"
 #include "suns/stations.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/production.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
@@ -12,6 +13,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QTreeWidget>
 #include <cassert>
 using namespace suns;
 namespace suns {
@@ -23,6 +25,15 @@ struct MainWindowTestAccess {
     }
     static void designer(MainWindow& w) { w.openStationDesigner(); }
     static const auto& orders(const MainWindow& w) { return w.pendingOrders_; }
+    static void cargo(MainWindow& w,const TransferCargoOrder& order) {
+        w.appendPendingOrder(order,"Unload one resident");w.refreshProductionQueue();
+    }
+    static void queueMiner(MainWindow& w,ShipDesignId design) {
+        const auto row=w.shipDesignCombo_->findData(quint32(design));assert(row>=0);
+        w.shipDesignCombo_->setCurrentIndex(row);w.queueShipDesign();w.refreshProductionQueue();
+    }
+    static auto* production(MainWindow& w) { return w.productionQueueTree_; }
+    static auto* removeButton(MainWindow& w) { return w.productionRemoveButton_; }
 };
 }
 namespace {
@@ -172,6 +183,54 @@ void designer_checks_received_housing_cargo_and_racial_research()
         assert(dialog->findChild<QComboBox*>("stationHull")->findData(int(OrbitalStationHullType::NativeCitadel))<0);dialog->reject();
     });MainWindowTestAccess::designer(w);
 }
+void a_refit_admitted_before_unloading_keeps_its_row_and_cancel_index()
+{
+    auto state=legacy().state;auto& home=state.planets.front();
+    const auto station=home.nativeOrbit.station,planet=home.id;
+    const auto miner=state.shipDesigns.front().id;
+    const StationLoadout bastion{OrbitalStationHullType::NativeBastion,{ShipComponentType::BulkRadiationScreen},true,true};
+    assert(complete_station_construction(state,home,{bastion,station}));
+    home.nativeOrbit.population=500'000;home.minerals={2000,2000,2000};
+    const auto design=state.nextShipDesignId++;
+    state.shipDesigns.push_back({design,1,"Resident carrier",ShipHullType::SmallFreighter,{ShipComponentType::QuickJump5}});
+    Fleet carrier;carrier.id=state.nextFleetId++;carrier.owner=1;carrier.design=design;carrier.ships={{design,1}};
+    carrier.position=state.stars.front().position;carrier.colonists=1;carrier.fuel=fleet_fuel_capacity(state,carrier);
+    carrier.telemetry=confirmed_fleet_telemetry(state,carrier);state.fleets.push_back(carrier);
+    set_survey_level(state,1,home.star,SurveyLevel::DeepSurvey,state.turn);
+    MainWindow w;w.installUiPolish();w.installProductionQueue();MainWindowTestAccess::install(w,state);
+    bool admitted=false;
+    QTimer::singleShot(0,[&] {
+        auto* dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(dialog);
+        auto* hull=dialog->findChild<QComboBox*>("stationHull");assert(hull);
+        hull->setCurrentIndex(hull->findData(int(OrbitalStationHullType::NativeCitadel)));
+        auto* queue=dialog->findChild<QPushButton*>("queueStationFit");assert(queue && queue->isEnabled());
+        admitted=true;queue->click();
+    });
+    MainWindowTestAccess::designer(w);assert(admitted);
+    MainWindowTestAccess::cargo(w,{{0,carrier.id},{planet,0,true},1,{}});
+    MainWindowTestAccess::queueMiner(w,miner);
+    const auto orders=MainWindowTestAccess::orders(w);assert(orders.orders.size()==3);
+    const auto control=TurnProcessor{}.process(state,{orders});
+    const auto& kept=control.planets.front().productionQueue;
+    assert(kept.size()==2 && kept[0].station && kept[0].station->loadout.hull==OrbitalStationHullType::NativeCitadel);
+    assert(kept[1].shipDesign==miner && control.orbitalStations.front().hull==OrbitalStationHullType::NativeBastion);
+    auto* tree=MainWindowTestAccess::production(w);assert(tree && tree->topLevelItemCount()==2);
+    assert(tree->topLevelItem(0)->text(1).contains("Citadel") && tree->topLevelItem(0)->text(2)=="housing");
+    assert(tree->topLevelItem(1)->text(1).contains("Orbital Miner"));
+    assert(tree->topLevelItem(0)->text(3)==QString::fromUtf8("—") && tree->topLevelItem(1)->text(3)==QString::fromUtf8("—"));
+    tree->setCurrentItem(tree->topLevelItem(1));auto* remove=MainWindowTestAccess::removeButton(w);
+    assert(remove && remove->isEnabled());remove->click();
+    const auto& cancelled=MainWindowTestAccess::orders(w);
+    const auto* cancel=std::get_if<CancelProductionOrder>(&cancelled.orders.back());assert(cancel && cancel->index==1);
+    const auto result=TurnProcessor{}.process(state,{cancelled});
+    assert(result.planets.front().productionQueue.size()==1 && result.planets.front().productionQueue.front().station);
+    assert(result.planets.front().productionQueue.front().remainingCost==station_build_cost(std::get<QueueStationOrder>(orders.orders[0]).construction.loadout));
+    // Reversing the cargo/refit order must reject that same shrink at admission.
+    auto reversed=orders;std::swap(reversed.orders[0],reversed.orders[1]);
+    const auto preview=planned_production_state(make_player_view(state,1).state,reversed);
+    assert(preview.planets.front().nativeOrbit.population==500'001);
+    assert(preview.planets.front().productionQueue.size()==1 && !preview.planets.front().productionQueue.front().station);
+}
 }
 int main(int argc,char** argv)
 {
@@ -181,4 +240,5 @@ int main(int argc,char** argv)
     new_fits_survive_all_record_and_order_channels();
     a_remote_paid_upgrade_is_known_only_after_delivery_and_reload();
     designer_checks_received_housing_cargo_and_racial_research();
+    a_refit_admitted_before_unloading_keeps_its_row_and_cancel_index();
 }

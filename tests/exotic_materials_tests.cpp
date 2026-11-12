@@ -108,7 +108,7 @@ void resonant_gate_forecasts_reserve_only_received_early_deliveries()
     auto s = resonance_network(); s.planets[0].xenocrystal.surface = 8;
     set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
     PlayerOrders orders{1, {GateFleetOrder{1, 1, 2, true}, SetResonanceLaboratoryOrder{1}}};
-    auto preview = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, orders), orders);
+    auto preview = planned_production_state(make_player_view(s, 1).state, orders);
     assert(!preview.planets[0].xenocrystal.surface);
     assert(!forecast_production_queue(preview, preview.planets[0], preview.planets[0].productionQueue, 16)[0].completionTurn);
     auto after = next(s, orders.orders);
@@ -191,7 +191,7 @@ void resonant_gate_projection_replays_accepted_fleet_commands()
     assert(resolved.planets[0].xenocrystal.surface == 8 && (resolved.fleets[0].position == Position{0, 25}));
     // No imaginary reservation: the laboratory or a second fleet may use the eight units.
     auto labOrders = moving; labOrders.orders.push_back(SetResonanceLaboratoryOrder{1});
-    auto lab = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, labOrders), labOrders);
+    auto lab = planned_production_state(make_player_view(s, 1).state, labOrders);
     assert(forecast_production_queue(lab, lab.planets[0], lab.planets[0].productionQueue, 16)[0].completionTurn);
     assert(next(s, labOrders.orders).planets[0].resonanceLab.work == 60);
     auto other = s.fleets[0]; other.id = s.nextFleetId++; s.fleets.push_back(other);
@@ -364,7 +364,7 @@ void colony_production_and_gate_orders_observe_the_mining_phase()
     auto s = colony_mining_fixture(); s.planets[0].xenocrystal.surface = 4;
     set_survey_level(s, 1, 1, SurveyLevel::DeepSurvey, s.turn);
     const PlayerOrders lab{1, {SetResonanceLaboratoryOrder{1}}};
-    auto preview = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, lab), lab);
+    auto preview = planned_production_state(make_player_view(s, 1).state, lab);
     assert(preview.planets[0].xenocrystal.surface == 4); // Forecasts never manufacture current stock.
     assert(forecast_production_queue(preview, preview.planets[0], preview.planets[0].productionQueue, 16)[0].completionTurn == s.turn + 10);
     auto built = next(s, lab.orders);
@@ -629,7 +629,7 @@ void stale_previews_cannot_teleport_or_spend_hidden_stocks()
     auto s = fixture(); auto& f = s.fleets[0]; f.xenocrystal = 8;
     f.telemetry = confirmed_fleet_telemetry(s, f); f.telemetry.observedTurn = s.turn - 1; f.position = {900, 0};
     const PlayerOrders orders{1, {TransferXenocrystalOrder{{0, 1}, {1, 0}, 8}, SetResonanceLaboratoryOrder{1}}};
-    const auto preview = planned_production_state(projected_cargo_order_state(make_player_view(s, 1).state, orders), orders);
+    const auto preview = planned_production_state(make_player_view(s, 1).state, orders);
     assert(preview.fleets[0].xenocrystal == 8 && !preview.planets[0].xenocrystal.surface);
     const auto forecast = forecast_production_queue(preview, preview.planets[0], preview.planets[0].productionQueue, 16);
     assert(!forecast[0].completionTurn);
@@ -886,8 +886,7 @@ void xenocrystal_transfers_use_mobile_base_service_phase()
     auto home = s; home.fleets[1].position = home.stars[0].position; home.fleets[1].xenocrystal = 8;
     for (auto& f : home.fleets) { f.telemetry = {}; f.telemetry = confirmed_fleet_telemetry(home, f); }
     const std::vector<Order> unloadAndBuild{TransferXenocrystalOrder{{0, 2}, {1, 0}, 8}, SetResonanceLaboratoryOrder{1}};
-    const auto estimate = planned_production_state(projected_cargo_order_state(make_player_view(home, 1).state,
-        {1, unloadAndBuild}), {1, unloadAndBuild});
+    const auto estimate = planned_production_state(make_player_view(home, 1).state, {1, unloadAndBuild});
     assert(estimate.planets[0].xenocrystal.surface == 0);
     auto delivered = next(home, unloadAndBuild);
     assert(delivered.planets[0].resonanceLab.work == 0 && delivered.planets[0].xenocrystal.surface == 8);

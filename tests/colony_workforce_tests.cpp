@@ -36,7 +36,7 @@ static void cargo_mining_forecast(bool unloading, std::uint32_t quantity)
         unloading ? CargoTransferEndpoint{1,0} : CargoTransferEndpoint{0,1},100000,{}}}};
     const auto received = make_player_view(state,1).state;
     const auto beforeMining = projected_mineral_mining(received,received.planets.front());
-    const auto planned = planned_production_state(projected_cargo_order_state(received,orders),orders);
+    const auto planned = planned_production_state(received,orders);
     const auto& afterCargo = planned.planets.front();
     assert(afterCargo.population == (unloading ? 100500U : 500U));
     assert(colony_workforce(planned,afterCargo).operatingMines == (unloading ? 100U : 0U));

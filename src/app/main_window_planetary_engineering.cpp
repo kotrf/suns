@@ -59,7 +59,7 @@ void MainWindow::installPlanetaryEngineering()
     auto* scroll=new QScrollArea(dock); scroll->setWidgetResizable(true); scroll->setWidget(body); dock->setWidget(scroll);
     addDockWidget(Qt::RightDockWidgetArea,dock); dock->hide(); menuBar()->addAction(dock->toggleViewAction());
     const auto knownWorld=[this] { return find_player(state_,pendingOrders_.player)
-        ? planned_production_state(projected_cargo_order_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_),pendingOrders_):GameState{}; };
+        ? planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_):GameState{}; };
     const auto update=[=,this] {
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
         const auto received = find_player(state_,pendingOrders_.player)

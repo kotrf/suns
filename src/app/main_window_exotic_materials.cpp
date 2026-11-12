@@ -23,7 +23,7 @@ namespace {
 qulonglong key(CargoTransferEndpoint e) { return (qulonglong(e.planet) << 32) | e.fleet; }
 CargoTransferEndpoint endpoint(qulonglong k) { return {PlanetId(k >> 32), FleetId(k)}; }
 GameState plan(const GameState& s, const PlayerOrders& orders)
-{ return planned_production_state(projected_cargo_order_state(make_player_view(s, orders.player).state, orders), orders); }
+{ return planned_production_state(make_player_view(s, orders.player).state, orders); }
 }
 void MainWindow::installExoticMaterials()
 {

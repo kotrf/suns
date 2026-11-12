@@ -1,5 +1,34 @@
 # Project status and development handoff
 
+## #289 review P2: retain refits admitted before later cargo — 13 November 2026
+
+[Review 5883007746](https://github.com/kotrf/suns/pull/289#pullrequestreview-5883007746)
+on `9162ae6` finds one P2: Qt projects a late resident unload before admitting
+a previously authored Citadel refit. At 500,001 residents that refit disappears,
+leaving the visible Orbital Miner at index0. Remove then cancels the host's
+index0 refit. The actual Qt/host regression fails on the reviewed source.
+
+Production edits now share the existing local command/cargo boundary replay.
+Admission sees its own order position, while final housing/stocks include later
+accepted cargo. Both rows remain visible with a housing wait and no promised
+completion; Remove sends index1 and the host keeps the paid refit. Reversing the
+cargo/refit order rejects the shrink at admission. All production callers supply
+raw received state, avoiding double cargo application. One prepared state copy
+is reused; no year simulation or repeated prefix copies are added. Atomic
+template edits and existing cargo/gate/split validation remain shared.
+
+The seven targeted CTest passed in 8.44 s. The complete GCC14.2/Qt6.12 Debug
+build and final full **130/130 CTest passed in 217.58 s**. The initial full run
+passed129/130 and timed out at the workspace25.20-s limit. That unchanged test
+passed alone in8.46 s and in9.94 s in the final full run; neither code nor the
+timeout was changed between those runs.
+[Previous source CI 43262064395](https://github.com/kotrf/suns/actions/runs/43262064395)
+succeeded, 130/130; the review reports 19/19 profile checks. Formats122/51/race3
+stay unchanged. #289 remains open for re-review; its discussion stays open until
+a user-authorized merge. Main `3115091`, #50 open, native setup/import/restart
+gated, #53/#63 frozen. Next is actual Human/Computer expansion acceptance.
+
+
 ## #50 paid native station hulls — 12 November 2026
 
 The user authorized this next slice after #288 merged. Main `3115091` has the
