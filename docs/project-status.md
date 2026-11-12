@@ -1,5 +1,28 @@
 # Project status and development handoff
 
+## #288 review P3: reserve support minerals in Qt estimates — 12 November 2026
+
+[Review 5870234964](https://github.com/kotrf/suns/pull/288#pullrequestreview-5870234964)
+on `4688bac` confirms the P2 fix and finds a mineral-budget mismatch: Qt promises
+a paid-work miner next year with exactly 58 I before support; the real bill and
+reserve consume four I/B/G, leaving 54 I and no ship. Source CI
+[43121366744](https://github.com/kotrf/suns/actions/runs/43121366744) succeeded,
+128/128, and the reviewer reports 25/25 profile checks.
+
+The actual Qt load regression fails before the fix. It shares the real four-year
+paid miner fixture with the P2 host/PBEM test, preserves pending local B cargo
+and compares displayed ETA with physical execution at 58 and 62 I. One cheap
+received support quote now supplies net work and the stock after both current
+upkeep and reserve assembly. Queue estimates, the waiting flag and per-unit
+shortfall use that same remaining budget; details show it explicitly. Hidden
+physical stock changes cannot alter the summary, ETA or tooltip.
+
+The three targeted CTest passed in 1.17 s; the complete GCC14.2/Qt6.12 Debug build and 128/128 CTest passed in 153.22 s. The final Qt capture shows the four-I shortfall with no promised completion date. Formats121/50/race3 are unchanged. There is no new
+future-year UI simulation, timer or predicted mining. #288 stays open for
+re-review; both threads remain open until a user-authorized merge. Main
+`99b47de`, #50 open, native setup/import/restart gated, #53/#63 frozen. Next:
+paid native hulls and actual Human/Computer expansion acceptance.
+
 ## #288 review P2: pause paid completions without native support — 12 November 2026
 
 [Review 5866688902](https://github.com/kotrf/suns/pull/288#pullrequestreview-5866688902)

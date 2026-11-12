@@ -63,6 +63,13 @@ struct MainWindowTestAccess {
     }
     static QTreeWidget* production(MainWindow& w) { return w.productionQueueTree_; }
     static void workspace(MainWindow& w) { w.installColonyWorkspace(); w.rebuildScene(); }
+    static void refreshHome(MainWindow& w) {
+        w.selection_.star = w.state_.planets.front().star; w.rebuildScene(); w.refreshProductionQueue();
+    }
+    static QString productionSummary(const MainWindow& w) {
+        return w.productionQueueSummary_->property("compactColonySummary").toBool()
+            ? w.productionQueueSummary_->toolTip() : w.productionQueueSummary_->text();
+    }
     static void hiddenShortage(MainWindow& w) {
         auto& p = w.state_.planets.front(); p.minerals = {}; p.nativeOrbit.reserveUnits = 0;
         p.nativeOrbit.service = HabitatService::Failing; w.rebuildScene();
@@ -239,6 +246,61 @@ void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
     resolved = TurnProcessor{}.process(MainWindowTestAccess::state(w),{orders});
     assert(resolved.fleets.size() == 1 && resolved.planets.front().productionQueue.empty());
 }
+void paid_miner_eta_reserves_support_minerals_after_pending_cargo()
+{
+    auto state = test::native_miner_waiting_for_ironium_fixture();
+    const auto home = state.planets.front().id, transport = state.fleets.back().id;
+    const auto boranium = state.planets.front().minerals.boranium;
+    state = TurnProcessor{}.process(state, {{1, {
+        TransferCargoOrder{{0, transport}, {home, 0}, 0, {16, 0, 0}},
+        TransferCargoOrder{{home, 0}, {0, transport}, 0, {0, boranium, 0}}
+    }}});
+    assert(state.turn == 6 && state.planets.front().nativeOrbit.service == HabitatService::Reserve);
+    assert(state.planets.front().minerals.ironium == 58 && state.planets.front().productionQueue.front().remainingCost == 0);
+    SaveGameData host; host.state = state; host.mode = SessionMode::Host;
+    host.campaignId = 288; host.turnToken = 17; host.playerTokens = {{1,17}};
+    host.pendingOrders = {1, {TransferCargoOrder{{0, transport}, {home, 0}, 0, {0, 20, 0}}}};
+    host.pendingDescriptions = {"Deliver boranium"};
+    QTemporaryDir dir; QString error; const auto path = dir.filePath("support-budget.suns");
+    MainWindow w; MainWindowTestAccess::setup(w);
+    for (bool enough : {false, true}) {
+        auto input = host;
+        if (enough) {
+            input.pendingOrders.orders.push_back(TransferCargoOrder{{0, transport}, {home, 0}, 0, {4, 0, 0}});
+            input.pendingDescriptions.push_back("Deliver remaining ironium");
+        }
+        assert(write_save_game_file(path, input, error));
+        assert(MainWindowTestAccess::load(w, path)); MainWindowTestAccess::refreshHome(w);
+        auto* tree = MainWindowTestAccess::production(w); assert(tree && tree->topLevelItemCount() == 1);
+        auto* row = tree->topLevelItem(0);
+        assert(row->text(3).contains("(+1)") == enough);
+        assert(row->text(2) == (enough ? "0" : "minerals"));
+        const auto details = row->toolTip(0);
+        assert(details.contains(enough
+            ? "Shortfall after life support, before other builds: I 0.0 / B 0.0 / G 0.0 kt"
+            : "Shortfall after life support, before other builds: I 4.0 / B 0.0 / G 0.0 kt"));
+        const auto summary = MainWindowTestAccess::productionSummary(w);
+        assert(summary.contains("Stock after life support"));
+        assert(summary.contains(enough ? "I 58.0 / B 16.0 / G 83.0 kt" : "I 54.0 / B 16.0 / G 83.0 kt"));
+        const auto actual = TurnProcessor{}.process_with_events(input.state, {input.pendingOrders});
+        const auto& planet = actual.state.planets.front();
+        assert(planet.nativeOrbit.service == HabitatService::Normal && planet.nativeOrbit.mineralUnitsPaid == 4);
+        assert(actual.state.fleets.size() == (enough ? 3 : 2));
+        assert(planet.productionQueue.empty() == enough);
+        assert(planet.minerals.ironium == (enough ? 0 : 54));
+        if (!enough) {
+            const auto eta = row->text(3);
+            MainWindowTestAccess::hiddenShortage(w); MainWindowTestAccess::refreshHome(w);
+            assert(MainWindowTestAccess::productionSummary(w) == summary);
+            assert(MainWindowTestAccess::production(w)->topLevelItem(0)->text(3) == eta);
+            assert(MainWindowTestAccess::production(w)->topLevelItem(0)->toolTip(0) == details);
+            if (qEnvironmentVariableIsSet("SUNS_BUDGET_SCREENSHOT")) {
+                w.resize(1440,900); QCoreApplication::processEvents();
+                w.grab().save(qEnvironmentVariable("SUNS_BUDGET_SCREENSHOT"));
+            }
+        }
+    }
+}
 }
 int main(int argc,char** argv)
 {
@@ -255,4 +317,5 @@ int main(int argc,char** argv)
     if (mode.isEmpty() || mode=="new-campaign") a_loaded_native_host_can_create_an_explicit_generalist_campaign();
     if (mode.isEmpty() || mode=="stale-queue") stale_surface_rows_do_not_hide_miner_eta_or_shift_commands();
     if (mode.isEmpty() || mode=="support") life_support_is_visible_and_received();
+    if (mode.isEmpty() || mode=="support-budget") paid_miner_eta_reserves_support_minerals_after_pending_cargo();
 }

@@ -19,27 +19,9 @@ void paid_manufacture_waits_for_resupply_after_host_reload()
 {
     SaveGameData host; host.mode = SessionMode::Host;
     host.campaignId = 288; host.turnToken = 17; host.playerTokens = {{1, 17}};
-    host.pendingOrders = {1, {}}; host.state = test::empty_native_orbital_start();
-    auto budget = native_orbital_start_budget(); budget.minerals.ironium -= 45;
-    const auto started = initialize_native_orbital_start(host.state, 1, host.state.planets.front().id, budget);
-    assert(started);
-    host.state.players.front().technology.researchActive = false;
+    host.pendingOrders = {1, {}}; host.state = test::native_miner_waiting_for_ironium_fixture();
     const auto home = host.state.planets.front().id;
-    // Prepared transport assets carry real cargo; all subsequent changes use orders.
-    const auto design = host.state.nextShipDesignId++;
-    host.state.shipDesigns.push_back({design, 1, "Supply transport", ShipHullType::SmallFreighter,
-        {ShipComponentType::QuickJump5}});
-    assert(ship_design_valid(host.state.shipDesigns.back()));
-    Fleet transport; transport.id = host.state.nextFleetId++; transport.owner = 1; transport.design = design;
-    transport.name = "Supply transport"; transport.ships = {{design, 2}};
-    transport.position = host.state.stars.front().position; transport.minerals = {20, 0, 0};
-    transport.fuel = fleet_fuel_capacity(host.state, transport);
-    transport.telemetry = confirmed_fleet_telemetry(host.state, transport);
-    host.state.fleets.push_back(transport);
-    const PlayerOrders build{1, {SetRemoteMiningOrder{started->minerFleet, false},
-        QueueShipDesignOrder{home, started->minerDesign}}};
-    for (unsigned year = 0; year < 4; ++year)
-        host.state = TurnProcessor{}.process(host.state, year ? std::vector<PlayerOrders>{} : std::vector<PlayerOrders>{build});
+    const auto transport = host.state.fleets.back().id;
     const auto& waiting = host.state.planets.front();
     assert(host.state.turn == 5 && waiting.productionQueue.size() == 1);
     assert(waiting.productionQueue.front().remainingCost == 0 && waiting.productionWaitingForMinerals);
@@ -49,8 +31,8 @@ void paid_manufacture_waits_for_resupply_after_host_reload()
     QTemporaryDir dir; QString error; SaveGameData loaded;
     const auto save = dir.filePath("waiting.suns"), orders = dir.filePath("resupply.sunsorders");
     assert(write_save_game_file(save, host, error) && read_save_game_file(save, loaded, error)); host = loaded;
-    const TransferCargoOrder deliver{{0, transport.id}, {home, 0}, 0, {20, 0, 0}};
-    const TransferCargoOrder removeB{{home, 0}, {0, transport.id}, 0, {0, boranium, 0}};
+    const TransferCargoOrder deliver{{0, transport}, {home, 0}, 0, {20, 0, 0}};
+    const TransferCargoOrder removeB{{home, 0}, {0, transport}, 0, {0, boranium, 0}};
     TurnOrderFileData packet{host.campaignId, host.state.turn, host.turnToken,
         {1, {deliver, removeB}}, {"Deliver ironium", "Load boranium"}};
     assert(write_turn_order_file(orders, packet, error)); TurnOrderFileData decoded;
@@ -78,7 +60,7 @@ void paid_manufacture_waits_for_resupply_after_host_reload()
     assert(stillPaused.state.planets.front().productionQueue == paidQueue && completed(stillPaused) == 0);
     host.state = stillPaused.state;
     assert(write_save_game_file(save, host, error) && read_save_game_file(save, loaded, error)); host = loaded;
-    packet.turn = host.state.turn; packet.orders = {1, {TransferCargoOrder{{0, transport.id}, {home, 0}, 0, {0, 20, 0}}}};
+    packet.turn = host.state.turn; packet.orders = {1, {TransferCargoOrder{{0, transport}, {home, 0}, 0, {0, 20, 0}}}};
     packet.descriptions = {"Restore life support"};
     assert(write_turn_order_file(orders, packet, error) && read_turn_order_file(orders, decoded, error));
     const auto resumed = TurnProcessor{}.process_with_events(host.state, {decoded.orders});

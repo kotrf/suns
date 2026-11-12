@@ -486,6 +486,14 @@ They use only received stocks/fits and accepted local cargo, without predicted
 mining, arrivals, future refits or a future-year simulation. The legacy queue-only
 forecast never converts a native population estimate into surface residents.
 
+Production uses one current support quote for both net work and the mineral
+budget, after accepted local cargo. It subtracts that quote's current bill and
+reserve assembly exactly once before the bounded queue estimate. A paid-work
+project has no completion date if this remaining stock cannot cover its recipe.
+The row's waiting flag, shortfall tooltip and detailed stock summary use the
+same received budget, including when hidden host stocks differ. No future
+mining or delivery is added to make the estimate affordable.
+
 Save **v121** persists kit counts, service, paid work/material units, the annual
 net-work record and growth guards in physical/received/pending native records.
 It appends the three support report kinds. Orders **v50** and race **v3** remain
