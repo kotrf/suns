@@ -91,6 +91,9 @@ GameEventKind event_kind(PlayerReportKind kind)
     case PlayerReportKind::TransportLineDelivery: return GameEventKind::FreightDelivered;
     case PlayerReportKind::RemoteMiningOutput: return GameEventKind::RemoteMiningOutput;
     case PlayerReportKind::NativeOrbitalRadiationLoss: return GameEventKind::NativeOrbitalRadiationLoss;
+    case PlayerReportKind::NativeOrbitalSupportRestored: return GameEventKind::NativeOrbitalSupportRestored;
+    case PlayerReportKind::NativeOrbitalReserveUsed: return GameEventKind::NativeOrbitalReserveUsed;
+    case PlayerReportKind::NativeOrbitalSupportFailure: return GameEventKind::NativeOrbitalSupportFailure;
     case PlayerReportKind::EnemyFleetDetected: return GameEventKind::EnemyFleetDetected;
     case PlayerReportKind::EnemyFleetLost: return GameEventKind::EnemyFleetLost;
     case PlayerReportKind::FleetMobilityRestored: return GameEventKind::FleetMobilityRestored;
@@ -131,6 +134,7 @@ GameEventKind event_kind(PlayerReportKind kind)
 GameEventSeverity event_severity(PlayerReportKind kind)
 {
     if (kind == PlayerReportKind::NativeOrbitalRadiationLoss
+        || kind == PlayerReportKind::NativeOrbitalReserveUsed || kind == PlayerReportKind::NativeOrbitalSupportFailure
         || kind == PlayerReportKind::SpaceBattle || kind == PlayerReportKind::Bombardment
         || kind == PlayerReportKind::MineStrike || kind == PlayerReportKind::EmissionDetected) return GameEventSeverity::Warning;
     if (kind == PlayerReportKind::ColonyLost) return GameEventSeverity::Critical;
@@ -208,7 +212,9 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
     // The manifest is part of the stable identity even when replaying a turn.
     if (report.kind == PlayerReportKind::FreightDelivered || report.kind == PlayerReportKind::StargateTransit
         || report.kind == PlayerReportKind::RemoteMiningOutput
-        || report.kind == PlayerReportKind::NativeOrbitalRadiationLoss) {
+        || report.kind == PlayerReportKind::NativeOrbitalRadiationLoss
+        || report.kind == PlayerReportKind::NativeOrbitalSupportRestored || report.kind == PlayerReportKind::NativeOrbitalReserveUsed
+        || report.kind == PlayerReportKind::NativeOrbitalSupportFailure) {
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.ironium));
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.boranium));
         mix(std::bit_cast<std::uint64_t>(report.deliveredMinerals.germanium));
@@ -257,7 +263,12 @@ void queue_survey_report_impl(
         if (p && p->owner == playerId && candidate.planetSnapshot->xenocrystal)
             candidate.planetSnapshot->xenocrystal->colony = XenocrystalObservation::Colony{playerId, p->population, p->mines};
     }
-    const auto phase = [](const auto& r) { return r.planetSnapshot &&
+    const auto phase = [](const auto& r) {
+        if (r.planetSnapshot && r.planetSnapshot->habitat
+            && r.planetSnapshot->habitat->nativeOrbit.station
+            && r.planetSnapshot->habitat->nativeOrbit.servicedTurn == r.observedTurn
+            && r.planetSnapshot->habitat->nativeOrbit.growthAppliedTurn == r.observedTurn) return 2;
+        return r.planetSnapshot &&
         ((r.planetSnapshot->surfaceMinerals && r.planetSnapshot->surfaceMinerals->finalSurface)
           || (r.planetSnapshot->xenocrystal && r.planetSnapshot->xenocrystal->stockPhase)) ? 1 : 0; };
     const auto dominated = std::any_of(player->pendingSurveyReports.begin(), player->pendingSurveyReports.end(),
@@ -485,6 +496,16 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             return lhs.sourceFleet < rhs.sourceFleet;
         });
         for (const auto& report : due) {
+            const auto existing = std::find_if(
+                player.surveyKnowledge.begin(), player.surveyKnowledge.end(),
+                [&](const SystemSurveyKnowledge& entry) { return entry.star == report.star; });
+            const bool newerNativeEconomy = report.planetSnapshot && report.planetSnapshot->habitat
+                && report.planetSnapshot->habitat->nativeOrbit.station
+                && report.planetSnapshot->habitat->nativeOrbit.servicedTurn == report.observedTurn
+                && report.planetSnapshot->habitat->nativeOrbit.growthAppliedTurn == report.observedTurn
+                && (existing == player.surveyKnowledge.end() || (existing->observedTurn <= report.observedTurn
+                    && (!existing->planetSnapshot || !existing->planetSnapshot->habitat
+                        || existing->planetSnapshot->habitat->nativeOrbit.growthAppliedTurn < report.observedTurn)));
             const auto* observedPlanet = find_planet_at_star(state, report.star);
             const auto oldExotic = observedPlanet ? known_xenocrystal(state, player.id, observedPlanet->id) : std::nullopt;
             const auto incomingExotic = report.planetSnapshot ? report.planetSnapshot->xenocrystal : std::nullopt;
@@ -492,18 +513,17 @@ std::vector<GameEvent> deliver_due_survey_reports(GameState& state)
             const auto incomingStock = report.planetSnapshot ? report.planetSnapshot->surfaceMinerals : std::nullopt;
             const bool newerStock = incomingStock && (!oldStock
                 || std::pair(incomingStock->observedTurn, incomingStock->finalSurface)
-                    > std::pair(oldStock->observedTurn, oldStock->finalSurface));
+                    > std::pair(oldStock->observedTurn, oldStock->finalSurface)
+                || (newerNativeEconomy && incomingStock->observedTurn == oldStock->observedTurn));
             const bool newerExotic = incomingExotic && (!oldExotic || incomingExotic->observedTurn > oldExotic->observedTurn
                 || (incomingExotic->observedTurn == oldExotic->observedTurn && incomingExotic->stockPhase > oldExotic->stockPhase)
+                || (newerNativeEconomy && incomingExotic->observedTurn == oldExotic->observedTurn)
                 || (incomingExotic->depositSurveyed && (!oldExotic->depositSurveyed
                     || incomingExotic->depositObservedTurn > oldExotic->depositObservedTurn)));
             const auto previousLevel = survey_level(state, player.id, report.star);
             if (previousLevel > report.level
                 && report.level < SurveyLevel::OrbitalSurvey) continue;
-            const auto existing = std::find_if(
-                player.surveyKnowledge.begin(), player.surveyKnowledge.end(),
-                [&](const SystemSurveyKnowledge& entry) { return entry.star == report.star; });
-            if (!newerExotic && !newerStock && existing != player.surveyKnowledge.end()
+            if (!newerExotic && !newerStock && !newerNativeEconomy && existing != player.surveyKnowledge.end()
                 && existing->level == report.level
                 && (existing->observedTurn > report.observedTurn
                     || (existing->observedTurn == report.observedTurn

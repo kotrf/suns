@@ -8,6 +8,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QLineEdit>
+#include <QLabel>
 #include <QPushButton>
 #include <QSettings>
 #include <QStatusBar>
@@ -61,6 +62,18 @@ struct MainWindowTestAccess {
         w.rebuildScene(); w.refreshProductionQueue();
     }
     static QTreeWidget* production(MainWindow& w) { return w.productionQueueTree_; }
+    static void workspace(MainWindow& w) { w.installColonyWorkspace(); w.rebuildScene(); }
+    static void refreshHome(MainWindow& w) {
+        w.selection_.star = w.state_.planets.front().star; w.rebuildScene(); w.refreshProductionQueue();
+    }
+    static QString productionSummary(const MainWindow& w) {
+        return w.productionQueueSummary_->property("compactColonySummary").toBool()
+            ? w.productionQueueSummary_->toolTip() : w.productionQueueSummary_->text();
+    }
+    static void hiddenShortage(MainWindow& w) {
+        auto& p = w.state_.planets.front(); p.minerals = {}; p.nativeOrbit.reserveUnits = 0;
+        p.nativeOrbit.service = HabitatService::Failing; w.rebuildScene();
+    }
     static void moveUp(MainWindow& w) { w.moveSelectedProductionItem(-1); }
     static void remove(MainWindow& w) { w.removeSelectedProductionItem(); }
 };
@@ -130,12 +143,25 @@ void native_industry_is_unavailable_in_the_actual_production_panel()
     assert(read_turn_order_file(path, decoded, error));
     const auto resolved = TurnProcessor{}.process(state,{decoded.orders});
     assert(resolved.planets.front().productionQueue.empty() && !resolved.planets.front().industry && !resolved.planets.front().mines);
-    assert(resolved.planets.front().minerals.germanium == 101);
+    assert(resolved.planets.front().minerals.germanium + resolved.planets.front().nativeOrbit.mineralUnitsPaid == 101);
     MainWindowTestAccess::surfaceTemplate(w, true);
     assert(MainWindowTestAccess::factoryButtonEnabled(w));
     assert(apply->isEnabled());
     for (int i=0; i<kinds->count(); ++i)
         assert(kinds->model()->flags(kinds->model()->index(i,0)) & Qt::ItemIsEnabled);
+}
+void life_support_is_visible_and_received()
+{
+    MainWindow w; MainWindowTestAccess::setup(w);
+    MainWindowTestAccess::workspace(w);
+    QCoreApplication::processEvents();
+    auto* status = w.findChild<QLabel*>("colonyStatusSummary"); assert(status);
+    const auto before = status->text();
+    assert(before.contains("Life support") && before.contains("Population change"));
+    MainWindowTestAccess::hiddenShortage(w); QCoreApplication::processEvents();
+    assert(status->text() == before);
+    const auto capture = qEnvironmentVariable("SUNS_SUPPORT_SCREENSHOT");
+    if (!capture.isEmpty()) { w.resize(1440, 900); QCoreApplication::processEvents(); assert(w.grab().save(capture)); }
 }
 void loaded_native_start_cannot_restart_as_a_generalist(bool throughMenu = false)
 {
@@ -203,9 +229,13 @@ void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
     assert(tree->topLevelItem(0)->data(0,Qt::UserRole).toUInt() == 0);
     assert(tree->topLevelItem(1)->data(0,Qt::UserRole).toUInt() == 1);
     auto resolved = MainWindowTestAccess::state(w);
-    for (int i=0; i<4; ++i) resolved = TurnProcessor{}.process(resolved,{});
+    unsigned paidSupport = 0;
+    for (int i=0; i<4; ++i) {
+        resolved = TurnProcessor{}.process(resolved,{});
+        paidSupport += resolved.planets.front().nativeOrbit.mineralUnitsPaid;
+    }
     assert(resolved.fleets.size() == 2 && !resolved.planets.front().industry);
-    assert(resolved.planets.front().minerals.germanium == 90);
+    assert(resolved.planets.front().minerals.germanium + paidSupport == 90);
     tree->setCurrentItem(tree->topLevelItem(1)); MainWindowTestAccess::moveUp(w);
     const auto* reorder = std::get_if<ReorderProductionQueueOrder>(&MainWindowTestAccess::orders(w).orders.back());
     assert(reorder && reorder->fromIndex == 1 && reorder->toIndex == 0);
@@ -215,6 +245,61 @@ void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
     const auto* cancel = std::get_if<CancelProductionOrder>(&orders.orders.back()); assert(cancel && cancel->index == 0);
     resolved = TurnProcessor{}.process(MainWindowTestAccess::state(w),{orders});
     assert(resolved.fleets.size() == 1 && resolved.planets.front().productionQueue.empty());
+}
+void paid_miner_eta_reserves_support_minerals_after_pending_cargo()
+{
+    auto state = test::native_miner_waiting_for_ironium_fixture();
+    const auto home = state.planets.front().id, transport = state.fleets.back().id;
+    const auto boranium = state.planets.front().minerals.boranium;
+    state = TurnProcessor{}.process(state, {{1, {
+        TransferCargoOrder{{0, transport}, {home, 0}, 0, {16, 0, 0}},
+        TransferCargoOrder{{home, 0}, {0, transport}, 0, {0, boranium, 0}}
+    }}});
+    assert(state.turn == 6 && state.planets.front().nativeOrbit.service == HabitatService::Reserve);
+    assert(state.planets.front().minerals.ironium == 58 && state.planets.front().productionQueue.front().remainingCost == 0);
+    SaveGameData host; host.state = state; host.mode = SessionMode::Host;
+    host.campaignId = 288; host.turnToken = 17; host.playerTokens = {{1,17}};
+    host.pendingOrders = {1, {TransferCargoOrder{{0, transport}, {home, 0}, 0, {0, 20, 0}}}};
+    host.pendingDescriptions = {"Deliver boranium"};
+    QTemporaryDir dir; QString error; const auto path = dir.filePath("support-budget.suns");
+    MainWindow w; MainWindowTestAccess::setup(w);
+    for (bool enough : {false, true}) {
+        auto input = host;
+        if (enough) {
+            input.pendingOrders.orders.push_back(TransferCargoOrder{{0, transport}, {home, 0}, 0, {4, 0, 0}});
+            input.pendingDescriptions.push_back("Deliver remaining ironium");
+        }
+        assert(write_save_game_file(path, input, error));
+        assert(MainWindowTestAccess::load(w, path)); MainWindowTestAccess::refreshHome(w);
+        auto* tree = MainWindowTestAccess::production(w); assert(tree && tree->topLevelItemCount() == 1);
+        auto* row = tree->topLevelItem(0);
+        assert(row->text(3).contains("(+1)") == enough);
+        assert(row->text(2) == (enough ? "0" : "minerals"));
+        const auto details = row->toolTip(0);
+        assert(details.contains(enough
+            ? "Shortfall after life support, before other builds: I 0.0 / B 0.0 / G 0.0 kt"
+            : "Shortfall after life support, before other builds: I 4.0 / B 0.0 / G 0.0 kt"));
+        const auto summary = MainWindowTestAccess::productionSummary(w);
+        assert(summary.contains("Stock after life support"));
+        assert(summary.contains(enough ? "I 58.0 / B 16.0 / G 83.0 kt" : "I 54.0 / B 16.0 / G 83.0 kt"));
+        const auto actual = TurnProcessor{}.process_with_events(input.state, {input.pendingOrders});
+        const auto& planet = actual.state.planets.front();
+        assert(planet.nativeOrbit.service == HabitatService::Normal && planet.nativeOrbit.mineralUnitsPaid == 4);
+        assert(actual.state.fleets.size() == (enough ? 3 : 2));
+        assert(planet.productionQueue.empty() == enough);
+        assert(planet.minerals.ironium == (enough ? 0 : 54));
+        if (!enough) {
+            const auto eta = row->text(3);
+            MainWindowTestAccess::hiddenShortage(w); MainWindowTestAccess::refreshHome(w);
+            assert(MainWindowTestAccess::productionSummary(w) == summary);
+            assert(MainWindowTestAccess::production(w)->topLevelItem(0)->text(3) == eta);
+            assert(MainWindowTestAccess::production(w)->topLevelItem(0)->toolTip(0) == details);
+            if (qEnvironmentVariableIsSet("SUNS_BUDGET_SCREENSHOT")) {
+                w.resize(1440,900); QCoreApplication::processEvents();
+                w.grab().save(qEnvironmentVariable("SUNS_BUDGET_SCREENSHOT"));
+            }
+        }
+    }
 }
 }
 int main(int argc,char** argv)
@@ -231,4 +316,6 @@ int main(int argc,char** argv)
     if (mode.isEmpty() || mode=="restart-menu") loaded_native_start_cannot_restart_as_a_generalist(true);
     if (mode.isEmpty() || mode=="new-campaign") a_loaded_native_host_can_create_an_explicit_generalist_campaign();
     if (mode.isEmpty() || mode=="stale-queue") stale_surface_rows_do_not_hide_miner_eta_or_shift_commands();
+    if (mode.isEmpty() || mode=="support") life_support_is_visible_and_received();
+    if (mode.isEmpty() || mode=="support-budget") paid_miner_eta_reserves_support_minerals_after_pending_cargo();
 }

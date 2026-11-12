@@ -127,7 +127,8 @@ void real_refit_only_protects_on_completion()
     state = first.state;
     assert(state.planets.front().nativeOrbit.population == 24'750);
     assert(!station_radiation_screen(state.orbitalStations.front()));
-    assert(state.planets.front().productionQueue.front().remainingCost == 24);
+    assert(state.planets.front().productionQueue.front().remainingCost == 28);
+    const auto firstSupport = state.planets.front().nativeOrbit.mineralUnitsPaid;
     const auto loss = std::find_if(first.events.begin(), first.events.end(), [](const auto& e) {
         return e.kind == GameEventKind::NativeOrbitalRadiationLoss;
     });
@@ -135,10 +136,12 @@ void real_refit_only_protects_on_completion()
     state = TurnProcessor{}.process(state, {});
     assert(state.planets.front().productionQueue.empty() && state.orbitalStations.front().id == station);
     assert(station_radiation_screen(state.orbitalStations.front()) == 20);
-    assert(state.planets.front().nativeOrbit.population == 24'750);
-    assert(state.planets.front().minerals.ironium == 56); // 100 + 2*4 mining - 52 paid fit.
-    assert(state.planets.front().minerals.boranium == 88 && state.planets.front().minerals.germanium == 84);
-    assert(TurnProcessor{}.process(state, {}).planets.front().nativeOrbit.population == 24'750);
+    assert(state.planets.front().nativeOrbit.population - state.planets.front().nativeOrbit.populationGrown == 24'750);
+    assert(state.planets.front().nativeOrbit.populationGrown > 0);
+    const auto support = firstSupport + state.planets.front().nativeOrbit.mineralUnitsPaid;
+    assert(state.planets.front().minerals.ironium == 56-support); // Mining minus paid fit and life support.
+    assert(state.planets.front().minerals.boranium == 88-support && state.planets.front().minerals.germanium == 84-support);
+    assert(TurnProcessor{}.process(state, {}).planets.front().nativeOrbit.population > state.planets.front().nativeOrbit.population);
 }
 void evacuation_and_empty_surviving_station()
 {

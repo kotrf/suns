@@ -2,6 +2,7 @@
 #include "main_window.hpp"
 #include "simple_production_estimate.hpp"
 #include "suns/production.hpp"
+#include "suns/native_orbital_support.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/stations.hpp"
@@ -369,13 +370,22 @@ void MainWindow::refreshProductionQueue()
     productionControls_.ruinedMines = reconstruction_available(*projectedPlanet, ProductionKind::ReconstructMine);
     productionControls_.cleanupUnits = cleanup_units_available(*projectedPlanet);
     refreshProductionControls();
-    const auto output = net_colony_output(forecastState,*projectedPlanet,firstTurnMining);
+    auto availableMinerals = projectedPlanet->minerals;
+    std::optional<NativeOrbitalSupportQuote> nativeSupport;
+    if (native_orbital_race(forecastState, projectedPlanet->owner)) {
+        nativeSupport = native_orbital_support_quote(forecastState, *projectedPlanet);
+        availableMinerals.ironium -= nativeSupport->mineralUnitsPaid;
+        availableMinerals.boranium -= nativeSupport->mineralUnitsPaid;
+        availableMinerals.germanium -= nativeSupport->mineralUnitsPaid;
+    }
+    const auto output = nativeSupport ? nativeSupport->output
+        : net_colony_output(forecastState,*projectedPlanet,firstTurnMining);
     const auto guaranteedResearch = colony_research_allocation(forecastState, *projectedPlanet, output);
     const auto* knownStation = known_orbital_station(state_, planet->owner, planet->id);
     bool shipyardAvailable = knownStation && orbital_station_has_module(*knownStation, OrbitalStationModule::Shipyard);
     // One bounded pass at today's rate/stocks; do not resolve future years in UI.
     const auto estimates = simple_production_estimates(forecastState, *projectedPlanet, queue,
-        output - guaranteedResearch, projectedPlanet->minerals, shipyardAvailable);
+        output - guaranteedResearch, availableMinerals, shipyardAvailable);
     productionQueueSummary_->setText(
         QString("<b>%1</b> • output %2/turn • guaranteed research %3 • production %4 • %5 item%6")
             .arg(QString::fromStdString(planet->name))
@@ -399,6 +409,11 @@ void MainWindow::refreshProductionQueue()
     productionQueueSummary_->setText(productionQueueSummary_->text()
         + QString("<br>Stock: %1<br>Current-year mining (before cargo): %2<br>Queue minerals (auto rules: one annual limit): %3<br>Minerals are spent on completion. Completion dates are approximate: current production rate and received stocks only; no future-year simulation.")
             .arg(mineralAmounts(projectedPlanet->minerals), mineralAmounts(firstTurnMining), mineralAmounts(total)));
+    if (nativeSupport) {
+        productionQueueSummary_->setText(productionQueueSummary_->text()
+            + QString("<br>Stock after life support (including reserve): %1")
+                .arg(mineralAmounts(availableMinerals)));
+    }
     const auto ruinedFactories=reconstruction_remaining(*planet,ProductionKind::ReconstructFactory);
     const auto ruinedMines=reconstruction_remaining(*planet,ProductionKind::ReconstructMine);
     productionQueueSummary_->setText(productionQueueSummary_->text()
@@ -437,7 +452,7 @@ void MainWindow::refreshProductionQueue()
         } else if (waitingForShipyard) {
             remaining = "shipyard";
         } else if (item.remainingCost == 0
-            && !mineral_cargo_sufficient(planet->minerals, production_item_mineral_cost(forecastState, item))) {
+            && !mineral_cargo_sufficient(availableMinerals, production_item_mineral_cost(forecastState, item))) {
             remaining = "minerals";
         }
 
@@ -459,12 +474,14 @@ void MainWindow::refreshProductionQueue()
         if (automatic) { auto font = row->font(1); font.setItalic(true); row->setFont(1, font); }
         row->setData(0, Qt::UserRole, static_cast<qulonglong>(index));
         const auto cost = production_item_mineral_cost(forecastState, item);
-        const MineralCargo missing{std::max(0.0, cost.ironium - planet->minerals.ironium),
-            std::max(0.0, cost.boranium - planet->minerals.boranium),
-            std::max(0.0, cost.germanium - planet->minerals.germanium)};
+        const MineralCargo missing{std::max(0.0, cost.ironium - availableMinerals.ironium),
+            std::max(0.0, cost.boranium - availableMinerals.boranium),
+            std::max(0.0, cost.germanium - availableMinerals.germanium)};
         auto details = QString("%1 — minerals per completed unit: %2\n"
-                                     "Shortfall against current stock before other builds: %3")
-            .arg(productionItemName(forecastState, item), mineralAmounts(cost), mineralAmounts(missing));
+                                     "%3: %4")
+            .arg(productionItemName(forecastState, item), mineralAmounts(cost),
+                nativeSupport ? "Shortfall after life support, before other builds"
+                    : "Shortfall against current stock before other builds", mineralAmounts(missing));
         details += QString("\n%1\nApproximate dates hold today's production rate and mineral budget fixed; growth, future mining, arrivals and future technology are not predicted.")
             .arg(QString::fromUtf8(simple_production_estimate_reason(estimates[index].status)));
         if (estimates[index].skippedQuantity && estimates[index].effectiveQuantity)

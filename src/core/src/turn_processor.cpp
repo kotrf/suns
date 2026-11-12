@@ -2,6 +2,7 @@
 #include "suns/fleet_recycling.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
+#include "suns/native_orbital_support.hpp"
 #include "suns/mining.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/exotic_materials.hpp"
@@ -2308,7 +2309,7 @@ void advance_fleets(GameState& state, std::vector<ColonyFreightDelivery>& freigh
 void grow_colonies(GameState& state)
 {
     for (auto& planet : state.planets) {
-        if (native_orbital_race(state, planet.owner)) continue; // Native support/growth is the next slice.
+        if (native_orbital_race(state, planet.owner)) { grow_native_orbit(state, planet); continue; }
         planet.habitat.population+=projected_orbital_growth(planet);
         const auto change = projected_population_growth(state, planet, state.turn);
         if (change >= 0) planet.population += static_cast<std::uint64_t>(change);
@@ -3042,6 +3043,7 @@ TurnResult TurnProcessor::process_with_events(
     refresh_planetary_engineering(next);
     publish_planetary_engineering_reports(next,current);
     publish_habitat_reports(next,current);
+    publish_native_support_reports(next,current);
     publish_exotic_material_reports(next,current);
     publish_surface_mineral_reports(next, next.turn + 1);
 

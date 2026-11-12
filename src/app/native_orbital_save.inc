@@ -2,16 +2,39 @@
 // v116: independent delivered station-destruction identities/times.
 // v117: received asset observation ranges for comparable History totals.
 // v118: native mining manifests are received events, not physical History output.
+// v121: paid life-support kits, annual debits and growth in the same observations.
 constexpr quint32 kNativeOrbitalMagic = 0x4e4f5242u; // NORB
 void writeNativePopulation(QDataStream& out, const NativeOrbitalPopulation& value)
 {
     out << quint32(value.station) << quint64(value.population);
+    if (value.station) out << quint16(value.reserveUnits) << quint8(value.service) << quint64(value.servicedTurn)
+        << quint32(value.productionPaid) << quint32(value.productionAvailable) << quint16(value.mineralUnitsPaid)
+        << quint64(value.populationLost) << quint64(value.growthEligiblePopulation)
+        << quint64(value.growthAppliedTurn) << quint64(value.populationGrown);
+    else if (value != NativeOrbitalPopulation{}) out.setStatus(QDataStream::WriteFailed);
 }
-void readNativePopulation(QDataStream& in, NativeOrbitalPopulation& value)
+void readNativePopulation(QDataStream& in, NativeOrbitalPopulation& value, std::uint64_t currentTurn)
 {
     quint32 station{}; quint64 population{};
     in >> station >> population;
     value = {station, population};
+    if (gReadSaveFormatVersion >= 121 && station) {
+        quint16 reserve{}, paidUnits{}; quint8 service{};
+        quint64 serviced{}, lost{}, eligible{}, grownTurn{}, grown{}; quint32 paid{}, available{};
+        in >> reserve >> service >> serviced >> paid >> available >> paidUnits >> lost >> eligible >> grownTurn >> grown;
+        value.reserveUnits = reserve; value.service = HabitatService(service); value.servicedTurn = serviced;
+        value.productionPaid = paid; value.productionAvailable = available; value.mineralUnitsPaid = paidUnits;
+        value.populationLost = lost; value.growthEligiblePopulation = eligible;
+        value.growthAppliedTurn = grownTurn; value.populationGrown = grown;
+        const auto limit = native_orbital_capacity(OrbitalStationHullType::Fortress);
+        if (service > quint8(HabitatService::Failing) || reserve > kNativeSupportMaxReserveUnits
+            || paidUnits > 2 * kNativeSupportMaxAnnualUnits || paid > kNativeSupportWorkPerUnit * paidUnits
+            || available > limit || lost > limit || eligible > limit || grown > limit
+            || serviced > currentTurn || (grownTurn && grownTurn != serviced)
+            || (grown && !grownTurn)
+            || (value.service != HabitatService::Normal && (available || eligible || grown))
+            || (!serviced && (service || paid || available || paidUnits || lost || eligible || grownTurn || grown))) markCorrupt(in);
+    }
     if ((!station && population) || population > native_orbital_capacity(OrbitalStationHullType::Fortress)) markCorrupt(in);
 }
 void writeNativeEvidence(QDataStream& out, const auto& record)
@@ -19,10 +42,10 @@ void writeNativeEvidence(QDataStream& out, const auto& record)
     writeNativePopulation(out, record.planetSnapshot && record.planetSnapshot->habitat
         ? record.planetSnapshot->habitat->nativeOrbit : NativeOrbitalPopulation{});
 }
-void readNativeEvidence(QDataStream& in, auto& record, const Player& player)
+void readNativeEvidence(QDataStream& in, auto& record, const Player& player, std::uint64_t currentTurn)
 {
     NativeOrbitalPopulation native;
-    readNativePopulation(in, native);
+    readNativePopulation(in, native, currentTurn);
     if (player.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization
         && record.observedOwner == player.id && record.planetSnapshot && record.planetSnapshot->habitat
         && (record.planetSnapshot->habitat->surfacePopulation || record.planetSnapshot->habitat->habitat.population)) markCorrupt(in);
@@ -83,7 +106,7 @@ void readNativeOrbit(QDataStream& stream, GameState& state)
     if (!readCount(in, count) || count != state.planets.size()) { markCorrupt(stream); return; }
     for (auto& planet : state.planets) {
         in >> id; if (id != planet.id) markCorrupt(in);
-        readNativePopulation(in, planet.nativeOrbit);
+        readNativePopulation(in, planet.nativeOrbit, state.turn);
         if (native_orbital_race(state, planet.owner) && (planet.population || planet.habitat != OrbitalHabitat{})) markCorrupt(in);
         if (planet.nativeOrbit.station) {
             const auto* station = native_orbital_station(state, planet);
@@ -95,13 +118,13 @@ void readNativeOrbit(QDataStream& stream, GameState& state)
         in >> id;
         if (id != player.id || !readCount(in, count) || count != player.surveyKnowledge.size()) { markCorrupt(stream); return; }
         for (auto& record : player.surveyKnowledge) {
-            in >> id; if (id != record.star) markCorrupt(in); readNativeEvidence(in, record, player);
+            in >> id; if (id != record.star) markCorrupt(in); readNativeEvidence(in, record, player, state.turn);
         }
         if (!readCount(in, count) || count != player.pendingSurveyReports.size()) { markCorrupt(stream); return; }
         for (auto& record : player.pendingSurveyReports) {
             quint64 observed{}; in >> id >> observed;
             if (id != record.star || observed != record.observedTurn) markCorrupt(in);
-            readNativeEvidence(in, record, player);
+            readNativeEvidence(in, record, player, state.turn);
         }
     }
     if (gReadSaveFormatVersion >= 116) {

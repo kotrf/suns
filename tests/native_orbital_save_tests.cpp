@@ -12,8 +12,13 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <map>
 using namespace suns;
 namespace {
+std::uint64_t before_native_births(const Planet& planet)
+{
+    return planet.nativeOrbit.population - planet.nativeOrbit.populationGrown;
+}
 bool same_minerals(const MineralCargo& a, const MineralCargo& b)
 {
     return std::abs(a.ironium-b.ironium) < 1e-9 && std::abs(a.boranium-b.boranium) < 1e-9
@@ -160,7 +165,7 @@ void native_terraforming_cannot_delay_a_lifesaving_refit()
         {ShipComponentType::BulkRadiationScreen}, true, true}, state.orbitalStations.front().id};
     const auto control = TurnProcessor{}.process(state, {{1, {QueueStationOrder{id, fit}}}});
     assert(control.planets.front().productionQueue.empty());
-    assert(control.planets.front().nativeOrbit.population == 25'000);
+    assert(before_native_births(control.planets.front()) == 25'000);
     assert(station_radiation_screen(control.orbitalStations.front()) == 20);
     QTemporaryDir directory; const auto path = directory.filePath("terraform.sunsorders");
     TurnOrderFileData packet{118, state.turn, 17, {1, {
@@ -171,11 +176,11 @@ void native_terraforming_cannot_delay_a_lifesaving_refit()
     assert(write_turn_order_file(path, packet, error)); TurnOrderFileData decoded;
     assert(read_turn_order_file(path, decoded, error));
     const auto submitted = TurnProcessor{}.process(state, {decoded.orders});
-    if (submitted.planets.front().nativeOrbit.population != 25'000)
+    if (before_native_births(submitted.planets.front()) != 25'000)
         std::fprintf(stderr, "Native Terraform regression: %llu residents, screen %u\n",
             static_cast<unsigned long long>(submitted.planets.front().nativeOrbit.population),
             unsigned(station_radiation_screen(submitted.orbitalStations.front())));
-    assert(submitted.planets.front().nativeOrbit.population == 25'000);
+    assert(before_native_births(submitted.planets.front()) == 25'000);
     assert(station_radiation_screen(submitted.orbitalStations.front()) == 20);
     const auto planned = planned_production_state(state, decoded.orders);
     assert(planned.planets.front().productionQueue.size() == 1);
@@ -186,7 +191,7 @@ void native_terraforming_cannot_delay_a_lifesaving_refit()
             {ProductionKind::Terraforming, kTerraformingCost, 0, automation, 100}};
         const auto resumed = TurnProcessor{}.process(stale, {{1, {QueueStationOrder{id, fit}}}});
         assert(resumed.planets.front().productionQueue.empty());
-        assert(resumed.planets.front().nativeOrbit.population == 25'000);
+        assert(before_native_births(resumed.planets.front()) == 25'000);
         assert(station_radiation_screen(resumed.orbitalStations.front()) == 20);
         assert(resumed.planets.front().environment.temperature == colony.environment.temperature);
         assert(resumed.planets.front().environment.gravity == colony.environment.gravity);
@@ -262,10 +267,10 @@ void genuine_v118_and_radiation_round_trip()
     assert(write_save_game_file(path, envelope(state), error) && read_save_game_file(path, loaded, error));
     state = TurnProcessor{}.process(loaded.state, {});
     assert(station_radiation_screen(state.orbitalStations.front()) == 20);
-    assert(state.planets.front().nativeOrbit.population == 24'502);
+    assert(before_native_births(state.planets.front()) == 24'502);
     host.state = state;
     assert(write_save_game_file(path, make_player_turn(host, 1), error) && read_save_game_file(path, loaded, error));
-    assert(loaded.state.planets.front().nativeOrbit.population == 24'502);
+    assert(before_native_births(loaded.state.planets.front()) == 24'502);
     assert(station_radiation_screen(loaded.state.orbitalStations.front()) == 20);
 }
 void delayed_radiation_receipts_preserve_observation_and_received_fit()
@@ -331,9 +336,11 @@ void paid_start_and_replacement_survive_host_and_pbem()
     assert(write_turn_order_file(ordersPath, packet, error)); TurnOrderFileData decoded;
     assert(read_turn_order_file(ordersPath, decoded, error));
     auto uninterrupted = state;
+    unsigned supportPaid = 0;
     for (unsigned year = 0; year < 4; ++year) {
         const auto orders = year == 0 ? std::vector<PlayerOrders>{decoded.orders} : std::vector<PlayerOrders>{};
         state = TurnProcessor{}.process(state, orders);
+        supportPaid += state.planets.front().nativeOrbit.mineralUnitsPaid;
         uninterrupted = TurnProcessor{}.process(uninterrupted, orders);
         assert(state.fleets.size() == uninterrupted.fleets.size());
         assert(state.planets.front().nativeOrbit == uninterrupted.planets.front().nativeOrbit);
@@ -343,7 +350,7 @@ void paid_start_and_replacement_survive_host_and_pbem()
         state = loaded.state;
     }
     assert(state.turn == 5 && state.fleets.size() == 2 && state.planets.front().productionQueue.empty());
-    assert(same_minerals(state.planets.front().minerals, {58, 108, 90}));
+    assert(same_minerals(state.planets.front().minerals, {58.0-supportPaid, 108.0-supportPaid, 90.0-supportPaid}));
     // A rejected repeat must leave even serialized host evidence unchanged.
     assert(write_save_game_file(path, envelope(state), error));
     QFile beforeFile(path); assert(beforeFile.open(QIODevice::ReadOnly)); const auto before = beforeFile.readAll(); beforeFile.close();
@@ -369,15 +376,20 @@ void paid_founding_orders_and_received_evidence_survive_reload()
         state = TurnProcessor{}.process(loaded.state, {decoded.orders});
         assert(state.orbitalStations.size() == 2 && state.fleets.size() == 1);
         assert(state.planets[1].nativeOrbit == expected.planets[1].nativeOrbit);
-        assert(same_minerals(state.planets[1].minerals, {24, 17, 21}));
+        const auto support = state.planets[1].nativeOrbit.mineralUnitsPaid;
+        assert(same_minerals(state.planets[1].minerals, {24.0-support, 17.0-support, 21.0-support}));
         auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
         assert(write_save_game_file(savePath, make_player_turn(host, 1), error) && read_save_game_file(savePath, loaded, error));
-        assert(loaded.state.planets[1].nativeOrbit.population == 1000 && !loaded.state.planets[1].population);
+        assert(before_native_births(loaded.state.planets[1]) == 1000 && !loaded.state.planets[1].population);
         assert(native_orbital_station(loaded.state, loaded.state.planets[1]));
-        assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+        assert(loaded.state.players.front().history.back().population
+            == state.planets.front().nativeOrbit.population + state.planets[1].nativeOrbit.population);
         assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
         const auto resumed = TurnProcessor{}.process(loaded.state, {decoded.orders});
-        assert(resumed.orbitalStations.size() == 2 && same_minerals(resumed.planets[1].minerals, state.planets[1].minerals));
+        const auto moreSupport = resumed.planets[1].nativeOrbit.mineralUnitsPaid;
+        assert(resumed.orbitalStations.size() == 2 && same_minerals(resumed.planets[1].minerals,
+            {state.planets[1].minerals.ironium-moreSupport, state.planets[1].minerals.boranium-moreSupport,
+             state.planets[1].minerals.germanium-moreSupport}));
     }
 
     auto state = test::native_orbital_founding_fixture();
@@ -388,7 +400,7 @@ void paid_founding_orders_and_received_evidence_survive_reload()
     // Fly the actual ship, preserving its real received/in-transit telemetry.
     for (unsigned year = 0; year < 40 && !find_planet(state, target)->nativeOrbit.station; ++year)
         state = TurnProcessor{}.process(state, year == 0 ? std::vector<PlayerOrders>{travel} : std::vector<PlayerOrders>{});
-    assert(find_planet(state, target)->nativeOrbit.population == 1000);
+    assert(before_native_births(*find_planet(state, target)) == 1000);
     const auto& reports = state.players.front().pendingPlayerReports;
     const auto founding = std::find_if(reports.begin(), reports.end(), [](const auto& r) { return r.kind == PlayerReportKind::ColonyFounded; });
     assert(founding != reports.end() && founding->deliveryTurn > state.turn);
@@ -401,16 +413,17 @@ void paid_founding_orders_and_received_evidence_survive_reload()
     assert(known_planet_owner(loaded.state, 1, target) == 0);
     assert(!find_planet(loaded.state, target)->nativeOrbit.population);
     assert(!find_orbital_station_at_planet(loaded.state, target));
-    assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+    assert(loaded.state.players.front().history.back().population == state.planets.front().nativeOrbit.population + 1000);
     assert(std::any_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [=](const auto& f) { return f.id == id; }));
     assert(write_save_game_file(savePath, envelope(state), error) && read_save_game_file(savePath, loaded, error));
     state = loaded.state;
     while (state.turn <= receiptYear+1) state = TurnProcessor{}.process(state, {});
     exportBoundary();
     assert(known_planet_owner(loaded.state, 1, target) == 1);
-    assert(find_planet(loaded.state, target)->nativeOrbit.population == 1000);
+    const auto receivedResidents = find_planet(loaded.state, target)->nativeOrbit.population;
+    assert(receivedResidents >= 1000 && receivedResidents <= find_planet(state, target)->nativeOrbit.population);
     assert(find_orbital_station_at_planet(loaded.state, target));
-    assert(loaded.state.players.front().history.back().population == kInitialHomePopulation);
+    assert(loaded.state.players.front().history.back().population == state.planets.front().nativeOrbit.population + receivedResidents);
     assert(std::none_of(loaded.state.fleets.begin(), loaded.state.fleets.end(), [=](const auto& f) { return f.id == id; }));
 }
 void reconnected_founding_is_counted_once_before_the_original_receipt()
@@ -430,7 +443,7 @@ void reconnected_founding_is_counted_once_before_the_original_receipt()
     const PlayerOrders travel{1,{MoveFleetOrder{founder,{400,0},5,{FleetArrivalActionKind::Colonize}}}};
     for (unsigned year=0;year<40 && !state.planets[1].nativeOrbit.station;++year)
         state = TurnProcessor{}.process(state,year==0?std::vector<PlayerOrders>{travel}:std::vector<PlayerOrders>{});
-    assert(state.planets[1].nativeOrbit.population == 1000);
+    assert(before_native_births(state.planets[1]) == 1000);
     const auto founding = std::find_if(state.players.front().pendingPlayerReports.begin(),state.players.front().pendingPlayerReports.end(),
         [&](const auto& r){return r.kind == PlayerReportKind::ColonyFounded && r.fleet == founder;});
     assert(founding != state.players.front().pendingPlayerReports.end() && founding->deliveryTurn > state.turn+1);
@@ -456,24 +469,25 @@ void reconnected_founding_is_counted_once_before_the_original_receipt()
         return total;
     };
     const auto checkBoundary = [&](const GameState& candidate,bool dockReceived) {
+        const auto knowledge = std::find_if(candidate.players.front().surveyKnowledge.begin(), candidate.players.front().surveyKnowledge.end(),
+            [&](const auto& k){return k.star == candidate.planets[1].star;});
+        assert(knowledge != candidate.players.front().surveyKnowledge.end());
+        const auto knownResidents = dockReceived ? knowledge->planetSnapshot->habitat->nativeOrbit.population : 0;
+        const auto expectedPopulation = candidate.planets.front().nativeOrbit.population + (dockReceived ? knownResidents : 1000);
+        if (dockReceived) assert(knownResidents >= 1000 && knownResidents <= candidate.planets[1].nativeOrbit.population);
         auto host=envelope(candidate); host.mode=SessionMode::Host; host.playerTokens={{1,17}};
         const auto pbem=dir.filePath("reconnected-player.suns"), save=dir.filePath("reconnected-host.suns");
         assert(write_save_game_file(pbem,make_player_turn(host,1),error) && read_save_game_file(pbem,loaded,error));
-        if (residents(loaded.state)!=kInitialHomePopulation)
-            std::fprintf(stderr,"PBEM turn %llu, received dock %d: residents %llu, History %llu\n",
-                static_cast<unsigned long long>(candidate.turn),int(dockReceived),
-                static_cast<unsigned long long>(residents(loaded.state)),
-                static_cast<unsigned long long>(loaded.state.players.front().history.back().population));
-        assert(residents(loaded.state)==kInitialHomePopulation);
-        assert(loaded.state.players.front().history.back().population==kInitialHomePopulation);
-        assert((find_planet(loaded.state,target)->nativeOrbit.population==1000)==dockReceived);
+        assert(residents(loaded.state)==expectedPopulation);
+        assert(loaded.state.players.front().history.back().population==expectedPopulation);
+        assert(find_planet(loaded.state,target)->nativeOrbit.population==knownResidents);
         assert(std::any_of(loaded.state.fleets.begin(),loaded.state.fleets.end(),
             [&](const auto& f){return f.id==founder;}) == !dockReceived);
         assert(std::any_of(loaded.state.fleets.begin(),loaded.state.fleets.end(),
             [&](const auto& f){return f.id==unrelatedId;}));
         assert(write_save_game_file(save,host,error) && read_save_game_file(save,loaded,error));
         const auto view=make_player_view(loaded.state,1);
-        assert(residents(view.state)==kInitialHomePopulation && empire_turn_statistics(loaded.state,1).population==kInitialHomePopulation);
+        assert(residents(view.state)==expectedPopulation && empire_turn_statistics(loaded.state,1).population==expectedPopulation);
         const auto missing=missing_fleet_contacts(loaded.state,1);
         assert(std::any_of(missing.begin(),missing.end(),[&](const auto& f){return f.id==founder;}) == !dockReceived);
         assert(std::any_of(missing.begin(),missing.end(),[&](const auto& f){return f.id==unrelatedId;}));
@@ -536,8 +550,8 @@ void resident_truth_and_pending_evidence_round_trip()
             auto& observation = *bad.players.front().surveyKnowledge.front().planetSnapshot->habitat;
             observation.nativeOrbit = {}; observation.surfacePopulation = 1;
         }
-        assert(write_save_game_file(path, envelope(bad), error));
-        assert(!read_save_game_file(path, loaded, error));
+        assert(!write_save_game_file(path, envelope(bad), error)
+            || !read_save_game_file(path, loaded, error));
     }
     assert(write_save_game_file(path, envelope(state), error));
     QFile file(path); assert(file.open(QIODevice::ReadOnly)); auto truncated = file.readAll(); file.close();
@@ -586,7 +600,7 @@ void real_pbem_decoding_keeps_guards_and_shared_unloading()
         assert(write_turn_order_file(path, packet, error)); TurnOrderFileData decoded;
         assert(read_turn_order_file(path, decoded, error));
         const auto next = TurnProcessor{}.process(state, {decoded.orders});
-        assert(next.planets.front().nativeOrbit == state.planets.front().nativeOrbit);
+        assert(before_native_births(next.planets.front()) == state.planets.front().nativeOrbit.population);
         assert(!next.planets.front().population && next.fleets.front().colonists == 500);
     }
     TurnOrderFileData packet{115, state.turn, 17,
@@ -595,13 +609,13 @@ void real_pbem_decoding_keeps_guards_and_shared_unloading()
     assert(write_turn_order_file(path, packet, error)); TurnOrderFileData decoded;
     assert(read_turn_order_file(path, decoded, error));
     const auto next = TurnProcessor{}.process(state, {decoded.orders});
-    assert(next.planets.front().nativeOrbit.population == 10'500 && !next.planets.front().population);
+    assert(before_native_births(next.planets.front()) == 10'500 && !next.planets.front().population);
     assert(next.fleets.front().colonists == 0 && next.fleets.front().minerals.ironium == 0);
     packet.orders = {1, {TransferCargoOrder{{0, fleet}, {1, 0, true}, 100, {}}}};
     packet.descriptions = {"Station transfer"};
     assert(write_turn_order_file(path, packet, error) && read_turn_order_file(path, decoded, error));
     const auto exact = TurnProcessor{}.process(state, {decoded.orders});
-    assert(exact.planets.front().nativeOrbit.population == 10'100 && exact.fleets.front().colonists == 400);
+    assert(before_native_births(exact.planets.front()) == 10'100 && exact.fleets.front().colonists == 400);
     assert(!exact.planets.front().population && exact.fleets.front().minerals.ironium == 3);
 }
 void genuine_v114_has_no_native_residents()
@@ -635,10 +649,12 @@ void unloading_history_waits_for_received_cargo()
         state.players.front().history.clear();
         record_empire_turn_statistics(state);
         const auto initialPopulation = residents+500;
+        std::map<std::uint64_t, Planet> annualSnapshots{{state.turn, planet}};
         const auto unloaded = std::min(500U, 100'000U-residents);
         auto result = TurnProcessor{}.process_with_events(state, {});
         state = result.state;
-        assert(state.planets.front().nativeOrbit.population == residents+unloaded);
+        annualSnapshots.emplace(state.turn, state.planets.front());
+        assert(before_native_births(state.planets.front()) == residents+unloaded);
         assert(state.fleets.front().colonists == 500-unloaded && state.fleets.front().minerals.ironium == 0);
         const auto manifest = std::find_if(state.players.front().pendingPlayerReports.begin(),
             state.players.front().pendingPlayerReports.end(), [](const auto& r) { return r.kind == PlayerReportKind::FreightDelivered; });
@@ -650,8 +666,12 @@ void unloading_history_waits_for_received_cargo()
         const auto path = directory.filePath("unload.suns");
         const auto checkHistory = [&](const GameState& observed, bool delivered) {
             const auto& history = observed.players.front().history.back();
-            assert(history.population == initialPopulation);
-            assert(same_minerals(history.minerals, {103, 102, 101}));
+            const auto& received = annualSnapshots.at(observed.turn-1);
+            const bool cargoReceived = observed.turn >= receipt;
+            const auto expectedPopulation = received.nativeOrbit.population + 500-(cargoReceived ? unloaded : 0);
+            assert(history.population == expectedPopulation);
+            assert(same_minerals(history.minerals, {received.minerals.ironium+(cargoReceived ? 0 : 3),
+                received.minerals.boranium+(cargoReceived ? 0 : 2), received.minerals.germanium+(cargoReceived ? 0 : 1)}));
             assert(history.freightRecorded);
             assert(history.colonistsDelivered == (delivered ? unloaded : 0));
             assert(same_minerals(history.freightDelivered, delivered ? MineralCargo{3, 2, 1} : MineralCargo{}));
@@ -662,13 +682,15 @@ void unloading_history_waits_for_received_cargo()
             auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
             const auto exported = make_player_turn(host, 1);
             assert(write_save_game_file(path, exported, error) && read_save_game_file(path, loaded, error));
-            assert(loaded.state.planets.front().nativeOrbit.population == residents+(delivered ? unloaded : 0));
+            const auto& received = annualSnapshots.at(state.turn-1);
+            assert(loaded.state.planets.front().nativeOrbit.population == received.nativeOrbit.population);
             assert(loaded.state.fleets.front().colonists == 500-(delivered ? unloaded : 0));
             assert(loaded.state.fleets.front().minerals.ironium == (delivered ? 0 : 3));
             checkHistory(loaded.state, delivered);
             // Rebuilding a received boundary must agree with its exported totals.
             const auto rebuilt = empire_turn_statistics(loaded.state, 1);
-            assert(rebuilt.population == initialPopulation && same_minerals(rebuilt.minerals, {103, 102, 101}));
+            assert(rebuilt.population == loaded.state.players.front().history.back().population
+                && same_minerals(rebuilt.minerals, loaded.state.players.front().history.back().minerals));
         };
         checkExport(false);
         // Preserve the actual pending manifest and telemetry across host reload.
@@ -677,12 +699,14 @@ void unloading_history_waits_for_received_cargo()
         auto overdue = state;
         result = TurnProcessor{}.process_with_events(state, {});
         state = result.state;
+        annualSnapshots.emplace(state.turn, state.planets.front());
         assert(state.turn == receipt);
         assert(std::count_if(result.events.begin(), result.events.end(), [](const auto& e) { return e.kind == GameEventKind::FreightDelivered; }) == 1);
         checkExport(true);
         record_empire_turn_statistics(state);
         checkHistory(state, true);
         state = TurnProcessor{}.process(state, {});
+        annualSnapshots.emplace(state.turn, state.planets.front());
         checkHistory(state, false);
         std::uint64_t deliveredTotal = 0;
         for (const auto& h : state.players.front().history) deliveredTotal += h.colonistsDelivered;
@@ -729,6 +753,9 @@ void received_missing_fleet_is_counted_once()
 void asynchronous_cargo_dates_survive_host_and_pbem()
 {
     auto state = test::asynchronous_native_unload_fixture();
+    std::uint64_t expectedPeople = 20'500;
+    double expectedIronium = 203;
+    std::map<std::uint64_t, Planet> remoteSnapshots{{state.turn, state.planets[1]}};
     QTemporaryDir directory; QString error; SaveGameData loaded, exported;
     const auto path = directory.filePath("asynchronous.suns");
     for (int year = 1; year <= 4; ++year) {
@@ -739,7 +766,7 @@ void asynchronous_cargo_dates_survive_host_and_pbem()
         for (const auto& f : state.fleets) if (f.owner == 1) {
             physicalPeople += f.colonists; physicalIronium += f.minerals.ironium;
         }
-        assert(physicalPeople == 20'500 && physicalIronium == 203);
+        assert(physicalPeople == expectedPeople && physicalIronium == expectedIronium);
         auto host = envelope(state); host.mode = SessionMode::Host; host.playerTokens = {{1, 17}};
         assert(write_save_game_file(path, host, error) && read_save_game_file(path, loaded, error));
         state = loaded.state;
@@ -748,7 +775,8 @@ void asynchronous_cargo_dates_survive_host_and_pbem()
         assert(h.assetTotalsSynchronized == (year == 1));
         assert(h.newestAssetObservation == std::uint64_t(year));
         if (year == 3) {
-            assert(h.population == 20'000 && h.minerals.ironium == 200 && h.oldestAssetObservation == 1);
+            assert(h.population == state.planets.front().nativeOrbit.population + 10'000
+                && h.minerals.ironium == state.planets.front().minerals.ironium + 100 && h.oldestAssetObservation == 1);
             assert(!h.colonistsDelivered && h.freightDelivered.ironium == 0);
             assert(exported.state.fleets.front().colonists == 0 && exported.state.planets[1].nativeOrbit.population == 10'000);
             // Neither hidden truth nor the contents/schedule of undelivered
@@ -761,12 +789,23 @@ void asynchronous_cargo_dates_survive_host_and_pbem()
                 && same.minerals.ironium == h.minerals.ironium && same.oldestAssetObservation == h.oldestAssetObservation);
         }
         if (year == 4) {
-            assert(h.population == 20'500 && h.minerals.ironium == 203 && h.oldestAssetObservation == 3);
+            const auto& remoteReceived = remoteSnapshots.at(year-1);
+            assert(h.population == state.planets.front().nativeOrbit.population + remoteReceived.nativeOrbit.population
+                && h.minerals.ironium == state.planets.front().minerals.ironium + remoteReceived.minerals.ironium
+                && h.oldestAssetObservation == 3);
             assert(h.colonistsDelivered == 500 && h.freightDelivered.ironium == 3);
             const auto& old = exported.state.players.front().history[2];
             assert(old.turn == 3 && !old.assetTotalsSynchronized && old.oldestAssetObservation == 1
                 && old.newestAssetObservation == 3 && !old.colonistsDelivered);
-        } else state = TurnProcessor{}.process(state, {});
+        } else {
+            state = TurnProcessor{}.process(state, {});
+            for (const auto& p : state.planets) if (p.owner == 1) {
+                expectedPeople += p.nativeOrbit.populationGrown;
+                expectedPeople -= p.nativeOrbit.populationLost;
+                expectedIronium -= p.nativeOrbit.mineralUnitsPaid;
+            }
+            remoteSnapshots.emplace(state.turn, state.planets[1]);
+        }
     }
 }
 void history_date_bounds_and_genuine_v116_migration()
@@ -795,7 +834,7 @@ void history_date_bounds_and_genuine_v116_migration()
     // the genuine v118 test above covers new radiation after an old-file load.
     for (auto& star : loaded.state.stars) star.stellarClass = StarClass::Orange;
     const auto next = TurnProcessor{}.process(loaded.state, {});
-    assert(next.players.front().history.back().population == 20'500);
+    assert(next.players.front().history.back().population == next.planets.front().nativeOrbit.population + 10'500);
     assert(next.players.front().history.back().colonistsDelivered == 500);
     assert(!next.players.front().history[2].assetTotalsSynchronized);
 }
@@ -806,7 +845,7 @@ void native_mining_manifests_and_v117_migration()
     state.fleets.front().task = state.fleets.front().telemetry.task = FleetTask::RemoteMining;
     set_survey_level(state, 1, 1, SurveyLevel::DeepSurvey, state.turn);
     state = TurnProcessor{}.process(state, {});
-    assert(state.planets.front().minerals.ironium == 108);
+    assert(state.planets.front().minerals.ironium + state.planets.front().nativeOrbit.mineralUnitsPaid == 108);
     assert(state.players.front().history.back().remoteExtraction.ironium == 0);
     const auto mining = std::find_if(state.players.front().pendingPlayerReports.begin(), state.players.front().pendingPlayerReports.end(),
         [](const auto& r) { return r.kind == PlayerReportKind::RemoteMiningOutput; });
@@ -837,7 +876,8 @@ void native_mining_manifests_and_v117_migration()
     TurnOrderFileData packet{118, 1, 17, {1, {SetRemoteMiningOrder{1, true}}}, {"Remote mining"}};
     const auto orderPath = directory.filePath("mining.sunsorders"); TurnOrderFileData decoded;
     assert(write_turn_order_file(orderPath, packet, error) && read_turn_order_file(orderPath, decoded, error));
-    assert(TurnProcessor{}.process(test::native_orbital_miner_fixture(), {decoded.orders}).planets.front().minerals.ironium == 108);
+    const auto ordered = TurnProcessor{}.process(test::native_orbital_miner_fixture(), {decoded.orders});
+    assert(ordered.planets.front().minerals.ironium + ordered.planets.front().nativeOrbit.mineralUnitsPaid == 108);
 
     assert(read_save_game_file(QString::fromUtf8(SUNS_SOURCE_DIR "/tests/fixtures/native-mining-v117.suns"), loaded, error));
     assert(loaded.state.players.front().history.back().remoteExtraction.ironium == 8);

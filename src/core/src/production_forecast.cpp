@@ -3,6 +3,7 @@
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/planetary_recovery.hpp"
+#include "suns/native_orbital.hpp"
 
 #include <algorithm>
 #include <numeric>
@@ -61,10 +62,14 @@ std::vector<ProductionCompletionEstimate> forecast_production_queue(
             && !result[original].completionTurn && !result[original].retiredTurn
             && std::find(origins.begin(),origins.end(),original)==origins.end())
                 result[original].retiredTurn=state.turn+offset;
-        simulated.habitat.population+=projected_orbital_growth(simulated);
-        const auto populationChange = projected_population_growth(simulationState, simulated, simulationState.turn);
-        if (populationChange >= 0) simulated.population += static_cast<std::uint64_t>(populationChange);
-        else simulated.population -= std::min(simulated.population, static_cast<std::uint64_t>(-populationChange));
+        // This legacy queue-only forecast has no native orbital lifecycle.
+        // Native scalar population changes must never become surface residents.
+        if (!native_orbital_race(simulationState, simulated.owner)) {
+            simulated.habitat.population+=projected_orbital_growth(simulated);
+            const auto populationChange = projected_population_growth(simulationState, simulated, simulationState.turn);
+            if (populationChange >= 0) simulated.population += static_cast<std::uint64_t>(populationChange);
+            else simulated.population -= std::min(simulated.population, static_cast<std::uint64_t>(-populationChange));
+        }
         if (std::all_of(result.begin(), result.end(), [](const auto& estimate) { return estimate.completionTurn.has_value(); })) break;
     }
     for (const auto index : origins)

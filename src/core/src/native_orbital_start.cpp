@@ -92,7 +92,8 @@ std::optional<NativeOrbitalStartReceipt> initialize_native_orbital_start(
     next.orbitalStations.push_back({stationId, owner, home, "Inhabited Orbital Dock",
         OrbitalStationHullType::OrbitalDock, {OrbitalStationModule::Shipyard, OrbitalStationModule::RefuelingDepot}, fit.components});
     // Reject a resource deadlock while all mutations are still in the private
-    // candidate. Native population does not grow in this implementation stage.
+    // candidate. Keep the declared positive initial gross-output requirement;
+    // annual support is paid from the remaining real stock after startup.
     if (!native_orbital_output(next, colony)) return {};
     const auto radiation = native_orbital_radiation_status(next, colony);
     if (!radiation || radiation->annualLoss) return {};

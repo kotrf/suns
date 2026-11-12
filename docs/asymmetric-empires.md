@@ -115,11 +115,12 @@ population/factories/mines and ordinary habitats start empty. Its initial home
 snapshot, fleet telemetry and History agree; other players' observations are not
 refreshed by this construction operation.
 
-An accepted custom startup must have nonzero actual orbital output at its current
+An accepted custom startup must have nonzero gross orbital output at its current
 Energy level. With Energy 0, 1–9 residents reject atomically; 10 can produce one
 resource. Higher Energy uses the same output function rather than an unrelated
-population minimum. Before population growth is enabled, a zero-output station
-cannot recover through either manufacture or research.
+population minimum. Stage 6 can devote a tiny start's entire initial output to
+support; supported growth must then create a manufacturing surplus. The positive
+initial gross-output requirement remains part of the startup contract.
 
 | Asset | Work | Ironium / Boranium / Germanium (kt) |
 | --- | --- | --- |
@@ -144,8 +145,8 @@ residents this gives 50 at Energy 0 and 100 at Energy 3. The `+1` prevents an
 Energy-zero research/manufacturing deadlock. Only residents linked to an owned,
 surviving station contribute; surface assets do not. Temperature and gravity do
 not change this output. Stage 5 applies annual radiation casualties to real
-residents, reducing the following year's output. Growth and support are still
-pending; this formula remains a prototype. Native population does not grow yet.
+residents, reducing the following year's output. Stage 6 adds paid support,
+reserves and growth below; this gross-output formula remains a prototype.
 
 The existing generalist start still yields 29 resources (25 population + four
 operating factories). Native early access grants MiniMiner,
@@ -179,11 +180,12 @@ even when it was an annual rule. It does not obscure the following miner's fixed
 estimate. Rows retain their original positions for cancel/reorder commands;
 free skips never restore an already uncertain prefix or simulate future years.
 
-With the default zero research allocation, a newly designed replacement miner
+In stage 3's pre-upkeep acceptance, with the default zero research allocation, a newly designed replacement miner
 costs 153 work and 58 / 0 / 14 kt through ordinary design/production orders. It
 completes after four years of 50 work while the original extracts 4 / 2 / 1 kt
 per year at concentrations 100 / 50 / 25. The ending stock is 58 / 108 / 90 kt;
-the new hull needs its own mining task. Removing the original stops its actual
+the new hull needs its own mining task. Stage 6 keeps those prices but deducts
+actual support bills and grows residents each year. Removing the original stops its actual
 extraction. Tests use real host turns, decoded PBEM orders, save/reload and
 received-state output after an unseen station loss. Formats stay v118/v49/v3;
 no new serialized startup allowance is introduced. These prepared-host fixtures
@@ -214,9 +216,8 @@ The reference module retains its catalog base of 20 work, I/B/G 20/15/15 and
 Prices derive from the ordinary station/receiver functions and are charged by
 normal ship production. A new kit-bearing Colony Ship takes two years at the
 50-resource capital. The initial stock is real finite I/B/G, carried inside the
-prepaid kit rather than generated each year. Native life-support consumption,
-reserve policy and growth are still future work; these supplies
-must not be described as unlimited protection or a completed support system.
+prepaid kit rather than generated each year. Stage 6 consumes this finite stock
+for actual life support; it grants no assembled reserve kits or recurring income.
 
 Founding consumes the entire fleet, transfers exactly its transported residents
 into one Dock (maximum 100,000), and deploys its paid services and receiver. It
@@ -390,9 +391,115 @@ kept beside the fixture and must be rebuilt against that old revision.
 
 Prepared-host, arithmetic, real queue/refit, old-file, delayed report and Qt
 received-fit regressions cover this stage. Human/Computer campaign creation,
-import and restart remain gated. Next: life support and native growth, paid
+import and restart remain gated. Stage 6 below adds life support/growth; next are paid
 advanced hull progression, then actual Human/Computer startup → replacement →
 second-colony acceptance and comparative balance. #50 stays open; #53/#63 frozen.
+
+## Implementation stage 6: paid life support and native growth
+
+This prepared-host slice follows merged #287 at main `99b47de`. It does not
+enable Human/Computer setup, import or restart. Prices and growth are prototype
+balance; paid hull progression and actual Computer expansion acceptance follow.
+
+### Annual support and finite kits
+
+One support unit covers **up to 25,000 residents for one annual bill**. Each unit
+uses **1 kt each of I/B/G** and up to **2 work**. Annual basic support may consume
+all available gross work in a tiny colony, while paid supplies still allow births;
+this avoids a permanent one-work startup deadlock. Work cannot become negative.
+The gross Energy/resident formula from stage 3 is unchanged.
+
+The same priced consumables can be assembled into reserve kits. Assembly costs
+the full 2 work and 1/1/1 kt per kit. After buying the current bill, automatic
+assembly may buy up to one further annual bill, within remaining work/materials,
+until the reserve reaches three current bills. These expenses precede research
+allocation and discretionary construction. Larger previously paid inventories
+survive evacuation/refits; they are not discarded when the target shrinks.
+
+Reserve is stored as **paid kit units**, never a population-independent year
+count. Three kits can cover 25,000 people for three bills or 75,000 for one bill;
+immigration cannot multiply that coverage. Kits remain local to the inhabited
+station. Battle destruction loses its remaining residents/kits; a paid refit
+preserves the entire resident/service record. Empty surviving stations consume
+nothing and retain their finite unused inventory, without creating residents.
+
+| Current condition | Result |
+| --- | --- |
+| All current units can be bought | Normal service; net work and growth available; spare work/materials can assemble reserves |
+| Purchases plus reserve cover the bill | Reserve service; everyone survives support, with no native production or growth |
+| Only some residents are covered | Buy affordable units and consume finite kits; lose `ceil(uncovered residents / 10)`, no native production or growth |
+| No residents | No bill, no births and no reserve assembly |
+
+Partial purchasing matters: one newly bought unit plus one stored kit supports
+50,000 people. With only one kit and no stock, 25,000 of those 50,000 are covered
+and 2,500 are lost. This is 10% of the unsupported part, not an all-or-nothing
+penalty for a nearly affordable bill. The same resolver can recover next year
+after real supplies arrive; its potential-output calculation ignores the prior
+failure state. Atomic annual guards prevent duplicate billing/loss/growth.
+
+Applicable queue items also require Normal service to finish. Reserve, Failing
+and empty native stations retain already paid work without consuming project
+materials, materializing ships or reporting completion. Restoring Normal service
+allows that same project to finish, including when its remaining work is zero.
+This is a service gate, not a zero-work gate: a supplied colony may complete paid
+work while allocating all new output to research. Queue origin indices remain
+intact for forecasts and cancellation; the other civilizations' rules are unchanged.
+
+At 25,000 residents and Energy 0, gross work is 50. The first normal bill plus
+one reserve kit uses **4 work and 2/2/2 kt**, leaving 46 work before research and
+construction. At 100,000 residents, four units plus four reserve kits cost
+16 work and 8/8/8 kt from gross 100. Actual growing populations change later
+bills and reserve targets. The original capital endowment and founding-kit
+material prices remain unchanged: leftover 100/100/100 and founding stock
+10/10/10 are real raw supplies, not free assembled reserve kits.
+
+### Growth, phases and observations
+
+Support resolves after actual mining, movement, normal arrivals, combat and
+bombardment, before research/manufacture. Completed refits and deferred mobile
+cargo then precede the existing annual radiation dose. Positive growth follows
+radiation and uses the race's 1–20% growth rate (current default 15%), with the
+actual surviving hull's capacity. Full rate applies through 25% capacity, then
+the Stars!-style quadratic crowding factor `16*(capacity-population)^2 /
+(9*capacity^2)` applies. Whole-person growth has a minimum of one while there
+is supported eligible population and free capacity; it never exceeds housing.
+
+Only Normal service and a safe orbital dose permit births. Unsafe radiation
+still removes actual residents separately, after support losses, without double
+counting deaths. Surface temperature/gravity/radiation and factories/mines do
+not determine native growth. Deferred arrivals after the support boundary cannot
+enlarge the already paid growth allowance; ordinary arrivals before it pay in
+the current bill. Refits do not create people or erase purchased support.
+
+One final owner observation captures the paid stock, service and newborn people
+through the ordinary dated survey/outbox path. HQ sees it on receipt; hidden
+remote shortages, reserve use and births do not refresh panels or History early.
+Its completed economic record takes precedence over earlier scans of the same
+year as one packet, so old stock cannot be combined with newborn residents.
+Fresh scans from the following year remain eligible for delivery.
+Status-change/reserve/loss reports retain their observation date through reload.
+History uses the received annual net-work record while the station is known to
+survive, preserving its mixed-year asset provenance and destruction rules.
+
+UI support costs and population change are current-condition scalar estimates.
+They use only received stocks/fits and accepted local cargo, without predicted
+mining, arrivals, future refits or a future-year simulation. The legacy queue-only
+forecast never converts a native population estimate into surface residents.
+
+Production uses one current support quote for both net work and the mineral
+budget, after accepted local cargo. It subtracts that quote's current bill and
+reserve assembly exactly once before the bounded queue estimate. A paid-work
+project has no completion date if this remaining stock cannot cover its recipe.
+The row's waiting flag, shortfall tooltip and detailed stock summary use the
+same received budget, including when hidden host stocks differ. No future
+mining or delivery is added to make the estimate affordable.
+
+Save **v121** persists kit counts, service, paid work/material units, the annual
+net-work record and growth guards in physical/received/pending native records.
+It appends the three support report kinds. Orders **v50** and race **v3** remain
+unchanged. Older native files load with no prepaid kits or invented annual
+receipts; the first real year pays from their real stock. Genuine v120 host/player
+fixtures from unmodified `99b47de` verify this migration and continuation.
 
 ## Direction supplied by the user
 
@@ -639,7 +746,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v120 / orders v50 / portable race v3. The native
+Current game formats are save v121 / orders v50 / portable race v3. The native
 population/mining foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

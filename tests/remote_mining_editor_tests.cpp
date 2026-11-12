@@ -115,7 +115,7 @@ void nativeOrbitalMining(MainWindow& w)
     auto orders = MainWindowTestAccess::orders(w);
     assert(orders.orders.size() == 1 && std::holds_alternative<SetRemoteMiningOrder>(orders.orders.front()));
     const auto active = TurnProcessor{}.process(s, {orders});
-    assert(active.planets.front().minerals.ironium == 108);
+    assert(active.planets.front().minerals.ironium + active.planets.front().nativeOrbit.mineralUnitsPaid == 108);
     MainWindowTestAccess::install(w, active, 1); settle();
     assert(MainWindowTestAccess::planetSummary(w).contains("Remote mining estimate — I 8.00"));
     if (QApplication::arguments().contains("--capture")) { w.show(); settle(); w.grab().save("/tmp/suns-owned-native-mining.png"); }

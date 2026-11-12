@@ -1,5 +1,87 @@
 # Project status and development handoff
 
+## #288 review P3: reserve support minerals in Qt estimates — 12 November 2026
+
+[Review 5870234964](https://github.com/kotrf/suns/pull/288#pullrequestreview-5870234964)
+on `4688bac` confirms the P2 fix and finds a mineral-budget mismatch: Qt promises
+a paid-work miner next year with exactly 58 I before support; the real bill and
+reserve consume four I/B/G, leaving 54 I and no ship. Source CI
+[43121366744](https://github.com/kotrf/suns/actions/runs/43121366744) succeeded,
+128/128, and the reviewer reports 25/25 profile checks.
+
+The actual Qt load regression fails before the fix. It shares the real four-year
+paid miner fixture with the P2 host/PBEM test, preserves pending local B cargo
+and compares displayed ETA with physical execution at 58 and 62 I. One cheap
+received support quote now supplies net work and the stock after both current
+upkeep and reserve assembly. Queue estimates, the waiting flag and per-unit
+shortfall use that same remaining budget; details show it explicitly. Hidden
+physical stock changes cannot alter the summary, ETA or tooltip.
+
+The three targeted CTest passed in 1.17 s; the complete GCC14.2/Qt6.12 Debug build and 128/128 CTest passed in 153.22 s. The final Qt capture shows the four-I shortfall with no promised completion date. Formats121/50/race3 are unchanged. There is no new
+future-year UI simulation, timer or predicted mining. #288 stays open for
+re-review; both threads remain open until a user-authorized merge. Main
+`99b47de`, #50 open, native setup/import/restart gated, #53/#63 frozen. Next:
+paid native hulls and actual Human/Computer expansion acceptance.
+
+## #288 review P2: pause paid completions without native support — 12 November 2026
+
+[Review 5866688902](https://github.com/kotrf/suns/pull/288#pullrequestreview-5866688902)
+on `48e19db` found that Reserve stations could finish a manual order whose work
+was already paid once minerals arrived. The new regression manufactures through
+four actual years, saves/reloads the host with a zero-work Orbital Miner waiting
+for ironium, then delivers I and withdraws B through decoded ordinary orders.
+It fails before the fix: Reserve spends two kits, produces zero work and still
+finishes the ship. Source CI [43058388987](https://github.com/kotrf/suns/actions/runs/43058388987)
+succeeded, 128/128; the review also reported 25/25 local checks.
+
+The shared resolver now pauses applicable native queue items until Normal
+service. It retains paid work and queue origins, charges no project materials
+and emits no completion while paused. Tests cover Reserve/Failing/Empty,
+host/PBEM reload during the pause, another paused year, one completion after
+real resupply and a supplied control with all new work allocated to research.
+The gate does not treat zero available work as a general shutdown.
+
+The two targeted CTest passed in 0.11 s; the complete GCC14.2/Qt6.12 Debug build and 128/128 CTest passed in 163.40 s. Formats121/50/race3 are unchanged; no new UI simulation
+is added. #288 remains open for re-review, its thread stays open until a
+user-authorized merge. Main `99b47de`, #50 open, native setup/import/restart
+gated and #53/#63 frozen. Next: paid hull progression, then actual
+Human/Computer startup → replacement → paid second-colony acceptance.
+
+## #50 paid native life support and population growth — 11 November 2026
+
+Base main is `99b47dedb7fe6beb107d4c8507095aabecb35d2c`, after the user-authorized
+#287 merge. The final [Conversation verification](https://github.com/kotrf/suns/pull/287#issuecomment-6796385000)
+checked source `a15c175` with no new findings; the merge tree exactly matches it.
+All six fixed discussions are resolved under MEM-34 and [main CI 43033209126](https://github.com/kotrf/suns/actions/runs/43033209126) succeeded.
+
+Branch `codex/native-orbital-support-growth-50` adds prototype annual native
+upkeep, paid finite emergency kits, partial-coverage casualties and race-rate
+growth within real hull housing and orbital radiation safety. One kit covers
+up to 25,000 residents for one bill: 1/1/1 kt and up to 2 work, with surplus
+assembly at full price toward three current bills. Immigrants cannot multiply
+the reserve; tiny colonies can devote all work to basic support and grow.
+Research/manufacture use the actual remaining work. Growth follows refit,
+deferred cargo and radiation; late arrivals cannot enlarge the paid allowance.
+
+Closing economic packets carry stocks, annual net work, paid kits and births
+together through ordinary communications. Earlier scans of the same year cannot
+split that record; following-year scans still arrive normally. Received History
+keeps dated asset provenance and battle-loss identity. UI quotes use scalar
+current received conditions only. No multi-year forecasting or timer is added.
+
+Save121 persists support/growth records and three report kinds. Orders50 and
+race3 are unchanged. Genuine v120 host/player fixtures were created by the
+unmodified `99b47de` writer before changing its layout; migration grants no kits.
+See [stage 6](asymmetric-empires.md#implementation-stage-6-paid-life-support-and-native-growth)
+for prices, formulas, ordering and test boundaries. The full GCC14.2/Qt6.12 Debug build and 128/128 CTest passed in 178.07 s; the final Qt capture shows the compact summary and all mineral rows.
+Prepared for review; the source PR and its CI are tracked on this branch in GitHub.
+
+This is still prepared-host acceptance: #50 remains open and Human/Computer
+native setup/import/restart stay gated. Next: paid advanced station hulls,
+then actual Human/Computer startup → miner replacement → paid second colony
+acceptance and balance. #53/#63 remain frozen. Existing work files and older
+local branches are preserved.
+
 ## #287 independent-Delete P3: persist explicit Rename intent — 11 November 2026
 
 Review [5858323183](https://github.com/kotrf/suns/pull/287#pullrequestreview-5858323183)

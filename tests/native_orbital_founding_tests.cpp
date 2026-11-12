@@ -62,19 +62,22 @@ void paid_manufacture_transport_and_arrival_found_a_second_colony()
             {ShipComponentType::QuickJump5, ShipComponentType::OrbitalConstructionModule}},
         QueueShipDesignOrder{home, 0, "Orbital Settler"}}};
     state = TurnProcessor{}.process(state, {build});
-    assert(state.fleets.size() == 1 && state.planets.front().productionQueue.front().remainingCost == 33);
+    assert(state.fleets.size() == 1 && state.planets.front().productionQueue.front().remainingCost == 37);
+    const auto initialSupport = state.planets.front().nativeOrbit.mineralUnitsPaid;
     state = TurnProcessor{}.process(state, {});
     assert(state.fleets.size() == 2 && state.planets.front().productionQueue.empty());
-    assert(same_minerals(state.planets.front().minerals, {51, 70, 49}));
+    const auto support = initialSupport + state.planets.front().nativeOrbit.mineralUnitsPaid;
+    assert(same_minerals(state.planets.front().minerals, {51.0-support, 70.0-support, 49.0-support}));
+    const auto homePopulation = state.planets.front().nativeOrbit.population;
     const auto id = state.fleets.back().id;
     const auto next = TurnProcessor{}.process_with_events(state, {{1, {
         TransferCargoOrder{{home, 0, true}, {0, id}, 1000, {}},
         MoveFleetOrder{id, destination, 5, {FleetArrivalActionKind::Colonize}}}}});
     state = next.state;
     const auto* colony = find_planet(state, target); assert(colony);
-    assert(colony->owner == 1 && colony->nativeOrbit.population == 1000 && !colony->population);
+    assert(colony->owner == 1 && colony->nativeOrbit.population - colony->nativeOrbit.populationGrown == 1000 && !colony->population);
     assert(!colony->industry && !colony->mines && !colony->habitat.population);
-    assert(state.planets.front().nativeOrbit.population == 24'000);
+    assert(state.planets.front().nativeOrbit.population - state.planets.front().nativeOrbit.populationGrown == homePopulation-1000);
     assert(state.fleets.size() == 1 && state.orbitalStations.size() == 2);
     const auto* station = native_orbital_station(state, *colony);
     assert(station && station->hull == OrbitalStationHullType::OrbitalDock);
@@ -82,14 +85,18 @@ void paid_manufacture_transport_and_arrival_found_a_second_colony()
     assert(colony->radar == PlanetaryRadarLevel::Full && !colony->homeworld);
     assert(colony_has_orbital_service(state, target, 1, OrbitalStationModule::Shipyard));
     assert(colony_has_orbital_service(state, target, 1, OrbitalStationModule::RefuelingDepot));
-    assert(same_minerals(colony->minerals, {21, 15, 20}));
+    const auto colonySupport = colony->nativeOrbit.mineralUnitsPaid;
+    assert(same_minerals(colony->minerals, {21.0-colonySupport, 15.0-colonySupport, 20.0-colonySupport}));
     assert(colony_output(state, *colony) == 10);
     assert(!colony->precursorArtifacts.claimed && technology_level(state, 1, ResearchField::Energy) == 0);
-    assert(state.players.front().history.back().population == kInitialHomePopulation);
+    assert(state.players.front().history.back().population
+        == state.planets.front().nativeOrbit.population + colony->nativeOrbit.population);
     assert(state.players.front().history.back().colonies == 2);
     assert(std::count_if(next.events.begin(), next.events.end(), [](const auto& e) { return e.kind == GameEventKind::ColonyFounded; }) == 1);
     const auto again = TurnProcessor{}.process(state, {{1, {ColonizePlanetOrder{id, target}}}});
-    assert(again.orbitalStations.size() == 2 && same_minerals(find_planet(again, target)->minerals, colony->minerals));
+    const auto* continued = find_planet(again, target); const auto paid = continued->nativeOrbit.mineralUnitsPaid;
+    assert(again.orbitalStations.size() == 2 && same_minerals(continued->minerals,
+        {colony->minerals.ironium-paid, colony->minerals.boranium-paid, colony->minerals.germanium-paid}));
 }
 void manual_and_arrival_paths_share_guards()
 {
@@ -131,8 +138,9 @@ void mixed_fleet_supplies_are_not_minted_from_repeated_kits()
     const auto id = fleet.id, target = state.planets[1].id;
     const auto next = TurnProcessor{}.process(state, {{1, {ColonizePlanetOrder{id, target}, ColonizePlanetOrder{id, target}}}});
     assert(next.fleets.size() == 1 && next.orbitalStations.size() == 2);
-    assert(same_minerals(find_planet(next, target)->minerals, {35, 22, 31}));
-    assert(find_planet(next, target)->nativeOrbit.population == 1000);
+    const auto* founded = find_planet(next, target); const auto paid = founded->nativeOrbit.mineralUnitsPaid;
+    assert(same_minerals(founded->minerals, {35.0-paid, 22.0-paid, 31.0-paid}));
+    assert(founded->nativeOrbit.population - founded->nativeOrbit.populationGrown == 1000);
     state = test::native_orbital_founding_fixture();
     state.shipDesigns.push_back({91, 1, "Surface settler", ShipHullType::ColonyShip,
         {ShipComponentType::QuickJump5, ShipComponentType::StarsColonizationModule}});
@@ -140,7 +148,8 @@ void mixed_fleet_supplies_are_not_minted_from_repeated_kits()
     state.fleets.back().ships.insert(state.fleets.back().ships.begin(), {91, 1});
     const auto mixed = TurnProcessor{}.process_with_events(state, {{1, {ColonizePlanetOrder{id, target}}}});
     assert(mixed.state.fleets.size() == 1 && mixed.state.orbitalStations.size() == 2);
-    assert(same_minerals(find_planet(mixed.state, target)->minerals, {32, 20, 30}));
+    const auto* mixedColony = find_planet(mixed.state, target); const auto mixedPaid = mixedColony->nativeOrbit.mineralUnitsPaid;
+    assert(same_minerals(mixedColony->minerals, {32.0-mixedPaid, 20.0-mixedPaid, 30.0-mixedPaid}));
     const auto report = std::find_if(mixed.events.begin(), mixed.events.end(), [](const auto& e) { return e.kind == GameEventKind::ColonyFounded; });
     assert(report != mixed.events.end() && report->shipDesign == 90);
 }
@@ -211,7 +220,8 @@ void incompatible_carried_plans_reject_before_founding()
         const Order order = arrival ? Order{MoveFleetOrder{founder.id, founder.position, 5, action}}
             : Order{ColonizePlanetOrder{founder.id, state.planets[1].id, plan}};
         const auto next = TurnProcessor{}.process(state, {{1, {order}}});
-        assert(next.planets[1].nativeOrbit.population == 1000 && next.planets[1].radar == PlanetaryRadarLevel::Full);
+        assert(next.planets[1].nativeOrbit.population - next.planets[1].nativeOrbit.populationGrown == 1000
+            && next.planets[1].radar == PlanetaryRadarLevel::Full);
         assert(next.planets[1].productionQueue.empty()); // The prepaid full receiver already satisfies this plan.
     }
 }

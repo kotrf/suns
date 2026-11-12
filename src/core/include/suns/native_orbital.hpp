@@ -9,7 +9,8 @@ namespace suns {
 [[nodiscard]] const OrbitalStation* native_orbital_station(const GameState&, const Planet&);
 // Prototype orbital industry: floor(sqrt(supported residents * (Energy + 1) / 10)).
 // Surface factories/population never contribute. Actual radiation casualties
-// reduce the next year's resident base; growth/life support come next.
+// reduce the next year's resident base. Annual service precedes production.
+[[nodiscard]] std::uint32_t native_orbital_potential_output(const GameState&, const Planet&);
 [[nodiscard]] std::uint32_t native_orbital_output(const GameState&, const Planet&);
 struct NativeOrbitalRadiationStatus {
     std::uint8_t background{}, protection{}, exposure{}, tolerance{};

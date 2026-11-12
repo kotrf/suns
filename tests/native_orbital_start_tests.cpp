@@ -95,23 +95,29 @@ void ordinary_orders_manufacture_a_paid_replacement()
     const auto fit = state.shipDesigns.front();
     PlayerOrders orders{1, {CreateShipDesignOrder{"Replacement miner", fit.hull, fit.components},
         QueueShipDesignOrder{home, 0, "Replacement miner"}}};
+    std::uint32_t workAvailable = 0, supportPaid = 0;
     for (unsigned year = 1; year <= 4; ++year) {
         const auto previous = state.planets.front().minerals;
+        const auto population = state.planets.front().nativeOrbit.population;
         state = TurnProcessor{}.process(state, year == 1 ? std::vector<PlayerOrders>{orders} : std::vector<PlayerOrders>{});
-        assert(state.planets.front().nativeOrbit.population == kInitialHomePopulation && !state.planets.front().population);
+        const auto& service = state.planets.front().nativeOrbit;
+        assert(service.population == population + service.populationGrown && !state.planets.front().population);
+        assert(service.service == HabitatService::Normal && service.populationGrown > 0);
+        supportPaid += service.mineralUnitsPaid; workAvailable += service.productionAvailable;
         assert(state.players.front().history.back().extraction.ironium == 0);
         assert(same_minerals(state.players.front().history.back().remoteExtraction, {4, 2, 1}));
         const auto spent = year == 4 ? ship_design_mineral_cost(fit) : MineralCargo{};
         assert(same_minerals(state.planets.front().minerals,
-            {previous.ironium+4-spent.ironium, previous.boranium+2-spent.boranium, previous.germanium+1-spent.germanium}));
+            {previous.ironium+4-spent.ironium-service.mineralUnitsPaid, previous.boranium+2-spent.boranium-service.mineralUnitsPaid,
+             previous.germanium+1-spent.germanium-service.mineralUnitsPaid}));
         if (year < 4) {
             assert(state.fleets.size() == 1 && state.planets.front().productionQueue.size() == 1);
-            assert(state.planets.front().productionQueue.front().remainingCost == 153-50*year);
+            assert(state.planets.front().productionQueue.front().remainingCost == 153-workAvailable);
         }
     }
     assert(state.turn == 5 && state.planets.front().productionQueue.empty() && state.fleets.size() == 2);
     assert(state.shipDesigns.size() == 2 && ship_design_cost(state.shipDesigns.back()) == 153);
-    assert(same_minerals(state.planets.front().minerals, {58, 108, 90}));
+    assert(same_minerals(state.planets.front().minerals, {58.0-supportPaid, 108.0-supportPaid, 90.0-supportPaid}));
     const auto& replacement = state.fleets.back();
     assert(replacement.id != source && replacement.design == state.shipDesigns.back().id);
     assert(replacement.fuel == fleet_fuel_capacity(state, replacement));
@@ -121,10 +127,13 @@ void ordinary_orders_manufacture_a_paid_replacement()
     // Losing the original hull immediately stops its physical extraction.
     std::erase_if(state.fleets, [=](const auto& f) { return f.id == source; });
     const auto paused = TurnProcessor{}.process(state, {});
-    assert(same_minerals(paused.planets.front().minerals, state.planets.front().minerals));
+    const auto idlePaid = paused.planets.front().nativeOrbit.mineralUnitsPaid;
+    assert(same_minerals(paused.planets.front().minerals, {state.planets.front().minerals.ironium-idlePaid,
+        state.planets.front().minerals.boranium-idlePaid, state.planets.front().minerals.germanium-idlePaid}));
     state = TurnProcessor{}.process(state, {{1, {SetRemoteMiningOrder{replacementId, true}}}});
     assert(same_minerals(state.players.front().history.back().remoteExtraction, {4, 2, 1}));
-    assert(same_minerals(state.planets.front().minerals, {62, 110, 91}));
+    supportPaid += state.planets.front().nativeOrbit.mineralUnitsPaid;
+    assert(same_minerals(state.planets.front().minerals, {62.0-supportPaid, 110.0-supportPaid, 91.0-supportPaid}));
 }
 void income_requires_supported_real_residents_and_energy()
 {
@@ -197,6 +206,12 @@ void starts_require_actual_nonzero_output()
             assert(colony_output(state, state.planets.front()) > 0);
             state = TurnProcessor{}.process(state, {{1, {SetResearchPlanOrder{ResearchField::Energy, {}, false},
                 QueueShipDesignOrder{state.planets.front().id, receipt->minerDesign}}}});
+            // A tiny start may devote its entire initial output to support;
+            // actual supported growth must release a manufacturing surplus.
+            for (unsigned year = 0; year < 60 && state.planets.front().productionQueue.front().remainingCost == 153; ++year) {
+                assert(state.planets.front().nativeOrbit.populationGrown > 0);
+                state = TurnProcessor{}.process(state, {});
+            }
             assert(state.planets.front().productionQueue.front().remainingCost < 153);
         }
     }
