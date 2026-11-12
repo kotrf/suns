@@ -61,7 +61,7 @@ void readHabitatEvidence(QDataStream& in,auto& record,PlayerId owner,const GameS
             || station.damagePercent<0 || station.damagePercent>=100 || !station_loadout_valid(station_loadout(station)))markCorrupt(in);
     }
     if(gReadSaveFormatVersion>=95) readEnum(in,value.radar,quint8(PlanetaryRadarLevel::Full));
-    const bool support=value.station && value.station->hull>=OrbitalStationHullType::Starbase && value.station->damagePercent<100
+    const bool support=value.station && station_hull_at_least(value.station->hull,OrbitalStationHullType::Starbase) && value.station->damagePercent<100
         && orbital_station_has_module(*value.station,OrbitalStationModule::Shipyard);
     if(support!=value.stationSupported)markCorrupt(in);
     if(value.habitat.population && (record.planetSnapshot->engineering.kind!=PlanetaryEngineeringKind::OrbitalHabitat

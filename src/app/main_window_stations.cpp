@@ -52,7 +52,7 @@ void MainWindow::openStationDesigner()
     const auto* selected=selectedPlanet();
     if(!selected || selected->owner!=pendingOrders_.player) return;
     const PlanetId planetId=selected->id;
-    const auto known=make_player_view(state_,pendingOrders_.player).state;
+    const auto known=projected_cargo_order_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_);
     const auto* receivedPlanet = find_planet(known, planetId);
     const bool native = native_orbital_race(known, pendingOrders_.player);
     if (orbital_base_at(known,planetId)) {
@@ -83,9 +83,11 @@ void MainWindow::openStationDesigner()
     layout->addWidget(status);
     auto* row=new QHBoxLayout;
     auto* hull=new QComboBox(&dialog); hull->setObjectName("stationHull");
-    for(const auto h:{OrbitalStationHullType::OrbitalDock,OrbitalStationHullType::Starbase,OrbitalStationHullType::Fortress}) {
-        const auto& spec=station_hull_spec(h);
-        hull->addItem(QString("%1 — Construction %2").arg(spec.name).arg(spec.construction),int(h));
+    std::vector<const StationHullSpec*> choices;
+    for (const auto& spec:station_hulls()) if (!spec.nativeOnly || native || spec.hull==work.loadout.hull) choices.push_back(&spec);
+    std::stable_sort(choices.begin(),choices.end(),[](const auto* a,const auto* b){return a->construction<b->construction;});
+    for(const auto* spec:choices) {
+        hull->addItem(QString("%1 — Construction %2").arg(spec->name).arg(spec->construction),int(spec->hull));
     }
     hull->setCurrentIndex(hull->findData(int(work.loadout.hull)));
     auto* yard=new QCheckBox("Shipyard / fleet repair",&dialog); yard->setObjectName("stationShipyard"); yard->setChecked(work.loadout.shipyard);
@@ -117,6 +119,8 @@ void MainWindow::openStationDesigner()
         OrbitalStation draft; draft.hull=fit.hull; draft.components=fit.components;
         const auto minerals=station_mineral_cost(fit); const auto& spec=station_hull_spec(fit.hull);
         const bool available=station_loadout_available(known,pendingOrders_.player,fit);
+        const StationConstruction proposed{fit,work.refitStation};
+        const bool housingBlocked=receivedPlanet && station_refit_over_capacity(known,*receivedPlanet,proposed);
         preview->setText(QString("Armor %1 • Shields %2 • Slots: %3 weapon / %4 defense / %5 electronics\nCost %6 production • I %7 / B %8 / G %9 kt\n%10")
             .arg(station_armor(draft),0,'f',0).arg(station_shields(draft),0,'f',0).arg(spec.weapons).arg(spec.defenses).arg(spec.electronics)
             .arg(station_build_cost(fit)).arg(minerals.ironium).arg(minerals.boranium).arg(minerals.germanium)
@@ -132,7 +136,15 @@ void MainWindow::openStationDesigner()
             pendingOrders_.player, receivedPlanet->star, receivedPlanet->nativeOrbit.population, fit))
             preview->setText(preview->text() + "\n" + native_orbital_radiation_text(*dose)
                 + "\nThis protection takes effect when construction or refitting completes.");
-        queue->setEnabled(available && !existingQueued);
+        if (native && receivedPlanet) {
+            const auto capacity=native_orbital_capacity(fit.hull);
+            preview->setText(preview->text()+QString("\nResidents after accepted cargo: %1 / %2 housing.")
+                .arg(qulonglong(receivedPlanet->nativeOrbit.population)).arg(qulonglong(capacity)));
+            preview->setText(preview->text()+(housingBlocked
+                ? QString(" Evacuate at least %1 residents before choosing this hull.").arg(qulonglong(receivedPlanet->nativeOrbit.population-capacity))
+                : QString(" Paid refits preserve residents and support kits; new housing activates on completion.")));
+        }
+        queue->setEnabled(available && !existingQueued && !housingBlocked);
     };
     std::function<void(const StationLoadout&)> populate;
     populate=[&](const StationLoadout& fit) {
@@ -154,7 +166,7 @@ void MainWindow::openStationDesigner()
                     const auto c=ShipComponentType(i);
                     const auto* gate = stargate_spec(c);
                     const bool available = gate ? stargate_component_available(known,pendingOrders_.player,c)
-                            && fit.hull >= gate->minimumHull
+                            && station_hull_at_least(fit.hull,gate->minimumHull)
                         : component_available_to_player(known,pendingOrders_.player,c);
                     if(station_component_supported(c) && (native || !radiation_screen_protection(c)) && category(c)==group
                         && (available || (slot<int(fitted.size()) && fitted[slot]==c))) {
@@ -193,7 +205,8 @@ void MainWindow::openStationDesigner()
     connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     if(dialog.exec()!=QDialog::Accepted) return;
     work.loadout=capture();
-    if(!station_loadout_available(known,pendingOrders_.player,work.loadout) || existingQueued) return;
+    if(!station_loadout_available(known,pendingOrders_.player,work.loadout) || existingQueued
+        || !receivedPlanet || !station_construction_valid(known,*receivedPlanet,work)) return;
     const auto description=QString("%1 %2 at %3 (%4 production)")
         .arg(work.refitStation ? "Refit" : "Build").arg(station_hull_spec(work.loadout.hull).name)
         .arg(QString::fromStdString(selected->name)).arg(station_build_cost(work.loadout));

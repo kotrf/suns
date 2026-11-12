@@ -10,7 +10,7 @@ planet's orbit. Homeworlds start with an empty basic dock; new colonies do not.
 station present in the selected system's received player view. Click it for a
 read-only fitting diagram: weapons above the hull, armor/shields on the left,
 electronics on the right, with individual numbered cells and subdued empty
-cells. The three ordinary station hulls have distinct silhouettes. Component
+cells. Ordinary and native station hulls have distinct silhouettes/colors. Component
 names are not filtered by current technology: this is installed equipment, not
 the build catalog. Gate tooltips include range/mass and explicit unlimited
 limits. Total armor, shields, damage, identity and fitted shipyard/refueling
@@ -45,6 +45,15 @@ station statistics:
 | Orbital Dock | 0 | 2 / 2 / 2 | 400 | 24 | 12 / 6 / 8 |
 | Starbase | 9 | 6 / 6 / 4 | 1600 | 160 | 70 / 40 / 60 |
 | Fortress | 16 | 12 / 12 / 6 | 6000 | 500 | 200 / 160 / 180 |
+| Orbital Citadel (native only) | 6 | 8 / 8 / 6 | 2400 | 240 | 100 / 60 / 80 |
+| Orbital Bastion (native only) | 14 | 16 / 16 / 8 | 9000 | 750 | 300 / 240 / 270 |
+
+The two native hulls require the orbital civilization and the listed research.
+They house 500,000 / 2,000,000 native residents. Generic Dock / Starbase /
+Fortress housing stays 100,000 / 500,000 / 2,000,000, including old files.
+Citadel counts as Starbase class; Bastion as Fortress class. Class determines
+engineering/gate support independently of enum order; a native hull does not
+grant another race's exclusive gate technologies. See [stage 7](asymmetric-empires.md#implementation-stage-7-paid-native-station-hulls).
 
 Fitted components add their ordinary production and mineral costs. Shipyard and
 refueling services can be toggled; removing them gives no cost refund. A refit
@@ -54,6 +63,14 @@ on completion, through the normal colony queue. A missing/destroyed/foreign
 refit target discards the project without rebuilding a station or charging more
 resources. One station project may be queued per colony; cancel it before
 replacing it. A partly completed project retains the usual cancellation policy.
+
+Native refits preserve all residents and paid life-support kits. The designer
+checks received residents after accepted cargo orders and asks for evacuation
+before queueing a smaller home. Execution rechecks real population. If growth
+outstrips the target housing while the job waits, it pauses with its paid work
+intact until residents fit; no one is deleted to complete the project. New
+housing activates only on paid completion. The existing support/radiation/growth
+phases still run normally.
 
 Shipyard service permits ship production and repairs docked friendly fleets by
 20 damage percentage points per year. It does not automatically repair the
@@ -122,6 +139,11 @@ Save **v65** adds station fits/damage, queued refit targets, colony defenses,
 station-loss history and undelivered station contacts. Orders **v20** adds fitted
 station construction/refit and defense batches/templates. Existing readers
 remain; all PBEM participants should use the same build.
+
+Current save **v122** / orders **v51** add the native hull identities in physical
+stations, received/pending fits, construction queues and orders. Race v3 is
+unchanged. Genuine v121/v50 files retain their generic hulls, paid work,
+residents and reserve; loading does not issue a free native hull.
 
 ## Orbital habitat integration (#56)
 

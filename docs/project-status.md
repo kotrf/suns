@@ -1,5 +1,39 @@
 # Project status and development handoff
 
+## #50 paid native station hulls — 12 November 2026
+
+The user authorized this next slice after #288 merged. Main `3115091` has the
+exact reviewed `e41bf2e` tree `ad7eeef18c767b680f04285db0cb6894311cfed6`.
+The final [Conversation verification](https://github.com/kotrf/suns/pull/288#issuecomment-6819150498)
+confirms both fixes and no new findings; both discussions are resolved under
+MEM-34. [Main CI 43188326293](https://github.com/kotrf/suns/actions/runs/43188326293)
+succeeded, 128/128 in 142.45 s. Prior open-#288 notes below are historical.
+
+Branch `codex/native-orbital-hulls-50` adds native-only Citadel (Construction6,
+500,000 housing, armor2400, 8/8/6 slots, 240 work, I100/B60/G80) and Bastion
+(Construction14, 2,000,000, armor9000, 16/16/8, 750 work, I300/B240/G270).
+Components add their ordinary price: Bulk-protected fits cost290/800 work and
+I/B/G140/70/90 or340/250/280. Explicit Starbase/Fortress structural classes
+preserve engineering/gate requirements without granting other traits' fittings.
+
+Normal production pays the entire refit and retains ID, residents and purchased
+support kits. The old fit/housing operates until completion. An admitted shrink
+that outgrows its target waits with paid work intact until evacuation. Designer
+admission and cheap queue estimates use received residents plus accepted cargo;
+physical execution rechecks housing. Research unlocks choices without free assets.
+Save122/orders51/race3; genuine unmodified-main v121 host/player and v50 orders
+keep their paid generic assets, service and resident records. Delayed reports,
+full 40-slot fits, PBEM, catalog and actual Qt designer are covered. See [stage7](asymmetric-empires.md#implementation-stage-7-paid-native-station-hulls).
+
+Validation: the complete GCC14.2/Qt6.12 Debug build and **130/130 CTest passed
+in 167.78 s**. The final designer/fit captures, 152 local documentation links
+and genuine fixture hashes were checked. The old unmodified fixture executable
+regenerated all three migration files byte-for-byte. This slice awaits review;
+current PR/head/CI are authoritative on GitHub. #50 remains open and native
+Human/Computer setup/import/restart remain gated. Next is real campaign
+startup→replacement miner→paid second colony acceptance. #53/#63 stay frozen.
+
+
 ## #288 review P3: reserve support minerals in Qt estimates — 12 November 2026
 
 [Review 5870234964](https://github.com/kotrf/suns/pull/288#pullrequestreview-5870234964)

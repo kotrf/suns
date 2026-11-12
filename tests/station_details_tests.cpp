@@ -89,7 +89,8 @@ void inspect(QToolButton* button, const std::function<void(QDialog*)>& check)
 
 void hullsAndCells(bool capture, QWidget* parent)
 {
-    for (auto hull : {OrbitalStationHullType::OrbitalDock, OrbitalStationHullType::Starbase, OrbitalStationHullType::Fortress}) {
+    for (const auto& hullInfo : station_hulls()) {
+        const auto hull=hullInfo.hull;
         auto station = fixture().orbitalStations.front();
         station.hull = hull;
         const auto& spec = station_hull_spec(hull);

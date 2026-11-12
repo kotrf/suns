@@ -41,11 +41,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 121;
+constexpr quint32 kSaveFormatVersion = 122;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 50;
+constexpr quint32 kTurnOrderFormatVersion = 51;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -707,9 +707,10 @@ void writeStationFit(QDataStream& stream, const StationConstruction& work)
 void readStationFit(QDataStream& stream, StationConstruction& work)
 {
     quint8 yard{},fuel{}; quint32 target{},count{};
-    if(!readEnum(stream,work.loadout.hull,quint8(OrbitalStationHullType::Fortress))) return;
+    if(!readEnum(stream,work.loadout.hull,quint8(gReadSaveFormatVersion >= 122 ? kLastOrbitalStationHull : OrbitalStationHullType::Fortress))) return;
     stream >> yard >> fuel >> target;
-    if(yard>1 || fuel>1 || !readCount(stream,count) || count>30) { markCorrupt(stream); return; }
+    const auto& hull = station_hull_spec(work.loadout.hull);
+    if(yard>1 || fuel>1 || !readCount(stream,count) || count>unsigned(hull.weapons+hull.defenses+hull.electronics)) { markCorrupt(stream); return; }
     work.loadout.shipyard=yard; work.loadout.refueling=fuel; work.refitStation=target;
     for(quint32 i=0;i<count;++i) {
         ShipComponentType c; if(!readEnum(stream,c,newestShipComponent())) return;
@@ -1203,7 +1204,7 @@ void readOrbitalStation(QDataStream& stream, OrbitalStation& value)
     value.planet = static_cast<PlanetId>(planet);
     readString(stream, value.name);
     if (!readEnum(
-            stream, value.hull, static_cast<quint8>(gReadSaveFormatVersion >= 65 ? OrbitalStationHullType::Fortress : OrbitalStationHullType::OrbitalDock))) {
+            stream, value.hull, static_cast<quint8>(gReadSaveFormatVersion >= 122 ? kLastOrbitalStationHull : gReadSaveFormatVersion >= 65 ? OrbitalStationHullType::Fortress : OrbitalStationHullType::OrbitalDock))) {
         return;
     }
     quint32 count{};
@@ -3668,7 +3669,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

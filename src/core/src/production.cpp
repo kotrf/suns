@@ -264,7 +264,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         else if (item.kind == ProductionKind::OrbitalStation) {
             stationExists = true;
             result.hasShipyard = !item.station || item.station->loadout.shipyard;
-            result.engineeringSupport=item.station && item.station->loadout.hull>=OrbitalStationHullType::Starbase
+            result.engineeringSupport=item.station && station_hull_at_least(item.station->loadout.hull,OrbitalStationHullType::Starbase)
                 && item.station->loadout.shipyard;
         }
         result.completions.push_back({item, origin, finishedBatch,
@@ -286,6 +286,9 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         // Paid work stays queued, but completion also needs an operating colony.
         // Zero available work alone must not block a normally supplied station.
         if (native && planet.nativeOrbit.service != HabitatService::Normal) break;
+        // Residents can grow while a downgrade waits behind earlier work.
+        // Keep its paid work until evacuation makes the target housing fit.
+        if (queue[index].station && station_refit_over_capacity(state,planet,*queue[index].station)) break;
         const bool factoryBuild = industrialKind == ProductionKind::Factory || industrialKind == ProductionKind::AdvancedFactory;
         const bool mineBuild = industrialKind == ProductionKind::Mine || industrialKind == ProductionKind::AdvancedMine;
         if (industry_upgrade_kind(industrialKind) || factoryBuild || mineBuild) {

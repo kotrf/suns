@@ -488,7 +488,8 @@ struct ShipDesign {
     std::vector<ShipComponentPlacement> placements;
 };
 
-enum class OrbitalStationHullType : std::uint8_t { OrbitalDock, Starbase, Fortress };
+enum class OrbitalStationHullType : std::uint8_t { OrbitalDock, Starbase, Fortress, NativeCitadel, NativeBastion };
+inline constexpr auto kLastOrbitalStationHull = OrbitalStationHullType::NativeBastion;
 enum class OrbitalStationModule : std::uint8_t { Shipyard, RefuelingDepot };
 
 struct StationLoadout {

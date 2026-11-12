@@ -449,6 +449,8 @@ void MainWindow::refreshProductionQueue()
             && !shipyardAvailable;
         if (skipped || inactiveAnnual) {
             remaining = "0";
+        } else if (estimates[index].status == SimpleProductionStatus::HousingTooSmall) {
+            remaining = "housing";
         } else if (waitingForShipyard) {
             remaining = "shipyard";
         } else if (item.remainingCost == 0
