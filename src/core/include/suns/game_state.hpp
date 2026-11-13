@@ -529,6 +529,7 @@ enum class ProductionKind {
     AdvancedMine,
     UpgradeFactory,
     UpgradeMine,
+    ClimateStabilizer,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -649,9 +650,9 @@ struct PlanetAftermathObservation {
     bool operator==(const PlanetAftermathObservation&) const = default;
 };
 
-enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere, OrbitalHabitat };
+enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere, OrbitalHabitat, ClimateStabilizer };
 enum class EngineeringAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetOutput };
-enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy, HabitatTechnology, HabitatReserve, HabitatFailure };
+enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy, HabitatTechnology, HabitatReserve, HabitatFailure, ClimateTechnology };
 struct PlanetaryEngineering {
     PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
     std::uint32_t work{};
@@ -660,6 +661,7 @@ struct PlanetaryEngineering {
     bool operational{};
     PlayerId builder{};
     std::uint64_t startedTurn{}, completedTurn{};
+    std::uint8_t targetTemperature{50}; // Climate stabilizer only; inherited physical setpoint.
 };
 
 // Whole 1 kt units. Deposit and surface cache are physical and independent.
@@ -2089,6 +2091,7 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::ArtificialMagnetosphere: return 2400;
     case ProductionKind::AdaptiveMagnetosphere: return 4800;
     case ProductionKind::OrbitalHabitat: return 4800;
+    case ProductionKind::ClimateStabilizer: return 4800;
     case ProductionKind::ResonanceLaboratory: return 600;
     }
     return kColonyShipCost;

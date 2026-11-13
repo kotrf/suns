@@ -1001,10 +1001,10 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
         if(p.owner!=view.player || !p.population || p.engineering.kind!=PlanetaryEngineeringKind::None
             || !p.productionQueue.empty() || colony_output(view.state,p)<kEngineeringWorkPerYear
             || !engineering_station_available(view.state,p)) continue;
-        auto best=PlanetaryEngineeringKind::None; std::uint8_t strength=0;
+        auto best=PlanetaryEngineeringKind::None; std::uint8_t strength=0,targetTemperature=50;
         const int baseline=player_planet_habitability(view.state,view.player,p,view.state.turn);
         int gain=4;
-        for(const auto kind:{PlanetaryEngineeringKind::ArtificialMagnetosphere,PlanetaryEngineeringKind::AdaptiveMagnetosphere}) {
+        for(const auto kind:{PlanetaryEngineeringKind::ArtificialMagnetosphere,PlanetaryEngineeringKind::AdaptiveMagnetosphere,PlanetaryEngineeringKind::ClimateStabilizer}) {
             const double work=engineering_work(kind);
             if(!planetary_engineering_available(view.state,view.player,kind)
                 || !mineral_cargo_sufficient(p.minerals,{work*0.1,work*0.05,work*0.1})) continue;
@@ -1012,8 +1012,10 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
                 auto proposed=p; proposed.observedHabitability.reset();
                 proposed.engineering.kind=kind; proposed.engineering.work=engineering_work(kind);
                 proposed.engineering.strength=output; proposed.engineering.operational=true;
+                proposed.engineering.targetTemperature=kind==PlanetaryEngineeringKind::ClimateStabilizer
+                    ? std::uint8_t((int(player->race.habitableTemperature.minimum)+int(player->race.habitableTemperature.maximum))/2) : 50;
                 const auto improvement=player_planet_habitability(view.state,view.player,proposed,view.state.turn)-baseline;
-                if(improvement>gain) {best=kind;strength=output;gain=improvement;}
+                if(improvement>gain) {best=kind;strength=output;targetTemperature=proposed.engineering.targetTemperature;gain=improvement;}
             }
         }
         const auto capacity=population_capacity(view.state,p,view.state.turn);
@@ -1023,8 +1025,8 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
             best=PlanetaryEngineeringKind::OrbitalHabitat;strength=10;
         }
         if(best!=PlanetaryEngineeringKind::None) {
-            plan.orders.orders.push_back(SetPlanetaryEngineeringOrder{p.id,best,EngineeringAction::StartOrResume,strength});
-            explain(reason,(best==PlanetaryEngineeringKind::OrbitalHabitat ? "Build received orbital housing at colony " : "Build received radiation protection at colony ")+std::to_string(p.id));
+            plan.orders.orders.push_back(SetPlanetaryEngineeringOrder{p.id,best,EngineeringAction::StartOrResume,strength,targetTemperature});
+            explain(reason,(best==PlanetaryEngineeringKind::ClimateStabilizer ? "Build received climate control at colony " : best==PlanetaryEngineeringKind::OrbitalHabitat ? "Build received orbital housing at colony " : "Build received radiation protection at colony ")+std::to_string(p.id));
         }
     }
     plan_military(view, plan, reason);

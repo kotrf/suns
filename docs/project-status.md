@@ -1,5 +1,28 @@
 # Project status and development handoff
 
+## #56 climate stabilizer — 13 November 2026
+
+All three requested slices293/294/295 merged. Main d362b43 exactly matches reviewed
+source2568071/tree3412ca0ff4f097620aad3a3dfd2fbc415702e5a6. [Final verification](https://github.com/kotrf/suns/pull/295#issuecomment-6862171645)
+confirms both P2 corrections; both discussions resolved underMEM34. SourceCI
+43456855640 passed134/134 in145.20s; mainCI43488870773 succeeded.
+
+The user requested the next task while playtesting. Current ordered open task#56
+gets a reversible single-slot Climate stabilizer: E20/C20/B18,4800work at80/year,
+I/B/G480/240/480. A chosen target0–100 with max correction0–10 warms/cools the
+effective surface temperature without rewriting the natural/terraformed axes.
+Output0 is off. Capture preserves the physical target and paid investment; current
+owner research, population and a friendly Starbase/Fortress shipyard gate operation.
+Native Orbital Civilization cannot construct/operate this surface controller.
+Scalar Qt previews and ordinary received-only computer orders avoid future-turn
+simulation/polling. Save126/orders54/race3 conditionally add only the new-kind
+target; old IDs/layouts/default50 and genuine fixture migration remain intact.
+
+Complete GCC14.2/Qt6.12 Debug build, final11/11 profile tests in2.16s and full137/137 CTest in170.27s passed. Actual Qt controls/effects/cost/progress capture and all173 local documentation targets were inspected. New slice awaits review; current PR/head/CI live in
+GitHub. [Audit](audits/2026-11-13-climate-stabilizer.md). #56 stays open for larger
+works; radical irreversible design still needs the separate accepted discussion.
+50/54/55 umbrellas open,53/63 frozen; work/ and prior branches preserved.
+
 ## PR295 repeat-review P2: named edits after coarse fixes — 13 November 2026
 
 [Review5892821657](https://github.com/kotrf/suns/pull/295#pullrequestreview-5892821657)

@@ -128,7 +128,7 @@ coverage, corrections and review status.
 richer discovery outcomes. The drifting hulk adds one globally finite architectural
 core: analyze for80 Construction RP or retain its+4 Construction RP/year capability
 after physical delivery. The received object journal acts as its learned reference;
-it never exposes the current stock or hidden course. Current save125/orders53/race3
+it never exposes the current stock or hidden course. Current save126/orders54/race3
 tag only the new kind with velocity fields, preserving old static record layouts
 and genuine migrations. Current wreck novelty and other
 finite science objectives are unchanged. Further artifact varieties and

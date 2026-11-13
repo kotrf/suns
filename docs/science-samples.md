@@ -106,7 +106,7 @@ return. It waits for cargo telemetry, returns to a reachable colony, unloads and
 analyzes. A confirmed empty recovery retires; hidden depletion does not affect
 planning. No direct research grant or privileged host-state access is added.
 
-Current formats are **save v125 / orders v53 / race v3**. Drifting-kind physical
+Current formats are **save v126 / orders v54 / race v3**. Drifting-kind physical
 and observation records carry a dated velocity payload; static records retain
 their old layout. The new sample kind uses the existing finite SAMP ledger.
 The completion slice used v93/v37 (main after #227 was v92/v37).
