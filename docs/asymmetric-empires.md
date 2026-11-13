@@ -839,6 +839,14 @@ Prior radiation, battle loss, full cargo and paid hull/refit suites remain part
 of the first-slice acceptance. Native Qt creation/restart and surface replacement
 are covered. Formats remain122/51/race3; no migration gives free assets.
 
+The first-build budget now protects early exploration on a mineral-poor start.
+It reserves current support, a scalar construction-interval deficit and, when
+the proposed miners cannot support a full habitat, the surveyor's price.
+A single-module miner is the affordable fallback; richer self-sustaining starts
+keep the pair. The unmodified Medium / Sparse seed2 regression exercises an
+actual early scout departure and deterministic in-progress reload. The existing
+seeds17/42/123 still verify a paid, independently supplied second colony.
+
 This completes the first playable stationary Native loop, not all of #50.
 Mobile homes, other asymmetric traits, automatic native military/upgrades and
 comparative long-game balance remain later work. #53/#63 stay frozen.

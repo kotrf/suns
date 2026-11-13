@@ -157,6 +157,35 @@ void actual_computer_campaign_survives_reload_and_supplies_its_second_colony(std
     }
     assert(replacement && second && supplied);
 }
+void sparse_bootstrap_preserves_paid_exploration()
+{
+    auto state=generate_campaign(galaxy_preset(GalaxySize::Medium,GalaxyDensity::Sparse,2),
+        {{"Local host"},native(PlayerController::Computer)});
+    const auto home=std::find_if(state.planets.begin(),state.planets.end(),[](const auto& p){return p.owner==2;})->id;
+    const auto homePosition=find_star(state,find_planet(state,home)->star)->position;
+    const auto view=make_player_view(state,2);
+    const auto concentration=planet_mineral_concentration(view.state,*find_planet(view.state,home)).ironium;
+    assert(concentration>27 && concentration<28); // Unmodified review seed2: home184, I27.09%.
+    QTemporaryDir dir;QString error;const auto path=dir.filePath("sparse-host.suns");
+    bool exploring=false;
+    for(unsigned year=0;year<12;++year) {
+        if(year==3) {
+            SaveGameData host;host.state=state;host.mode=SessionMode::Host;host.campaignId=50;
+            host.turnToken=17;host.playerTokens={{1,17}};host.pendingOrders={1,{}};
+            assert(write_save_game_file(path,host,error));SaveGameData loaded;assert(read_save_game_file(path,loaded,error));
+            const auto before=plan_computer_turn(make_player_view(state,2)),after=plan_computer_turn(make_player_view(loaded.state,2));
+            assert(before.nextState==after.nextState && packet(before,state.turn)==packet(after,state.turn));
+            state=loaded.state;
+        }
+        state=resolve_controlled_campaign_turn(state,{{1,{}}}).state;
+        exploring |= std::any_of(state.fleets.begin(),state.fleets.end(),[&](const auto& f){
+            const auto* design=find_ship_design(state,f.design);
+            return f.owner==2 && design && design->hull==ShipHullType::StarsScout && !same_position(f.position,homePosition);
+        });
+        assert(find_planet(state,home)->nativeOrbit.service==HabitatService::Normal);
+    }
+    assert(exploring); // Before the fix no scout was built even by year161.
+}
 void stale_remote_queue_does_not_duplicate_a_build()
 {
     auto view=make_player_view(campaign(PlayerController::Computer),1);
@@ -174,5 +203,6 @@ int main(int argc,char** argv)
     paid_start_is_identical_for_both_controllers_and_race_import();
     human_replaces_a_miner_and_founds_an_orbit_through_pbem_orders();
     stale_remote_queue_does_not_duplicate_a_build();
+    sparse_bootstrap_preserves_paid_exploration();
     for(const auto seed:{17,42,123})actual_computer_campaign_survives_reload_and_supplies_its_second_colony(seed);
 }

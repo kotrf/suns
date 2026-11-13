@@ -155,15 +155,32 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
     }
     const ShipDesign miner{state.nextShipDesignId,view.player,"Orbital Miner Pair",ShipHullType::MiniMiner,
         {ShipComponentType::QuickJump5,ShipComponentType::RoboMiniMiner,ShipComponentType::RoboMiniMiner}};
+    const ShipDesign singleMiner{state.nextShipDesignId,view.player,"Orbital Miner",ShipHullType::MiniMiner,
+        {ShipComponentType::QuickJump5,ShipComponentType::RoboMiniMiner}};
     const ShipDesign scout{state.nextShipDesignId,view.player,"Orbital Surveyor",ShipHullType::StarsScout,
         {ShipComponentType::QuickJump5,ShipComponentType::RhinoScanner}};
     const ShipDesign founder{state.nextShipDesignId,view.player,"Orbital Settler",ShipHullType::ColonyShip,
         {ShipComponentType::QuickJump5,ShipComponentType::OrbitalConstructionModule}};
-    const auto build=[&](const Planet& p,const ShipDesign& design) {
+    const auto build=[&](const Planet& p,const ShipDesign& design,MineralCargo reserve=MineralCargo{}) {
         if(!ship_design_valid(design) || !ship_design_available_to_player(state,view.player,design))return false;
         const auto quote=native_orbital_support_quote(state,p);auto stock=p.minerals;
         stock.ironium-=quote.mineralUnitsPaid;stock.boranium-=quote.mineralUnitsPaid;stock.germanium-=quote.mineralUnitsPaid;
-        if(!mineral_cargo_sufficient(stock,ship_design_mineral_cost(design)))return false;
+        if(!quote.output)return false;
+        // Keep a paid exploration reserve and cover a conservative current-rate
+        // deficit while this fit is built. No future turns or hidden deposits.
+        const auto years=std::ceil(double(ship_design_cost(design))/std::max(1.0,double(quote.output)*(100-allocation)/100));
+        const auto residents=p.nativeOrbit.population+std::max<std::int64_t>(0,projected_native_population_change(state,p));
+        const auto bill=double((residents+kNativeSupportPopulationPerUnit-1)/kNativeSupportPopulationPerUnit);
+        const auto concentration=p.observedConcentration.value_or(MineralCargo{25,25,25});
+        const auto* at=find_star(state,p.star);double producing=0;
+        for(const auto& f:state.fleets)if(f.owner==view.player && f.task==FleetTask::RemoteMining && !f.destination
+            && at && same_position(f.position,at->position))producing+=mining_rate(state,f);
+        const auto runway=[&](double c){return std::max(0.0,bill-producing*c/100)*std::max(0.0,years-1);};
+        auto cost=ship_design_mineral_cost(design);
+        cost.ironium+=reserve.ironium+runway(concentration.ironium);
+        cost.boranium+=reserve.boranium+runway(concentration.boranium);
+        cost.germanium+=reserve.germanium+runway(concentration.germanium);
+        if(!mineral_cargo_sufficient(stock,cost))return false;
         const auto existing=std::find_if(state.shipDesigns.begin(),state.shipDesigns.end(),[&](const auto& d){return d.owner==view.player && d.name==design.name && d.components==design.components && d.hull==design.hull;});
         if(existing!=state.shipDesigns.end())plan.orders.orders.push_back(QueueShipDesignOrder{p.id,existing->id});
         else {
@@ -187,7 +204,13 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             });
         });
         if(!pendingMiner && (miners<2 || shortage)) {
-            if(build(*p,miner)){++miners;continue;}
+            // A self-sustaining full habitat can fund its scout from mining.
+            // Otherwise protect exploration before growth absorbs that income.
+            const auto* habitat=native_orbital_station(state,*p);
+            const auto fullBill=double((native_orbital_capacity(habitat->hull)+kNativeSupportPopulationPerUnit-1)/kNativeSupportPopulationPerUnit);
+            const bool canFundLater=(assigned_rate(*p)+ship_design_remote_mining_rate(miner))*support_concentration(*p)/100>fullBill;
+            const auto exploration=scouts || canFundLater ? MineralCargo{} : ship_design_mineral_cost(scout);
+            if(build(*p,miner,exploration) || build(*p,singleMiner,exploration)){++miners;continue;}
         }
         if(!scouts && build(*p,scout)){++scouts;continue;}
         if(!founders && !shortage && !pendingMiner) {

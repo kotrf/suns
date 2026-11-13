@@ -8,7 +8,11 @@ station residents and sends paid Orbital Construction Module ships to received
 unowned, radiation-safe orbits. Surface habitability does not choose its targets.
 Annual support and the weakest received I/B/G concentration determine mining
 needs; surplus miners can supply new colonies without abandoning the capital's
-bill. Research starts after an additional miner is in service. Unknown current
+bill. A build budgets its paid upkeep and current-rate mineral deficit over an
+arithmetic construction interval. If the proposed mining output cannot support a
+full habitat, the first miner also leaves a paid surveyor reserve; an affordable
+single-module fit replaces the pair when necessary. Self-sustaining richer starts
+retain the pair. Research starts after an additional miner is in service. Unknown current
 queues wait for a fresh closing economic observation rather than duplicating a
 possibly undelivered build. Fleet goals survive save/reload and await ordinary
 acknowledgements. Travel uses the same loaded-fleet fuel/cloud budgeting as
