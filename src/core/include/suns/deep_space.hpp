@@ -4,6 +4,8 @@
 namespace suns {
 inline constexpr double kOutpostUpkeepMg = 1.0;
 inline constexpr double kOutpostRelayRangeLy = 300.0;
+inline constexpr double kOutpostSensorRangeLy = 250.0;
+inline constexpr double kOutpostPenetratingRangeLy = 75.0;
 inline constexpr double kOutpostStellarClearanceLy = 5.0;
 [[nodiscard]] OutpostKind construction_kit_kind(ShipComponentType);
 [[nodiscard]] OutpostKind fleet_construction_kit(const GameState&, const Fleet&);

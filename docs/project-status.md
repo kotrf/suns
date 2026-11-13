@@ -1,5 +1,22 @@
 # Project status and development handoff
 
+## #54 paid sensor arrays on corrected native source — 13 November 2026
+
+Branch codex/deep-space-sensor-posts-54 follows #293 source6eb78bd (native
+startup-budget P2 corrected; seed2 now buys a scout by year6). The Sensor Array
+Kit costs120 work/I40 B20 G70,100 kt and C6/Electronics6. Normal manufacture,
+travel and permanent deployment provide250 ordinary/75 penetrating ly for1 mg
+fuel/year. Existing tanker supply, emissions, jamming, medium and delayed
+knowledge apply. No moving scanner, free relay/refueling field or remote geology.
+Save123/orders52/race3 preserve old IDs/layouts and separate physical/received/
+in-flight/loss evidence. Hidden loss cannot change PBEM or UI before delivery.
+The slice's original full132/132 CTest passed in205.88 s; after the native fix,
+the combined stack's full134/134 passed in173.13 s, GCC14.2/Qt6.12 Debug.
+The Qt panel and documentation links were checked. Current source CI/PR are in
+GitHub; no new slice is merged. #54 stays open for its remaining scope.
+The user explicitly approved this and future ordinary Suns! source publication
+to kotrf/suns (MEM-37); the previous publication block is resolved. #53/#63 frozen.
+
 ## PR #293 P2: keep paid exploration affordable — 13 November 2026
 
 [Review5888638178](https://github.com/kotrf/suns/pull/293#pullrequestreview-5888638178)

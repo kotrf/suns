@@ -66,7 +66,11 @@ before the queued refresh runs. The core remains the authoritative validator.
 This changes no simulation, technology requirements or save/orders format.
 
 Suns! support equipment includes Field Repair Bay, Relay Array and Anomaly
-Detector. The following prototype equipment is retained for existing legacy
+Detector. Paid Fuel Depot, Deep-space Relay and Sensor Array construction kits
+use a Mechanical cell and one-kit-per-constructor validation; [deep-space infrastructure](deep-space-infrastructure.md)
+describes deployment, upkeep and received service evidence.
+
+The following prototype equipment is retained for existing legacy
 empires; Colony Module, Fuel Tank, Cargo Pod and Antimatter Generator have
 separate reference counterparts for new campaigns:
 

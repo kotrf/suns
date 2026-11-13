@@ -606,7 +606,9 @@ QString event_text(const GameState& state, const GameEvent& event)
         text=QString("Year %1 • %2 at %3, %4.\n%5")
             .arg(qulonglong(event.observedTurn)).arg(fleetName).arg(event.position.x,0,'f',1).arg(event.position.y,0,'f',1)
             .arg(event.kind==GameEventKind::OutpostDeployed
-                ? (event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital constructor anchored permanently. Six supplied assembly years are required; use Independent orbital shipyards for workers, stocks and radiation protection.") : kind + " permanently deployed. Upkeep: 1 mg/year. Depots dispense finite fuel; relays extend communications by 300 ly while powered.")
+                ? (event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital constructor anchored permanently. Six supplied assembly years are required; use Independent orbital shipyards for workers, stocks and radiation protection.")
+                    : event.quantity==int(OutpostKind::SensorArray) ? QString("Sensor array permanently deployed. Powered coverage: 250 ly ordinary / 75 ly penetrating. Upkeep: 1 mg/year; tankers replenish fuel. Scans reach headquarters through ordinary communications.")
+                    : kind + " permanently deployed. Upkeep: 1 mg/year. Depots dispense finite fuel; relays extend communications by 300 ly while powered.")
                 : event.kind==GameEventKind::OutpostFuelExhausted
                 ? QString("Operating fuel exhausted: depot/relay services are offline. Send a tanker with Supply outpost; the installation remains in place.")
                 : event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital deployment failed. The one-ship constructor must be idle at the selected planet, with no occupied station slot or foreign surface colony.")

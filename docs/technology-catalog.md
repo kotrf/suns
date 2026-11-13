@@ -5,8 +5,8 @@ a separate modeless reference window. One live window is reused; closing it
 releases it, and reopening reads the latest player view. Browsing creates no
 designs or orders and does not change the fitted Ship Designer draft.
 
-The complete registry currently contains **224 entries**: all **41 ship hulls**,
-the **3 orbital station hulls**, and **180 components**, including station gates
+The complete registry currently contains **227 entries**: all **41 ship hulls**,
+the **5 orbital station hulls**, and **181 components**, including station gates
 and legacy equipment. Legacy hull names are explicitly marked. Locked entries
 remain selectable and readable. The search matches names, categories,
 requirements and descriptions; category and Available only filters can be
@@ -22,7 +22,8 @@ hulls show their slot capacities and configurable services. Components show
 shared Ship Designer descriptions: costs, mass, ratings, fuel tables, scanner/
 mining/service effects and fitting restrictions as applicable. The shared
 formatter now retains base mass/cost facts for Orbital Shipyard Kit and radiation
-screens alongside their special descriptions.
+screens alongside their special descriptions. Sensor Array Kit facts distinguish
+the transported 100 kt fitting from the powered anchored 250/75 ly scan field.
 
 Requirements include technology, racial access, acquisition and legacy catalog
 conditions. Station gates use their dedicated Energy/Electronics/Construction,

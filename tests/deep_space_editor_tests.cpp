@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QDockWidget>
 #include <QGraphicsScene>
 #include <QGraphicsItem>
 #include <QPushButton>
@@ -32,6 +33,20 @@ struct MainWindowTestAccess {
     static const auto& orders(const MainWindow& w) { return w.pendingOrders_.orders; }
     static void clear(MainWindow& w) { w.pendingOrders_.orders.clear(); w.pendingDescriptions_.clear(); w.rebuildScene(); }
     static bool unchanged(const MainWindow& w) { return w.state_.fleets[0].outpost==OutpostKind::None; }
+    static void sensor(MainWindow& w) {
+        auto& design=w.state_.shipDesigns.back();
+        design={100,1,"Sensor constructor",ShipHullType::Scout,{ShipComponentType::FusionDrive,ShipComponentType::SensorArrayKit}};
+        normalize_ship_design_placement(design);
+        auto& site=w.state_.fleets[1];site.outpost=OutpostKind::SensorArray;site.telemetry.outpost=site.outpost;
+        w.rebuildScene();
+    }
+    static void hiddenSensorLoss(MainWindow& w) {
+        w.state_.fleets[1].fuel=0;w.state_.fleets[1].damagePercent=100;w.state_.fleets[1].outpost=OutpostKind::None;
+        w.rebuildScene();
+    }
+    static void passiveSensor(MainWindow& w) {
+        w.state_.fleets[1].telemetry.electronics.mode=EmissionMode::Passive;w.rebuildScene();
+    }
 };
 }
 int main(int argc,char** argv)
@@ -67,5 +82,20 @@ int main(int argc,char** argv)
     assert(MainWindowTestAccess::unchanged(w)); MainWindowTestAccess::clear(w);
     auto* deploy=w.findChild<QPushButton*>("deployOutpostHere"); assert(deploy->isEnabled()); deploy->click();
     assert(std::get<SetFleetTaskOrder>(MainWindowTestAccess::orders(w).back()).task==FleetTask::DeployOutpost);
-    assert(MainWindowTestAccess::unchanged(w)); overlay->setChecked(original);
+    assert(MainWindowTestAccess::unchanged(w));
+    MainWindowTestAccess::clear(w);MainWindowTestAccess::sensor(w);
+    assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(1)=="Sensor array");
+    assert(tree->topLevelItem(0)->text(6).contains("250 / 75"));
+    tree->setCurrentItem(tree->topLevelItem(0));assert(supply->isEnabled() && !refuel->isEnabled());
+    MainWindowTestAccess::hiddenSensorLoss(w);
+    assert(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->text(6).contains("250 / 75"));
+    assert(tree->topLevelItem(0)->text(3).startsWith("120.0"));
+    const auto capture=qEnvironmentVariable("SUNS_SENSOR_POST_SCREENSHOT");
+    if(!capture.isEmpty()) {
+        auto* dock=w.findChild<QDockWidget*>("outpostsDock");assert(dock);dock->setFloating(true);dock->resize(1200,560);dock->show();
+        app.processEvents();assert(dock->grab().save(capture));
+    }
+    MainWindowTestAccess::passiveSensor(w);
+    assert(tree->topLevelItem(0)->text(6).contains("active sensors off"));
+    overlay->setChecked(original);
 }

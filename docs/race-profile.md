@@ -166,8 +166,8 @@ Dock, receiver, one fueled basic miner and leaves 100 kt of each mineral with
 25,000 station residents. Blueprints for an orbital settler and surveyor are
 included; additional ships require ordinary manufacture. A surface-radiation-
 immune Radiotroph preset or BRM is explicitly incompatible, without rewriting
-the chosen settings. Portable race v3 uses `orbital-civilization`; save122 and
-orders51 retain their existing layouts and migration rules. Human/PBEM and
+the chosen settings. Portable race v3 uses `orbital-civilization`; save123 and
+orders52 retain the native layouts and migration rules. Human/PBEM and
 actual Computer campaigns exercise paid replacement and second-colony founding.
 
 The Qt setup dialog calls `generate_campaign`; race mechanics and research
