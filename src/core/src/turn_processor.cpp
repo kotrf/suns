@@ -890,7 +890,9 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     fleet.arrivalAction.reset();
     if (action.kind == FleetArrivalActionKind::None) return false;
     if (const auto task = arrival_work_task(action.kind); task && *task != FleetTask::RemoteMining) {
-        if (fleet_task_equipment_available(state, fleet, *task)) fleet.task = *task;
+        if (fleet_task_equipment_available(state, fleet, *task)) {
+            fleet.task = *task; fleet.recoveryTarget=*task==FleetTask::RecoverSample?action.recoveryTarget:0;
+        }
         return false;
     }
     // Keep a blocked colonization programme visible and retryable instead
@@ -2492,7 +2494,7 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
             (void)submit_mobile_base_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
-            (void)submit_fleet_task_command(state, player, value.fleet, value.task);
+            (void)submit_fleet_task_command(state, player, value.fleet, value.task, value.recoveryTarget);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
             (void)submit_electronics_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {

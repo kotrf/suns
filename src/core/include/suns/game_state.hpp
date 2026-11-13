@@ -1566,6 +1566,7 @@ struct FleetArrivalAction {
     PlanetId transportDestination{};
     std::uint32_t destinationTarget{}; // UnloadTransportLine only; zero preserves complete unloading.
     FleetId transportDestinationFleet{}; // Exact anchored receiver, alternative to transportDestination.
+    UnknownObjectId recoveryTarget{}; // RecoverSample only; zero is a legacy coordinate-only attempt.
     bool operator==(const FleetArrivalAction&) const = default;
 };
 
@@ -1704,6 +1705,7 @@ struct FleetTelemetry {
     std::uint32_t xenocrystal{};
     ProbeMission probe;
     VisitorMission visitor;
+    UnknownObjectId recoveryTarget{};
 };
 
 struct PendingFleetCommand {
@@ -1716,6 +1718,7 @@ struct PendingFleetCommand {
     std::optional<ProbeCommand> probe;
     std::optional<VisitorMission> visitor;
     std::optional<OrbitalBaseCommand> orbitalBase;
+    UnknownObjectId recoveryTarget{}; // Frozen with a RecoverSample task command at issue time.
 };
 
 struct PendingFleetTelemetry {
@@ -1767,6 +1770,7 @@ struct Fleet {
     ProbeMission probe;
     VisitorMission visitor;
     bool orbitalShipyardBirth{}; // Host provenance: hide a new remote ship until first received telemetry.
+    UnknownObjectId recoveryTarget{};
 };
 
 struct Minefield {

@@ -9,6 +9,8 @@ inline constexpr std::size_t kMaximumScienceSamples = 64;
 [[nodiscard]] const char* science_sample_name(UnknownObjectKind);
 [[nodiscard]] std::uint32_t science_sample_research_points(UnknownObjectKind);
 [[nodiscard]] bool sample_observation_received(const GameState&, PlayerId, UnknownObjectId);
+// Bind only unambiguous received study/course evidence, never a nearby live body.
+[[nodiscard]] UnknownObjectId science_recovery_target(const GameState&, PlayerId, Position);
 [[nodiscard]] std::uint32_t retained_sample_research(const GameState&, const Planet&);
 bool transfer_science_sample(GameState&, PlayerId, const TransferScienceSampleOrder&);
 // Apply to a planning copy only when both fleet endpoints have current

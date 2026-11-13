@@ -112,7 +112,7 @@ void transfer_fleet_report_outbox(GameState&, PlayerId, FleetId source, FleetId 
     GameState& state,
     PlayerId player,
     FleetId fleet,
-    FleetTask task);
+    FleetTask task, UnknownObjectId recoveryTarget = 0);
 
 void deliver_due_fleet_commands(GameState& state);
 void deliver_due_fleet_telemetry(GameState& state);

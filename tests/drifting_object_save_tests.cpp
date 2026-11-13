@@ -56,7 +56,7 @@ void physical_course_reports_and_received_archive_stay_separate()
 void the_unique_core_and_onboard_rendezvous_survive_reload()
 {
     auto h=host();h.state.players.front().objectKnowledge={test::drifting_observation(h.state)};
-    h.state.fleets.front().task=FleetTask::RecoverSample;
+    h.state.fleets.front().task=FleetTask::RecoverSample;h.state.fleets.front().recoveryTarget=7;
     QTemporaryDir dir;QString error;SaveGameData loaded;const auto path=dir.filePath("core.suns");
     assert(write_save_game_file(path,h,error) && read_save_game_file(path,loaded,error));
     h.state=TurnProcessor{}.process(loaded.state,{});
@@ -68,10 +68,94 @@ void the_unique_core_and_onboard_rendezvous_survive_reload()
     assert(write_save_game_file(pbem,player,error));SaveGameData received;assert(read_save_game_file(pbem,received,error));
     assert(received.state.fleets.front().scienceSamples==h.state.fleets.front().scienceSamples);
     // Destruction/consumption does not restore the global stock after loading.
-    loaded.state.fleets.front().scienceSamples.clear();loaded.state.fleets.front().task=FleetTask::RecoverSample;
+    loaded.state.fleets.front().scienceSamples.clear();loaded.state.fleets.front().task=FleetTask::RecoverSample;loaded.state.fleets.front().recoveryTarget=7;
     assert(write_save_game_file(path,loaded,error) && read_save_game_file(path,h,error));
     h.state=TurnProcessor{}.process(h.state,{});
     assert(h.state.unknownObjects.front().sampleRecovered && h.state.fleets.front().scienceSamples.empty());
+}
+void static_target_survives_silence_save_and_received_telemetry()
+{
+    auto h=host();h.state.unknownObjects.front().position={119,0};
+    h.state.players.front().objectKnowledge={test::drifting_observation(h.state)};
+    h.state.unknownObjects.push_back({8,{111,0},UnknownObjectKind::AncientProbe});h.state.nextUnknownObjectId=9;
+    h.state.players.front().objectKnowledge.push_back({8,{111,0},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::AncientProbe,10,10});
+    ElectronicsProgram silent;silent.mode=EmissionMode::RadioSilence;silent.resumeTurn=12;
+    h.state=TurnProcessor{}.process(h.state,{{1,{SetFleetElectronicsOrder{1,silent},
+        MoveFleetOrder{1,{111,0},5,{FleetArrivalActionKind::RecoverSample}}}}});
+    assert(h.state.fleets.front().recoveryTarget==8 && h.state.fleets.front().scienceSamples.empty());
+    QTemporaryDir dir;QString error;SaveGameData loaded;
+    const auto a=dir.filePath("received-before.sunsturn"),b=dir.filePath("received-after.sunsturn");
+    assert(write_save_game_file(a,make_player_turn(h,1),error));
+    h.state.fleets.front().recoveryTarget=7; // Unreceived host intent cannot rewrite the old contact.
+    assert(write_save_game_file(b,make_player_turn(h,1),error) && bytes(a)==bytes(b));
+    h.state.fleets.front().recoveryTarget=8;
+    const auto path=dir.filePath("waiting.suns");assert(write_save_game_file(path,h,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets.front().recoveryTarget==8);
+    const auto fuel=loaded.state.fleets.front().fuel;
+    loaded.state=TurnProcessor{}.process(loaded.state,{});
+    assert(loaded.state.fleets.front().position==Position(111,0) && loaded.state.fleets.front().fuel==fuel);
+    assert(loaded.state.fleets.front().scienceSamples.size()==1 && loaded.state.fleets.front().scienceSamples.front().source==8);
+    assert(!loaded.state.unknownObjects.front().sampleRecovered && loaded.state.unknownObjects.back().sampleRecovered);
+    assert(loaded.state.fleets.front().recoveryTarget==0);
+}
+void standing_target_is_received_only_through_frozen_telemetry()
+{
+    auto h=host();h.state.players.front().objectKnowledge={test::drifting_observation(h.state)};
+    auto& fleet=h.state.fleets.front();fleet.task=FleetTask::RecoverSample;fleet.recoveryTarget=7;
+    fleet.electronics.mode=EmissionMode::Standard;
+    publish_fleet_telemetry(h.state,h.state.turn);
+    assert(fleet.telemetry.task==FleetTask::RecoverSample && fleet.telemetry.recoveryTarget==7);
+    QTemporaryDir dir;QString error;SaveGameData loaded;const auto path=dir.filePath("intent.sunsturn");
+    assert(write_save_game_file(path,make_player_turn(h,1),error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets.front().recoveryTarget==7 && loaded.state.fleets.front().telemetry.recoveryTarget==7);
+    fleet.position={390,0};fleet.telemetry.position=fleet.position;
+    publish_fleet_telemetry(h.state,h.state.turn+1);++h.state.turn;
+    assert(!fleet.telemetryInTransit.empty() && fleet.telemetryInTransit.back().telemetry.recoveryTarget==7);
+    fleet.task=FleetTask::None;fleet.recoveryTarget=0;
+    const auto hostPath=dir.filePath("outbox.suns");assert(write_save_game_file(hostPath,h,error) && read_save_game_file(hostPath,loaded,error));
+    assert(loaded.state.fleets.front().telemetryInTransit.back().telemetry.recoveryTarget==7);
+}
+void delayed_routes_tasks_and_orders_freeze_their_target()
+{
+    auto h=host();h.state.fleets.front().position={390,0};h.state.fleets.front().telemetry.position={390,0};
+    h.state.unknownObjects.front().position={411,0};
+    h.state.players.front().objectKnowledge={test::drifting_observation(h.state)};
+    h.state.unknownObjects.push_back({8,{400,0},UnknownObjectKind::AncientProbe});h.state.nextUnknownObjectId=9;
+    h.state.players.front().objectKnowledge.push_back({8,{400,0},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::AncientProbe,10,10});
+    FleetArrivalAction recovery{FleetArrivalActionKind::RecoverSample};recovery.recoveryTarget=7;
+    const FleetWaypoint final{{414,1},5,recovery};
+    auto route=h;
+    assert(submit_fleet_route_command(route.state,1,1,{400,0},5,{}, {final}));
+    assert(!route.state.fleets.front().pendingCommands.empty());
+    assert(route.state.fleets.front().pendingCommands.front().deliveryTurn>route.state.turn);
+    QTemporaryDir dir;QString error;SaveGameData loaded;const auto path=dir.filePath("pending.suns");
+    assert(write_save_game_file(path,route,error) && read_save_game_file(path,loaded,error));
+    assert(loaded.state.fleets.front().pendingCommands.front().program.queuedWaypoints.front().arrivalAction.recoveryTarget==7);
+    h.state.fleets.front().position={400,0};h.state.fleets.front().telemetry.position={400,0};
+    assert(submit_fleet_task_command(h.state,1,1,FleetTask::RecoverSample));
+    assert(h.state.fleets.front().pendingCommands.front().recoveryTarget==8);
+    // A later received contact at the fleet cannot rebind the old task packet.
+    h.state.players.front().objectKnowledge.front().position={400,0};
+    assert(write_save_game_file(path,h,error) && read_save_game_file(path,loaded,error));
+    const auto due=loaded.state.fleets.front().pendingCommands.front().deliveryTurn;
+    loaded.state.turn=due;deliver_due_fleet_commands(loaded.state);
+    assert(loaded.state.fleets.front().task==FleetTask::RecoverSample && loaded.state.fleets.front().recoveryTarget==8);
+    TurnOrderFileData data{55,10,17,{1,{MoveFleetOrder{1,{414,1},5,recovery},
+        SetFleetTaskOrder{1,FleetTask::RecoverSample,8},MoveFleetOrder{1,{400,0},5,{}, {final}}}},
+        {"Recover X7","Work on X8","Route to X7"}};
+    const auto orderPath=dir.filePath("targets.sunsorders");TurnOrderFileData decoded;
+    assert(write_turn_order_file(orderPath,data,error) && read_turn_order_file(orderPath,decoded,error));
+    assert(std::get<MoveFleetOrder>(decoded.orders.orders[0]).arrivalAction.recoveryTarget==7);
+    assert(std::get<SetFleetTaskOrder>(decoded.orders.orders[1]).recoveryTarget==8);
+    assert(std::get<MoveFleetOrder>(decoded.orders.orders[2]).queuedWaypoints.front().arrivalAction.recoveryTarget==7);
+    for(unsigned invalid=0;invalid<4;++invalid) {
+        auto bad=data;
+        if(invalid==0)std::get<MoveFleetOrder>(bad.orders.orders[0]).arrivalAction.recoveryTarget=0x80000000U;
+        if(invalid==1)std::get<MoveFleetOrder>(bad.orders.orders[0]).arrivalAction.kind=FleetArrivalActionKind::None;
+        if(invalid==2)std::get<SetFleetTaskOrder>(bad.orders.orders[1]).recoveryTarget=0x80000000U;
+        if(invalid==3)std::get<SetFleetTaskOrder>(bad.orders.orders[1]).task=FleetTask::None;
+        const bool wrote=write_turn_order_file(orderPath,bad,error);assert(!wrote || !read_turn_order_file(orderPath,decoded,error));
+    }
 }
 void new_tags_cannot_masquerade_as_v123_and_invalid_courses_reject()
 {
@@ -97,5 +181,8 @@ int main(int argc,char** argv)
     QCoreApplication app(argc,argv);
     physical_course_reports_and_received_archive_stay_separate();
     the_unique_core_and_onboard_rendezvous_survive_reload();
+    static_target_survives_silence_save_and_received_telemetry();
+    standing_target_is_received_only_through_frozen_telemetry();
+    delayed_routes_tasks_and_orders_freeze_their_target();
     new_tags_cannot_masquerade_as_v123_and_invalid_courses_reject();
 }

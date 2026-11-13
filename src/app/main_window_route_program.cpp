@@ -4,6 +4,7 @@
 #include "suns/deep_space.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/science_samples.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/production.hpp"
 #include "suns/mining.hpp"
@@ -85,7 +86,8 @@ QString actionName(const GameState& state, const FleetArrivalAction& action)
     if (action.kind == FleetArrivalActionKind::TransitStargate) return QString("Gate %1 → %2%3; wait and retry if unavailable")
         .arg(gateDestinationName(state,action.gateSource),gateDestinationName(state,action.gateDestination)).arg(action.gateResonant ? " (8 source xenocrystals on success)" : "");
     if (action.kind == FleetArrivalActionKind::DeployOutpost) return "Deploy outpost — permanent";
-    if (action.kind == FleetArrivalActionKind::RecoverSample) return "Recover scientific specimen — one attempt";
+    if (action.kind == FleetArrivalActionKind::RecoverSample) return action.recoveryTarget
+        ? QString("Recover specimen X%1 — one attempt").arg(action.recoveryTarget) : "Recover scientific specimen — coordinate-only attempt";
     if (action.kind == FleetArrivalActionKind::SupplyOutpost) return QString("Supply fuel; keep %1 mg").arg(action.reserveFuel);
     if (const auto task = arrival_work_task(action.kind))
         return QString::fromStdString(fleet_task_name(*task)) + " — persistent";
@@ -996,6 +998,12 @@ bool MainWindow::appendRouteWaypoint(
         : std::nullopt;
     const auto* fleet = visibleFleetStorage ? &*visibleFleetStorage : nullptr;
     if (!fleet || !fleet_warp_valid(state_, *fleet, warp)) return false;
+    if(arrivalAction.kind==FleetArrivalActionKind::RecoverSample) {
+        if(!arrivalAction.recoveryTarget)arrivalAction.recoveryTarget=science_recovery_target(receivedPlayerState(),pendingOrders_.player,destination);
+        if(!arrivalAction.recoveryTarget || !sample_observation_received(receivedPlayerState(),pendingOrders_.player,arrivalAction.recoveryTarget)) {
+            statusBar()->showMessage("Select one studied object in Unknown objects before ordering specimen recovery.",5000);return false;
+        }
+    }
     if (arrivalAction.colonyPlan && (arrivalAction.kind != FleetArrivalActionKind::Colonize
         || !colonyPlanApplicableForOrders(*arrivalAction.colonyPlan))) return false;
     if (const auto error = fleet_work_order_error(state_, *fleet, destination, arrivalAction.kind); !error.empty()) {
@@ -1058,6 +1066,16 @@ bool MainWindow::appendRouteWaypoint(
 bool MainWindow::stageSelectedFleetRoute(
     const Fleet& fleet, MoveFleetOrder route, const QString& statusMessage)
 {
+    const auto bind=[&](FleetArrivalAction& action,Position point) {
+        if(action.kind!=FleetArrivalActionKind::RecoverSample)return true;
+        if(!action.recoveryTarget)action.recoveryTarget=science_recovery_target(receivedPlayerState(),pendingOrders_.player,point);
+        return action.recoveryTarget && sample_observation_received(receivedPlayerState(),pendingOrders_.player,action.recoveryTarget);
+    };
+    bool bound=bind(route.arrivalAction,route.destination);
+    for(auto& waypoint:route.queuedWaypoints)bound=bind(waypoint.arrivalAction,waypoint.destination) && bound;
+    if(!bound) {
+        statusBar()->showMessage("Select one studied object in Unknown objects before ordering specimen recovery.",5000);return false;
+    }
     if (auto* pending = pendingMove(pendingOrders_, fleet.id)) {
         *pending = std::move(route);
         for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
@@ -1209,6 +1227,9 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         if (leg.arrivalAction.kind != action.kind) return false;
         action = leg.arrivalAction;
     }
+    if(action.kind==FleetArrivalActionKind::RecoverSample && !action.recoveryTarget
+        && leg.arrivalAction.kind==FleetArrivalActionKind::RecoverSample)
+        action.recoveryTarget=leg.arrivalAction.recoveryTarget;
     leg.arrivalAction = action;
     route->destination = legs.front().destination;
     route->warp = legs.front().warp;

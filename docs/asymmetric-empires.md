@@ -805,7 +805,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v124 / orders v52 / portable race v3. The complete
+Current game formats are save v125 / orders v53 / portable race v3. The complete
 first stationary campaign is enabled by stage 8 below. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

@@ -584,7 +584,8 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                 if (canReturn) {
                     const auto warp = route_warp(state, loaded, {point});
                     if (warp) {
-                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, point, *warp, {FleetArrivalActionKind::RecoverSample}});
+                        FleetArrivalAction action{FleetArrivalActionKind::RecoverSample};action.recoveryTarget=object->id;
+                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, point, *warp, action});
                         existing->issuedTurn = state.turn; existing->reviewTurn = review_turn(state, fleet);
                         explain(reason, "Recover specimen from received study X" + std::to_string(object->id));
                         continue;

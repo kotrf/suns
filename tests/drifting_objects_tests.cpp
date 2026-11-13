@@ -1,6 +1,7 @@
 #include "drifting_object_fixture.hpp"
 #include "suns/campaign.hpp"
 #include "suns/computer_player.hpp"
+#include "suns/communications.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/native_orbital.hpp"
@@ -59,7 +60,7 @@ void local_recovery_requires_received_study_and_active_mobile_sensors()
 {
     for(unsigned invalid=0;invalid<4;++invalid) {
         auto s=fixture();s.players.front().objectKnowledge={observation(s)};
-        s.fleets.front().task=FleetTask::RecoverSample;
+        s.fleets.front().task=FleetTask::RecoverSample;s.fleets.front().recoveryTarget=7;
         if(invalid==0)s.players.front().objectKnowledge.clear();
         if(invalid==1)s.fleets.front().electronics.mode=EmissionMode::Passive;
         if(invalid==2)s.fleets.front().position={50,0};
@@ -69,7 +70,7 @@ void local_recovery_requires_received_study_and_active_mobile_sensors()
         assert(s.fleets.front().destination==dest && s.fleets.front().scienceSamples.empty());
     }
     auto s=fixture();s.players.front().objectKnowledge={observation(s)};
-    s.fleets.front().task=FleetTask::RecoverSample;
+    s.fleets.front().task=FleetTask::RecoverSample;s.fleets.front().recoveryTarget=7;
     auto other=s.fleets.front();other.id=2;s.fleets.push_back(other);s.nextFleetId=3;
     auto reversed=s;std::reverse(reversed.fleets.begin(),reversed.fleets.end());
     const auto a=TurnProcessor{}.process(s,{}),b=TurnProcessor{}.process(reversed,{});
@@ -78,6 +79,54 @@ void local_recovery_requires_received_study_and_active_mobile_sensors()
         assert(same!=b.fleets.end() && f.scienceSamples==same->scienceSamples);
         assert(f.scienceSamples.size()==(f.id==1?1:0));
     }
+}
+void static_recovery_waiting_for_sensors_does_not_chase_a_neighbour()
+{
+    auto s=fixture();s.unknownObjects.front().position={119,0};
+    s.players.front().objectKnowledge={observation(s)};
+    s.unknownObjects.push_back({8,{111,0},UnknownObjectKind::AncientProbe});s.nextUnknownObjectId=9;
+    s.players.front().objectKnowledge.push_back({8,{111,0},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::AncientProbe,10,10});
+    ElectronicsProgram silent;silent.mode=EmissionMode::RadioSilence;silent.resumeTurn=12;
+    s=TurnProcessor{}.process(s,{{1,{SetFleetElectronicsOrder{1,silent},
+        MoveFleetOrder{1,{111,0},5,{FleetArrivalActionKind::RecoverSample}}}}});
+    assert(s.fleets.front().position==Position(111,0) && s.fleets.front().scienceSamples.empty());
+    assert(s.fleets.front().recoveryTarget==8);
+    const auto fuel=s.fleets.front().fuel;
+    s=TurnProcessor{}.process(s,{});
+    assert(s.fleets.front().position==Position(111,0) && s.fleets.front().fuel==fuel);
+    assert(s.fleets.front().scienceSamples.size()==1 && s.fleets.front().scienceSamples.front().source==8);
+    assert(!s.unknownObjects.front().sampleRecovered && s.unknownObjects.back().sampleRecovered);
+}
+void recovery_keeps_the_named_moving_body_and_legacy_tasks_stay_put()
+{
+    auto s=fixture();s.players.front().objectKnowledge={observation(s)};
+    s.unknownObjects.push_back({9,{101,0},UnknownObjectKind::DriftingDerelict,false,{1.5,0.5}});s.nextUnknownObjectId=10;
+    s.players.front().objectKnowledge.push_back({9,{101,0},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::DriftingDerelict,10,10,Position{1.5,0.5}});
+    auto legacy=s;legacy.fleets.front().task=FleetTask::RecoverSample;
+    legacy=TurnProcessor{}.process(legacy,{});
+    assert(legacy.fleets.front().position==Position(100,0) && legacy.fleets.front().scienceSamples.empty());
+    auto depleted=s;depleted.unknownObjects.front().sampleRecovered=true;
+    depleted=TurnProcessor{}.process(depleted,{{1,{SetFleetTaskOrder{1,FleetTask::RecoverSample,7}}}});
+    assert(depleted.fleets.front().position==depleted.unknownObjects.front().position && depleted.fleets.front().scienceSamples.empty());
+    assert(!depleted.unknownObjects.back().sampleRecovered && !depleted.fleets.front().recoveryTarget);
+    s=TurnProcessor{}.process(s,{{1,{SetFleetTaskOrder{1,FleetTask::RecoverSample,7}}}});
+    assert(s.fleets.front().fuel==depleted.fleets.front().fuel);
+    assert(s.fleets.front().position==s.unknownObjects.front().position);
+    assert(s.fleets.front().scienceSamples.size()==1 && s.fleets.front().scienceSamples.front().source==7);
+    assert(s.unknownObjects.front().sampleRecovered && !s.unknownObjects.back().sampleRecovered);
+    assert(!s.fleets.front().recoveryTarget);
+}
+void ambiguous_new_coordinates_require_an_explicit_target()
+{
+    auto s=fixture();s.players.front().objectKnowledge={observation(s)};
+    s.unknownObjects.push_back({9,{111,0},UnknownObjectKind::AncientProbe});s.nextUnknownObjectId=10;
+    s.players.front().objectKnowledge.push_back({9,{111,0},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::AncientProbe,10,10});
+    assert(!submit_fleet_route_command(s,1,1,{111,0},5,{FleetArrivalActionKind::RecoverSample},{}));
+    assert(!s.fleets.front().destination && s.fleets.front().pendingCommands.empty());
+    FleetArrivalAction chosen{FleetArrivalActionKind::RecoverSample};chosen.recoveryTarget=9;
+    s=TurnProcessor{}.process(s,{{1,{MoveFleetOrder{1,{111,0},5,chosen}}}});
+    assert(s.fleets.front().scienceSamples.size()==1 && s.fleets.front().scienceSamples.front().source==9);
+    assert(!s.unknownObjects.front().sampleRecovered);
 }
 void newer_fixes_survive_a_late_study_and_coarse_updates()
 {
@@ -150,7 +199,10 @@ int main()
 {
     generation_is_rare_and_keeps_the_static_sequence();
     motion_and_rendezvous_spend_real_movement_and_fuel();
+    static_recovery_waiting_for_sensors_does_not_chase_a_neighbour();
     local_recovery_requires_received_study_and_active_mobile_sensors();
+    recovery_keeps_the_named_moving_body_and_legacy_tasks_stay_put();
+    ambiguous_new_coordinates_require_an_explicit_target();
     newer_fixes_survive_a_late_study_and_coarse_updates();
     computer_aims_from_received_course_only();
     native_stations_receive_and_research_real_cores_without_surface_population();

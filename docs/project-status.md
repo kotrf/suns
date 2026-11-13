@@ -1,5 +1,33 @@
 # Project status and development handoff
 
+## #293/#294 merged; #295 recovery-target P2 — 13 November 2026
+
+The user ordered293 then294 merged. [#293](https://github.com/kotrf/suns/pull/293)
+merged as57baf40, exact reviewed tree0f04f6a. [Repeat review](https://github.com/kotrf/suns/pull/293#issuecomment-6853663431)
+confirms the native P2 correction; its fixed thread is resolved under MEM-34. [#294](https://github.com/kotrf/suns/pull/294)
+was retargeted to main, then merged as6e5633b, exact reviewed treee1eaa291.
+Its [review](https://github.com/kotrf/suns/pull/294#issuecomment-6853663963) has no findings.
+Source CIs131/131 and132/132 passed; current main CI43432219440 succeeded.
+
+[#295](https://github.com/kotrf/suns/pull/295) is now based on main and stays open.
+[Review5891409220](https://github.com/kotrf/suns/pull/295#pullrequestreview-5891409220)
+on5c38dc5 finds staticX8 recovery redirected to nearby driftingX7 when sensors
+wake. The new actual two-turn regression fails before the fix. Recovery now
+freezes a typed source ID in the route/standing task/delayed task and telemetry.
+It binds explicit or unique received study evidence once, never live nearest
+objects at delivery. Actual rendezvous/pickup accept only that ID, including
+when another source is closer or available and the chosen one is depleted.
+New ambiguous coordinates reject; old saved target0 tasks stay coordinate-only.
+
+Save125/orders53/race3 add a conditional recovery ID in those records only;
+other action/task layouts stay unchanged. Wrong-kind/out-of-range IDs reject.
+UI and AI author explicit IDs and route edits retain them; received telemetry
+cannot expose a changed hidden task. The complete GCC14.2/Qt6.12 Debug build, focused11/11 in5.06 s and final134/134 CTest in207.14 s passed; the actual Qt panel and214 local link targets were checked.
+
+Keep the295 thread open for repeat review/user-authorized merge. User permission
+now covers all routine kotrf/suns operations without repeated questions (MEM-37).
+Existing checkout/work/branches preserved;50/54/55 umbrellas open,53/63 frozen.
+
 ## #293 corrected; #294 sensor posts; #55 drifting derelict — 13 November 2026
 
 [#293](https://github.com/kotrf/suns/pull/293), source6eb78bd, corrects the first-miner

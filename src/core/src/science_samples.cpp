@@ -27,6 +27,17 @@ bool sample_observation_received(const GameState& state, PlayerId owner, Unknown
     const auto* x = known_unknown_object(state, owner, source);
     return x && x->level == ObjectKnowledgeLevel::Studied && x->receivedTurn <= state.turn;
 }
+UnknownObjectId science_recovery_target(const GameState& state,PlayerId owner,Position point)
+{
+    const auto* player=find_player(state,owner);if(!player)return 0;
+    UnknownObjectId target=0;
+    for(const auto& x:player->objectKnowledge)if(x.level==ObjectKnowledgeLevel::Studied && x.receivedTurn<=state.turn
+        && (same_position(x.position,point) || object_course_contains(x,point))) {
+        if(target)return 0; // Ambiguous coordinates cannot authorize pursuit.
+        target=x.id;
+    }
+    return target;
+}
 std::uint32_t retained_sample_research(const GameState& state, const Planet& colony)
 {
     const auto* owner = find_player(state, colony.owner);
@@ -146,7 +157,7 @@ void prepare_science_sample_recovery(GameState& state,std::uint64_t turn)
         const auto range=std::min(20.0,strategic_sensor_range(state,fleet,turn)*0.5);
         const UnknownObject* target=nullptr;double nearest=range;
         for(const auto& object:state.unknownObjects) {
-            if(object.kind!=UnknownObjectKind::DriftingDerelict
+            if(!fleet.recoveryTarget || object.id!=fleet.recoveryTarget || object.kind!=UnknownObjectKind::DriftingDerelict
                 || !sample_observation_received(state,fleet.owner,object.id))continue;
             const auto distance=distance_between(fleet.position,object.position);
             if(distance>range*medium_active_path_factor(state,fleet.position,object.position)+1e-6)continue;
@@ -155,6 +166,7 @@ void prepare_science_sample_recovery(GameState& state,std::uint64_t turn)
         if(target && !same_position(fleet.position,target->position)) {
             fleet.destination=target->position;
             fleet.arrivalAction=FleetArrivalAction{FleetArrivalActionKind::RecoverSample};
+            fleet.arrivalAction->recoveryTarget=target->id;
         }
     }
 }
@@ -163,7 +175,8 @@ void recover_science_samples(GameState& state, Fleet& fleet, std::uint64_t turn)
     if (fleet.task != FleetTask::RecoverSample || fleet.destination
         || !fleet_has_scanner(state, fleet) || !fleet_active_sensors(fleet, turn)) return;
     std::vector<UnknownObject*> objects;
-    for (auto& object : state.unknownObjects) if (same_position(fleet.position, object.position)
+    for (auto& object : state.unknownObjects) if ((!fleet.recoveryTarget || object.id==fleet.recoveryTarget)
+        && same_position(fleet.position, object.position)
         && sample_observation_received(state, fleet.owner, object.id)) objects.push_back(&object);
     std::sort(objects.begin(), objects.end(), [](auto a, auto b) { return a->id < b->id; });
     for (auto* object : objects) {
@@ -172,19 +185,20 @@ void recover_science_samples(GameState& state, Fleet& fleet, std::uint64_t turn)
             || fleet_cargo_used(state, fleet) + kScienceSampleMass > fleet_cargo_capacity(state, fleet) + 1e-6) {
             queue_player_report(state, fleet.owner, PlayerReportKind::SampleHoldFull, fleet.position,
                 turn, 0, 0, fleet.id, 0, ProductionKind::Research, object->id);
-            fleet.task = FleetTask::None; return;
+            fleet.task = FleetTask::None; fleet.recoveryTarget=0; return;
         }
         fleet.scienceSamples.push_back({object->id, object->kind, false});
         object->sampleRecovered = true;
         queue_player_report(state, fleet.owner, PlayerReportKind::SampleRecovered, fleet.position,
             turn, 0, 0, fleet.id, 0, ProductionKind::Research, object->id,
             unknown_object_research_field(object->kind));
-        fleet.task = FleetTask::None; return;
+        fleet.task = FleetTask::None; fleet.recoveryTarget=0; return;
     }
     if (!objects.empty()) {
         queue_player_report(state, fleet.owner, PlayerReportKind::SampleDepleted, fleet.position,
             turn, 0, 0, fleet.id, 0, ProductionKind::Research, objects.front()->id);
         fleet.task = FleetTask::None;
+        fleet.recoveryTarget=0;
     }
 }
 } // namespace suns

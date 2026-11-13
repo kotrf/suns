@@ -144,8 +144,9 @@ bool MainWindow::queueUnknownObjectRecovery(UnknownObjectId id)
         || fleet_cargo_used(known,*f)+kScienceSampleMass>fleet_cargo_capacity(known,*f)+1e-6) return false;
     const auto warp=selectedFleetSuggestedWarpForRouteProgram();
     const auto point=object_approach_position(*x,known.turn,f->position,warp);
+    FleetArrivalAction action{FleetArrivalActionKind::RecoverSample};action.recoveryTarget=id;
     replacePendingFleetMove(f->id, point, warp,
-        FleetArrivalAction{FleetArrivalActionKind::RecoverSample}, QString("Recover specimen from studied object X%1").arg(id));
+        action, QString("Recover specimen from studied object X%1").arg(id));
     rebuildScene(); return true;
 }
 } // namespace suns

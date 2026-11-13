@@ -13,6 +13,13 @@ expeditions**, or use the corresponding arrival task in the route editor.
 Recovery requires physical arrival at the landmark, active scanners, that empire's
 delivered study and 5 kt of free shared hold. Ordinary command delay applies.
 
+Recovery is bound to the selected object's stable ID at authoring/transmission.
+Route edits, command delay, radio silence, host reload and received telemetry
+retain that ID. A nearby studied/depleted/available object cannot replace it.
+Generic coordinate authoring needs one unambiguous received completed study;
+otherwise select the object explicitly in the journal. Old saved unbound tasks
+make fixed-coordinate attempts and cannot begin autonomous pursuit.
+
 A drifting target has a received course and an approximate intercept. Once
 locally detected within20 ly (limited by half the effective scanner range and
 medium), its recovery programme may rendezvous through the normal movement
@@ -97,7 +104,7 @@ return. It waits for cargo telemetry, returns to a reachable colony, unloads and
 analyzes. A confirmed empty recovery retires; hidden depletion does not affect
 planning. No direct research grant or privileged host-state access is added.
 
-Current formats are **save v124 / orders v52 / race v3**. Drifting-kind physical
+Current formats are **save v125 / orders v53 / race v3**. Drifting-kind physical
 and observation records carry a dated velocity payload; static records retain
 their old layout. The new sample kind uses the existing finite SAMP ledger.
 The completion slice used v93/v37 (main after #227 was v92/v37).

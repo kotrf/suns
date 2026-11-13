@@ -1,5 +1,13 @@
 # Multiplayer turn exchange
 
+Save v125 / orders v53 freeze the selected specimen source ID in recovery
+arrival actions, standing tasks, delayed commands and dated fleet telemetry.
+New commands bind an explicit source or unique received study/course before
+transmission; they never select a new nearby object on arrival or wake-up.
+Older saved tasks have target0: a fixed-coordinate attempt without pursuit.
+Only RecoverSample records carry the added field; other layouts and race v3
+remain unchanged. Invalid IDs or IDs on unrelated actions/tasks reject.
+
 Save v124 adds the drifting-derelict kind, its physical velocity and classified
 received/pending course. Only the new tagged kind carries extra payload; old
 static and anonymous records keep their layouts. The architectural core uses

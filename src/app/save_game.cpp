@@ -41,11 +41,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 124;
+constexpr quint32 kSaveFormatVersion = 125;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 52;
+constexpr quint32 kTurnOrderFormatVersion = 53;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -221,6 +221,17 @@ void readColonyPlan(QDataStream& stream, std::optional<ProductionTemplate>& valu
     }
 }
 
+void writeRecoveryTarget(QDataStream& stream,bool active,UnknownObjectId target)
+{
+    if(target>0x7fffffffU || (!active && target)) {stream.setStatus(QDataStream::WriteFailed);return;}
+    if(active)stream<<quint32(target);
+}
+UnknownObjectId readRecoveryTarget(QDataStream& stream,bool active)
+{
+    UnknownObjectId target{};if(gReadSaveFormatVersion>=125 && active)stream>>target;
+    if(target>0x7fffffffU)markCorrupt(stream);return target;
+}
+
 void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
 {
     if (!mineral_load_policy_valid(value) || !transport_unload_valid(value)) { stream.setStatus(QDataStream::WriteFailed); return; }
@@ -244,6 +255,7 @@ void writeArrivalAction(QDataStream& stream, const FleetArrivalAction& value)
         stream<<quint32(value.transportLine)<<quint64(value.transportRevision)<<quint32(value.transportDestination)<<quint32(value.destinationTarget);
         if(!value.transportDestination)stream<<quint32(value.transportDestinationFleet);
     }
+    writeRecoveryTarget(stream,value.kind==FleetArrivalActionKind::RecoverSample,value.recoveryTarget);
 }
 
 void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
@@ -281,6 +293,7 @@ void readArrivalAction(QDataStream& stream, FleetArrivalAction& value)
         if(gReadSaveFormatVersion>=105)stream>>value.destinationTarget;
         if(gReadSaveFormatVersion>=106 && !value.transportDestination)stream>>value.transportDestinationFleet;}
     if(!mineral_load_policy_valid(value) || !transport_unload_valid(value))markCorrupt(stream);
+    value.recoveryTarget=readRecoveryTarget(stream,value.kind==FleetArrivalActionKind::RecoverSample);
 }
 
 void writeWaypoint(QDataStream& stream, const FleetWaypoint& value)
@@ -453,6 +466,7 @@ void writeTelemetry(QDataStream& stream, const FleetTelemetry& value)
     for (const auto& waypoint : value.waypointQueue) writeWaypoint(stream, waypoint);
     writeMinerals(stream, value.minerals);
     writeEnum(stream, value.task);
+    writeRecoveryTarget(stream,value.task==FleetTask::RecoverSample,value.task==FleetTask::RecoverSample?value.recoveryTarget:0);
     stream << static_cast<quint8>(value.repeatOrders ? 1 : 0)
            << static_cast<quint32>(value.routeTemplate.size());
     for (const auto& waypoint : value.routeTemplate) writeWaypoint(stream, waypoint);
@@ -508,6 +522,7 @@ void readTelemetry(QDataStream& stream, FleetTelemetry& value)
     }
     readMinerals(stream, value.minerals);
     if (!readEnum(stream, value.task, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
+    value.recoveryTarget=readRecoveryTarget(stream,value.task==FleetTask::RecoverSample);
     quint8 repeatOrders{};
     stream >> repeatOrders;
     if (repeatOrders > 1) {
@@ -542,6 +557,7 @@ void writePendingCommand(QDataStream& stream, const PendingFleetCommand& value)
     writeRouteProgram(stream, value.program);
     stream << static_cast<quint8>(value.task.has_value() ? 1 : 0);
     if (value.task) writeEnum(stream, *value.task);
+    writeRecoveryTarget(stream,value.task==FleetTask::RecoverSample,value.recoveryTarget);
 }
 
 void readPendingCommand(QDataStream& stream, PendingFleetCommand& value)
@@ -564,6 +580,7 @@ void readPendingCommand(QDataStream& stream, PendingFleetCommand& value)
         if (!readEnum(stream, task, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
         value.task = task;
     }
+    value.recoveryTarget=readRecoveryTarget(stream,value.task==FleetTask::RecoverSample);
 }
 
 void writePendingTelemetry(QDataStream& stream, const PendingFleetTelemetry& value)
@@ -1952,6 +1969,7 @@ void writeFleet(QDataStream& stream, const Fleet& value)
     for (const auto& packet : value.telemetryInTransit) writePendingTelemetry(stream, packet);
     stream << static_cast<quint8>(value.fuelStalled ? 1 : 0);
     writeEnum(stream, value.task);
+    writeRecoveryTarget(stream,value.task==FleetTask::RecoverSample,value.task==FleetTask::RecoverSample?value.recoveryTarget:0);
     stream << static_cast<quint8>(value.repeatOrders ? 1 : 0)
            << static_cast<quint32>(value.routeTemplate.size());
     for (const auto& waypoint : value.routeTemplate) writeWaypoint(stream, waypoint);
@@ -2060,6 +2078,7 @@ void readFleet(QDataStream& stream, Fleet& value)
     }
     value.fuelStalled = fuelStalled != 0;
     if (!readEnum(stream, value.task, static_cast<quint8>(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : gReadSaveFormatVersion >= 62 ? FleetTask::Salvage : FleetTask::RemoteMining))) return;
+    value.recoveryTarget=readRecoveryTarget(stream,value.task==FleetTask::RecoverSample);
     quint8 repeatOrders{};
     stream >> repeatOrders;
     if (repeatOrders > 1) {
@@ -2687,6 +2706,7 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << quint8{23} << quint32(concrete.colony); writeStationFit(stream,concrete.construction);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
             stream << quint8{21} << quint32(concrete.fleet); writeEnum(stream, concrete.task);
+            writeRecoveryTarget(stream,concrete.task==FleetTask::RecoverSample,concrete.recoveryTarget);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
             stream << quint8{22} << quint32(concrete.fleet); writeElectronics(stream, concrete.program);
         } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
@@ -3064,6 +3084,7 @@ bool readOrder(QDataStream& stream, Order& order)
         if (gReadSaveFormatVersion < 62) { markCorrupt(stream); return false; }
         SetFleetTaskOrder value; stream >> value.fleet;
         if (!readEnum(stream, value.task, quint8(gReadSaveFormatVersion >= 86 ? FleetTask::RecoverSample : gReadSaveFormatVersion >= 82 ? FleetTask::DeployOutpost : FleetTask::Salvage))) return false;
+        value.recoveryTarget=readRecoveryTarget(stream,value.task==FleetTask::RecoverSample);
         order = value; return stream.status() == QDataStream::Ok;
     }
     case 22: {
@@ -3669,7 +3690,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

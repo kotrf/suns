@@ -29,6 +29,11 @@ struct MainWindowTestAccess {
         w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.fleet=1;w.rebuildScene();
     }
     static void studyDrift(MainWindow& w) {w.state_.players.front().objectKnowledge.front().level=ObjectKnowledgeLevel::Studied;w.rebuildScene();}
+    static void ambiguousRecoveryNeighbour(MainWindow& w) {
+        w.state_.unknownObjects.push_back({9,{999,-999},UnknownObjectKind::DriftingDerelict,false,{1.5,0.5}});w.state_.nextUnknownObjectId=10;
+        w.state_.players.front().objectKnowledge.push_back({9,{115.5,1.5},0,ObjectKnowledgeLevel::Studied,UnknownObjectKind::DriftingDerelict,12,12,Position{1.5,0.5}});
+        w.rebuildScene();
+    }
     static void hiddenDrift(MainWindow& w) {
         w.state_.unknownObjects.front().position={-777,777};w.state_.unknownObjects.front().sampleRecovered=true;w.rebuildScene();
     }
@@ -74,6 +79,16 @@ int main(int argc,char** argv)
     assert(tree->topLevelItem(0)->toolTip(0).contains("architectural core") && tree->topLevelItem(0)->toolTip(0).contains("80 Construction"));
     recover->click();assert(suns::MainWindowTestAccess::move(window).arrivalAction.kind==suns::FleetArrivalActionKind::RecoverSample);
     assert(suns::MainWindowTestAccess::move(window).destination==suns::Position(115.5,1.5));
+    assert(suns::MainWindowTestAccess::move(window).arrivalAction.recoveryTarget==7);
+    suns::MainWindowTestAccess::ambiguousRecoveryNeighbour(window);
+    assert(window.setSelectedFleetRouteProgramLegWarp(0,6));
+    assert(window.setSelectedFleetRouteProgramLegAction(0,{suns::FleetArrivalActionKind::RecoverSample}));
+    assert(suns::MainWindowTestAccess::move(window).arrivalAction.recoveryTarget==7);
+
+    assert(window.setSelectedFleetRouteProgramLegAction(0,{}));
+    assert(!window.setSelectedFleetRouteProgramLegAction(0,{suns::FleetArrivalActionKind::RecoverSample}));
+    suns::FleetArrivalAction selected{suns::FleetArrivalActionKind::RecoverSample};selected.recoveryTarget=7;
+    assert(window.setSelectedFleetRouteProgramLegAction(0,selected));
     const auto capture=qEnvironmentVariable("SUNS_DRIFTING_OBJECT_SCREENSHOT");
     if(!capture.isEmpty()) {
         auto* dock=window.findChild<QDockWidget*>("unknownObjectsDock");assert(dock);dock->setFloating(true);dock->resize(1250,600);dock->show();

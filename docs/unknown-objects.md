@@ -56,6 +56,14 @@ its contents when its scanner study radius covers the reported uncertainty;
 otherwise classify first or fit stronger scanners. Existing command delay, fuel
 use, electronics and standing tasks apply.
 
+Recovery orders freeze the chosen object ID from received study/course evidence.
+The final waypoint, standing task, delayed command and telemetry preserve it;
+resuming a scanner never changes a static target into a neighbouring derelict.
+A named moving source remains the target even when another is closer or the
+chosen source is depleted. New ambiguous coordinate-only recovery requests
+are rejected; the object journal can choose an explicit ID. Legacy saved
+unbound tasks stay at their coordinates and never acquire a moving neighbour.
+
 Known drifting courses offer an **estimated intercept** using only received age,
 distance and Warp. It uses three scalar geometry steps, without future-year
 simulation; stale course/command delay can make it miss. Map markers remain at
@@ -117,7 +125,7 @@ coverage, corrections and review status.
 richer discovery outcomes. The drifting hulk adds one globally finite architectural
 core: analyze for80 Construction RP or retain its+4 Construction RP/year capability
 after physical delivery. The received object journal acts as its learned reference;
-it never exposes the current stock or hidden course. Current save124/orders52/race3
+it never exposes the current stock or hidden course. Current save125/orders53/race3
 tag only the new kind with velocity fields, preserving old static record layouts
 and genuine migrations. Current wreck novelty and other
 finite science objectives are unchanged. Further artifact varieties and
