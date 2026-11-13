@@ -36,7 +36,8 @@ int main(int argc, char** argv)
     // Every supported choice survives a portable round trip. The controller is
     // deliberately excluded: the host, not the file, decides who plays a slot.
     for (int preset = 0; preset < 3; ++preset) for (int hull = 0; hull < 6; ++hull)
-        for (int trait = 0; trait < 2; ++trait) for (int mining = 0; mining < 3; ++mining) {
+        for (int trait = 0; trait < 3; ++trait) for (int mining = 0; mining < 3; ++mining) {
+            if (trait == int(PrimaryRaceTrait::HabitatCivilization) && (preset == int(RacePreset::Radiotroph) || mining == 2)) continue;
             EmpireSetup original{"Игрок Ω"};
             original.race = static_cast<RacePreset>(preset);
             original.hullAccess = static_cast<HullAccess>(hull);
@@ -101,18 +102,20 @@ int main(int argc, char** argv)
 
     // Invalid settings and failed writes do not replace a previously valid file.
     put(path, validBytes);
-    for (int failure = 0; failure < 9; ++failure) {
+    for (int failure = 0; failure < 11; ++failure) {
         auto invalid = original;
         switch (failure) {
         case 0: invalid.race = static_cast<RacePreset>(90); break;
         case 1: invalid.hullAccess = static_cast<HullAccess>(90); break;
-        case 2: invalid.primaryTrait = PrimaryRaceTrait::HabitatCivilization; break;
+        case 2: invalid.primaryTrait = static_cast<PrimaryRaceTrait>(90); break;
         case 3: invalid.advancedRemoteMining = invalid.basicRemoteMining = true; break;
         case 4: invalid.factoriesPerTenThousand = 0; break;
         case 5: invalid.name = std::string("A\0B", 3); break;
         case 6: invalid.name = std::string("\xff", 1); break;
         case 7: invalid.populationGrowthRate=0; break;
         case 8: invalid.populationGrowthRate=21; break;
+        case 9: invalid.primaryTrait=PrimaryRaceTrait::HabitatCivilization;invalid.race=RacePreset::Radiotroph;break;
+        case 10: invalid.primaryTrait=PrimaryRaceTrait::HabitatCivilization;invalid.basicRemoteMining=true;break;
         }
         assert(!write_race_file(path, invalid, error));
         assert(bytesAt(path) == validBytes);

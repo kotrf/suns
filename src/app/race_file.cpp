@@ -18,7 +18,8 @@ constexpr std::array environments{
     std::pair{RacePreset::Radiotroph, "radiotroph"}};
 constexpr std::array traits{
     std::pair{PrimaryRaceTrait::Generalist, "generalist"},
-    std::pair{PrimaryRaceTrait::StargateSpecialist, "stargate-specialist"}};
+    std::pair{PrimaryRaceTrait::StargateSpecialist, "stargate-specialist"},
+    std::pair{PrimaryRaceTrait::HabitatCivilization, "orbital-civilization"}};
 constexpr std::array hulls{
     std::pair{HullAccess::Standard, "standard"},
     std::pair{HullAccess::InnerStrength, "inner-strength"},
@@ -56,6 +57,9 @@ QString race_setup_error(const EmpireSetup& setup)
     if (!keyFor(setup.hullAccess, hulls)) return "Unknown hull family.";
     if (setup.advancedRemoteMining && setup.basicRemoteMining)
         return "Advanced and Basic remote mining cannot both be selected.";
+    if (setup.primaryTrait == PrimaryRaceTrait::HabitatCivilization
+        && (setup.race == RacePreset::Radiotroph || setup.basicRemoteMining))
+        return "Orbital civilization requires a radiation-sensitive preset and cannot use Basic Remote Mining.";
     if (setup.factoriesPerTenThousand < kMinWorkforceRate || setup.factoriesPerTenThousand > kMaxWorkforceRate
         || setup.minesPerTenThousand < kMinWorkforceRate || setup.minesPerTenThousand > kMaxWorkforceRate)
         return "Factory and mine operation rates must each be between 5 and 25 per 10,000 colonists.";

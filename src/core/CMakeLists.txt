@@ -2,6 +2,7 @@ add_library(suns_core
     src/transport_lines.cpp
     src/campaign.cpp
     src/computer_player.cpp
+    src/computer_native.cpp
     src/computer_transport.cpp
     src/computer_military.cpp
     src/computer_stargates.cpp

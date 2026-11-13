@@ -26,9 +26,10 @@ pending drafts and packets recover it from their original Rename/Save
 descriptions; an ordinary Delete and following Save execute independently.
 The flag survives importing, saving and reopening the host inbox, which retains
 typed orders without display descriptions. Genuine v119/v49 fixtures cover both
-actions. Portable race files remain v3. The native civilization is still
-unavailable in campaign setup until its complete start and Computer acceptance
-pass; this format extension does not enable a partially implemented race.
+actions. Portable race files remain v3. Orbital Civilization is now available in
+Human/Computer campaign setup, race files and restart following real campaign
+acceptance. Shared format122/orders51 are unchanged; native colony transfers
+still require explicit orbital endpoints and ordinary command delivery.
 
 Save v122 / orders v51 add the researched native Citadel/Bastion hull identities
 to physical stations, received/pending fits, queue projects and exchanged orders.

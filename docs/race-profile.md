@@ -129,8 +129,9 @@ Environmental presets default to Generalist. Campaign creation can independently
 select **Stargate Specialist**, whose rules allow physical cargo/colonist gate
 transit and unlock paid Network and Infinity/Infinity orbital fittings. See
 [Stargate Specialist](stargate-specialist.md) for prerequisites, prices, endpoint
-constraints and Computer strategy. Habitat Civilization and Remote Logistics
-Specialist remain reserved, unavailable choices rather than placeholder bonuses.
+constraints and Computer strategy. **Habitat Civilization**, presented as
+**Orbital Civilization** in setup, is playable by Human and Computer. Remote
+Logistics Specialist remains reserved.
 
 The selected next-trait [design and acceptance plan](asymmetric-empires.md) is an
 Alternate Reality-inspired orbital civilization: station-bound population,
@@ -140,7 +141,7 @@ destruction kills all native residents remaining aboard; prior physical
 evacuation and paid hull replacement preserve their actual residents. The shared
 `UnloadAll` command delivers native colonists to their own inhabited station,
 subject to actual housing capacity; absent/full stations leave residents aboard.
-Economics remain prototype work; this is not yet a playable trait.
+Economics use the prototype balance described in that plan.
 The native population/cargo kernel is separate from ordinary habitats. Owned-orbit
 remote mining uses the world's shared mineral stock; native surface/innate mining
 is zero. The paid startup kernel budgets a basic mining fit, fuel, station and
@@ -148,8 +149,8 @@ stocks; narrow native MiniMiner/Robo-Mini-Miner access permits ordinary paid
 replacement manufacture without granting research levels. Custom starts with zero
 actual output reject atomically. Native surface factories/mines, their advanced
 forms, upgrades and reconstruction are unavailable in production/templates; stale
-rows retire without spending. Loading preserves the primary trait, and Restart
-refuses an unavailable civilization instead of changing it to Generalist.
+rows retire without spending. Loading and Restart preserve the primary trait;
+restart creates a new paid native capital rather than changing it to Generalist.
 An explicit New campaign with supported new empire settings remains available;
 failed creation/restart preserves the current save association and refusal status.
 The Orbital Construction
@@ -159,12 +160,15 @@ deployment is excluded from salvage. Prototype output uses station residents and
 Energy. Native radiation and paid 20/40/60 station screens now use stellar
 exposure and the race's maximum radiation tolerance; surface temperature/gravity
 and surface terraforming do not alter that dose. Annual casualties reduce real
-residents. Support and growth remain unfinished, so setup is still gated.
-Save v119 adds delayed native radiation-loss reports and also retains delivered station destruction before the first
-received fit and mining manifests credited in their receipt year. It
-does not enable this reserved identity in campaign
-setup or portable race files; the complete start and Human/Computer expansion
-acceptance in the design still applies.
+residents. Paid annual support, finite emergency kits and housing-limited growth
+use the same rules for both controllers. The default capital buys a protected
+Dock, receiver, one fueled basic miner and leaves 100 kt of each mineral with
+25,000 station residents. Blueprints for an orbital settler and surveyor are
+included; additional ships require ordinary manufacture. A surface-radiation-
+immune Radiotroph preset or BRM is explicitly incompatible, without rewriting
+the chosen settings. Portable race v3 uses `orbital-civilization`; save122 and
+orders51 retain their existing layouts and migration rules. Human/PBEM and
+actual Computer campaigns exercise paid replacement and second-colony founding.
 
 The Qt setup dialog calls `generate_campaign`; race mechanics and research
 validation live in the core and apply identically to every player.

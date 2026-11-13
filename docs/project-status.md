@@ -1,5 +1,64 @@
 # Project status and development handoff
 
+## PR #293 P2: keep paid exploration affordable — 13 November 2026
+
+[Review5888638178](https://github.com/kotrf/suns/pull/293#pullrequestreview-5888638178)
+on3c7fa83 finds one P2. The real Medium / Sparse seed2 campaign queues an88-I
+Miner Pair and has2.42 I at year6; no10-I scout appears through year161. The new
+actual-campaign regression fails before the fix on the missing scout departure.
+The received-state policy now budgets paid support, a current-rate construction
+runway and an exploration reserve where a full habitat would absorb mining.
+A one-module paid miner is the fallback; self-sustaining richer starts keep the
+pair. Seed2 completes its miner at year5 and scout at year6, with an actual flight
+and deterministic in-progress host reload. Existing17/42/123 still verify a paid,
+independently supplied second colony. See the [audit](audits/2026-11-13-native-start-economy.md).
+
+The native campaign suite passed in2.29 s. Complete GCC14.2/Qt6.12 Debug
+build and the combined stack's **134/134 CTest in173.13 s** passed. Native
+policy and campaign-test sources are identical in the #293 correction and
+the stacked slices; standalone #293 source CI runs131 tests.
+
+The user explicitly approved publishing #54/#55 including src/app/save_game.cpp,
+and future ordinary Suns! source/patch publication to kotrf/suns without repeated
+questions (MEM-37). The earlier blocker below is historical. Publish the #293
+correction first, then the separate sensor-post and drifting-object PRs on top.
+All three slices remain unmerged; GitHub supplies current heads and source CI.
+The review thread remains open for re-review/user-authorized merge. Main2912a0e,
+#53/#63 frozen, previous branches and work/ preserved. Formats stay unchanged by
+the correction (native122/51; sensor123/52; drifting124/52; race3).
+
+## #50 playable native campaigns; then #54 and #55 — 13 November 2026
+
+The user requested three tasks in order: #50 → #54 → #55, preserving frozen
+#53/#63. Main `2912a0e` contains merged #289, with exactly reviewed tree7707247.
+The final [Conversation verification](https://github.com/kotrf/suns/pull/289#issuecomment-6844896270)
+reports no new findings; [main CI43371923470](https://github.com/kotrf/suns/actions/runs/43371923470)
+has succeeded. Prior open-#289/gated checkpoints below are historical.
+
+Branch `codex/native-orbital-campaign-50` enables Orbital Civilization for Human
+and Computer campaign setup, independent race files and Restart. The existing
+paid capital kernel supplies residents, protected Dock/receiver, fueled miner
+and100/100/100 remaining stock; extra surveyor/settler blueprints add no ships.
+Radiotroph and BRM reject explicitly. The native AI uses ordinary received-state
+research/build/cargo/movement/mining/founding orders. It budgets annual support,
+the weakest mineral concentration and loaded-fleet travel, sends surplus miners
+to new colonies, and waits for fresh queues/mission acknowledgements.
+
+Actual Human/PBEM and Computer campaigns on seeds17/42/123 exercise replacement,
+paid second-colony founding, physical mining supply and deterministic host
+reload. Hidden stocks/environment cannot alter orders. Existing radiation,
+destruction, cargo, paid refit and genuine old-file tests remain active. Qt
+creation/restart and changing back to a surface civilization are covered.
+The first full run exposed an obsolete two-trait UI assertion; it now checks
+all three supported choices. Complete GCC14.2/Qt6.12 Debug build and final
+**131/131 CTest passed in176.76 s**. The new Qt capture was inspected. Formats
+remain122/51/race3 and UI estimates remain scalar. See [stage8](asymmetric-empires.md#implementation-stage-8-playable-native-campaigns).
+
+This slice is ready for review, not merged; GitHub is authoritative for PR/head/CI.
+#50 stays open for other traits, native military/upgrades and comparative balance.
+Continue the user's request with a separate #54 sensor-post slice, then #55
+unknown-object expansion. Keep the existing checkout, work/ and previous branches.
+
 ## #289 review P2: retain refits admitted before later cargo — 13 November 2026
 
 [Review 5883007746](https://github.com/kotrf/suns/pull/289#pullrequestreview-5883007746)

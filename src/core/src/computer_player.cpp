@@ -1,4 +1,5 @@
 #include "suns/orbital_habitats.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/computer_player.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/combat.hpp"
@@ -985,6 +986,9 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
 
     ComputerTurnPlan plan{{view.player, {}}, player->computer};
     std::string reason;
+    if (native_orbital_race(view.state,view.player)) {
+        plan_native_civilization(view,plan,reason);
+    } else {
     plan_research(view, plan, reason);
     // Commit only received, fully supplied colonies whose racial habitability
     // improves materially. Construction and operation use ordinary rules.
@@ -1109,8 +1113,10 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
         }
     }
     plan_orbital_bases(view, plan.orders, plan.nextState);
+    }
     // Materialize the same received-profile paths used by route_warp as normal
     // waypoints. Final arrival actions stay at their original destinations.
+    std::optional<GameState> nativeCargo;
     for (auto& order:plan.orders.orders) if (auto* move=std::get_if<MoveFleetOrder>(&order)) {
         if (!view.state.interstellarMediumEnabled || player->mediumKnowledge.empty()
             || move->clearRoute || move->targetFleet
@@ -1119,6 +1125,12 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
             [&](const auto& f) { return f.id==move->fleet; });
         if (original==view.state.fleets.end()) continue;
         auto fleet=*original;
+        if (player->race.primaryTrait==PrimaryRaceTrait::HabitatCivilization) {
+            if (!nativeCargo) nativeCargo=projected_cargo_order_state(view.state,plan.orders);
+            const auto loaded=std::find_if(nativeCargo->fleets.begin(),nativeCargo->fleets.end(),
+                [&](const auto& f){return f.id==fleet.id;});
+            if (loaded!=nativeCargo->fleets.end()) {fleet.colonists=loaded->colonists;fleet.minerals=loaded->minerals;}
+        }
         // Use the same confirmed initial service as Warp selection, including
         // an acknowledged loading programme currently at a received depot.
         budget_initial_depot_service(view.state,fleet);
