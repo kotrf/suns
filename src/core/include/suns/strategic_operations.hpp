@@ -17,6 +17,8 @@ namespace suns {
 // Equipment-only check: a travelling fleet may program work for a later arrival.
 [[nodiscard]] bool fleet_task_equipment_available(const GameState&, const Fleet&, FleetTask);
 // Planning validation uses received target knowledge, never hidden physical objects.
+// Pass the complete action to retain a named recovery target after coarse reports.
+[[nodiscard]] std::string fleet_work_order_error(const GameState&, const Fleet&, Position, const FleetArrivalAction&);
 [[nodiscard]] std::string fleet_work_order_error(const GameState&, const Fleet&, Position, FleetArrivalActionKind);
 [[nodiscard]] std::string fleet_task_name(FleetTask);
 void resolve_bombardments(GameState&, std::uint64_t);

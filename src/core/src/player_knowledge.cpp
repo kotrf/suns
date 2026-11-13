@@ -182,6 +182,7 @@ std::uint64_t stable_event_id(const PendingPlayerReport& report, PlayerId recipi
         const auto& x=*report.objectObservation; mix(x.id); mix(std::uint64_t(x.level));
         mix(x.kind ? std::uint64_t(*x.kind)+1 : 0);
         mix(std::bit_cast<std::uint64_t>(x.position.x)); mix(std::bit_cast<std::uint64_t>(x.position.y));
+        if(x.velocity) {mix(std::bit_cast<std::uint64_t>(x.velocity->x));mix(std::bit_cast<std::uint64_t>(x.velocity->y));}
     }
     if (report.mediumObservation) {
         const auto& x=*report.mediumObservation; mix(x.id); mix(std::uint64_t(x.level));
@@ -696,7 +697,18 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 if(report.kind==PlayerReportKind::ScientificData && current!=player.objectKnowledge.end()
                     && current->level==ObjectKnowledgeLevel::Studied) continue;
                 const bool upgraded=current==player.objectKnowledge.end() || object->level>current->level;
-                if(upgraded || (object->level==current->level && object->observedTurn>current->observedTurn)) {
+                const bool moving=object->kind==UnknownObjectKind::DriftingDerelict
+                    || (current!=player.objectKnowledge.end() && current->kind==UnknownObjectKind::DriftingDerelict);
+                if(moving && current!=player.objectKnowledge.end()) {
+                    // Classification accumulates; a moving position has its own
+                    // chronology. Late study must not rewind a newer fix, and a
+                    // fresh coarse detection must not pretend to be an old fix.
+                    const auto level=std::max(current->level,object->level);
+                    const auto kind=object->kind ? object->kind : current->kind;
+                    if(object->observedTurn>current->observedTurn
+                        || (object->observedTurn==current->observedTurn && object->uncertainty<current->uncertainty)) *current=*object;
+                    current->level=level;current->kind=kind;
+                } else if(upgraded || (object->level==current->level && object->observedTurn>current->observedTurn)) {
                     if(current==player.objectKnowledge.end()) player.objectKnowledge.push_back(*object);
                     else *current=*object;
                 }

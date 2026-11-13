@@ -23,7 +23,7 @@ namespace suns {
 namespace {
 QString description(const ObjectObservation& x,std::uint64_t turn)
 {
-    QString text=QString("Object X%1 — %2\n%3\nObserved year %4; received %5; age %6 years.\nPosition %7, %8 ±%9 ly.")
+    QString text=QString("Object X%1 — %2\n%3\nPosition observed year %4; received %5; age %6 years.\nLast reported position %7, %8 ±%9 ly.")
         .arg(x.id).arg(x.kind ? unknown_object_name(*x.kind) : "Unclassified physical contact")
         .arg(object_knowledge_name(x.level)).arg(qulonglong(x.observedTurn)).arg(qulonglong(x.receivedTurn))
         .arg(qulonglong(turn>x.observedTurn?turn-x.observedTurn:0))
@@ -31,6 +31,13 @@ QString description(const ObjectObservation& x,std::uint64_t turn)
     if(x.kind) text+=QString("\nStudy objective: %1 research points in %2, once per empire, after data delivery.")
         .arg(unknown_object_research_points(*x.kind)).arg(QString::fromStdString(research_field_name(unknown_object_research_field(*x.kind))));
     else text+="\nApproach with active scanners to classify; no contents or scientific value identified yet.";
+    if(x.kind==UnknownObjectKind::DriftingDerelict) {
+        text+=x.velocity ? QString("\nReported course: %1, %2 ly/year. Routes use an approximate intercept from this dated course.")
+            .arg(x.velocity->x,0,'f',2).arg(x.velocity->y,0,'f',2)
+            : "\nLatest fix is coarse; approach to obtain a fresh course.";
+        if(x.level==ObjectKnowledgeLevel::Studied)
+            text+="\nOne physical 5 kt architectural core exists galaxy-wide. Recover with active scanners and free hold; a ship can close the final locally detected distance using normal movement and fuel. Deliver to a populated colony: analyze for 80 Construction points or retain for +4 Construction research/year. Availability is confirmed at the site.";
+    }
     return text;
 }
 }
@@ -39,10 +46,10 @@ void MainWindow::installUnknownObjects()
     if(findChild<QDockWidget*>("unknownObjectsDock")) return;
     auto* dock=new QDockWidget("Unknown objects / expeditions",this); dock->setObjectName("unknownObjectsDock");
     auto* body=new QWidget(dock); auto* layout=new QVBoxLayout(body);
-    auto* hint=new QLabel("Received physical contacts only. Select a fleet and a row. Fly to the reported area, or arrive with Field research. Active scanners classify nearby objects; study within 20 ly (limited by sensor range) yields finite data, usable after delivery. Objects remain as landmarks. A delivered completed Compact remnant study also unlocks the optional Adaptive magnetosphere at Energy 18 / Construction 18; no specimen is consumed. A delivered completed Compact remnant study also unlocks the optional Adaptive magnetosphere at Energy 18 / Construction 18; no specimen is consumed. After the study report arrives, a scanner fleet with 5 kt of free hold can recover one finite physical specimen and bring it home.",body);
+    auto* hint=new QLabel("Received physical contacts only. Select a fleet and a row. Fly to the reported area, or arrive with Field research. Active scanners classify nearby objects; study within 20 ly (limited by sensor range) yields finite data after delivery. Moving contacts retain dated positions and courses; an estimated intercept can miss after delays. After a study report arrives, a scanner fleet with 5 kt of free hold can recover the site's one physical specimen and bring it home. Recovery can follow a locally detected moving target using normal movement and fuel. A delivered Compact remnant study also unlocks Adaptive magnetosphere at Energy 18 / Construction 18 without consuming a specimen.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* tree=new QTreeWidget(body); tree->setObjectName("unknownObjectContacts");
-    tree->setHeaderLabels({"Object","Knowledge","Observed / received","Position ± ly","Science objective"});
+    tree->setHeaderLabels({"Object","Knowledge","Position observed / received","Last reported position ± ly","Science objective"});
     tree->setRootIsDecorated(false); tree->header()->setSectionResizeMode(QHeaderView::ResizeToContents); layout->addWidget(tree);
     auto* buttons=new QHBoxLayout; auto* locate=new QPushButton("Show area",body);
     locate->setObjectName("locateUnknownObject");
@@ -55,11 +62,13 @@ void MainWindow::installUnknownObjects()
     else menuBar()->addAction(dock->toggleViewAction());
     const auto update=[this,tree,fly,study,locate,recover] {
         const auto* row=tree->currentItem(); const auto* x=row?known_unknown_object(state_,pendingOrders_.player,row->data(0,Qt::UserRole).toUInt()):nullptr;
-        const auto* f=selectedFleet(); locate->setEnabled(x); fly->setEnabled(x && f);
-        const auto received = f ? fleet_player_view(state_, *f) : Fleet{};
-        recover->setEnabled(x && f && x->level==ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,received) && fleet_cargo_capacity(state_,received)>=kScienceSampleMass);
-        recover->setToolTip("Requires a delivered completed study, active scanners at the landmark and 5 kt of free hold. One finite physical specimen exists per landmark for all empires; its current availability is unknown until arrival.");
-        study->setEnabled(x && f && x->level!=ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,*f)
+        const auto f=selectedFleetPlanningView();const bool mobile=f && f->outpost==OutpostKind::None;
+        locate->setEnabled(x); fly->setEnabled(x && mobile);
+        fly->setText(x && x->velocity ? "Fly to estimated intercept" : "Fly to reported area");
+        recover->setEnabled(x && mobile && x->level==ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,*f)
+            && fleet_cargo_used(state_,*f)+kScienceSampleMass<=fleet_cargo_capacity(state_,*f)+1e-6);
+        recover->setToolTip("Requires a delivered study, active scanners and 5 kt of free hold. A moving target can be acquired locally within 20 ly, limited by actual scanner conditions; normal movement and fuel apply. Availability is unknown until arrival.");
+        study->setEnabled(x && mobile && x->level!=ObjectKnowledgeLevel::Studied && fleet_has_scanner(state_,*f)
             && x->uncertainty<=object_study_radius(state_,*f));
         study->setToolTip("Needs active scanners when work runs. The fitted study radius must cover the reported uncertainty; classify the area first or use a stronger scanner. Maximum study radius: 20 ly.");
     };
@@ -95,12 +104,14 @@ void MainWindow::refreshUnknownObjects()
 }
 bool MainWindow::queueUnknownObjectApproach(UnknownObjectId id,bool study)
 {
-    const auto* fleet=selectedFleet(); const auto* x=known_unknown_object(state_,pendingOrders_.player,id);
-    if(!fleet || !x || (study && (x->level==ObjectKnowledgeLevel::Studied || !fleet_has_scanner(state_,*fleet)
+    const auto fleet=selectedFleetPlanningView(); const auto* x=known_unknown_object(state_,pendingOrders_.player,id);
+    if(!fleet || fleet->outpost!=OutpostKind::None || !x || (study && (x->level==ObjectKnowledgeLevel::Studied || !fleet_has_scanner(state_,*fleet)
         || x->uncertainty>object_study_radius(state_,*fleet)))) return false;
     FleetArrivalAction action; if(study) action.kind=FleetArrivalActionKind::FieldResearch;
-    replacePendingFleetMove(fleet->id,x->position,selectedFleetSuggestedWarpForRouteProgram(),action,
-        QString("%1 object X%2 at reported coordinates").arg(study?"Study":"Approach").arg(id));
+    const auto warp=selectedFleetSuggestedWarpForRouteProgram();
+    const auto point=object_approach_position(*x,state_.turn,fleet->position,warp);
+    replacePendingFleetMove(fleet->id,point,warp,action,
+        QString("%1 object X%2 at %3").arg(study?"Study":"Approach").arg(id).arg(x->velocity?"estimated intercept":"reported coordinates"));
     rebuildScene(); return true;
 }
 void MainWindow::renderKnownUnknownObjects()

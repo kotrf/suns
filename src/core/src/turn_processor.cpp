@@ -890,7 +890,9 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
     fleet.arrivalAction.reset();
     if (action.kind == FleetArrivalActionKind::None) return false;
     if (const auto task = arrival_work_task(action.kind); task && *task != FleetTask::RemoteMining) {
-        if (fleet_task_equipment_available(state, fleet, *task)) fleet.task = *task;
+        if (fleet_task_equipment_available(state, fleet, *task)) {
+            fleet.task = *task; fleet.recoveryTarget=*task==FleetTask::RecoverSample?action.recoveryTarget:0;
+        }
         return false;
     }
     // Keep a blocked colonization programme visible and retryable instead
@@ -2492,7 +2494,7 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
         } else if constexpr (std::is_same_v<T, SetMobileBaseOrder>) {
             (void)submit_mobile_base_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, SetFleetTaskOrder>) {
-            (void)submit_fleet_task_command(state, player, value.fleet, value.task);
+            (void)submit_fleet_task_command(state, player, value.fleet, value.task, value.recoveryTarget);
         } else if constexpr (std::is_same_v<T, SetFleetElectronicsOrder>) {
             (void)submit_electronics_command(state, player, value.fleet, value.program);
         } else if constexpr (std::is_same_v<T, RenameFleetOrder>) {
@@ -2975,6 +2977,8 @@ TurnResult TurnProcessor::process_with_events(
     resolve_wormhole_approaches(next);
     advance_survey_probes(next);
     prepare_visitor_navigation(next);
+    advance_unknown_objects(next);
+    prepare_science_sample_recovery(next,next.turn+1);
     advance_fleets(next, freight, movementFuel);
     advance_visitors(next);
     resolve_bombardments(next, next.turn + 1);
@@ -2986,7 +2990,8 @@ TurnResult TurnProcessor::process_with_events(
     observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint64_t>> researchByPlayer;
     for (auto& planet : next.planets) {
-        const auto contribution = std::uint64_t(run_colony_production(next, planet)) + retained_sample_research(next, planet);
+        const auto industry=run_colony_production(next,planet); // Pays native support before retained science.
+        const auto contribution = std::uint64_t(industry) + retained_sample_research(next, planet);
         const auto parallel = resonance_research(next, planet);
         for (std::size_t field = 0; field < parallel.size(); ++field) if (parallel[field]) {
             const auto* star = find_star(next, planet.star);

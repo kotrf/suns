@@ -9,6 +9,8 @@ inline constexpr std::size_t kMaximumScienceSamples = 64;
 [[nodiscard]] const char* science_sample_name(UnknownObjectKind);
 [[nodiscard]] std::uint32_t science_sample_research_points(UnknownObjectKind);
 [[nodiscard]] bool sample_observation_received(const GameState&, PlayerId, UnknownObjectId);
+// Bind only unambiguous received study/course evidence, never a nearby live body.
+[[nodiscard]] UnknownObjectId science_recovery_target(const GameState&, PlayerId, Position);
 [[nodiscard]] std::uint32_t retained_sample_research(const GameState&, const Planet&);
 bool transfer_science_sample(GameState&, PlayerId, const TransferScienceSampleOrder&);
 // Apply to a planning copy only when both fleet endpoints have current
@@ -16,5 +18,7 @@ bool transfer_science_sample(GameState&, PlayerId, const TransferScienceSampleOr
 bool preview_science_sample_transfer(GameState&, PlayerId, const TransferScienceSampleOrder&);
 bool process_science_sample(GameState&, PlayerId, const ProcessScienceSampleOrder&);
 void recover_science_samples(GameState&, Fleet&, std::uint64_t);
+// Onboard, locally detected rendezvous uses the normal movement/fuel phase.
+void prepare_science_sample_recovery(GameState&,std::uint64_t);
 bool unload_science_samples(GameState&, Planet&, Fleet&, std::uint64_t);
 } // namespace suns

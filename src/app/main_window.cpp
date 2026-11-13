@@ -12,6 +12,7 @@
 #include "suns/stations.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/science_samples.hpp"
 #include "suns/campaign.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/wormholes.hpp"
@@ -1534,6 +1535,12 @@ void MainWindow::replacePendingFleetMove(
     FleetArrivalAction arrivalAction,
     const QString& description)
 {
+    if(arrivalAction.kind==FleetArrivalActionKind::RecoverSample) {
+        if(!arrivalAction.recoveryTarget)arrivalAction.recoveryTarget=science_recovery_target(receivedPlayerState(),pendingOrders_.player,destination);
+        if(!arrivalAction.recoveryTarget || !sample_observation_received(receivedPlayerState(),pendingOrders_.player,arrivalAction.recoveryTarget)) {
+            statusBar()->showMessage("Select one studied object in Unknown objects before ordering specimen recovery.",5000);return;
+        }
+    }
     for (std::size_t index = 0; index < pendingOrders_.orders.size(); ++index) {
         if (const auto* move = std::get_if<MoveFleetOrder>(&pendingOrders_.orders[index]); move && move->fleet == fleet) {
             pendingOrders_.orders[index] = MoveFleetOrder{fleet, destination, warp, arrivalAction};

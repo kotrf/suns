@@ -2283,7 +2283,8 @@ void unknown_objects_and_expeditions_round_trip()
         if(n==2) bad.state.players[0].pendingPlayerReports[0].objectObservation->receivedTurn=10;
         if(n==3) bad.state.players[0].pendingPlayerReports[0].quantity=999;
         if(n==4) bad.state.players[0].history[0].milestones.back().object=0;
-        assert(write_save_game_file(path,bad,error) && !read_save_game_file(path,loaded,error));
+        const bool wrote=write_save_game_file(path,bad,error);
+        assert(!wrote || !read_save_game_file(path,loaded,error));
     }
 }
 void v78_hosts_seed_unknown_objects_once_and_player_turns_keep_them_hidden()

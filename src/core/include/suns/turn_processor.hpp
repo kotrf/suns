@@ -156,7 +156,7 @@ struct GateFleetOrder {
     bool resonant{}; // Optional paid xenocrystal pulse; doubles finite range only.
 };
 
-struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; };
+struct SetFleetTaskOrder { FleetId fleet{}; FleetTask task{FleetTask::None}; UnknownObjectId recoveryTarget{}; };
 struct SetFleetElectronicsOrder { FleetId fleet{}; ElectronicsProgram program; };
 struct OrbitalBaseOrder { FleetId fleet{}; OrbitalBaseCommand command; };
 struct SetMobileBaseOrder { FleetId fleet{}; MobileBaseProgram program; };

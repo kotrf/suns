@@ -6,6 +6,7 @@
 #include "suns/orbital_bases.hpp"
 #include "suns/wormholes.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/science_samples.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/production.hpp"
 #include "suns/mining.hpp"
@@ -168,7 +169,8 @@ bool route_tasks_valid(const FleetRouteProgram& program)
         if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
             || !production_template_valid(*action.colonyPlan))) return false;
         if (action.kind < FleetArrivalActionKind::None || action.kind > FleetArrivalActionKind::ScrapFleet) return false;
-        if (!mineral_load_policy_valid(action) || !transport_unload_valid(action)) return false;
+        if (!mineral_load_policy_valid(action) || !transport_unload_valid(action)
+            || action.recoveryTarget>0x7fffffffU || (action.kind!=FleetArrivalActionKind::RecoverSample && action.recoveryTarget)) return false;
         if (!std::isfinite(action.reserveFuel) || action.reserveFuel < 0 || action.reserveFuel > 1e12
             || (action.kind != FleetArrivalActionKind::SupplyOutpost && action.reserveFuel != 0)) return false;
         if ((action.kind == FleetArrivalActionKind::EnterWormhole) != (action.wormholeEndpoint != 0)) return false;
@@ -270,7 +272,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
         fleet.destination.reset();
         fleet.arrivalAction.reset();
         fleet.waypointQueue.clear();
-        fleet.task = FleetTask::None;
+        fleet.task = FleetTask::None; fleet.recoveryTarget=0;
         fleet.repeatOrders = false;
         fleet.routeTemplate.clear();
         fleet.targetFleet = 0;
@@ -289,7 +291,7 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
 
     // A travel programme replaces stationary work. Delayed movement commands
     // cancel mining only when they physically reach the fleet.
-    fleet.task = FleetTask::None;
+    fleet.task = FleetTask::None; fleet.recoveryTarget=0;
     fleet.arrivalAction = active_arrival_action(program.arrivalAction);
     fleet.waypointQueue = program.queuedWaypoints;
     fleet.repeatOrders = program.repeatOrders;
@@ -326,16 +328,17 @@ bool apply_route_program(GameState& state, Fleet& fleet, const FleetRouteProgram
     return true;
 }
 
-bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
+bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task, UnknownObjectId recoveryTarget=0)
 {
+    if(recoveryTarget>0x7fffffffU || (task!=FleetTask::RecoverSample && recoveryTarget))return false;
     if (task == FleetTask::None) {
-        fleet.task = FleetTask::None;
+        fleet.task = FleetTask::None; fleet.recoveryTarget=0;
         pause_probe(fleet); fleet.visitor = {};
         return true;
     }
     if (task != FleetTask::RemoteMining) {
         if (!strategic_task_available(state, fleet, task)) return false;
-        fleet.task = task;
+        fleet.task = task; fleet.recoveryTarget=task==FleetTask::RecoverSample?recoveryTarget:0;
         pause_probe(fleet); fleet.visitor = {};
         return true;
     }
@@ -352,7 +355,7 @@ bool apply_task_program(GameState& state, Fleet& fleet, FleetTask task)
         });
     if (!atMiningSite) return false;
     pause_probe(fleet); fleet.visitor = {};
-    fleet.task = FleetTask::RemoteMining;
+    fleet.task = FleetTask::RemoteMining; fleet.recoveryTarget=0;
     return true;
 }
 
@@ -379,7 +382,7 @@ FleetTelemetry authoritative_snapshot(const GameState& state, const Fleet& fleet
     result.xenocrystal = fleet.xenocrystal;
     result.visitor = fleet.visitor;
     result.probe = fleet.probe; result.probe.surveys.clear();
-    result.task = fleet.task;
+    result.task = fleet.task; result.recoveryTarget=fleet.task==FleetTask::RecoverSample?fleet.recoveryTarget:0;
     result.repeatOrders = fleet.repeatOrders;
     result.routeTemplate = fleet.routeTemplate;
     result.ships = fleet_ship_stacks(fleet);
@@ -727,7 +730,7 @@ Fleet fleet_player_view(const GameState& state, const Fleet& fleet)
     view.xenocrystal = telemetry.xenocrystal;
     view.visitor = telemetry.visitor;
     view.probe = telemetry.probe; view.probe.surveys.clear();
-    view.task = telemetry.task;
+    view.task = telemetry.task; view.recoveryTarget=telemetry.recoveryTarget;
     view.repeatOrders = telemetry.repeatOrders;
     view.routeTemplate = telemetry.routeTemplate;
     view.targetFleet = telemetry.targetFleet;
@@ -760,9 +763,16 @@ bool submit_fleet_route_command(
         destination, warp, arrivalAction, queuedWaypoints, false, repeatOrders, targetFleet};
     if (!route_tasks_valid(program) || !route_work_equipment_valid(state, *fleet, program)) return false;
     const auto knownFleet = fleet_player_view(state, *fleet);
-    if (!fleet_work_order_error(state, knownFleet, program.destination, program.arrivalAction.kind).empty()
+    const auto bindRecovery=[&](FleetArrivalAction& action,Position point) {
+        if(action.kind!=FleetArrivalActionKind::RecoverSample)return true;
+        if(!action.recoveryTarget)action.recoveryTarget=science_recovery_target(state,player,point);
+        return action.recoveryTarget && sample_observation_received(state,player,action.recoveryTarget);
+    };
+    if(!bindRecovery(program.arrivalAction,program.destination))return false;
+    for(auto& waypoint:program.queuedWaypoints)if(!bindRecovery(waypoint.arrivalAction,waypoint.destination))return false;
+    if (!fleet_work_order_error(state, knownFleet, program.destination, program.arrivalAction).empty()
         || std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(), [&](const auto& waypoint) {
-            return !fleet_work_order_error(state, knownFleet, waypoint.destination, waypoint.arrivalAction.kind).empty();
+            return !fleet_work_order_error(state, knownFleet, waypoint.destination, waypoint.arrivalAction).empty();
         })) return false;
     const auto validTarget = [&](FleetId candidateId) {
         if (candidateId == 0) return true;
@@ -825,17 +835,24 @@ bool submit_fleet_task_command(
     GameState& state,
     PlayerId player,
     FleetId fleetId,
-    FleetTask task)
+    FleetTask task, UnknownObjectId recoveryTarget)
 {
     const auto fleet = std::find_if(state.fleets.begin(), state.fleets.end(), [&](const Fleet& candidate) {
         return candidate.id == fleetId && candidate.owner == player;
     });
     if (fleet == state.fleets.end()) return false;
+    if(recoveryTarget>0x7fffffffU || (task!=FleetTask::RecoverSample && recoveryTarget))return false;
+    if(task==FleetTask::RecoverSample) {
+        const auto known=fleet_player_view(state,*fleet);
+        if(!recoveryTarget)recoveryTarget=known.task==FleetTask::RecoverSample && known.recoveryTarget
+            ? known.recoveryTarget : science_recovery_target(state,player,known.position);
+        if(!recoveryTarget || !sample_observation_received(state,player,recoveryTarget))return false;
+    }
 
     record_command_transmission(state,player,fleet->position,state.turn);
     const auto delivery = state.turn + communication_delay_turns(state, player, fleet->position);
     const auto delay = delivery - state.turn;
-    if (delay == 0) return apply_task_program(state, *fleet, task);
+    if (delay == 0) return apply_task_program(state, *fleet, task, recoveryTarget);
 
     fleet->pendingCommands.push_back(PendingFleetCommand{
         state.turn,
@@ -843,6 +860,7 @@ bool submit_fleet_task_command(
         {},
         task,
     });
+    fleet->pendingCommands.back().recoveryTarget=recoveryTarget;
     return true;
 }
 
@@ -885,7 +903,7 @@ void deliver_due_fleet_commands(GameState& state)
                 const auto& e = *pending.electronics;
                 apply_electronics_program(fleet,e.resumeTurn && e.resumeTurn <= state.turn ? ElectronicsProgram{} : e);
             }
-            else if (pending.task) apply_task_program(state, fleet, *pending.task);
+            else if (pending.task) apply_task_program(state, fleet, *pending.task, pending.recoveryTarget);
             else {
                 apply_route_program(state, fleet, pending.program);
                 if (pending.program.clearRoute) { stoppedThrough = pending.issuedTurn; stoppedDelivery = pending.deliveryTurn; }

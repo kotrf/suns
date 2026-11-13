@@ -11,7 +11,7 @@ void readSampleList(QDataStream& stream, std::vector<ScienceSample>& samples, bo
     if (!readCount(stream, count) || count > kMaximumScienceSamples) { markCorrupt(stream); return; }
     for (quint32 i = 0; i < count; ++i) {
         quint32 source{}; quint8 kind{}, retained{}; stream >> source >> kind >> retained;
-        if (!source || source > 0x7fffffffU || kind > quint8(UnknownObjectKind::CompactRemnant)
+        if (!source || source > 0x7fffffffU || kind > quint8(gReadSaveFormatVersion>=124?UnknownObjectKind::DriftingDerelict:UnknownObjectKind::CompactRemnant)
             || retained > 1 || (fleet && retained) || std::any_of(samples.begin(), samples.end(),
                 [&](const auto& s) { return s.source == source; })) { markCorrupt(stream); return; }
         samples.push_back({source, UnknownObjectKind(kind), retained != 0});

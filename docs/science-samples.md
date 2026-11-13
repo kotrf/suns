@@ -6,12 +6,27 @@ unchanged. Samples add something an expedition must actually bring home.
 
 ## Player workflow and prerequisites
 
-Study an Ancient probe or Compact remnant with active scanners and **Field
+Study an Ancient probe, Compact remnant or drifting derelict with active scanners and **Field
 research**, then wait for the completed study to reach headquarters. Select a
 cargo-capable scanner fleet and **Fly and recover specimen** in **Unknown objects /
 expeditions**, or use the corresponding arrival task in the route editor.
 Recovery requires physical arrival at the landmark, active scanners, that empire's
 delivered study and 5 kt of free shared hold. Ordinary command delay applies.
+
+Recovery is bound to the selected object's stable ID at authoring/transmission.
+Editing that named route validates the received study by ID and fitted equipment,
+even if a newer coarse report has removed the exact position/course.
+Route edits, command delay, radio silence, host reload and received telemetry
+retain that ID. A nearby studied/depleted/available object cannot replace it.
+Generic coordinate authoring needs one unambiguous received completed study;
+otherwise select the object explicitly in the journal. Old saved unbound tasks
+make fixed-coordinate attempts and cannot begin autonomous pursuit.
+
+A drifting target has a received course and an approximate intercept. Once
+locally detected within20 ly (limited by half the effective scanner range and
+medium), its recovery programme may rendezvous through the normal movement
+phase. It pays real fuel and transfers the core only at actual co-location.
+Explicit routes, silent sensors and other autonomous missions are preserved.
 
 There is one specimen per landmark for the whole galaxy. Recoveries resolve in
 FleetId order. The depleted source persists after analysis or destruction; later
@@ -28,6 +43,12 @@ transfer in **Science samples / artifacts**. At a populated owned colony choose:
 | --- | --- | --- |
 | Ancient archive | 64 Electronics RP once | +4 RP/year with Electronics as the active focus |
 | Compact-matter specimen | 96 Energy RP once | +4 RP/year with Energy as the active focus |
+| Architectural core (drifting derelict) | 80 Construction RP once | +4 RP/year with Construction as the active focus |
+
+Orbital Civilization receives, transfers and researches these physical assets at
+its surviving inhabited station, without surface population. Its retained
+instrument bonus pauses without Normal life support/output. Annual support is
+paid before evaluating that bonus; destroyed or empty stations cannot process it.
 
 Analysis consumes the specimen and dispatches ordinary scientific data from the
 colony; research is awarded only after delivery. Repeated orders cannot award it
@@ -85,7 +106,10 @@ return. It waits for cargo telemetry, returns to a reachable colony, unloads and
 analyzes. A confirmed empty recovery retires; hidden depletion does not affect
 planning. No direct research grant or privileged host-state access is added.
 
-Current formats are **save v93 / orders v37** (main after #227 was v92/v37).
+Current formats are **save v125 / orders v53 / race v3**. Drifting-kind physical
+and observation records carry a dated velocity payload; static records retain
+their old layout. The new sample kind uses the existing finite SAMP ledger.
+The completion slice used v93/v37 (main after #227 was v92/v37).
 The original sample slice, save **v86**, appended a bounded SAMP extension after v85, storing depletion,
 physical manifests and each confirmed/in-flight/loss/wormhole contact separately.
 Older saves start with empty manifests and unclaimed specimens. Host loading
@@ -126,7 +150,8 @@ original #59 requirements to implemented mechanics and tests, including the two
 completion fixes. This is a complete expedition/data/sample/disposition/unlock
 cycle. Further artifact kinds, technology families, observation rewards and
 physical mineral recovery from wrecks are optional extensions. #59 remains open
-until the completion PR is reviewed and merged; #63 is frozen and is not expanded.
+in that historical assessment; the completion PR was subsequently merged.
+Further moving-object work belongs to #55; #63 is frozen and is not expanded.
 
 ## Main audit follow-up (save v100 build)
 

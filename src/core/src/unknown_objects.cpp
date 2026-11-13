@@ -12,23 +12,64 @@
 
 namespace suns {
 const char* unknown_object_name(UnknownObjectKind kind)
-{ return kind==UnknownObjectKind::AncientProbe ? "Ancient probe" : "Compact remnant"; }
+{
+    switch(kind) {
+    case UnknownObjectKind::AncientProbe:return "Ancient probe";
+    case UnknownObjectKind::CompactRemnant:return "Compact remnant";
+    case UnknownObjectKind::DriftingDerelict:return "Drifting derelict";
+    }
+    return "Unknown object";
+}
 const char* object_knowledge_name(ObjectKnowledgeLevel level)
 { return level==ObjectKnowledgeLevel::Studied ? "Studied" : level==ObjectKnowledgeLevel::Classified ? "Classified" : "Unknown"; }
 ResearchField unknown_object_research_field(UnknownObjectKind kind)
-{ return kind==UnknownObjectKind::AncientProbe ? ResearchField::Electronics : ResearchField::Energy; }
+{ return kind==UnknownObjectKind::DriftingDerelict ? ResearchField::Construction
+    :kind==UnknownObjectKind::AncientProbe ? ResearchField::Electronics : ResearchField::Energy; }
 std::uint32_t unknown_object_research_points(UnknownObjectKind kind)
 { return kind==UnknownObjectKind::AncientProbe ? 24 : 32; }
 double object_study_radius(const GameState& s,const Fleet& fleet)
 { return fleet_has_scanner(s,fleet) ? std::min(20.0,std::max(1.0,fleet_sensor_range(s,fleet))) : 0; }
 bool object_observation_valid(const ObjectObservation& x)
 {
+    if(x.velocity && (x.kind!=UnknownObjectKind::DriftingDerelict
+        || !std::isfinite(x.velocity->x) || !std::isfinite(x.velocity->y)
+        || std::hypot(x.velocity->x,x.velocity->y)<=0 || std::hypot(x.velocity->x,x.velocity->y)>2))return false;
     return x.id && x.id<=0x7fffffffU && x.level<=ObjectKnowledgeLevel::Studied
         && std::isfinite(x.position.x) && std::isfinite(x.position.y)
         && std::isfinite(x.uncertainty) && x.uncertainty>=0 && x.uncertainty<=15
         && x.observedTurn && (!x.receivedTurn || x.receivedTurn>=x.observedTurn)
-        && (x.level==ObjectKnowledgeLevel::Detected ? !x.kind && x.uncertainty==15
-            : x.kind && *x.kind<=UnknownObjectKind::CompactRemnant && x.uncertainty==0);
+        && (x.level==ObjectKnowledgeLevel::Detected ? !x.kind && !x.velocity && x.uncertainty==15
+            : x.kind && *x.kind<=UnknownObjectKind::DriftingDerelict
+                && (x.kind==UnknownObjectKind::DriftingDerelict
+                    ? (x.uncertainty==0 && x.velocity) || (x.uncertainty==15 && !x.velocity)
+                    : x.uncertainty==0 && !x.velocity));
+}
+bool unknown_object_valid(const UnknownObject& x)
+{
+    if(!x.id || x.id>0x7fffffffU || x.kind>UnknownObjectKind::DriftingDerelict
+        || !std::isfinite(x.position.x) || !std::isfinite(x.position.y)
+        || !std::isfinite(x.velocity.x) || !std::isfinite(x.velocity.y))return false;
+    const auto speed=std::hypot(x.velocity.x,x.velocity.y);
+    return x.kind==UnknownObjectKind::DriftingDerelict ? speed>0 && speed<=2 : speed==0;
+}
+Position object_approach_position(const ObjectObservation& x,std::uint64_t turn,Position from,std::uint8_t warp)
+{
+    if(!x.velocity || x.kind!=UnknownObjectKind::DriftingDerelict)return x.position;
+    const auto age=double(turn>x.observedTurn?turn-x.observedTurn:0);
+    auto result=x.position;
+    for(unsigned iteration=0;iteration<3;++iteration) {
+        const auto travel=std::ceil(distance_between(from,result)/std::max(1.0,warp_distance(warp)));
+        result={x.position.x+x.velocity->x*(age+travel),x.position.y+x.velocity->y*(age+travel)};
+    }
+    return result;
+}
+bool object_course_contains(const ObjectObservation& x,Position point)
+{
+    if(x.kind!=UnknownObjectKind::DriftingDerelict || !x.velocity)return false;
+    const auto v=*x.velocity;const auto length=v.x*v.x+v.y*v.y;
+    if(!length)return false;
+    const auto t=((point.x-x.position.x)*v.x+(point.y-x.position.y)*v.y)/length;
+    return t>=0 && same_position(point,{x.position.x+v.x*t,x.position.y+v.y*t});
 }
 const ObjectObservation* known_unknown_object(const GameState& s,PlayerId owner,UnknownObjectId id)
 {
@@ -36,7 +77,7 @@ const ObjectObservation* known_unknown_object(const GameState& s,PlayerId owner,
     const auto found=std::find_if(player->objectKnowledge.begin(),player->objectKnowledge.end(),[&](const auto& x){return x.id==id;});
     return found==player->objectKnowledge.end() ? nullptr : &*found;
 }
-void generate_unknown_objects(GameState& s)
+void generate_unknown_objects(GameState& s,bool includeDrifting)
 {
     if(!s.unknownObjects.empty() || s.nextUnknownObjectId!=1 || s.stars.size()<16) return;
     std::mt19937_64 rng(s.galaxySeed ^ 0x554e4b4e4f574eULL);
@@ -48,6 +89,24 @@ void generate_unknown_objects(GameState& s)
             || std::any_of(s.unknownObjects.begin(),s.unknownObjects.end(),[&](const auto& x){return distance_between(x.position,p)<60;})) continue;
         s.unknownObjects.push_back({s.nextUnknownObjectId++,p,UnknownObjectKind(rng()%2)}); break;
     }
+    // Keep the old static sequence byte-for-byte. New campaigns alone may
+    // append one rare moving hulk; importing an older campaign does not seed it.
+    if(!includeDrifting || s.stars.size()<64 || s.galaxySeed%5)return;
+    std::mt19937_64 drift(s.galaxySeed ^ 0x4452494654494e47ULL);
+    const auto axis=[&](double extent){return (double(drift()%1'000'001)/1'000'000-0.5)*extent;};
+    for(unsigned attempt=0;attempt<2000;++attempt) {
+        const Position p{axis(s.wormholeRules.width),axis(s.wormholeRules.height)};
+        if(std::any_of(s.stars.begin(),s.stars.end(),[&](const auto& star){return distance_between(star.position,p)<30;})
+            || std::any_of(s.unknownObjects.begin(),s.unknownObjects.end(),[&](const auto& x){return distance_between(x.position,p)<60;}))continue;
+        const Position velocity{drift()%2?1.5:-1.5,drift()%2?0.5:-0.5};
+        s.unknownObjects.push_back({s.nextUnknownObjectId++,p,UnknownObjectKind::DriftingDerelict,false,velocity});break;
+    }
+}
+void advance_unknown_objects(GameState& s)
+{
+    for(auto& object:s.unknownObjects)if(object.kind==UnknownObjectKind::DriftingDerelict) {
+        object.position.x+=object.velocity.x;object.position.y+=object.velocity.y;
+    }
 }
 namespace {
 struct Receiver { Position position; double range{}; FleetId fleet{}; PlanetId colony{}; };
@@ -58,7 +117,10 @@ ObjectObservation observation(const UnknownObject& object,ObjectKnowledgeLevel l
     if(level==ObjectKnowledgeLevel::Detected) {
         result.position={std::floor(object.position.x/20)*20+10,std::floor(object.position.y/20)*20+10};
         result.uncertainty=15;
-    } else result.kind=object.kind;
+    } else {
+        result.kind=object.kind;
+        if(object.kind==UnknownObjectKind::DriftingDerelict)result.velocity=object.velocity;
+    }
     return result;
 }
 }

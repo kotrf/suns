@@ -18,7 +18,7 @@ using OrbitalStationId = std::uint32_t;
 using WormholeEndpointId = std::uint32_t;
 using UnknownObjectId = std::uint32_t;
 
-enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant };
+enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant, DriftingDerelict };
 enum class ObjectKnowledgeLevel : std::uint8_t { Detected, Classified, Studied };
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
@@ -601,6 +601,7 @@ struct UnknownObject {
     Position position;
     UnknownObjectKind kind{UnknownObjectKind::AncientProbe};
     bool sampleRecovered{}; // Host-only finite physical stock, including lost/consumed samples.
+    Position velocity; // ly/year; static landmarks retain zero velocity.
 };
 
 struct ScienceSample {
@@ -617,6 +618,7 @@ struct ObjectObservation {
     ObjectKnowledgeLevel level{ObjectKnowledgeLevel::Detected};
     std::optional<UnknownObjectKind> kind;
     std::uint64_t observedTurn{}, receivedTurn{};
+    std::optional<Position> velocity; // Classified, dated course; anonymous contacts expose none.
     bool operator==(const ObjectObservation&) const = default;
 };
 
@@ -1564,6 +1566,7 @@ struct FleetArrivalAction {
     PlanetId transportDestination{};
     std::uint32_t destinationTarget{}; // UnloadTransportLine only; zero preserves complete unloading.
     FleetId transportDestinationFleet{}; // Exact anchored receiver, alternative to transportDestination.
+    UnknownObjectId recoveryTarget{}; // RecoverSample only; zero is a legacy coordinate-only attempt.
     bool operator==(const FleetArrivalAction&) const = default;
 };
 
@@ -1702,6 +1705,7 @@ struct FleetTelemetry {
     std::uint32_t xenocrystal{};
     ProbeMission probe;
     VisitorMission visitor;
+    UnknownObjectId recoveryTarget{};
 };
 
 struct PendingFleetCommand {
@@ -1714,6 +1718,7 @@ struct PendingFleetCommand {
     std::optional<ProbeCommand> probe;
     std::optional<VisitorMission> visitor;
     std::optional<OrbitalBaseCommand> orbitalBase;
+    UnknownObjectId recoveryTarget{}; // Frozen with a RecoverSample task command at issue time.
 };
 
 struct PendingFleetTelemetry {
@@ -1765,6 +1770,7 @@ struct Fleet {
     ProbeMission probe;
     VisitorMission visitor;
     bool orbitalShipyardBirth{}; // Host provenance: hide a new remote ship until first received telemetry.
+    UnknownObjectId recoveryTarget{};
 };
 
 struct Minefield {

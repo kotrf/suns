@@ -574,15 +574,18 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             if(object && object->kind && object->level==ObjectKnowledgeLevel::Studied && !fleet.telemetry.destination
                 && fleet.telemetry.task==FleetTask::FieldResearch && fleet.telemetry.observedTurn>existing->issuedTurn) {
                 auto loaded = fleet; loaded.scienceSamples.push_back({object->id, object->kind.value(), false});
+                const auto point=object_approach_position(*object,state.turn+communication_delay_turns(state,view.player,fleet.telemetry.position),
+                    fleet.position,fleet.warp);
                 const bool canReturn = fleet_cargo_used(state, loaded) <= fleet_cargo_capacity(state, loaded) + 1e-6
                     && std::any_of(colonies.begin(), colonies.end(), [&](const auto* colony) {
                         const auto* star = find_star(state, colony->star);
-                        return star && route_warp(state, loaded, {object->position, star->position}).has_value();
+                        return star && route_warp(state, loaded, {point, star->position}).has_value();
                     });
                 if (canReturn) {
-                    const auto warp = route_warp(state, loaded, {object->position});
+                    const auto warp = route_warp(state, loaded, {point});
                     if (warp) {
-                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, object->position, *warp, {FleetArrivalActionKind::RecoverSample}});
+                        FleetArrivalAction action{FleetArrivalActionKind::RecoverSample};action.recoveryTarget=object->id;
+                        plan.orders.orders.push_back(MoveFleetOrder{fleet.id, point, *warp, action});
                         existing->issuedTurn = state.turn; existing->reviewTurn = review_turn(state, fleet);
                         explain(reason, "Recover specimen from received study X" + std::to_string(object->id));
                         continue;
@@ -759,6 +762,7 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
             }
         }
         const ObjectObservation* expedition=nullptr;
+        Position expeditionPoint;
         if(!colonizer && fleet_has_scanner(state,fleet) && fleet_active_sensors(fleet,state.turn) && depot) {
             const auto* player=find_player(state,view.player); const auto* depotStar=find_star(state,depot->star);
             for(const auto& object:player->objectKnowledge) {
@@ -766,15 +770,16 @@ void plan_expansion(const PlayerView& view, ComputerTurnPlan& plan, std::string&
                     || std::any_of(goals.begin(),goals.end(),[&](const auto& g) {
                     return g.kind==ComputerFleetGoalKind::InvestigateObject && g.target==object.id;
                 })) continue;
-                const auto candidate=route_warp(state,fleet,{object.position,depotStar->position}); if(!candidate) continue;
-                const auto score=(distance_between(fleet.position,object.position)+distance_between(object.position,depotStar->position))/warp_distance(*candidate);
+                const auto point=object_approach_position(object,state.turn+communication_delay_turns(state,view.player,fleet.telemetry.position),fleet.position,fleet.warp);
+                const auto candidate=route_warp(state,fleet,{point,depotStar->position}); if(!candidate) continue;
+                const auto score=(distance_between(fleet.position,point)+distance_between(point,depotStar->position))/warp_distance(*candidate);
                 if(score<best || (expedition && score==best && object.id<expedition->id)) {
-                    best=score; expedition=&object; warp=candidate;
+                    best=score; expedition=&object; expeditionPoint=point;warp=candidate;
                 }
             }
         }
         if(expedition) {
-            plan.orders.orders.push_back(MoveFleetOrder{fleet.id,expedition->position,*warp,{FleetArrivalActionKind::FieldResearch}});
+            plan.orders.orders.push_back(MoveFleetOrder{fleet.id,expeditionPoint,*warp,{FleetArrivalActionKind::FieldResearch}});
             goals.push_back({fleet.id,ComputerFleetGoalKind::InvestigateObject,expedition->id,state.turn,review_turn(state,fleet)});
             explain(reason,"Study received object X"+std::to_string(expedition->id)+" by fleet "+std::to_string(fleet.id));
         } else if (target) {
