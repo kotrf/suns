@@ -11,6 +11,8 @@ struct StationHullSpec {
     double armor;
     std::uint32_t cost;
     MineralCargo minerals;
+    OrbitalStationHullType tier{OrbitalStationHullType::OrbitalDock};
+    bool nativeOnly{};
 };
 inline constexpr std::uint16_t kMaximumColonyDefenses = 100;
 // Existing finite gate rules are unchanged for generalist empires.
@@ -38,6 +40,9 @@ struct StargateSpec {
     const GameState&, PlayerId, FleetId, PlanetId source, PlanetId destination, bool resonant = false,
     bool onboard = false);
 [[nodiscard]] const StationHullSpec& station_hull_spec(OrbitalStationHullType);
+[[nodiscard]] std::span<const StationHullSpec> station_hulls();
+[[nodiscard]] bool station_hull_at_least(OrbitalStationHullType, OrbitalStationHullType minimum);
+[[nodiscard]] bool station_hull_available(const GameState&, PlayerId, OrbitalStationHullType);
 [[nodiscard]] bool station_component_supported(ShipComponentType);
 [[nodiscard]] bool stargate_station_available(const GameState&, PlayerId, PlanetId);
 [[nodiscard]] bool stargate_transfer_valid(
@@ -58,6 +63,7 @@ bool preview_stargate_transfer(GameState&, PlayerId, const GateFleetOrder&);
 [[nodiscard]] std::uint8_t station_radiation_screen(const OrbitalStation&);
 [[nodiscard]] bool station_has_weapons(const OrbitalStation&);
 [[nodiscard]] bool station_construction_valid(const GameState&, const Planet&, const StationConstruction&);
+[[nodiscard]] bool station_refit_over_capacity(const GameState&, const Planet&, const StationConstruction&);
 bool queue_station_construction(GameState&, PlayerId, const QueueStationOrder&);
 bool complete_station_construction(GameState&, const Planet&, const StationConstruction&);
 [[nodiscard]] const OrbitalStation* known_orbital_station(const GameState&, PlayerId, PlanetId);

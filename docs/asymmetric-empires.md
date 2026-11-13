@@ -501,6 +501,65 @@ unchanged. Older native files load with no prepaid kits or invented annual
 receipts; the first real year pays from their real stock. Genuine v120 host/player
 fixtures from unmodified `99b47de` verify this migration and continuation.
 
+## Implementation stage 7: paid native station hulls
+
+This slice starts from merged #288 at main `3115091`. Native Human/Computer
+setup, portable import and restart remain gated until the actual campaign
+startup/expansion acceptance. These are initial Suns! balance values, not Stars!
+station statistics. Existing generic hulls and prices stay valid.
+
+| Native-only hull | Construction | Weapons / defense / electronics | Armor | Work | I / B / G | Residents |
+| --- | --- | --- | --- | --- | --- | --- |
+| Orbital Citadel | 6 | 8 / 8 / 6 | 2400 | 240 | 100 / 60 / 80 | 500,000 |
+| Orbital Bastion | 14 | 16 / 16 / 8 | 9000 | 750 | 300 / 240 / 270 | 2,000,000 |
+
+Research unlocks a choice, never a free station. The normal queue pays the full
+hull and every fitted component: with Bulk screen, Citadel costs **290 work,
+140/70/90 kt** and Bastion **800 work, 340/250/280 kt**. Shipyard/refueling are
+ordinary fit services; screens, weapons and electronics retain their access
+rules. The technology catalog lists the racial/research requirements and housing,
+and the station designer shows the received residents against the draft capacity.
+
+Citadel is structurally Starbase class; Bastion is Fortress class. Support and
+gate slot requirements use that explicit class, not appended enum values. This
+does not give the civilization Network or Infinity Gate access belonging to the
+Stargate Specialist. Native stations still die through the shared combat rules;
+more armor and slots improve defense without weakening total resident loss on
+destruction. Ordinary races cannot order either native hull at any research level.
+
+Refit completion retains station identity, every resident and the whole support
+record, including already paid kits. The old hull remains operational and its
+housing applies until all work and minerals are paid. Subsequent normal annual
+support, radiation and growth use the completed fit. Generic Dock / Starbase /
+Fortress housing remains 100,000 / 500,000 / 2,000,000 for existing assets.
+
+A smaller hull cannot be queued above its housing limit. Authoring uses received
+residents plus accepted cargo transfers, so evacuation can precede the refit in
+one turn without consulting hidden host changes. Execution rechecks physical
+housing. If residents outgrow an admitted shrink before completion, the queue
+pauses and retains its work/origins until evacuation makes space. Cheap UI
+estimates show the housing wait and withhold following completion dates; there
+is no future-year simulation or polling.
+
+The production preview replays local cargo and queue edits in submission order.
+Cargo before a refit changes admission; later accepted unloading preserves the
+already admitted refit and its queue index, while the final housing estimate
+shows the wait. Cancel/reorder therefore target the same row as the host. The
+shared order-boundary replay uses one state copy and does not calculate a year.
+
+Save **v122** / orders **v51** append the two hull identities without changing
+the native population/service record; race v3 is unchanged. All station channels
+use the same validity rules, including Bastion's 40-component fit. Genuine
+synthetic host/player v121 and orders v50 were written against unmodified
+`3115091` before implementation. Their actually paid generic Starbase, residents,
+reserve and queued generic Fortress survive migration with no conversion gift.
+Tests exercise paid upgrades, research access, housing waits/evacuation, all fit
+channels, delayed completion reports, PBEM round trips and the actual Qt designer.
+
+Next: actual Human/Computer campaign startup → replacement miner → paid second
+orbital colony, then enable the trait only after the full first-playable checks.
+#50 stays open; #53/#63 remain frozen.
+
 ## Direction supplied by the user
 
 - Population lives on orbital stations. Destruction of its inhabited station in
@@ -746,7 +805,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v121 / orders v50 / portable race v3. The native
+Current game formats are save v122 / orders v51 / portable race v3. The native
 population/mining foundation does not enable a playable race. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.

@@ -17,7 +17,7 @@ namespace suns {
 enum class SimpleProductionStatus {
     Approximate, AnnualRule, Nonlinear, Unavailable, NoProduction,
     MissingMinerals, MissingShipyard, EarlierUncertain, Overflow,
-    Skipped, InactiveAnnualRule,
+    Skipped, InactiveAnnualRule, HousingTooSmall,
 };
 
 struct SimpleProductionEstimate {
@@ -54,6 +54,7 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
         const bool automatic = item.automation != ProductionAutomation::None;
         const bool factoryBuild = item.kind == ProductionKind::Factory || item.kind == ProductionKind::AdvancedFactory;
         const bool mineBuild = item.kind == ProductionKind::Mine || item.kind == ProductionKind::AdvancedMine;
+        const bool housingBlocked = item.station && station_refit_over_capacity(state,planet,*item.station);
         const auto eligible = item.kind == ProductionKind::UpgradeFactory ? factories - std::min(factories, advancedFactories)
             : item.kind == ProductionKind::UpgradeMine ? mines - std::min(mines, advancedMines)
             : factoryBuild ? std::numeric_limits<std::uint32_t>::max() - factories
@@ -63,7 +64,7 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
         const bool skipped = (owner && !production_kind_applicable(owner->race.primaryTrait, item.kind))
             || item.kind == ProductionKind::Research || item.quantity == 0
             || (prefixKnown && !automatic && !eligible)
-            || (item.kind == ProductionKind::OrbitalStation && (item.station
+            || (item.kind == ProductionKind::OrbitalStation && !housingBlocked && (item.station
                 ? !station_construction_valid(state, planet, *item.station) : stationExists))
             || (item.kind == ProductionKind::LocalRadar && radar != PlanetaryRadarLevel::None)
             || (item.kind == ProductionKind::PlanetaryRadar && radar == PlanetaryRadarLevel::Full)
@@ -102,7 +103,8 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
         const bool validCost = std::isfinite(batchCost.ironium) && batchCost.ironium >= 0
             && std::isfinite(batchCost.boranium) && batchCost.boranium >= 0
             && std::isfinite(batchCost.germanium) && batchCost.germanium >= 0;
-        if (item.automation != ProductionAutomation::None) estimate.status = SimpleProductionStatus::AnnualRule;
+        if (housingBlocked) estimate.status = SimpleProductionStatus::HousingTooSmall;
+        else if (item.automation != ProductionAutomation::None) estimate.status = SimpleProductionStatus::AnnualRule;
         else if (!fixed) estimate.status = SimpleProductionStatus::Nonlinear;
         else if (!units || (item.kind == ProductionKind::ColonyShip
             && (!design || !ship_design_available_to_player(state, design->owner, *design))))
@@ -158,6 +160,7 @@ inline const char* simple_production_estimate_reason(SimpleProductionStatus stat
     case SimpleProductionStatus::Overflow: return "Completion exceeds the supported date range.";
     case SimpleProductionStatus::Skipped: return "Currently skipped without spending work or minerals under this civilization's rules and received technology, cap, radar or station conditions.";
     case SimpleProductionStatus::InactiveAnnualRule: return "Annual rule currently does no work at the defense cap; it remains active for future turns and conditions.";
+    case SimpleProductionStatus::HousingTooSmall: return "Evacuate residents before reducing station housing. The queued refit retains its paid work until everyone fits.";
     }
     return "No simple completion estimate.";
 }

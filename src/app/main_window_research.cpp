@@ -246,7 +246,7 @@ void MainWindow::refreshResearchPanel()
     if (!researchDialog_) return;
     if (!find_player(state_, pendingOrders_.player)) return;
     const auto received = make_player_view(state_, pendingOrders_.player).state;
-    const auto planned = planned_production_state(projected_cargo_order_state(received, pendingOrders_), pendingOrders_);
+    const auto planned = planned_production_state(received, pendingOrders_);
     const auto* player = find_player(planned, pendingOrders_.player);
     if (!player) return;
 

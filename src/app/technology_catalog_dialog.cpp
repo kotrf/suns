@@ -4,6 +4,7 @@
 #include "suns/hulls.hpp"
 #include "suns/equipment.hpp"
 #include "suns/stations.hpp"
+#include "suns/native_orbital.hpp"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QColor>
@@ -112,11 +113,12 @@ TechnologyCatalogDialog::TechnologyCatalogDialog(const GameState& received,Playe
         +(reference_hull(hull.type) ? "" : " (legacy)"),"Ship hulls",hullRequirements(hull),hullDescription(hull));};
     for(int type=int(ShipHullType::Scout);type<=int(ShipHullType::MiniColonyShip);++type)addHull(hull_spec(ShipHullType(type)));
     for(const auto& hull:reference_hulls())addHull(hull);
-    for(auto type:{OrbitalStationHullType::OrbitalDock,OrbitalStationHullType::Starbase,OrbitalStationHullType::Fortress}) {
-        const auto& spec=station_hull_spec(type);
-        add(OrbitalHull,int(type),QString::fromUtf8(spec.name),"Orbital hulls",QString("Construction %1").arg(spec.construction),
-            QString("Production %1\n%2\nBase armor %3\nSlots: %4 weapons / %5 armor-shields / %6 electronics\nStationary orbital hull; one station per planet. Shipyard / repair and refueling services are configurable.")
-            .arg(spec.cost).arg(minerals(spec.minerals)).arg(spec.armor).arg(spec.weapons).arg(spec.defenses).arg(spec.electronics));
+    for(const auto& spec:station_hulls()) {
+        add(OrbitalHull,int(spec.hull),QString::fromUtf8(spec.name),"Orbital hulls",
+            QString("%1Construction %2").arg(spec.nativeOnly ? "Orbital civilization only; " : "").arg(spec.construction),
+            QString("Production %1\n%2\nBase armor %3\nSlots: %4 weapons / %5 armor-shields / %6 electronics\nOrbital civilization housing: %7 residents\nStationary orbital hull; one station per planet. Shipyard / repair and refueling services are configurable.")
+            .arg(spec.cost).arg(minerals(spec.minerals)).arg(spec.armor).arg(spec.weapons).arg(spec.defenses).arg(spec.electronics)
+            .arg(qulonglong(native_orbital_capacity(spec.hull))));
     }
     for(unsigned id=0;id<=unsigned(kLastShipComponent);++id) {
         const auto component=ShipComponentType(id);const auto spec=component_spec(component);const auto* gate=stargate_spec(component);

@@ -15,8 +15,10 @@ std::uint64_t native_orbital_capacity(OrbitalStationHullType hull)
     // Prototype housing; independent habitats keep their own fixed capacity.
     switch (hull) {
     case OrbitalStationHullType::OrbitalDock: return 100'000;
-    case OrbitalStationHullType::Starbase: return 500'000;
-    case OrbitalStationHullType::Fortress: return 2'000'000;
+    case OrbitalStationHullType::Starbase:
+    case OrbitalStationHullType::NativeCitadel: return 500'000;
+    case OrbitalStationHullType::Fortress:
+    case OrbitalStationHullType::NativeBastion: return 2'000'000;
     }
     return 0;
 }

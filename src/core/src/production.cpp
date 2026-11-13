@@ -1,4 +1,5 @@
 #include "suns/production.hpp"
+#include "order_boundary_preview.hpp"
 #include "suns/production_template_edits.hpp"
 #include "suns/native_orbital_support.hpp"
 #include "suns/orbital_bases.hpp"
@@ -264,7 +265,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         else if (item.kind == ProductionKind::OrbitalStation) {
             stationExists = true;
             result.hasShipyard = !item.station || item.station->loadout.shipyard;
-            result.engineeringSupport=item.station && item.station->loadout.hull>=OrbitalStationHullType::Starbase
+            result.engineeringSupport=item.station && station_hull_at_least(item.station->loadout.hull,OrbitalStationHullType::Starbase)
                 && item.station->loadout.shipyard;
         }
         result.completions.push_back({item, origin, finishedBatch,
@@ -286,6 +287,9 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
         // Paid work stays queued, but completion also needs an operating colony.
         // Zero available work alone must not block a normally supplied station.
         if (native && planet.nativeOrbit.service != HabitatService::Normal) break;
+        // Residents can grow while a downgrade waits behind earlier work.
+        // Keep its paid work until evacuation makes the target housing fit.
+        if (queue[index].station && station_refit_over_capacity(state,planet,*queue[index].station)) break;
         const bool factoryBuild = industrialKind == ProductionKind::Factory || industrialKind == ProductionKind::AdvancedFactory;
         const bool mineBuild = industrialKind == ProductionKind::Mine || industrialKind == ProductionKind::AdvancedMine;
         if (industry_upgrade_kind(industrialKind) || factoryBuild || mineBuild) {
@@ -410,8 +414,11 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
 
 GameState planned_production_state(const GameState& state, const PlayerOrders& pending)
 {
-    auto result = planned_ship_design_state(state, pending);
-    for (std::size_t orderIndex = 0; orderIndex < pending.orders.size(); ++orderIndex) std::visit([&](const auto& value) {
+    // Start from received state, not an already cargo-projected state. Admission
+    // uses each order's boundary; later cargo affects final housing/stock but
+    // cannot retroactively erase an accepted project or shift queue indices.
+    return detail::project_order_boundary_state(planned_ship_design_state(state, pending), pending,
+        [&](GameState& result, std::size_t& orderIndex) { std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, SetResearchAllocationOrder> || std::is_same_v<T, SetResearchPlanOrder>) {
             // Forecast settings must follow the research orders accepted by End Turn.
@@ -480,8 +487,7 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
                 }
             }
         }
-    }, pending.orders[orderIndex]);
-    return result;
+    }, pending.orders[orderIndex]); });
 }
 
 } // namespace suns

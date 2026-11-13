@@ -4,6 +4,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/orbital_habitats.hpp"
+#include "suns/stations.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -57,7 +58,7 @@ bool engineering_station_available(const GameState& state,const Planet& planet)
                 return record.planetSnapshot->habitat->stationSupported;
     }
     return std::any_of(state.orbitalStations.begin(),state.orbitalStations.end(),[&](const auto& s) {
-        return s.planet==planet.id && s.owner==planet.owner && s.hull>=OrbitalStationHullType::Starbase
+        return s.planet==planet.id && s.owner==planet.owner && station_hull_at_least(s.hull,OrbitalStationHullType::Starbase)
             && s.damagePercent<100 && std::find(s.modules.begin(),s.modules.end(),OrbitalStationModule::Shipyard)!=s.modules.end();
     });
 }

@@ -79,7 +79,7 @@ QGroupBox* fittingGroup(const OrbitalStation& station, int group, int capacity, 
 
 QIcon stationIcon(OrbitalStationHullType hull)
 {
-    static std::array<QIcon, 3> icons;
+    static std::array<QIcon, std::size_t(kLastOrbitalStationHull)+1> icons;
     auto& icon = icons.at(std::size_t(hull));
     if (!icon.isNull()) return icon;
     for (int size : {32, 64, 160, 320}) {
@@ -89,11 +89,12 @@ QIcon stationIcon(OrbitalStationHullType hull)
         painter.setRenderHint(QPainter::Antialiasing);
         painter.scale(size / 100.0, size / 100.0);
         painter.translate(50, 50);
-        painter.setPen(QPen(QColor("#78bdcf"), 1.6));
+        painter.setPen(QPen(QColor(station_hull_spec(hull).nativeOnly ? "#bb9ce2" : "#78bdcf"), 1.6));
         painter.setBrush(QColor("#162e3d"));
         painter.drawEllipse(QPointF(), 32, 32);
-        const int arms = hull == OrbitalStationHullType::OrbitalDock ? 4
-            : hull == OrbitalStationHullType::Starbase ? 6 : 8;
+        const auto tier=station_hull_spec(hull).tier;
+        const int arms = tier == OrbitalStationHullType::OrbitalDock ? 4
+            : tier == OrbitalStationHullType::Starbase ? 6 : 8;
         for (int i = 0; i < arms; ++i) {
             painter.save();
             painter.rotate(360.0 * i / arms);
@@ -119,8 +120,8 @@ StationDetailsDialog::StationDetailsDialog(const OrbitalStation& station, std::u
 {
     setObjectName("stationDetailsDialog");
     setWindowTitle(QString("Station — %1").arg(QString::fromStdString(station.name)));
-    resize(860, station.hull == OrbitalStationHullType::OrbitalDock ? 500
-        : station.hull == OrbitalStationHullType::Starbase ? 600 : 740);
+    resize(860, station_hull_spec(station.hull).tier == OrbitalStationHullType::OrbitalDock ? 500
+        : station_hull_spec(station.hull).tier == OrbitalStationHullType::Starbase ? 600 : 740);
     setStyleSheet("QDialog#stationDetailsDialog, QWidget#stationFitDeck { background: #0b141e; color: #d6e5f2; }"
         "QLabel { color: #d6e5f2; }"
         "QGroupBox { color: #a9cadf; border: 1px solid #344b5b; border-radius: 4px; margin-top: 9px; padding-top: 9px; }"

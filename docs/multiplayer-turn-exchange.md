@@ -1,6 +1,6 @@
 # Multiplayer turn exchange
 
-Save v121 preserves the native station-population/mining kernel, its received/pending
+Save v122 preserves the native station-population/mining kernel, its received/pending
 evidence and independently received station destruction. Native colony history
 uses delivered colony state and fleet holds, so loss cannot leak through graphs
 or PBEM exports before its report. Native freight totals are credited in the
@@ -29,6 +29,15 @@ typed orders without display descriptions. Genuine v119/v49 fixtures cover both
 actions. Portable race files remain v3. The native civilization is still
 unavailable in campaign setup until its complete start and Computer acceptance
 pass; this format extension does not enable a partially implemented race.
+
+Save v122 / orders v51 add the researched native Citadel/Bastion hull identities
+to physical stations, received/pending fits, queue projects and exchanged orders.
+The full 40-slot Bastion fit survives every channel. Genuine v121 host/player
+files and v50 packets keep their old generic hulls, paid work, residents and
+support kits; no free hull conversion is performed. Housing checks at authoring
+use received residents and accepted cargo, while execution uses real residents.
+Paid completion remains unknown until its normal report arrives. Portable race
+files stay v3; all PBEM participants must use the same build.
 
 ## Prepare each player's race
 
@@ -94,7 +103,7 @@ The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 Save v31 introduced session mode, host inbox, player tokens, racial environment
 rules and projected observations; controller integration arrived in v67/orders
 v21. Earlier saves retain their legacy defaults. Current saves/orders are
-v121/v50; portable race files use their own v3 schema.
+v122/v51; portable race files use their own v3 schema.
 Multiplayer clients should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;
 a restart creates a new campaign identity.

@@ -73,13 +73,13 @@ void completeReference(TechnologyCatalogDialog& dialog,GameState state,bool capt
     auto* available=dialog.findChild<QCheckBox*>("technologyCatalogAvailableOnly");
     auto* details=dialog.findChild<QTextBrowser*>("technologyCatalogDetails");
     assert(list && search && category && available && details);
-    assert(list->topLevelItemCount()==41+3+int(kLastShipComponent)+1);
+    assert(list->topLevelItemCount()==41+5+int(kLastShipComponent)+1);
     std::set<std::pair<int,int>> identities;int hulls=0,orbital=0;
     for(int i=0;i<list->topLevelItemCount();++i){auto* item=list->topLevelItem(i);
         assert(identities.insert({item->data(0,Qt::UserRole).toInt(),item->data(0,Qt::UserRole+1).toInt()}).second);
         hulls+=item->data(0,Qt::UserRole).toInt()==0;orbital+=item->data(0,Qt::UserRole).toInt()==1;
         assert(item->flags().testFlag(Qt::ItemIsEnabled) && item->flags().testFlag(Qt::ItemIsSelectable));}
-    assert(hulls==41 && orbital==3 && !available->isChecked());
+    assert(hulls==41 && orbital==5 && !available->isChecked());
     hullMineralPrices(list,details);
     auto* nubian=entry(list,0,int(ShipHullType::Nubian));assert(nubian->text(2)=="Locked");
     list->setCurrentItem(nubian);assert(details->toPlainText().contains("Construction 26"));
@@ -95,9 +95,21 @@ void completeReference(TechnologyCatalogDialog& dialog,GameState state,bool capt
     dialog.refresh(make_player_view(state,1).state,1);
     assert(entry(list,0,int(ShipHullType::MiniMorph))->text(2)=="Available");
     assert(entry(list,0,int(ShipHullType::MetaMorph))->text(2)=="Available");
-    available->setChecked(false);search->clear();category->setCurrentText("Orbital hulls");assert(visible(list)==3);
+    available->setChecked(false);search->clear();category->setCurrentText("Orbital hulls");assert(visible(list)==5);
     list->setCurrentItem(entry(list,1,int(OrbitalStationHullType::Fortress)));
     assert(details->toPlainText().contains("Construction 16") && details->toPlainText().contains("12 weapons"));
+    auto* citadel=entry(list,1,int(OrbitalStationHullType::NativeCitadel));
+    auto* bastion=entry(list,1,int(OrbitalStationHullType::NativeBastion));
+    assert(citadel->text(2)=="Locked" && bastion->text(2)=="Locked");
+    const auto originalRace=state.players[0].race;
+    state.players[0].race.primaryTrait=PrimaryRaceTrait::HabitatCivilization;
+    state.players[0].technology.levels[std::size_t(ResearchField::Construction)]=6;
+    dialog.refresh(make_player_view(state,1).state,1);
+    assert(citadel->text(2)=="Available" && bastion->text(2)=="Locked");
+    list->setCurrentItem(citadel);
+    assert(details->toPlainText().contains("500000") && details->toPlainText().contains("Orbital civilization only"));
+    state.players[0].technology.levels.fill(26);state.players[0].race=originalRace;
+    dialog.refresh(make_player_view(state,1).state,1);
     state.players[0].race.primaryTrait=PrimaryRaceTrait::StargateSpecialist;
     dialog.refresh(make_player_view(state,1).state,1);
     category->setCurrentText("Station gates");assert(visible(list)==3);

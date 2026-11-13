@@ -61,6 +61,26 @@ generator against that revision, never the current v121 writer.
 | native-support-v120-host.suns | `d86f6d72e631af0c1be232db9a12cdea8124286e1c0f602b3535f32fcb299c55` |
 | native-support-v120-player.suns | `543dc451d4cf1d47bfdcf16a5b897b8c4737c3b58aea103c664bc5a5aa06d61c` |
 
+## Native hull migration fixtures
+
+`native_hulls_v121_writer.cpp` was compiled against the unmodified headers,
+core and writer at main `311509178aa9cb9a7f3858ea2154e7242b66aeca`, with
+GCC14.2 / Qt6.12 and QDataStream Qt6.4 encoding, before the hull changes.
+These are synthetic genuine save121/orders50 files, not renamed modern headers.
+Rebuild the generator against that revision, never current headers/libraries.
+
+The prepared capital has 500/500/500 raw stock before actual turns pay native
+support, assemble finite reserve, grow residents and complete a generic Starbase
+with Bulk screen. Host/player files and the order packet then carry a pending
+generic Fortress refit (550 work with that screen). Migration keeps the paid
+Starbase, residents, reserve, stock and old order identity; it grants no new hull.
+
+| Fixture | SHA-256 |
+| --- | --- |
+| native-hulls-v121-host.suns | `848f75280b320bcd255a3c800ddbdf19a19d6a92b8566def04cf88aa43ae4924` |
+| native-hulls-v121-player.suns | `ff62781f7035c224e754f6e8942ff0510e97628c811a7ee17e07df9bf1e2d216` |
+| native-hulls-v50.sunsorders | `48718452d43cb33fcaadd33a079c3bbb98350f71df13d9901d5477ef3cec82fd` |
+
 ## Population v111 follow-up fixture
 
 `population-v111.suns` was written by `population_v111_writer.cpp` compiled with

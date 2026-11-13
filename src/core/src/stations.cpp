@@ -32,7 +32,7 @@ const StargateSpec* station_stargate(const OrbitalStation& station)
 {
     const StargateSpec* result = nullptr;
     for (auto component : station.components) if (const auto* gate = stargate_spec(component)) {
-        if (result || station.hull < gate->minimumHull) return nullptr;
+        if (result || !station_hull_at_least(station.hull, gate->minimumHull)) return nullptr;
         result = gate;
     }
     return result;
@@ -47,17 +47,34 @@ bool stargate_component_available(const GameState& s, PlayerId owner, ShipCompon
         && technology_level(s, owner, ResearchField::Electronics) >= gate->electronics
         && technology_level(s, owner, ResearchField::Construction) >= gate->construction;
 }
-const StationHullSpec& station_hull_spec(OrbitalStationHullType hull)
+std::span<const StationHullSpec> station_hulls()
 {
     // Initial Suns! station balance, separate from the reference ship hulls.
-    static const std::array<StationHullSpec,3> specs{{
-        {OrbitalStationHullType::OrbitalDock,"Orbital Dock",0,2,2,2,400,24,{12,6,8}},
-        {OrbitalStationHullType::Starbase,"Starbase",9,6,6,4,1600,160,{70,40,60}},
-        {OrbitalStationHullType::Fortress,"Fortress",16,12,12,6,6000,500,{200,160,180}},
+    static const std::array<StationHullSpec,5> specs{{
+        {OrbitalStationHullType::OrbitalDock,"Orbital Dock",0,2,2,2,400,24,{12,6,8},OrbitalStationHullType::OrbitalDock},
+        {OrbitalStationHullType::Starbase,"Starbase",9,6,6,4,1600,160,{70,40,60},OrbitalStationHullType::Starbase},
+        {OrbitalStationHullType::Fortress,"Fortress",16,12,12,6,6000,500,{200,160,180},OrbitalStationHullType::Fortress},
+        {OrbitalStationHullType::NativeCitadel,"Orbital Citadel",6,8,8,6,2400,240,{100,60,80},OrbitalStationHullType::Starbase,true},
+        {OrbitalStationHullType::NativeBastion,"Orbital Bastion",14,16,16,8,9000,750,{300,240,270},OrbitalStationHullType::Fortress,true},
     }};
+    return specs;
+}
+const StationHullSpec& station_hull_spec(OrbitalStationHullType hull)
+{
+    const auto specs = station_hulls();
     const auto i = static_cast<std::size_t>(hull);
     if (i >= specs.size()) throw std::invalid_argument("Unknown station hull");
     return specs[i];
+}
+bool station_hull_at_least(OrbitalStationHullType hull, OrbitalStationHullType minimum)
+{ return station_hull_spec(hull).tier >= station_hull_spec(minimum).tier; }
+bool station_hull_available(const GameState& s, PlayerId owner, OrbitalStationHullType hull)
+{
+    if (unsigned(hull) > unsigned(kLastOrbitalStationHull)) return false;
+    const auto* player = find_player(s, owner);
+    const auto& spec = station_hull_spec(hull);
+    return player && (!spec.nativeOnly || native_orbital_race(s,owner))
+        && technology_level(s,owner,ResearchField::Construction) >= spec.construction;
 }
 bool station_component_supported(ShipComponentType component)
 {
@@ -70,14 +87,14 @@ bool station_component_supported(ShipComponentType component)
 }
 bool station_loadout_valid(const StationLoadout& fit)
 {
-    if (static_cast<unsigned>(fit.hull) > static_cast<unsigned>(OrbitalStationHullType::Fortress)) return false;
+    if (static_cast<unsigned>(fit.hull) > static_cast<unsigned>(kLastOrbitalStationHull)) return false;
     const auto& h = station_hull_spec(fit.hull);
     if (fit.components.size() > std::size_t(h.weapons+h.defenses+h.electronics)) return false;
     unsigned weapons=0, defenses=0, electronics=0;
     for (auto c : fit.components) {
         if (static_cast<unsigned>(c) > static_cast<unsigned>(kLastShipComponent)
             || !station_component_supported(c)) return false;
-        if (const auto* gate = stargate_spec(c); gate && fit.hull < gate->minimumHull) return false;
+        if (const auto* gate = stargate_spec(c); gate && !station_hull_at_least(fit.hull,gate->minimumHull)) return false;
         const auto kind = component_spec(c).kind;
         if (kind == ShipComponentKind::BeamWeapon || kind == ShipComponentKind::Torpedo) ++weapons;
         else if (kind == ShipComponentKind::Armor || kind == ShipComponentKind::Shield
@@ -95,7 +112,7 @@ bool station_loadout_available(const GameState& s, PlayerId owner, const Station
 {
     const auto* p = find_player(s,owner);
     return p && station_loadout_valid(fit)
-        && p->technology.levels[std::size_t(ResearchField::Construction)] >= station_hull_spec(fit.hull).construction
+        && station_hull_available(s,owner,fit.hull)
         && std::all_of(fit.components.begin(),fit.components.end(),[&](auto c) {
             if (radiation_screen_protection(c) && !native_orbital_race(s,owner)) return false;
             if (stargate_spec(c)) return stargate_component_available(s, owner, c);
@@ -251,6 +268,12 @@ std::uint8_t station_radiation_screen(const OrbitalStation& s)
 }
 bool station_has_weapons(const OrbitalStation& s)
 { return std::any_of(s.components.begin(),s.components.end(),[](auto c) { return component_spec(c).weaponPower > 0; }); }
+bool station_refit_over_capacity(const GameState& s, const Planet& p, const StationConstruction& work)
+{
+    const auto* station = native_orbital_station(s,p);
+    return station && work.refitStation == station->id && station_loadout_valid(work.loadout)
+        && p.nativeOrbit.population > native_orbital_capacity(work.loadout.hull);
+}
 bool station_construction_valid(const GameState& s, const Planet& p, const StationConstruction& work)
 {
     if (orbital_base_at(s, p.id)) return false;

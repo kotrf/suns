@@ -326,6 +326,27 @@ void native_surface_rows_preserve_fixed_estimates_and_row_indices()
     assert(uncertain[1].status == SimpleProductionStatus::Skipped);
     assert(uncertain[2].status == SimpleProductionStatus::EarlierUncertain);
 }
+void native_housing_wait_is_not_a_free_skip_or_a_promised_completion()
+{
+    auto state = test::empty_native_orbital_start();
+    assert(initialize_native_orbital_start(state,1,state.planets.front().id,native_orbital_start_budget()));
+    state.players.front().technology.levels[std::size_t(ResearchField::Construction)]=14;
+    auto& planet=state.planets.front();
+    const auto station=planet.nativeOrbit.station;
+    const StationLoadout bastion{OrbitalStationHullType::NativeBastion};
+    assert(complete_station_construction(state,planet,{bastion,station}));
+    ProductionItem shrink{ProductionKind::OrbitalStation,17};
+    shrink.station=StationConstruction{{OrbitalStationHullType::NativeCitadel},station};
+    const ProductionItem miner{ProductionKind::ColonyShip,153,state.shipDesigns.front().id};
+    planet.nativeOrbit.population=500'001;
+    const auto waiting=simple_production_estimates(state,planet,{shrink,miner},100,{1000,1000,1000},true);
+    assert(waiting[0].status==SimpleProductionStatus::HousingTooSmall && waiting[0].remainingWork==17);
+    assert(!waiting[0].completionTurn && !waiting[0].skippedQuantity);
+    assert(waiting[1].status==SimpleProductionStatus::EarlierUncertain && !waiting[1].completionTurn);
+    planet.nativeOrbit.population=499'000;
+    const auto fits=simple_production_estimates(state,planet,{shrink,miner},100,{1000,1000,1000},true);
+    assert(fits[0].completionTurn==state.turn+1 && fits[1].completionTurn==state.turn+2);
+}
 int main(int argc, char** argv)
 {
     if (argc == 2 && std::string(argv[1]) == "native") { native_surface_rows_preserve_fixed_estimates_and_row_indices(); return 0; }
@@ -341,4 +362,5 @@ int main(int argc, char** argv)
     invalid_stations_are_free_skips_and_do_not_create_a_shipyard();
     free_skips_never_restore_an_uncertain_prefix();
     native_surface_rows_preserve_fixed_estimates_and_row_indices();
+    native_housing_wait_is_not_a_free_skip_or_a_promised_completion();
 }
