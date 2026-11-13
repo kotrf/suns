@@ -53,7 +53,8 @@ std::optional<PlanetEnvironment> next_terraforming_environment(
         return std::tuple{race_habitability(empire->race, environment,
             technology_level(state, player, ResearchField::Biology)), -outside, -displacement};
     };
-    auto bestScore = score(planet.environment);
+    const auto currentScore = score(planet.environment);
+    auto bestScore = currentScore;
     std::optional<PlanetEnvironment> best;
     for (int axis = 0; axis < 3; ++axis) {
         if (maximum[axis] == 0) continue;
@@ -70,6 +71,21 @@ std::optional<PlanetEnvironment> next_terraforming_environment(
         else candidate.radiation = static_cast<std::uint8_t>(value);
         const auto candidateScore = score(candidate);
         if (candidateScore > bestScore) { bestScore = candidateScore; best = candidate; }
+        else if (axis == 0 && !best && candidateScore == currentScore) {
+            const auto& controller = planet.engineering;
+            if (controller.kind != PlanetaryEngineeringKind::ClimateStabilizer
+                || !controller.operational || controller.strength == 0
+                || controller.work != engineering_work(controller.kind)
+                || operating[0] != controller.targetTemperature) continue;
+            // The controller holds a flat temperature until raw conditions pass
+            // target +/- strength. Pay each ordinary step across that plateau
+            // only if the first useful exit is reachable under the same limits.
+            const int direction = value - current[0];
+            const int exit = int(controller.targetTemperature) + direction * (int(controller.strength) + 1);
+            const int bound = std::clamp(original[0] + direction * maximum[0], 0, 100);
+            if (exit >= 0 && exit <= 100 && (direction > 0 ? exit <= bound : exit >= bound))
+                best = candidate; // A later axis with an immediate improvement still takes priority.
+        }
     }
     return best;
 }

@@ -209,6 +209,14 @@ the controller exposes the accumulated ordinary changes without drift. Stellar
 variability keeps its existing separate habitability modifier; this is surface
 climate control rather than a change to the star.
 
+When several raw temperatures yield the same controlled temperature, ordinary
+terraforming can pay for those intermediate points if an improvement beyond the
+plateau is reachable under its existing technology/natural-axis limits. Manual
+batches, annual rules and received UI admission share this choice; every point
+retains its normal cost. An unreachable exit does not consume production, and
+immediately useful changes to other axes take priority. The exit check is scalar
+arithmetic, with no additional simulation or search.
+
 The engineering window provides a target spin box and a maximum-correction
 control. Its effect preview uses received evidence and accepted pending orders
 without advancing future years. Paid progress, milestones, operation and target

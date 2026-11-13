@@ -8,6 +8,69 @@ using namespace suns;
 using E=PlanetaryEngineeringKind;using A=EngineeringAction;using K=ProductionKind;
 namespace {
 bool near(double a,double b){return std::abs(a-b)<1e-6;}
+GameState plateau_fixture(bool cool=false)
+{
+    auto s=test::climate_fixture();test::finish_climate(s,cool?54:46);
+    auto& p=s.planets.front();
+    assert(apply_planetary_engineering_order(s,p,{1,E::ClimateStabilizer,A::SetOutput,3,std::uint8_t(cool?54:46)}));
+    p.environment.temperature=cool?55:45;p.naturalEnvironment=p.environment;p.observedHabitability.reset();
+    set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+    return s;
+}
+void paid_terraforming_crosses_the_active_controllers_plateau()
+{
+    for(bool cool:{false,true}) {
+        auto s=plateau_fixture(cool);const auto initial=s.planets.front().environment.temperature;
+        const auto natural=s.planets.front().naturalEnvironment;
+        assert(current_planet_habitability(s,s.planets.front(),s.turn)==96);
+        const PlayerOrders first{1,{QueueProductionBatchOrder{1,K::Terraforming}}};
+        const auto next=TurnProcessor{}.process(s,{first});
+        assert(next.planets.front().environment.temperature==initial+(cool?-1:1));
+        assert(current_planet_habitability(next,next.planets.front(),next.turn)==96);
+        assert(next.planets.front().productionQueue.empty());
+        const auto projected=planned_production_state(make_player_view(s,1).state,first);
+        assert(projected.planets.front().productionQueue.size()==1 && s.planets.front().environment.temperature==initial);
+        const auto potential=terraforming_potential(s,1,s.planets.front());
+        assert(potential.environment.temperature==(cool?47:53) && engineered_environment(potential).temperature==50);
+        s=TurnProcessor{}.process(next,{{1,{QueueProductionBatchOrder{1,K::Terraforming,7}}}});
+        const auto& p=s.planets.front();assert(p.environment.temperature==(cool?47:53));
+        assert(p.naturalEnvironment->temperature==natural->temperature && engineered_environment(p).temperature==50);
+        assert(p.engineering.strength==3 && p.engineering.targetTemperature==(cool?54:46));
+        assert(current_planet_habitability(s,p,s.turn)==100 && !next_terraforming_environment(s,1,p));
+    }
+}
+void plateau_progress_respects_limits_costs_and_other_axes()
+{
+    auto s=plateau_fixture();
+    s.planets.front().population=4000;s.planets.front().industry=0;
+    s=TurnProcessor{}.process(s,{{1,{QueueProductionBatchOrder{1,K::Terraforming}}}});
+    assert(s.planets.front().environment.temperature==45 && s.planets.front().productionQueue.size()==1);
+    assert(s.planets.front().productionQueue.front().remainingCost>0 && s.planets.front().productionQueue.front().remainingCost<kTerraformingCost);
+    for(unsigned year=0;year<10 && !s.planets.front().productionQueue.empty();++year)s=TurnProcessor{}.process(s,{});
+    assert(s.planets.front().environment.temperature==46 && s.planets.front().productionQueue.empty());
+    auto automatic=plateau_fixture();
+    automatic=TurnProcessor{}.process(automatic,{{1,{QueueProductionBatchOrder{1,K::Terraforming,10,ProductionAutomation::MaxTerraform}}}});
+    assert(automatic.planets.front().environment.temperature==53 && engineered_environment(automatic.planets.front()).temperature==50);
+    automatic=TurnProcessor{}.process(automatic,{});assert(automatic.planets.front().environment.temperature==53);
+    auto priority=plateau_fixture();priority.planets.front().environment.gravity=49;
+    const auto immediate=next_terraforming_environment(priority,1,priority.planets.front());
+    assert(immediate && immediate->gravity==50 && immediate->temperature==45);
+    auto limited=plateau_fixture();auto& p=limited.planets.front();
+    assert(apply_planetary_engineering_order(limited,p,{1,E::ClimateStabilizer,A::SetOutput,10,55}));
+    limited.players.front().race.habitableTemperature={60,80};
+    assert(!next_terraforming_environment(limited,1,p)); // Exit66 exceeds natural45 + limit15.
+    limited=TurnProcessor{}.process(limited,{{1,{QueueProductionBatchOrder{1,K::Terraforming}}}});
+    assert(limited.planets.front().environment.temperature==45 && limited.planets.front().productionQueue.empty());
+    auto capped=plateau_fixture();capped.players.front().race.habitableTemperature={99,100};
+    capped.planets.front().environment.temperature=95;capped.planets.front().naturalEnvironment=capped.planets.front().environment;
+    assert(apply_planetary_engineering_order(capped,capped.planets.front(),{1,E::ClimateStabilizer,A::SetOutput,10,98}));
+    assert(!next_terraforming_environment(capped,1,capped.planets.front())); // No progress past raw100.
+    auto old=plateau_fixture();old.planets.front().naturalEnvironment->temperature=80;
+    const auto undo=next_terraforming_environment(old,1,old.planets.front());
+    assert(undo && undo->temperature==46); // Older out-of-band work may still move toward its baseline.
+    auto off=plateau_fixture();assert(apply_planetary_engineering_order(off,off.planets.front(),{1,E::ClimateStabilizer,A::SetOutput,0,46}));
+    assert(next_terraforming_environment(off,1,off.planets.front())->temperature==46);
+}
 void paid_sixty_year_project_uses_real_host_turns_and_milestones()
 {
     auto s=test::climate_fixture();const auto stocks=s.planets.front().minerals;MineralCargo minedTotal;
@@ -128,6 +191,8 @@ void computer_uses_received_climate_evidence_and_ordinary_paid_orders()
 }
 int main()
 {
+    paid_terraforming_crosses_the_active_controllers_plateau();
+    plateau_progress_respects_limits_costs_and_other_axes();
     paid_sixty_year_project_uses_real_host_turns_and_milestones();
     interruption_controls_and_terraforming_keep_the_natural_baseline();
     capture_preserves_settings_and_requires_the_new_owners_technology();

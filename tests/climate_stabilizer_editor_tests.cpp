@@ -16,6 +16,7 @@ struct MainWindowTestAccess {
     }
     static const PlayerOrders& orders(const MainWindow& w){return w.pendingOrders_;}
     static const GameState& state(const MainWindow& w){return w.state_;}
+    static bool canTerraform(MainWindow& w){w.refreshProductionQueue();return w.productionControls_.canTerraform;}
     static void hidden(MainWindow& w) {
         w.state_.planets.front().engineering.targetTemperature=77;w.state_.planets.front().minerals={};
         w.state_.orbitalStations.clear();refresh_planetary_engineering(w.state_);w.rebuildScene();
@@ -25,7 +26,7 @@ struct MainWindowTestAccess {
 }
 int main(int argc,char** argv)
 {
-    QApplication app(argc,argv);MainWindow w;w.installPlanetaryEngineering();MainWindowTestAccess::load(w,test::climate_fixture());
+    QApplication app(argc,argv);MainWindow w;w.installUiPolish();w.installProductionQueue();w.installPlanetaryEngineering();MainWindowTestAccess::load(w,test::climate_fixture());
     auto* kind=w.findChild<QComboBox*>("engineeringKind");auto* target=w.findChild<QSpinBox*>("engineeringTargetTemperature");
     auto* output=w.findChild<QSpinBox*>("engineeringOutput");auto* start=w.findChild<QPushButton*>("engineeringStart");
     auto* effect=w.findChild<QLabel*>("engineeringEffect");auto* status=w.findChild<QLabel*>("engineeringStatus");
@@ -56,4 +57,14 @@ int main(int argc,char** argv)
     auto locked=test::climate_fixture();locked.players.front().technology.levels[std::size_t(ResearchField::Biology)]=17;
     MainWindowTestAccess::load(w,locked);kind->setCurrentIndex(kind->findData(int(E::ClimateStabilizer)));
     assert(!start->isEnabled() && status->text().contains("Biology 18"));
+    auto plateau=test::climate_fixture();test::finish_climate(plateau,46);
+    auto& p=plateau.planets.front();
+    assert(apply_planetary_engineering_order(plateau,p,{1,E::ClimateStabilizer,EngineeringAction::SetOutput,3,46}));
+    p.environment.temperature=45;p.naturalEnvironment=p.environment;p.observedHabitability.reset();
+    MainWindowTestAccess::load(w,plateau);
+    assert(MainWindowTestAccess::canTerraform(w));
+    assert(MainWindowTestAccess::state(w).planets.front().environment.temperature==45);
+    assert(apply_planetary_engineering_order(plateau,p,{1,E::ClimateStabilizer,EngineeringAction::SetOutput,10,55}));
+    plateau.players.front().race.habitableTemperature={60,80};
+    MainWindowTestAccess::load(w,plateau);assert(!MainWindowTestAccess::canTerraform(w));
 }

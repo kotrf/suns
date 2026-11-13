@@ -31,3 +31,30 @@ plus frozen owner and foreign evidence. Complete GCC14.2/Qt6.12 Debug build, fin
 This slice awaits review; do not merge until reviewed and authorized. #56 remains
 open for ocean/atmosphere, system projects and the separately discussed radical
 path. #53/#63 stay frozen; existing checkout, work/ and earlier branches preserved.
+
+## PR297 review P2 — paid terraforming across a controlled plateau
+
+[Review5898683448](https://github.com/kotrf/suns/pull/297#pullrequestreview-5898683448)
+on a67bfd6 found that a completed active controller could prevent ordinary
+terraforming. With raw45, target46 and correction3, raw45→46 keeps effective46,
+so the old strict-improvement admission rejected it. Nevertheless, paid raw steps
+to53 can reach effective50 and improve racial habitability96→100. The new actual
+host regression failed at the first queued step before the implementation change.
+SourceCI43504712137 had passed137/137 in142.29s on that exact SHA/Qt6.12.0.
+
+The shared choice now allows an equal-temperature unit only when the first useful
+exit, target +/- (strength+1), is reachable in the direction of the racial optimum
+under existing technology/natural-axis and0–100 bounds. This is constant-time
+scalar arithmetic, without additional copies or future-turn simulation. Each
+intermediate unit still costs12 production and occupies normal annual capacity;
+an immediately beneficial gravity/radiation change takes priority. Unreachable
+exits admit no work. Inherited out-of-band work may still reverse toward its
+natural baseline. Controller settings and save126/orders54/race3 stay unchanged.
+
+Regressions cover manual batches through real host turns in both directions,
+received planning and reachable potential, partial funding across years,
+Max Terraform/year, other-axis priority, unreachable technology/physical bounds,
+legacy reversal, controller off and Qt production admission. Complete GCC14.2/Qt6.12 Debug build, final11/11 profile tests in2.32s and full137/137 CTest in200.92s passed. All163 local file targets in the five changed documents were checked.
+
+Publish the correction to the existing PR297 and keep its discussion open for
+repeat review. #56 remains open; no merge or scope expansion is part of this fix.

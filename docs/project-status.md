@@ -1,5 +1,22 @@
 # Project status and development handoff
 
+## PR297 review P2 — controlled temperature plateau, 13 November 2026
+
+[Review5898683448](https://github.com/kotrf/suns/pull/297#discussion_r4569162787)
+on a67bfd6 found rejected Terraform work across the active controller's flat
+temperature range. A new real-host regression fails before the correction. The
+shared choice now admits paid intermediate steps only if an improving exit is
+reachable under the existing natural/technology and0–100 limits. Every point
+retains its normal cost and annual capacity; immediate gains on other axes take
+priority. A scalar formula preserves UI responsiveness and inherited baseline
+reversal without extra simulation/copies. Save126/orders54/race3 unchanged.
+
+Complete GCC14.2/Qt6.12 Debug build, final11/11 profile tests in2.32s and full137/137 CTest in200.92s passed. All163 local file targets in the five changed documents were checked. Previous sourceCI43504712137 passed137/137 in142.29s, with
+exactSHA/Qt6.12.0 verified. Publish the correction to existing#297; keep its thread
+open for repeat review and do not merge. Main d362b43;#56 remains open for the
+larger scope,#53/#63 frozen,work/ and earlier branches preserved.
+[Audit](audits/2026-11-13-climate-stabilizer.md#pr297-review-p2--paid-terraforming-across-a-controlled-plateau).
+
 ## #56 climate stabilizer — 13 November 2026
 
 All three requested slices293/294/295 merged. Main d362b43 exactly matches reviewed
