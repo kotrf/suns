@@ -83,8 +83,14 @@ std::optional<PlanetEnvironment> next_terraforming_environment(
             const int direction = value - current[0];
             const int exit = int(controller.targetTemperature) + direction * (int(controller.strength) + 1);
             const int bound = std::clamp(original[0] + direction * maximum[0], 0, 100);
-            if (exit >= 0 && exit <= 100 && (direction > 0 ? exit <= bound : exit >= bound))
-                best = candidate; // A later axis with an immediate improvement still takes priority.
+            if (exit >= 0 && exit <= 100 && (direction > 0 ? exit <= bound : exit >= bound)) {
+                auto exitEnvironment = planet.environment;
+                exitEnvironment.temperature = static_cast<std::uint8_t>(exit);
+                // A half-integer racial optimum can make adjacent effective
+                // temperatures equally good; do not pay to cross such a tie.
+                if (score(exitEnvironment) > currentScore)
+                    best = candidate; // A later axis with an immediate improvement still takes priority.
+            }
         }
     }
     return best;

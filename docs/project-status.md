@@ -1,5 +1,23 @@
 # Project status and development handoff
 
+## PR297 repeat P2 — tied plateau exit, 14 November 2026
+
+[Repeat review](https://github.com/kotrf/suns/pull/297#issuecomment-6867024973)
+on3ec105b confirms the first P2 and finds15 paid points/180 production spent
+crossing equally good effective51→50 for racial range30–71. The new real-host
+regression fails before the correction. After existing reachability checks, the
+shared helper requires the exact exit's full score to strictly improve. One
+bounded evaluation preserves natural limits, costs and other-axis priority,
+without future-turn simulation/search. Save126/orders54/race3 unchanged.
+
+Actual manual/annual host regressions preserve research on the tie and still pay
+14 points/168 resources in the useful control; received planning/potential and Qt
+admission share the result. Complete GCC14.2/Qt6.12 Debug build, final12/12 profile tests in2.41s and full137/137 CTest in160.06s passed. All165 local file targets in the five changed documents were checked. Prior sourceCI43520986389
+passed137/137 in135.78s, exact3ec105b/Qt6.12.0 verified. Publish in existing#297;
+both discussions open for repeat review, no merge. Main d362b43;#56 larger scope
+open,#53/#63 frozen;work/ and old branches retained.
+[Audit](audits/2026-11-13-climate-stabilizer.md#pr297-repeat-p2--the-reachable-exit-must-improve-the-score).
+
 ## PR297 review P2 — controlled temperature plateau, 13 November 2026
 
 [Review5898683448](https://github.com/kotrf/suns/pull/297#discussion_r4569162787)

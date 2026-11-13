@@ -27,8 +27,11 @@ when several hostile axes temporarily leave the same negative habitability.
 An active [Climate stabilizer](planetary-engineering.md#climate-stabilizer-56)
 can hold the effective temperature constant over several raw-axis points. Ordinary
 terraforming may cross that plateau if its first improving exit is reachable
-within the same technology and natural-baseline limits. Every intermediate point
-still costs 12 production; unreachable exits admit no work. Immediate improvements
+within the same technology and natural-baseline limits and its full score is
+strictly better than the current one. For a racial range30–71, effective50 and51
+are equally close to the midpoint50.5; crossing between them admits no work and
+leaves production for research. Every useful intermediate point still costs
+12 production; unreachable exits admit no work. Immediate improvements
 to another axis take priority over an equal-temperature step.
 
 The natural baseline is captured before the first completed change and persists

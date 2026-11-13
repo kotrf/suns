@@ -71,6 +71,37 @@ void plateau_progress_respects_limits_costs_and_other_axes()
     auto off=plateau_fixture();assert(apply_planetary_engineering_order(off,off.planets.front(),{1,E::ClimateStabilizer,A::SetOutput,0,46}));
     assert(next_terraforming_environment(off,1,off.planets.front())->temperature==46);
 }
+void half_integer_optimum_preserves_research_unless_the_exit_improves()
+{
+    for(bool useful:{false,true}) {
+        auto s=test::climate_fixture();test::finish_climate(s,useful?52:51);
+        auto& owner=s.players.front();owner.race.habitableTemperature={30,71};
+        owner.technology.researchActive=true;owner.technology.focus=ResearchField::Electronics;
+        owner.technology.progress.fill(0);owner.technology.queuedFocuses.clear();
+        auto& p=s.planets.front();p.environment.temperature=55;p.naturalEnvironment=p.environment;
+        p.observedHabitability.reset();set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+        const auto control=TurnProcessor{}.process(s,{});
+        const auto automatic=TurnProcessor{}.process(s,{{1,{QueueProductionBatchOrder{1,K::Terraforming,15,ProductionAutomation::MaxTerraform}}}});
+        const auto& after=automatic.planets.front();
+        assert(after.environment.temperature==(useful?41:55));
+        assert(engineered_environment(after).temperature==51 && after.naturalEnvironment->temperature==55);
+        assert(current_planet_habitability(automatic,after,automatic.turn)==99);
+        const auto focus=std::size_t(ResearchField::Electronics);
+        assert(automatic.players.front().technology.levels==control.players.front().technology.levels);
+        assert(control.players.front().technology.progress[focus]-automatic.players.front().technology.progress[focus]
+            ==(useful?14*kTerraformingCost:0));
+        const auto potential=terraforming_potential(s,1,p);
+        assert(potential.environment.temperature==(useful?41:55));
+        if(!useful) {
+            assert(!next_terraforming_environment(s,1,p));
+            const auto manual=TurnProcessor{}.process(s,{{1,{QueueProductionBatchOrder{1,K::Terraforming}}}});
+            assert(manual.planets.front().environment.temperature==55 && manual.planets.front().productionQueue.empty());
+            assert(manual.players.front().technology.progress==control.players.front().technology.progress);
+            const auto planned=planned_production_state(make_player_view(s,1).state,{1,{QueueProductionBatchOrder{1,K::Terraforming}}});
+            assert(planned.planets.front().productionQueue.empty());
+        }
+    }
+}
 void paid_sixty_year_project_uses_real_host_turns_and_milestones()
 {
     auto s=test::climate_fixture();const auto stocks=s.planets.front().minerals;MineralCargo minedTotal;
@@ -193,6 +224,7 @@ int main()
 {
     paid_terraforming_crosses_the_active_controllers_plateau();
     plateau_progress_respects_limits_costs_and_other_axes();
+    half_integer_optimum_preserves_research_unless_the_exit_improves();
     paid_sixty_year_project_uses_real_host_turns_and_milestones();
     interruption_controls_and_terraforming_keep_the_natural_baseline();
     capture_preserves_settings_and_requires_the_new_owners_technology();

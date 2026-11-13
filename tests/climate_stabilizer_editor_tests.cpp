@@ -67,4 +67,10 @@ int main(int argc,char** argv)
     assert(apply_planetary_engineering_order(plateau,p,{1,E::ClimateStabilizer,EngineeringAction::SetOutput,10,55}));
     plateau.players.front().race.habitableTemperature={60,80};
     MainWindowTestAccess::load(w,plateau);assert(!MainWindowTestAccess::canTerraform(w));
+    plateau.players.front().race.habitableTemperature={30,71};
+    p.environment.temperature=55;p.naturalEnvironment=p.environment;
+    assert(apply_planetary_engineering_order(plateau,p,{1,E::ClimateStabilizer,EngineeringAction::SetOutput,10,51}));
+    MainWindowTestAccess::load(w,plateau);assert(!MainWindowTestAccess::canTerraform(w));
+    assert(apply_planetary_engineering_order(plateau,p,{1,E::ClimateStabilizer,EngineeringAction::SetOutput,10,52}));
+    MainWindowTestAccess::load(w,plateau);assert(MainWindowTestAccess::canTerraform(w));
 }

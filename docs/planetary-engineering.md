@@ -215,7 +215,11 @@ plateau is reachable under its existing technology/natural-axis limits. Manual
 batches, annual rules and received UI admission share this choice; every point
 retains its normal cost. An unreachable exit does not consume production, and
 immediately useful changes to other axes take priority. The exit check is scalar
-arithmetic, with no additional simulation or search.
+arithmetic, with no additional simulation or search. Reachability alone is not
+enough: the full habitability/outside-distance/displacement score at the exit
+must strictly improve. Adjacent temperatures at a half-integer racial optimum
+can tie, so moving between them does not spend ordinary production or reduce
+the year's research contribution.
 
 The engineering window provides a target spin box and a maximum-correction
 control. Its effect preview uses received evidence and accepted pending orders

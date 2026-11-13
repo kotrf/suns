@@ -58,3 +58,30 @@ legacy reversal, controller off and Qt production admission. Complete GCC14.2/Qt
 
 Publish the correction to the existing PR297 and keep its discussion open for
 repeat review. #56 remains open; no merge or scope expansion is part of this fix.
+
+## PR297 repeat P2 — the reachable exit must improve the score
+
+[Repeat review](https://github.com/kotrf/suns/pull/297#issuecomment-6867024973)
+on3ec105b confirms the first plateau correction and reports a second
+[P2](https://github.com/kotrf/suns/pull/297#discussion_r4569616075). For racial
+temperature range30–71, effective50 and51 tie around midpoint50.5. Raw55,
+target51, strength10 admitted15 paid points to raw40, wasting180 production
+without a habitability gain. The new actual-host regression fails before this
+correction. Previous sourceCI43520986389 passed137/137 in135.78s; exact
+3ec105b/Qt6.12.0 verified from job132214886550.
+
+After the unchanged reachability checks, the shared helper now scores the exact
+exit with its existing habitability/outside-distance/displacement tuple. The paid
+intermediate step is accepted only if that exit strictly beats the current score.
+This adds one bounded score evaluation, without searching or simulating future
+years. Natural limits, ordinary per-point costs, immediate other-axis priority
+and save126/orders54/race3 are unchanged.
+
+Actual host/manual/Max Terraform regressions verify unchanged raw55/effective51,
+Hab99 and the full research contribution for the tied exit. A positive control
+with target52 still pays14 useful points to raw41/effective51, reducing research
+by exactly168. Received planning, reachable potential and Qt admission reject the
+tie and retain the useful case. Complete GCC14.2/Qt6.12 Debug build, final12/12 profile tests in2.41s and full137/137 CTest in160.06s passed. All165 local file targets in the five changed documents were checked.
+
+Publish into existing PR297; both discussions stay open for repeat review. No
+merge or change to the larger scope of#56;#53/#63 remain frozen.
