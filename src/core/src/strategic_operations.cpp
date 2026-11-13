@@ -254,12 +254,14 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
         const bool wormhole = player && std::any_of(player->wormholeKnowledge.begin(), player->wormholeKnowledge.end(),
             [&](const auto& end) { return !end.collapsed && distance_between(end.lastPosition, destination) <= 10 + epsilon; });
         const bool object=player && std::any_of(player->objectKnowledge.begin(),player->objectKnowledge.end(),
-            [&](const auto& x){return distance_between(x.position,destination)+x.uncertainty<=object_study_radius(state,fleet)+1e-6;});
+            [&](const auto& x){return distance_between(x.position,destination)+x.uncertainty<=object_study_radius(state,fleet)+1e-6
+                || object_course_contains(x,destination);});
         if (!wormhole && !object) return "Field research needs a system, reported wormhole within 10 ly, or an object area within the fitted study radius (up to 20 ly). Classify uncertain areas or fit stronger scanners.";
     }
     if (*task == FleetTask::RecoverSample) {
         const bool target = player && std::any_of(player->objectKnowledge.begin(), player->objectKnowledge.end(),
-            [&](const auto& x) { return x.level == ObjectKnowledgeLevel::Studied && same_position(x.position, destination); });
+            [&](const auto& x) { return x.level == ObjectKnowledgeLevel::Studied
+                && (same_position(x.position, destination) || object_course_contains(x,destination)); });
         if (!target) return "Specimen recovery requires a received completed study at the destination and 5 kt of cargo capacity.";
     }
     if (*task == FleetTask::Salvage) {

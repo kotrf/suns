@@ -41,7 +41,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 123;
+constexpr quint32 kSaveFormatVersion = 124;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -3481,7 +3481,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
         errorMessage = "The Suns! save file is truncated or contains invalid data.";
         return false;
     }
-    if(version<79 && loaded.mode!=SessionMode::PlayerTurn) generate_unknown_objects(loaded.state);
+    if(version<79 && loaded.mode!=SessionMode::PlayerTurn) generate_unknown_objects(loaded.state,false);
     if (loaded.pendingDescriptions.size() != static_cast<qsizetype>(loaded.pendingOrders.orders.size())) {
         errorMessage = "The Suns! save file has an inconsistent planning-order section.";
         return false;

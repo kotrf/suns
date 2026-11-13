@@ -5,7 +5,9 @@ void writeUnknownObjects(QDataStream& stream,const GameState& state)
     QByteArray payload; QDataStream s(&payload,QIODevice::WriteOnly); s.setVersion(stream.version());
     s << quint32(state.nextUnknownObjectId);
     writeVector(s,state.unknownObjects,[](QDataStream& out,const UnknownObject& x) {
+        if(!unknown_object_valid(x)) {out.setStatus(QDataStream::WriteFailed);return;}
         out << quint32(x.id); writePosition(out,x.position); out << quint8(x.kind);
+        if(x.kind==UnknownObjectKind::DriftingDerelict)writePosition(out,x.velocity);
     });
     s << quint32(state.players.size());
     for(const auto& p:state.players) {
@@ -16,6 +18,7 @@ void writeUnknownObjects(QDataStream& stream,const GameState& state)
             for(const auto& m:h.milestones) s << quint64(m.eventId) << quint32(m.object);
         }
     }
+    if(s.status()!=QDataStream::Ok) {stream.setStatus(QDataStream::WriteFailed);return;}
     stream << kUnknownObjectsMagic << quint32(payload.size()); stream.writeRawData(payload.data(),payload.size());
 }
 void readUnknownObjects(QDataStream& stream,GameState& state)
@@ -27,7 +30,10 @@ void readUnknownObjects(QDataStream& stream,GameState& state)
     if(!state.nextUnknownObjectId || state.nextUnknownObjectId>0x7fffffffU
         || !readVector(s,state.unknownObjects,[](QDataStream& in,UnknownObject& x) {
             quint8 kind{}; in >> x.id; readPosition(in,x.position); in >> kind; x.kind=UnknownObjectKind(kind);
-            if(!x.id || x.id>0x7fffffffU || kind>quint8(UnknownObjectKind::CompactRemnant)) markCorrupt(in);
+            const auto newest=gReadSaveFormatVersion>=124?UnknownObjectKind::DriftingDerelict:UnknownObjectKind::CompactRemnant;
+            if(kind>quint8(newest)) {markCorrupt(in);return;}
+            if(x.kind==UnknownObjectKind::DriftingDerelict)readPosition(in,x.velocity);
+            if(!unknown_object_valid(x))markCorrupt(in);
         }) || state.unknownObjects.size()>1000) { markCorrupt(stream); return; }
     for(std::size_t n=0;n<state.unknownObjects.size();++n) {
         const auto& x=state.unknownObjects[n];

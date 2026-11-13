@@ -16,5 +16,7 @@ bool transfer_science_sample(GameState&, PlayerId, const TransferScienceSampleOr
 bool preview_science_sample_transfer(GameState&, PlayerId, const TransferScienceSampleOrder&);
 bool process_science_sample(GameState&, PlayerId, const ProcessScienceSampleOrder&);
 void recover_science_samples(GameState&, Fleet&, std::uint64_t);
+// Onboard, locally detected rendezvous uses the normal movement/fuel phase.
+void prepare_science_sample_recovery(GameState&,std::uint64_t);
 bool unload_science_samples(GameState&, Planet&, Fleet&, std::uint64_t);
 } // namespace suns

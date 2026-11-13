@@ -2975,6 +2975,8 @@ TurnResult TurnProcessor::process_with_events(
     resolve_wormhole_approaches(next);
     advance_survey_probes(next);
     prepare_visitor_navigation(next);
+    advance_unknown_objects(next);
+    prepare_science_sample_recovery(next,next.turn+1);
     advance_fleets(next, freight, movementFuel);
     advance_visitors(next);
     resolve_bombardments(next, next.turn + 1);
@@ -2986,7 +2988,8 @@ TurnResult TurnProcessor::process_with_events(
     observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint64_t>> researchByPlayer;
     for (auto& planet : next.planets) {
-        const auto contribution = std::uint64_t(run_colony_production(next, planet)) + retained_sample_research(next, planet);
+        const auto industry=run_colony_production(next,planet); // Pays native support before retained science.
+        const auto contribution = std::uint64_t(industry) + retained_sample_research(next, planet);
         const auto parallel = resonance_research(next, planet);
         for (std::size_t field = 0; field < parallel.size(); ++field) if (parallel[field]) {
             const auto* star = find_star(next, planet.star);

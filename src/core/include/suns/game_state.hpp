@@ -18,7 +18,7 @@ using OrbitalStationId = std::uint32_t;
 using WormholeEndpointId = std::uint32_t;
 using UnknownObjectId = std::uint32_t;
 
-enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant };
+enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant, DriftingDerelict };
 enum class ObjectKnowledgeLevel : std::uint8_t { Detected, Classified, Studied };
 
 inline constexpr std::uint32_t kColonyShipCost = 12;
@@ -601,6 +601,7 @@ struct UnknownObject {
     Position position;
     UnknownObjectKind kind{UnknownObjectKind::AncientProbe};
     bool sampleRecovered{}; // Host-only finite physical stock, including lost/consumed samples.
+    Position velocity; // ly/year; static landmarks retain zero velocity.
 };
 
 struct ScienceSample {
@@ -617,6 +618,7 @@ struct ObjectObservation {
     ObjectKnowledgeLevel level{ObjectKnowledgeLevel::Detected};
     std::optional<UnknownObjectKind> kind;
     std::uint64_t observedTurn{}, receivedTurn{};
+    std::optional<Position> velocity; // Classified, dated course; anonymous contacts expose none.
     bool operator==(const ObjectObservation&) const = default;
 };
 

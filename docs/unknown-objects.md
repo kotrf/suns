@@ -1,18 +1,26 @@
 # Unknown objects and scientific expeditions
 
-This is the first persistent-landmark slice of #55 and the implemented field-science
-chain of #59. Ancient probes and compact remnants are physical stationary objects,
-separate from wormholes and planetary artifact sites. They are not pop-up rewards.
+This implements persistent landmarks and a rare moving derelict for #55, using
+the field-science chain of #59. Ancient probes and compact remnants are stationary;
+drifting derelicts follow physical inertial courses. All are separate from
+wormholes and planetary artifact sites, rather than pop-up rewards.
 
 ## Generation and knowledge
 
-A galaxy of at least 16 stars contains up to `min(4, 1 + stars / 80)` objects.
+A galaxy of at least 16 stars contains up to `min(4, 1 + stars / 80)` static objects.
 Positions and kinds come from an independent seed-derived generator, so stellar
 and planetary generation is unchanged. Placement is bounded, at least 30 ly from
 stars and 60 ly from another object; crowded maps may contain fewer. Stable IDs,
 positions and kinds are saved. Objects persist after every empire has studied them.
 Older host/local saves seed the same sparse population once on migration to v79;
 player-turn imports never generate hidden objects.
+
+Fresh galaxies with at least64 stars may append one drifting derelict, on one
+in five seeds if placement succeeds. The original static generator is unchanged.
+The hulk starts with the same30/60 ly clearance and moves1.5 ly/year horizontally
+and0.5 ly/year vertically, with seed-derived signs. It can drift beyond the star
+field in ordinary unbounded space. Motion runs once per actual turn, including
+after study or specimen recovery; older campaigns gain no retroactive hulk.
 
 Active fleet scanners and built colony radars can detect objects within their
 ordinary, interference-adjusted sensor range. Orbit-only scanners have a 1 ly local
@@ -24,6 +32,14 @@ using the actual receiver's communications route. Only delivery updates headquar
 knowledge. Classification cannot be downgraded by a later distant observation;
 routine same-quality updates refresh the measurement date without a new briefing.
 A higher-quality old packet can still add classification of these static landmarks.
+
+For a drifting object, classification and position chronology are independent:
+a late study can raise knowledge without replacing a newer received position.
+A fresh distant fix may have15 ly uncertainty and no fresh course even after the
+object is Studied. Anonymous contacts expose no velocity. Close classification
+and study carry a frozen course; routine new positions arrive quietly through
+normal communications. Position timestamps describe the measurement, while
+study milestones keep their own receipt year.
 
 Raw objects, the generation seed, global allocation counter and pending evidence
 are withheld from player exports. The map, object journal, messages, navigation
@@ -40,10 +56,21 @@ its contents when its scanner study radius covers the reported uncertainty;
 otherwise classify first or fit stronger scanners. Existing command delay, fuel
 use, electronics and standing tasks apply.
 
+Known drifting courses offer an **estimated intercept** using only received age,
+distance and Warp. It uses three scalar geometry steps, without future-year
+simulation; stale course/command delay can make it miss. Map markers remain at
+the last received position. Once a Recover specimen programme locally detects
+its received-studied moving target within20 ly (also limited by half its actual
+scanner range and medium conditions), it can set a rendezvous destination.
+The ordinary movement phase spends the real distance and fuel. The5 kt core is
+transferred only at actual co-location; explicit routes, radio silence, anchored
+installations, probes and visitor programmes are not overridden.
+
 A stationary fleet running Field research with active scanners studies an object
 within 20 ly, further limited by its effective sensor range (1 ly for an orbit-only
 scanner). It collects a finite objective once per empire: an Ancient probe gives
-24 Electronics RP; a Compact remnant gives 32 Energy RP. This extends the existing
+24 Electronics RP; a Compact remnant gives32 Energy RP; a drifting derelict gives
+32 Construction RP. This extends the existing
 field-science ledger with a distinct stable-object key. Repeating work, sending a
 second fleet or replaying a delivered study packet cannot farm additional points.
 The body stays in the world. Data does not improve headquarters research until its
@@ -62,6 +89,10 @@ completed study only after receiving both the result and relevant fleet telemetr
 military goal cleanup preserves civilian expedition goals. No controller reads
 hidden objects or receives free RP.
 
+Computer expeditions aim using their received course and an estimated command
+delay, then fund the actual authored coordinate route and a loaded return.
+They use the same local rendezvous and globally finite specimen as humans.
+
 ## Persistence and remaining scope
 
 The original save v79 slice preserved raw host objects, delivered/in-flight observations, science
@@ -78,11 +109,16 @@ scientific capability. Landmarks remain available for other empires' data studie
 Merged [#227](https://github.com/kotrf/suns/pull/227) also makes the delivered
 Compact remnant study a prerequisite for Adaptive magnetosphere. Detection,
 classification and undelivered research cannot unlock it; the unique specimen is
-not required. Current completion formats are save v93 / orders v37; the
+not required. That completion slice used save v93 / orders v37; the
 [completion audit](audits/2026-10-22-field-science-completion.md) records #59's
 coverage, corrections and review status.
 
-#55 remains open for moving/transient/rogue objects, hazards, unusual resources and
-richer discovery outcomes/reference integration. Current wreck novelty and other
+#55 remains open for further transient/rogue objects, hazards, unusual resources and
+richer discovery outcomes. The drifting hulk adds one globally finite architectural
+core: analyze for80 Construction RP or retain its+4 Construction RP/year capability
+after physical delivery. The received object journal acts as its learned reference;
+it never exposes the current stock or hidden course. Current save124/orders52/race3
+tag only the new kind with velocity fields, preserving old static record layouts
+and genuine migrations. Current wreck novelty and other
 finite science objectives are unchanged. Further artifact varieties and
 observation-gated technology families can extend this path.

@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "suns/campaign.hpp"
 #include "suns/science_samples.hpp"
+#include "suns/native_orbital.hpp"
 #include "suns/unknown_objects.hpp"
 #include <QComboBox>
 #include <QDockWidget>
@@ -75,7 +76,8 @@ void MainWindow::installScienceSamples()
         if (const auto* selected = tree->currentItem()) {
             const auto source = selected->data(1, Qt::UserRole).toULongLong();
             const auto known = sample_plan(state_, pendingOrders_);
-            for (const auto& p : known.planets) if (p.owner == pendingOrders_.player && p.population && source != endpoint_key({p.id, 0}))
+            for (const auto& p : known.planets) if (p.owner == pendingOrders_.player
+                && (p.population || (native_orbital_station(known,p) && p.nativeOrbit.population)) && source != endpoint_key({p.id, 0}))
                 destination->addItem(QString::fromStdString(p.name) + " — colony", QVariant::fromValue(endpoint_key({p.id, 0})));
             for (const auto& f : known.fleets) if (f.owner == pendingOrders_.player && source != endpoint_key({0, f.id}))
                 destination->addItem(QString::fromStdString(f.name) + QString(" — fleet #%1").arg(f.id), QVariant::fromValue(endpoint_key({0, f.id})));
@@ -138,8 +140,11 @@ bool MainWindow::queueUnknownObjectRecovery(UnknownObjectId id)
     const auto* x = known_unknown_object(known, pendingOrders_.player, id);
     const auto f = std::find_if(known.fleets.begin(), known.fleets.end(), [&](const auto& f) { return f.id == selected->id; });
     if (!x || x->level != ObjectKnowledgeLevel::Studied || f == known.fleets.end()
-        || !fleet_has_scanner(known, *f) || fleet_cargo_capacity(known, *f) < kScienceSampleMass) return false;
-    replacePendingFleetMove(f->id, x->position, selectedFleetSuggestedWarpForRouteProgram(),
+        || f->outpost!=OutpostKind::None || !fleet_has_scanner(known, *f)
+        || fleet_cargo_used(known,*f)+kScienceSampleMass>fleet_cargo_capacity(known,*f)+1e-6) return false;
+    const auto warp=selectedFleetSuggestedWarpForRouteProgram();
+    const auto point=object_approach_position(*x,known.turn,f->position,warp);
+    replacePendingFleetMove(f->id, point, warp,
         FleetArrivalAction{FleetArrivalActionKind::RecoverSample}, QString("Recover specimen from studied object X%1").arg(id));
     rebuildScene(); return true;
 }

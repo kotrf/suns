@@ -1,21 +1,30 @@
 # Project status and development handoff
 
-## #54 paid sensor arrays on corrected native source — 13 November 2026
+## #293 corrected; #294 sensor posts; #55 drifting derelict — 13 November 2026
 
-Branch codex/deep-space-sensor-posts-54 follows #293 source6eb78bd (native
-startup-budget P2 corrected; seed2 now buys a scout by year6). The Sensor Array
-Kit costs120 work/I40 B20 G70,100 kt and C6/Electronics6. Normal manufacture,
-travel and permanent deployment provide250 ordinary/75 penetrating ly for1 mg
-fuel/year. Existing tanker supply, emissions, jamming, medium and delayed
-knowledge apply. No moving scanner, free relay/refueling field or remote geology.
-Save123/orders52/race3 preserve old IDs/layouts and separate physical/received/
-in-flight/loss evidence. Hidden loss cannot change PBEM or UI before delivery.
-The slice's original full132/132 CTest passed in205.88 s; after the native fix,
-the combined stack's full134/134 passed in173.13 s, GCC14.2/Qt6.12 Debug.
-The Qt panel and documentation links were checked. Current source CI/PR are in
-GitHub; no new slice is merged. #54 stays open for its remaining scope.
-The user explicitly approved this and future ordinary Suns! source publication
-to kotrf/suns (MEM-37); the previous publication block is resolved. #53/#63 frozen.
+[#293](https://github.com/kotrf/suns/pull/293), source6eb78bd, corrects the first-miner
+P2: the real sparse seed2 now buys its scout by year6 and explores;17/42/123
+still pay for independently supplied second colonies. [#294](https://github.com/kotrf/suns/pull/294),
+sourcebb591df, follows that correction with the paid250/75-ly sensor post.
+Branch codex/drifting-derelict-55 is the third separate review slice on top.
+
+Fresh eligible campaigns may contain one inertially drifting derelict. Classified
+reports freeze position/course; a late study cannot rewind a newer received fix.
+Map markers, human routes and AI use received data only. A geometry estimate is
+cheap; locally detected recovery pays actual movement/fuel and requires physical
+co-location. The finite32 Construction study and globally unique5 kt core use
+ordinary delayed data/cargo/research. Analyze for80 Construction or retain for+4
+per year; a surviving inhabited Native station also accepts it, with Normal
+support/output required for retained science. Save124/orders52/race3 preserve old
+static layouts; old campaigns gain no retroactive moving hulk.
+
+Complete GCC14.2/Qt6.12 Debug build and **134/134 CTest in173.13 s** passed after
+the native correction. The prior19/19 profile, actual Qt capture and161 local
+link targets were checked. Only checkpoint documentation changed after that run.
+The user explicitly approved both full source patches and future ordinary Suns!
+publication to kotrf/suns (MEM-37); the previous blocker below is historical.
+All three slices remain unmerged and await review; GitHub supplies exact current
+heads/CI and the third PR. Main2912a0e; umbrella50/54/55 stay open,53/63 frozen.
 
 ## PR #293 P2: keep paid exploration affordable — 13 November 2026
 
@@ -43,6 +52,81 @@ All three slices remain unmerged; GitHub supplies current heads and source CI.
 The review thread remains open for re-review/user-authorized merge. Main2912a0e,
 #53/#63 frozen, previous branches and work/ preserved. Formats stay unchanged by
 the correction (native122/51; sensor123/52; drifting124/52; race3).
+
+## Ordered slices #50 → #54 → #55 — 13 November 2026
+
+Main stays `2912a0e`. [#293](https://github.com/kotrf/suns/pull/293), source
+`3c7fa83`, is open; [CI43384636755](https://github.com/kotrf/suns/actions/runs/43384636755)
+succeeded131/131. The sensor-post slice #54 is committed locally as `fd5eb64`
+(tree6471eea), with132/132 CTest in205.88 s and profile9/9 in5.82 s. Its
+publication was rejected by automatic approval review for uploading
+`src/app/save_game.cpp` to `kotrf/suns` without explicit file/destination approval.
+No #54 PR exists yet. Local work and verification continue independently.
+
+Branch `codex/drifting-derelict-55` adds one rare moving derelict in fresh eligible
+campaigns. The old static sequence is unchanged; older saves gain no retroactive
+moving object. Physical inertial drift runs once per actual year in unbounded
+space. Classified/studied reports freeze position and velocity; delayed study
+raises classification without rewinding a newer fix. Anonymous contacts carry no
+course, and a fresh coarse fix clears stale course without erasing learned kind.
+The map and all human/computer authoring use received evidence only.
+
+The estimated intercept takes three scalar geometry steps. Local active-scanner
+recovery may set a rendezvous within20 ly, limited by actual scanner/medium;
+normal fleet movement pays real distance/fuel and pickup requires co-location.
+Study yields32 Construction RP on delivery. One globally finite5 kt architectural
+core gives80 Construction RP on analysis or+4/year retained, through existing
+cargo/data/receipt paths. Loss/consumption cannot respawn it. Native stations
+also accept real specimens without surface population; retained science waits
+for Normal support, and annual industry pays support before the artifact bonus.
+Save124/orders52/race3 tag new course records without changing static layouts.
+
+Complete GCC14.2/Qt6.12 Debug build and profile **19/19 CTest in21.21 s**
+passed. Final full **134/134 CTest in179.52 s** passed. The new core/save/UI
+checks cover actual paid movement, finite pickup, delayed chronology, immutable
+course/manifests, identical hidden-state PBEM exports, reload, malformed/versioned
+records, received-only AI and Native delivery/support. The Qt panel capture and
+161 local documentation link targets were inspected. No source changes followed
+the final full run; this #55 slice is ready locally pending publication.
+
+All three new slices remain unmerged and require review. The #50/#54/#55 umbrellas
+stay open for their documented remaining scope. #53/#63 stay frozen. Existing
+checkout, work/ and earlier branches are preserved. Continue publication after
+the exact blocked file/destination is approved; use the immutable #54 manifest,
+then stack the completed #55 source. No user save or new binary fixture is part
+of either slice.
+
+## #54 paid deep-space sensor arrays — 13 November 2026
+
+The second ordered slice follows open [#293](https://github.com/kotrf/suns/pull/293),
+source `3c7fa83`, exact tree76764c0. Its [source CI43384636755](https://github.com/kotrf/suns/actions/runs/43384636755)
+succeeded131/131 in141.43 s; checkout SHA and Qt6.12 were verified from the job
+log. Main remains2912a0e. Branch `codex/deep-space-sensor-posts-54` is stacked
+on that reviewed-later source, with no merge of either new slice yet.
+
+Sensor Array Kit requires Construction6/Electronics6, weighs100 kt and costs
+120 work plus I40/B20/G70. Ordinary manufacture and travel pay its full fit;
+only permanent one-ship/no-colonist deployment supplies250 ordinary/75
+penetrating ly. Standard power upkeep, fuel delivery, emission policy, jamming
+and medium apply. The post adds no relay or refueling field. Penetration retains
+BasicScan/Hab semantics, without remote geological or stock disclosure.
+
+Save123/orders52 append component/outpost IDs without changing existing record
+layouts or converting installations. A tagged v122-layout check is explicitly
+distinguished from genuine old fixtures. Host/player/in-flight telemetry and
+scans keep ordinary delays; hidden loss produces identical PBEM bytes before
+receipt. UI catalog/designer/panel/messages expose the received service, power
+and active-sensor state. The catalog now contains227 entries (41/5/181).
+
+Complete GCC14.2/Qt6.12 Debug build, profile9/9 in5.82 s, and final **132/132
+CTest in205.88 s** passed. The new panel capture and12 documentation links were
+checked. Profile work corrected a remapped test fit's placements and obsolete
+format-number assertions; old genuine fixture hashes remain unchanged.
+The slice is ready for its separate review; GitHub supplies current PR/head/CI.
+#54 stays open for capture, caches, fortifications, statistics and AI planning.
+Continue #55 with a physically drifting derelict and a globally finite specimen,
+received-only course/positions and the existing cargo/research lifecycle.
+#53/#63 remain frozen; use the existing checkout and preserve work/.
 
 ## #50 playable native campaigns; then #54 and #55 — 13 November 2026
 

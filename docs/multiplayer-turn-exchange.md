@@ -1,5 +1,12 @@
 # Multiplayer turn exchange
 
+Save v124 adds the drifting-derelict kind, its physical velocity and classified
+received/pending course. Only the new tagged kind carries extra payload; old
+static and anonymous records keep their layouts. The architectural core uses
+the existing globally finite specimen ledger and real5 kt cargo. Player files
+omit physical motion, depletion and undelivered reports. A late study upgrades
+knowledge while retaining a newer received fix. Orders remain v52, race v3.
+
 Save v123 / orders v52 append the paid Sensor Array Kit and anchored sensor-array
 identities. Physical, received, in-flight and delayed-loss deployment flags use
 the existing bounded records. Old identities/layouts and native migration rules
@@ -109,7 +116,7 @@ The order stream rejects nonfinite coordinates and negative/nonfinite minerals.
 Save v31 introduced session mode, host inbox, player tokens, racial environment
 rules and projected observations; controller integration arrived in v67/orders
 v21. Earlier saves retain their legacy defaults. Current saves/orders are
-v123/v52; portable race files use their own v3 schema.
+v124/v52; portable race files use their own v3 schema.
 Multiplayer clients should use the same build.
 Reopening and restarting a new-style host campaign preserves its preset choices;
 a restart creates a new campaign identity.

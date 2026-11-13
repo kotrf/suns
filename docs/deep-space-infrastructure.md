@@ -88,7 +88,7 @@ field. Enemy sites initially appear as ordinary uncertain fleet contacts; this
 slice does not disclose an enemy's installation kind, fittings or stock through
 the owner panel. Computer empires exclude anchored sites from mobile missions.
 
-Current save **v123**, orders **v52**, portable race **v3**. The Sensor Array Kit
+Current save **v124**, orders **v52**, portable race **v3**. The Sensor Array Kit
 and anchored kind use appended IDs; old identities keep their exact values.
 v123 extends accepted enum ranges without changing the v122 record layout.
 v52 transports the new blueprint component; older packets keep their versioned
