@@ -1,5 +1,10 @@
 # Multiplayer turn exchange
 
+Save126 / orders54 add the Climate stabilizer kind and its conditional normalized
+temperature target. Physical projects, received/in-flight surveys, drafts and
+host inboxes keep that setting independently. Other engineering records keep
+their previous layout; older files default target50. Race files stayv3.
+
 Save v125 / orders v53 freeze the selected specimen source ID in recovery
 arrival actions, standing tasks, delayed commands and dated fleet telemetry.
 New commands bind an explicit source or unique received study/course before

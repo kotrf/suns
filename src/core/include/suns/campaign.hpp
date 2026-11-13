@@ -42,6 +42,7 @@ struct ResearchUnlock {
     bool legacyEquipment{};
     std::optional<PrimaryRaceTrait> primaryTrait;
     bool requiresCompactStudy{};
+    bool surfaceEngineering{};
 };
 
 [[nodiscard]] RaceProfile race_preset(RacePreset preset);

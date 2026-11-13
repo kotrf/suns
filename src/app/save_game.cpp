@@ -41,11 +41,11 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 125;
+constexpr quint32 kSaveFormatVersion = 126;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
-constexpr quint32 kTurnOrderFormatVersion = 53;
+constexpr quint32 kTurnOrderFormatVersion = 54;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
@@ -744,7 +744,7 @@ void writeProductionItem(QDataStream& stream, const ProductionItem& value)
 
 void readProductionItem(QDataStream& stream, ProductionItem& value)
 {
-    const auto newestKind = gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming
+    const auto newestKind = gReadSaveFormatVersion >= 126 ? ProductionKind::ClimateStabilizer : gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming
         : gReadSaveFormatVersion >= 24 ? ProductionKind::OrbitalStation : ProductionKind::Research;
     if (!readEnum(stream, value.kind, quint8(newestKind))) return;
     quint32 cost{}, design{};
@@ -1118,7 +1118,7 @@ void readGameEvent(QDataStream& stream, GameEvent& value)
     if (!readEnum(stream, value.kind, static_cast<quint8>(newestEventKind))) return;
     if (!readEnum(stream, value.severity, static_cast<quint8>(GameEventSeverity::Critical))) return;
     stream >> star >> planet >> fleet >> shipDesign;
-    if (!readEnum(stream, value.productionKind, static_cast<quint8>(gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : ProductionKind::OrbitalStation))) return;
+    if (!readEnum(stream, value.productionKind, static_cast<quint8>(gReadSaveFormatVersion >= 126 ? ProductionKind::ClimateStabilizer : gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : ProductionKind::OrbitalStation))) return;
     stream >> value.position.x >> value.position.y >> quantity;
     const auto newestSurveyLevel = gReadSaveFormatVersion >= 28
         ? SurveyLevel::DeepSurvey
@@ -1728,7 +1728,7 @@ void readPlayer(QDataStream& stream, Player& value)
         quint32 fleet{};
         quint32 shipDesign{};
         stream >> observedTurn >> deliveryTurn >> star >> planet >> fleet >> shipDesign;
-        const auto newestProductionKind = gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
+        const auto newestProductionKind = gReadSaveFormatVersion >= 126 ? ProductionKind::ClimateStabilizer : gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
             ? ProductionKind::OrbitalStation
             : ProductionKind::Research;
         if (!readEnum(
@@ -2667,7 +2667,9 @@ void writeOrder(QDataStream& stream, const Order& order)
             stream << quint8{20} << quint32(concrete.colony);
             writeString(stream, concrete.name);
         } else if constexpr (std::is_same_v<T, SetPlanetaryEngineeringOrder>) {
+            if(concrete.targetTemperature>100 || (concrete.kind!=PlanetaryEngineeringKind::ClimateStabilizer && concrete.targetTemperature!=50)) {stream.setStatus(QDataStream::WriteFailed);return;}
             stream << quint8{27} << quint32(concrete.colony); writeEnum(stream,concrete.kind); writeEnum(stream,concrete.action); stream << quint8(concrete.strength);
+            if(concrete.kind==PlanetaryEngineeringKind::ClimateStabilizer)stream<<quint8(concrete.targetTemperature);
         } else if constexpr (std::is_same_v<T, TransferScienceSampleOrder>) {
             if(concrete.source.orbital || concrete.destination.orbital) {stream.setStatus(QDataStream::WriteFailed);return;}
             stream << quint8{28} << quint32(concrete.source.planet) << quint32(concrete.source.fleet)
@@ -2788,7 +2790,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{};
         stream >> colony;
         value.colony = static_cast<PlanetId>(colony);
-        const auto newestKind = gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
+        const auto newestKind = gReadSaveFormatVersion >= 126 ? ProductionKind::ClimateStabilizer : gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : gReadSaveFormatVersion >= 59 ? ProductionKind::Terraforming : gReadSaveFormatVersion >= 24
             ? ProductionKind::OrbitalStation
             : ProductionKind::Research;
         if (!readEnum(stream, value.kind, static_cast<quint8>(newestKind))) return false;
@@ -3047,7 +3049,7 @@ bool readOrder(QDataStream& stream, Order& order)
         quint32 colony{}, quantity{};
         stream >> colony;
         value.colony = colony;
-        if (!readEnum(stream, value.kind, quint8(gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : ProductionKind::Terraforming))) return false;
+        if (!readEnum(stream, value.kind, quint8(gReadSaveFormatVersion >= 126 ? ProductionKind::ClimateStabilizer : gReadSaveFormatVersion >= 111 ? ProductionKind::UpgradeMine : gReadSaveFormatVersion >= 94 ? ProductionKind::OrbitalHabitat : gReadSaveFormatVersion >= 92 ? ProductionKind::AdaptiveMagnetosphere : gReadSaveFormatVersion >= 87 ? ProductionKind::ResonanceLaboratory : gReadSaveFormatVersion >= 85 ? ProductionKind::OrbitalShades : gReadSaveFormatVersion >= 78 ? ProductionKind::CleanupContamination : gReadSaveFormatVersion >= 77 ? ProductionKind::ReconstructMine : gReadSaveFormatVersion >= 71 ? ProductionKind::PlanetaryRadar : gReadSaveFormatVersion >= 65 ? ProductionKind::ColonyDefense : ProductionKind::Terraforming))) return false;
         stream >> quantity;
         value.quantity = quantity;
         if (!readEnum(stream, value.automation, quint8(ProductionAutomation::MaxTerraform))) return false;
@@ -3178,10 +3180,11 @@ bool readOrder(QDataStream& stream, Order& order)
     case 27: {
         if(gReadSaveFormatVersion<85) { markCorrupt(stream); return false; }
         SetPlanetaryEngineeringOrder value; quint8 strength{}; stream >> value.colony;
-        if(!readEnum(stream,value.kind,quint8(gReadSaveFormatVersion>=94?PlanetaryEngineeringKind::OrbitalHabitat:gReadSaveFormatVersion>=92?PlanetaryEngineeringKind::AdaptiveMagnetosphere:PlanetaryEngineeringKind::OrbitalShades))
+        if(!readEnum(stream,value.kind,quint8(gReadSaveFormatVersion>=126?PlanetaryEngineeringKind::ClimateStabilizer:gReadSaveFormatVersion>=94?PlanetaryEngineeringKind::OrbitalHabitat:gReadSaveFormatVersion>=92?PlanetaryEngineeringKind::AdaptiveMagnetosphere:PlanetaryEngineeringKind::OrbitalShades))
             || !readEnum(stream,value.action,quint8(EngineeringAction::SetOutput))) return false;
         stream >> strength; value.strength=strength;
-        if(!value.colony || strength>engineering_max_strength(value.kind) || (value.action==EngineeringAction::StartOrResume && value.kind==PlanetaryEngineeringKind::None)) markCorrupt(stream);
+        if(value.kind==PlanetaryEngineeringKind::ClimateStabilizer) {quint8 target{};stream>>target;value.targetTemperature=target;}
+        if(!value.colony || strength>engineering_max_strength(value.kind) || value.targetTemperature>100 || (value.action==EngineeringAction::StartOrResume && value.kind==PlanetaryEngineeringKind::None)) markCorrupt(stream);
         order=value; return stream.status()==QDataStream::Ok;
     }
     default:
@@ -3690,7 +3693,7 @@ bool read_turn_order_file(const QString& filePath, TurnOrderFileData& data, QStr
     loaded.turnToken = static_cast<std::uint64_t>(turnToken);
     // Turn-order v2 adds ProductionKind::OrbitalStation. Version 1 otherwise
     // matches the save-v23 order payload and remains importable.
-    gReadSaveFormatVersion = version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
+    gReadSaveFormatVersion = version >= 54 ? 126 : version >= 53 ? 125 : version >= 52 ? 123 : version >= 51 ? 122 : version >= 50 ? 120 : version >= 49 ? 111 : version >= 48 ? 109 : version >= 47 ? 107 : version >= 46 ? 106 : version >= 45 ? 105 : version >= 44 ? 104 : version >= 43 ? 103 : version >= 42 ? 102 : version >= 41 ? 101 : version >= 40 ? 97 : version >= 39 ? 96 : version >= 38 ? 94 : version >= 37 ? 92 : version >= 36 ? 90 : version >= 35 ? 89 : version >= 34 ? 88 : version >= 33 ? 87 : version >= 32 ? 86 : version >= 31 ? 85 : version >= 30 ? 84 : version >= 29 ? 82 : version >= 28 ? 81 : version >= 27 ? 78 : version >= 26 ? 77 : version >= 25 ? 75 : version >= 24 ? 74 : version >= 23 ? 71 : version >= 22 ? 70 : version >= 21 ? 66 : version >= 20 ? 65 : version >= 19 ? 62 : version >= 18 ? 60 : version >= 17 ? 59 : version >= 16 ? 58 : version >= 15 ? 57 : version >= 14 ? 56 : version >= 13 ? 55 : version >= 12 ? 54 : version >= 11 ? 52 : version == 10 ? 48 : version == 9 ? 45 : version == 8 ? 43 : version == 7 ? 39 : version == 6 ? 35 : version == 5 ? 34 : version == 4 ? 33
         : version == 3 ? 32 : version == 2 ? 31 : 23;
     readPlayerOrders(stream, loaded.orders);
     readDescriptions(stream, loaded.descriptions);

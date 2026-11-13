@@ -30,6 +30,7 @@ void MainWindow::installPlanetaryEngineering()
         "(total 240 I / 120 B / 240 G kt). Construction and operation need a populated colony and a friendly "
         "Starbase or Fortress with a shipyard. Queue priority, research allocation and supplies can extend the schedule. Artificial magnetosphere: Energy/Construction 16, radiation reduction 0–10. Adaptive: Energy/Construction 18 plus a delivered completed Compact remnant study, 4,800 work and I/B/G 480/240/480 kt (at least 60 years), radiation reduction 0–20. One engineering installation per planet; switching requires dismantling.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
+    const auto generalHint=hint->text();
     auto* planets=new QComboBox(body); planets->setObjectName("engineeringPlanet"); layout->addWidget(planets);
     auto* project=new QComboBox(body); project->setObjectName("engineeringKind");
     project->addItem("Orbital mirrors (+temperature)",int(PlanetaryEngineeringKind::OrbitalMirrors));
@@ -37,9 +38,13 @@ void MainWindow::installPlanetaryEngineering()
     project->addItem("Artificial magnetosphere (−radiation)",int(PlanetaryEngineeringKind::ArtificialMagnetosphere));
     project->addItem("Adaptive magnetosphere (−radiation; field study)",int(PlanetaryEngineeringKind::AdaptiveMagnetosphere));
     project->addItem("Orbital habitat (2 million residents)",int(PlanetaryEngineeringKind::OrbitalHabitat));
+    project->addItem("Climate stabilizer (target temperature)",int(PlanetaryEngineeringKind::ClimateStabilizer));
     layout->addWidget(project);
     auto* output=new QSpinBox(body); output->setObjectName("engineeringOutput"); output->setRange(0,kEngineeringStrength); output->setValue(kEngineeringStrength);
-    auto* form=new QFormLayout; form->addRow("Axis adjustment (0 = off)",output); layout->addLayout(form);
+    auto* form=new QFormLayout;
+    auto* outputLabel=new QLabel("Axis adjustment (0 = off)",body);form->addRow(outputLabel,output);
+    auto* target=new QSpinBox(body);target->setObjectName("engineeringTargetTemperature");target->setRange(0,100);target->setValue(50);
+    auto* targetLabel=new QLabel("Target surface temperature",body);form->addRow(targetLabel,target);layout->addLayout(form);
     auto* progress=new QProgressBar(body); progress->setObjectName("engineeringProgress"); progress->setRange(0,kEngineeringWork); layout->addWidget(progress);
     auto* status=new QLabel(body); status->setObjectName("engineeringStatus"); status->setWordWrap(true); layout->addWidget(status);
     auto* effect=new QLabel(body); effect->setObjectName("engineeringEffect"); effect->setWordWrap(true); layout->addWidget(effect);
@@ -62,13 +67,13 @@ void MainWindow::installPlanetaryEngineering()
         ? planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_):GameState{}; };
     const auto update=[=,this] {
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
-        const auto received = find_player(state_,pendingOrders_.player)
-            ? make_player_view(state_,pendingOrders_.player).state : GameState{};
-        const auto* beforeCargo = p ? find_planet(received,p->id) : nullptr;
-        const auto firstTurnMining = beforeCargo ? projected_mineral_mining(received,*beforeCargo) : MineralCargo{};
         const bool owned=p && p->owner==pendingOrders_.player;
         const bool existing=p && p->engineering.kind!=PlanetaryEngineeringKind::None;
         const auto kind=existing?p->engineering.kind:PlanetaryEngineeringKind(project->currentData().toInt());
+        const bool climate=kind==PlanetaryEngineeringKind::ClimateStabilizer;
+        hint->setText(climate?"Climate stabilizer: Energy 20, Construction 20 and Biology 18. Choose a surface temperature from 0 to 100 and a maximum correction from 0 to 10 (0 = off). 4800 work at at most 80/year means at least 60 years; I/B/G 480/240/480 kt paid during construction. Construction and operation require a populated colony and a friendly Starbase/Fortress shipyard. The current owner must retain the operating technology. One engineering slot per planet; captured settings stay as built.":generalHint);
+        target->setVisible(climate);targetLabel->setVisible(climate);target->setEnabled(owned && climate);
+        outputLabel->setText(climate?"Maximum correction (0 = off)":"Axis adjustment (0 = off)");
         const auto total=engineering_work(kind);
         { const QSignalBlocker block(output); output->setMaximum(engineering_max_strength(kind)); }
         const bool complete=existing && p->engineering.work==total;
@@ -106,7 +111,7 @@ void MainWindow::installPlanetaryEngineering()
             text+=QString("\nPaid: I %1 / B %2 / G %3 kt. Stocks: I %4 / B %5 / G %6 kt.")
                 .arg(e.invested.ironium,0,'f',1).arg(e.invested.boranium,0,'f',1).arg(e.invested.germanium,0,'f',1)
                 .arg(p->minerals.ironium,0,'f',1).arg(p->minerals.boranium,0,'f',1).arg(p->minerals.germanium,0,'f',1);
-            if(!planetary_engineering_available(known,p->owner,kind) && !complete) text+=kind==PlanetaryEngineeringKind::OrbitalHabitat?"\nRequires Construction 18, Energy 16 and Biology 14.":kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"\nRequires Energy 18, Construction 18 and delivered completed Compact remnant field research.":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"\nRequires Energy 16 and Construction 16.":"\nRequires Energy 14 and Construction 14.";
+            if(!planetary_engineering_available(known,p->owner,kind) && !complete) text+=climate?"\nRequires a race with surface colonies, Energy 20, Construction 20 and Biology 18.":kind==PlanetaryEngineeringKind::OrbitalHabitat?"\nRequires Construction 18, Energy 16 and Biology 14.":kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"\nRequires Energy 18, Construction 18 and delivered completed Compact remnant field research.":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"\nRequires Energy 16 and Construction 16.":"\nRequires Energy 14 and Construction 14.";
             if(existing && !complete && engineering_scheduled(*p))
                 text+="\nScheduled in production queue. Progress is resolved each turn from output, queue priority and supplies.";
         } else {
@@ -117,6 +122,8 @@ void MainWindow::installPlanetaryEngineering()
                 :"No received orbital evidence.";
         }
         if(kind==PlanetaryEngineeringKind::OrbitalHabitat && owned) {
+            const auto& received=receivedPlayerState();const auto* beforeCargo=find_planet(received,p->id);
+            const auto firstTurnMining=beforeCargo?projected_mineral_mining(received,*beforeCargo):MineralCargo{};
             const auto potential=std::uint64_t(colony_workforce(known,*p).operatingFactories)+total_colony_population(*p)/kPopulationPerProductionUnit;
             const auto mined=firstTurnMining;
             const MineralCargo supplied{p->minerals.ironium+mined.ironium,p->minerals.boranium+mined.boranium,p->minerals.germanium+mined.germanium};
@@ -145,19 +152,27 @@ void MainWindow::installPlanetaryEngineering()
         projected.engineering.kind=existing?e.kind:PlanetaryEngineeringKind(project->currentData().toInt());
         projected.engineering.work=total; projected.engineering.strength=owned?std::uint8_t(output->value()):e.strength;
         projected.engineering.operational=projected.engineering.strength>0;
+        if(climate)projected.engineering.targetTemperature=owned?std::uint8_t(target->value()):e.targetTemperature;
         effect->setText(QString("Temperature now: %1 / 100. With completed, supported output: %2 / 100.\n"
             "Radiation now: %5 / 100. With that output: %6 / 100.\nHab now: %3%; with that output: %4%. Forecast assumes current stellar conditions and other environment axes.")
             .arg(engineered_environment(*p).temperature).arg(engineered_environment(projected).temperature)
             .arg(player_planet_habitability(known,pendingOrders_.player,*p,known.turn))
             .arg(player_planet_habitability(known,pendingOrders_.player,projected,known.turn))
             .arg(engineered_environment(*p).radiation).arg(engineered_environment(projected).radiation));
+        if(climate)effect->setText(effect->text()+QString("\nTarget temperature: %1 / 100; maximum correction: %2 points. 4800 work, at most 80/year (at least 60 years), I/B/G 480/240/480 kt. One engineering slot. Stellar variability remains separate; natural axes and ordinary terraforming are preserved.")
+            .arg(projected.engineering.targetTemperature).arg(projected.engineering.strength));
     };
     const auto load=[=] {
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
-        const QSignalBlocker a(output),b(project);
+        const QSignalBlocker a(output),b(project),c(target);
         if(p && p->engineering.kind!=PlanetaryEngineeringKind::None) {
             output->setMaximum(engineering_max_strength(p->engineering.kind)); output->setValue(p->engineering.strength); project->setCurrentIndex(project->findData(int(p->engineering.kind)));
-        } else output->setValue(kEngineeringStrength);
+            target->setValue(p->engineering.targetTemperature);
+        } else {
+            output->setValue(kEngineeringStrength);
+            const auto* owner=find_player(known,pendingOrders_.player);
+            target->setValue(owner?(int(owner->race.habitableTemperature.minimum)+int(owner->race.habitableTemperature.maximum))/2:50);
+        }
         update();
     };
     const auto previousMapStar=std::make_shared<StarId>(0);
@@ -176,7 +191,7 @@ void MainWindow::installPlanetaryEngineering()
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
         if(!p || p->owner!=pendingOrders_.player) return;
         const auto kind=p->engineering.kind!=PlanetaryEngineeringKind::None?p->engineering.kind:PlanetaryEngineeringKind(project->currentData().toInt());
-        appendPendingOrder(SetPlanetaryEngineeringOrder{p->id,kind,action,std::uint8_t(output->value())},
+        appendPendingOrder(SetPlanetaryEngineeringOrder{p->id,kind,action,std::uint8_t(output->value()),kind==PlanetaryEngineeringKind::ClimateStabilizer?std::uint8_t(target->value()):std::uint8_t{50}},
             QString("%1: %2").arg(QString::fromStdString(p->name),action==EngineeringAction::StartOrResume?"start / resume engineering project":action==EngineeringAction::Pause?"pause engineering construction":action==EngineeringAction::SetOutput?"set engineering output":"dismantle engineering project"));
         rebuildScene();
     };
@@ -191,6 +206,7 @@ void MainWindow::installPlanetaryEngineering()
     connect(planets,&QComboBox::currentIndexChanged,this,[load](int){load();});
     connect(project,&QComboBox::currentIndexChanged,this,[update](int){update();});
     connect(output,&QSpinBox::valueChanged,this,[update](int){update();});
+    connect(target,&QSpinBox::valueChanged,this,[update](int){update();});
     connect(start,&QPushButton::clicked,this,[issue]{issue(EngineeringAction::StartOrResume);});
     connect(pause,&QPushButton::clicked,this,[issue]{issue(EngineeringAction::Pause);});
     connect(apply,&QPushButton::clicked,this,[issue]{issue(EngineeringAction::SetOutput);});

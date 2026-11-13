@@ -170,6 +170,7 @@ struct SetPlanetaryEngineeringOrder {
     PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
     EngineeringAction action{EngineeringAction::StartOrResume};
     std::uint8_t strength{10};
+    std::uint8_t targetTemperature{50};
 };
 
 struct TransferScienceSampleOrder {

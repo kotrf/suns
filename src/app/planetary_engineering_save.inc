@@ -5,13 +5,16 @@ void writeEngineeringState(QDataStream& out,const PlanetaryEngineering& e)
     if(!engineering_state_valid(e)) { out.setStatus(QDataStream::WriteFailed); return; }
     writeEnum(out,e.kind); out<<quint32(e.work); writeMinerals(out,e.invested);
     out<<quint8(e.strength)<<quint8(e.operational)<<quint32(e.builder)<<quint64(e.startedTurn)<<quint64(e.completedTurn);
+    if(e.kind==PlanetaryEngineeringKind::ClimateStabilizer)out<<quint8(e.targetTemperature);
 }
 void readEngineeringState(QDataStream& in,PlanetaryEngineering& e)
 {
     quint32 work{},builder{}; quint8 strength{},online{}; quint64 started{},completed{};
-    if(!readEnum(in,e.kind,quint8(gReadSaveFormatVersion>=94?PlanetaryEngineeringKind::OrbitalHabitat:gReadSaveFormatVersion>=92?PlanetaryEngineeringKind::AdaptiveMagnetosphere:PlanetaryEngineeringKind::OrbitalShades)))return;
+    if(!readEnum(in,e.kind,quint8(gReadSaveFormatVersion>=126?PlanetaryEngineeringKind::ClimateStabilizer:gReadSaveFormatVersion>=94?PlanetaryEngineeringKind::OrbitalHabitat:gReadSaveFormatVersion>=92?PlanetaryEngineeringKind::AdaptiveMagnetosphere:PlanetaryEngineeringKind::OrbitalShades)))return;
     in>>work; readMinerals(in,e.invested); in>>strength>>online>>builder>>started>>completed;
     e.work=work; e.strength=strength; e.operational=online; e.builder=builder; e.startedTurn=started; e.completedTurn=completed;
+    e.targetTemperature=50;
+    if(e.kind==PlanetaryEngineeringKind::ClimateStabilizer) {quint8 target{};in>>target;e.targetTemperature=target;}
     if(online>1 || !engineering_state_valid(e))markCorrupt(in);
 }
 bool publicEngineeringValid(const PlanetaryEngineering& e,SurveyLevel level)

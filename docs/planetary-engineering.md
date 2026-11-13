@@ -83,7 +83,7 @@ received/in-flight survey evidence. Orders **v31** add the project-control order
 The v84 body and prior readers remain intact; old saves start without projects.
 
 The initial climate slice did not include autonomous AI selection. Later
-magnetosphere and habitat sections below describe the implemented follow-ups;
+magnetosphere, habitat and climate-stabilizer sections describe the follow-ups;
 atmospheric/ocean and larger system projects remain future #56 work.
 
 ## Artificial and adaptive magnetospheres (#56 / #59)
@@ -176,3 +176,70 @@ and ordinary evacuation/capture make the structure a demographic commitment.
 Its private economic evidence is frozen with normal reports. Save v94 / orders
 v38; prior environmental engineering recipes and effects remain unchanged.
 #228 is merged and #59 closed; its observation-gated capability is complete.
+
+## Climate stabilizer (#56)
+
+Races with surface colonies can research a reversible controller at **Energy 20,
+Construction 20 and Biology 18**. Choose a normalized target temperature 0–100 and
+a maximum correction 0–10; output 0 switches it off, while target 0 is a valid cold
+setting. A supported completed installation warms or cools the ordinary surface
+axis toward that target without overshooting or exceeding the chosen correction.
+For example, temperature 40, target 48 and correction 10 gives 48; temperature 65
+with those settings gives 55. Gravity, radiation and natural geology are unchanged.
+
+The initial recipe is **4,800 work, at most 80/year (at least 60 years),
+I/B/G 480/240/480 kt**. Normal research allocation, queue priority and delivered
+minerals apply. It competes for the same single engineering slot as the cheaper
+fixed mirrors/shades, magnetospheres and orbital housing. Batches, Annual rules
+and templates cannot repeat it. There is no extra recurring upkeep in this slice.
+
+Construction and operation require a populated colony and a friendly operational
+Starbase/Fortress shipyard. The current owner also needs the operating technology
+and a race that uses surface colonies. Orbital Civilization cannot construct or
+operate this surface controller. Pause, supply shortages, support loss and capture
+preserve progress, paid materials, builder, dates and the physical target setting.
+Resume never silently retargets it for the new race; Set output explicitly changes
+maximum correction and target, including during construction. Dismantling returns
+no resources. Replacing a supporting station restores eligible operation.
+
+The controller recalculates a scalar correction from the current conventionally
+terraformed axis. It never rewrites that baseline or natural terraforming limits.
+Ordinary terraforming can therefore reduce the required correction, and disabling
+the controller exposes the accumulated ordinary changes without drift. Stellar
+variability keeps its existing separate habitability modifier; this is surface
+climate control rather than a change to the star.
+
+When several raw temperatures yield the same controlled temperature, ordinary
+terraforming can pay for those intermediate points if an improvement beyond the
+plateau is reachable under its existing technology/natural-axis limits. Manual
+batches, annual rules and received UI admission share this choice; every point
+retains its normal cost. An unreachable exit does not consume production, and
+immediately useful changes to other axes take priority. The exit check is scalar
+arithmetic, with no additional simulation or search. Reachability alone is not
+enough: the full habitability/outside-distance/displacement score at the exit
+must strictly improve. Adjacent temperatures at a half-integer racial optimum
+can tie, so moving between them does not spend ordinary production or reduce
+the year's research contribution.
+
+The engineering window provides a target spin box and a maximum-correction
+control. Its effect preview uses received evidence and accepted pending orders
+without advancing future years. Paid progress, milestones, operation and target
+settings travel through the existing dated survey/report path. Orbital observers
+see the physical target with the public project evidence; investment remains
+private. Undelivered reconfiguration, work or station loss cannot change either
+the panel or exported player files.
+
+The ordinary computer planner may choose a fully supplied, supported, idle colony
+only when received evidence predicts at least five habitability points gained.
+It explicitly targets its race's temperature midpoint and sends the normal paid
+construction order; hidden host stocks/environment do not authorize the choice.
+
+**Current formats: save v126 / orders v54 / portable race v3.** Append-only kind values
+preserve earlier IDs. Only Climate stabilizer records/orders add a target byte;
+older kinds keep their previous layout and default target 50. Old headers reject
+new kinds; malformed targets and unrelated target payloads reject. Existing real
+legacy fixtures still exercise migration; no new binary fixtures are introduced.
+
+Ocean/atmosphere projects, system engineering and the irreversible radical path
+remain open in #56. The latter still needs the separate gameplay discussion about
+evacuation, capture, cost and commitment required by the accepted design.

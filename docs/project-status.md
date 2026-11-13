@@ -1,5 +1,63 @@
 # Project status and development handoff
 
+## PR297 repeat P2 — tied plateau exit, 14 November 2026
+
+[Repeat review](https://github.com/kotrf/suns/pull/297#issuecomment-6867024973)
+on3ec105b confirms the first P2 and finds15 paid points/180 production spent
+crossing equally good effective51→50 for racial range30–71. The new real-host
+regression fails before the correction. After existing reachability checks, the
+shared helper requires the exact exit's full score to strictly improve. One
+bounded evaluation preserves natural limits, costs and other-axis priority,
+without future-turn simulation/search. Save126/orders54/race3 unchanged.
+
+Actual manual/annual host regressions preserve research on the tie and still pay
+14 points/168 resources in the useful control; received planning/potential and Qt
+admission share the result. Complete GCC14.2/Qt6.12 Debug build, final12/12 profile tests in2.41s and full137/137 CTest in160.06s passed. All165 local file targets in the five changed documents were checked. Prior sourceCI43520986389
+passed137/137 in135.78s, exact3ec105b/Qt6.12.0 verified. Publish in existing#297;
+both discussions open for repeat review, no merge. Main d362b43;#56 larger scope
+open,#53/#63 frozen;work/ and old branches retained.
+[Audit](audits/2026-11-13-climate-stabilizer.md#pr297-repeat-p2--the-reachable-exit-must-improve-the-score).
+
+## PR297 review P2 — controlled temperature plateau, 13 November 2026
+
+[Review5898683448](https://github.com/kotrf/suns/pull/297#discussion_r4569162787)
+on a67bfd6 found rejected Terraform work across the active controller's flat
+temperature range. A new real-host regression fails before the correction. The
+shared choice now admits paid intermediate steps only if an improving exit is
+reachable under the existing natural/technology and0–100 limits. Every point
+retains its normal cost and annual capacity; immediate gains on other axes take
+priority. A scalar formula preserves UI responsiveness and inherited baseline
+reversal without extra simulation/copies. Save126/orders54/race3 unchanged.
+
+Complete GCC14.2/Qt6.12 Debug build, final11/11 profile tests in2.32s and full137/137 CTest in200.92s passed. All163 local file targets in the five changed documents were checked. Previous sourceCI43504712137 passed137/137 in142.29s, with
+exactSHA/Qt6.12.0 verified. Publish the correction to existing#297; keep its thread
+open for repeat review and do not merge. Main d362b43;#56 remains open for the
+larger scope,#53/#63 frozen,work/ and earlier branches preserved.
+[Audit](audits/2026-11-13-climate-stabilizer.md#pr297-review-p2--paid-terraforming-across-a-controlled-plateau).
+
+## #56 climate stabilizer — 13 November 2026
+
+All three requested slices293/294/295 merged. Main d362b43 exactly matches reviewed
+source2568071/tree3412ca0ff4f097620aad3a3dfd2fbc415702e5a6. [Final verification](https://github.com/kotrf/suns/pull/295#issuecomment-6862171645)
+confirms both P2 corrections; both discussions resolved underMEM34. SourceCI
+43456855640 passed134/134 in145.20s; mainCI43488870773 succeeded.
+
+The user requested the next task while playtesting. Current ordered open task#56
+gets a reversible single-slot Climate stabilizer: E20/C20/B18,4800work at80/year,
+I/B/G480/240/480. A chosen target0–100 with max correction0–10 warms/cools the
+effective surface temperature without rewriting the natural/terraformed axes.
+Output0 is off. Capture preserves the physical target and paid investment; current
+owner research, population and a friendly Starbase/Fortress shipyard gate operation.
+Native Orbital Civilization cannot construct/operate this surface controller.
+Scalar Qt previews and ordinary received-only computer orders avoid future-turn
+simulation/polling. Save126/orders54/race3 conditionally add only the new-kind
+target; old IDs/layouts/default50 and genuine fixture migration remain intact.
+
+Complete GCC14.2/Qt6.12 Debug build, final11/11 profile tests in2.16s and full137/137 CTest in170.27s passed. Actual Qt controls/effects/cost/progress capture and all173 local documentation targets were inspected. New slice awaits review; current PR/head/CI live in
+GitHub. [Audit](audits/2026-11-13-climate-stabilizer.md). #56 stays open for larger
+works; radical irreversible design still needs the separate accepted discussion.
+50/54/55 umbrellas open,53/63 frozen; work/ and prior branches preserved.
+
 ## PR295 repeat-review P2: named edits after coarse fixes — 13 November 2026
 
 [Review5892821657](https://github.com/kotrf/suns/pull/295#pullrequestreview-5892821657)

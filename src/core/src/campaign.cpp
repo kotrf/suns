@@ -102,6 +102,13 @@ const std::vector<ResearchUnlock>& research_unlocks()
             pulse.extraLevels[std::size_t(ResearchField::Construction)] = 16; entries.push_back(std::move(pulse));
         }
         {
+            ResearchUnlock climate{ResearchField::Construction,20,"Climate stabilizer",
+                "Choose a surface temperature from 0 to 100; supported control warms or cools by at most 10 points (0 output = off). 4800 work, at most 80/year, I/B/G 480/240/480. One engineering slot, populated colony and friendly Starbase/Fortress shipyard; current owner also needs Energy 20 and Biology 18. Natural axes and stellar variability remain separate.",{}};
+            climate.planetaryEngineering=true;
+            climate.surfaceEngineering=true;
+            climate.extraLevels[std::size_t(ResearchField::Energy)]=20;
+            climate.extraLevels[std::size_t(ResearchField::Biology)]=18;
+            entries.push_back(std::move(climate));
             ResearchUnlock habitat{ResearchField::Construction,18,"Orbital habitat",
                 "One engineering slot; 2 million orbital residents. 4800 work, 80/year, I/B/G 480/240/480; friendly Starbase/Fortress shipyard. Biology 14 and Energy 16. Occupied upkeep: 2 work and I/B/G 1/1/1 yearly; three paid emergency years, then 10% yearly losses. Physical colonist transport required.",{}};
             habitat.planetaryEngineering=true;
@@ -232,6 +239,7 @@ bool research_unlock_applicable(const GameState& state, PlayerId player, const R
     const auto* equipment = unlock.component ? equipment_technology(*unlock.component) : nullptr;
     return owner && (!unlock.primaryTrait || owner->race.primaryTrait == *unlock.primaryTrait)
         && (!unlock.planetaryEngineering || owner->race.environmentBased)
+        && (!unlock.surfaceEngineering || owner->race.primaryTrait!=PrimaryRaceTrait::HabitatCivilization)
         && (!unlock.terraforming || (owner->race.environmentBased
             && !(owner->race.radiationImmune && unlock.extraLevels[static_cast<std::size_t>(ResearchField::Weapons)] != 0)))
         && engine_access_available(owner->race, unlock.engineAccess)
