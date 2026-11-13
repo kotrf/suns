@@ -1930,7 +1930,8 @@ bool MainWindow::newGalaxy(std::optional<GalaxyConfig> config, std::optional<std
 {
     if (!empires && std::any_of(state_.players.begin(), state_.players.end(), [](const auto& player) {
         return player.race.primaryTrait != PrimaryRaceTrait::Generalist
-            && player.race.primaryTrait != PrimaryRaceTrait::StargateSpecialist;
+            && player.race.primaryTrait != PrimaryRaceTrait::StargateSpecialist
+            && player.race.primaryTrait != PrimaryRaceTrait::HabitatCivilization;
     })) {
         statusBar()->showMessage("This primary race trait is not playable yet. Restart is unavailable; use File → New campaign to choose a different civilization.", 5000);
         return false;

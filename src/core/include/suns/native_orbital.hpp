@@ -2,8 +2,7 @@
 #include "suns/game_state.hpp"
 
 namespace suns {
-// Population/cargo foundation. Setup stays disabled until the paid starting
-// economy and Computer expansion acceptance are ready.
+// Station-resident civilization: paid life support, remote mining and housing.
 [[nodiscard]] bool native_orbital_race(const GameState&, PlayerId);
 [[nodiscard]] std::uint64_t native_orbital_capacity(OrbitalStationHullType);
 [[nodiscard]] const OrbitalStation* native_orbital_station(const GameState&, const Planet&);

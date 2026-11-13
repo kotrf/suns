@@ -62,7 +62,7 @@ void setup_and_research_are_trait_specific()
         assert(!stargate_component_available(s, 1, C::InfinityStargate));
         assert(stargate_component_available(s, 1, C::JumpGate));
     }
-    for (const auto trait : {PrimaryRaceTrait::HabitatCivilization, static_cast<PrimaryRaceTrait>(255)}) {
+    for (const auto trait : {PrimaryRaceTrait::RemoteLogisticsSpecialist, static_cast<PrimaryRaceTrait>(255)}) {
         setup.primaryTrait = trait; bool rejected = false;
         try { (void)generate_campaign({}, {setup}); } catch (const std::invalid_argument&) { rejected = true; }
         assert(rejected);

@@ -394,8 +394,12 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         if (empires[i].controller > PlayerController::Computer)
             throw std::invalid_argument("Invalid empire controller");
         if (empires[i].primaryTrait != PrimaryRaceTrait::Generalist
-            && empires[i].primaryTrait != PrimaryRaceTrait::StargateSpecialist)
+            && empires[i].primaryTrait != PrimaryRaceTrait::StargateSpecialist
+            && empires[i].primaryTrait != PrimaryRaceTrait::HabitatCivilization)
             throw std::invalid_argument("This primary race trait is not playable yet");
+        if (empires[i].primaryTrait == PrimaryRaceTrait::HabitatCivilization
+            && (empires[i].race == RacePreset::Radiotroph || empires[i].basicRemoteMining))
+            throw std::invalid_argument("Orbital civilization requires radiation sensitivity and unrestricted remote mining");
         const PlayerId id = static_cast<PlayerId>(i + 1);
         const StarSystem* home = &state.stars.front();
         double best = -1;
@@ -425,6 +429,19 @@ GameState generate_campaign(const GalaxyConfig& config, const std::vector<Empire
         state.players.push_back(player);
         auto& planet = *std::find_if(state.planets.begin(), state.planets.end(),
             [&](const Planet& p) { return p.star == home->id; });
+        if (player.race.primaryTrait == PrimaryRaceTrait::HabitatCivilization) {
+            planet.precursorArtifacts = {};
+            if (!initialize_native_orbital_start(state,id,planet.id,native_orbital_start_budget()))
+                throw std::invalid_argument("Cannot fund a viable native orbital capital");
+            // Blueprints are reusable designs, not free additional ships.
+            ShipDesign scout{state.nextShipDesignId++,id,"Orbital Surveyor",ShipHullType::StarsScout,
+                {ShipComponentType::QuickJump5,ShipComponentType::RhinoScanner}};
+            ShipDesign settler{state.nextShipDesignId++,id,"Orbital Settler",ShipHullType::ColonyShip,
+                {ShipComponentType::QuickJump5,ShipComponentType::OrbitalConstructionModule}};
+            normalize_ship_design_placement(scout);normalize_ship_design_placement(settler);
+            state.shipDesigns.push_back(std::move(scout));state.shipDesigns.push_back(std::move(settler));
+            continue;
+        }
         planet.owner = id;
         planet.population = kInitialHomePopulation;
         planet.industry = 4;

@@ -62,7 +62,9 @@ void MainWindow::newCampaign()
         "Factories and mines have independent operating limits per 10,000 surface colonists; excess buildings remain idle.\n"
         "Primary trait: Generalist uses finite unloaded gates. Stargate Specialist transports cargo and colonists, "
         "researches Network Gates and eventually Infinity/Infinity. Both endpoints require paid construction; "
-        "frontier travel still needs engines.", &dialog);
+        "frontier travel still needs engines. Orbital Civilization lives on paid stations, ignores surface temperature/gravity, "
+        "and uses remote mining from the start. Life support consumes minerals and work; station destruction kills its residents. "
+        "Stellar radiation matters; Radiotroph and BRM are incompatible.", &dialog);
     explanation->setWordWrap(true);
     layout->addWidget(explanation);
     QTableWidget table(8, 18, &dialog);
@@ -102,6 +104,7 @@ void MainWindow::newCampaign()
         trait->setObjectName(QString("campaignPrimaryTrait%1").arg(row));
         trait->addItem("Generalist", int(PrimaryRaceTrait::Generalist));
         trait->addItem("Stargate Specialist", int(PrimaryRaceTrait::StargateSpecialist));
+        trait->addItem("Orbital Civilization", int(PrimaryRaceTrait::HabitatCivilization));
         trait->setToolTip("Specialist: cargo/colonists through gates; Energy/Electronics 14 unlock 750 ly / 1200 kt. "
             "Energy/Electronics 24 and Construction 16 unlock Infinity/Infinity on Fortresses. No free gates or technology.");
         table.setCellWidget(row, 8, trait);

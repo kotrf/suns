@@ -27,6 +27,10 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     form->addRow("Habitat", environmentSummary_);
     const auto updateEnvironment = [this] {
         const auto race = race_preset(static_cast<RacePreset>(environment_->currentData().toInt()));
+        if (trait_ && trait_->currentData().toInt() == int(PrimaryRaceTrait::HabitatCivilization)) {
+            environmentSummary_->setText("Residents live on stations. Surface temperature and gravity do not affect them; stellar radiation requires protection. Radiotroph and BRM are incompatible.");
+            return;
+        }
         const auto range = [](const auto& axis) { return QString("%1–%2").arg(axis.minimum).arg(axis.maximum); };
         environmentSummary_->setText(QString("Temperature %1 • Gravity %2 • Radiation %3")
             .arg(range(race.habitableTemperature), range(race.habitableGravity),
@@ -36,7 +40,9 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     trait_ = new QComboBox(this); trait_->setObjectName("racePrimaryTrait");
     trait_->addItem("Generalist", int(PrimaryRaceTrait::Generalist));
     trait_->addItem("Stargate Specialist", int(PrimaryRaceTrait::StargateSpecialist));
-    trait_->setToolTip("Generalist: finite unloaded gates. Stargate Specialist: cargo and colonists through gates, plus researched Network and Infinity/Infinity gates. Gates still require construction.");
+    trait_->addItem("Orbital Civilization", int(PrimaryRaceTrait::HabitatCivilization));
+    connect(trait_, &QComboBox::currentIndexChanged, this, updateEnvironment);
+    trait_->setToolTip("Generalist: finite unloaded gates. Stargate Specialist: cargo through researched gates. Orbital Civilization: station residents, paid life support and remote mining from the start; losing their station kills its residents.");
     form->addRow("Primary trait", trait_);
     efficiency_ = new QCheckBox("15% lower reference-engine fuel use; Fuel Mizer / Galaxy Scoop access", this);
     efficiency_->setObjectName("raceFuelEfficiency");
@@ -58,11 +64,11 @@ RaceSetupWidget::RaceSetupWidget(QWidget* parent) : QWidget(parent)
     });
     mining_ = new QComboBox(this); mining_->setObjectName("raceRemoteMining");
     mining_->addItems({"Standard", "Advanced (ARM)", "Basic (BRM)"});
-    mining_->setToolTip("ARM adds Midget Miner and Ultra-Miner; BRM blocks reference miner hulls.");
+    mining_->setToolTip("ARM adds Midget Miner and Ultra-Miner; BRM blocks reference miner hulls and is incompatible with Orbital Civilization.");
     form->addRow("Remote mining", mining_);
     growth_ = new QSpinBox(this); growth_->setObjectName("racePopulationGrowth");
     growth_->setRange(1, 20); growth_->setSuffix("%");
-    growth_->setToolTip("Maximum annual surface growth on a 100% world. Full rate through 25% capacity; crowding slows growth above it. New homeworld: 25,000 colonists.");
+    growth_->setToolTip("Maximum annual growth in a safe, supported colony. Full rate through 25% housing capacity; crowding slows growth above it. New homeworld: 25,000 colonists.");
     form->addRow("Maximum population growth / year", growth_);
     factories_ = new QSpinBox(this); factories_->setObjectName("raceFactoryOperation");
     mines_ = new QSpinBox(this); mines_->setObjectName("raceMineOperation");

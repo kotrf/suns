@@ -805,7 +805,40 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v122 / orders v51 / portable race v3. The native
-population/mining foundation does not enable a playable race. Mobile residential arks, transport-network
+Current game formats are save v122 / orders v51 / portable race v3. The complete
+first stationary campaign is enabled by stage 8 below. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.
+
+## Implementation stage 8: playable native campaigns
+
+New campaign, independent race files and Restart now offer Orbital Civilization
+for Human and Computer together. Radiotroph and BRM combinations reject explicitly.
+The existing paid starting kernel supplies 25,000 residents, a protected Dock,
+full receiver, fueled MiniMiner and 100/100/100 kt remaining stock. Additional
+surveyor/settler blueprints are free designs, not additional physical ships.
+Other civilizations retain their existing starts and technologies.
+
+The native computer policy uses only its PlayerView and ordinary research,
+blueprint, ship queue, exact orbital cargo, movement, mining and Colonize orders.
+It budgets support from received minerals and weakest mineral concentration;
+prioritizes real miners before further expansion; sends a surplus miner to a
+received new colony; and chooses unshielded founding sites by received orbital
+radiation rather than surface temperature/gravity. Public unvisited stars are
+valid survey targets even before a planet snapshot exists. Fleet mission memory
+uses existing persisted goals and waits for acknowledgement. Production without
+a fresh received closing queue waits rather than repeating an in-flight build.
+
+Campaign acceptance includes imported Human/Computer starts among surface
+empires, no-miner extraction stopping, ordinary paid replacement, actual PBEM
+station-to-ship loading and paid second-colony arrival. Real Computer campaigns
+on seeds17/42/123 run the ordinary planner/processor, including host reload and
+an independently supplied second colony. Hidden physical stock/environment
+changes cannot alter authored orders, while received economic changes can.
+Prior radiation, battle loss, full cargo and paid hull/refit suites remain part
+of the first-slice acceptance. Native Qt creation/restart and surface replacement
+are covered. Formats remain122/51/race3; no migration gives free assets.
+
+This completes the first playable stationary Native loop, not all of #50.
+Mobile homes, other asymmetric traits, automatic native military/upgrades and
+comparative long-game balance remain later work. #53/#63 stay frozen.

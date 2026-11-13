@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "ship_designer_dialog.hpp"
+#include "race_setup_widget.hpp"
 #include "native_orbital_fixture.hpp"
 #include <QApplication>
 #include <QAction>
@@ -163,7 +164,7 @@ void life_support_is_visible_and_received()
     const auto capture = qEnvironmentVariable("SUNS_SUPPORT_SCREENSHOT");
     if (!capture.isEmpty()) { w.resize(1440, 900); QCoreApplication::processEvents(); assert(w.grab().save(capture)); }
 }
-void loaded_native_start_cannot_restart_as_a_generalist(bool throughMenu = false)
+void loaded_native_start_restarts_as_native(bool throughMenu = false)
 {
     auto state = test::empty_native_orbital_start();
     assert(initialize_native_orbital_start(state, 1, state.planets.front().id, native_orbital_start_budget()));
@@ -176,7 +177,6 @@ void loaded_native_start_cannot_restart_as_a_generalist(bool throughMenu = false
     MainWindow w; w.installUiPolish(); assert(MainWindowTestAccess::load(w,path));
     QCoreApplication::processEvents();
     const auto campaign = MainWindowTestAccess::campaign(w), token = MainWindowTestAccess::token(w);
-    const auto loadedPath = MainWindowTestAccess::path(w), loadedTitle = w.windowTitle();
     if (throughMenu) {
         QAction* restart = nullptr;
         for (auto* action : w.findChildren<QAction*>()) if (action->text() == "Restart current galaxy") restart = action;
@@ -186,12 +186,11 @@ void loaded_native_start_cannot_restart_as_a_generalist(bool throughMenu = false
     assert(after.players.front().race.primaryTrait == PrimaryRaceTrait::HabitatCivilization);
     assert(after.planets.front().nativeOrbit.population == kInitialHomePopulation && !after.planets.front().population);
     assert(after.turn == state.turn && after.orbitalStations.size() == 1);
-    assert(MainWindowTestAccess::campaign(w) == campaign && MainWindowTestAccess::token(w) == token);
-    assert(MainWindowTestAccess::orders(w).orders.size() == 1);
-    assert(w.statusBar()->currentMessage().contains("not playable", Qt::CaseInsensitive));
-    assert(MainWindowTestAccess::path(w) == loadedPath && w.windowTitle() == loadedTitle);
+    assert(MainWindowTestAccess::campaign(w) != campaign && MainWindowTestAccess::token(w) != token);
+    assert(MainWindowTestAccess::orders(w).orders.empty());
+    assert(MainWindowTestAccess::path(w).isEmpty());
 }
-void a_loaded_native_host_can_create_an_explicit_generalist_campaign()
+void a_loaded_native_host_can_create_an_explicit_campaign(bool orbital = false)
 {
     MainWindow w; MainWindowTestAccess::setup(w);
     SaveGameData save; save.state = MainWindowTestAccess::state(w); save.mode = SessionMode::Host;
@@ -205,20 +204,30 @@ void a_loaded_native_host_can_create_an_explicit_generalist_campaign()
         assert(dialog && dialog->objectName() == "newCampaignDialog");
         dialog->findChild<QSpinBox*>("campaignEmpireCount")->setValue(1);
         auto* table = dialog->findChild<QTableWidget*>("campaignEmpiresTable"); assert(table);
-        table->item(0,0)->setText("Fresh Terrans");
+        table->item(0,0)->setText(orbital ? "Fresh orbitals" : "Fresh Terrans");
         auto* trait = qobject_cast<QComboBox*>(table->cellWidget(0,8)); assert(trait);
-        trait->setCurrentIndex(trait->findData(int(PrimaryRaceTrait::Generalist)));
+        trait->setCurrentIndex(trait->findData(int(orbital ? PrimaryRaceTrait::HabitatCivilization : PrimaryRaceTrait::Generalist)));
         submitted = true; dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
     });
     auto* action = w.findChild<QAction*>("newCampaignAction"); assert(action); action->trigger();
     assert(submitted);
     const auto& fresh = MainWindowTestAccess::state(w);
-    assert(fresh.players.size() == 1 && fresh.players.front().name == "Fresh Terrans");
-    assert(fresh.players.front().race.primaryTrait == PrimaryRaceTrait::Generalist);
-    assert(fresh.planets.front().population == kInitialHomePopulation && !fresh.planets.front().nativeOrbit.population);
+    assert(fresh.players.size() == 1 && fresh.players.front().name == (orbital ? "Fresh orbitals" : "Fresh Terrans"));
+    assert(fresh.players.front().race.primaryTrait == (orbital ? PrimaryRaceTrait::HabitatCivilization : PrimaryRaceTrait::Generalist));
+    assert(orbital ? fresh.planets.front().nativeOrbit.population == kInitialHomePopulation && !fresh.planets.front().population
+        : fresh.planets.front().population == kInitialHomePopulation && !fresh.planets.front().nativeOrbit.population);
     assert(MainWindowTestAccess::orders(w).orders.empty());
     assert(MainWindowTestAccess::campaign(w) != 285 && MainWindowTestAccess::token(w) != 17);
     assert(MainWindowTestAccess::path(w).isEmpty() && !w.windowTitle().contains("replace-native.suns"));
+    if (orbital) {
+        RaceSetupWidget editor;
+        EmpireSetup setup{"Orbitals"}; setup.primaryTrait=PrimaryRaceTrait::HabitatCivilization;editor.setSetup(setup);
+        const auto summary=editor.findChild<QLabel*>("raceEnvironmentSummary")->text();
+        assert(summary.contains("Surface temperature and gravity do not affect") && summary.contains("radiation"));
+        assert(editor.setup().primaryTrait==PrimaryRaceTrait::HabitatCivilization);
+        const auto capture=qEnvironmentVariable("SUNS_NATIVE_CAMPAIGN_SCREENSHOT");
+        if (!capture.isEmpty()) {w.resize(1440,900);QCoreApplication::processEvents();assert(w.grab().save(capture));}
+    }
 }
 void stale_surface_rows_do_not_hide_miner_eta_or_shift_commands()
 {
@@ -312,9 +321,10 @@ int main(int argc,char** argv)
     if (mode.isEmpty() || mode=="design-two") designer_selection_queues_the_same_pending_project(true);
     if (mode.isEmpty() || mode=="design-foreign") designer_selection_queues_the_same_pending_project(false, true);
     if (mode.isEmpty() || mode=="industry") native_industry_is_unavailable_in_the_actual_production_panel();
-    if (mode.isEmpty() || mode=="restart") loaded_native_start_cannot_restart_as_a_generalist();
-    if (mode.isEmpty() || mode=="restart-menu") loaded_native_start_cannot_restart_as_a_generalist(true);
-    if (mode.isEmpty() || mode=="new-campaign") a_loaded_native_host_can_create_an_explicit_generalist_campaign();
+    if (mode.isEmpty() || mode=="restart") loaded_native_start_restarts_as_native();
+    if (mode.isEmpty() || mode=="restart-menu") loaded_native_start_restarts_as_native(true);
+    if (mode.isEmpty() || mode=="new-campaign") a_loaded_native_host_can_create_an_explicit_campaign();
+    if (mode.isEmpty() || mode=="native-campaign") a_loaded_native_host_can_create_an_explicit_campaign(true);
     if (mode.isEmpty() || mode=="stale-queue") stale_surface_rows_do_not_hide_miner_eta_or_shift_commands();
     if (mode.isEmpty() || mode=="support") life_support_is_visible_and_received();
     if (mode.isEmpty() || mode=="support-budget") paid_miner_eta_reserves_support_minerals_after_pending_cargo();

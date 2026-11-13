@@ -163,13 +163,20 @@ void battle_loss_is_physical_once_and_delivered_without_resurrecting_residents()
     destroy_native_orbital_population(state, station);
     assert(state.fleets.front().colonists == 500 && !state.planets.front().owner);
 }
-void creation_remains_disabled()
+void creation_requires_compatible_race_choices()
 {
     EmpireSetup setup; setup.name = "Native"; setup.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
     for (auto controller : {PlayerController::Human, PlayerController::Computer}) {
-        setup.controller = controller; bool rejected = false;
-        try { (void)generate_campaign(GalaxyConfig{}, {setup}); } catch (const std::invalid_argument&) { rejected = true; }
-        assert(rejected);
+        setup.controller = controller;
+        const auto state=generate_campaign(GalaxyConfig{}, {setup});
+        assert(state.planets.front().nativeOrbit.population == kInitialHomePopulation);
+        assert(!state.planets.front().population && state.fleets.size() == 1);
+        for (int invalid=0;invalid<2;++invalid) {
+            auto bad=setup; bad.race=invalid?RacePreset::Terran:RacePreset::Radiotroph;bad.basicRemoteMining=invalid;
+            bool rejected=false;
+            try { (void)generate_campaign({}, {bad}); } catch (const std::invalid_argument&) { rejected=true; }
+            assert(rejected);
+        }
     }
 }
 void abandoned_station_cleanup_cannot_leave_a_dangling_housing_link()
@@ -195,6 +202,6 @@ int main()
     exact_station_transfers_and_surface_bypasses();
     refits_preserve_residents_and_reject_insufficient_housing();
     battle_loss_is_physical_once_and_delivered_without_resurrecting_residents();
-    creation_remains_disabled();
+    creation_requires_compatible_race_choices();
     abandoned_station_cleanup_cannot_leave_a_dangling_housing_link();
 }

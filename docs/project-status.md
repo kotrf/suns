@@ -1,5 +1,37 @@
 # Project status and development handoff
 
+## #50 playable native campaigns; then #54 and #55 — 13 November 2026
+
+The user requested three tasks in order: #50 → #54 → #55, preserving frozen
+#53/#63. Main `2912a0e` contains merged #289, with exactly reviewed tree7707247.
+The final [Conversation verification](https://github.com/kotrf/suns/pull/289#issuecomment-6844896270)
+reports no new findings; [main CI43371923470](https://github.com/kotrf/suns/actions/runs/43371923470)
+has succeeded. Prior open-#289/gated checkpoints below are historical.
+
+Branch `codex/native-orbital-campaign-50` enables Orbital Civilization for Human
+and Computer campaign setup, independent race files and Restart. The existing
+paid capital kernel supplies residents, protected Dock/receiver, fueled miner
+and100/100/100 remaining stock; extra surveyor/settler blueprints add no ships.
+Radiotroph and BRM reject explicitly. The native AI uses ordinary received-state
+research/build/cargo/movement/mining/founding orders. It budgets annual support,
+the weakest mineral concentration and loaded-fleet travel, sends surplus miners
+to new colonies, and waits for fresh queues/mission acknowledgements.
+
+Actual Human/PBEM and Computer campaigns on seeds17/42/123 exercise replacement,
+paid second-colony founding, physical mining supply and deterministic host
+reload. Hidden stocks/environment cannot alter orders. Existing radiation,
+destruction, cargo, paid refit and genuine old-file tests remain active. Qt
+creation/restart and changing back to a surface civilization are covered.
+The first full run exposed an obsolete two-trait UI assertion; it now checks
+all three supported choices. Complete GCC14.2/Qt6.12 Debug build and final
+**131/131 CTest passed in176.76 s**. The new Qt capture was inspected. Formats
+remain122/51/race3 and UI estimates remain scalar. See [stage8](asymmetric-empires.md#implementation-stage-8-playable-native-campaigns).
+
+This slice is ready for review, not merged; GitHub is authoritative for PR/head/CI.
+#50 stays open for other traits, native military/upgrades and comparative balance.
+Continue the user's request with a separate #54 sensor-post slice, then #55
+unknown-object expansion. Keep the existing checkout, work/ and previous branches.
+
 ## #289 review P2: retain refits admitted before later cargo — 13 November 2026
 
 [Review 5883007746](https://github.com/kotrf/suns/pull/289#pullrequestreview-5883007746)

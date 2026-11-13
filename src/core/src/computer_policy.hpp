@@ -5,6 +5,7 @@
 namespace suns::computer_detail {
 bool idle(const Fleet&);
 bool confirmed_idle(const Fleet&, std::uint64_t issuedTurn);
+void budget_initial_depot_service(const GameState&, Fleet&);
 double leg_fuel(const GameState&, const Fleet&, Position);
 bool transport_reserved(const PlayerView&, const ComputerTurnPlan&, FleetId);
 void plan_transport_lines(const PlayerView&, ComputerTurnPlan&, std::string&);
@@ -18,4 +19,5 @@ void plan_military(const PlayerView&, ComputerTurnPlan&, std::string&);
 std::optional<GateFleetOrder> gate_staging_order(
     const GameState&, const Fleet&, Position target, bool requireRefueling = false, const PlayerOrders* pending = nullptr);
 void plan_gate_construction(const PlayerView&, ComputerTurnPlan&, std::string&);
+void plan_native_civilization(const PlayerView&, ComputerTurnPlan&, std::string&);
 } // namespace suns::computer_detail

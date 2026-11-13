@@ -63,7 +63,8 @@ void create_campaign(MainWindow& window, bool remoteHuman)
         assert(factories->value() == 10 && mines->value() == 10);
         factories->setValue(5); mines->setValue(25);
         auto* trait = qobject_cast<QComboBox*>(table->cellWidget(1, 8));
-        assert(trait && trait->count() == 2);
+        assert(trait && trait->count() == 3);
+        assert(trait->findData(int(PrimaryRaceTrait::HabitatCivilization)) >= 0);
         trait->setCurrentIndex(trait->findData(int(PrimaryRaceTrait::StargateSpecialist)));
         count->setValue(3);
         auto* local = qobject_cast<QComboBox*>(table->cellWidget(0, 7));

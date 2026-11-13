@@ -58,7 +58,7 @@ void starter_is_paid_legal_and_observed()
         assert(same_minerals(history.front().minerals, {100, 100, 100}));
     }
 }
-void early_access_is_narrow_and_does_not_unlock_campaigns()
+void early_access_is_narrow_in_playable_campaigns()
 {
     auto state = started();
     assert(ship_hull_available_to_player(state, 1, ShipHullType::MiniMiner));
@@ -79,10 +79,9 @@ void early_access_is_narrow_and_does_not_unlock_campaigns()
     for (const auto controller : {PlayerController::Human, PlayerController::Computer}) {
         EmpireSetup empire{"Orbital civilization"}; empire.controller = controller;
         empire.primaryTrait = PrimaryRaceTrait::HabitatCivilization;
-        bool rejected = false;
-        try { (void)generate_campaign(GalaxyConfig{}, {empire}); }
-        catch (const std::invalid_argument&) { rejected = true; }
-        assert(rejected);
+        const auto campaign=generate_campaign(GalaxyConfig{}, {empire});
+        assert(campaign.players.front().controller==controller);
+        assert(campaign.planets.front().nativeOrbit.population==kInitialHomePopulation);
     }
     const auto generalist = generate_campaign(GalaxyConfig{}, {{"Terrans"}});
     assert(colony_output(generalist, generalist.planets.front()) == 29);
@@ -298,7 +297,7 @@ int main(int argc, char** argv)
     if (argc == 2 && std::string(argv[1]) == "minimum") { starts_require_actual_nonzero_output(); return 0; }
     if (argc == 2 && std::string(argv[1]) == "industry") { native_surface_industry_never_spends_work_or_minerals(); return 0; }
     starter_is_paid_legal_and_observed();
-    early_access_is_narrow_and_does_not_unlock_campaigns();
+    early_access_is_narrow_in_playable_campaigns();
     ordinary_orders_manufacture_a_paid_replacement();
     income_requires_supported_real_residents_and_energy();
     undersupply_and_invalid_starts_are_atomic();
