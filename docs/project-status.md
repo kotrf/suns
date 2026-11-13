@@ -1,5 +1,23 @@
 # Project status and development handoff
 
+## PR295 repeat-review P2: named edits after coarse fixes — 13 November 2026
+
+[Review5892821657](https://github.com/kotrf/suns/pull/295#pullrequestreview-5892821657)
+on3619dfa confirms the old static/moving-source correction and finds host
+rejection of a Qt Warp2→5 edit after a received coarse report removes precise
+course data. Both new Qt→host/core regressions fail before the fix. Shared work
+validation now consumes the complete action: named recovery checks received study
+by ID and fleet equipment, while new unnamed choices bind unique coordinates.
+Active/queued admission and Qt append/action editing use that complete intent;
+same-action IDs survive before validation. Delayed commands, received-only
+admission and invalid-target/equipment controls are covered.
+
+The complete GCC14.2/Qt6.12 Debug build and134/134 CTest passed in208.19 s; after strengthening the two initial-course fixtures, final12/12 profile tests passed in3.68 s. All158 local documentation targets were checked. Save125/orders53/race3 unchanged. The previous
+source CI43440521704 on3619dfa passed134/134 in147.44 s; exactSHA/Qt6.12.0 checked.
+Main6e5633b and its CI remain successful;293/294 merged,295 open for repeat review,
+both discussions open until an authorized merge. Existing work/branches kept,
+50/54/55 umbrellas open,53/63 frozen. Details: [audit](audits/2026-11-13-specimen-recovery-target.md).
+
 ## #293/#294 merged; #295 recovery-target P2 — 13 November 2026
 
 The user ordered293 then294 merged. [#293](https://github.com/kotrf/suns/pull/293)

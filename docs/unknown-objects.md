@@ -57,6 +57,9 @@ otherwise classify first or fit stronger scanners. Existing command delay, fuel
 use, electronics and standing tasks apply.
 
 Recovery orders freeze the chosen object ID from received study/course evidence.
+Named route edits remain valid after coarse updates remove a precise course:
+Qt and host check received study by ID and equipment, without rematching the old
+intercept to the newer reported coordinate.
 The final waypoint, standing task, delayed command and telemetry preserve it;
 resuming a scanner never changes a static target into a neighbouring derelict.
 A named moving source remains the target even when another is closer or the

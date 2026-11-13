@@ -770,9 +770,9 @@ bool submit_fleet_route_command(
     };
     if(!bindRecovery(program.arrivalAction,program.destination))return false;
     for(auto& waypoint:program.queuedWaypoints)if(!bindRecovery(waypoint.arrivalAction,waypoint.destination))return false;
-    if (!fleet_work_order_error(state, knownFleet, program.destination, program.arrivalAction.kind).empty()
+    if (!fleet_work_order_error(state, knownFleet, program.destination, program.arrivalAction).empty()
         || std::any_of(program.queuedWaypoints.begin(), program.queuedWaypoints.end(), [&](const auto& waypoint) {
-            return !fleet_work_order_error(state, knownFleet, waypoint.destination, waypoint.arrivalAction.kind).empty();
+            return !fleet_work_order_error(state, knownFleet, waypoint.destination, waypoint.arrivalAction).empty();
         })) return false;
     const auto validTarget = [&](FleetId candidateId) {
         if (candidateId == 0) return true;

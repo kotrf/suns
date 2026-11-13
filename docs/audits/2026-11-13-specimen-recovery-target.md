@@ -33,3 +33,30 @@ The complete GCC14.2/Qt6.12 Debug build, focused11/11 in5.06 s and final134/134 
 
 The original source CI134/134 was green before the P2 correction. The new source
 awaits repeat review; its thread stays open until an authorized merge.
+
+## Repeat-review P2: keep route edits after coarse received fixes
+
+[Review5892821657](https://github.com/kotrf/suns/pull/295#pullrequestreview-5892821657)
+on3619dfa confirms the first correction. A newer coarse report keeps Studied but
+removes the precise course; Qt correctly stages Warp2→5 for namedX7 at129,0,
+but host admission calls the kind-only coordinate check after validating the ID
+and silently discards the edit. Source CI43440521704 passed134/134 in147.44 s
+with exact3619dfa/Qt6.12.0 verified.
+
+The shared work validator now accepts a complete arrival action. A named recovery
+checks that source's received completed study and fleet equipment; it does not
+require the old intercept to match a newly received position/course. Coordinate
+lookup remains for new unnamed choices, using unique received evidence. Host
+admission validates full active/queued actions; Qt append/action editing passes
+the same complete intent and retains an existing ID before action validation.
+Physical location and availability stay local execution concerns. Save125,
+orders53 and race3 are unchanged.
+
+Both new regressions fail before the correction. The Qt test delivers an actual
+coarse observation, edits the existing route and executes its pending orders
+through TurnProcessor, checking Warp5, real125,0 movement and retained target7.
+Core cases cover active/queued routes, immediate/delayed delivery, absent hidden
+physical objects and rejection of unnamed/missing/unreceived/unstudied targets,
+missing scanners and missing cargo capacity. The complete GCC14.2/Qt6.12 Debug build and134/134 CTest passed in208.19 s; after strengthening the two initial-course fixtures, final12/12 profile tests passed in3.68 s. All158 local documentation targets were checked.
+
+Both review discussions remain open for repeat review and user-authorized merge.

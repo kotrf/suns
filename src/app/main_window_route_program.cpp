@@ -1006,7 +1006,7 @@ bool MainWindow::appendRouteWaypoint(
     }
     if (arrivalAction.colonyPlan && (arrivalAction.kind != FleetArrivalActionKind::Colonize
         || !colonyPlanApplicableForOrders(*arrivalAction.colonyPlan))) return false;
-    if (const auto error = fleet_work_order_error(state_, *fleet, destination, arrivalAction.kind); !error.empty()) {
+    if (const auto error = fleet_work_order_error(state_, *fleet, destination, arrivalAction); !error.empty()) {
         statusBar()->showMessage(QString::fromStdString(error), 5000);
         return false;
     }
@@ -1069,12 +1069,12 @@ bool MainWindow::stageSelectedFleetRoute(
     const auto bind=[&](FleetArrivalAction& action,Position point) {
         if(action.kind!=FleetArrivalActionKind::RecoverSample)return true;
         if(!action.recoveryTarget)action.recoveryTarget=science_recovery_target(receivedPlayerState(),pendingOrders_.player,point);
-        return action.recoveryTarget && sample_observation_received(receivedPlayerState(),pendingOrders_.player,action.recoveryTarget);
+        return action.recoveryTarget && fleet_work_order_error(state_,fleet,point,action).empty();
     };
     bool bound=bind(route.arrivalAction,route.destination);
     for(auto& waypoint:route.queuedWaypoints)bound=bind(waypoint.arrivalAction,waypoint.destination) && bound;
     if(!bound) {
-        statusBar()->showMessage("Select one studied object in Unknown objects before ordering specimen recovery.",5000);return false;
+        statusBar()->showMessage("Specimen recovery requires one received studied object, a fitted scanner and 5 kt of cargo capacity.",5000);return false;
     }
     if (auto* pending = pendingMove(pendingOrders_, fleet.id)) {
         *pending = std::move(route);
@@ -1149,6 +1149,9 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
     auto legs = routeLegs(*route);
     if (index >= legs.size()) return false;
     auto& leg = legs[index];
+    if(action.kind==FleetArrivalActionKind::RecoverSample && !action.recoveryTarget
+        && leg.arrivalAction.kind==FleetArrivalActionKind::RecoverSample)
+        action.recoveryTarget=leg.arrivalAction.recoveryTarget;
     if (leg.arrivalAction == action) return true;
     if (action.colonyPlan && (action.kind != FleetArrivalActionKind::Colonize
         || !colonyPlanApplicableForOrders(*action.colonyPlan))) return false;
@@ -1169,7 +1172,7 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         return false;
     }
 
-    if (const auto error = fleet_work_order_error(state_, fleet, leg.destination, action.kind); !error.empty()) {
+    if (const auto error = fleet_work_order_error(state_, fleet, leg.destination, action); !error.empty()) {
         statusBar()->showMessage(QString::fromStdString(error), 5000);
         return false;
     }
@@ -1227,9 +1230,6 @@ bool MainWindow::setSelectedFleetRouteProgramLegAction(std::size_t index, FleetA
         if (leg.arrivalAction.kind != action.kind) return false;
         action = leg.arrivalAction;
     }
-    if(action.kind==FleetArrivalActionKind::RecoverSample && !action.recoveryTarget
-        && leg.arrivalAction.kind==FleetArrivalActionKind::RecoverSample)
-        action.recoveryTarget=leg.arrivalAction.recoveryTarget;
     leg.arrivalAction = action;
     route->destination = legs.front().destination;
     route->warp = legs.front().warp;

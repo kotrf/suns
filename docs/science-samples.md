@@ -14,6 +14,8 @@ Recovery requires physical arrival at the landmark, active scanners, that empire
 delivered study and 5 kt of free shared hold. Ordinary command delay applies.
 
 Recovery is bound to the selected object's stable ID at authoring/transmission.
+Editing that named route validates the received study by ID and fitted equipment,
+even if a newer coarse report has removed the exact position/course.
 Route edits, command delay, radio silence, host reload and received telemetry
 retain that ID. A nearby studied/depleted/available object cannot replace it.
 Generic coordinate authoring needs one unambiguous received completed study;

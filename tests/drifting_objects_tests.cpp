@@ -148,6 +148,48 @@ void newer_fixes_survive_a_late_study_and_coarse_updates()
     fix.deliveryTurn=22;s.players.front().pendingPlayerReports={fix};s.turn=22;(void)deliver_due_player_reports(s);
     assert(known_unknown_object(s,1,7)->observedTurn==21);
 }
+void bound_recovery_survives_coarse_reports_and_command_delay()
+{
+    auto base=fixture();base.unknownObjects.front().velocity={1.5,0};
+    base.players.front().objectKnowledge={observation(base)};
+    assert(object_course_contains(base.players.front().objectKnowledge.front(),{129,0}));
+    base.unknownObjects.front().position={150,0};++base.turn;
+    observe_unknown_objects(base,base.turn);(void)deliver_due_player_reports(base);
+    const auto* known=known_unknown_object(base,1,7);
+    assert(known && known->level==ObjectKnowledgeLevel::Studied && known->uncertainty==15 && !known->velocity);
+    FleetArrivalAction recovery{FleetArrivalActionKind::RecoverSample};recovery.recoveryTarget=7;
+    for(bool queued:{false,true})for(bool delayed:{false,true}) {
+        auto s=base;
+        if(delayed)s.fleets.front().position=s.fleets.front().telemetry.position=Position{400,0};
+        const MoveFleetOrder order=queued
+            ? MoveFleetOrder{1,{110,0},2,{},{{{129,0},5,recovery}}}
+            : MoveFleetOrder{1,{129,0},5,recovery};
+        s=TurnProcessor{}.process(s,{{1,{order}}});
+        if(delayed) {
+            assert(!s.fleets.front().pendingCommands.empty());
+            const auto due=s.fleets.front().pendingCommands.front().deliveryTurn;
+            while(s.turn<due)s=TurnProcessor{}.process(s,{});
+        }
+        const auto& f=s.fleets.front();
+        if(queued) {
+            assert(f.waypointQueue.size()==1 && f.waypointQueue.front().warp==5);
+            assert(f.waypointQueue.front().arrivalAction.recoveryTarget==7);
+        } else assert(f.warp==5 && f.arrivalAction && f.arrivalAction->recoveryTarget==7);
+    }
+    for(unsigned invalid=0;invalid<6;++invalid) {
+        auto s=base;auto action=recovery;
+        if(invalid==0)action.recoveryTarget=0; // No coordinate/course evidence for a new target.
+        if(invalid==1)action.recoveryTarget=8;
+        if(invalid==2)s.players.front().objectKnowledge.front().level=ObjectKnowledgeLevel::Classified;
+        if(invalid==3)s.players.front().objectKnowledge.front().receivedTurn=s.turn+1;
+        if(invalid==4)s.shipDesigns.front().components={ShipComponentType::QuickJump5};
+        if(invalid==5)s.shipDesigns.front().hull=ShipHullType::Scout;
+        assert(!submit_fleet_route_command(s,1,1,{129,0},5,action,{}));
+        assert(!s.fleets.front().destination && s.fleets.front().pendingCommands.empty());
+    }
+    auto hidden=base;hidden.unknownObjects.clear();
+    assert(submit_fleet_route_command(hidden,1,1,{129,0},5,recovery,{}));
+}
 void computer_aims_from_received_course_only()
 {
     auto s=fixture();s.players.front().controller=PlayerController::Computer;
@@ -204,6 +246,7 @@ int main()
     recovery_keeps_the_named_moving_body_and_legacy_tasks_stay_put();
     ambiguous_new_coordinates_require_an_explicit_target();
     newer_fixes_survive_a_late_study_and_coarse_updates();
+    bound_recovery_survives_coarse_reports_and_command_delay();
     computer_aims_from_received_course_only();
     native_stations_receive_and_research_real_cores_without_surface_population();
 }

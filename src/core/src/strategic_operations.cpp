@@ -225,6 +225,13 @@ bool strategic_task_available(const GameState& state, const Fleet& fleet, FleetT
 std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, Position destination,
     FleetArrivalActionKind action)
 {
+    return fleet_work_order_error(state, fleet, destination, FleetArrivalAction{action});
+}
+
+std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, Position destination,
+    const FleetArrivalAction& intent)
+{
+    const auto action = intent.kind;
     const auto task = arrival_work_task(action);
     if (action == FleetArrivalActionKind::ScrapFleet && fleet.outpost != OutpostKind::None)
         return "Use the installation's decommission controls before Scrap Fleet.";
@@ -259,10 +266,10 @@ std::string fleet_work_order_error(const GameState& state, const Fleet& fleet, P
         if (!wormhole && !object) return "Field research needs a system, reported wormhole within 10 ly, or an object area within the fitted study radius (up to 20 ly). Classify uncertain areas or fit stronger scanners.";
     }
     if (*task == FleetTask::RecoverSample) {
-        const bool target = player && std::any_of(player->objectKnowledge.begin(), player->objectKnowledge.end(),
-            [&](const auto& x) { return x.level == ObjectKnowledgeLevel::Studied
-                && (same_position(x.position, destination) || object_course_contains(x,destination)); });
-        if (!target) return "Specimen recovery requires a received completed study at the destination and 5 kt of cargo capacity.";
+        const auto target = intent.recoveryTarget ? intent.recoveryTarget
+            : science_recovery_target(state, fleet.owner, destination);
+        if (!target || target > 0x7fffffffU || !sample_observation_received(state, fleet.owner, target))
+            return "Specimen recovery requires a received completed study of the selected object and 5 kt of cargo capacity.";
     }
     if (*task == FleetTask::Salvage) {
         const bool wreck = player && std::any_of(player->strategicIntel.begin(), player->strategicIntel.end(),
