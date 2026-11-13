@@ -359,6 +359,10 @@ ShipComponentSpec component_spec(ShipComponentType type)
         spec.mass = kind == OutpostKind::FuelDepot ? 80 : 50;
         spec.buildCost = kind == OutpostKind::FuelDepot ? 80 : 60;
         spec.fuelCapacity = kind == OutpostKind::FuelDepot ? 2500 : 0;
+        if (kind == OutpostKind::SensorArray) {
+            spec.name = "Sensor Array Kit"; spec.mass = 100; spec.buildCost = 120;
+            // The transported kit supplies no scanning field until anchored.
+        }
         return spec;
     }
     if (const auto* gate = stargate_spec(type); gate && gate->specialistOnly) {
@@ -1102,6 +1106,7 @@ double fleet_speed(const GameState& state, const Fleet& fleet)
 
 bool fleet_has_scanner(const GameState& state, const Fleet& fleet)
 {
+    if (fleet.outpost == OutpostKind::SensorArray && outpost_online(fleet)) return true;
     const auto stacks = fleet_ship_stacks(fleet);
     return std::any_of(stacks.begin(), stacks.end(), [&](const auto& stack) {
         const auto* design = find_ship_design(state, stack.design);
@@ -1119,7 +1124,7 @@ double fleet_sensor_range(const GameState& state, const Fleet& fleet)
 double fleet_ordinary_sensor_range(const GameState& state, const Fleet& fleet)
 {
     if (fleet.outpost != OutpostKind::None && !outpost_online(fleet)) return 0;
-    double range = 0.0;
+    double range = fleet.outpost == OutpostKind::SensorArray ? kOutpostSensorRangeLy : 0.0;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         if (const auto* design = find_ship_design(state, stack.design)) {
             range = std::max(range, ship_design_ordinary_sensor_range(*design));
@@ -1142,7 +1147,7 @@ double fleet_communication_range(const GameState& state, const Fleet& fleet)
 double fleet_penetrating_sensor_range(const GameState& state, const Fleet& fleet)
 {
     if (fleet.outpost != OutpostKind::None && !outpost_online(fleet)) return 0;
-    double range = 0.0;
+    double range = fleet.outpost == OutpostKind::SensorArray ? kOutpostPenetratingRangeLy : 0.0;
     for (const auto& stack : fleet_ship_stacks(fleet)) {
         if (const auto* design = find_ship_design(state, stack.design)) {
             range = std::max(range, ship_design_penetrating_sensor_range(*design));

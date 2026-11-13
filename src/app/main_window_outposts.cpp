@@ -2,6 +2,7 @@
 #include "suns/deep_space.hpp"
 #include "suns/communications.hpp"
 #include "suns/strategic_operations.hpp"
+#include "suns/reconnaissance.hpp"
 #include <QAction>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
@@ -27,9 +28,10 @@ void MainWindow::installOutposts()
     auto* dock=new QDockWidget("Deep-space infrastructure",this); dock->setObjectName("outpostsDock");
     auto* body=new QWidget(dock); auto* layout=new QVBoxLayout(body);
     auto* hint=new QLabel("Build a ship with one Fuel Depot Kit (Construction 4 / Energy 3) or Deep-space Relay Kit "
-        "(Construction 4 / Electronics 5) in Ship Designer, then fly it to deep space and deploy. Deployment is permanent; "
+        "(Construction 4 / Electronics 5), or Sensor Array Kit (Construction 6 / Electronics 6) in Ship Designer, then fly it to deep space and deploy. Deployment is permanent; "
         "one ship, no colonists, 5 ly from stars and 1 ly from other outposts. Upkeep: 1 mg/year. "
-        "Depots dispense finite fuel; tankers replenish both kinds. A powered relay adds 300 ly only after deployment. "
+        "Depots dispense finite fuel; tankers replenish fuel at every kind. A powered relay adds 300 ly communications; "
+        "a powered sensor array adds 250 ly ordinary / 75 ly penetrating scans only after deployment. "
         "Stocks and condition below are received telemetry; remote outcomes can change before arrival.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* coordinates=new QFormLayout;
@@ -125,7 +127,9 @@ void MainWindow::refreshOutposts()
         row->setText(4,QString("%1%").arg(f.damagePercent,0,'f',0));
         row->setText(5,QString("Year %1; age %2").arg(qulonglong(f.telemetry.observedTurn)).arg(qulonglong(fleet_telemetry_age(state_,f))));
         row->setText(6,!outpost_online(f)?"Offline at observation":f.outpost==OutpostKind::CommunicationsRelay
-            && !fleet_transmits(f,f.telemetry.observedTurn)?"Powered; radio silent at observation":"Powered at observation");
+            && !fleet_transmits(f,f.telemetry.observedTurn)?"Powered; radio silent at observation"
+            :f.outpost==OutpostKind::SensorArray && !fleet_active_sensors(f,f.telemetry.observedTurn)?"Powered; active sensors off at observation"
+            :f.outpost==OutpostKind::SensorArray?"Sensors: 250 / 75 ly at observation":"Powered at observation");
         for (int c=0;c<7;++c) row->setToolTip(c,"Last received snapshot. Fuel changes, destruction and network interruptions require a delivered report. Powered sites consume 1 mg per year; tanks can be replenished by a Supply outpost arrival order.");
         if (f.id==selected) tree->setCurrentItem(row);
     }

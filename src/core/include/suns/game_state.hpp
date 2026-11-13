@@ -398,9 +398,10 @@ enum class ShipComponentType {
     BulkRadiationScreen,
     CompositeRadiationScreen,
     AdvancedRadiationScreen,
+    SensorArrayKit,
 };
 
-inline constexpr auto kLastShipComponent = ShipComponentType::AdvancedRadiationScreen;
+inline constexpr auto kLastShipComponent = ShipComponentType::SensorArrayKit;
 
 enum class ShipComponentKind {
     Engine,
@@ -1476,7 +1477,7 @@ enum class FleetTask {
 
 // A paid constructor hull becomes a permanent, fixed installation. It keeps
 // its stable FleetId, fitted hull, cargo and the normal combat/contact model.
-enum class OutpostKind : std::uint8_t { None, FuelDepot, CommunicationsRelay, OrbitalShipyard };
+enum class OutpostKind : std::uint8_t { None, FuelDepot, CommunicationsRelay, OrbitalShipyard, SensorArray };
 
 enum class EmissionMode : std::uint8_t { Standard, Passive, RadioSilence };
 struct ElectronicsProgram {

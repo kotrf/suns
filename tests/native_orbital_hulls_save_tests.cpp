@@ -103,7 +103,7 @@ void new_fits_survive_all_record_and_order_channels()
         assert(std::get<QueueStationOrder>(decoded.orders.orders.front()).construction==refit);
         // A new enum payload cannot masquerade as an old order format.
         QFile file(path);assert(file.open(QIODevice::ReadOnly));auto bytes=file.readAll();file.close();
-        assert(quint8(bytes[7])==51);bytes[7]=char(50);
+        assert(quint8(bytes[7])==52);bytes[7]=char(50);
         assert(file.open(QIODevice::WriteOnly) && file.write(bytes)==bytes.size());file.close();
         assert(!read_turn_order_file(path,decoded,error));
     }

@@ -12,6 +12,7 @@ OutpostKind construction_kit_kind(ShipComponentType component)
     if (component == ShipComponentType::OrbitalShipyardKit) return OutpostKind::OrbitalShipyard;
     if (component == ShipComponentType::FuelDepotKit) return OutpostKind::FuelDepot;
     if (component == ShipComponentType::DeepSpaceRelayKit) return OutpostKind::CommunicationsRelay;
+    if (component == ShipComponentType::SensorArrayKit) return OutpostKind::SensorArray;
     return OutpostKind::None;
 }
 OutpostKind fleet_construction_kit(const GameState& state, const Fleet& fleet)
@@ -36,6 +37,7 @@ std::string outpost_kind_name(OutpostKind kind)
     case OutpostKind::OrbitalShipyard: return "Orbital shipyard";
     case OutpostKind::FuelDepot: return "Fuel depot";
     case OutpostKind::CommunicationsRelay: return "Communications relay";
+    case OutpostKind::SensorArray: return "Sensor array";
     default: return "Mobile constructor";
     }
 }
@@ -52,7 +54,7 @@ std::string outpost_deployment_error(const GameState& state, const Fleet& fleet,
 }
 bool outpost_state_valid(const GameState& state, const Fleet& fleet)
 {
-    if (fleet.outpost > OutpostKind::OrbitalShipyard) return false;
+    if (fleet.outpost > OutpostKind::SensorArray) return false;
     if (fleet.outpost == OutpostKind::OrbitalShipyard) {
         // Validate physical anchoring here; the trailing ORBI section validates
         // the independently dated construction/crew state after it has loaded.

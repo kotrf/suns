@@ -3,7 +3,7 @@
 Mobile support ships are described in [mobile expedition bases](mobile-expedition-bases.md); they do not change the permanent anchoring below.
 
 First playable slice of [#54](https://github.com/kotrf/suns/issues/54): paid
-constructors become permanent fuel depots and communications relays away from
+constructors become permanent fuel depots, communications relays and sensor arrays away from
 planets. Orbital stations remain a separate system. There is no remote placement
 or free teleportation of material.
 
@@ -17,11 +17,20 @@ production/mineral costs apply, including the kit:
 | --- | --- | --- | --- | --- | --- |
 | Fuel Depot Kit | Construction 4, Energy 3 | 80 | 40 / 20 / 30 | 80 | +2500 mg finite reservoir; visiting fleets use Refuel |
 | Deep-space Relay Kit | Construction 4, Electronics 5 | 60 | 25 / 10 / 50 | 50 | 300 ly communications field while powered and transmitting |
+| Sensor Array Kit | Construction 6, Electronics 6 | 120 | 40 / 20 / 70 | 100 | 250 ly ordinary / 75 ly penetrating sensors while powered and active |
 
 The kit's reservoir is physical storage aboard the constructor too. Kits grant
 no free fuel on deployment; the existing stock remains aboard. The relay kit
 adds no communications range while mobile. Ordinary scanner/Relay Array fittings
 continue to obey their existing rules.
+
+A Sensor Array Kit is transported as inactive equipment. Only the permanently
+anchored array supplies its 250/75 ly field. Penetration provides the ordinary
+rough habitability observation, with no remote geological survey or surface
+stock report. Radio silence/passive sensor settings, jamming and interstellar
+medium apply normally. The array grants neither a relay field nor fuel service;
+it accepts ordinary tanker fuel deliveries. It can be armed/shielded through
+the constructor's normal paid fit and has zero tactical movement when anchored.
 
 Open **View → Deep-space infrastructure**. Select the constructor and enter
 coordinates, then choose **Fly to coordinates and deploy**, or **Deploy selected
@@ -61,8 +70,8 @@ route. Fuel burned while travelling is charged before delivery.
 
 The panel's Fly/Refuel/Deliver buttons use received fixed coordinates; the route
 editor displays and edits tanker reserves, including fractional mg. A depleted
-or destroyed site cannot fulfill a stale order. Route forecasts simulate received
-stocks and explicitly describe future stock uncertainty.
+or destroyed site cannot fulfill a stale order. Cheap route estimates use
+received geometry; the host rechecks real stock on arrival.
 
 ## Knowledge, combat and persistence
 
@@ -79,7 +88,12 @@ field. Enemy sites initially appear as ordinary uncertain fleet contacts; this
 slice does not disclose an enemy's installation kind, fittings or stock through
 the owner panel. Computer empires exclude anchored sites from mobile missions.
 
-Save **v82**, orders **v29**. A bounded OUTP extension records physical,
+Current save **v123**, orders **v52**, portable race **v3**. The Sensor Array Kit
+and anchored kind use appended IDs; old identities keep their exact values.
+v123 extends accepted enum ranges without changing the v122 record layout.
+v52 transports the new blueprint component; older packets keep their versioned
+component limits. Existing installations are never converted during migration.
+The first slice used save v82/orders v29. Its bounded OUTP extension records physical,
 received, in-flight and delayed-loss deployment flags without changing old fleet
 record layouts. Supply alone adds a fuel-reserve payload to the new action ID.
 Old v81 and earlier supported campaigns load with no deployed sites. Invalid
@@ -88,7 +102,7 @@ reserves are rejected. Player exports omit host-only flags and stocks; order
 packets carry deployment and fuel-delivery intent, never authoritative sites.
 
 Further #54 stages remain open: construction projects beyond one paid kit,
-dedicated listening/sensor posts, cargo caches, separate fortified outpost types,
+dedicated passive listening posts, cargo caches, separate fortified outpost types,
 capture, maintenance/traffic statistics and richer infrastructure management.
 Deep-space shipyards, gates and mobile services belong to later work, including
 [#61](https://github.com/kotrf/suns/issues/61). Deferred transport networks #53

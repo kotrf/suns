@@ -70,6 +70,12 @@ const std::vector<ResearchUnlock>& research_unlocks()
             unlock.extraLevels[std::size_t(depot ? ResearchField::Energy : ResearchField::Electronics)] = depot ? 3 : 5;
             entries.push_back(std::move(unlock));
         }
+        {
+            ResearchUnlock unlock{ResearchField::Construction,6,"Sensor Array Kit",
+                "Paid 100 kt constructor kit: permanently deploy 250 ly ordinary / 75 ly penetrating sensors. Upkeep 1 mg/year; no kit scanning field while mobile. Observations use normal communication delivery.",ShipComponentType::SensorArrayKit};
+            unlock.extraLevels[std::size_t(ResearchField::Electronics)]=6;
+            entries.push_back(std::move(unlock));
+        }
         for(const auto name:{"Orbital mirrors","Orbital shades"}) {
             ResearchUnlock unlock{ResearchField::Construction,14,name,
                 "Long climate project: 2400 production, I/B/G 240/120/240 kt, at most 80 work/year. Needs a friendly Starbase or Fortress with a shipyard; changes effective temperature by up to 10 points while supported.", {}};

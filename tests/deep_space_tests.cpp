@@ -68,6 +68,52 @@ void deployment_is_physical_paid_and_permanent()
     assert(built.fleets.size()==1 && built.fleets[0].outpost==OutpostKind::None);
     assert(near(built.planets[0].minerals.ironium,baseline.planets[0].minerals.ironium-minerals.ironium));
 }
+void sensor_arrays_are_paid_anchored_and_need_power()
+{
+    auto s=world();
+    ShipDesign design{102,1,"Sensor constructor",ShipHullType::Scout,{C::FusionDrive,C::SensorArrayKit}};
+    normalize_ship_design_placement(design);
+    assert(ship_design_valid(design));s.shipDesigns.push_back(design);s.nextShipDesignId=103;
+    assert(component_spec(C::SensorArrayKit).mass==100 && component_spec(C::SensorArrayKit).buildCost==120);
+    const auto price=component_mineral_cost(C::SensorArrayKit);
+    assert(price.ironium==40 && price.boranium==20 && price.germanium==70);
+    auto campaign=generate_campaign({},{{"Surveyors"}});
+    campaign.players.front().technology.levels[std::size_t(ResearchField::Construction)]=6;
+    campaign.players.front().technology.levels[std::size_t(ResearchField::Electronics)]=6;
+    ShipDesign modern{campaign.nextShipDesignId,1,"Reference constructor",ShipHullType::StarsScout,{C::QuickJump5,C::SensorArrayKit}};
+    assert(ship_design_valid(modern) && ship_design_available_to_player(campaign,1,modern));
+    s.players[0].technology.levels.fill(0);
+    for(int construction=5;construction<=6;++construction)for(int electronics=5;electronics<=6;++electronics) {
+        s.players[0].technology.levels[std::size_t(ResearchField::Construction)]=construction;
+        s.players[0].technology.levels[std::size_t(ResearchField::Electronics)]=electronics;
+        assert(component_available_to_player(s,1,C::SensorArrayKit)==(construction==6 && electronics==6));
+    }
+    auto& f=add(s,102);f.fuel=3;
+    assert(fleet_construction_kit(s,f)==OutpostKind::SensorArray && !fleet_has_scanner(s,f));
+    assert(fleet_sensor_range(s,f)==0 && fleet_communication_range(s,f)==0);
+    f.task=FleetTask::DeployOutpost;deploy_outposts(s,s.turn);
+    assert(f.outpost==OutpostKind::SensorArray && f.fuel==3 && outpost_state_valid(s,f));
+    assert(fleet_has_scanner(s,f) && fleet_ordinary_sensor_range(s,f)==250 && fleet_penetrating_sensor_range(s,f)==75);
+    assert(fleet_communication_range(s,f)==0 && fleet_max_warp(s,f)==0);
+    maintain_outposts(s,s.turn+1);maintain_outposts(s,s.turn+2);maintain_outposts(s,s.turn+3);
+    assert(f.fuel==0 && !outpost_online(f) && fleet_sensor_range(s,f)==0 && !fleet_has_scanner(s,f));
+    const auto id=f.id;auto& tanker=add(s,kScoutDesignId,f.position);tanker.fuel=20;
+    assert(supply_outpost(s,tanker,10)==10);
+    const auto post=std::find_if(s.fleets.begin(),s.fleets.end(),[&](const auto& f){return f.id==id;});
+    assert(post->fuel==10 && tanker.fuel==10 && fleet_sensor_range(s,*post)==250);
+    post->damagePercent=100;assert(fleet_sensor_range(s,*post)==0);
+    // Ordinary manufacture pays the entire hull/kit price; no scanning asset
+    // is created just by researching the new component.
+    auto paid=world();paid.shipDesigns.push_back(design);paid.nextShipDesignId=103;
+    paid.planets[0].population=1'000'000;paid.planets[0].industry=1000;paid.planets[0].minerals={1000,1000,1000};
+    const auto baseline=TurnProcessor{}.process(paid,{});
+    const auto built=TurnProcessor{}.process(paid,{{1,{QueueShipDesignOrder{1,102}}}});
+    assert(built.fleets.size()==1 && built.fleets[0].outpost==OutpostKind::None && !fleet_has_scanner(built,built.fleets[0]));
+    const auto minerals=ship_design_mineral_cost(design);
+    assert(near(built.planets[0].minerals.ironium,baseline.planets[0].minerals.ironium-minerals.ironium));
+    assert(near(built.planets[0].minerals.boranium,baseline.planets[0].minerals.boranium-minerals.boranium));
+    assert(near(built.planets[0].minerals.germanium,baseline.planets[0].minerals.germanium-minerals.germanium));
+}
 void validation_and_arbitration_do_not_depend_on_storage_order()
 {
     auto s=world(); auto& first=add(s);
@@ -204,6 +250,7 @@ void armed_platforms_have_no_tactical_movement()
 }
 int main()
 {
+    sensor_arrays_are_paid_anchored_and_need_power();
     deployment_is_physical_paid_and_permanent(); validation_and_arbitration_do_not_depend_on_storage_order();
     fuel_is_finite_owned_and_conserved(); route_stops_replenish_and_draw_from_the_reservoir();
     relay_upkeep_and_loss_cut_the_live_mesh(); deployment_and_stock_wait_for_received_telemetry();
