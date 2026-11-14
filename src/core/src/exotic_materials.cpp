@@ -332,7 +332,7 @@ void publish_exotic_material_reports(GameState& s, const GameState& previous)
         for (const auto& f : s.fleets) if (same_position(f.position, star->position))
             observe_xenocrystal_surface(s, f.owner, p.id, f.id, s.turn + 1, true);
         const auto* old = find_planet(previous, p.id);
-        if (p.owner && old && (p.resonanceLab.work != old->resonanceLab.work
+        if (p.owner && old && (p.resonanceLab.started || old->resonanceLab.started) && (p.resonanceLab.work != old->resonanceLab.work
             || resonance_block(s, p) != resonance_block(previous, *old) || p.owner != old->owner)) {
             // Work is 0..600; 601..608 encode an immutable crystal shortage.
             const auto quantity = resonance_block(s, p) == "Awaiting 8 physically delivered xenocrystals"

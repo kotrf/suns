@@ -1,5 +1,72 @@
 # Project status and development handoff
 
+## PR298 fourth review — creation dependencies and retained refit
+
+Two P2 and one P3 on0844277 have independently failing regressions before the fix.
+Named build/refit references bind only to successful Create in the same submission;
+failure cannot select an older same-name design. A queued stationary refit protects
+its fuel despite missing Shipyard or other temporary work eligibility. Production
+uses the effective yard after earlier completions and resumes work in its repair
+year. Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 15.02s and full 139/139 CTest in 167.88s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; source/CI in PR298. Discussions
+remain for repeat review; no merge. #56 open,#53/#63 frozen; work/ retained.
+
+## PR298 third review — four P2 cases
+
+Four new regressions fail on2f8471d before correction. Production resolution
+respects a prior station refit disabling Shipyard and retains unpaid ship work.
+Mobile bases keep repairing clients but do not refill eligible refit fleets.
+Deployed generators run before upkeep/network routing; ship generation retains
+its refit protection. Deleting a newly created project appends a final command
+instead of rewriting indexed queue operations. Host binding uses owner-scoped
+names for fresh planning IDs across hidden global IDs; Qt/PBEM tests cover this.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 11.85s and full 139/139 CTest in 140.47s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; current source/CI in PR298. Leave
+discussions for repeat review, no merge. #56 open,#53/#63 frozen; work/ retained.
+
+## PR298 repeat review — onboard fuel and gate departure
+
+Two P2 findings on05d2a12 are confirmed by regressions failing before correction.
+Onboard generation runs after command admission and shares the eligible-refit
+exclusion with depot service. A generator removal preserves the existing stock
+and remains possible while work waits for production over multiple years.
+Immediate gate orders service only their departing fleet at the source depot,
+including when the destination has no depot. Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 14.29s and full 139/139 CTest in 141.12s passed. All 183 local documentation targets in six related documents were checked. Current source/CI
+are in PR298; leave discussions for repeat review, no merge. Formats127/55/race3
+remain unchanged;#56 open,#53/#63 frozen; work/ and old branches retained.
+
+## PR298 review — 14 November 2026
+
+[Review of 23e3609](https://github.com/kotrf/suns/pull/298#pullrequestreview-5903254313)
+found two P2 defects and a P3 tooltip defect. All three new regressions fail
+against that revision before correction. Production planning now handles project
+creation/deletion at its ordinary command boundary, preserving queue indices.
+Automatic depot refuelling runs after commands but before movement and skips
+fleets eligible for their queued refit; paused/departing fleets retain ordinary
+service. Completed ships resume normal end-of-year service. Existing fuel is never discarded, and an actual excess still blocks
+smaller tanks. Mineral tooltips belong to the visible rectangles; Qt tests use
+real viewport hit-testing and check exact stocks/report dates.
+
+Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 15.82s and full 139/139 CTest in 172.73s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 and balance remain unchanged. No
+future-year UI forecasts or polling. Previous CI43539988760 passed139/139 on23e3609;
+current source/CI are in PR298. Keep all three threads open for repeat review;
+do not merge. #56 scope remains open,#53/#63 frozen; work/ and old branches retained.
+[Details](mini-3.md#pr298-review--14-november-2026).
+
+## Mini-3 / issue296 — 14 November 2026
+
+User requested all twelve items in [#296](https://github.com/kotrf/suns/issues/296).
+Branch codex/mini-3-296 starts at main6a59a53 after merged#297. Map/route/mineral
+presentation, designer naming/read-only fits/mixed composition, immutable emission
+navigation, physical design deletion/dock refit, Research layout, resonance reports
+and both waypoint-editor defects are implemented. Received evidence remains
+separate from host truth; no future-year UI forecasts or periodic work are added.
+Refit pays only changed equipment, returns10% removed minerals and charges50%
+installation labour in resources; one ship per queued job, with cargo/fuel/damage
+retained. Save127/orders55/race3 append guarded kinds/orders; active old layouts and
+genuine fixtures remain intact. [Details](mini-3.md). Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 21.51s and full 139/139 CTest in 194.98s passed. Actual Qt fitting/refit/map screenshots and 181 local documentation targets were checked. The main baseline CI43527982470 succeeded.
+
+Ready for review; current PR/source/CI are tracked in GitHub. Do not merge automatically. #56 larger scope remains
+open,#53/#63 frozen; existing work/ and source/archive branches retained.
+
 ## PR297 repeat P2 — tied plateau exit, 14 November 2026
 
 [Repeat review](https://github.com/kotrf/suns/pull/297#issuecomment-6867024973)

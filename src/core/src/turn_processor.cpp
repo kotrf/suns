@@ -38,11 +38,17 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include "suns/ship_refit.hpp"
 
 namespace suns {
 
 std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item)
 {
+    if (item.kind == ProductionKind::ShipRefit && item.refit) {
+        const auto* a=find_ship_design(state,item.refit->source);const auto* b=find_ship_design(state,item.refit->target);
+        if(a&&b)if(const auto q=ship_refit_quote(*a,*b))return q->work;
+        return 0;
+    }
     if (item.kind == ProductionKind::ResonanceLaboratory) return kResonanceWork;
     if (item.kind == ProductionKind::Research) return 0;
     if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
@@ -247,7 +253,7 @@ void sync_fleet_presentation(GameState& state, Fleet& fleet)
 bool design_name_exists(const GameState& state, PlayerId owner, const std::string& name)
 {
     return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& design) {
-        return design.owner == owner && design.name == name;
+        return !design.retired && design.owner == owner && design.name == name;
     });
 }
 
@@ -361,6 +367,11 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
         const auto& completed = completion.item;
         if (engineering_kind(completed.kind) || completed.kind == ProductionKind::ResonanceLaboratory)
             continue; // Dedicated dated installation reports, never ship construction.
+        if(completed.kind==ProductionKind::ShipRefit && completed.refit) {
+            if(complete_ship_refit(state,planet,*completed.refit) && star)
+                queue_player_report(state,planet.owner,PlayerReportKind::ProductionCompleted,star->position,state.turn+1,planet.star,planet.id,completed.refit->fleet,completed.refit->target,ProductionKind::ShipRefit,1);
+            continue;
+        }
         const auto object = complete_production(state, planet, completed);
         if (!object || !star) continue;
         const auto design = completed.kind == ProductionKind::ColonyShip
@@ -1209,9 +1220,22 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
     }
 }
 
-void generate_fleet_fuel(GameState& state)
+std::set<FleetId> fleets_under_refit(const GameState& state)
 {
+    std::set<FleetId> result;
+    for (const auto& planet : state.planets)
+        for (const auto& item : planet.productionQueue)
+            if (item.refit && ship_refit_fuel_capacity(state, planet, *item.refit))
+                result.insert(item.refit->fleet);
+    return result;
+}
+
+void generate_fleet_fuel(GameState& state, bool deployed)
+{
+    const auto refitting = fleets_under_refit(state);
     for (auto& fleet : state.fleets) {
+        if ((fleet.outpost != OutpostKind::None) != deployed) continue;
+        if (refitting.contains(fleet.id)) continue;
         const auto capacity = fleet_fuel_capacity(state, fleet);
         if (capacity <= 0.0) {
             fleet.fuel = 0.0;
@@ -1221,15 +1245,22 @@ void generate_fleet_fuel(GameState& state)
     }
 }
 
+void refuel_fleet_at_orbital_service(GameState& state, Fleet& fleet)
+{
+    const auto* colony = friendly_colony_at_fleet(state, fleet);
+    if (colony && colony_has_orbital_service(
+            state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot))
+        fleet.fuel = fleet_fuel_capacity(state, fleet);
+}
+
 void refuel_fleets_at_orbital_services(GameState& state)
 {
+    const auto refitting = fleets_under_refit(state);
     for (auto& fleet : state.fleets) {
-        const auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony || !colony_has_orbital_service(
-                state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot)) {
-            continue;
-        }
-        fleet.fuel = fleet_fuel_capacity(state, fleet);
+        // Preserve fuel already aboard while a refit can proceed. Filling the
+        // old tanks could invalidate an accepted reduction in tank capacity.
+        if (refitting.contains(fleet.id)) continue;
+        refuel_fleet_at_orbital_service(state, fleet);
     }
 }
 
@@ -2457,6 +2488,10 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
             (void)submit_visitor_command(state, player, value);
         } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
             (void)submit_probe_command(state, player, value);
+        } else if constexpr (std::is_same_v<T, DeleteShipDesignOrder>) {
+            (void)delete_ship_design(state,player,value.design);
+        } else if constexpr (std::is_same_v<T, RefitShipOrder>) {
+            (void)queue_ship_refit(state,player,value);
         } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
             create_ship_design(state, player, value);
         } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
@@ -2532,6 +2567,29 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
 
 namespace {
 struct PlannedSplitReference { std::size_t order{}; FleetId fleet{}; };
+using CreatedDesigns = std::map<std::string, ShipDesignId>;
+
+// A pending name is a dependency on this submission's successful Create,
+// never a request to fall back to an older project with the same name.
+bool bind_created_design(Order& order,const GameState& state,PlayerId owner,const CreatedDesigns& created)
+{
+    std::string* name=nullptr;ShipDesignId* target=nullptr;
+    if(auto* build=std::get_if<QueueShipDesignOrder>(&order)){name=&build->pendingDesignName;target=&build->design;}
+    if(auto* refit=std::get_if<RefitShipOrder>(&order)){name=&refit->pendingTargetName;target=&refit->target;}
+    if(!name || name->empty())return true;
+    const auto it=created.find(*name);if(it==created.end())return false;
+    const auto* design=find_ship_design(state,it->second);
+    if(!design || design->retired || design->owner!=owner)return false;
+    *target=design->id;name->clear();return true;
+}
+
+void record_created_design(const Order& order,ShipDesignId allocated,const GameState& state,CreatedDesigns& created)
+{
+    if(const auto* request=std::get_if<CreateShipDesignOrder>(&order)) {
+        created.erase(request->name);
+        if(state.nextShipDesignId!=allocated)created.emplace(request->name,allocated);
+    }
+}
 
 // UI/AI callers supply a PlayerView: command validation must not inspect host truth.
 GameState project_order_boundary(GameState projected, const PlayerOrders& pending,
@@ -2542,11 +2600,17 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
         p.xenocrystal = known_xenocrystal(projected, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
+    CreatedDesigns created;
     for (std::size_t index = 0; index < pending.orders.size(); ++index) {
+        auto admission=pending.orders[index];
+        if(!bind_created_design(admission,projected,pending.player,created))continue;
         if (beforeOrder) beforeOrder(projected, index);
-        const auto& order = pending.orders[index];
+        auto order = pending.orders[index];
+        if(!bind_created_design(order,projected,pending.player,created))continue;
         const auto nextFleet = projected.nextFleetId;
+        const auto nextDesign = projected.nextShipDesignId;
         if (apply_fleet_command_order(projected, pending.player, order, gated, true)) {
+            record_created_design(order,nextDesign,projected,created);
             if (splits && std::holds_alternative<SplitFleetOrder>(order) && projected.nextFleetId != nextFleet)
                 splits->push_back({index, nextFleet});
             continue;
@@ -2639,6 +2703,8 @@ GameState planned_ship_design_state(const GameState& state, const PlayerOrders& 
     for (const auto& order : pending.orders) {
         if (const auto* create = std::get_if<CreateShipDesignOrder>(&order))
             create_ship_design(result, pending.player, *create);
+        else if(const auto* remove=std::get_if<DeleteShipDesignOrder>(&order))
+            (void)delete_ship_design(result,pending.player,remove->design);
     }
     return result;
 }
@@ -2648,12 +2714,12 @@ const ShipDesign* resolve_ship_design_order(
 {
     if (!order.pendingDesignName.empty()) {
         const auto it = std::find_if(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& design) {
-            return design.owner == player && design.name == order.pendingDesignName;
+            return !design.retired && design.owner == player && design.name == order.pendingDesignName;
         });
         return it == state.shipDesigns.end() ? nullptr : &*it;
     }
     const auto* design = find_ship_design(state, order.design);
-    return design && design->owner == player ? design : nullptr;
+    return design && !design->retired && design->owner == player ? design : nullptr;
 }
 
 TurnResult TurnProcessor::process_with_events(
@@ -2681,12 +2747,10 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
 
     refresh_planetary_engineering(next);
-    generate_fleet_fuel(next);
+    // Deployed installations cannot undergo ship refit. Their generators must
+    // power upkeep and the communications network before commands are delivered.
+    generate_fleet_fuel(next, true);
     maintain_outposts(next, next.turn + 1);
-    // Friendly orbital refueling services top up every docked fleet before
-    // orders and movement are resolved. A basic dock without the module does
-    // not refuel, leaving room for cheaper station hulls later.
-    refuel_fleets_at_orbital_services(next);
     advance_minefields(next);
     const auto extraction = mine_colonies(next);
     std::vector<ColonyFreightDelivery> freight;
@@ -2731,6 +2795,16 @@ TurnResult TurnProcessor::process_with_events(
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
+        CreatedDesigns created;
+        std::map<ShipDesignId, std::string> draftDeletions;
+        if (find_player(current,submission.player) && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<CreateShipDesignOrder>(o);})
+            && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<DeleteShipDesignOrder>(o);})) {
+            const auto received=make_player_view(current,submission.player).state;
+            const auto catalog=planned_ship_design_state(received,submission);
+            for(const auto& design:catalog.shipDesigns)
+                if(design.owner==submission.player && !find_ship_design(received,design.id))
+                    draftDeletions.emplace(design.id,design.name);
+        }
         std::vector<PlannedSplitReference> splits;
         if (find_player(current, submission.player)
             && std::any_of(submission.orders.begin(), submission.orders.end(), [](const auto& o) { return std::holds_alternative<SplitFleetOrder>(o); })) {
@@ -2748,6 +2822,16 @@ TurnResult TurnProcessor::process_with_events(
         std::map<FleetId, FleetId> aliases;
         for (std::size_t index = 0; index < submission.orders.size(); ++index) {
             auto order = submission.orders[index];
+            // A newly created design's planning ID can differ from the host's
+            // global allocation. Bind only this submission's fresh IDs by name.
+            if(auto* remove=std::get_if<DeleteShipDesignOrder>(&order)) {
+                if(const auto draft=draftDeletions.find(remove->design);draft!=draftDeletions.end()) {
+                    const auto actual=std::find_if(next.shipDesigns.begin(),next.shipDesigns.end(),[&](const auto& d){return !d.retired && d.owner==submission.player && d.name==draft->second;});
+                    if(actual==next.shipDesigns.end())continue;
+                    remove->design=actual->id;
+                }
+            }
+            if(!bind_created_design(order,next,submission.player,created))continue;
             if (!remap_fleet_references(order, aliases)) {
                 // A failed parent's nested split cannot leave an unbound ID
                 // that later happens to name an unrelated physical fleet.
@@ -2758,7 +2842,9 @@ TurnResult TurnProcessor::process_with_events(
                 continue;
             }
             const auto allocated = next.nextFleetId;
+            const auto allocatedDesign = next.nextShipDesignId;
             if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn)) {
+                record_created_design(order,allocatedDesign,next,created);
                 if (std::holds_alternative<SplitFleetOrder>(order)) {
                     const auto reference = std::find_if(splits.begin(), splits.end(), [&](const auto& split) { return split.order == index; });
                     if (reference != splits.end()) aliases[reference->fleet] = next.nextFleetId != allocated ? allocated : 0;
@@ -2786,6 +2872,12 @@ TurnResult TurnProcessor::process_with_events(
                             }
                             return;
                         }
+                        // Gate commands move immediately, before the ordinary
+                        // pre-movement service phase. Supply this departing
+                        // fleet at its source without filling other refit ships.
+                        if (stargate_transfer_valid(next, submission.player, concreteOrder.fleet,
+                                concreteOrder.source, concreteOrder.destination, concreteOrder.resonant))
+                            refuel_fleet_at_orbital_service(next, *fleet);
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
                             concreteOrder.fleet, concreteOrder.source, concreteOrder.destination, concreteOrder.resonant);
                         if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }
@@ -2967,6 +3059,12 @@ TurnResult TurnProcessor::process_with_events(
                 order);
         }
     }
+
+    generate_fleet_fuel(next, false);
+    // Admit commands against the fuel already aboard, as in the received
+    // planning state. Other docked fleets still top up before movement; refit
+    // fleets resume ordinary depot service after their job has completed.
+    refuel_fleets_at_orbital_services(next);
 
     for(auto& planet:next.planets) decay_planet_contamination(planet);
     // Mine and queue source-bound reports before movement/combat can remove

@@ -234,6 +234,10 @@ void MainWindow::refreshPlanetPolish()
     const auto& received = receivedPlayerState();
     const auto* star = selectedStar();
     const auto* planet = star ? find_planet_at_star(received, star->id) : nullptr;
+    if(!minerals->property("mapScaleConnected").toBool()) {
+        minerals->setProperty("mapScaleConnected",true);
+        connect(minerals,&MineralStockPanel::stockScaleChanged,this,[this]{applyMapDisplayMode();});
+    }
     minerals->setMinerals(planet ? mineral_display_data(received, fleetPlanningState(), pendingOrders_.player, planet->id) : MineralDisplayData{}, received.turn);
     const auto level = star ? survey_level(received, pendingOrders_.player, star->id) : SurveyLevel::Detected;
     if (!star || !planet || level < SurveyLevel::OrbitalSurvey) {

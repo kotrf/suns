@@ -63,6 +63,7 @@ enum class MessageTypeFilter {
 
 QString production_item_name(const GameState& state, const GameEvent& event)
 {
+    if (event.productionKind == ProductionKind::ShipRefit) return "Ship refit";
     if (event.productionKind == ProductionKind::Terraforming) return "Terraforming";
     if (event.productionKind == ProductionKind::AdvancedFactory) return "Advanced factory";
     if (event.productionKind == ProductionKind::AdvancedMine) return "Advanced mine";
@@ -503,6 +504,11 @@ QString event_text(const GameState& state, const GameEvent& event)
             "These residents were lost aboard the inhabited station. Refit a stronger radiation screen or evacuate. "
             "Protection changes only when the paid refit completes.")
             .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn));
+    } else if (event.kind == GameEventKind::ResonanceProjectStatus) {
+        text = event_subject(state,event) + QString("\nObserved turn %1; received turn %2.\nProgress: %3 / 600 work.")
+            .arg(qulonglong(event.observedTurn)).arg(qulonglong(event.turn)).arg(event.quantity <= 600 ? event.quantity : 0);
+        if (event.quantity > 600) text += QString("\nAwaiting %1 physically delivered xenocrystals.").arg(event.quantity-600);
+        return text;
     } else if (event.kind == GameEventKind::RemoteMiningOutput) {
         text = event_subject(state, event) + QString("\nObserved turn %1; received turn %2.\n"
             "Ore was added to the world's mineral stockpile, not the miner's hold. History records this report in its receiving year.")
@@ -670,7 +676,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             ? QString::fromStdString(planet->name)
             : QString("Colony %1").arg(event.planet);
         QString itemName;
-        if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
+        if (event.productionKind == ProductionKind::ShipRefit) itemName = "Ship refit";
+        else if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
         else if (event.productionKind == ProductionKind::AdvancedFactory) itemName = "Advanced factory";
         else if (event.productionKind == ProductionKind::AdvancedMine) itemName = "Advanced mine";
         else if (event.productionKind == ProductionKind::UpgradeFactory) itemName = "Factory upgrade";
@@ -779,7 +786,8 @@ QString event_text(const GameState& state, const GameEvent& event)
             ? QString::fromStdString(planet->name)
             : QString("Colony %1").arg(event.planet);
         QString itemName;
-        if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
+        if (event.productionKind == ProductionKind::ShipRefit) itemName = "Ship refit";
+        else if (event.productionKind == ProductionKind::Terraforming) itemName = "Terraforming";
         else if (event.productionKind == ProductionKind::AdvancedFactory) itemName = "Advanced factory";
         else if (event.productionKind == ProductionKind::AdvancedMine) itemName = "Advanced mine";
         else if (event.productionKind == ProductionKind::UpgradeFactory) itemName = "Factory upgrade";
@@ -948,9 +956,16 @@ void MainWindow::installTurnMessages()
         return item ? find_event(turnMessages_, item->data(kEventIdRole).toULongLong()) : nullptr;
     };
 
-    const auto showOnMap = [this, selectedEvent] {
-        const auto* event = selectedEvent();
-        if (!event || (event->star == 0 && event->fleet == 0)) return;
+    const auto showOnMap = [this](const GameEvent& snapshot) {
+        const auto* event = &snapshot;
+        if (!event) return;
+        if (event->kind == GameEventKind::EmissionDetected) {
+            const auto size=view_->mapToScene(view_->viewport()->rect()).boundingRect().size();
+            const QRectF focus(event->position.x-size.width()/2-2,event->position.y-size.height()/2-2,size.width()+4,size.height()+4);
+            scene_->setSceneRect(scene_->sceneRect().united(focus));
+            view_->centerOn(event->position.x,event->position.y);return;
+        }
+        if (event->star == 0 && event->fleet == 0) return;
         const bool battle = event->kind == GameEventKind::SpaceBattle;
         if(event->contact || event->sensorStatus || event->objectObservation || event->mediumObservation) { view_->centerOn(event->position.x,event->position.y); return; }
         const auto position = event->position;
@@ -984,10 +999,17 @@ void MainWindow::installTurnMessages()
     connect(turnMessagesList_, &QListWidget::currentItemChanged, this,
         [this](QListWidgetItem* current, QListWidgetItem*) { displayTurnMessage(current, true); });
     connect(turnMessagesList_, &QListWidget::itemClicked, this,
-        [this, showOnMap](QListWidgetItem* item) { displayTurnMessage(item, true); showOnMap(); });
-    connect(turnMessageShowOnMapButton_, &QPushButton::clicked, this, [this, showOnMap] {
+        [this](QListWidgetItem* item) { displayTurnMessage(item, true); });
+    connect(turnMessagesList_, &QListWidget::itemDoubleClicked, this,
+        [this, showOnMap](QListWidgetItem* item) {
+            const auto* source=find_event(turnMessages_,item->data(kEventIdRole).toULongLong());
+            if(!source)return;const auto snapshot=*source;
+            displayTurnMessage(item,true);showOnMap(snapshot);
+        });
+    connect(turnMessageShowOnMapButton_, &QPushButton::clicked, this, [this, selectedEvent, showOnMap] {
+        const auto* source=selectedEvent();if(!source)return;const auto snapshot=*source;
         displayTurnMessage(turnMessagesList_->currentItem(), true);
-        showOnMap();
+        showOnMap(snapshot);
     });
     const auto navigateUnread = [this](int direction) {
         if (!turnMessagesList_ || turnMessagesList_->count() == 0) return;
@@ -1080,7 +1102,7 @@ void MainWindow::displayTurnMessage(QListWidgetItem* item, bool markRead)
     updateTurnMessagesSummary();
     if (event->kind == GameEventKind::SpaceBattle) turnMessageBody_->setHtml(event_text(state_, *event));
     else turnMessageBody_->setPlainText(event_text(state_, *event));
-    turnMessageShowOnMapButton_->setEnabled(event->star != 0 || event->fleet != 0);
+    turnMessageShowOnMapButton_->setEnabled(event->kind == GameEventKind::EmissionDetected || event->star != 0 || event->fleet != 0);
     turnMessageHideSimilarButton_->setEnabled(true);
 }
 

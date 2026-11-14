@@ -99,12 +99,12 @@ void MainWindow::installSurveyProbes()
         const auto view = make_player_view(state_, pendingOrders_.player).state;
         auto design = basic_survey_probe_design(pendingOrders_.player, view.nextShipDesignId);
         if (!colony->currentData().toUInt() || !ship_design_available_to_player(view, pendingOrders_.player, design)) return;
-        auto existing = std::find_if(view.shipDesigns.begin(), view.shipDesigns.end(), [&](const auto& d) { return d.name == design.name; });
+        auto existing = std::find_if(view.shipDesigns.begin(), view.shipDesigns.end(), [&](const auto& d) { return !d.retired && d.owner==pendingOrders_.player && d.name == design.name; });
         for (int suffix = 2; existing != view.shipDesigns.end(); ++suffix) {
             Fleet candidate; candidate.owner = pendingOrders_.player; candidate.design = existing->id;
             if (probe_capable(view, candidate) && ship_design_available_to_player(view, pendingOrders_.player, *existing)) break;
             design.name = "Autonomous Survey Probe " + std::to_string(suffix);
-            existing = std::find_if(view.shipDesigns.begin(), view.shipDesigns.end(), [&](const auto& d) { return d.name == design.name; });
+            existing = std::find_if(view.shipDesigns.begin(), view.shipDesigns.end(), [&](const auto& d) { return !d.retired && d.owner==pendingOrders_.player && d.name == design.name; });
         }
         if (existing != view.shipDesigns.end() && existing->hull == ShipHullType::SurveyProbe) {
             appendPendingOrder(QueueShipDesignOrder{colony->currentData().toUInt(), existing->id}, "Build survey probe");

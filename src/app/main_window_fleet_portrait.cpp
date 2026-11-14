@@ -1,5 +1,17 @@
 #include "main_window.hpp"
 #include "suns/hulls.hpp"
+#include "ship_designer_dialog.hpp"
+#include "game_session.hpp"
+#include "suns/ship_refit.hpp"
+#include "suns/production.hpp"
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QMouseEvent>
+#include <QKeyEvent>
+#include <QListWidget>
+#include <QDialog>
 
 #include <QColor>
 #include <QGraphicsScene>
@@ -14,9 +26,19 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <memory>
 
 namespace suns {
 namespace {
+
+class FleetPortrait final : public QLabel {
+public:
+    using QLabel::QLabel;
+    std::function<void()> clicked;
+protected:
+    void mouseReleaseEvent(QMouseEvent* e) override {if(e->button()==Qt::LeftButton && rect().contains(e->pos()) && clicked)clicked();}
+    void keyPressEvent(QKeyEvent* e) override {if((e->key()==Qt::Key_Return || e->key()==Qt::Key_Space)&&clicked)clicked();else QLabel::keyPressEvent(e);}
+};
 
 bool hasComponent(const ShipDesign& design, ShipComponentType type)
 {
@@ -289,7 +311,9 @@ void MainWindow::installFleetPortraitPolish()
     auto* layout = qobject_cast<QVBoxLayout*>(fleetGroup->layout());
     if (!layout) return;
 
-    auto* portrait = new QLabel(fleetGroup);
+    auto* portrait = new FleetPortrait(fleetGroup);
+    portrait->setFocusPolicy(Qt::StrongFocus);
+    portrait->setCursor(Qt::PointingHandCursor);
     portrait->setObjectName("fleetPortrait");
     portrait->setAlignment(Qt::AlignCenter);
     portrait->setFixedSize(92, 52);
@@ -297,17 +321,88 @@ void MainWindow::installFleetPortraitPolish()
     portrait->setToolTip("The silhouette is derived from the selected ship design's hull and fitted components.");
     layout->insertWidget(0, portrait);
 
+    portrait->clicked=[this] {
+        const auto* fleet=selectedFleet();if(!fleet)return;
+        const auto snapshot=std::make_shared<GameState>(fleetPlanningState());const auto stacks=fleet_ship_stacks(*fleet);
+        const auto openFit=[this,snapshot](ShipDesignId id) {
+            auto* fit=new ShipDesignerDialog(*snapshot,pendingOrders_.player,this);
+            fit->setAttribute(Qt::WA_DeleteOnClose);fit->showDesign(id);fit->show();
+        };
+        if(stacks.size()==1){openFit(stacks.front().design);return;}
+        auto* dialog=new QDialog(this);dialog->setWindowTitle("Fleet composition");dialog->setObjectName("fleetComposition");
+        dialog->setAttribute(Qt::WA_DeleteOnClose);auto* layout=new QVBoxLayout(dialog);auto* list=new QListWidget(dialog);
+        list->setObjectName("fleetCompositionList");layout->addWidget(list);
+        for(const auto& stack:stacks)if(const auto* d=find_ship_design(*snapshot,stack.design)) {
+            auto* row=new QListWidgetItem(QString("%1 ×%2").arg(QString::fromStdString(d->name)).arg(stack.count),list);
+            row->setData(Qt::UserRole,quint32(d->id));
+        }
+        connect(list,&QListWidget::itemActivated,dialog,[openFit](QListWidgetItem* i){openFit(i->data(Qt::UserRole).toUInt());});
+        connect(list,&QListWidget::itemClicked,dialog,[openFit](QListWidgetItem* i){openFit(i->data(Qt::UserRole).toUInt());});
+        dialog->resize(380,260);dialog->show();
+    };
+    auto* refitButton=new QPushButton("Refit…",fleetGroup);refitButton->setObjectName("refitFleetShip");layout->insertWidget(1,refitButton);
+    connect(refitButton,&QPushButton::clicked,this,[this] {
+        const auto* selected=selectedFleet();if(!selected)return;
+        const auto fleetId=selected->id;const auto generation=session_->documentGeneration();
+        const auto snapshot=std::make_shared<GameState>(planned_ship_design_state(fleetPlanningState(),pendingOrders_));
+        const auto f=std::find_if(snapshot->fleets.begin(),snapshot->fleets.end(),[&](const auto& f){return f.id==fleetId;});if(f==snapshot->fleets.end())return;
+        auto* dialog=new QDialog(this);dialog->setObjectName("shipRefitDialog");dialog->setWindowTitle("Refit one ship at a friendly dock");dialog->setAttribute(Qt::WA_DeleteOnClose);
+        auto* l=new QVBoxLayout(dialog);auto* from=new QComboBox(dialog);from->setObjectName("refitSourceDesign");auto* to=new QComboBox(dialog);to->setObjectName("refitTargetDesign");
+        for(const auto& stack:fleet_ship_stacks(*f))if(const auto* d=find_ship_design(*snapshot,stack.design))from->addItem(QString::fromStdString(d->name)+QString(" ×%1").arg(stack.count),quint32(d->id));
+        l->addWidget(new QLabel("Existing project (one ship per job)",dialog));l->addWidget(from);l->addWidget(new QLabel("Target project — same hull",dialog));l->addWidget(to);
+        auto* quote=new QLabel(dialog);quote->setObjectName("shipRefitQuote");quote->setWordWrap(true);l->addWidget(quote);
+        auto* buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,dialog);l->addWidget(buttons);
+        const auto refresh=[=] {
+            const auto* a=find_ship_design(*snapshot,from->currentData().toUInt());const auto* b=find_ship_design(*snapshot,to->currentData().toUInt());
+            PlanetId colony=0;for(const auto& p:snapshot->planets)if(const auto* star=find_star(*snapshot,p.star);star && same_position(star->position,f->position) && p.owner==f->owner)colony=p.id;
+            const auto q=a&&b?ship_refit_quote(*a,*b):std::nullopt;const auto* p=find_planet(*snapshot,colony);
+            const bool allowed=q && p && ship_refit_available(*snapshot,*p,{fleetId,a->id,b->id});buttons->button(QDialogButtonBox::Ok)->setEnabled(allowed);
+            if(!q){quote->setText("Choose a different project with the same hull.");return;}
+            QStringList removed,installed;for(auto c:q->removed)removed<<QString::fromStdString(component_spec(c).name);for(auto c:q->installed)installed<<QString::fromStdString(component_spec(c).name);
+            const auto minerals=[](const auto& m){return QString("I %1 / B %2 / G %3 kt").arg(m.ironium,0,'f',1).arg(m.boranium,0,'f',1).arg(m.germanium,0,'f',1);};
+            quote->setText(QString("Remove: %1\nInstall: %2\nRecovered (10%): %3\nInstalled: %4\nNet minerals (negative = returned): %5\nWork: %6 resources, including 50% installation labour. Unchanged components are free.\n%7")
+                .arg(removed.isEmpty()?"none":removed.join(", "),installed.isEmpty()?"none":installed.join(", "),minerals(q->recovered),minerals(q->installedMinerals),minerals(q->netMinerals)).arg(q->work)
+                .arg(allowed?"Paid through the colony production queue; cargo, fuel and damage are retained.":"Requires an idle ship at your operational shipyard, no pending fleet command, and enough capacity for all current cargo/fuel."));
+        };
+        const auto targets=[=] {const QSignalBlocker block(to);to->clear();const auto* a=find_ship_design(*snapshot,from->currentData().toUInt());if(a)for(const auto& b:snapshot->shipDesigns)if(!b.retired && b.owner==a->owner && b.hull==a->hull && b.id!=a->id)to->addItem(QString::fromStdString(b.name),quint32(b.id));refresh();};
+        connect(from,&QComboBox::currentIndexChanged,dialog,targets);connect(to,&QComboBox::currentIndexChanged,dialog,refresh);targets();
+        connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
+        connect(buttons,&QDialogButtonBox::accepted,dialog,[=,this] {
+            if(generation!=session_->documentGeneration()){dialog->reject();return;}
+            PlanetId colony=0;for(const auto& p:snapshot->planets)if(const auto* star=find_star(*snapshot,p.star);star && same_position(star->position,f->position) && p.owner==f->owner)colony=p.id;
+            RefitShipOrder order{colony,fleetId,from->currentData().toUInt(),to->currentData().toUInt()};
+            const auto* expected=find_ship_design(*snapshot,order.target);if(!expected)return;
+            const auto& received=receivedPlayerState();
+            if(!find_ship_design(received,order.target)){order.pendingTargetName=expected->name;order.target=0;}
+            auto live=planned_production_state(received,pendingOrders_);
+            const auto actual=std::find_if(live.shipDesigns.begin(),live.shipDesigns.end(),[&](const auto& d){return !d.retired && (order.pendingTargetName.empty()?d.id==order.target:d.owner==pendingOrders_.player && d.name==order.pendingTargetName);});
+            if(actual==live.shipDesigns.end() || actual->hull!=expected->hull || actual->components!=expected->components || actual->placements!=expected->placements || !queue_ship_refit(live,pendingOrders_.player,order)) {
+                quote->setText("The fleet, dock or target project changed. Reopen Refit to inspect the current quote.");buttons->button(QDialogButtonBox::Ok)->setEnabled(false);return;
+            }
+            appendPendingOrder(order,"Refit one ship through dock production");rebuildScene();dialog->accept();
+        });dialog->resize(620,430);dialog->show();
+    });
     const auto refresh = [this, portrait] {
         if (shuttingDown_) return;
         const auto* fleet = selectedFleet();
-        const auto* design = fleet ? fleet_design(state_, *fleet) : nullptr;
+        const auto* design = fleet ? fleet_design(fleetPlanningState(), *fleet) : nullptr;
         if (!fleet || !design) {
             portrait->setPixmap(emptyFleetPortrait().scaled(92, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
             portrait->setToolTip("No fleet selected.");
             return;
         }
 
-        portrait->setPixmap(renderShipPortrait(*design).scaled(92, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        auto image=renderShipPortrait(*design);
+        const auto stacks=fleet_ship_stacks(*fleet);
+        if(stacks.size()>1) {
+            QPainter painter(&image);
+            if(const auto* second=find_ship_design(fleetPlanningState(),stacks[1].design)) {
+                painter.fillRect(image.rect(),QColor("#09121c"));
+                painter.drawPixmap(QRect(0,0,140,80),renderShipPortrait(*design));
+                painter.drawPixmap(QRect(44,24,140,80),renderShipPortrait(*second));
+            }
+        }
+        portrait->setPixmap(image.scaled(92,52,Qt::KeepAspectRatio,Qt::SmoothTransformation));
         QStringList components;
         for (const auto component : design->components) {
             components << QString::fromStdString(component_spec(component).name);

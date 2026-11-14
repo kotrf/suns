@@ -39,8 +39,11 @@ public:
     // Recheck against live planning state before accepting a nonmodal draft.
     void setSaveValidator(std::function<QString(const ShipDesignDraft&)> validator);
     void accept() override;
+    void showDesign(ShipDesignId id, bool readOnly = true);
+    void setDeleteHandler(std::function<QString(ShipDesignId)> handler);
 
 private:
+    void suggestName(const std::string& base);
     void rebuildSlotGrid();
     void refreshSlotGrid();
     void fitComponent(ShipComponentType component, ShipSlotId target, ShipSlotId source = 0);
@@ -53,6 +56,8 @@ private:
     [[nodiscard]] ShipDesign previewDesign() const;
     [[nodiscard]] std::optional<ShipComponentType> selectedCatalogComponent() const;
 
+    std::function<QString(ShipDesignId)> deleteHandler_;
+    QPushButton* deleteButton_{};
     PlayerId player_{};
     ShipHullType initialHull_{ShipHullType::Scout};
     ShipComponentType initialScanner_{ShipComponentType::LongRangeScanner};
@@ -62,6 +67,7 @@ private:
     QComboBox* hullCombo_{};
     QComboBox* templateCombo_{};
     std::vector<ShipDesign> templates_;
+    std::vector<ShipDesign> viewDesigns_;
     QListWidget* componentCatalog_{};
     QLineEdit* componentSearch_{};
     QComboBox* componentCategory_{};

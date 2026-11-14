@@ -3,6 +3,7 @@
 #include "suns/orbital_bases.hpp"
 #include "suns/deep_space.hpp"
 #include "suns/turn_processor.hpp"
+#include "suns/ship_refit.hpp"
 #include <algorithm>
 #include <cmath>
 #include <set>
@@ -104,6 +105,9 @@ bool transfer_mobile_base_fuel(GameState& state, PlayerId player, const Transfer
 }
 void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
 {
+    std::set<FleetId> refitting;
+    for(const auto& planet:state.planets)for(const auto& item:planet.productionQueue)
+        if(item.refit && ship_refit_fuel_capacity(state,planet,*item.refit))refitting.insert(item.refit->fleet);
     std::vector<FleetId> bases;
     for (const auto& f : state.fleets) if (mobile_base_dock(state, f)) bases.push_back(f.id);
     std::sort(bases.begin(), bases.end());
@@ -120,7 +124,7 @@ void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
             auto* client = client_fleet(state, clientId);
             if (!client || client == &base || client->owner != base.owner || client->outpost != OutpostKind::None
                 || !same_position(client->position, base.position)) continue;
-            const auto fuel = std::min(std::max(0.0, base.fuel - base.mobileBase.fuelReserve),
+            const auto fuel = refitting.contains(clientId) ? 0.0 : std::min(std::max(0.0, base.fuel - base.mobileBase.fuelReserve),
                 std::max(0.0, fleet_fuel_capacity(state, *client) - client->fuel));
             base.fuel -= fuel; client->fuel += fuel;
             const auto mass = fleet_dry_mass(state, *client);

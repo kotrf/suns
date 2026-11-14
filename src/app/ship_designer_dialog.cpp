@@ -535,6 +535,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
         "Move fitted components by dragging; double-click a cell or press Delete to remove its component.",
         this);
     intro->setWordWrap(true);
+    intro->setObjectName("shipDesignInstructions");
     layout->addWidget(intro);
 
     auto* form = new QFormLayout;
@@ -547,11 +548,13 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     templateCombo_->setObjectName("shipDesignTemplate");
     templateCombo_->setToolTip("Open an existing design as a new draft. Built ships and the original design stay unchanged.");
     templateCombo_->addItem("New design", static_cast<quint32>(0));
-    for (const auto& design : state.shipDesigns) {
-        if (design.owner != player_) continue;
-        templates_.push_back(design);
-        templateCombo_->addItem(QString::fromStdString(design.name), static_cast<quint32>(design.id));
-    }
+    for (const auto& design : state.shipDesigns)
+        if (design.owner == player_ && !design.retired) templates_.push_back(design);
+    std::stable_sort(templates_.begin(), templates_.end(), [](const auto& a,const auto& b) {
+        return QString::compare(QString::fromStdString(a.name),QString::fromStdString(b.name),Qt::CaseInsensitive)<0;
+    });
+    for (const auto& design : templates_)
+        templateCombo_->addItem(QString::fromStdString(design.name),quint32(design.id));
     form->addRow("Start from", templateCombo_);
 
     hullCombo_ = new QComboBox(this);
@@ -748,6 +751,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     connect(nameEdit_, &QLineEdit::textChanged, this, [this] { updatePreview(); });
     connect(templateCombo_, &QComboBox::currentIndexChanged, this, [this] {
         const auto id = static_cast<ShipDesignId>(templateCombo_->currentData().toUInt());
+        if(deleteButton_)deleteButton_->setEnabled(deleteHandler_ && id!=0);
         const auto it = std::find_if(templates_.begin(), templates_.end(), [id](const ShipDesign& design) {
             return design.id == id;
         });
@@ -756,13 +760,13 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
             hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(initialHull_)));
             placements_ = autoplace_ship_components(initialHull_,
                 {initialEngine_, initialScanner_});
-            nameEdit_->setText("New Design");
+            suggestName(hull_spec(initialHull_).name);
         } else {
             const QSignalBlocker blockHull(hullCombo_);
             hullCombo_->setCurrentIndex(hullCombo_->findData(static_cast<int>(it->hull)));
             placements_ = it->placements.empty()
                 ? autoplace_ship_components(it->hull, it->components) : it->placements;
-            nameEdit_->setText(QString::fromStdString(it->name).left(43) + " Copy");
+            suggestName(it->name);
         }
         selectedSlot_ = 0;
         rebuildSlotGrid();
@@ -770,6 +774,7 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     });
     connect(hullCombo_, &QComboBox::currentIndexChanged, this, [this] {
         const auto hullType = static_cast<ShipHullType>(hullCombo_->currentData().toInt());
+        suggestName(hull_spec(hullType).name);
         ShipDesign migrated;
         migrated.hull = hullType;
         for (const auto& placement : placements_) migrated.components.push_back(placement.component);
@@ -834,6 +839,19 @@ ShipDesignerDialog::ShipDesignerDialog(const GameState& state, PlayerId player, 
     });
 
     rebuildSlotGrid();
+    deleteButton_ = new QPushButton("Delete design",this);
+    deleteButton_->setObjectName("deleteShipDesign");
+    layout->addWidget(deleteButton_);deleteButton_->setEnabled(false);
+    connect(deleteButton_,&QPushButton::clicked,this,[this] {
+        const auto id=ShipDesignId(templateCombo_->currentData().toUInt());
+        if(!id || !deleteHandler_) return;
+        const auto error=deleteHandler_(id);
+        if(!error.isEmpty()) {fitMessage_->setText(error);return;}
+        const auto row=templateCombo_->currentIndex();
+        std::erase_if(templates_,[id](const auto& d){return d.id==id;});
+        templateCombo_->removeItem(row);templateCombo_->setCurrentIndex(0);
+    });
+    suggestName(hull_spec(initialHull_).name);
     refreshAvailability(state);
     if (parent && !QCoreApplication::arguments().contains("--smoke-test")) {
         const auto geometry = QSettings("SunsProject", "Suns").value("designer/geometry").toByteArray();
@@ -850,6 +868,16 @@ ShipDesignerDialog::~ShipDesignerDialog()
 
 void ShipDesignerDialog::refreshAvailability(const GameState& received)
 {
+    viewDesigns_=received.shipDesigns;
+    const auto selectedId=templateCombo_->currentData().toUInt();
+    {const QSignalBlocker block(templateCombo_);
+        templates_.clear();for(const auto& d:received.shipDesigns)if(d.owner==player_ && !d.retired)templates_.push_back(d);
+        std::stable_sort(templates_.begin(),templates_.end(),[](const auto& a,const auto& b){return QString::compare(QString::fromStdString(a.name),QString::fromStdString(b.name),Qt::CaseInsensitive)<0;});
+        templateCombo_->clear();templateCombo_->addItem("New design",quint32(0));
+        for(const auto& d:templates_)templateCombo_->addItem(QString::fromStdString(d.name),quint32(d.id));
+        templateCombo_->setCurrentIndex(std::max(0,templateCombo_->findData(selectedId)));
+    }
+
     bool changed = false;
     // Changing item flags must not choose another hull or migrate fitted banks.
     const QSignalBlocker blockHull(hullCombo_);
@@ -1353,4 +1381,31 @@ void ShipDesignerDialog::accept()
     QDialog::accept();
 }
 
+} // namespace suns
+
+namespace suns {
+void ShipDesignerDialog::suggestName(const std::string& base) {
+    auto name=QString::fromStdString(base).left(48);const auto root=name;
+    for(int generation=2;std::any_of(templates_.begin(),templates_.end(),[&](const auto& d){return d.name==name.toStdString();});++generation) {
+        const auto suffix=QString(" Gen%1").arg(generation);name=root.left(48-suffix.size())+suffix;
+    }
+    nameEdit_->setText(name);
+}
+void ShipDesignerDialog::setDeleteHandler(std::function<QString(ShipDesignId)> handler) {deleteHandler_=std::move(handler);}
+void ShipDesignerDialog::showDesign(ShipDesignId id,bool readOnly) {
+    if(templateCombo_->findData(quint32(id))<0) {
+        const auto d=std::find_if(viewDesigns_.begin(),viewDesigns_.end(),[id](const auto& d){return d.id==id;});
+        if(d==viewDesigns_.end())return;
+        templates_.push_back(*d);templateCombo_->addItem(QString::fromStdString(d->name),quint32(id));
+    }
+    templateCombo_->setCurrentIndex(templateCombo_->findData(quint32(id)));
+    const auto i=std::find_if(templates_.begin(),templates_.end(),[id](const auto& d){return d.id==id;});
+    if(i!=templates_.end())nameEdit_->setText(QString::fromStdString(i->name));
+    if(!readOnly)return;
+    setWindowTitle("Ship fitting — "+nameEdit_->text());nameEdit_->setReadOnly(true);
+    findChild<QLabel*>("shipDesignInstructions")->setText("Read-only fitting of the received ship project. Select the fleet's Refit action to change its equipment at a dock.");
+    fitMessage_->setText("Read-only fitting");
+    hullCombo_->setEnabled(false);templateCombo_->setEnabled(false);slotPanel_->setEnabled(false);
+    componentCatalog_->setEnabled(false);saveButton_->hide();fitButton_->hide();removeButton_->hide();deleteButton_->hide();
+}
 } // namespace suns

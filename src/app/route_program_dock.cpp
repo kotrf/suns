@@ -157,7 +157,7 @@ void drawRouteOverlay(MainWindow& window, std::optional<Position> coordinateDraf
     QPen pen(QColor(110, 190, 255, 175));
     pen.setWidthF(0.8);
     pen.setCosmetic(true);
-    pen.setStyle(Qt::DashDotLine);
+    pen.setStyle(Qt::SolidLine);
 
     for (std::size_t index = 1; index < points.size(); ++index) {
         const auto& from = points[index - 1];
@@ -352,7 +352,7 @@ void attachRouteProgramDock(MainWindow& window)
     actionCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     actionCombo->addItem("No action", static_cast<int>(FleetArrivalActionKind::None));
     actionCombo->addItem("Load all available", static_cast<int>(FleetArrivalActionKind::LoadAllAvailable));
-    actionCombo->addItem("Unload all", static_cast<int>(FleetArrivalActionKind::UnloadAll));
+    actionCombo->addItem("Unload all of selected cargo", static_cast<int>(FleetArrivalActionKind::UnloadAll));
     actionCombo->addItem("Colonize world", static_cast<int>(FleetArrivalActionKind::Colonize));
     actionCombo->addItem("Remote Mining (persistent)", static_cast<int>(FleetArrivalActionKind::RemoteMining));
     actionCombo->addItem("Merge with fleet", static_cast<int>(FleetArrivalActionKind::MergeWithFleet));
@@ -742,8 +742,7 @@ void attachRouteProgramDock(MainWindow& window)
             && (!fleetTarget || targetFleetCombo->currentIndex() >= 0));
         if (editor->editingLeg) {
             actionCombo->setEnabled(true);
-            cargoCombo->setEnabled(false);
-            reserveSpin->setEnabled(false);
+            updateCargoControls();
             destinationCombo->setEnabled(false);
             pickTargetButton->setEnabled(false);
             appendButton->setEnabled(false);
@@ -871,11 +870,18 @@ void attachRouteProgramDock(MainWindow& window)
                 if (const auto original = window.selectedFleetRouteProgramLegAction(*row)) {
                     const QSignalBlocker blocked(actionCombo);
                     actionCombo->setCurrentIndex(actionCombo->findData(static_cast<int>(original->kind)));
+                    const QSignalBlocker cargoBlocked(cargoCombo), reserveBlocked(reserveSpin), fuelBlocked(fuelReserveSpin), planBlocked(colonyPlan);
+                    cargoCombo->setCurrentIndex(cargoCombo->findData(static_cast<int>(original->cargo)));
+                    reserveSpin->setValue(int(original->reservePopulation));
+                    fuelReserveSpin->setValue(original->reserveFuel);
                     colonyPlan->setPlan(original->colonyPlan);
+                    updateCargoControls();
                 }
             }
         };
     QObject::connect(actionCombo, &QComboBox::currentIndexChanged, panel, editLegAction);
+    QObject::connect(cargoCombo, &QComboBox::currentIndexChanged, panel, editLegAction);
+    QObject::connect(reserveSpin, &QSpinBox::valueChanged, panel, editLegAction);
     QObject::connect(fuelReserveSpin, &QDoubleSpinBox::valueChanged, panel, editLegAction);
     QObject::connect(colonyPlan, &QComboBox::currentIndexChanged, panel, editLegAction);
     const auto leaveLegEditing = [=] {
