@@ -1,3 +1,4 @@
+#include "suns/ship_refit.hpp"
 #include "suns/production.hpp"
 #include "order_boundary_preview.hpp"
 #include "suns/production_template_edits.hpp"
@@ -281,6 +282,10 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     while (index < queue.size()) {
         const auto origin = origins[index];
         const auto industrialKind = queue[index].kind;
+        if(industrialKind==ProductionKind::ColonyShip) {
+            const auto* d=find_ship_design(state,queue[index].shipDesign?queue[index].shipDesign:kColonyShipDesignId);
+            if(d && d->retired){erase(index);continue;}
+        }
         if (player && !production_kind_applicable(player->race.primaryTrait, industrialKind)) {
             erase(index); continue;
         }
@@ -348,6 +353,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
             || (queue[index].kind == ProductionKind::ColonyDefense
                 && ((planet.defenses >= kMaximumColonyDefenses && queue[index].automation == ProductionAutomation::None)
                     || !colony_defenses_available(state,planet.owner)))) { erase(index); continue; }
+        if(queue[index].kind==ProductionKind::ShipRefit && (!queue[index].refit || !ship_refit_available(state,planet,*queue[index].refit))) {planet.productionWaitingForShipyard=true;break;}
         const auto kind = queue[index].kind;
         const bool automatic = queue[index].automation != ProductionAutomation::None;
         if (automatic) {
@@ -482,7 +488,7 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
                 else if (value.kind == ProductionKind::ColonyShip
                     && colony_has_orbital_service(result, colony.id, pending.player, OrbitalStationModule::Shipyard)) {
                     const auto design = std::find_if(result.shipDesigns.begin(), result.shipDesigns.end(),
-                        [&](const auto& candidate) { return candidate.owner == pending.player && ship_design_can_colonize(candidate); });
+                        [&](const auto& candidate) { return !candidate.retired && candidate.owner == pending.player && ship_design_can_colonize(candidate); });
                     if (design != result.shipDesigns.end()) queue.push_back({value.kind, ship_design_cost(*design), design->id});
                 }
             }

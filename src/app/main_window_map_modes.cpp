@@ -2,6 +2,9 @@
 #include "suns/terraforming.hpp"
 #include "suns/campaign.hpp"
 #include "star_item.hpp"
+#include "mineral_stock_panel.hpp"
+#include <QGraphicsItemGroup>
+#include <QGraphicsRectItem>
 
 #include <QComboBox>
 #include <QGraphicsScene>
@@ -51,6 +54,8 @@ QString modeLegend(int mode)
 {
     if (mode == 1) return "size = hab  ·  dark red negative  ·  red 0%  ·  yellow 50%  ·  green 100%  ·  dim estimated  ·  grey unknown";
     if (mode == 2) return "marker size = population  ·  green = your colony  ·  grey = empty/unknown";
+    if(mode==3)return "I / B / G concentration — shared 0–100% scale";
+    if(mode==4)return "I / B / G surface kt — shared System Details scale";
     return "stellar spectral class colours";
 }
 
@@ -72,6 +77,8 @@ void MainWindow::installMapDisplayModes()
     mode->addItem("Spectral", 0);
     mode->addItem("Habitability", 1);
     mode->addItem("Population", 2);
+    mode->addItem("Mineral Concentration",3);
+    mode->addItem("Surface Minerals",4);
     mode->setToolTip(
         "Spectral: real stellar-class colours\n"
         "Habitability: larger markers for higher known hab; red-to-green world value; yellow means hostile but terraformable\n"
@@ -104,7 +111,7 @@ void MainWindow::installMapDisplayModes()
 void MainWindow::applyMapDisplayMode()
 {
     if (!scene_) return;
-    const auto received = receivedPlayerState();
+    const auto& received = receivedPlayerState();
 
     bool changed = false;
     for (auto* item : scene_->items()) {
@@ -154,6 +161,39 @@ void MainWindow::applyMapDisplayMode()
             }
         }
 
+        QGraphicsItemGroup* bars=nullptr;
+        for(auto* child:marker->childItems())if(child->data(0).toString()=="mineralOverlay")bars=static_cast<QGraphicsItemGroup*>(child);
+        if(mapDisplayMode_==3 || mapDisplayMode_==4) {
+            std::optional<MineralCargo> values;
+            std::optional<std::uint64_t> observed;
+            if(planet) {
+                if(mapDisplayMode_==3 && (planet_geology_known(received,pendingOrders_.player,planet->id)
+                    || known_planet_owner(received,pendingOrders_.player,planet->id)==pendingOrders_.player))
+                    values=planet_mineral_concentration(received,*planet);
+                if(mapDisplayMode_==4)if(const auto stock=known_surface_minerals(received,pendingOrders_.player,planet->id)) {
+                    values=stock->minerals;observed=stock->observedTurn;
+                    if(known_planet_owner(received,pendingOrders_.player,planet->id)==pendingOrders_.player)
+                        if(const auto* p=find_planet(fleetPlanningState(),planet->id))values=p->minerals;
+                }
+            }
+            if(values) {
+                if(!bars) {
+                    bars=new QGraphicsItemGroup(marker);bars->setData(0,"mineralOverlay");
+                    bars->setFlag(QGraphicsItem::ItemIgnoresTransformations);bars->setZValue(5);
+                    for(int i=0;i<3;++i){auto* b=new QGraphicsRectItem(bars);b->setData(1,i);b->setPen(QPen(QColor("#7d91a0"),0.5));b->setBrush(QColor(i==0?"#6db7e7":i==1?"#75c586":"#dfcc75"));}
+                }
+                const auto* panel=findChild<MineralStockPanel*>("mineralStockPanel");
+                const double maximum=mapDisplayMode_==3?100:panel?panel->stockScale():1000;
+                const std::array<double,3> v{values->ironium,values->boranium,values->germanium};
+                for(auto* b:bars->childItems()){const auto i=b->data(1).toInt();const auto h=20*std::clamp(v[i]/maximum,0.0,1.0);static_cast<QGraphicsRectItem*>(b)->setRect(-6+i*5,-12-h,3,h);}
+                const auto tip=QString("I %1 / B %2 / G %3 %4\n%5")
+                    .arg(v[0],0,'f',1).arg(v[1],0,'f',1).arg(v[2],0,'f',1)
+                    .arg(mapDisplayMode_==3?"%":"kt")
+                    .arg(observed?QString("Last stock report: year %1").arg(qulonglong(*observed)):"Received geology");
+                if(bars->toolTip()!=tip)bars->setToolTip(tip);
+                bars->setVisible(true);
+            } else if(bars)bars->setVisible(false);
+        } else if(bars)bars->setVisible(false);
         changed |= marker->setVisualStyle(color, scale);
     }
     if (changed) queueMapLabelRefresh();

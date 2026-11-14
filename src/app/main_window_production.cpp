@@ -46,6 +46,7 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
 {
     QString name;
     switch (item.kind) {
+    case ProductionKind::ShipRefit: name = "Refit ship"; break;
     case ProductionKind::Factory: name = "Basic factory"; break;
     case ProductionKind::Mine: name = "Basic mine"; break;
     case ProductionKind::AdvancedFactory: name = "Advanced factory"; break;

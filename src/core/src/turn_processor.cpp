@@ -38,11 +38,17 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include "suns/ship_refit.hpp"
 
 namespace suns {
 
 std::uint32_t production_item_cost(const GameState& state, const ProductionItem& item)
 {
+    if (item.kind == ProductionKind::ShipRefit && item.refit) {
+        const auto* a=find_ship_design(state,item.refit->source);const auto* b=find_ship_design(state,item.refit->target);
+        if(a&&b)if(const auto q=ship_refit_quote(*a,*b))return q->work;
+        return 0;
+    }
     if (item.kind == ProductionKind::ResonanceLaboratory) return kResonanceWork;
     if (item.kind == ProductionKind::Research) return 0;
     if (item.kind == ProductionKind::Terraforming) return kTerraformingCost;
@@ -247,7 +253,7 @@ void sync_fleet_presentation(GameState& state, Fleet& fleet)
 bool design_name_exists(const GameState& state, PlayerId owner, const std::string& name)
 {
     return std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& design) {
-        return design.owner == owner && design.name == name;
+        return !design.retired && design.owner == owner && design.name == name;
     });
 }
 
@@ -361,6 +367,11 @@ std::uint32_t run_colony_production(GameState& state, Planet& planet)
         const auto& completed = completion.item;
         if (engineering_kind(completed.kind) || completed.kind == ProductionKind::ResonanceLaboratory)
             continue; // Dedicated dated installation reports, never ship construction.
+        if(completed.kind==ProductionKind::ShipRefit && completed.refit) {
+            if(complete_ship_refit(state,planet,*completed.refit) && star)
+                queue_player_report(state,planet.owner,PlayerReportKind::ProductionCompleted,star->position,state.turn+1,planet.star,planet.id,completed.refit->fleet,completed.refit->target,ProductionKind::ShipRefit,1);
+            continue;
+        }
         const auto object = complete_production(state, planet, completed);
         if (!object || !star) continue;
         const auto design = completed.kind == ProductionKind::ColonyShip
@@ -2457,6 +2468,10 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
             (void)submit_visitor_command(state, player, value);
         } else if constexpr (std::is_same_v<T, SetProbeProgramOrder>) {
             (void)submit_probe_command(state, player, value);
+        } else if constexpr (std::is_same_v<T, DeleteShipDesignOrder>) {
+            (void)delete_ship_design(state,player,value.design);
+        } else if constexpr (std::is_same_v<T, RefitShipOrder>) {
+            (void)queue_ship_refit(state,player,value);
         } else if constexpr (std::is_same_v<T, CreateShipDesignOrder>) {
             create_ship_design(state, player, value);
         } else if constexpr (std::is_same_v<T, RefuelFleetOrder>) {
@@ -2639,6 +2654,8 @@ GameState planned_ship_design_state(const GameState& state, const PlayerOrders& 
     for (const auto& order : pending.orders) {
         if (const auto* create = std::get_if<CreateShipDesignOrder>(&order))
             create_ship_design(result, pending.player, *create);
+        else if(const auto* remove=std::get_if<DeleteShipDesignOrder>(&order))
+            (void)delete_ship_design(result,pending.player,remove->design);
     }
     return result;
 }
@@ -2648,12 +2665,12 @@ const ShipDesign* resolve_ship_design_order(
 {
     if (!order.pendingDesignName.empty()) {
         const auto it = std::find_if(state.shipDesigns.begin(), state.shipDesigns.end(), [&](const ShipDesign& design) {
-            return design.owner == player && design.name == order.pendingDesignName;
+            return !design.retired && design.owner == player && design.name == order.pendingDesignName;
         });
         return it == state.shipDesigns.end() ? nullptr : &*it;
     }
     const auto* design = find_ship_design(state, order.design);
-    return design && design->owner == player ? design : nullptr;
+    return design && !design->retired && design->owner == player ? design : nullptr;
 }
 
 TurnResult TurnProcessor::process_with_events(

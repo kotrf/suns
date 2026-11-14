@@ -690,7 +690,7 @@ void MainWindow::refreshShipDesignChoices()
     int restoreIndex = -1;
     const auto planning = planned_ship_design_state(receivedPlayerState(), pendingOrders_);
     for (const auto& design : planning.shipDesigns) {
-        if (design.owner != pendingOrders_.player) continue;
+        if (design.retired || design.owner != pendingOrders_.player) continue;
         const auto index = shipDesignCombo_->count();
         const auto hull = hull_spec(design.hull);
         const auto text = QString("%1 — %2, cost %3, W%4, fuel %5, cargo %6")
@@ -814,7 +814,7 @@ void MainWindow::rebuildScene(bool planningStateChanged)
         QPen routePen(routeColor);
         routePen.setWidthF(0.8);
         routePen.setCosmetic(true);
-        routePen.setStyle(Qt::DotLine);
+        routePen.setStyle(selection_.fleet == fleet.id ? Qt::SolidLine : Qt::DotLine);
         auto* route = scene_->addLine(
             routeStart.x(), routeStart.y(), routeEnd.x(), routeEnd.y(), routePen);
         route->setZValue(-20.0);
@@ -851,7 +851,7 @@ void MainWindow::rebuildScene(bool planningStateChanged)
                 QPen routePen(routeColor);
                 routePen.setWidthF(1.0);
                 routePen.setCosmetic(true);
-                routePen.setStyle(Qt::DashLine);
+                routePen.setStyle(selection_.fleet == fleet->id ? Qt::SolidLine : Qt::DashLine);
                 auto* route = scene_->addLine(
                     routeStart.x(), routeStart.y(), routeEnd.x(), routeEnd.y(), routePen);
                 route->setZValue(-18.0);
@@ -1573,12 +1573,31 @@ void MainWindow::openShipDesigner()
     const auto documentGeneration = session_->documentGeneration();
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     dialog->setModal(false);
+    dialog->setDeleteHandler([this,documentGeneration](ShipDesignId id)->QString {
+        if(documentGeneration!=session_->documentGeneration())return "This game was replaced. Reopen Ship Designer.";
+        const auto planned=planned_ship_design_state(receivedPlayerState(),pendingOrders_);
+        for(const auto& fleet:planned.fleets)if(fleet_ship_count(fleet,id))return "Cannot delete: existing ships use this design, including ships in mixed fleets or in flight.";
+        if(!find_ship_design(receivedPlayerState(),id)) {
+            const auto* design=find_ship_design(planned,id);if(!design)return "Design no longer exists.";
+            const auto name=design->name;
+            for(std::size_t i=pendingOrders_.orders.size();i-->0;) {
+                const auto* create=std::get_if<CreateShipDesignOrder>(&pendingOrders_.orders[i]);
+                const auto* build=std::get_if<QueueShipDesignOrder>(&pendingOrders_.orders[i]);
+                if((create && create->name==name) || (build && build->pendingDesignName==name)) {
+                    pendingOrders_.orders.erase(pendingOrders_.orders.begin()+i);
+                    if(i<std::size_t(pendingDescriptions_.size()))pendingDescriptions_.removeAt(int(i));
+                }
+            }
+        } else appendPendingOrder(DeleteShipDesignOrder{id},"Delete ship design and cancel its unbuilt production references");
+        rebuildScene();refreshShipDesignChoices();return {};
+    });
     dialog->setSaveValidator([this, documentGeneration](const ShipDesignDraft& draft) -> QString {
         if (documentGeneration != session_->documentGeneration())
             return "This draft belongs to a replaced game. Reopen Ship Designer.";
+        const auto currentPlanning=planned_ship_design_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_);
         const auto duplicateInState = std::any_of(
-            state_.shipDesigns.begin(), state_.shipDesigns.end(), [&](const ShipDesign& design) {
-                return design.owner == pendingOrders_.player && design.name == draft.name;
+            currentPlanning.shipDesigns.begin(), currentPlanning.shipDesigns.end(), [&](const ShipDesign& design) {
+                return !design.retired && design.owner == pendingOrders_.player && design.name == draft.name;
             });
         if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
             return "A ship design with that name already exists or is pending";
@@ -1589,8 +1608,7 @@ void MainWindow::openShipDesigner()
         design.components = draft.components;
         // Saving is an admission boundary: recheck current received access
         // even before a deferred controls/availability refresh has run.
-        const auto planning = planned_ship_design_state(
-            make_player_view(state_, pendingOrders_.player).state, pendingOrders_);
+        const auto& planning = currentPlanning;
         if (!ship_design_available_to_player(planning, pendingOrders_.player, design))
             return "Hull or equipment unavailable. Check this empire's research, race and acquisition requirements.";
         return {};
@@ -1617,7 +1635,7 @@ void MainWindow::openShipDesigner()
         refreshShipDesignChoices();
         const auto planning = planned_ship_design_state(receivedPlayerState(), pendingOrders_);
         const auto it = std::find_if(planning.shipDesigns.begin(), planning.shipDesigns.end(), [&](const ShipDesign& design) {
-            return design.owner == pendingOrders_.player && design.name == draft.name;
+            return !design.retired && design.owner == pendingOrders_.player && design.name == draft.name;
         });
         if (it != planning.shipDesigns.end()) shipDesignCombo_->setCurrentIndex(shipDesignCombo_->findData(it->id));
         updateControls();

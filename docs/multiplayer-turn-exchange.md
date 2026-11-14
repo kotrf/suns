@@ -1,5 +1,13 @@
 # Multiplayer turn exchange
 
+Save127 / orders55 add [Mini-3](mini-3.md) design deletion and one-ship dock refit
+orders. The new refit production kind carries its fleet/source/target IDs; all older
+production kinds keep their record layout. Archive flags are gated by save127,
+and new order tags38/39 require orders55. Older formats remain readable under
+their existing version-specific guards; no new binary fixtures are required.
+
+The previous save126 / orders54 change follows.
+
 Save126 / orders54 add the Climate stabilizer kind and its conditional normalized
 temperature target. Physical projects, received/in-flight surveys, drafts and
 host inboxes keep that setting independently. Other engineering records keep

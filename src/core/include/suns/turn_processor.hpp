@@ -207,6 +207,9 @@ struct AssignTransportLineOrder {
     bool remove{};
 };
 
+struct DeleteShipDesignOrder { ShipDesignId design{}; };
+struct RefitShipOrder { PlanetId colony{}; FleetId fleet{}; ShipDesignId source{},target{}; std::string pendingTargetName; };
+
 using Order = std::variant<
     MoveFleetOrder,
     QueueProductionOrder,
@@ -244,7 +247,7 @@ using Order = std::variant<
     EncounterVisitorOrder,
     OrbitalBaseOrder,
     SetTransportLineOrder,
-    AssignTransportLineOrder>;
+    AssignTransportLineOrder, DeleteShipDesignOrder, RefitShipOrder>;
 
 struct PlayerOrders {
     PlayerId player{};

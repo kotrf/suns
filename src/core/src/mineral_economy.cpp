@@ -1,3 +1,4 @@
+#include "suns/ship_refit.hpp"
 #include "suns/game_state.hpp"
 #include "suns/stations.hpp"
 #include "suns/propulsion.hpp"
@@ -199,6 +200,11 @@ MineralCargo projected_remote_mining(const GameState& state, const Planet& plane
 
 MineralCargo production_item_mineral_cost(const GameState& state, const ProductionItem& item)
 {
+    if(item.kind==ProductionKind::ShipRefit && item.refit) {
+        const auto* a=find_ship_design(state,item.refit->source);const auto* b=find_ship_design(state,item.refit->target);
+        if(a&&b)if(const auto q=ship_refit_quote(*a,*b))return q->netMinerals;
+        return {};
+    }
     if (item.kind == ProductionKind::ResonanceLaboratory) return {item.remainingCost*0.2,item.remainingCost*0.1,item.remainingCost*0.2};
     if (engineering_kind(item.kind)) return {item.remainingCost*0.1,item.remainingCost*0.05,item.remainingCost*0.1};
     if (item.kind == ProductionKind::CleanupContamination) return {0,1,1};

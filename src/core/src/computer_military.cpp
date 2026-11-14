@@ -137,7 +137,7 @@ std::optional<ShipDesign> military_design(const GameState& state, PlayerId owner
     }
     if (!best) return std::nullopt;
     const ShipDesign* match = nullptr;
-    for (const auto& design : state.shipDesigns) if (design.owner == owner && design.hull == best->hull
+    for (const auto& design : state.shipDesigns) if (!design.retired && design.owner == owner && design.hull == best->hull
         && design.components == best->components && ship_design_valid(design)
         && (!match || design.id < match->id)) match = &design;
     if (match) return *match;
@@ -147,7 +147,7 @@ std::optional<ShipDesign> military_design(const GameState& state, PlayerId owner
     name.resize(std::min<std::size_t>(40, name.size()));
     best->name = name;
     for (unsigned suffix = 2; std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(),
-        [&](const auto& d) { return d.owner == owner && d.name == best->name; }); ++suffix)
+        [&](const auto& d) { return !d.retired && d.owner == owner && d.name == best->name; }); ++suffix)
         best->name = name + " " + std::to_string(suffix);
     return best;
 }

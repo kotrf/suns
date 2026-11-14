@@ -1,5 +1,21 @@
 # Project status and development handoff
 
+## Mini-3 / issue296 — 14 November 2026
+
+User requested all twelve items in [#296](https://github.com/kotrf/suns/issues/296).
+Branch codex/mini-3-296 starts at main6a59a53 after merged#297. Map/route/mineral
+presentation, designer naming/read-only fits/mixed composition, immutable emission
+navigation, physical design deletion/dock refit, Research layout, resonance reports
+and both waypoint-editor defects are implemented. Received evidence remains
+separate from host truth; no future-year UI forecasts or periodic work are added.
+Refit pays only changed equipment, returns10% removed minerals and charges50%
+installation labour in resources; one ship per queued job, with cargo/fuel/damage
+retained. Save127/orders55/race3 append guarded kinds/orders; active old layouts and
+genuine fixtures remain intact. [Details](mini-3.md). Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 21.51s and full 139/139 CTest in 194.98s passed. Actual Qt fitting/refit/map screenshots and 181 local documentation targets were checked. The main baseline CI43527982470 succeeded.
+
+Ready for review; current PR/source/CI are tracked in GitHub. Do not merge automatically. #56 larger scope remains
+open,#53/#63 frozen; existing work/ and source/archive branches retained.
+
 ## PR297 repeat P2 — tied plateau exit, 14 November 2026
 
 [Repeat review](https://github.com/kotrf/suns/pull/297#issuecomment-6867024973)

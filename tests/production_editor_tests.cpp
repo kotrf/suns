@@ -394,7 +394,7 @@ int main(int argc, char** argv)
         assert(source->findData(foreign.id) < 0);
         source->setCurrentIndex(source->findData(archived.id));
         const auto draft = designer.draft();
-        assert(draft.name == "Archive Copy");
+        assert(draft.name == "Archive Gen2");
         assert(draft.hull == archived.hull);
         assert(draft.components == archived.components);
         assert(draft.placements == archived.placements);
