@@ -1230,10 +1230,11 @@ std::set<FleetId> fleets_under_refit(const GameState& state)
     return result;
 }
 
-void generate_fleet_fuel(GameState& state)
+void generate_fleet_fuel(GameState& state, bool deployed)
 {
     const auto refitting = fleets_under_refit(state);
     for (auto& fleet : state.fleets) {
+        if ((fleet.outpost != OutpostKind::None) != deployed) continue;
         if (refitting.contains(fleet.id)) continue;
         const auto capacity = fleet_fuel_capacity(state, fleet);
         if (capacity <= 0.0) {
@@ -2717,6 +2718,9 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
 
     refresh_planetary_engineering(next);
+    // Deployed installations cannot undergo ship refit. Their generators must
+    // power upkeep and the communications network before commands are delivered.
+    generate_fleet_fuel(next, true);
     maintain_outposts(next, next.turn + 1);
     advance_minefields(next);
     const auto extraction = mine_colonies(next);
@@ -2762,6 +2766,15 @@ TurnResult TurnProcessor::process_with_events(
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
+        std::map<ShipDesignId, std::string> draftDeletions;
+        if (std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<CreateShipDesignOrder>(o);})
+            && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<DeleteShipDesignOrder>(o);})) {
+            const auto received=make_player_view(current,submission.player).state;
+            const auto catalog=planned_ship_design_state(received,submission);
+            for(const auto& design:catalog.shipDesigns)
+                if(design.owner==submission.player && !find_ship_design(received,design.id))
+                    draftDeletions.emplace(design.id,design.name);
+        }
         std::vector<PlannedSplitReference> splits;
         if (find_player(current, submission.player)
             && std::any_of(submission.orders.begin(), submission.orders.end(), [](const auto& o) { return std::holds_alternative<SplitFleetOrder>(o); })) {
@@ -2779,6 +2792,15 @@ TurnResult TurnProcessor::process_with_events(
         std::map<FleetId, FleetId> aliases;
         for (std::size_t index = 0; index < submission.orders.size(); ++index) {
             auto order = submission.orders[index];
+            // A newly created design's planning ID can differ from the host's
+            // global allocation. Bind only this submission's fresh IDs by name.
+            if(auto* remove=std::get_if<DeleteShipDesignOrder>(&order)) {
+                if(const auto draft=draftDeletions.find(remove->design);draft!=draftDeletions.end()) {
+                    const auto actual=std::find_if(next.shipDesigns.begin(),next.shipDesigns.end(),[&](const auto& d){return !d.retired && d.owner==submission.player && d.name==draft->second;});
+                    if(actual==next.shipDesigns.end())continue;
+                    remove->design=actual->id;
+                }
+            }
             if (!remap_fleet_references(order, aliases)) {
                 // A failed parent's nested split cannot leave an unbound ID
                 // that later happens to name an unrelated physical fleet.
@@ -3005,7 +3027,7 @@ TurnResult TurnProcessor::process_with_events(
         }
     }
 
-    generate_fleet_fuel(next);
+    generate_fleet_fuel(next, false);
     // Admit commands against the fuel already aboard, as in the received
     // planning state. Other docked fleets still top up before movement; refit
     // fleets resume ordinary depot service after their job has completed.

@@ -3,6 +3,7 @@
 #include "suns/production.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/stations.hpp"
+#include "suns/mobile_base.hpp"
 #include <cassert>
 #include <algorithm>
 #include <cmath>
@@ -209,6 +210,46 @@ void gate_uses_departure_depot() {
     assert(same_position(next.fleets[0].position,s.stars[1].position));
     assert(next.fleets[0].fuel==capacity);
 }
+void station_loss_preserves_refit() {
+    auto s=fixture();
+    const QueueStationOrder station{s.planets[0].id,{{OrbitalStationHullType::OrbitalDock,{},false,true},s.orbitalStations[0].id}};
+    const auto control=TurnProcessor{}.process(s,{{1,{station}}});
+    const RefitShipOrder job{s.planets[0].id,s.fleets[0].id,s.shipDesigns[0].id,s.shipDesigns[1].id};
+    const auto next=TurnProcessor{}.process(s,{{1,{station,job}}});
+    assert(!orbital_station_has_module(next.orbitalStations[0],OrbitalStationModule::Shipyard));
+    assert(next.planets[0].productionQueue.size()==1 && next.planets[0].productionQueue[0].refit);
+    assert(next.planets[0].minerals.germanium==control.planets[0].minerals.germanium);
+    assert(fleet_ship_count(next.fleets[0],job.source)==2);
+}
+void mobile_base_preserves_refit_fuel_and_repairs() {
+    auto s=fixture();auto& from=s.shipDesigns[0];
+    from.components.push_back(ShipComponentType::FuelTank);
+    from.placements=autoplace_ship_components(from.hull,from.components);
+    assert(ship_design_valid(from));
+    s.orbitalStations[0].modules={OrbitalStationModule::Shipyard};
+    assert(queue_ship_refit(s,1,{s.planets[0].id,s.fleets[0].id,from.id,s.shipDesigns[1].id}));
+    s.planets[0].productionQueue[0].remainingCost=1000000;
+    ShipDesign d{s.nextShipDesignId++,1,"Service base",ShipHullType::ExpeditionBase,
+        {ShipComponentType::QuickJump5,ShipComponentType::QuickJump5,ShipComponentType::QuickJump5,ShipComponentType::QuickJump5,
+         ShipComponentType::ExpeditionDock,ShipComponentType::ExpeditionWorkshop,ShipComponentType::RelayArray}};
+    s.shipDesigns.push_back(d);
+    Fleet base;base.id=s.nextFleetId++;base.owner=1;base.design=d.id;base.ships={{d.id,1}};
+    base.position=s.fleets[0].position;base.fuel=5000;base.minerals={100,100,100};base.mobileBase.clients={s.fleets[0].id};
+    s.fleets.push_back(base);
+    service_mobile_bases(s,s.turn+1);
+    assert(s.fleets[0].fuel==10);
+    assert(s.fleets[0].damagePercent<5);
+}
+void deployed_generator_precedes_upkeep() {
+    auto s=fixture();auto& d=s.shipDesigns[0];
+    d.components={ShipComponentType::FusionDrive,ShipComponentType::DeepSpaceRelayKit,ShipComponentType::AntimatterGenerator};
+    d.placements=autoplace_ship_components(d.hull,d.components);assert(ship_design_valid(d));
+    auto& f=s.fleets[0];f.ships={{d.id,1}};f.outpost=OutpostKind::CommunicationsRelay;f.fuel=.5;
+    s.orbitalStations[0].modules={OrbitalStationModule::Shipyard};
+    const auto expected=f.fuel+fleet_fuel_generation(s,f)-1;
+    const auto next=TurnProcessor{}.process(s,{});
+    assert(std::abs(next.fleets[0].fuel-expected)<1e-6);
+}
 }
 int main(int argc, char** argv) {
     if (argc == 2) {
@@ -217,6 +258,9 @@ int main(int argc, char** argv) {
         else if (test == "refit-fuel") refit_preserves_fuel_while_waiting_for_minerals();
         else if (test == "generator") generator_does_not_block_refit();
         else if (test == "gate-fuel") gate_uses_departure_depot();
+        else if (test == "station-loss") station_loss_preserves_refit();
+        else if (test == "mobile-fuel") mobile_base_preserves_refit_fuel_and_repairs();
+        else if (test == "relay-fuel") deployed_generator_precedes_upkeep();
         else assert(false);
         return 0;
     }
@@ -224,4 +268,5 @@ int main(int argc, char** argv) {
     queue_edits_keep_submission_order();
     refit_preserves_fuel_while_waiting_for_minerals();
     generator_does_not_block_refit();gate_uses_departure_depot();
+    station_loss_preserves_refit();mobile_base_preserves_refit_fuel_and_repairs();deployed_generator_precedes_upkeep();
 }

@@ -110,3 +110,18 @@ that would prevent completion. Direct GateFleetOrder performs source depot
 service for its own fleet before moving immediately. A destination without a
 depot therefore receives the same full tanks as before Mini-3. Other queued refits
 are not refuelled as a side effect. Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 14.29s and full 139/139 CTest in 141.12s passed. All 183 local documentation targets in six related documents were checked. Formats and balance unchanged.
+
+## PR298 third review — station support, mobile supply, relays and draft deletion
+
+Four P2 findings on2f8471d have independently failing regressions before the fix.
+The production resolver consults the effective Shipyard flag after prior queue
+completions, so disabling it pauses subsequent refit without charging minerals.
+Automatic Expedition Dock service skips fuel additions to eligible refit clients
+while retaining their mineral-paid repairs. Deployed outpost generators operate
+before upkeep and command routing; ordinary ship generators still wait for refit
+admission. Fresh-project deletion preserves Create/Queue and earlier Cancel/Reorder
+commands, appending deletion last. The host binds newly allocated planning IDs to
+its own created project by owner/name rather than another empire global ID.
+The Qt regression clicks Delete design and exports/reads the order file before
+checking the host queue and foreign-project preservation. No file-layout changes.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 11.85s and full 139/139 CTest in 140.47s passed. All 183 local documentation targets in six related documents were checked. Current source and CI are tracked in PR298; discussions stay open.

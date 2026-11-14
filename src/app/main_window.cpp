@@ -238,14 +238,6 @@ bool hasPendingMove(const PlayerOrders& pending, FleetId fleetId)
     });
 }
 
-bool hasPendingDesignName(const PlayerOrders& pending, const std::string& name)
-{
-    return std::any_of(pending.orders.begin(), pending.orders.end(), [&](const Order& order) {
-        if (const auto* create = std::get_if<CreateShipDesignOrder>(&order)) return create->name == name;
-        return false;
-    });
-}
-
 QString arrivalActionSummary(const FleetArrivalAction& action)
 {
     const auto cargo = [&] {
@@ -1577,18 +1569,7 @@ void MainWindow::openShipDesigner()
         if(documentGeneration!=session_->documentGeneration())return "This game was replaced. Reopen Ship Designer.";
         const auto planned=planned_ship_design_state(receivedPlayerState(),pendingOrders_);
         for(const auto& fleet:planned.fleets)if(fleet_ship_count(fleet,id))return "Cannot delete: existing ships use this design, including ships in mixed fleets or in flight.";
-        if(!find_ship_design(receivedPlayerState(),id)) {
-            const auto* design=find_ship_design(planned,id);if(!design)return "Design no longer exists.";
-            const auto name=design->name;
-            for(std::size_t i=pendingOrders_.orders.size();i-->0;) {
-                const auto* create=std::get_if<CreateShipDesignOrder>(&pendingOrders_.orders[i]);
-                const auto* build=std::get_if<QueueShipDesignOrder>(&pendingOrders_.orders[i]);
-                if((create && create->name==name) || (build && build->pendingDesignName==name)) {
-                    pendingOrders_.orders.erase(pendingOrders_.orders.begin()+i);
-                    if(i<std::size_t(pendingDescriptions_.size()))pendingDescriptions_.removeAt(int(i));
-                }
-            }
-        } else appendPendingOrder(DeleteShipDesignOrder{id},"Delete ship design and cancel its unbuilt production references");
+        appendPendingOrder(DeleteShipDesignOrder{id},"Delete ship design and cancel its unbuilt production references");
         rebuildScene();refreshShipDesignChoices();return {};
     });
     dialog->setSaveValidator([this, documentGeneration](const ShipDesignDraft& draft) -> QString {
@@ -1599,7 +1580,7 @@ void MainWindow::openShipDesigner()
             currentPlanning.shipDesigns.begin(), currentPlanning.shipDesigns.end(), [&](const ShipDesign& design) {
                 return !design.retired && design.owner == pendingOrders_.player && design.name == draft.name;
             });
-        if (duplicateInState || hasPendingDesignName(pendingOrders_, draft.name)) {
+        if (duplicateInState) {
             return "A ship design with that name already exists or is pending";
         }
         ShipDesign design;

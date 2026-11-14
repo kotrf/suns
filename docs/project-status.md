@@ -1,5 +1,17 @@
 # Project status and development handoff
 
+## PR298 third review — four P2 cases
+
+Four new regressions fail on2f8471d before correction. Production resolution
+respects a prior station refit disabling Shipyard and retains unpaid ship work.
+Mobile bases keep repairing clients but do not refill eligible refit fleets.
+Deployed generators run before upkeep/network routing; ship generation retains
+its refit protection. Deleting a newly created project appends a final command
+instead of rewriting indexed queue operations. Host binding uses owner-scoped
+names for fresh planning IDs across hidden global IDs; Qt/PBEM tests cover this.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 11.85s and full 139/139 CTest in 140.47s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; current source/CI in PR298. Leave
+discussions for repeat review, no merge. #56 open,#53/#63 frozen; work/ retained.
+
 ## PR298 repeat review — onboard fuel and gate departure
 
 Two P2 findings on05d2a12 are confirmed by regressions failing before correction.

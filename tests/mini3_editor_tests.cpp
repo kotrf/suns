@@ -3,6 +3,7 @@
 #include "ship_designer_dialog.hpp"
 #include "save_game.hpp"
 #include "mineral_stock_panel.hpp"
+#include "suns/production.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QLineEdit>
@@ -48,6 +49,35 @@ struct MainWindowTestAccess {
     static double mapScale(MainWindow& w){return std::abs(w.view_->transform().m11());}
     static QPointF center(MainWindow& w){return w.view_->mapToScene(w.view_->viewport()->rect().center());}
     static QGraphicsView* mapView(MainWindow& w){return w.view_;}
+    static void pendingDeletion(MainWindow& w) {
+        load(w);
+        w.state_.players[0].technology.levels.fill(26);
+        auto& p=w.state_.planets[0];p.productionQueue={{ProductionKind::Factory,1000000},{ProductionKind::Mine,1000000},{ProductionKind::ColonyDefense,1000000}};
+        const auto d=w.state_.shipDesigns[0];
+        auto opponent=w.state_.players[0];opponent.id=2;opponent.name="Other empire";w.state_.players.push_back(opponent);
+        // Other empires consume global IDs which the planning view cannot see.
+        for(int i=0;i<3;++i){auto foreign=d;foreign.owner=2;foreign.id=w.state_.nextShipDesignId++;foreign.name="Foreign project"+std::to_string(i);w.state_.shipDesigns.push_back(foreign);}
+        w.pendingOrders_.orders={CreateShipDesignOrder{"Disposable",d.hull,d.components,d.placements},QueueShipDesignOrder{p.id,0,"Disposable"},ReorderProductionQueueOrder{p.id,3,1},CancelProductionOrder{p.id,2}};
+        w.pendingDescriptions_={"Create","Build","Move","Cancel"};
+        set_survey_level(w.state_,1,p.star,SurveyLevel::DeepSurvey,w.state_.turn);
+        w.rebuildScene();
+        w.openShipDesigner();
+        auto* dialog=w.shipDesigner_.data();assert(dialog);
+        auto* choices=dialog->findChild<QComboBox*>("shipDesignTemplate");choices->setCurrentIndex(choices->findText("Disposable"));
+        dialog->findChild<QPushButton*>("deleteShipDesign")->click();
+        const auto check=[](const auto& s){const auto& q=s.planets[0].productionQueue;assert(q.size()==2);assert(q[0].kind==ProductionKind::Factory);assert(q[1].kind==ProductionKind::ColonyDefense);};
+        const auto v=make_player_view(w.state_,1).state;
+        const auto plan=planned_production_state(v,w.pendingOrders_);
+        check(plan);
+        QTemporaryDir dir;QString error;TurnOrderFileData packet{1,w.state_.turn,1,w.pendingOrders_,w.pendingDescriptions_};
+        assert(write_turn_order_file(dir.filePath("delete.sunsorders"),packet,error));
+        TurnOrderFileData decoded;assert(read_turn_order_file(dir.filePath("delete.sunsorders"),decoded,error));
+        const auto hosted=TurnProcessor{}.process(w.state_,{decoded.orders});check(hosted);
+        for(const auto& project:hosted.shipDesigns)if(project.owner==2)assert(!project.retired);
+        const auto removed=std::find_if(hosted.shipDesigns.begin(),hosted.shipDesigns.end(),[](const auto& project){return project.name=="Disposable";});
+        assert(removed!=hosted.shipDesigns.end() && removed->retired);
+        dialog->close();
+    }
 };
 }
 int main(int argc,char** argv) {
@@ -102,6 +132,7 @@ int main(int argc,char** argv) {
         assert(fitting->window()->grab().save(capture+"-fit.png"));
         assert(w.grab().save(capture+"-map.png"));
     }
+    MainWindowTestAccess::pendingDeletion(w);
     QTemporaryDir dir;assert(dir.isValid());QString error;SaveGameData save;save.campaignId=1;save.turnToken=1;save.state=s;
     save.pendingOrders={1,{DeleteShipDesignOrder{extra.id},RefitShipOrder{1,s.fleets.front().id,s.shipDesigns[0].id,0,"Deferred target"}}};
     save.pendingDescriptions={"Delete design","Refit ship"};
