@@ -250,6 +250,34 @@ void deployed_generator_precedes_upkeep() {
     const auto next=TurnProcessor{}.process(s,{});
     assert(std::abs(next.fleets[0].fuel-expected)<1e-6);
 }
+void rejected_creation_has_no_named_dependents() {
+    auto s=fixture();const auto stale=s;
+    auto hidden=s.fleets[0];hidden.id=s.nextFleetId++;hidden.design=s.shipDesigns[1].id;hidden.ships={{hidden.design,1}};hidden.position={2000,2000};
+    s.fleets.push_back(hidden);
+    const auto old=s.shipDesigns[1];const auto replacement=s.shipDesigns[0];
+    const PlayerOrders orders{1,{DeleteShipDesignOrder{old.id},CreateShipDesignOrder{old.name,replacement.hull,replacement.components,replacement.placements},
+        QueueShipDesignOrder{s.planets[0].id,0,old.name},RefitShipOrder{s.planets[0].id,s.fleets[0].id,replacement.id,0,old.name}}};
+    assert(!planned_production_state(stale,orders).planets[0].productionQueue.empty());
+    const auto next=TurnProcessor{}.process(s,{orders});
+    std::uint32_t count=0;for(const auto& f:next.fleets)count+=fleet_ship_count(f,old.id);
+    assert(count==1);
+    assert(fleet_ship_count(next.fleets[0],replacement.id)==2);
+    const PlayerOrders bare{1,{QueueShipDesignOrder{s.planets[0].id,0,old.name},RefitShipOrder{s.planets[0].id,s.fleets[0].id,replacement.id,0,old.name}}};
+    assert(planned_production_state(stale,bare).planets[0].productionQueue.empty());
+}
+void restored_shipyard_resumes_same_turn(bool depot) {
+    auto s=fixture();auto& from=s.shipDesigns[0];from.components.push_back(ShipComponentType::FuelTank);
+    from.placements=autoplace_ship_components(from.hull,from.components);assert(ship_design_valid(from));
+    const RefitShipOrder job{s.planets[0].id,s.fleets[0].id,from.id,s.shipDesigns[1].id};
+    const QueueStationOrder remove{s.planets[0].id,{{OrbitalStationHullType::OrbitalDock,{},false,depot},s.orbitalStations[0].id}};
+    auto next=TurnProcessor{}.process(s,{{1,{remove,job}}});
+    assert(next.planets[0].productionQueue.size()==1);
+    if(depot)assert(next.fleets[0].fuel==10);
+    const QueueStationOrder restore{s.planets[0].id,{{OrbitalStationHullType::OrbitalDock,{},true,depot},s.orbitalStations[0].id}};
+    next=TurnProcessor{}.process(next,{{1,{restore,ReorderProductionQueueOrder{s.planets[0].id,1,0}}}});
+    assert(next.planets[0].productionQueue.empty());
+    assert(fleet_ship_count(next.fleets[0],job.target)==1);
+}
 }
 int main(int argc, char** argv) {
     if (argc == 2) {
@@ -261,6 +289,9 @@ int main(int argc, char** argv) {
         else if (test == "station-loss") station_loss_preserves_refit();
         else if (test == "mobile-fuel") mobile_base_preserves_refit_fuel_and_repairs();
         else if (test == "relay-fuel") deployed_generator_precedes_upkeep();
+        else if (test == "creation-binding") rejected_creation_has_no_named_dependents();
+        else if (test == "shipyard-fuel") restored_shipyard_resumes_same_turn(true);
+        else if (test == "shipyard-resume") restored_shipyard_resumes_same_turn(false);
         else assert(false);
         return 0;
     }
@@ -269,4 +300,5 @@ int main(int argc, char** argv) {
     refit_preserves_fuel_while_waiting_for_minerals();
     generator_does_not_block_refit();gate_uses_departure_depot();
     station_loss_preserves_refit();mobile_base_preserves_refit_fuel_and_repairs();deployed_generator_precedes_upkeep();
+    rejected_creation_has_no_named_dependents();restored_shipyard_resumes_same_turn(true);restored_shipyard_resumes_same_turn(false);
 }

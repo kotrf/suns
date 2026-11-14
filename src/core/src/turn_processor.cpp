@@ -1225,7 +1225,7 @@ std::set<FleetId> fleets_under_refit(const GameState& state)
     std::set<FleetId> result;
     for (const auto& planet : state.planets)
         for (const auto& item : planet.productionQueue)
-            if (item.refit && ship_refit_available(state, planet, *item.refit))
+            if (item.refit && ship_refit_fuel_capacity(state, planet, *item.refit))
                 result.insert(item.refit->fleet);
     return result;
 }
@@ -2567,6 +2567,29 @@ bool apply_fleet_command_order(GameState& state, PlayerId player, const Order& o
 
 namespace {
 struct PlannedSplitReference { std::size_t order{}; FleetId fleet{}; };
+using CreatedDesigns = std::map<std::string, ShipDesignId>;
+
+// A pending name is a dependency on this submission's successful Create,
+// never a request to fall back to an older project with the same name.
+bool bind_created_design(Order& order,const GameState& state,PlayerId owner,const CreatedDesigns& created)
+{
+    std::string* name=nullptr;ShipDesignId* target=nullptr;
+    if(auto* build=std::get_if<QueueShipDesignOrder>(&order)){name=&build->pendingDesignName;target=&build->design;}
+    if(auto* refit=std::get_if<RefitShipOrder>(&order)){name=&refit->pendingTargetName;target=&refit->target;}
+    if(!name || name->empty())return true;
+    const auto it=created.find(*name);if(it==created.end())return false;
+    const auto* design=find_ship_design(state,it->second);
+    if(!design || design->retired || design->owner!=owner)return false;
+    *target=design->id;name->clear();return true;
+}
+
+void record_created_design(const Order& order,ShipDesignId allocated,const GameState& state,CreatedDesigns& created)
+{
+    if(const auto* request=std::get_if<CreateShipDesignOrder>(&order)) {
+        created.erase(request->name);
+        if(state.nextShipDesignId!=allocated)created.emplace(request->name,allocated);
+    }
+}
 
 // UI/AI callers supply a PlayerView: command validation must not inspect host truth.
 GameState project_order_boundary(GameState projected, const PlayerOrders& pending,
@@ -2577,11 +2600,17 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
         p.xenocrystal = known_xenocrystal(projected, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
+    CreatedDesigns created;
     for (std::size_t index = 0; index < pending.orders.size(); ++index) {
+        auto admission=pending.orders[index];
+        if(!bind_created_design(admission,projected,pending.player,created))continue;
         if (beforeOrder) beforeOrder(projected, index);
-        const auto& order = pending.orders[index];
+        auto order = pending.orders[index];
+        if(!bind_created_design(order,projected,pending.player,created))continue;
         const auto nextFleet = projected.nextFleetId;
+        const auto nextDesign = projected.nextShipDesignId;
         if (apply_fleet_command_order(projected, pending.player, order, gated, true)) {
+            record_created_design(order,nextDesign,projected,created);
             if (splits && std::holds_alternative<SplitFleetOrder>(order) && projected.nextFleetId != nextFleet)
                 splits->push_back({index, nextFleet});
             continue;
@@ -2766,8 +2795,9 @@ TurnResult TurnProcessor::process_with_events(
 
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
+        CreatedDesigns created;
         std::map<ShipDesignId, std::string> draftDeletions;
-        if (std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<CreateShipDesignOrder>(o);})
+        if (find_player(current,submission.player) && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<CreateShipDesignOrder>(o);})
             && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<DeleteShipDesignOrder>(o);})) {
             const auto received=make_player_view(current,submission.player).state;
             const auto catalog=planned_ship_design_state(received,submission);
@@ -2801,6 +2831,7 @@ TurnResult TurnProcessor::process_with_events(
                     remove->design=actual->id;
                 }
             }
+            if(!bind_created_design(order,next,submission.player,created))continue;
             if (!remap_fleet_references(order, aliases)) {
                 // A failed parent's nested split cannot leave an unbound ID
                 // that later happens to name an unrelated physical fleet.
@@ -2811,7 +2842,9 @@ TurnResult TurnProcessor::process_with_events(
                 continue;
             }
             const auto allocated = next.nextFleetId;
+            const auto allocatedDesign = next.nextShipDesignId;
             if (apply_fleet_command_order(next, submission.player, order, gatedThisTurn)) {
+                record_created_design(order,allocatedDesign,next,created);
                 if (std::holds_alternative<SplitFleetOrder>(order)) {
                     const auto reference = std::find_if(splits.begin(), splits.end(), [&](const auto& split) { return split.order == index; });
                     if (reference != splits.end()) aliases[reference->fleet] = next.nextFleetId != allocated ? allocated : 0;

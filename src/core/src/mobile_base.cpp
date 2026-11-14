@@ -107,7 +107,7 @@ void service_mobile_bases(GameState& state, std::uint64_t serviceTurn)
 {
     std::set<FleetId> refitting;
     for(const auto& planet:state.planets)for(const auto& item:planet.productionQueue)
-        if(item.refit && ship_refit_available(state,planet,*item.refit))refitting.insert(item.refit->fleet);
+        if(item.refit && ship_refit_fuel_capacity(state,planet,*item.refit))refitting.insert(item.refit->fleet);
     std::vector<FleetId> bases;
     for (const auto& f : state.fleets) if (mobile_base_dock(state, f)) bases.push_back(f.id);
     std::sort(bases.begin(), bases.end());

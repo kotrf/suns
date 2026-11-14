@@ -125,3 +125,18 @@ its own created project by owner/name rather than another empire global ID.
 The Qt regression clicks Delete design and exports/reads the order file before
 checking the host queue and foreign-project preservation. No file-layout changes.
 Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 11.85s and full 139/139 CTest in 140.47s passed. All 183 local documentation targets in six related documents were checked. Current source and CI are tracked in PR298; discussions stay open.
+
+## PR298 fourth review — bound creation and interrupted support
+
+Two P2 and one P3 on0844277 are reproduced independently before correction.
+Both host and received planning track successful Create results in command order.
+Named build/refit dependencies require the successful, still-active design from
+that submission; a failed replacement cannot silently select the previous fitting.
+Protection against automatic fuel additions follows the retained stationary job,
+not current yard/technology/cargo eligibility. It survives a temporary Shipyard
+shutdown without discarding pre-existing fuel, while departing ships keep service.
+The resolver supplies effective Shipyard availability after prior station work;
+completion still rechecks the real state after those completions have been applied.
+Tests cover a failed deletion/replacement with an unreported physical ship, bare
+names without Create, fuel conservation while support is missing and same-year
+restoration with and without a depot. Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 15.02s and full 139/139 CTest in 167.88s passed. All 183 local documentation targets in six related documents were checked. No file-layout or balance changes.

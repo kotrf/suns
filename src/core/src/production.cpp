@@ -353,7 +353,7 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
             || (queue[index].kind == ProductionKind::ColonyDefense
                 && ((planet.defenses >= kMaximumColonyDefenses && queue[index].automation == ProductionAutomation::None)
                     || !colony_defenses_available(state,planet.owner)))) { erase(index); continue; }
-        if(queue[index].kind==ProductionKind::ShipRefit && (!result.hasShipyard || !queue[index].refit || !ship_refit_available(state,planet,*queue[index].refit))) {planet.productionWaitingForShipyard=true;break;}
+        if(queue[index].kind==ProductionKind::ShipRefit && (!result.hasShipyard || !queue[index].refit || !ship_refit_available(state,planet,*queue[index].refit,result.hasShipyard))) {planet.productionWaitingForShipyard=true;break;}
         const auto kind = queue[index].kind;
         const bool automatic = queue[index].automation != ProductionAutomation::None;
         if (automatic) {

@@ -1,5 +1,15 @@
 # Project status and development handoff
 
+## PR298 fourth review — creation dependencies and retained refit
+
+Two P2 and one P3 on0844277 have independently failing regressions before the fix.
+Named build/refit references bind only to successful Create in the same submission;
+failure cannot select an older same-name design. A queued stationary refit protects
+its fuel despite missing Shipyard or other temporary work eligibility. Production
+uses the effective yard after earlier completions and resumes work in its repair
+year. Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 15.02s and full 139/139 CTest in 167.88s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; source/CI in PR298. Discussions
+remain for repeat review; no merge. #56 open,#53/#63 frozen; work/ retained.
+
 ## PR298 third review — four P2 cases
 
 Four new regressions fail on2f8471d before correction. Production resolution

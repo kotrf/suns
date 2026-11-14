@@ -17,7 +17,20 @@ std::optional<ShipRefitQuote> ship_refit_quote(const ShipDesign& from,const Ship
     q.work=q.componentWork+(q.componentWork+1)/2;
     return q;
 }
-bool ship_refit_available(const GameState& s,const Planet& p,const ShipRefitJob& job) {
+std::optional<double> ship_refit_fuel_capacity(const GameState& s,const Planet& p,const ShipRefitJob& job) {
+    const auto* a=find_ship_design(s,job.source);const auto* b=find_ship_design(s,job.target);
+    const auto f=std::find_if(s.fleets.begin(),s.fleets.end(),[&](const auto& f){return f.id==job.fleet;});
+    const auto* star=find_star(s,p.star);
+    if(!p.owner || !star || !a || !b || a->owner!=p.owner || b->owner!=p.owner || !ship_refit_quote(*a,*b)
+        || f==s.fleets.end() || f->owner!=p.owner || !same_position(f->position,star->position)
+        || f->destination || !f->pendingCommands.empty() || f->outpost!=OutpostKind::None || f->orbitalBase.planet
+        || !fleet_ship_count(*f,job.source))return {};
+    auto next=*f;next.ships=fleet_ship_stacks(*f);
+    auto i=std::find_if(next.ships.begin(),next.ships.end(),[&](const auto& x){return x.design==job.source;});--i->count;
+    next.ships.push_back({job.target,1});normalize_fleet_composition(next);
+    return fleet_fuel_capacity(s,next);
+}
+bool ship_refit_available(const GameState& s,const Planet& p,const ShipRefitJob& job,std::optional<bool> shipyard) {
     const auto* a=find_ship_design(s,job.source);const auto* b=find_ship_design(s,job.target);
     const auto f=std::find_if(s.fleets.begin(),s.fleets.end(),[&](const auto& f){return f.id==job.fleet;});
     const auto* star=find_star(s,p.star);
@@ -26,7 +39,7 @@ bool ship_refit_available(const GameState& s,const Planet& p,const ShipRefitJob&
         || f==s.fleets.end() || f->owner!=p.owner || !same_position(f->position,star->position)
         || f->destination || !f->pendingCommands.empty() || f->outpost!=OutpostKind::None || f->orbitalBase.planet
         || !fleet_ship_count(*f,job.source)
-        || !colony_has_orbital_service(s,p.id,p.owner,OrbitalStationModule::Shipyard))return false;
+        || !shipyard.value_or(colony_has_orbital_service(s,p.id,p.owner,OrbitalStationModule::Shipyard)))return false;
     auto next=*f;next.ships=fleet_ship_stacks(*f);
     auto i=std::find_if(next.ships.begin(),next.ships.end(),[&](const auto& x){return x.design==job.source;});--i->count;
     next.ships.push_back({job.target,1});normalize_fleet_composition(next);
