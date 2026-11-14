@@ -2,6 +2,7 @@
 #include "suns/ship_refit.hpp"
 #include "suns/production.hpp"
 #include "suns/exotic_materials.hpp"
+#include "suns/stations.hpp"
 #include <cassert>
 #include <algorithm>
 #include <cmath>
@@ -166,16 +167,61 @@ void refit_preserves_fuel_while_waiting_for_minerals() {
         assert(blocked.fleets.front().fuel >= capacity + 1);
     }
 }
+void generator_does_not_block_refit() {
+    auto s=fixture();
+    auto& from=s.shipDesigns[0]; auto& to=s.shipDesigns[1];
+    from.hull=to.hull=ShipHullType::Destroyer;
+    to.components.assign(hull_spec(to.hull).requiredEngines,ShipComponentType::FusionDrive);
+    from.components=to.components;from.components.push_back(ShipComponentType::AntimatterGenerator);
+    from.placements=autoplace_ship_components(from.hull,from.components);
+    to.placements=autoplace_ship_components(to.hull,to.components);
+    assert(ship_design_valid(from) && ship_design_valid(to));
+    auto& f=s.fleets[0];f.ships={{from.id,1}};f.design=from.id;
+    auto future=f;future.ships={{to.id,1}};
+    const auto capacity=fleet_fuel_capacity(s,future);
+    f.fuel=capacity-10;f.telemetry.ships=f.ships;f.telemetry.fuel=f.fuel;
+    s.orbitalStations[0].modules={OrbitalStationModule::Shipyard};
+    const RefitShipOrder job{s.planets[0].id,f.id,from.id,to.id};
+    assert(planned_production_state(s,{1,{job}}).planets[0].productionQueue.size()==1);
+    const auto next=TurnProcessor{}.process(s,{{1,{job}}});
+    assert(fleet_ship_count(next.fleets[0],to.id)==1);
+    assert(next.fleets[0].fuel==f.fuel);
+    // Waiting for production must also preserve the original fuel for years.
+    assert(queue_ship_refit(s,1,job));
+    s.planets[0].productionQueue[0].remainingCost=1000000;
+    auto waiting=TurnProcessor{}.process(s,{});
+    waiting=TurnProcessor{}.process(waiting,{});
+    assert(waiting.planets[0].productionQueue.size()==1);
+    assert(waiting.fleets[0].fuel==f.fuel);
+}
+void gate_uses_departure_depot() {
+    auto s=make_demo_game();s.wormholeRules.spawnChancePerTurn=0;
+    s.players[0].technology.levels.fill(26);
+    s.planets[1].owner=1;s.planets[1].population=100000;
+    auto& source=s.orbitalStations[0];source.hull=OrbitalStationHullType::Starbase;
+    source.components={ShipComponentType::JumpGate};
+    s.orbitalStations.push_back({s.nextOrbitalStationId++,1,s.planets[1].id,"Target gate",
+        OrbitalStationHullType::Starbase,{OrbitalStationModule::Shipyard},{ShipComponentType::JumpGate}});
+    auto& f=s.fleets[0];f.destination.reset();f.fuel=10;
+    const auto capacity=fleet_fuel_capacity(s,f);
+    assert(stargate_transfer_valid(s,1,f.id,1,2));
+    const auto next=TurnProcessor{}.process(s,{{1,{GateFleetOrder{f.id,1,2}}}});
+    assert(same_position(next.fleets[0].position,s.stars[1].position));
+    assert(next.fleets[0].fuel==capacity);
+}
 }
 int main(int argc, char** argv) {
     if (argc == 2) {
         const std::string test = argv[1];
         if (test == "queue-order") queue_edits_keep_submission_order();
         else if (test == "refit-fuel") refit_preserves_fuel_while_waiting_for_minerals();
+        else if (test == "generator") generator_does_not_block_refit();
+        else if (test == "gate-fuel") gate_uses_departure_depot();
         else assert(false);
         return 0;
     }
     quote_and_host();pending_target_is_resolved_by_name();blocked_and_delete();actual_unload();
     queue_edits_keep_submission_order();
     refit_preserves_fuel_while_waiting_for_minerals();
+    generator_does_not_block_refit();gate_uses_departure_depot();
 }

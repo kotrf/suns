@@ -1220,9 +1220,21 @@ void activate_next_waypoint(GameState& state, Fleet& fleet)
     }
 }
 
+std::set<FleetId> fleets_under_refit(const GameState& state)
+{
+    std::set<FleetId> result;
+    for (const auto& planet : state.planets)
+        for (const auto& item : planet.productionQueue)
+            if (item.refit && ship_refit_available(state, planet, *item.refit))
+                result.insert(item.refit->fleet);
+    return result;
+}
+
 void generate_fleet_fuel(GameState& state)
 {
+    const auto refitting = fleets_under_refit(state);
     for (auto& fleet : state.fleets) {
+        if (refitting.contains(fleet.id)) continue;
         const auto capacity = fleet_fuel_capacity(state, fleet);
         if (capacity <= 0.0) {
             fleet.fuel = 0.0;
@@ -1232,23 +1244,22 @@ void generate_fleet_fuel(GameState& state)
     }
 }
 
+void refuel_fleet_at_orbital_service(GameState& state, Fleet& fleet)
+{
+    const auto* colony = friendly_colony_at_fleet(state, fleet);
+    if (colony && colony_has_orbital_service(
+            state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot))
+        fleet.fuel = fleet_fuel_capacity(state, fleet);
+}
+
 void refuel_fleets_at_orbital_services(GameState& state)
 {
-    std::set<FleetId> refitting;
-    for (const auto& planet : state.planets)
-        for (const auto& item : planet.productionQueue)
-            if (item.refit && ship_refit_available(state, planet, *item.refit))
-                refitting.insert(item.refit->fleet);
+    const auto refitting = fleets_under_refit(state);
     for (auto& fleet : state.fleets) {
         // Preserve fuel already aboard while a refit can proceed. Filling the
         // old tanks could invalidate an accepted reduction in tank capacity.
         if (refitting.contains(fleet.id)) continue;
-        const auto* colony = friendly_colony_at_fleet(state, fleet);
-        if (!colony || !colony_has_orbital_service(
-                state, colony->id, fleet.owner, OrbitalStationModule::RefuelingDepot)) {
-            continue;
-        }
-        fleet.fuel = fleet_fuel_capacity(state, fleet);
+        refuel_fleet_at_orbital_service(state, fleet);
     }
 }
 
@@ -2706,7 +2717,6 @@ TurnResult TurnProcessor::process_with_events(
     deliver_due_fleet_commands(next);
 
     refresh_planetary_engineering(next);
-    generate_fleet_fuel(next);
     maintain_outposts(next, next.turn + 1);
     advance_minefields(next);
     const auto extraction = mine_colonies(next);
@@ -2807,6 +2817,12 @@ TurnResult TurnProcessor::process_with_events(
                             }
                             return;
                         }
+                        // Gate commands move immediately, before the ordinary
+                        // pre-movement service phase. Supply this departing
+                        // fleet at its source without filling other refit ships.
+                        if (stargate_transfer_valid(next, submission.player, concreteOrder.fleet,
+                                concreteOrder.source, concreteOrder.destination, concreteOrder.resonant))
+                            refuel_fleet_at_orbital_service(next, *fleet);
                         const bool transferred = transfer_fleet_through_stargate(next, submission.player,
                             concreteOrder.fleet, concreteOrder.source, concreteOrder.destination, concreteOrder.resonant);
                         if (transferred) { pause_probe(*fleet); fleet->visitor = {}; }
@@ -2989,6 +3005,7 @@ TurnResult TurnProcessor::process_with_events(
         }
     }
 
+    generate_fleet_fuel(next);
     // Admit commands against the fuel already aboard, as in the received
     // planning state. Other docked fleets still top up before movement; refit
     // fleets resume ordinary depot service after their job has completed.

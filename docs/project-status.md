@@ -1,5 +1,16 @@
 # Project status and development handoff
 
+## PR298 repeat review — onboard fuel and gate departure
+
+Two P2 findings on05d2a12 are confirmed by regressions failing before correction.
+Onboard generation runs after command admission and shares the eligible-refit
+exclusion with depot service. A generator removal preserves the existing stock
+and remains possible while work waits for production over multiple years.
+Immediate gate orders service only their departing fleet at the source depot,
+including when the destination has no depot. Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 14.29s and full 139/139 CTest in 141.12s passed. All 183 local documentation targets in six related documents were checked. Current source/CI
+are in PR298; leave discussions for repeat review, no merge. Formats127/55/race3
+remain unchanged;#56 open,#53/#63 frozen; work/ and old branches retained.
+
 ## PR298 review — 14 November 2026
 
 [Review of 23e3609](https://github.com/kotrf/suns/pull/298#pullrequestreview-5903254313)

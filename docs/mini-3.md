@@ -97,3 +97,16 @@ fail at the reported assertions before the fix:
 Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 15.82s and full 139/139 CTest in 172.73s passed. All 183 local documentation targets in six related documents were checked. The review fix adds no format or balance changes. Current
 source, CI and repeat-review status are tracked in PR298; the three discussions
 are left open for reviewer verification.
+
+## PR298 repeat review — generator and gate supply
+
+The review of05d2a12 confirmed the original three corrections and found two more
+P2 cases. Each added regression fails before correction. Onboard fuel generation
+now follows command admission, sharing the depot exclusion for eligible refits.
+The test removes an Antimatter Generator from a Destroyer with 10 mg less than its
+new capacity, without a Refueling Depot; the host completes the accepted job. A
+second check waits for production across two turns without accumulating fuel
+that would prevent completion. Direct GateFleetOrder performs source depot
+service for its own fleet before moving immediately. A destination without a
+depot therefore receives the same full tanks as before Mini-3. Other queued refits
+are not refuelled as a side effect. Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 14.29s and full 139/139 CTest in 141.12s passed. All 183 local documentation targets in six related documents were checked. Formats and balance unchanged.
