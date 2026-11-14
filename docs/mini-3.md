@@ -25,7 +25,9 @@ Refit uses the ordinary colony production queue and payment/resolution sequence.
 One job refits one ship; one active refit job per fleet avoids competing work on
 the same physical composition. The ship must remain idle at its owner's operational
 shipyard, without a pending fleet command. Departure, missing ships or lost support
-pause the job; the regular queue Remove action cancels it. Paid resource work is
+pause the job; the regular queue Remove action cancels it. Automatic depot
+refuelling waits while the ship remains eligible for its dock refit; departing
+fleets retain normal service, and completed ships refuel to their new capacity. Paid resource work is
 not refunded on cancellation, matching other production jobs. No replacement hull
 is created and the other ships in a mixed fleet remain unchanged.
 
@@ -69,3 +71,29 @@ unloading of colonists/Boranium/all, map bars, existing cargo editing, rejected
 arrival controls, immutable emission navigation, report text, designer names and
 read-only fitting, mixed-fleet selection, refit dialog and save/order boundaries.
 Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 21.51s and full 139/139 CTest in 194.98s passed. Actual Qt fitting/refit/map screenshots and 181 local documentation targets were checked. The main baseline CI43527982470 succeeded.
+
+## PR298 review — 14 November 2026
+
+[Review5903254313](https://github.com/kotrf/suns/pull/298#pullrequestreview-5903254313)
+on23e3609 found two P2 issues and one P3 issue. Three new regressions independently
+fail at the reported assertions before the fix:
+
+- Queue `[ship B, Factory, Mine]`, Cancel Factory, Delete unused B must leave Mine
+  in both received planning and the actual host. Additional cases cover deleting
+  first, reordering on either side of deletion and a subsequent cancellation.
+  Production planning starts from the received state; its existing shared command
+  boundary applies create/delete/refit in order, once.
+- A docked ship with a Fuel Tank and 0/10 fuel can refit to smaller tanks. Depot
+  refuelling occurs after commands and before movement, excluding eligible refit
+  fleets at both service phases. Departing fleets still receive normal fuel
+  before movement, while their refit pauses. The actual host test waits two years for minerals,
+  retains the original fuel, then completes and refuels to the new capacity. An
+  original fuel stock above the target capacity still rejects the order without
+  discarding fuel. Existing departure/arrival and service tests remain in the suite.
+- Qt viewport hit-testing finds each actual mineral rectangle; its tooltip must
+  contain the exact I/B/G stock and received report year. The group alone has no
+  hover area, so each visible child now receives the current tooltip too.
+
+Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 15.82s and full 139/139 CTest in 172.73s passed. All 183 local documentation targets in six related documents were checked. The review fix adds no format or balance changes. Current
+source, CI and repeat-review status are tracked in PR298; the three discussions
+are left open for reviewer verification.

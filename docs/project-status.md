@@ -1,5 +1,23 @@
 # Project status and development handoff
 
+## PR298 review — 14 November 2026
+
+[Review of 23e3609](https://github.com/kotrf/suns/pull/298#pullrequestreview-5903254313)
+found two P2 defects and a P3 tooltip defect. All three new regressions fail
+against that revision before correction. Production planning now handles project
+creation/deletion at its ordinary command boundary, preserving queue indices.
+Automatic depot refuelling runs after commands but before movement and skips
+fleets eligible for their queued refit; paused/departing fleets retain ordinary
+service. Completed ships resume normal end-of-year service. Existing fuel is never discarded, and an actual excess still blocks
+smaller tanks. Mineral tooltips belong to the visible rectangles; Qt tests use
+real viewport hit-testing and check exact stocks/report dates.
+
+Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 15.82s and full 139/139 CTest in 172.73s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 and balance remain unchanged. No
+future-year UI forecasts or polling. Previous CI43539988760 passed139/139 on23e3609;
+current source/CI are in PR298. Keep all three threads open for repeat review;
+do not merge. #56 scope remains open,#53/#63 frozen; work/ and old branches retained.
+[Details](mini-3.md#pr298-review--14-november-2026).
+
 ## Mini-3 / issue296 — 14 November 2026
 
 User requested all twelve items in [#296](https://github.com/kotrf/suns/issues/296).

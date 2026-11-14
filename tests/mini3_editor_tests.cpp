@@ -12,6 +12,7 @@
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QGraphicsItemGroup>
+#include <QGraphicsRectItem>
 #include <QTemporaryDir>
 #include <QTextBrowser>
 #include <QLabel>
@@ -46,6 +47,7 @@ struct MainWindowTestAccess {
     }
     static double mapScale(MainWindow& w){return std::abs(w.view_->transform().m11());}
     static QPointF center(MainWindow& w){return w.view_->mapToScene(w.view_->viewport()->rect().center());}
+    static QGraphicsView* mapView(MainWindow& w){return w.view_;}
 };
 }
 int main(int argc,char** argv) {
@@ -53,7 +55,18 @@ int main(int argc,char** argv) {
     MainWindowTestAccess::load(w);attachRouteProgramDock(w);w.resize(1400,1000);w.show();QApplication::processEvents();
     auto* mode=w.findChild<QComboBox*>("mapDisplayModeCombo");assert(mode && mode->count()==5);
     mode->setCurrentIndex(mode->findData(4));QApplication::processEvents();
-    bool bars=false;for(auto* item:w.routeProgramScene()->items())if(item->data(0).toString()=="mineralOverlay" && item->isVisible()) {bars=true;assert(item->childItems().size()==3);assert(item->toolTip().contains("Last stock report"));}
+    bool bars=false;for(auto* item:w.routeProgramScene()->items())if(item->data(0).toString()=="mineralOverlay" && item->isVisible()) {
+        bars=true;assert(item->childItems().size()==3);assert(item->toolTip().contains("Last stock report"));
+        const auto* view=MainWindowTestAccess::mapView(w);
+        for(auto* child:item->childItems()) {
+            auto* bar=dynamic_cast<QGraphicsRectItem*>(child);assert(bar);
+            const auto point=bar->deviceTransform(view->viewportTransform()).map(bar->rect().center()).toPoint();
+            assert(view->items(point).contains(bar));
+            assert(bar->toolTip()==item->toolTip());
+            assert(bar->toolTip().contains("I 100.0 / B 100.0 / G 100.0 kt"));
+            assert(bar->toolTip().contains(QString("Last stock report: year %1").arg(qulonglong(MainWindowTestAccess::state(w).turn))));
+        }
+    }
     assert(bars);
     FleetArrivalAction unload{FleetArrivalActionKind::UnloadAll,1,FleetCargoKind::Colonists};
     assert(w.appendSelectedStarWaypoint(5,unload));

@@ -190,7 +190,12 @@ void MainWindow::applyMapDisplayMode()
                     .arg(v[0],0,'f',1).arg(v[1],0,'f',1).arg(v[2],0,'f',1)
                     .arg(mapDisplayMode_==3?"%":"kt")
                     .arg(observed?QString("Last stock report: year %1").arg(qulonglong(*observed)):"Received geology");
-                if(bars->toolTip()!=tip)bars->setToolTip(tip);
+                if(bars->toolTip()!=tip) {
+                    bars->setToolTip(tip);
+                    // The visible rectangles participate in scene hit-testing.
+                    // An empty item group alone is not a tooltip hover target.
+                    for(auto* bar:bars->childItems())bar->setToolTip(tip);
+                }
                 bars->setVisible(true);
             } else if(bars)bars->setVisible(false);
         } else if(bars)bars->setVisible(false);
