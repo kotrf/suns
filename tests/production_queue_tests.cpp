@@ -22,6 +22,7 @@ void reorder_is_applied_before_production()
         {ProductionKind::Mine, kMineCost, 0},
     };
     const auto mines = colony.mines;
+    set_survey_level(state,1,colony.star,SurveyLevel::DeepSurvey,state.turn);
 
     const auto result = processor.process(
         state, {{1, {ReorderProductionQueueOrder{colony.id, 1, 0}}}});
@@ -108,6 +109,7 @@ void cancellation_obeys_order_sequence_and_ownership()
     colony.productionWaitingForMinerals = true;
     colony.productionWaitingForShipyard = true;
     const auto planetId = colony.id;
+    set_survey_level(state,1,colony.star,SurveyLevel::DeepSurvey,state.turn);
     const auto next = TurnProcessor{}.process(state, {{1, {
         QueueShipDesignOrder{planetId, kScoutDesignId},
         ReorderProductionQueueOrder{planetId, 2, 0},
@@ -131,6 +133,7 @@ void cancelled_build_does_not_spend_minerals_or_complete()
     auto state = fixed_production_fixture();
     auto& colony = state.planets.front();
     colony.productionQueue = {{ProductionKind::Factory, 0, 0}};
+    set_survey_level(state,1,colony.star,SurveyLevel::DeepSurvey,state.turn);
     auto empty = state;
     empty.planets.front().productionQueue.clear();
     const auto cancelled = TurnProcessor{}.process(state, {{1, {CancelProductionOrder{colony.id, 0}}}});

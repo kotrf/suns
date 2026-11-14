@@ -92,6 +92,7 @@ void queue_edits_keep_submission_order() {
         auto current = s;
         current.planets.front().productionQueue = {
             {K::ColonyShip, 1000000, unused}, {K::Factory, 1000000}, {K::Mine, 1000000}};
+        set_survey_level(current,1,current.planets[0].star,SurveyLevel::DeepSurvey,current.turn);
         const PlayerOrders submission{1, std::move(orders)};
         const auto preview = planned_production_state(current, submission);
         const auto host = TurnProcessor{}.process(current, {submission});
@@ -273,10 +274,36 @@ void restored_shipyard_resumes_same_turn(bool depot) {
     auto next=TurnProcessor{}.process(s,{{1,{remove,job}}});
     assert(next.planets[0].productionQueue.size()==1);
     if(depot)assert(next.fleets[0].fuel==10);
+    set_survey_level(next,1,next.planets[0].star,SurveyLevel::DeepSurvey,next.turn);
     const QueueStationOrder restore{s.planets[0].id,{{OrbitalStationHullType::OrbitalDock,{},true,depot},s.orbitalStations[0].id}};
     next=TurnProcessor{}.process(next,{{1,{restore,ReorderProductionQueueOrder{s.planets[0].id,1,0}}}});
     assert(next.planets[0].productionQueue.empty());
     assert(fleet_ship_count(next.fleets[0],job.target)==1);
+}
+void rejected_orders_preserve_queue_targets() {
+    for(int mode=0;mode<5;++mode) {
+        auto s=fixture();auto& p=s.planets[0];const auto b=s.shipDesigns[1];
+        p.productionQueue={{ProductionKind::ColonyShip,1000000,b.id},{ProductionKind::Factory,1000000},{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10}};
+        if(mode==2)p.productionQueue={{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10}};
+        if(mode==3)p.productionQueue={{ProductionKind::ColonyShip,1000000,b.id},{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10},{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10}};
+        if(mode==4)p.productionQueue={{ProductionKind::ColonyShip,1000000,b.id},{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10}};
+        set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+        auto hidden=s.fleets[0];hidden.id=s.nextFleetId++;hidden.design=b.id;hidden.ships={{b.id,1}};
+        hidden.position={2000,2000};hidden.telemetry={};hidden.orbitalShipyardBirth=true;s.fleets.push_back(hidden);
+        PlayerOrders orders{1,{DeleteShipDesignOrder{b.id}}};
+        if(mode==0)orders.orders.push_back(CancelProductionOrder{p.id,0});
+        if(mode==1)orders.orders.push_back(ReorderProductionQueueOrder{p.id,0,1});
+        if(mode==2){const auto a=s.shipDesigns[0];orders.orders.push_back(CreateShipDesignOrder{b.name,a.hull,a.components,a.placements});orders.orders.push_back(QueueShipDesignOrder{p.id,0,b.name});orders.orders.push_back(ReorderProductionQueueOrder{p.id,1,0});orders.orders.push_back(CancelProductionOrder{p.id,0});}
+        if(mode==3){orders.orders.push_back(CancelProductionOrder{p.id,0});orders.orders.push_back(CancelProductionOrder{p.id,0});}
+        if(mode==4){orders.orders.push_back(QueueProductionBatchOrder{p.id,ProductionKind::Mine,10});orders.orders.push_back(CancelProductionOrder{p.id,1});orders.orders.push_back(CancelProductionOrder{p.id,0});}
+        const auto preview=planned_production_state(make_player_view(s,1).state,orders);
+        assert(preview.planets[0].productionQueue.size()==std::size_t(mode>=3?0:mode==1?2:1));
+        const auto next=TurnProcessor{}.process(s,{orders});const auto& q=next.planets[0].productionQueue;
+        if(mode==0){assert(q.size()==2);assert(q[0].kind==ProductionKind::ColonyShip);assert(q[1].kind==ProductionKind::Mine);}
+        if(mode==1){assert(q.size()==3);assert(q[0].kind==ProductionKind::ColonyShip);assert(q[1].kind==ProductionKind::Mine);assert(q[2].kind==ProductionKind::Factory);}
+        if(mode==2){assert(q.size()==1);assert(q[0].kind==ProductionKind::Mine && q[0].quantity==10);}
+        if(mode>=3){assert(q.size()==1);assert(q[0].kind==ProductionKind::ColonyShip);}
+    }
 }
 }
 int main(int argc, char** argv) {
@@ -292,6 +319,7 @@ int main(int argc, char** argv) {
         else if (test == "creation-binding") rejected_creation_has_no_named_dependents();
         else if (test == "shipyard-fuel") restored_shipyard_resumes_same_turn(true);
         else if (test == "shipyard-resume") restored_shipyard_resumes_same_turn(false);
+        else if (test == "queue-targets") rejected_orders_preserve_queue_targets();
         else assert(false);
         return 0;
     }
@@ -301,4 +329,5 @@ int main(int argc, char** argv) {
     generator_does_not_block_refit();gate_uses_departure_depot();
     station_loss_preserves_refit();mobile_base_preserves_refit_fuel_and_repairs();deployed_generator_precedes_upkeep();
     rejected_creation_has_no_named_dependents();restored_shipyard_resumes_same_turn(true);restored_shipyard_resumes_same_turn(false);
+    rejected_orders_preserve_queue_targets();
 }

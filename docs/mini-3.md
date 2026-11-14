@@ -140,3 +140,21 @@ completion still rechecks the real state after those completions have been appli
 Tests cover a failed deletion/replacement with an unreported physical ship, bare
 names without Create, fuel conservation while support is missing and same-year
 restoration with and without a depot. Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 15.02s and full 139/139 CTest in 167.88s passed. All 183 local documentation targets in six related documents were checked. No file-layout or balance changes.
+
+## PR298 fifth review — queue intent under rejection
+
+The P2 and P3 on e1b5349 fail before correction. ProductionQueueIdentity tracks
+command provenance: an original received row or an insertion by a particular
+order/ordinal. The host traces received production planning once for submissions
+with indexed edits, then binds their source and destination to actual surviving
+rows. Missing targets skip the edit. Explicit cancel/reorder tracking preserves
+identity among identical batches; before/after anchor intent survives index changes.
+Initial queue matching accounts for unique work progress, declining ambiguous
+references rather than applying an index to unrelated work. This is a transient
+command-boundary calculation over received evidence, not future-year simulation;
+normal UI planning performs no extra trace pass. Original reports and PBEM orders
+are sufficient to reconstruct it, without adding file fields. Tests cover rejected
+blueprint deletion, rejected named construction, reorder anchors, duplicate batches,
+newly queued batches and actual PBEM export/reload. The Refit dialog reuses the
+already-projected fleet catalog and no longer resurrects a deleted draft.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.61s and full 139/139 CTest in 138.78s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 and balance unchanged.

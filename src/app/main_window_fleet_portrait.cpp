@@ -344,7 +344,7 @@ void MainWindow::installFleetPortraitPolish()
     connect(refitButton,&QPushButton::clicked,this,[this] {
         const auto* selected=selectedFleet();if(!selected)return;
         const auto fleetId=selected->id;const auto generation=session_->documentGeneration();
-        const auto snapshot=std::make_shared<GameState>(planned_ship_design_state(fleetPlanningState(),pendingOrders_));
+        const auto snapshot=std::make_shared<GameState>(fleetPlanningState());
         const auto f=std::find_if(snapshot->fleets.begin(),snapshot->fleets.end(),[&](const auto& f){return f.id==fleetId;});if(f==snapshot->fleets.end())return;
         auto* dialog=new QDialog(this);dialog->setObjectName("shipRefitDialog");dialog->setWindowTitle("Refit one ship at a friendly dock");dialog->setAttribute(Qt::WA_DeleteOnClose);
         auto* l=new QVBoxLayout(dialog);auto* from=new QComboBox(dialog);from->setObjectName("refitSourceDesign");auto* to=new QComboBox(dialog);to->setObjectName("refitTargetDesign");

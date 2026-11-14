@@ -1,5 +1,18 @@
 # Project status and development handoff
 
+## PR298 fifth review — queue row provenance and single projection
+
+P2 and P3 on e1b5349 are independently reproduced before correction. For submissions
+with Cancel/Reorder the host reconstructs received row origins once. Existing rows
+and rows created by an earlier command keep separate transient identities; rejected
+insertions cannot redirect later edits. Reorders retain destination-side intent.
+Duplicate cancellations are tracked explicitly. Ambiguous received baseline matches
+are skipped conservatively; unique work can match despite reported progress.
+The trace is reconstructed after PBEM reload; no serialized IDs or format change.
+Ordinary UI projection has no trace pass. Refit consumes fleetPlanningState once
+without replaying Create/Delete. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.61s and full 139/139 CTest in 138.78s passed. All 183 local documentation targets in six related documents were checked. Current source/CI in PR298; leave
+discussions for repeat review, no merge. #56 open,#53/#63 frozen; work/ retained.
+
 ## PR298 fourth review — creation dependencies and retained refit
 
 Two P2 and one P3 on0844277 have independently failing regressions before the fix.

@@ -2796,6 +2796,14 @@ TurnResult TurnProcessor::process_with_events(
     std::set<FleetId> gatedThisTurn; // One physical gate hop per fleet and year.
     for (const auto& submission : submitted_orders) {
         CreatedDesigns created;
+        std::optional<detail::ProductionQueueIdentity> queueIdentity;
+        std::vector<detail::QueueEditTarget> queueTargets;
+        std::size_t previousQueueOrder=0;
+        if(find_player(current,submission.player) && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& order){return std::holds_alternative<CancelProductionOrder>(order) || std::holds_alternative<ReorderProductionQueueOrder>(order);})) {
+            const auto received=make_player_view(current,submission.player).state;
+            queueTargets=production_queue_edit_targets(received,submission);
+            queueIdentity.emplace(next,&received);
+        }
         std::map<ShipDesignId, std::string> draftDeletions;
         if (find_player(current,submission.player) && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<CreateShipDesignOrder>(o);})
             && std::any_of(submission.orders.begin(),submission.orders.end(),[](const auto& o){return std::holds_alternative<DeleteShipDesignOrder>(o);})) {
@@ -2822,6 +2830,10 @@ TurnResult TurnProcessor::process_with_events(
         std::map<FleetId, FleetId> aliases;
         for (std::size_t index = 0; index < submission.orders.size(); ++index) {
             auto order = submission.orders[index];
+            if(queueIdentity) {
+                queueIdentity->synchronize(next,previousQueueOrder);previousQueueOrder=index;
+                if(!queueIdentity->bind(order,queueTargets[index]))continue;
+            }
             // A newly created design's planning ID can differ from the host's
             // global allocation. Bind only this submission's fresh IDs by name.
             if(auto* remove=std::get_if<DeleteShipDesignOrder>(&order)) {
@@ -3020,12 +3032,14 @@ TurnResult TurnProcessor::process_with_events(
                         planet->productionQueue.insert(
                             planet->productionQueue.begin() + concreteOrder.toIndex,
                             std::move(item));
+                        if(queueIdentity)queueIdentity->moved(concreteOrder.colony,concreteOrder.fromIndex,concreteOrder.toIndex,planet->productionQueue);
                     } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
                         const auto planet = std::find_if(next.planets.begin(), next.planets.end(), [&](const Planet& candidate) {
                             return candidate.id == concreteOrder.colony && candidate.owner == submission.player;
                         });
                         if (planet == next.planets.end() || concreteOrder.index >= planet->productionQueue.size()) return;
                         planet->productionQueue.erase(planet->productionQueue.begin() + concreteOrder.index);
+                        if(queueIdentity)queueIdentity->erased(concreteOrder.colony,concreteOrder.index,planet->productionQueue);
                         if (concreteOrder.index == 0) {
                             planet->productionWaitingForMinerals = false;
                             planet->productionWaitingForShipyard = false;

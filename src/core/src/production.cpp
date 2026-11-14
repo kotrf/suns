@@ -418,15 +418,22 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     return result;
 }
 
-GameState planned_production_state(const GameState& state, const PlayerOrders& pending)
+namespace {
+GameState project_production(const GameState& state, const PlayerOrders& pending,
+    std::vector<detail::QueueEditTarget>* targets)
 {
+    std::optional<detail::ProductionQueueIdentity> identity;
+    if(targets)identity.emplace(state);
+    std::size_t previousOrder=0;
     // Start from received state, not an already cargo-projected state. Admission
     // uses each order's boundary; later cargo affects final housing/stock but
     // cannot retroactively erase an accepted project or shift queue indices.
     // Creation/deletion run at their own order boundary too; applying them
     // first would shift indices used by earlier queue edits.
     return detail::project_order_boundary_state(state, pending,
-        [&](GameState& result, std::size_t& orderIndex) { std::visit([&](const auto& value) {
+        [&](GameState& result, std::size_t& orderIndex) {
+        if(identity){identity->synchronize(result,previousOrder);(*targets)[orderIndex]=identity->target(pending.orders[orderIndex]);previousOrder=orderIndex;}
+        std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, SetResearchAllocationOrder> || std::is_same_v<T, SetResearchPlanOrder>) {
             // Forecast settings must follow the research orders accepted by End Turn.
@@ -469,12 +476,16 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
             else if constexpr (std::is_same_v<T, ApplyProductionTemplateOrder>) {
                 if (const auto* player = find_player(result, pending.player)) (void)apply_production_template(colony, *player, value.name);
             } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
-                if (value.index < queue.size()) queue.erase(queue.begin() + value.index);
+                if (value.index < queue.size()) {
+                    queue.erase(queue.begin() + value.index);
+                    if(identity)identity->erased(value.colony,value.index,queue);
+                }
             } else if constexpr (std::is_same_v<T, ReorderProductionQueueOrder>) {
                 if (value.fromIndex < queue.size() && value.toIndex < queue.size()) {
                     auto item = queue[value.fromIndex];
                     queue.erase(queue.begin() + value.fromIndex);
                     queue.insert(queue.begin() + value.toIndex, item);
+                    if(identity)identity->moved(value.colony,value.fromIndex,value.toIndex,queue);
                 }
             } else if constexpr (std::is_same_v<T, QueueShipDesignOrder>) {
                 if (const auto* design = resolve_ship_design_order(result, pending.player, value);
@@ -496,6 +507,15 @@ GameState planned_production_state(const GameState& state, const PlayerOrders& p
             }
         }
     }, pending.orders[orderIndex]); });
+}
+}
+
+GameState planned_production_state(const GameState& state,const PlayerOrders& pending) {
+    return project_production(state,pending,nullptr);
+}
+std::vector<detail::QueueEditTarget> production_queue_edit_targets(const GameState& state,const PlayerOrders& pending) {
+    std::vector<detail::QueueEditTarget> targets(pending.orders.size());
+    (void)project_production(state,pending,&targets);return targets;
 }
 
 } // namespace suns

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "suns/turn_processor.hpp"
+#include "suns/production_queue_identity.hpp"
 
 namespace suns {
 
@@ -44,5 +45,6 @@ bool set_production_template(Player& player, const SetProductionTemplateOrder& o
 bool apply_production_template(Planet& planet, const Player& player, const std::string& name);
 void apply_default_production_template(const GameState& state, Planet& planet);
 [[nodiscard]] GameState planned_production_state(const GameState& state, const PlayerOrders& pending);
+[[nodiscard]] std::vector<detail::QueueEditTarget> production_queue_edit_targets(const GameState& received, const PlayerOrders&);
 
 } // namespace suns

@@ -25,6 +25,7 @@ add_library(suns_core
     src/reconnaissance.cpp
     src/production_forecast.cpp
     src/production.cpp
+    src/production_queue_identity.cpp
     src/planetary_recovery.cpp
     src/intergalactic_visitors.cpp
     src/unknown_objects.cpp
