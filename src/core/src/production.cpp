@@ -174,7 +174,8 @@ std::size_t apply_production_template_edit(Player& player, const std::vector<Ord
     return 1;
 }
 
-bool apply_production_template(Planet& planet, const Player& player, const std::string& name)
+bool apply_production_template(Planet& planet, const Player& player, const std::string& name,
+    detail::ProductionQueueIdentity* identity, std::size_t order)
 {
     if (planet.owner != player.id) return false;
     const auto found = std::find_if(player.productionTemplates.begin(), player.productionTemplates.end(),
@@ -183,6 +184,7 @@ bool apply_production_template(Planet& planet, const Player& player, const std::
         || !production_template_applicable(player.race.primaryTrait, *found)) return false;
     std::erase_if(planet.productionQueue, [](const auto& item) { return item.automation != ProductionAutomation::None; });
     planet.productionQueue.insert(planet.productionQueue.end(), found->items.begin(), found->items.end());
+    if(identity)identity->template_applied(planet.id,order,found->items.size(),planet.productionQueue);
     return true;
 }
 
@@ -474,7 +476,7 @@ GameState project_production(const GameState& state, const PlayerOrders& pending
             auto& queue = colony.productionQueue;
             if constexpr (std::is_same_v<T, QueueProductionBatchOrder>) (void)apply_production_batch(result, colony, value);
             else if constexpr (std::is_same_v<T, ApplyProductionTemplateOrder>) {
-                if (const auto* player = find_player(result, pending.player)) (void)apply_production_template(colony, *player, value.name);
+                if (const auto* player = find_player(result, pending.player)) (void)apply_production_template(colony, *player, value.name,identity?&*identity:nullptr,orderIndex);
             } else if constexpr (std::is_same_v<T, CancelProductionOrder>) {
                 if (value.index < queue.size()) {
                     queue.erase(queue.begin() + value.index);

@@ -1,5 +1,18 @@
 # Project status and development handoff
 
+## PR298 sixth review — explicit template births and whole-group ambiguity
+
+Both P2 cases on ece3cf2 independently fail before correction. Applying a template
+now records retained row origins and assigns every inserted template row its own
+order/ordinal, including identical replacement annual rules. Initial queue matching
+checks cardinality of the entire logical-work group before matching remaining costs;
+a completed first factory cannot alias a surviving second one at the same cost.
+A real two-turn delayed-report regression preserves both completions; a unique-row
+progress control remains cancellable. PBEM includes template replacement after a
+rejected blueprint deletion. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 25.54s and full 139/139 CTest in 148.05s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; current
+source/CI in PR298, discussions open for repeat review, no merge. #56 open;#53/#63
+frozen. Work/ and branches retained.
+
 ## PR298 fifth review — queue row provenance and single projection
 
 P2 and P3 on e1b5349 are independently reproduced before correction. For submissions

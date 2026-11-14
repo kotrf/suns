@@ -158,3 +158,18 @@ blueprint deletion, rejected named construction, reorder anchors, duplicate batc
 newly queued batches and actual PBEM export/reload. The Refit dialog reuses the
 already-projected fleet catalog and no longer resurrects a deleted draft.
 Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.61s and full 139/139 CTest in 138.78s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 and balance unchanged.
+
+## PR298 sixth review — template replacement and delayed progress
+
+Two P2 findings on ece3cf2 are reproduced before correction. The template-application
+mutation now registers its retained prefix and all newly inserted rows explicitly,
+rather than reconstructing identical annual rules by value afterwards. Both host
+and received trace receive the same original insertion ordinals. A PBEM regression
+checks rejected deletion plus replacement of Auto Mines followed by cancelling
+Factory. Initial matching rejects a whole same-work group when its cardinality
+changed, before an exact remainingCost match can alias different work. A remote
+colony actually completes the first Factory:4 and advances Factory:10 to4 while
+its old two-row report remains in flight. Cancelling the completed first row is
+skipped; the second still completes, matching the control. A unique Factory:16
+advancing to6 remains cancellable from its delayed report. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 25.54s and full 139/139 CTest in 148.05s passed. All 183 local documentation targets in six related documents were checked. No file
+layout or balance changes; no extra ordinary UI trace pass or future-year forecast.

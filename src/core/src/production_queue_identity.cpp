@@ -16,6 +16,18 @@ ProductionQueueIdentity::ProductionQueueIdentity(const GameState& state,const Ga
         const auto* known=find_planet(*received,p.id);if(!known)continue;
         const auto& initial=known->productionQueue;
         std::vector<bool> used(initial.size()),assigned(rows.items.size());
+        // Check the whole logical work group before comparing progress. A
+        // surviving second factory may now have the first factory's old cost.
+        std::vector<bool> classified(initial.size());
+        for(std::size_t i=0;i<initial.size();++i)if(!classified[i]) {
+            std::vector<std::size_t> left,right;
+            for(std::size_t j=0;j<initial.size();++j)if(same_work(initial[i],initial[j])){left.push_back(j);classified[j]=true;}
+            for(std::size_t j=0;j<rows.items.size();++j)if(same_work(initial[i],rows.items[j]))right.push_back(j);
+            if(left.size()!=right.size()) {
+                for(auto j:left)used[j]=true;
+                for(auto j:right)assigned[j]=true;
+            }
+        }
         // Exact duplicate groups retain their order only when cardinality agrees.
         // Otherwise their original identities cannot safely be inferred.
         for(std::size_t i=0;i<initial.size();++i)if(!used[i]) {
@@ -77,5 +89,18 @@ void ProductionQueueIdentity::erased(PlanetId id,std::size_t index,const std::ve
 void ProductionQueueIdentity::moved(PlanetId id,std::size_t from,std::size_t to,const std::vector<ProductionItem>& after) {
     auto& rows=rows_.at(id);const auto origin=rows.origins[from];rows.origins.erase(rows.origins.begin()+from);
     rows.origins.insert(rows.origins.begin()+to,origin);rows.items=after;
+}
+void ProductionQueueIdentity::template_applied(PlanetId id,std::size_t order,std::size_t inserted,const std::vector<ProductionItem>& after) {
+    auto& rows=rows_.at(id);std::vector<QueueRowOrigin> origins;
+    const auto retained=after.size()-inserted;std::size_t cursor=0;
+    for(std::size_t i=0;i<retained;++i) {
+        auto found=std::find(rows.items.begin()+cursor,rows.items.end(),after[i]);
+        if(found==rows.items.end())origins.push_back({false,order,inserted+i});
+        else {const auto index=std::size_t(found-rows.items.begin());origins.push_back(rows.origins[index]);cursor=index+1;}
+    }
+    // Every template row is newly inserted, including an identical annual rule.
+    // Its ordinal must not depend on which earlier rows survived on the host.
+    for(std::size_t i=0;i<inserted;++i)origins.push_back({false,order,i});
+    rows.items=after;rows.origins=std::move(origins);
 }
 }

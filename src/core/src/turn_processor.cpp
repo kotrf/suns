@@ -2976,7 +2976,7 @@ TurnResult TurnProcessor::process_with_events(
                         if constexpr (std::is_same_v<T, QueueProductionBatchOrder>)
                             (void)apply_production_batch(next, *planet, concreteOrder);
                         else if (const auto* player = find_player(next, submission.player))
-                            (void)apply_production_template(*planet, *player, concreteOrder.name);
+                            (void)apply_production_template(*planet, *player, concreteOrder.name,queueIdentity?&*queueIdentity:nullptr,index);
                     } else if constexpr (std::is_same_v<T, SetProductionTemplateOrder>) {
                         if (auto* player = mutable_player(next, submission.player))
                             index += apply_production_template_edit(*player, submission.orders, index) - 1;

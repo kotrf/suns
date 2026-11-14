@@ -24,6 +24,7 @@ public:
     bool bind(Order&, const QueueEditTarget&) const;
     void erased(PlanetId, std::size_t, const std::vector<ProductionItem>&);
     void moved(PlanetId, std::size_t, std::size_t, const std::vector<ProductionItem>&);
+    void template_applied(PlanetId, std::size_t order, std::size_t inserted, const std::vector<ProductionItem>&);
 private:
     struct Rows {std::vector<ProductionItem> items;std::vector<QueueRowOrigin> origins;};
     std::map<PlanetId,Rows> rows_;

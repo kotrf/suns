@@ -42,7 +42,8 @@ bool apply_production_batch(const GameState& state, Planet& planet, const QueueP
 // Suggestions only: never installed or selected implicitly in a new campaign.
 [[nodiscard]] std::vector<ProductionTemplate> colony_development_presets();
 bool set_production_template(Player& player, const SetProductionTemplateOrder& order);
-bool apply_production_template(Planet& planet, const Player& player, const std::string& name);
+bool apply_production_template(Planet& planet, const Player& player, const std::string& name,
+    detail::ProductionQueueIdentity* identity = nullptr, std::size_t order = 0);
 void apply_default_production_template(const GameState& state, Planet& planet);
 [[nodiscard]] GameState planned_production_state(const GameState& state, const PlayerOrders& pending);
 [[nodiscard]] std::vector<detail::QueueEditTarget> production_queue_edit_targets(const GameState& received, const PlayerOrders&);

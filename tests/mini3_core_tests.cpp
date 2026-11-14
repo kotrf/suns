@@ -305,6 +305,43 @@ void rejected_orders_preserve_queue_targets() {
         if(mode>=3){assert(q.size()==1);assert(q[0].kind==ProductionKind::ColonyShip);}
     }
 }
+void template_rows_keep_their_birth_order() {
+    auto s=fixture();auto& p=s.planets[0];const auto design=s.shipDesigns[1];
+    const ProductionItem rule{ProductionKind::Mine,production_cost(ProductionKind::Mine),0,ProductionAutomation::Annual,10};
+    p.productionQueue={rule,{ProductionKind::ColonyShip,1000000,design.id}};
+    s.players[0].productionTemplates={{"Replacement",{rule,{ProductionKind::Factory,production_cost(ProductionKind::Factory)}}}};
+    set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+    auto hidden=s.fleets[0];hidden.id=s.nextFleetId++;hidden.design=design.id;hidden.ships={{design.id,1}};hidden.position={2000,2000};hidden.telemetry={};hidden.orbitalShipyardBirth=true;s.fleets.push_back(hidden);
+    const PlayerOrders orders{1,{DeleteShipDesignOrder{design.id},ApplyProductionTemplateOrder{p.id,"Replacement"},CancelProductionOrder{p.id,1}}};
+    const auto preview=planned_production_state(make_player_view(s,1).state,orders);
+    assert(preview.planets[0].productionQueue.size()==1 && preview.planets[0].productionQueue[0]==rule);
+    const auto next=TurnProcessor{}.process(s,{orders});const auto& queue=next.planets[0].productionQueue;
+    assert(queue.size()==2 && queue[0].kind==ProductionKind::ColonyShip);
+    assert(queue[1]==rule);
+}
+void delayed_factory_report_does_not_alias_completed_work() {
+    auto s=fixture();auto& p=s.planets[1];const auto id=p.id;
+    s.stars[1].position={2000,2000};p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};
+    p.productionQueue={{ProductionKind::Factory,4},{ProductionKind::Factory,10}};
+    set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+    const auto after=TurnProcessor{}.process(s,{});
+    assert(after.planets[1].industry==1 && after.planets[1].productionQueue.size()==1);
+    assert(after.planets[1].productionQueue[0].remainingCost==4);
+    const auto received=make_player_view(after,1).state;
+    assert(received.planets[1].productionQueue.size()==2);
+    const auto control=TurnProcessor{}.process(after,{});
+    const auto edited=TurnProcessor{}.process(after,{{1,{CancelProductionOrder{id,0}}}});
+    assert(edited.planets[1].industry==control.planets[1].industry);
+    assert(edited.planets[1].industry==2);
+    // A unique partially built row remains addressable despite a delayed cost.
+    auto one=s;one.planets[1].productionQueue={{ProductionKind::Factory,16}};
+    set_survey_level(one,1,one.planets[1].star,SurveyLevel::DeepSurvey,one.turn);
+    const auto partial=TurnProcessor{}.process(one,{});
+    assert(partial.planets[1].productionQueue[0].remainingCost==6);
+    assert(make_player_view(partial,1).state.planets[1].productionQueue[0].remainingCost==16);
+    const auto stopped=TurnProcessor{}.process(partial,{{1,{CancelProductionOrder{id,0}}}});
+    assert(stopped.planets[1].industry==0 && stopped.planets[1].productionQueue.empty());
+}
 }
 int main(int argc, char** argv) {
     if (argc == 2) {
@@ -320,6 +357,8 @@ int main(int argc, char** argv) {
         else if (test == "shipyard-fuel") restored_shipyard_resumes_same_turn(true);
         else if (test == "shipyard-resume") restored_shipyard_resumes_same_turn(false);
         else if (test == "queue-targets") rejected_orders_preserve_queue_targets();
+        else if (test == "template-origin") template_rows_keep_their_birth_order();
+        else if (test == "delayed-origin") delayed_factory_report_does_not_alias_completed_work();
         else assert(false);
         return 0;
     }
@@ -330,4 +369,5 @@ int main(int argc, char** argv) {
     station_loss_preserves_refit();mobile_base_preserves_refit_fuel_and_repairs();deployed_generator_precedes_upkeep();
     rejected_creation_has_no_named_dependents();restored_shipyard_resumes_same_turn(true);restored_shipyard_resumes_same_turn(false);
     rejected_orders_preserve_queue_targets();
+    template_rows_keep_their_birth_order();delayed_factory_report_does_not_alias_completed_work();
 }

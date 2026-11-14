@@ -79,16 +79,19 @@ struct MainWindowTestAccess {
         dialog->close();
     }
     static void rejectedQueuePacket() {
-        for(bool replacement:{false,true}) {
+        for(int mode=0;mode<3;++mode) {
+            const bool replacement=mode==1,fromTemplate=mode==2;
             auto state=make_demo_game();state.players[0].technology.levels.fill(26);state.players[0].technology.researchAllocationPercent=0;
             auto design=state.shipDesigns[0];design.id=state.nextShipDesignId++;design.name="Remote project";state.shipDesigns.push_back(design);
             auto& p=state.planets[0];p.productionQueue={{ProductionKind::ColonyShip,1000000,design.id},{ProductionKind::Factory,1000000},{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10}};
             if(replacement)p.productionQueue={{ProductionKind::Mine,1000000,0,ProductionAutomation::None,10}};
+            if(fromTemplate){const ProductionItem rule{ProductionKind::Mine,production_cost(ProductionKind::Mine),0,ProductionAutomation::Annual,10};p.productionQueue={rule,{ProductionKind::ColonyShip,1000000,design.id}};state.players[0].productionTemplates={{"Replacement",{rule,{ProductionKind::Factory,production_cost(ProductionKind::Factory)}}}};}
             set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
             auto hidden=state.fleets[0];hidden.id=state.nextFleetId++;hidden.design=design.id;hidden.ships={{design.id,1}};hidden.telemetry={};hidden.orbitalShipyardBirth=true;hidden.position={2000,2000};state.fleets.push_back(hidden);
             PlayerOrders orders{1,{DeleteShipDesignOrder{design.id}}};
             if(replacement){orders.orders.push_back(CreateShipDesignOrder{design.name,design.hull,design.components,design.placements});orders.orders.push_back(QueueShipDesignOrder{p.id,0,design.name});orders.orders.push_back(ReorderProductionQueueOrder{p.id,1,0});}
-            orders.orders.push_back(CancelProductionOrder{p.id,0});
+            if(fromTemplate)orders.orders.push_back(ApplyProductionTemplateOrder{p.id,"Replacement"});
+            orders.orders.push_back(CancelProductionOrder{p.id,fromTemplate?1u:0u});
             QStringList descriptions;for(const auto& order:orders.orders){(void)order;descriptions<<"Queue edit";}
             QTemporaryDir dir;QString error;TurnOrderFileData packet{1,state.turn,1,orders,descriptions},decoded;
             assert(write_turn_order_file(dir.filePath("queue.sunsorders"),packet,error));
