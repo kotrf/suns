@@ -805,7 +805,7 @@ expansion using received orbital suitability despite adverse surface temperature
 gravity. Include delayed/stale reports and deterministic save/reload continuation;
 the planner may not spend missing physical stocks or act on hidden changes.
 
-Current game formats are save v126 / orders v54 / portable race v3. The complete
+Current game formats are save v128 / orders v55 / portable race v3. The complete
 first stationary campaign is enabled by stage 8 below. Mobile residential arks, transport-network
 #53 and exotic-material #63 work remain outside this first stationary slice.
 #50 remains open for implementation and later comparative balance/other traits.
@@ -848,5 +848,51 @@ actual early scout departure and deterministic in-progress reload. The existing
 seeds17/42/123 still verify a paid, independently supplied second colony.
 
 This completes the first playable stationary Native loop, not all of #50.
-Mobile homes, other asymmetric traits, automatic native military/upgrades and
-comparative long-game balance remain later work. #53/#63 stay frozen.
+Automatic native station decisions follow in stage 9 below. Mobile homes,
+other asymmetric traits, native military fleets and comparative long-game
+balance remain later work. #53/#63 stay frozen.
+
+## Implementation stage 9: paid computer station defense and housing
+
+The native computer policy now authors ordinary `QueueStationOrder` refits.
+An inhabited hull at 80% housing targets the next larger native hull: Dock →
+Citadel → Bastion, with the existing Construction 6/14 unlocks. Once the original
+Energy 4 / Construction 6 / Propulsion 3 startup targets are met, a crowded
+station whose next hull is locked prioritizes Construction research. Research
+does not grant a hull or free fitted equipment.
+
+An unarmed station can add at most two available ordinary hull-damaging beams
+and one available shield, respecting slot limits. Existing components, radiation
+screens, shipyard/refueling services and station ID are preserved. The ordinary
+queue pays the full chosen hull and every fitted module, including the existing
+components, under the current refit rules. Paid completion preserves residents
+and finite life-support kits; battle destruction keeps its existing consequences.
+
+The current closing economic receipt, an empty queue and a live inhabited
+shipyard are required before authoring a project. Mining shortages, pending miner
+construction and the first scout/settler keep economic priority. An unaffordable
+first settler for a known safe target retains its savings rather than buying a
+discretionary defense fit. Emergency support cannot fund a station project.
+
+The received mineral budget must cover the complete refit after the immediate
+support bill, one full annual bill for the target housing capacity and the
+construction-interval deficit of the existing housing at today's production and
+locally active mining rates. Unknown concentrations contribute no assumed income;
+assigned miners still travelling to the colony, miners dispatched elsewhere
+this boundary and miners with pending commands contribute none. This bounded
+arithmetic walks no future years and runs only during actual computer planning.
+
+Acceptance covers the real paid Citadel/armed-station completion against a
+no-refit mineral control, preserved ID/residents/screens, Construction/Bastion
+progression, an existing queue, stale economic reports, scarce supply and a
+funded construction bill lacking survival reserves. Hidden physical changes and
+collection storage order preserve the received plan. Host save/load and an ordinary
+order-file round trip preserve both the authored plan and the resolved queue,
+population, fitted station and mineral stocks. Existing actual Human/Computer
+startup/replacement/second-colony campaigns remain acceptance coverage.
+
+Complete GCC 14.2 / Qt 6.12 Debug build; focused2/2 in2.34s and full141/141 CTest in146.09s passed. All178 local documentation targets in seven related documents were checked.
+Save128 / orders55 / race3 remain unchanged. This implements baseline station
+arming and housing decisions. Combat-fleet policy, replacement of obsolete
+weapons, other traits and comparative long-game balance remain open under #50;
+#53/#63 stay frozen.

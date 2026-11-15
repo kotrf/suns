@@ -1,5 +1,24 @@
 # Project status and development handoff
 
+## #50 paid native computer station defense/housing — 16 November2026
+
+Mini-4/#300 merged as0d3db76, issue299 completed5/5. PR301 also auto-squash-merged
+as15c6b6a; treeb9cfe286 exactly matches reviewed693c0ec and successful source CI
+43761569727. The next ordered open issue is50. Existing native startup/expansion
+was complete; this slice adds ordinary paid station defense and housing decisions.
+The native policy preserves purchased modules/services/screens, uses fresh received
+queues, protects miners/scouts/first settlers and reserves life support before
+spending a full refit bill. Crowded housing drives existing C6/C14 native hulls and
+Construction research after the original startup sequence. No new game mechanics,
+formats or future-turn previews. Core tests cover actual mineral payment and
+identity/population preservation, priorities/shortfalls, stale/hidden evidence,
+research progression and deterministic storage order. Host reload and ordinary
+order-file replay give the same plan and resolved state.
+Complete GCC 14.2 / Qt 6.12 Debug build; focused2/2 in2.34s and full141/141 CTest in146.09s passed. All178 local documentation targets in seven related documents were checked.
+PR/head/tree/CI must be checked in GitHub; leave the new slice for review.
+Issue50 stays open for remaining military/traits/balance work;53/63 frozen.
+All old branches and work/ retained. [Contract](asymmetric-empires.md#implementation-stage-9-paid-computer-station-defense-and-housing).
+
 ## PR300 repeat review — map destination selection leaves row editing first
 
 Review5912544366 on a531642 confirms the first P2/P3 fixes; its source CI43747640707
