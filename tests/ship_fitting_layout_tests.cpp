@@ -109,14 +109,18 @@ int main(int argc,char** argv)
     auto* scanner = designer.findChild<QToolButton*>("shipSlot_200");
     const QPointer<QToolButton> stable(scanner);
     assert(scanner && !scanner->property("emptySlot").toBool());
+    const auto scannerName = QString::fromStdString(component_spec(ShipComponentType::LongRangeScanner).name);
+    assert(scanner->toolTip().startsWith(scannerName + '\n'));
     scanner->click();
     QKeyEvent remove(QEvent::KeyPress,Qt::Key_Delete,Qt::NoModifier);
     QApplication::sendEvent(scanner,&remove);
     assert(stable && scanner->property("emptySlot").toBool());
+    assert(!scanner->toolTip().contains(scannerName));
     auto* catalog = designer.findChild<QListWidget*>("shipComponentCatalog");
     for (int i=0;i<catalog->count();++i)
         if(catalog->item(i)->data(Qt::UserRole).toInt()==int(ShipComponentType::LongRangeScanner))catalog->setCurrentRow(i);
     designer.findChild<QPushButton*>("fitSelectedComponent")->click();
     assert(stable && !scanner->property("emptySlot").toBool());
+    assert(scanner->toolTip().startsWith(scannerName + '\n'));
     assert(designer.draft().placements==archived.placements);
 }

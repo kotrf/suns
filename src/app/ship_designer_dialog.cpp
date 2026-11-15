@@ -494,7 +494,7 @@ private:
             const auto fullName = QString::fromStdString(component_spec(*component_).name);
             setText(QString("%1\n%2").arg(title, fontMetrics().elidedText(fullName, Qt::ElideRight, 70)));
             setAccessibleName(QString("%1 slot, bank %2, %3 fitted").arg(fullTitle).arg(slot_.bank).arg(fullName));
-            setToolTip(componentCatalogDescription(*component_) + bankHint
+            setToolTip(fullName + '\n' + componentCatalogDescription(*component_) + bankHint
                 + "\n\nDrag to another compatible slot. Double-click or press Delete to remove.");
         } else {
             setText(QString("%1\nEmpty").arg(title));
