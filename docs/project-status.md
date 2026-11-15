@@ -1,5 +1,55 @@
 # Project status and development handoff
 
+## PR300 repeat review — map destination selection leaves row editing first
+
+Review5912544366 on a531642 confirms the first P2/P3 fixes; its source CI43747640707
+passed140/140. The new P2 erased a selected row's Unload action and reset the next
+fleet target when normalizing incompatible actions. Two new actual Qt regressions
+failed before the fix: right-clicking a fleet with that row selected, and selecting
+the row again while New waypoint is active. Both object and coordinate pick handlers
+now leave row editing before applying a destination. Quick append uses that prepared
+draft without a later edit-mode transition. Tests retain the first action/cargo/Warp,
+bind the next waypoint to the picked FleetId, select/edit only that next leg and
+verify actual Boranium unloading through PBEM and a physical turn.
+Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in13.27s and full140/140 CTest in130.87s passed. All186 local documentation targets in seven related documents were checked. Save128/orders55/race3 unchanged; no future simulations/polling.
+PR300 remains open for repeat review, all three threads open until merge. Check
+head/tree/CI in GitHub. #56 open; #53/#63 frozen; work/ and all branches retained.
+
+## PR300 first review — preserve arrival actions and paid-refit mineral status
+
+Review5912119102 on05649bf found P2 implicit merging when New waypoint targets
+a friendly fleet and P3 a missing mineral warning for paid Refit work. Both were
+reproduced with failing Qt regressions before the source changes. The destination
+selector preserves compatible actions/reserves, with Merge only when explicitly
+chosen. Refit's known signed bill is independent of its unavailable simple ETA;
+unknown prefixes and later rows do not receive invented future mineral recovery.
+Actual map-click/PBEM/host tests retain both FleetIds for None/Transfer fuel,
+transfer fuel with its reserve, and merge only with explicit Merge. Refit tests
+pay work in a real turn, check the current shortfall and complete after supplying
+minerals. Scalar cases cover preceding fixed/annual work, recovery and invalid
+quotes. Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in13.52s and full140/140 CTest in137.30s passed. All185 local documentation targets in seven related documents were checked. Save128/orders55/race3 unchanged. PR300 remains open
+for repeat review; leave both discussions open. Head/tree/CI must be checked in
+GitHub. #56 open, #53/#63 frozen; work/ and all source/archive branches retained.
+
+## Mini-4 / issue299 — 15 November2026
+
+Mini-3/#298 merged as main841c7bb with exact tested tree56f8940; review5910797560
+confirmed the last P2 and no new findings, all18 discussions resolved and issue296
+completed12/12. Main CI43716530552 succeeded. The user asked to continue; fresh
+Mini-4/#299 supplies the five concrete follow-ups implemented in this slice.
+
+The five changes provide a resizable Item column, numbered singleton split results,
+one-click map waypoint addition, whole-batch queue budgets/deficits and passenger-
+conditional radiation warnings. Existing manual target picking, identity, cargo,
+radiation rules and save128/orders55/race3 remain intact. UI estimates stay bounded
+received-state arithmetic, without future simulation or polling. Tests cover host/
+preview naming across foreign IDs, existing own names, multi-ship/UTF-8 results,
+fixed-rate cumulative ETA and batch deficits, actual Qt clicks/cancellation/legacy
+picking, passenger summaries, queue tooltips and Split/route PBEM.
+Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in16.38s and full140/140 CTest in160.19s passed. All184 local documentation targets in seven related documents were checked. Source/head/CI in the new Mini-4 PR; leave for review, no auto-merge.
+#56 retains ocean/atmosphere/system work; radical transformation needs its separate
+gameplay design. #53/#63 remain frozen; work/ and source/archive branches retained.
+
 ## PR298 eighth review — persistent production identities across reports
 
 Review5909761975 confirms replacement protection but finds that the current-year

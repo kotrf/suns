@@ -378,7 +378,7 @@ QString MainWindow::selectedFleetPanelSummary() const
                                    .arg(sensor, 0, 'f', 0).arg(penetrating, 0, 'f', 0)
                              : QString("%1 ly detection").arg(sensor, 0, 'f', 0));
 
-    if (fleet_radiation_hazard(state_, *fleet) > 0.0) {
+    if (fleet->colonists && fleet_radiation_hazard(state_, *fleet) > 0.0) {
         if (fleet_radiation_safe(state_, *fleet)) {
             lines << "<span style='color:#83c99a'>Radiating drive: safe for this race</span>";
         } else {

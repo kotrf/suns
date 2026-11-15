@@ -201,7 +201,8 @@ void MainWindow::installProductionQueue()
     productionQueueTree_->setMinimumHeight(72);
     productionQueueTree_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     productionQueueTree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    productionQueueTree_->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    productionQueueTree_->header()->setSectionResizeMode(1, QHeaderView::Interactive);
+    productionQueueTree_->header()->resizeSection(1, 240);
     productionQueueTree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     productionQueueTree_->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     layout->addWidget(productionQueueTree_, 1);
@@ -455,8 +456,8 @@ void MainWindow::refreshProductionQueue()
             remaining = "housing";
         } else if (waitingForShipyard) {
             remaining = "shipyard";
-        } else if (item.remainingCost == 0
-            && !mineral_cargo_sufficient(availableMinerals, production_item_mineral_cost(forecastState, item))) {
+        } else if (item.remainingCost == 0 && estimates[index].mineralBudgetKnown
+            && !mineral_cargo_sufficient(estimates[index].mineralsBefore, production_item_mineral_cost(forecastState, item))) {
             remaining = "minerals";
         }
 
@@ -478,14 +479,18 @@ void MainWindow::refreshProductionQueue()
         if (automatic) { auto font = row->font(1); font.setItalic(true); row->setFont(1, font); }
         row->setData(0, Qt::UserRole, static_cast<qulonglong>(index));
         const auto cost = production_item_mineral_cost(forecastState, item);
-        const MineralCargo missing{std::max(0.0, cost.ironium - availableMinerals.ironium),
-            std::max(0.0, cost.boranium - availableMinerals.boranium),
-            std::max(0.0, cost.germanium - availableMinerals.germanium)};
-        auto details = QString("%1 — minerals per completed unit: %2\n"
-                                     "%3: %4")
-            .arg(productionItemName(forecastState, item), mineralAmounts(cost),
-                nativeSupport ? "Shortfall after life support, before other builds"
-                    : "Shortfall against current stock before other builds", mineralAmounts(missing));
+        auto details = QString("%1 — minerals per completed unit: %2")
+            .arg(productionItemName(forecastState, item), mineralAmounts(cost));
+        if(estimates[index].mineralBudgetKnown) {
+            details += QString("\nWhole batch (%1 units): %2\nAvailable after earlier queue items%3: %4\nShortfall for this batch: %5")
+                .arg(estimates[index].effectiveQuantity)
+                .arg(mineralAmounts(estimates[index].batchMinerals))
+                .arg(nativeSupport?" and life support":"")
+                .arg(mineralAmounts(estimates[index].mineralsBefore))
+                .arg(mineralAmounts(estimates[index].missingMinerals));
+        } else {
+            details += "\nMinerals after earlier queue items are uncertain; no batch shortfall is estimated.";
+        }
         details += QString("\n%1\nApproximate dates hold today's production rate and mineral budget fixed; growth, future mining, arrivals and future technology are not predicted.")
             .arg(QString::fromUtf8(simple_production_estimate_reason(estimates[index].status)));
         if (estimates[index].skippedQuantity && estimates[index].effectiveQuantity)

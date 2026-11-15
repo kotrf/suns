@@ -242,9 +242,8 @@ int main(int argc, char** argv)
         assert(appended.queuedWaypoints.size() == 1);
         assert(same_position(appended.queuedWaypoints.back().destination, {-65, -55}));
     }
-    // New waypoint arms the real map, including empty space. Picking is only
-    // a draft: the existing source/system, world and orders remain unchanged
-    // until Add, and the click must be transformed through the current zoom.
+    // New waypoint adds one leg immediately, without mutating the physical
+    // world. Coordinates must be transformed through the current zoom.
     auto* newWaypoint = window.findChild<QPushButton*>("routeNewWaypointButton");
     auto* addWaypoint = window.findChild<QPushButton*>("routeAddButton");
     auto* destination = window.findChild<QComboBox*>("routeDestinationCombo");
@@ -268,14 +267,12 @@ int main(int argc, char** argv)
         assert(!window.routeProgramMapTargetPickActive());
         assert(window.selectedFleetForRouteProgram() == 1);
         assert(MainWindowTestAccess::selectedStar(window) == 1);
-        assert(MainWindowTestAccess::orders(window).orders.empty());
+        assert(MainWindowTestAccess::orders(window).orders.size()==1);
         assert(!MainWindowTestAccess::state(window).fleets.front().destination);
         assert(destination->currentData().toInt() == 4);
         assert(destination->currentText().contains("Coordinates"));
-        assert(addWaypoint->isEnabled());
         if (zoom == 1.0 && app.arguments().contains("--capture"))
-            window.grab().save("/tmp/suns-coordinate-waypoint-draft.png");
-        addWaypoint->click();
+            window.grab().save("/tmp/suns-coordinate-waypoint-added.png");
         auto route = std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front());
         assert(same_position(route.destination, {expected.x(), expected.y()}));
         assert(route.targetFleet == 0 && route.warp == 5);
@@ -289,7 +286,6 @@ int main(int argc, char** argv)
         const QPointF second{-25, 21};
         const auto next = view->mapToScene(view->mapFromScene(second));
         click(window, second, Qt::LeftButton);
-        addWaypoint->click();
         route = std::get<MoveFleetOrder>(MainWindowTestAccess::orders(window).orders.front());
         assert(route.warp == 5 && route.queuedWaypoints.size() == 1);
         assert(same_position(route.queuedWaypoints.front().destination, {next.x(), next.y()}));
@@ -307,12 +303,13 @@ int main(int argc, char** argv)
         assert(MainWindowTestAccess::orders(window).orders.size() == 1);
     }
 
-    // Each source retains its coordinate draft. Changing source cancels a
-    // pending pick; a new game clears drafts even if FleetIds are reused.
+    // Manual Pick target retains each source's coordinate draft. Changing
+    // source cancels picking; a new game clears drafts even if IDs are reused.
+    auto* manualPickButton=window.findChild<QPushButton*>("routePickTargetButton");assert(manualPickButton);
     MainWindowTestAccess::orbits(window);
     view->resetTransform();
     view->centerOn(0, 0);
-    newWaypoint->click();
+    manualPickButton->click();
     click(window, {-30, 27}, Qt::LeftButton);
     const auto firstDraft = destination->currentText();
     newWaypoint->click();
@@ -320,7 +317,7 @@ int main(int argc, char** argv)
     assert(window.selectFleetForRouteProgram(2));
     assert(!window.routeProgramMapTargetPickActive());
     assert(destination->currentData().toInt() != 4);
-    newWaypoint->click();
+    manualPickButton->click();
     click(window, {41, -32}, Qt::LeftButton);
     const auto secondDraft = destination->currentText();
     assert(firstDraft != secondDraft);
@@ -344,7 +341,6 @@ int main(int argc, char** argv)
     assert(MainWindowTestAccess::orders(window).orders.empty());
     const auto arrival = view->mapToScene(view->mapFromScene(QPointF{15, 12}));
     click(window, {15, 12}, Qt::LeftButton);
-    addWaypoint->click();
     MainWindowTestAccess::advance(window);
     assert(same_position(MainWindowTestAccess::state(window).fleets.front().position,
         {arrival.x(), arrival.y()}));

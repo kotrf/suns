@@ -629,17 +629,20 @@ bool MainWindow::selectFleetForRouteProgram(FleetId fleetId)
     return true;
 }
 
-bool MainWindow::beginRouteProgramMapTargetPick()
+bool MainWindow::beginRouteProgramMapTargetPick(bool appendWaypoint)
 {
     if (!selectedFleet()) {
         statusBar()->showMessage("Select a source fleet before choosing a route target", 3000);
         return false;
     }
+    routeProgramAppendPickedWaypoint_=appendWaypoint;
     if (routeProgramMapTargetPickActive_) return true;
     routeProgramMapTargetPickActive_ = true;
     if (view_ && view_->viewport()) view_->viewport()->setCursor(Qt::CrossCursor);
     emit routeProgramMapTargetPickChanged(true);
-    statusBar()->showMessage("Route target mode: click a point, star or another fleet; Esc cancels");
+    statusBar()->showMessage(appendWaypoint
+        ? "New waypoint: click a point, star or another fleet to add it; Esc cancels"
+        : "Route target mode: click a point, star or another fleet; Esc cancels");
     return true;
 }
 
@@ -647,6 +650,7 @@ void MainWindow::cancelRouteProgramMapTargetPick()
 {
     if (!routeProgramMapTargetPickActive_) return;
     routeProgramMapTargetPickActive_ = false;
+    routeProgramAppendPickedWaypoint_ = false;
     if (view_ && view_->viewport()) view_->viewport()->unsetCursor();
     emit routeProgramMapTargetPickChanged(false);
 }

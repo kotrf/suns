@@ -1520,6 +1520,26 @@ bool split_fleet(GameState& state, PlayerId player, const SplitFleetOrder& order
     remaining.warp = std::min(remaining.warp, fleet_max_warp(state, remaining));
     if (fleet_cargo_used(state, remaining) > fleet_cargo_capacity(state, remaining) + 1e-6
         || fleet_cargo_used(state, detached) > fleet_cargo_capacity(state, detached) + 1e-6) return false;
+    // Name both single-ship results, reserving names of the fleets that remain.
+    std::set<std::string> names;
+    for(const auto& fleet:state.fleets)
+        if(fleet.owner==player && fleet.id!=remaining.id)names.insert(fleet.name);
+    if(fleet_ship_count(remaining)!=1)names.insert(remaining.name);
+    if(fleet_ship_count(detached)!=1)names.insert(detached.name);
+    const auto nameSingle=[&](Fleet& fleet) {
+        if(fleet_ship_count(fleet)!=1)return;
+        const auto* design=find_ship_design(state,fleet.design);
+        const auto type=design?design->name:std::string("Ship");
+        for(std::uint64_t number=1;;++number) {
+            const auto suffix=" #"+std::to_string(number);
+            auto length=std::min(type.size(),std::size_t(80)-suffix.size());
+            // Keep a complete UTF-8 prefix within the ordinary fleet-name limit.
+            while(length<type.size() && length && (static_cast<unsigned char>(type[length])&0xc0)==0x80)--length;
+            auto name=type.substr(0,length)+suffix;
+            if(names.insert(name).second){fleet.name=std::move(name);return;}
+        }
+    };
+    nameSingle(remaining);nameSingle(detached);
     remaining.telemetry = {};
     remaining.telemetryInTransit.clear();
     *source = std::move(remaining);

@@ -352,6 +352,7 @@ int main(int argc, char* argv[])
 
     window.findChild<QPushButton*>("routeNewWaypointButton")->click();
     targetType->setCurrentIndex(targetType->findData(1));
+    action->setCurrentIndex(action->findData(static_cast<int>(suns::FleetArrivalActionKind::MergeWithFleet)));
     target->setCurrentIndex(target->findData(static_cast<quint32>(fleets[0])));
     window.selectFleetForRouteProgram(fleets[0]);
     assert(targetType->currentData().toInt() == 0);
@@ -372,6 +373,7 @@ int main(int argc, char* argv[])
     // Map target mode keeps the first fleet as the source while a click on
     // another fleet captures that second FleetId as the moving destination.
     window.selectFleetForRouteProgram(fleets[0]);
+    action->setCurrentIndex(action->findData(static_cast<int>(suns::FleetArrivalActionKind::MergeWithFleet)));
     pickTarget->click();
     assert(window.routeProgramMapTargetPickActive());
     window.routeProgramScene()->clearSelection();
@@ -436,7 +438,7 @@ int main(int argc, char* argv[])
         suns::MainWindowTestAccess::orders(window).orders.front());
     assert(quickPursuit.fleet == fleets[0]);
     assert(quickPursuit.targetFleet == fleets[1]);
-    assert(quickPursuit.arrivalAction.kind == suns::FleetArrivalActionKind::MergeWithFleet);
+    assert(quickPursuit.arrivalAction.kind == suns::FleetArrivalActionKind::None);
 
     // Enemy targets are distinguished from friendly moving targets. The route
     // goes to the enemy's currently observed position with No action.
