@@ -45,6 +45,8 @@ public:
     explicit MineralStockPanel(QWidget* parent);
     void setMinerals(const MineralDisplayData&, std::uint64_t turn);
     double stockScale() const;
+signals:
+    void stockScaleChanged();
 private:
     void cycleScale();
     void refresh();

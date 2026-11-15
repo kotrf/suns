@@ -126,7 +126,7 @@ MineralStockPanel::MineralStockPanel(QWidget* parent) : QWidget(parent)
 }
 void MineralStockPanel::setMinerals(const MineralDisplayData& data, std::uint64_t turn) { data_ = data; turn_ = turn; refresh(); }
 double MineralStockPanel::stockScale() const { return scales[scaleIndex_]; }
-void MineralStockPanel::cycleScale() { scaleIndex_ = (scaleIndex_ + 1) % scales.size(); refresh(); }
+void MineralStockPanel::cycleScale() { scaleIndex_ = (scaleIndex_ + 1) % scales.size(); emit stockScaleChanged(); refresh(); }
 void MineralStockPanel::refresh()
 {
     scaleButton_->setText(QString("Stock: 0–%1 kt  ·  ◇ 0–100%").arg(stockScale(), 0, 'f', 0));

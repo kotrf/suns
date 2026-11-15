@@ -1,6 +1,7 @@
 #pragma once
 
 #include "suns/turn_processor.hpp"
+#include "suns/production_queue_identity.hpp"
 
 namespace suns {
 
@@ -41,8 +42,13 @@ bool apply_production_batch(const GameState& state, Planet& planet, const QueueP
 // Suggestions only: never installed or selected implicitly in a new campaign.
 [[nodiscard]] std::vector<ProductionTemplate> colony_development_presets();
 bool set_production_template(Player& player, const SetProductionTemplateOrder& order);
-bool apply_production_template(Planet& planet, const Player& player, const std::string& name);
+bool apply_production_template(Planet& planet, const Player& player, const std::string& name,
+    detail::ProductionQueueIdentity* identity = nullptr, std::size_t order = 0);
 void apply_default_production_template(const GameState& state, Planet& planet);
 [[nodiscard]] GameState planned_production_state(const GameState& state, const PlayerOrders& pending);
+[[nodiscard]] std::vector<detail::QueueEditTarget> production_queue_edit_targets(const GameState& received, const PlayerOrders&);
+// Only legacy untracked rows need a command trace; tracked reports work at any age.
+[[nodiscard]] std::optional<std::string> production_queue_edit_error(
+    const GameState& received, const PlayerOrders&, const Order& proposed);
 
 } // namespace suns

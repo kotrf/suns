@@ -121,7 +121,7 @@ void MainWindow::installResearch()
     technologies->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
     technologies->header()->setSectionResizeMode(3, QHeaderView::Stretch);
     technologies->setToolTip("Double-click a locked technology to queue the required levels.");
-    layout->addWidget(technologies);
+    layout->addWidget(technologies, 3);
     connect(technologies, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
         const auto index = item->data(0, Qt::UserRole + 2).toUInt();
         if (index >= research_unlocks().size()) return;
@@ -171,7 +171,7 @@ void MainWindow::installResearch()
     researchPlanTree_->setRootIsDecorated(false);
     researchPlanTree_->setAlternatingRowColors(true);
     researchPlanTree_->setSelectionMode(QAbstractItemView::SingleSelection);
-    researchPlanTree_->setMinimumHeight(190);
+    researchPlanTree_->setMinimumHeight(100);
     researchPlanTree_->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     researchPlanTree_->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     researchPlanTree_->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);

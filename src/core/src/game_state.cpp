@@ -823,7 +823,7 @@ bool component_available_to_player(
 bool ship_design_available_to_player(
     const GameState& state, PlayerId player, const ShipDesign& design)
 {
-    return design.owner == player
+    return !design.retired && design.owner == player
         && ship_hull_available_to_player(state, player, design.hull)
         && std::all_of(design.components.begin(), design.components.end(), [&](ShipComponentType component) {
             return component_available_to_player(state, player, component);

@@ -221,7 +221,7 @@ std::optional<ShipDesign> civilian_design(const GameState& state, PlayerId playe
     double bestScore = std::numeric_limits<double>::infinity();
     for (const auto& design : state.shipDesigns) {
         Fleet example; example.owner = player; example.design = design.id;
-        if (design.owner != player || military_fleet(state, example) || ship_design_can_colonize(design) != colonizer
+        if (design.retired || design.owner != player || military_fleet(state, example) || ship_design_can_colonize(design) != colonizer
             || (!colonizer && !ship_design_has_scanner(design))) continue;
         const auto candidate = score(design);
         if (candidate < bestScore || (candidate == bestScore && best && design.id < best->id)) {
@@ -271,7 +271,7 @@ std::optional<ShipDesign> civilian_design(const GameState& state, PlayerId playe
     name.resize(std::min<std::size_t>(name.size(), 40));
     best->name = name;
     for (unsigned suffix = 2; std::any_of(state.shipDesigns.begin(), state.shipDesigns.end(),
-        [&](const auto& existing) { return existing.owner == player && existing.name == best->name; }); ++suffix)
+        [&](const auto& existing) { return !existing.retired && existing.owner == player && existing.name == best->name; }); ++suffix)
         best->name = name + " " + std::to_string(suffix);
     return best;
 }
@@ -1060,13 +1060,13 @@ ComputerTurnPlan plan_computer_turn(const PlayerView& input)
                 && p.minerals.boranium >= ship_design_mineral_cost(design).boranium
                 && p.minerals.germanium >= ship_design_mineral_cost(design).germanium) {
                 auto existing = std::find_if(view.state.shipDesigns.begin(), view.state.shipDesigns.end(),
-                    [&](const auto& d) { return d.owner == view.player && d.name == design.name; });
+                    [&](const auto& d) { return !d.retired && d.owner == view.player && d.name == design.name; });
                 for (int suffix = 2; existing != view.state.shipDesigns.end(); ++suffix) {
                     Fleet candidate; candidate.owner = view.player; candidate.design = existing->id;
                     if (probe_capable(view.state, candidate) && ship_design_available_to_player(view.state, view.player, *existing)) break;
                     design.name = "Autonomous Survey Probe " + std::to_string(suffix);
                     existing = std::find_if(view.state.shipDesigns.begin(), view.state.shipDesigns.end(),
-                        [&](const auto& d) { return d.owner == view.player && d.name == design.name; });
+                        [&](const auto& d) { return !d.retired && d.owner == view.player && d.name == design.name; });
                 }
                 if (existing == view.state.shipDesigns.end()) {
                     plan.orders.orders.push_back(CreateShipDesignOrder{design.name, design.hull, design.components});

@@ -1,5 +1,11 @@
 # Ship design foundation
 
+The [Mini-3 implementation](mini-3.md) adds paid component-difference dock refits
+and archival deletion of unused projects. Refit preserves the hull and physical
+ship/cargo; retained components are free, removal recovers10% minerals, installation
+costs its normal price plus50% resource labour. A retired project remains available
+to historical records but cannot supply a new ship or a current project choice.
+
 Suns! should eventually make ship roles emerge from fitted hardware rather than from fixed classes. The first implementation keeps the current Qt presentation compatible, but the simulation now has explicit ship designs and components.
 
 ## Legacy demo model

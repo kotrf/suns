@@ -1,4 +1,5 @@
 add_library(suns_core
+    src/ship_refit.cpp
     src/transport_lines.cpp
     src/campaign.cpp
     src/computer_player.cpp
@@ -24,6 +25,7 @@ add_library(suns_core
     src/reconnaissance.cpp
     src/production_forecast.cpp
     src/production.cpp
+    src/production_queue_identity.cpp
     src/planetary_recovery.cpp
     src/intergalactic_visitors.cpp
     src/unknown_objects.cpp

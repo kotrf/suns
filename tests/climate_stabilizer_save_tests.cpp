@@ -69,7 +69,7 @@ void versioned_orders_and_unchanged_legacy_records()
     const auto path=dir.filePath("climate.sunsorders");assert(write_turn_order_file(path,data,error) && read_turn_order_file(path,decoded,error));
     assert(std::get<SetPlanetaryEngineeringOrder>(decoded.orders.orders.front()).targetTemperature==0);
     assert(std::get<SetPlanetaryEngineeringOrder>(decoded.orders.orders.back()).targetTemperature==100);
-    auto old=bytes(path);assert(quint8(old[7])==54);old[7]=char(53);write(path,old);assert(!read_turn_order_file(path,decoded,error));
+    auto old=bytes(path);assert(quint8(old[7])==55);old[7]=char(53);write(path,old);assert(!read_turn_order_file(path,decoded,error));
     for(bool wrongKind:{false,true}) {
         auto bad=data;auto& order=std::get<SetPlanetaryEngineeringOrder>(bad.orders.orders.front());
         if(wrongKind){order.kind=E::OrbitalMirrors;order.targetTemperature=48;}else order.targetTemperature=101;

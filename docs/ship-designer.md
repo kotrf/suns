@@ -1,5 +1,11 @@
 # Ship Designer
 
+[Mini-3](mini-3.md) adds alphabetical project choices, hull/project-based names
+with the first free Gen suffix, physical-ship-guarded Delete design, and read-only
+slot fitting from fleet portraits. Mixed portraits open the project/count list.
+Refit in the Fleet panel compares two own projects on the same hull and queues a
+paid dock job; see the linked cost, cargo/fuel and cancellation rules.
+
 Suns! treats a ship role as the result of a fitted design rather than a fixed class. The first player-facing designer introduces hulls and hard slot constraints so adding capability always creates an engineering choice.
 
 ## Hulls

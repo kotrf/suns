@@ -1,5 +1,137 @@
 # Project status and development handoff
 
+## PR298 eighth review — persistent production identities across reports
+
+Review5909761975 confirms replacement protection but finds that the current-year
+receipt requirement permanently prevents editing remote queues. The exact two-year
+latency regression fails with the previous policy. Stable per-colony row IDs now
+survive progress, quantity changes, reorders and received/in-flight reports. Host
+allocation never reuses a removed row's ID. Original Cancel/Reorder targets bind by
+ID at any report age; same-submission command provenance still handles rejection.
+Missing completed IDs skip without redirecting to replacement work.
+
+Save128 adds a bounded PQID extension for physical allocators/queues and all frozen
+owner reports; base item layouts and orders55/race3 remain unchanged. Old snapshots
+retain zero IDs; only a current complete receipt can establish their identity.
+Qt rejects an unidentifiable legacy edit immediately with a reason, preserving
+both queue and pending orders. New same-submission rows remain editable; later
+real reports restore legacy remote editing. Physical allocator state is redacted
+from player exports. Tests cover one-rule and two-row queues over three consecutive
+years with exactly two-year latency, both reorder anchors, actual Qt Remove through
+PBEM host/player persistence, legacy127 migration/recovery, duplicate-ID corruption,
+hidden-allocation byte equality and previous replacement/template/rejection cases.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.98s and full 139/139 CTest in 136.57s passed. All 183 local documentation targets in six related documents were checked. Source/CI in PR298; repeat-review discussions remain open, no merge.
+#56 open;#53/#63 frozen. Work/ and branches retained.
+
+## PR298 seventh review — stale rows require a current final receipt
+
+Review5909590605 confirms the previous fixes and finds a replacement order with
+the same row count; one-unit replacements can even have identical values. Both
+actual-host regressions fail on0b0cdfc before correction. Value/progress matching
+cannot establish identity across years without persistent IDs. Initial rows now
+bind only when the received economic snapshot is final for the planning year and
+the complete queue is unchanged. Otherwise Cancel/Reorder skips an unproven source
+or destination. Fresh same-submission insertions retain explicit origins; a fresh
+final report restores ordinary editing. Tests cover batches10/1, both reorder
+anchors, current and pre-production reports, unique-progress ambiguity, new-row
+cancellation and actual host/player save plus order-file PBEM reload. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 22.39s and full 139/139 CTest in 163.85s passed. All 183 local documentation targets in six related documents were checked.
+Formats127/55/race3 unchanged; no new normal UI pass, simulation or polling. Current
+source/CI in PR298, discussions open for repeat review, no merge. #56 open;#53/#63
+frozen. Work/ and branches retained.
+
+## PR298 sixth review — explicit template births and whole-group ambiguity
+
+Both P2 cases on ece3cf2 independently fail before correction. Applying a template
+now records retained row origins and assigns every inserted template row its own
+order/ordinal, including identical replacement annual rules. Initial queue matching
+checks cardinality of the entire logical-work group before matching remaining costs;
+a completed first factory cannot alias a surviving second one at the same cost.
+A real two-turn delayed-report regression preserves both completions; a unique-row
+progress control remains cancellable. PBEM includes template replacement after a
+rejected blueprint deletion. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 25.54s and full 139/139 CTest in 148.05s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; current
+source/CI in PR298, discussions open for repeat review, no merge. #56 open;#53/#63
+frozen. Work/ and branches retained.
+
+## PR298 fifth review — queue row provenance and single projection
+
+P2 and P3 on e1b5349 are independently reproduced before correction. For submissions
+with Cancel/Reorder the host reconstructs received row origins once. Existing rows
+and rows created by an earlier command keep separate transient identities; rejected
+insertions cannot redirect later edits. Reorders retain destination-side intent.
+Duplicate cancellations are tracked explicitly. Ambiguous received baseline matches
+are skipped conservatively; unique work can match despite reported progress.
+The trace is reconstructed after PBEM reload; no serialized IDs or format change.
+Ordinary UI projection has no trace pass. Refit consumes fleetPlanningState once
+without replaying Create/Delete. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.61s and full 139/139 CTest in 138.78s passed. All 183 local documentation targets in six related documents were checked. Current source/CI in PR298; leave
+discussions for repeat review, no merge. #56 open,#53/#63 frozen; work/ retained.
+
+## PR298 fourth review — creation dependencies and retained refit
+
+Two P2 and one P3 on0844277 have independently failing regressions before the fix.
+Named build/refit references bind only to successful Create in the same submission;
+failure cannot select an older same-name design. A queued stationary refit protects
+its fuel despite missing Shipyard or other temporary work eligibility. Production
+uses the effective yard after earlier completions and resumes work in its repair
+year. Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 15.02s and full 139/139 CTest in 167.88s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; source/CI in PR298. Discussions
+remain for repeat review; no merge. #56 open,#53/#63 frozen; work/ retained.
+
+## PR298 third review — four P2 cases
+
+Four new regressions fail on2f8471d before correction. Production resolution
+respects a prior station refit disabling Shipyard and retains unpaid ship work.
+Mobile bases keep repairing clients but do not refill eligible refit fleets.
+Deployed generators run before upkeep/network routing; ship generation retains
+its refit protection. Deleting a newly created project appends a final command
+instead of rewriting indexed queue operations. Host binding uses owner-scoped
+names for fresh planning IDs across hidden global IDs; Qt/PBEM tests cover this.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 11.85s and full 139/139 CTest in 140.47s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 unchanged; current source/CI in PR298. Leave
+discussions for repeat review, no merge. #56 open,#53/#63 frozen; work/ retained.
+
+## PR298 repeat review — onboard fuel and gate departure
+
+Two P2 findings on05d2a12 are confirmed by regressions failing before correction.
+Onboard generation runs after command admission and shares the eligible-refit
+exclusion with depot service. A generator removal preserves the existing stock
+and remains possible while work waits for production over multiple years.
+Immediate gate orders service only their departing fleet at the source depot,
+including when the destination has no depot. Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 14.29s and full 139/139 CTest in 141.12s passed. All 183 local documentation targets in six related documents were checked. Current source/CI
+are in PR298; leave discussions for repeat review, no merge. Formats127/55/race3
+remain unchanged;#56 open,#53/#63 frozen; work/ and old branches retained.
+
+## PR298 review — 14 November 2026
+
+[Review of 23e3609](https://github.com/kotrf/suns/pull/298#pullrequestreview-5903254313)
+found two P2 defects and a P3 tooltip defect. All three new regressions fail
+against that revision before correction. Production planning now handles project
+creation/deletion at its ordinary command boundary, preserving queue indices.
+Automatic depot refuelling runs after commands but before movement and skips
+fleets eligible for their queued refit; paused/departing fleets retain ordinary
+service. Completed ships resume normal end-of-year service. Existing fuel is never discarded, and an actual excess still blocks
+smaller tanks. Mineral tooltips belong to the visible rectangles; Qt tests use
+real viewport hit-testing and check exact stocks/report dates.
+
+Complete GCC 14.2 / Qt 6.12 Debug build; final 15/15 focused tests in 15.82s and full 139/139 CTest in 172.73s passed. All 183 local documentation targets in six related documents were checked. Formats127/55/race3 and balance remain unchanged. No
+future-year UI forecasts or polling. Previous CI43539988760 passed139/139 on23e3609;
+current source/CI are in PR298. Keep all three threads open for repeat review;
+do not merge. #56 scope remains open,#53/#63 frozen; work/ and old branches retained.
+[Details](mini-3.md#pr298-review--14-november-2026).
+
+## Mini-3 / issue296 — 14 November 2026
+
+User requested all twelve items in [#296](https://github.com/kotrf/suns/issues/296).
+Branch codex/mini-3-296 starts at main6a59a53 after merged#297. Map/route/mineral
+presentation, designer naming/read-only fits/mixed composition, immutable emission
+navigation, physical design deletion/dock refit, Research layout, resonance reports
+and both waypoint-editor defects are implemented. Received evidence remains
+separate from host truth; no future-year UI forecasts or periodic work are added.
+Refit pays only changed equipment, returns10% removed minerals and charges50%
+installation labour in resources; one ship per queued job, with cargo/fuel/damage
+retained. Save127/orders55/race3 append guarded kinds/orders; active old layouts and
+genuine fixtures remain intact. [Details](mini-3.md). Complete GCC 14.2 / Qt 6.12 Debug build; final 16/16 focused tests in 21.51s and full 139/139 CTest in 194.98s passed. Actual Qt fitting/refit/map screenshots and 181 local documentation targets were checked. The main baseline CI43527982470 succeeded.
+
+Ready for review; current PR/source/CI are tracked in GitHub. Do not merge automatically. #56 larger scope remains
+open,#53/#63 frozen; existing work/ and source/archive branches retained.
+
 ## PR297 repeat P2 — tied plateau exit, 14 November 2026
 
 [Repeat review](https://github.com/kotrf/suns/pull/297#issuecomment-6867024973)

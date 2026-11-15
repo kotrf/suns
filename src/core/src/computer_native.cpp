@@ -181,7 +181,7 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
         cost.boranium+=reserve.boranium+runway(concentration.boranium);
         cost.germanium+=reserve.germanium+runway(concentration.germanium);
         if(!mineral_cargo_sufficient(stock,cost))return false;
-        const auto existing=std::find_if(state.shipDesigns.begin(),state.shipDesigns.end(),[&](const auto& d){return d.owner==view.player && d.name==design.name && d.components==design.components && d.hull==design.hull;});
+        const auto existing=std::find_if(state.shipDesigns.begin(),state.shipDesigns.end(),[&](const auto& d){return !d.retired && d.owner==view.player && d.name==design.name && d.components==design.components && d.hull==design.hull;});
         if(existing!=state.shipDesigns.end())plan.orders.orders.push_back(QueueShipDesignOrder{p.id,existing->id});
         else {
             if(std::none_of(plan.orders.orders.begin(),plan.orders.orders.end(),[&](const auto& o){const auto* c=std::get_if<CreateShipDesignOrder>(&o);return c && c->name==design.name;}))

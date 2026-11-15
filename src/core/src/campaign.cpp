@@ -557,6 +557,7 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
         Planet known;
         if (owned) {
             known = planet;
+            for(auto& item:known.productionQueue)item.queueId=0; // Only frozen private evidence supplies identities.
             known.owner=playerId;
             known.defenses=0;known.warDamage={};known.aftermathKnownLocally=false;
             const auto record=std::find_if(player->surveyKnowledge.begin(),player->surveyKnowledge.end(),[&](const auto& r){return r.star==planet.star;});
@@ -673,6 +674,9 @@ PlayerView make_player_view(const GameState& host, PlayerId playerId)
                 if(known.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !h.stationSupported)known.engineering.operational=false;
             }
         }
+        // A physical allocator would disclose undelivered queue changes.
+        known.nextProductionQueueId=1;
+        for(const auto& item:known.productionQueue)known.nextProductionQueueId=std::max(known.nextProductionQueueId,item.queueId+1);
         state.planets.push_back(known);
     }
     for (const auto& design : host.shipDesigns) if (design.owner == playerId) {
