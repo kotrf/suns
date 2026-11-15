@@ -363,6 +363,10 @@ ShipComponentSpec component_spec(ShipComponentType type)
             spec.name = "Sensor Array Kit"; spec.mass = 100; spec.buildCost = 120;
             // The transported kit supplies no scanning field until anchored.
         }
+        if (kind == OutpostKind::CargoCache) {
+            spec.name = "Cargo Cache Kit"; spec.mass = 100; spec.buildCost = 100;
+            // Extra storage is deployed structure, not a mobile cargo bonus.
+        }
         return spec;
     }
     if (const auto* gate = stargate_spec(type); gate && gate->specialistOnly) {
@@ -1241,7 +1245,7 @@ double fleet_cargo_capacity(const GameState& state, const Fleet& fleet)
             capacity += ship_design_cargo_capacity(*design) * stack.count;
         }
     }
-    return capacity;
+    return capacity + (fleet.outpost==OutpostKind::CargoCache ? kOutpostCacheCapacityKt : 0.0);
 }
 
 double fleet_cargo_used(const GameState&, const Fleet& fleet)

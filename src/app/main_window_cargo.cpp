@@ -422,6 +422,8 @@ void MainWindow::openCargoManifestDialog()
                 - fleet_cargo_used(planned, *endpoint.fleet)) : std::numeric_limits<double>::infinity();
         };
         const auto peopleAvailable = [&](const CargoEndpointView& from, const CargoEndpointView& to) {
+            if((from.fleet && from.fleet->outpost==OutpostKind::CargoCache)
+                || (to.fleet && to.fleet->outpost==OutpostKind::CargoCache))return std::uint64_t{0};
             if (native_orbital_race(planned, pendingOrders_.player)
                 && ((from.planet && !from.nativeOrbit) || (to.planet && !to.nativeOrbit))) return std::uint64_t{0};
             auto people = endpointColonists(from);
@@ -475,6 +477,11 @@ void MainWindow::openCargoManifestDialog()
             control.spin->setEnabled(!invasion && !residentOnly);
             control.slider->setToolTip("Positive loads the destination; negative returns minerals to the source.");
         }
+        const bool materialCache=(source.fleet && source.fleet->outpost==OutpostKind::CargoCache)
+            || (destination.fleet && destination.fleet->outpost==OutpostKind::CargoCache);
+        for(auto* control:std::vector<QWidget*>{colonistSpin,colonistSlider,receivedColonists})control->setEnabled(!materialCache);
+        colonistSpin->setToolTip(materialCache ? "Cargo caches store material cargo only; no population."
+            : "People. 100 colonists occupy 1 kt of cargo (10,000 kg per person).");
         const auto colonists = std::int64_t(colonistSpin->value());
         const auto minerals = transferMinerals();
         const auto sourcePeople = endpointColonists(source), destinationPeople = endpointColonists(destination);

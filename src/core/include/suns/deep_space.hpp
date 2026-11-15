@@ -7,6 +7,7 @@ inline constexpr double kOutpostRelayRangeLy = 300.0;
 inline constexpr double kOutpostSensorRangeLy = 250.0;
 inline constexpr double kOutpostPenetratingRangeLy = 75.0;
 inline constexpr double kOutpostStellarClearanceLy = 5.0;
+inline constexpr double kOutpostCacheCapacityKt = 2000.0;
 [[nodiscard]] OutpostKind construction_kit_kind(ShipComponentType);
 [[nodiscard]] OutpostKind fleet_construction_kit(const GameState&, const Fleet&);
 [[nodiscard]] bool outpost_online(const Fleet&);

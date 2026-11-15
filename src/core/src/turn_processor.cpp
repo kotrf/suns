@@ -638,6 +638,8 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
         return false;
     }
     if (!valid_mineral_cargo(order.minerals)) return false;
+    if(order.colonists && ((source->fleet && source->fleet->outpost==OutpostKind::CargoCache)
+        || (destination->fleet && destination->fleet->outpost==OutpostKind::CargoCache))) return false;
     if (order.colonists && native_orbital_race(state, player)
         && ((source->planet && !source->nativeOrbit) || (destination->planet && !destination->nativeOrbit))) return false;
     if(source->orbital || destination->orbital) {

@@ -1,5 +1,36 @@
 # Project status and development handoff
 
+## #54 paid deep-space cargo caches — 16 November 2026
+
+Mini-4/#300 and #301 have merged; main15c6b6a/treeb9cfe28 is the verified
+baseline. PR302 (native station defense/housing) remains separate in review.
+At the user's request, codex/deep-space-cargo-cache-54 starts independently from
+main and adds the next remaining #54 slice.
+
+Cargo Cache Kit costs100 work/I50/B20/G30, weighs100 kt and needs Construction6.
+The paid, transported constructor permanently anchors under existing clearance,
+one-ship/one-kit and no-population rules. Only deployment adds2000 kt material
+storage. Ordinary exact Cargo transfers conserve stocks and recheck capacity,
+ownership and co-location; population transfers reject atomically. Storage and
+local exchange survive empty operating tanks. Upkeep remains1 mg/year; no free
+stock, mobile bonus, scanner/relay/refueling service or freight automation.
+
+The received infrastructure table gains cargo/capacity and stock tooltips; the
+Cargo population controls are disabled for caches. Host/PBEM snapshots preserve
+physical, received, in-flight and delayed-loss material manifests separately.
+Save129/orders56 append enum IDs without changing old record layouts; race3 is
+unchanged. No new future-turn previews or polling.
+
+Validation: complete GCC14.2/Qt6.12 Debug build; focused18/18 in7.61s and full142/142 CTest in145.94s passed;177 local documentation targets checked. New core/editor suites cover paid production,
+route deployment, reversible Cargo/PBEM transfers, capacity/people rejection,
+offline storage and received-only serialization/UI. The old-ID header test is
+explicitly a byte-layout check, not a historical fixture. No uploaded save or new
+binary fixture is published. Source/PR/CI should be verified in GitHub; this
+slice requires review before merge. #54 stays open for fortified types, capture,
+statistics and computer infrastructure planning; #53/#63 frozen. Work/ and all
+previous branches retained. [Contract](deep-space-infrastructure.md#cargo-caches-54).
+
+
 ## PR300 repeat review — map destination selection leaves row editing first
 
 Review5912544366 on a531642 confirms the first P2/P3 fixes; its source CI43747640707

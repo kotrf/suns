@@ -17,7 +17,7 @@ A fleet's used cargo is therefore:
 
 `colonist cargo + ironium + boranium + germanium + scientific samples + xenocrystal`
 
-This total may not exceed the fitted design's cargo capacity.
+This total may not exceed the fitted design's cargo capacity, plus any physically deployed cargo-cache storage.
 
 ## Mass and fuel
 
@@ -80,6 +80,18 @@ mining, movement or the underlying simulation state.
 Waypoint programs add dynamic `LoadAllAvailable` and `UnloadAll` policies for each individual cargo type. Mineral policies transfer to or from the planet's surface stockpile, including an uncolonized world being worked by remote miners. Loading colonists requires a friendly colony and retains the configured population reserve. Unloading colonists at an enemy colony commits everyone selected by the policy to ground combat. `UnloadAll` with all cargo unloads minerals only if that invasion captures the colony; after a defeat they remain aboard. The amount is resolved on every actual arrival, so the same policy is safe in a repeating transport loop.
 
 Colonist loading uses the same hold. In particular, the dynamic `Load All` arrival action fills only cargo capacity left after any minerals already aboard.
+
+## Deep-space cargo caches (#54)
+
+A permanently deployed [cargo cache](deep-space-infrastructure.md#cargo-caches-54)
+adds 2000 kt to its ordinary hold; the paid kit grants no extra hold in flight.
+Use the same Cargo window and ordinary exact transfer orders between co-located
+owned fleets. Minerals and other material cargo share that finite capacity;
+colonist controls are disabled and the host rejects population transfers
+atomically. Returning materials works in the same turn's plan. Empty operating
+tanks do not remove storage or prevent material exchange, subject to ordinary
+current-contact/communications requirements. No stock is created on deployment,
+and no automatic freight network or new arrival policy is added.
 
 ## Colonization
 

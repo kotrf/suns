@@ -5,6 +5,7 @@ Fleet outpostSnapshot(const Fleet& carrier, const FleetTelemetry& t)
     auto f = carrier;
     f.position=t.position; f.destination=t.destination; f.warp=t.warp;
     f.fuel=t.fuel; f.damagePercent=t.damagePercent; f.colonists=t.colonists;
+    f.minerals=t.minerals; f.scienceSamples=t.scienceSamples; f.xenocrystal=t.xenocrystal;
     f.arrivalAction=t.arrivalAction; f.waypointQueue=t.waypointQueue; f.task=t.task;
     f.repeatOrders=t.repeatOrders; f.routeTemplate=t.routeTemplate; f.targetFleet=t.targetFleet;
     f.outpost=t.outpost; if (!t.ships.empty()) f.ships=t.ships;
@@ -44,7 +45,7 @@ void readOutposts(QDataStream& stream, GameState& state)
     }
     const auto read = [&](Fleet& f) {
         quint32 id{},packets{}; in >> id;
-        const auto newest=quint8(gReadSaveFormatVersion>=123?OutpostKind::SensorArray:gReadSaveFormatVersion>=97?OutpostKind::OrbitalShipyard:OutpostKind::CommunicationsRelay);
+        const auto newest=quint8(gReadSaveFormatVersion>=129?OutpostKind::CargoCache:gReadSaveFormatVersion>=123?OutpostKind::SensorArray:gReadSaveFormatVersion>=97?OutpostKind::OrbitalShipyard:OutpostKind::CommunicationsRelay);
         if (id!=f.id || !readEnum(in,f.outpost,newest)
             || !readEnum(in,f.telemetry.outpost,newest)
             || !readCount(in,packets) || packets!=f.telemetryInTransit.size()) { markCorrupt(in); return; }
