@@ -265,7 +265,7 @@ void attachRouteProgramDock(MainWindow& window)
     auto* removeButton = new QPushButton("Remove", routeGroup);
     auto* newWaypointButton = new QPushButton("New waypoint", routeGroup);
     newWaypointButton->setObjectName("routeNewWaypointButton");
-    newWaypointButton->setToolTip("Choose a new waypoint anywhere on the map; Esc cancels");
+    newWaypointButton->setToolTip("Click a point, star or another fleet on the map to add a waypoint; Esc cancels");
     routeButtons->addWidget(moveUpButton);
     routeButtons->addWidget(moveDownButton);
     routeButtons->addWidget(removeButton);
@@ -891,7 +891,7 @@ void attachRouteProgramDock(MainWindow& window)
     };
     QObject::connect(newWaypointButton, &QPushButton::clicked, panel, [=, &window] {
         leaveLegEditing();
-        window.beginRouteProgramMapTargetPick();
+        window.beginRouteProgramMapTargetPick(true);
     });
     const auto refreshRouteTable = [=, &window, lastRouteSignature = std::make_shared<QString>()] {
         const auto selectedFleet = window.selectedFleetForRouteProgram();

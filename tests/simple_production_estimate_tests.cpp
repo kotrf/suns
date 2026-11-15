@@ -27,6 +27,26 @@ void fixed_rate_and_priority()
     assert(state.turn == 10 && queue.front().remainingCost == 3);
 }
 
+void advanced_mine_batches_reserve_prior_minerals() {
+    auto state=make_demo_game();const auto& p=state.planets.front();
+    const ProductionItem batch{ProductionKind::AdvancedMine,production_cost(ProductionKind::AdvancedMine),0,ProductionAutomation::None,30};
+    const auto unit=production_item_mineral_cost(state,batch);
+    const MineralCargo cost{unit.ironium*30,unit.boranium*30,unit.germanium*30};
+    const auto enough=simple_production_estimates(state,p,{batch,batch},333,{cost.ironium*2,cost.boranium*2,cost.germanium*2},true);
+    assert(enough[0].remainingWork==300 && enough[1].remainingWork==300);
+    assert(enough[0].completionTurn==state.turn+1 && enough[1].completionTurn==state.turn+2);
+    const auto shortfall=simple_production_estimates(state,p,{batch,batch},333,{cost.ironium*1.5,cost.boranium*1.5,cost.germanium*1.5},true);
+    assert(shortfall[0].completionTurn==state.turn+1);
+    assert(shortfall[1].status==SimpleProductionStatus::MissingMinerals && !shortfall[1].completionTurn);
+    assert(shortfall[1].mineralBudgetKnown);
+    assert(std::abs(shortfall[1].mineralsBefore.ironium-cost.ironium*.5)<1e-8);
+    assert(std::abs(shortfall[1].missingMinerals.ironium-cost.ironium*.5)<1e-8);
+    assert(std::abs(shortfall[1].missingMinerals.boranium-cost.boranium*.5)<1e-8);
+    assert(std::abs(shortfall[1].missingMinerals.germanium-cost.germanium*.5)<1e-8);
+    const auto unknown=simple_production_estimates(state,p,{{ProductionKind::Mine,5,0,ProductionAutomation::Annual,1},batch},333,cost,true);
+    assert(!unknown[1].mineralBudgetKnown && !unknown[1].completionTurn);
+}
+
 void annual_and_nonlinear_prefixes()
 {
     const auto state = make_demo_game();
@@ -351,6 +371,7 @@ int main(int argc, char** argv)
 {
     if (argc == 2 && std::string(argv[1]) == "native") { native_surface_rows_preserve_fixed_estimates_and_row_indices(); return 0; }
     fixed_rate_and_priority();
+    advanced_mine_batches_reserve_prior_minerals();
     annual_and_nonlinear_prefixes();
     mineral_and_production_limits();
     missing_yard_and_design();

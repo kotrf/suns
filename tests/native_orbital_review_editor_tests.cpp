@@ -285,9 +285,10 @@ void paid_miner_eta_reserves_support_minerals_after_pending_cargo()
         assert(row->text(3).contains("(+1)") == enough);
         assert(row->text(2) == (enough ? "0" : "minerals"));
         const auto details = row->toolTip(0);
+        assert(details.contains("Available after earlier queue items and life support"));
         assert(details.contains(enough
-            ? "Shortfall after life support, before other builds: I 0.0 / B 0.0 / G 0.0 kt"
-            : "Shortfall after life support, before other builds: I 4.0 / B 0.0 / G 0.0 kt"));
+            ? "Shortfall for this batch: I 0.0 / B 0.0 / G 0.0 kt"
+            : "Shortfall for this batch: I 4.0 / B 0.0 / G 0.0 kt"));
         const auto summary = MainWindowTestAccess::productionSummary(w);
         assert(summary.contains("Stock after life support"));
         assert(summary.contains(enough ? "I 58.0 / B 16.0 / G 83.0 kt" : "I 54.0 / B 16.0 / G 83.0 kt"));

@@ -1,4 +1,5 @@
 #include "suns/game_state.hpp"
+#include "suns/campaign.hpp"
 #include "suns/communications.hpp"
 #include "suns/turn_processor.hpp"
 
@@ -232,6 +233,30 @@ void enemy_colonies_cannot_be_colonized()
     assert(close(survivingFleet->minerals.germanium, beforeCargo.germanium));
 }
 
+void split_singletons_receive_unique_project_numbers() {
+    auto state=make_demo_game();state.shipDesigns.front().name="Scout";
+    auto& source=state.fleets.front();source.name="Survey group";source.ships={{kScoutDesignId,2}};
+    source.telemetry={};source.telemetry=confirmed_fleet_telemetry(state,source);
+    for(unsigned i=1;i<=11;++i){auto other=state.fleets.front();other.id=i+1;other.name="Scout #"+std::to_string(i);other.ships={{kScoutDesignId,1}};other.telemetry={};state.fleets.push_back(other);}
+    state.players.push_back({2,"Other"});auto foreign=state.fleets.front();foreign.id=99;foreign.owner=2;foreign.name="Scout #12";foreign.position={10000,10000};foreign.telemetry={};state.fleets.push_back(foreign);
+    state.nextFleetId=100;
+    const PlayerOrders orders{1,{SplitFleetOrder{1,{{kScoutDesignId,1}}}}};
+    const auto preview=projected_cargo_order_state(make_player_view(state,1).state,orders);
+    assert(find_fleet(preview,1)->name=="Scout #12" && preview.fleets.back().name=="Scout #13");
+    const auto next=TurnProcessor{}.process(state,{orders});
+    assert(find_fleet(next,1)->name=="Scout #12" && find_fleet(next,100)->name=="Scout #13");
+    state.fleets.front().ships={{kScoutDesignId,3}};state.fleets.front().telemetry={};
+    state.fleets.front().telemetry=confirmed_fleet_telemetry(state,state.fleets.front());
+    const auto multi=TurnProcessor{}.process(state,{orders});
+    assert(find_fleet(multi,1)->name=="Survey group" && find_fleet(multi,100)->name=="Scout #12");
+    auto unicode=make_demo_game();std::string type;for(int i=0;i<40;++i)type+="Я";unicode.shipDesigns.front().name=type;
+    unicode.fleets.front().ships={{kScoutDesignId,2}};unicode.fleets.front().telemetry={};
+    unicode.fleets.front().telemetry=confirmed_fleet_telemetry(unicode,unicode.fleets.front());
+    const auto named=TurnProcessor{}.process(unicode,{orders});
+    assert(named.fleets.front().name==type.substr(0,76)+" #1");
+    assert(named.fleets.back().name==type.substr(0,76)+" #2");
+}
+
 } // namespace
 
 int main()
@@ -240,6 +265,7 @@ int main()
     remote_mining_output_sums_ship_counts();
     merge_preserves_destination_id_and_all_stacks();
     split_preserves_source_id_and_resources();
+    split_singletons_receive_unique_project_numbers();
     moving_fleets_cannot_be_reorganized();
     fleets_can_be_renamed_by_their_owner();
     colonization_dismantles_entire_fleet_and_recovers_minerals();

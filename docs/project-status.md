@@ -1,5 +1,24 @@
 # Project status and development handoff
 
+## Mini-4 / issue299 — 15 November2026
+
+Mini-3/#298 merged as main841c7bb with exact tested tree56f8940; review5910797560
+confirmed the last P2 and no new findings, all18 discussions resolved and issue296
+completed12/12. Main CI43716530552 succeeded. The user asked to continue; fresh
+Mini-4/#299 supplies the five concrete follow-ups implemented in this slice.
+
+The five changes provide a resizable Item column, numbered singleton split results,
+one-click map waypoint addition, whole-batch queue budgets/deficits and passenger-
+conditional radiation warnings. Existing manual target picking, identity, cargo,
+radiation rules and save128/orders55/race3 remain intact. UI estimates stay bounded
+received-state arithmetic, without future simulation or polling. Tests cover host/
+preview naming across foreign IDs, existing own names, multi-ship/UTF-8 results,
+fixed-rate cumulative ETA and batch deficits, actual Qt clicks/cancellation/legacy
+picking, passenger summaries, queue tooltips and Split/route PBEM.
+Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in16.38s and full140/140 CTest in160.19s passed. All184 local documentation targets in seven related documents were checked. Source/head/CI in the new Mini-4 PR; leave for review, no auto-merge.
+#56 retains ocean/atmosphere/system work; radical transformation needs its separate
+gameplay design. #53/#63 remain frozen; work/ and source/archive branches retained.
+
 ## PR298 eighth review — persistent production identities across reports
 
 Review5909761975 confirms replacement protection but finds that the current-year

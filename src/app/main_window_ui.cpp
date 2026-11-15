@@ -940,14 +940,15 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                 const bool target = quick || routeProgramMapTargetPickActive_;
                 const auto fleets = item->data(2).toList();
                 if ((kind == kMapItemOrbit && !quick) || (kind == 2 && fleets.size() > 1)) {
-                    showMapFleetPicker(fleets, mouse->position().toPoint(), target, quick);
+                    showMapFleetPicker(fleets, mouse->position().toPoint(), target, quick || routeProgramAppendPickedWaypoint_);
                     return true;
                 }
                 if (kind == kMapItemOrbit) kind = 1;
                 if (mouse->button() == Qt::RightButton || routeProgramMapTargetPickActive_) {
+                    const bool append=quick || routeProgramAppendPickedWaypoint_;
                     if (!selectRouteProgramMapTarget(kind, id)) return true;
                     cancelRouteProgramMapTargetPick();
-                    if (mouse->button() == Qt::RightButton)
+                    if (append)
                         emit routeProgramQuickTargetRequested(kind, id);
                 } else {
                     if (!selectWorkspaceObject(kind, id)) return true;
@@ -958,9 +959,11 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
             if (routeProgramMapTargetPickActive_ && mouse->button() == Qt::LeftButton) {
                 const auto position = view_->mapToScene(mouse->position().toPoint());
+                const bool append=routeProgramAppendPickedWaypoint_;
                 cancelRouteProgramMapTargetPick();
                 emit routeProgramMapPositionPicked(position.x(), position.y());
-                statusBar()->showMessage("Waypoint coordinates selected; press Add waypoint to confirm");
+                if(append)emit routeProgramQuickTargetRequested(4,0);
+                else statusBar()->showMessage("Waypoint coordinates selected; press Add waypoint to confirm");
                 return true;
             }
         }

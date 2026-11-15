@@ -97,7 +97,7 @@ public:
     bool appendStargateRouteStep(PlanetId source, PlanetId destination, std::uint8_t warp, bool resonant = false);
     bool appendFleetTargetWaypoint(
         FleetId targetFleet, std::uint8_t warp, FleetArrivalAction arrivalAction);
-    bool beginRouteProgramMapTargetPick();
+    bool beginRouteProgramMapTargetPick(bool appendWaypoint = false);
     void cancelRouteProgramMapTargetPick();
     [[nodiscard]] bool routeProgramMapTargetPickActive() const;
     [[nodiscard]] QString routeProgramMapTargetName(int kind, std::uint32_t id) const;
@@ -366,6 +366,7 @@ private:
     bool mapLabelsRefreshPending_{};
     QPointer<QMenu> mapFleetPicker_;
     bool routeProgramMapTargetPickActive_{};
+    bool routeProgramAppendPickedWaypoint_{};
     bool mapDisplayApplyPending_{};
     bool planetPolishRefreshPending_{};
     bool shuttingDown_{};

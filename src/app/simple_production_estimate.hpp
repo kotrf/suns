@@ -26,6 +26,8 @@ struct SimpleProductionEstimate {
     std::uint64_t remainingWork{};
     std::uint32_t effectiveQuantity{};
     std::uint32_t skippedQuantity{};
+    MineralCargo batchMinerals, mineralsBefore, missingMinerals;
+    bool mineralBudgetKnown{};
 };
 
 // A display estimate, not a future-turn simulation. The caller supplies the
@@ -103,6 +105,14 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
         const bool validCost = std::isfinite(batchCost.ironium) && batchCost.ironium >= 0
             && std::isfinite(batchCost.boranium) && batchCost.boranium >= 0
             && std::isfinite(batchCost.germanium) && batchCost.germanium >= 0;
+        estimate.batchMinerals=batchCost;
+        estimate.mineralBudgetKnown=prefixKnown && fixed && !automatic && validCost;
+        if(estimate.mineralBudgetKnown) {
+            estimate.mineralsBefore=availableMinerals;
+            estimate.missingMinerals={std::max(0.0,batchCost.ironium-availableMinerals.ironium),
+                std::max(0.0,batchCost.boranium-availableMinerals.boranium),
+                std::max(0.0,batchCost.germanium-availableMinerals.germanium)};
+        }
         if (housingBlocked) estimate.status = SimpleProductionStatus::HousingTooSmall;
         else if (item.automation != ProductionAutomation::None) estimate.status = SimpleProductionStatus::AnnualRule;
         else if (!fixed) estimate.status = SimpleProductionStatus::Nonlinear;

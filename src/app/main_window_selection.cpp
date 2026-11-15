@@ -186,8 +186,10 @@ void MainWindow::installDeferredMapSelectionHandler()
         const auto kind = item->data(1).toInt();
         const auto id = static_cast<std::uint32_t>(item->data(0).toUInt());
         if (routeProgramMapTargetPickActive_) {
+            const bool append=routeProgramAppendPickedWaypoint_;
             if (!selectRouteProgramMapTarget(kind, id)) return;
             cancelRouteProgramMapTargetPick();
+            if(append)emit routeProgramQuickTargetRequested(kind,id);
 
             // Restore the source-fleet highlight after the target item caused
             // QGraphicsScene's ordinary selection to move to itself.
