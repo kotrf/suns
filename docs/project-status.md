@@ -1,5 +1,20 @@
 # Project status and development handoff
 
+## PR300 repeat review — map destination selection leaves row editing first
+
+Review5912544366 on a531642 confirms the first P2/P3 fixes; its source CI43747640707
+passed140/140. The new P2 erased a selected row's Unload action and reset the next
+fleet target when normalizing incompatible actions. Two new actual Qt regressions
+failed before the fix: right-clicking a fleet with that row selected, and selecting
+the row again while New waypoint is active. Both object and coordinate pick handlers
+now leave row editing before applying a destination. Quick append uses that prepared
+draft without a later edit-mode transition. Tests retain the first action/cargo/Warp,
+bind the next waypoint to the picked FleetId, select/edit only that next leg and
+verify actual Boranium unloading through PBEM and a physical turn.
+Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in13.27s and full140/140 CTest in130.87s passed. All186 local documentation targets in seven related documents were checked. Save128/orders55/race3 unchanged; no future simulations/polling.
+PR300 remains open for repeat review, all three threads open until merge. Check
+head/tree/CI in GitHub. #56 open; #53/#63 frozen; work/ and all branches retained.
+
 ## PR300 first review — preserve arrival actions and paid-refit mineral status
 
 Review5912119102 on05649bf found P2 implicit merging when New waypoint targets

@@ -17,6 +17,8 @@ on main841c7bb after merged Mini-3/#298.
   Friendly fleet targets preserve No action or Transfer fuel (including the
   reserve); Merge is used only after explicitly selecting it. Incompatible
   actions revert to No action when the target type changes.
+  Map object/coordinate picking exits row editing before applying the new target,
+  so normalization cannot rewrite an existing leg or reset the picked destination.
   The ordinary Move order and PBEM format carry the resulting route.
 - Fixed production batches reserve known minerals for earlier queue items.
   Tooltips show per-unit cost, the whole buildable batch, the remaining mineral
@@ -47,3 +49,11 @@ through PBEM and a physical turn. Refit tests pay work in a physical turn, check
 Work/tooltip, supply the bill and verify completion. Scalar tests cover known
 and uncertain prefixes, signed recovery and invalid quotes.
 Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in13.52s and full140/140 CTest in137.30s passed. All185 local documentation targets in seven related documents were checked.
+
+Repeat review [5912544366](https://github.com/kotrf/suns/pull/300#pullrequestreview-5912544366)
+confirmed both fixes and found a P2 in adding a destination with a route row
+selected. Right-click and New waypoint with a reselected row both failed new Qt
+regressions before the fix. Tests preserve the original Boranium unload and Warp,
+bind the new leg to the clicked FleetId, edit only the newly selected leg and
+verify actual unloading after PBEM export/import and a physical turn.
+Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in13.27s and full140/140 CTest in130.87s passed. All186 local documentation targets in seven related documents were checked.

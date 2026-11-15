@@ -11,6 +11,7 @@
 #include <QDialogButtonBox>
 #include <QGraphicsView>
 #include <QMouseEvent>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -147,6 +148,50 @@ struct MainWindowTestAccess {
         const auto next=TurnProcessor{}.process(w.state_,{});
         assert(next.planets.front().productionQueue.empty() && fleet_ship_count(next.fleets.front(),to.id)==1);
     }
+    static void selectedLegMapAppend(MainWindow& w,bool newWaypoint) {
+        load(w);auto source=w.state_.fleets.front();
+        source.position={10,-5};source.destination.reset();source.arrivalAction.reset();
+        source.waypointQueue.clear();source.pendingCommands.clear();source.repeatOrders=false;
+        source.fuel=fleet_fuel_capacity(w.state_,source);source.minerals={0,3,0};
+        auto target=source;target.id=2;target.name="Next rendezvous";target.position={35,-20};target.minerals={};
+        for(auto* f : {&source,&target}) {f->telemetry={};f->telemetry=confirmed_fleet_telemetry(w.state_,*f);}
+        w.state_.fleets={source,target};w.state_.nextFleetId=3;w.state_.wormholeRules.spawnChancePerTurn=0;
+        w.rebuildScene();emit w.routeProgramContextChanged(true);
+        auto* action=w.findChild<QComboBox*>("routeArrivalActionCombo");
+        auto* cargo=w.findChild<QComboBox*>("routeCargoCombo");
+        auto* warp=w.findChild<QProgressBar*>("routeWarpSelector");
+        auto* rows=w.findChild<QTreeWidget*>("routeProgramQueue");assert(action && cargo && warp && rows);
+        action->setCurrentIndex(action->findData(int(FleetArrivalActionKind::UnloadAll)));
+        cargo->setCurrentIndex(cargo->findData(int(FleetCargoKind::Boranium)));warp->setValue(5);
+        w.findChild<QPushButton*>("routeAddButton")->click();
+        assert(rows->topLevelItemCount()==1);rows->setCurrentItem(rows->topLevelItem(0));
+        const auto first=std::get<MoveFleetOrder>(w.pendingOrders_.orders.front());
+        assert(first.arrivalAction.kind==FleetArrivalActionKind::UnloadAll && first.arrivalAction.cargo==FleetCargoKind::Boranium);
+        const auto control=TurnProcessor{}.process(w.state_,{w.pendingOrders_});
+        assert(control.fleets.front().minerals.boranium==0); // The original route really unloads.
+        if(newWaypoint) {
+            w.findChild<QPushButton*>("routeNewWaypointButton")->click();
+            rows->setCurrentItem(rows->topLevelItem(0)); // Reselect while map picking is still active.
+            assert(w.routeProgramMapTargetPickActive());
+        }
+        click(w,target.position,newWaypoint ? Qt::LeftButton : Qt::RightButton);
+        assert(w.pendingOrders_.orders.size()==1);
+        const auto& order=std::get<MoveFleetOrder>(w.pendingOrders_.orders.front());
+        assert(order.arrivalAction==first.arrivalAction && order.warp==first.warp);
+        assert(order.targetFleet==0 && same_position(order.destination,first.destination));
+        assert(order.queuedWaypoints.size()==1 && order.queuedWaypoints.front().targetFleet==target.id);
+        assert(same_position(order.queuedWaypoints.front().destination,target.position));
+        assert(order.queuedWaypoints.front().arrivalAction.kind==FleetArrivalActionKind::None);
+        assert(rows->topLevelItemCount()==2 && rows->currentItem()==rows->topLevelItem(1));
+        warp->setValue(3);assert(std::get<MoveFleetOrder>(w.pendingOrders_.orders.front()).warp==5);
+        assert(std::get<MoveFleetOrder>(w.pendingOrders_.orders.front()).queuedWaypoints.front().warp==3);
+        QTemporaryDir dir;QString error;TurnOrderFileData packet{1,w.state_.turn,1,w.pendingOrders_,w.pendingDescriptions_},decoded;
+        assert(write_turn_order_file(dir.filePath("selected-leg.sunsorders"),packet,error));
+        assert(read_turn_order_file(dir.filePath("selected-leg.sunsorders"),decoded,error));
+        const auto next=TurnProcessor{}.process(w.state_,{decoded.orders});
+        assert(next.fleets.size()==2 && next.fleets.front().minerals.boranium==0);
+        assert(std::abs(next.planets.front().minerals.boranium-control.planets.front().minerals.boranium)<1e-8);
+    }
     static void radiation(MainWindow& w) {
         load(w);auto& design=w.state_.shipDesigns[1];
         for(auto& component:design.components)if(component==ShipComponentType::FusionDrive)component=ShipComponentType::RadiatingRamScoopDrive;
@@ -178,7 +223,10 @@ int main(int argc,char** argv) {
     if(argc==2) {
         if(std::string(argv[1])=="arrival") {MainWindowTestAccess::fleetArrivalChoice(w);return 0;}
         if(std::string(argv[1])=="refit") {MainWindowTestAccess::paidRefitMinerals(w);return 0;}
+        if(std::string(argv[1])=="selected-quick") {MainWindowTestAccess::selectedLegMapAppend(w,false);return 0;}
+        if(std::string(argv[1])=="selected-new") {MainWindowTestAccess::selectedLegMapAppend(w,true);return 0;}
     }
     MainWindowTestAccess::navigation(w);MainWindowTestAccess::queueBudget(w);MainWindowTestAccess::radiation(w);MainWindowTestAccess::split(w);
     MainWindowTestAccess::fleetArrivalChoice(w);MainWindowTestAccess::paidRefitMinerals(w);
+    MainWindowTestAccess::selectedLegMapAppend(w,false);MainWindowTestAccess::selectedLegMapAppend(w,true);
 }

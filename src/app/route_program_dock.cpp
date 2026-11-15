@@ -779,23 +779,6 @@ void attachRouteProgramDock(MainWindow& window)
                 pickedTargetLabel->setText("Target picking canceled; current target unchanged.");
             }
         });
-    QObject::connect(&window, &MainWindow::routeProgramMapTargetPicked, panel,
-        [=, &window](int kind, std::uint32_t id) {
-            rebuildDestinationChoices(kind, id);
-            pickedTargetLabel->show();
-            pickedTargetLabel->setText(QString("Target: <b>%1</b>")
-                .arg(window.routeProgramMapTargetName(kind, id).toHtmlEscaped()));
-        });
-    QObject::connect(&window, &MainWindow::routeProgramMapPositionPicked, panel,
-        [=, &window](double x, double y) {
-            *coordinateTarget = Position{x, y};
-            rebuildDestinationChoices(4, 0);
-            pickedTargetLabel->show();
-            pickedTargetLabel->setText(QString("Target: coordinates (%1, %2)")
-                .arg(x, 0, 'f', 1).arg(y, 0, 'f', 1));
-            syncEditor(false);
-            drawRouteOverlay(window, *coordinateTarget);
-        });
     auto* cancelTargetShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), panel);
     QObject::connect(cancelTargetShortcut, &QShortcut::activated, panel,
         [&window] { window.cancelRouteProgramMapTargetPick(); });
@@ -892,6 +875,28 @@ void attachRouteProgramDock(MainWindow& window)
         routeTree->setCurrentItem(nullptr);
         syncRouteSelection();
     };
+    // A picked map destination belongs to a new draft. Leave the selected
+    // row before target-type changes can emit action edits or refresh the
+    // route synchronously; that refresh would also overwrite the picked target.
+    QObject::connect(&window, &MainWindow::routeProgramMapTargetPicked, panel,
+        [=, &window](int kind, std::uint32_t id) {
+            leaveLegEditing();
+            rebuildDestinationChoices(kind, id);
+            pickedTargetLabel->show();
+            pickedTargetLabel->setText(QString("Target: <b>%1</b>")
+                .arg(window.routeProgramMapTargetName(kind, id).toHtmlEscaped()));
+        });
+    QObject::connect(&window, &MainWindow::routeProgramMapPositionPicked, panel,
+        [=, &window](double x, double y) {
+            leaveLegEditing();
+            *coordinateTarget = Position{x, y};
+            rebuildDestinationChoices(4, 0);
+            pickedTargetLabel->show();
+            pickedTargetLabel->setText(QString("Target: coordinates (%1, %2)")
+                .arg(x, 0, 'f', 1).arg(y, 0, 'f', 1));
+            syncEditor(false);
+            drawRouteOverlay(window, *coordinateTarget);
+        });
     QObject::connect(newWaypointButton, &QPushButton::clicked, panel, [=, &window] {
         leaveLegEditing();
         window.beginRouteProgramMapTargetPick(true);
@@ -983,8 +988,7 @@ void attachRouteProgramDock(MainWindow& window)
         window.startSelectedFleetWorkHere(actionFromControls(actionCombo, cargoCombo, reserveSpin, fuelReserveSpin, colonyPlan));
     });
     QObject::connect(&window, &MainWindow::routeProgramQuickTargetRequested, panel,
-        [appendCurrentTarget, leaveLegEditing](int, std::uint32_t) {
-            leaveLegEditing();
+        [appendCurrentTarget](int, std::uint32_t) {
             appendCurrentTarget();
         });
     QObject::connect(moveUpButton, &QPushButton::clicked, panel, [&window, routeTree, selectedRouteIndex] {
