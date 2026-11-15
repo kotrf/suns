@@ -2727,6 +2727,7 @@ TurnResult TurnProcessor::process_with_events(
     const std::vector<PlayerOrders>& submitted_orders) const
 {
     GameState next = current;
+    detail::assign_production_queue_ids(next);
     dispatch_fleet_report_outbox(next);
     // Establish a baseline for headless callers too, before overdue reports
     // are delivered at the current planning boundary.
@@ -3098,6 +3099,7 @@ TurnResult TurnProcessor::process_with_events(
     deploy_outposts(next, next.turn + 1);
     observe_current_wormholes(next, next.turn + 1);
     refresh_planetary_engineering(next);
+    detail::assign_production_queue_ids(next);
     observe_current_sensor_coverage(next, next.turn + 1);
     observe_enemy_fleet_contacts(next, next.turn + 1);
     std::vector<std::pair<PlayerId, std::uint64_t>> researchByPlayer;
@@ -3166,6 +3168,7 @@ TurnResult TurnProcessor::process_with_events(
     refresh_planetary_engineering(next);
     grow_colonies(next);
     refresh_planetary_engineering(next);
+    detail::assign_production_queue_ids(next);
     publish_planetary_engineering_reports(next,current);
     publish_habitat_reports(next,current);
     publish_native_support_reports(next,current);

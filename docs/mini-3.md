@@ -57,6 +57,10 @@ empty templates. Historical records do not become new project choices.
 
 ## Formats and verification
 
+Current save128 / orders55 / race3 adds stable production IDs in the trailing PQID
+extension described in the eighth-review section below. The original Mini-3
+format change follows; its existing item and order records remain intact.
+
 Save 127 / orders 55 / race 3 append DeleteShipDesignOrder and RefitShipOrder as tags 38/39
 and append ProductionKind::ShipRefit. Only the new production kind writes its
 fleet/source/target payload. A retired project's existing placement-count word
@@ -203,3 +207,44 @@ cancellation after a fresh report. PBEM tests persist/reload both host and playe
 turn, validate/export/reload the order packet and preserve the replacement batch
 when the stale Remove reaches the host. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 22.39s and full 139/139 CTest in 163.85s passed. All 183 local documentation targets in six related documents were checked. No new fixtures, file layout
 change, ordinary UI trace pass, polling or future-year forecast.
+
+
+## PR298 eighth review — remote editing with stable row identities
+
+[Review5909761975](https://github.com/kotrf/suns/pull/298#pullrequestreview-5909761975)
+confirms replacement protection and finds a functional P2 in the seventh-review
+policy. A colony with permanent two-year signal latency never receives a current-
+year report, so Remove cannot cancel even a persistent unchanged annual rule.
+The regression fails with the previous matching policy. That policy is superseded.
+
+Each physical production row now receives a monotonically allocated ID scoped to
+its planet. IDs persist with remaining cost/quantity changes and row movement;
+new batches, replacement templates and generated partial jobs receive fresh IDs.
+The physical allocator survives empty queues and ownership changes. The host binds
+received original rows by ID, independent of report age; a missing completed row
+never aliases its identical successor. Existing order/ordinal provenance still
+handles rows inserted by this submission and earlier rejected host commands.
+
+Save128 appends a bounded PQID block containing each physical allocator/queue and
+IDs for every received or pending owner habitat queue. The reader validates record
+keys, lengths, duplicate nonzero IDs and physical allocator bounds. Historical item
+layouts and order packets are unchanged (orders55/race3). Legacy saves retain zero
+IDs, without attributing old observations to current physical jobs. A current final
+complete legacy receipt can still bind safely. Otherwise Qt reports that a newer
+colony report is needed and preserves the row and pending orders. Legacy-only
+validation traces commands on the attempted edit, so newly inserted rows can still
+be removed. Normal tracked editing adds no UI trace pass or future simulation.
+The next actual host observations carry IDs through the normal signal delay and
+restore remote editing. Player exports derive their allocator solely from received
+IDs; hidden allocation changes cannot alter exported bytes.
+
+Tests cover an unchanged single annual rule and an annual rule plus progressing
+work, three consecutive planning years with exactly two-year delay, both reorder
+anchors and the previous completed/replacement cases with real distinct IDs. A
+surviving partial row remains cancellable despite delayed progress. Actual Qt Remove
+is exported/validated as orders55 after saving/reloading both host and player turn;
+subsequent years reload pending report IDs as well. Additional checks migrate the
+unchanged base127 layout, show immediate legacy UI rejection with no phantom order,
+allow a new current row, recover after new reports, reject duplicated persisted IDs
+and compare byte-identical player exports after hidden allocator changes.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.98s and full 139/139 CTest in 136.57s passed. All 183 local documentation targets in six related documents were checked. No user save or new binary fixture is published.

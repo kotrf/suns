@@ -1,5 +1,28 @@
 # Project status and development handoff
 
+## PR298 eighth review — persistent production identities across reports
+
+Review5909761975 confirms replacement protection but finds that the current-year
+receipt requirement permanently prevents editing remote queues. The exact two-year
+latency regression fails with the previous policy. Stable per-colony row IDs now
+survive progress, quantity changes, reorders and received/in-flight reports. Host
+allocation never reuses a removed row's ID. Original Cancel/Reorder targets bind by
+ID at any report age; same-submission command provenance still handles rejection.
+Missing completed IDs skip without redirecting to replacement work.
+
+Save128 adds a bounded PQID extension for physical allocators/queues and all frozen
+owner reports; base item layouts and orders55/race3 remain unchanged. Old snapshots
+retain zero IDs; only a current complete receipt can establish their identity.
+Qt rejects an unidentifiable legacy edit immediately with a reason, preserving
+both queue and pending orders. New same-submission rows remain editable; later
+real reports restore legacy remote editing. Physical allocator state is redacted
+from player exports. Tests cover one-rule and two-row queues over three consecutive
+years with exactly two-year latency, both reorder anchors, actual Qt Remove through
+PBEM host/player persistence, legacy127 migration/recovery, duplicate-ID corruption,
+hidden-allocation byte equality and previous replacement/template/rejection cases.
+Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 20.98s and full 139/139 CTest in 136.57s passed. All 183 local documentation targets in six related documents were checked. Source/CI in PR298; repeat-review discussions remain open, no merge.
+#56 open;#53/#63 frozen. Work/ and branches retained.
+
 ## PR298 seventh review — stale rows require a current final receipt
 
 Review5909590605 confirms the previous fixes and finds a replacement order with

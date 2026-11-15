@@ -47,5 +47,8 @@ bool apply_production_template(Planet& planet, const Player& player, const std::
 void apply_default_production_template(const GameState& state, Planet& planet);
 [[nodiscard]] GameState planned_production_state(const GameState& state, const PlayerOrders& pending);
 [[nodiscard]] std::vector<detail::QueueEditTarget> production_queue_edit_targets(const GameState& received, const PlayerOrders&);
+// Only legacy untracked rows need a command trace; tracked reports work at any age.
+[[nodiscard]] std::optional<std::string> production_queue_edit_error(
+    const GameState& received, const PlayerOrders&, const Order& proposed);
 
 } // namespace suns

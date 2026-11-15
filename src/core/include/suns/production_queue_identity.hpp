@@ -4,6 +4,9 @@
 #include <optional>
 
 namespace suns::detail {
+// Host-only allocation, before observations. Reports retain these IDs verbatim.
+void assign_production_queue_ids(GameState&);
+bool current_production_queue_receipt(const GameState&, const Planet&);
 // Transient command provenance, reconstructed from the received queue and orders.
 // It is deliberately independent of a host's acceptance of earlier commands.
 struct QueueRowOrigin {

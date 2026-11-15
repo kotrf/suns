@@ -1,5 +1,13 @@
 # Multiplayer turn exchange
 
+Save128 / orders55 / race3 adds the trailing PQID extension: stable per-colony
+production-row IDs and physical allocators, plus the same IDs in received/in-flight
+owner reports. This lets Cancel/Reorder identify a surviving job despite signal
+latency without confusing a completed job with a new identical batch. Historical
+production/order records keep their layouts. Older reports retain zero IDs; the
+editor explains an unsafe legacy edit until a real newer report arrives. Player
+exports derive allocator values from received rows, without leaking hidden work.
+
 Save127 / orders55 add [Mini-3](mini-3.md) design deletion and one-ship dock refit
 orders. The new refit production kind carries its fleet/source/target IDs; all older
 production kinds keep their record layout. Archive flags are gated by save127,

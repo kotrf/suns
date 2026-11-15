@@ -41,7 +41,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 127;
+constexpr quint32 kSaveFormatVersion = 128;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -2437,6 +2437,7 @@ void readProductionExtension(QDataStream& stream, GameState& value)
 #include "fleet_recycling_save.inc"
 #include "surface_minerals_save.inc"
 #include "economy_save.inc"
+#include "production_queue_save.inc"
 
 void writeGameState(QDataStream& stream, const GameState& value)
 {
@@ -3389,6 +3390,7 @@ bool write_save_game_file(const QString& filePath, const SaveGameData& data, QSt
     writeEconomy(stream,data.state);
     writePopulationRules(stream,data.state);
     writeNativeOrbit(stream,data.state);
+    writeProductionQueueIds(stream,data.state);
 
     if (stream.status() != QDataStream::Ok) {
         file.cancelWriting();
@@ -3526,6 +3528,7 @@ bool read_save_game_file(const QString& filePath, SaveGameData& data, QString& e
     if(version>=112) readPopulationRules(stream,loaded.state);
     else for (auto& player : loaded.state.players) player.race.populationGrowthRate = 10;
     if(version>=115) readNativeOrbit(stream,loaded.state);
+    if(version>=128) readProductionQueueIds(stream,loaded.state);
     loaded.galaxyConfig.slowResearch = loaded.state.slowResearch;
     if (version<80 && loaded.mode==SessionMode::PlayerTurn) loaded.state.mediumObserver=loaded.pendingOrders.player;
     if (version>=80 && loaded.mode==SessionMode::PlayerTurn

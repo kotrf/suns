@@ -528,8 +528,14 @@ void MainWindow::removeSelectedProductionItem()
     if (row < 0) return;
     const auto queue = plannedProductionQueue(*planet);
     if (static_cast<std::size_t>(row) >= queue.size()) return;
+    const Order cancel=CancelProductionOrder{planet->id,static_cast<std::uint32_t>(row)};
+    if(const auto reason=production_queue_edit_error(receivedPlayerState(),pendingOrders_,cancel)) {
+        productionQueueSummary_->setText(QString::fromStdString(*reason));
+        if(auto* details=findChild<QLabel*>("productionExtendedSummary"))details->setText(productionQueueSummary_->text());
+        return;
+    }
     appendPendingOrder(
-        CancelProductionOrder{planet->id, static_cast<std::uint32_t>(row)},
+        cancel,
         QString("Cancel %1 at %2")
             .arg(productionItemName(planned_ship_design_state(state_, pendingOrders_), queue[row]))
             .arg(QString::fromStdString(planet->name)));
@@ -545,13 +551,15 @@ void MainWindow::moveSelectedProductionItem(int direction)
     const auto to = from + direction;
     if (from < 0 || to < 0 || to >= productionQueueTree_->topLevelItemCount()) return;
 
+    const Order move=ReorderProductionQueueOrder{planet->id,static_cast<std::uint32_t>(from),static_cast<std::uint32_t>(to)};
+    if(const auto reason=production_queue_edit_error(receivedPlayerState(),pendingOrders_,move)) {
+        productionQueueSummary_->setText(QString::fromStdString(*reason));
+        if(auto* details=findChild<QLabel*>("productionExtendedSummary"))details->setText(productionQueueSummary_->text());
+        return;
+    }
     const auto itemName = productionQueueTree_->topLevelItem(from)->text(1);
     appendPendingOrder(
-        ReorderProductionQueueOrder{
-            planet->id,
-            static_cast<std::uint32_t>(from),
-            static_cast<std::uint32_t>(to),
-        },
+        move,
         QString("Move %1 to production position %2 at %3")
             .arg(itemName)
             .arg(to + 1)

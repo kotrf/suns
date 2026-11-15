@@ -4,6 +4,7 @@
 #include "save_game.hpp"
 #include "mineral_stock_panel.hpp"
 #include "suns/production.hpp"
+#include "suns/communications.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QLineEdit>
@@ -15,6 +16,8 @@
 #include <QGraphicsItemGroup>
 #include <QGraphicsRectItem>
 #include <QTemporaryDir>
+#include <QFile>
+#include <QDataStream>
 #include <QTextBrowser>
 #include <QLabel>
 #include <QMouseEvent>
@@ -78,12 +81,105 @@ struct MainWindowTestAccess {
         assert(removed!=hosted.shipDesigns.end() && removed->retired);
         dialog->close();
     }
+    static void remoteQueueEditing(MainWindow& w) {
+        auto state=make_demo_game();state.players[0].technology.researchAllocationPercent=0;state.players.push_back({2,"Host"});
+        const auto star=state.stars[1].id;state.stars[1].position={300,0};state.fleets.clear();state.planets[0].radar=PlanetaryRadarLevel::Local;
+        auto& p=state.planets[1];const auto id=p.id;p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::Local;p.minerals={10000,10000,10000};
+        p.productionQueue={{ProductionKind::Factory,production_cost(ProductionKind::Factory),0,ProductionAutomation::Annual,1},{ProductionKind::Mine,1000000}};
+        assert(communication_delay_turns(state,1,state.stars[1].position)==2);
+        set_survey_level(state,1,star,SurveyLevel::DeepSurvey,state.turn);
+        const auto originalSetup=state;
+        for(int year=0;year<8;++year)state=TurnProcessor{}.process(state,{});
+        QTemporaryDir dir;assert(dir.isValid());QString error;
+        SaveGameData host;host.mode=SessionMode::Host;host.campaignId=1;host.turnToken=2;host.playerTokens={{1,1},{2,2}};host.pendingOrders={2,{}};
+        const auto bytes=[](const QString& path){QFile file(path);assert(file.open(QIODevice::ReadOnly));return file.readAll();};
+        const auto openPlayer=[&](const SaveGameData& h) {
+            auto player=make_player_turn(h,1);player.selectedStar=star;
+            assert(write_save_game_file(dir.filePath("player.sunsturn"),player,error));
+            assert(w.loadGameFromPath(dir.filePath("player.sunsturn")));
+            w.selection_.star=star;w.rebuildScene();w.refreshProductionQueue();
+            assert(w.productionQueueTree_->topLevelItemCount()==2);
+            w.productionQueueTree_->setCurrentItem(w.productionQueueTree_->topLevelItem(0));
+        };
+        for(int year=0;year<3;++year) {
+            host.state=state;
+            assert(write_save_game_file(dir.filePath("host.suns"),host,error));
+            SaveGameData loaded;assert(read_save_game_file(dir.filePath("host.suns"),loaded,error));
+            assert(loaded.state.planets[1].productionQueue==host.state.planets[1].productionQueue);
+            openPlayer(loaded);
+            const auto& received=w.receivedPlayerState();
+            const auto report=std::find_if(received.players[0].surveyKnowledge.begin(),received.players[0].surveyKnowledge.end(),[&](const auto& k){return k.star==star;});
+            assert(report!=received.players[0].surveyKnowledge.end() && report->observedTurn+2==received.turn);
+            assert(received.planets[1].productionQueue[0].queueId==loaded.state.planets[1].productionQueue[0].queueId);
+            assert(received.planets[1].productionQueue[0].queueId);
+            w.productionRemoveButton_->click();QApplication::processEvents();
+            assert(w.productionQueueTree_->topLevelItemCount()==1 && w.pendingOrders_.orders.size()==1);
+            assert(std::holds_alternative<CancelProductionOrder>(w.pendingOrders_.orders[0]));
+            TurnOrderFileData packet{w.campaignId_,w.state_.turn,w.turnToken_,w.pendingOrders_,w.pendingDescriptions_},decoded;
+            assert(write_turn_order_file(dir.filePath("remove.sunsorders"),packet,error));
+            assert(read_turn_order_file(dir.filePath("remove.sunsorders"),decoded,error));
+            assert(validate_turn_submission(loaded,decoded).isEmpty());
+            const auto next=TurnProcessor{}.process(loaded.state,{decoded.orders});
+            assert(next.planets[1].industry==loaded.state.planets[1].industry);
+            assert(next.planets[1].productionQueue.size()==1 && next.planets[1].productionQueue[0].kind==ProductionKind::Mine);
+            // Hidden physical allocations cannot change the exported turn bytes.
+            auto hidden=loaded;hidden.state.planets[1].nextProductionQueueId+=100;
+            assert(write_save_game_file(dir.filePath("hidden.sunsturn"),make_player_turn(hidden,1),error));
+            assert(write_save_game_file(dir.filePath("visible.sunsturn"),make_player_turn(loaded,1),error));
+            assert(bytes(dir.filePath("hidden.sunsturn"))==bytes(dir.filePath("visible.sunsturn")));
+            state=TurnProcessor{}.process(loaded.state,{});
+        }
+        // An empty queue must retain its allocator through a host save/reload.
+        auto initial=originalSetup;auto& colony=initial.planets[1];colony.population=6000;colony.industry=0;
+        colony.productionQueue={{ProductionKind::Factory,4}};detail::assign_production_queue_ids(initial);
+        const auto completedId=colony.productionQueue[0].queueId;
+        set_survey_level(initial,1,star,SurveyLevel::DeepSurvey,initial.turn);
+        auto empty=host;empty.state=TurnProcessor{}.process(initial,{});assert(empty.state.planets[1].productionQueue.empty());
+        assert(write_save_game_file(dir.filePath("empty.suns"),empty,error));
+        SaveGameData restored;assert(read_save_game_file(dir.filePath("empty.suns"),restored,error));
+        assert(restored.state.planets[1].nextProductionQueueId>completedId);
+        const auto successor=TurnProcessor{}.process(restored.state,{{1,{QueueProductionBatchOrder{id,ProductionKind::Factory,1}}}});
+        assert(successor.planets[1].productionQueue.size()==1 && successor.planets[1].productionQueue[0].remainingCost>0);
+        assert(successor.planets[1].productionQueue[0].queueId>completedId);
+        assert(make_player_view(successor,1).state.planets[1].productionQueue[0].queueId==completedId);
+        const auto retained=TurnProcessor{}.process(successor,{{1,{CancelProductionOrder{id,0}}}});
+        assert(retained.planets[1].industry==2);
+        // The base v127 bytes are unchanged; absent PQID must not invent old IDs.
+        host.state=state;assert(write_save_game_file(dir.filePath("host.suns"),host,error));
+        auto old=bytes(dir.filePath("host.suns"));const auto extension=old.lastIndexOf("PQID");assert(extension>0);
+        old.truncate(extension);{QDataStream out(&old,QIODevice::ReadWrite);assert(out.device()->seek(4));out<<quint32(127);}
+        {QFile file(dir.filePath("legacy.suns"));assert(file.open(QIODevice::WriteOnly));assert(file.write(old)==old.size());}
+        SaveGameData legacy;assert(read_save_game_file(dir.filePath("legacy.suns"),legacy,error));
+        assert(!legacy.state.planets[1].productionQueue[0].queueId && legacy.state.planets[1].nextProductionQueueId==1);
+        openPlayer(legacy);w.productionRemoveButton_->click();QApplication::processEvents();
+        assert(w.pendingOrders_.orders.empty() && w.productionQueueTree_->topLevelItemCount()==2);
+        assert(w.productionQueueSummary_->text().contains("newer colony report"));
+        w.moveSelectedProductionItem(1);assert(w.pendingOrders_.orders.empty());
+        w.appendPendingOrder(QueueProductionOrder{id,ProductionKind::Mine},"Build mine");w.refreshProductionQueue();
+        w.productionQueueTree_->setCurrentItem(w.productionQueueTree_->topLevelItem(2));w.productionRemoveButton_->click();
+        assert(w.pendingOrders_.orders.size()==2 && w.productionQueueTree_->topLevelItemCount()==2);
+        // The next physical reports introduce IDs after migration, even with delay.
+        for(int year=0;year<8;++year)legacy.state=TurnProcessor{}.process(legacy.state,{});
+        openPlayer(legacy);w.productionRemoveButton_->click();assert(w.pendingOrders_.orders.size()==1);
+        assert(TurnProcessor{}.process(legacy.state,{w.pendingOrders_}).planets[1].industry==legacy.state.planets[1].industry);
+        // A duplicate persisted identity must be rejected instead of aliasing edits.
+        auto corrupt=bytes(dir.filePath("host.suns"));QDataStream edit(&corrupt,QIODevice::ReadWrite);
+        assert(edit.device()->seek(corrupt.lastIndexOf("PQID")+8));quint32 planets{};edit>>planets;bool changed=false;
+        for(quint32 i=0;i<planets;++i) {
+            quint32 planet{},count{};quint64 next{};edit>>planet>>next>>count;
+            if(planet==id){assert(count==2);quint64 first{};edit>>first;edit<<first;changed=true;break;}
+            assert(edit.device()->seek(edit.device()->pos()+8*count));
+        }
+        assert(changed);{QFile file(dir.filePath("corrupt.suns"));assert(file.open(QIODevice::WriteOnly));assert(file.write(corrupt)==corrupt.size());}
+        SaveGameData rejected;assert(!read_save_game_file(dir.filePath("corrupt.suns"),rejected,error));
+    }
     static void staleQueuePacket() {
         for(const auto quantity: {1u,10u}) {
             auto state=make_demo_game();state.players[0].technology.researchAllocationPercent=0;state.players.push_back({2,"Host"});
             const auto star=state.stars[1].id;state.stars[1].position={2000,2000};
             auto& p=state.planets[1];const auto id=p.id;p.owner=1;p.population=10000;p.industry=0;p.habitability=0;
             p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};p.productionQueue={{ProductionKind::Factory,4}};
+            detail::assign_production_queue_ids(state);
             set_survey_level(state,1,star,SurveyLevel::DeepSurvey,state.turn);
             SaveGameData host;host.mode=SessionMode::Host;host.campaignId=1;host.turnToken=1;host.playerTokens={{1,1},{2,2}};host.pendingOrders={2,{}};
             host.state=TurnProcessor{}.process(state,{{1,{QueueProductionBatchOrder{id,ProductionKind::Factory,quantity}}}});
@@ -190,6 +286,7 @@ int main(int argc,char** argv) {
     assert(refits.back()->findChild<QComboBox*>("refitTargetDesign")->findText("Disposable")==-1);
     MainWindowTestAccess::rejectedQueuePacket();
     MainWindowTestAccess::staleQueuePacket();
+    MainWindowTestAccess::remoteQueueEditing(w);
     QTemporaryDir dir;assert(dir.isValid());QString error;SaveGameData save;save.campaignId=1;save.turnToken=1;save.state=s;
     save.pendingOrders={1,{DeleteShipDesignOrder{extra.id},RefitShipOrder{1,s.fleets.front().id,s.shipDesigns[0].id,0,"Deferred target"}}};
     save.pendingDescriptions={"Delete design","Refit ship"};

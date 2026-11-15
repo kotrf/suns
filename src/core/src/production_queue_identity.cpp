@@ -2,30 +2,39 @@
 #include <algorithm>
 
 namespace suns::detail {
+void assign_production_queue_ids(GameState& state) {
+    for(auto& p:state.planets)for(auto& item:p.productionQueue)
+        if(!item.queueId)item.queueId=p.nextProductionQueueId++;
+}
+bool current_production_queue_receipt(const GameState& state,const Planet& planet) {
+    const auto* player=find_player(state,planet.owner);if(!player)return false;
+    const auto report=std::find_if(player->surveyKnowledge.begin(),player->surveyKnowledge.end(),
+        [&](const auto& entry){return entry.star==planet.star;});
+    return report!=player->surveyKnowledge.end() && report->observedOwner==planet.owner
+        && report->observedTurn==state.turn && report->planetSnapshot
+        && report->planetSnapshot->habitat
+        && report->planetSnapshot->habitat->stationEvidenceTime==3*state.turn+2
+        && report->planetSnapshot->surfaceMinerals
+        && report->planetSnapshot->surfaceMinerals->finalSurface
+        && report->planetSnapshot->surfaceMinerals->observedTurn==state.turn;
+}
 ProductionQueueIdentity::ProductionQueueIdentity(const GameState& state,const GameState* received) {
     for(const auto& p:state.planets) {
         auto& rows=rows_[p.id];rows.items=p.productionQueue;
         for(std::size_t i=0;i<rows.items.size();++i)rows.origins.push_back({true,received?1u:0u,i});
         if(!received)continue;
-        const auto* known=find_planet(*received,p.id);if(!known)continue;
+        const auto* known=find_planet(*received,p.id);if(!known || known->owner!=p.owner)continue;
         const auto& initial=known->productionQueue;
-        const auto* player=find_player(*received,known->owner);if(!player)continue;
-        const auto report=std::find_if(player->surveyKnowledge.begin(),player->surveyKnowledge.end(),
-            [&](const auto& entry){return entry.star==known->star;});
-        // Row values (even an exact, unique match) cannot prove continuity
-        // across production years: completed work may have an identical successor.
-        // Without persistent row IDs, bind original rows only to the current
-        // final economic snapshot and an unchanged complete queue. New rows in
-        // this submission still use their explicit command origins below.
-        if(report==player->surveyKnowledge.end() || report->observedOwner!=known->owner
-            || report->observedTurn!=received->turn || !report->planetSnapshot
-            || !report->planetSnapshot->habitat
-            || report->planetSnapshot->habitat->stationEvidenceTime!=3*received->turn+2
-            || !report->planetSnapshot->surfaceMinerals
-            || !report->planetSnapshot->surfaceMinerals->finalSurface
-            || report->planetSnapshot->surfaceMinerals->observedTurn!=received->turn
-            || initial!=rows.items)continue;
-        for(std::size_t i=0;i<initial.size();++i)rows.origins[i]={true,0,i};
+        for(std::size_t i=0;i<initial.size();++i)if(initial[i].queueId) {
+            const auto found=std::find_if(rows.items.begin(),rows.items.end(),[&](const auto& item){return item.queueId==initial[i].queueId;});
+            if(found!=rows.items.end())rows.origins[std::size_t(found-rows.items.begin())]={true,0,i};
+        }
+        // Old files have no IDs. Only a current final receipt can establish
+        // their initial identity; never infer continuity from delayed values.
+        if(!current_production_queue_receipt(*received,*known) || initial.size()!=rows.items.size())continue;
+        const auto equalValues=[](ProductionItem a,ProductionItem b){a.queueId=b.queueId=0;return a==b;};
+        if(!std::equal(initial.begin(),initial.end(),rows.items.begin(),equalValues))continue;
+        for(std::size_t i=0;i<initial.size();++i)if(!initial[i].queueId)rows.origins[i]={true,0,i};
     }
 }
 void ProductionQueueIdentity::synchronize(const GameState& state,std::size_t previousOrder) {

@@ -4,6 +4,7 @@
 #include "suns/exotic_materials.hpp"
 #include "suns/stations.hpp"
 #include "suns/mobile_base.hpp"
+#include "suns/communications.hpp"
 #include <cassert>
 #include <algorithm>
 #include <cmath>
@@ -317,12 +318,39 @@ void template_rows_keep_their_birth_order() {
     assert(preview.planets[0].productionQueue.size()==1 && preview.planets[0].productionQueue[0]==rule);
     const auto next=TurnProcessor{}.process(s,{orders});const auto& queue=next.planets[0].productionQueue;
     assert(queue.size()==2 && queue[0].kind==ProductionKind::ColonyShip);
-    assert(queue[1]==rule);
+    assert(queue[1].kind==rule.kind && queue[1].automation==rule.automation && queue[1].quantity==rule.quantity && queue[1].queueId);
+}
+void remote_annual_rule_remains_editable(bool withMine) {
+    auto s=fixture();auto& p=s.planets[1];const auto id=p.id;
+    s.stars[1].position={300,0};s.fleets.clear();s.planets[0].radar=PlanetaryRadarLevel::Local;p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::Local;p.minerals={10000,10000,10000};
+    p.productionQueue={{ProductionKind::Factory,production_cost(ProductionKind::Factory),0,ProductionAutomation::Annual,1}};
+    if(withMine)p.productionQueue.push_back({ProductionKind::Mine,1000000});
+    assert(communication_delay_turns(s,1,s.stars[1].position)==2);
+    set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+    for(int year=0;year<8;++year)s=TurnProcessor{}.process(s,{});
+    for(int year=0;year<3;++year) {
+        const auto received=make_player_view(s,1).state;
+        const auto& reports=received.players[0].surveyKnowledge;
+        const auto report=std::find_if(reports.begin(),reports.end(),[&](const auto& k){return k.star==s.planets[1].star;});
+        assert(report!=reports.end() && report->observedTurn+2==s.turn);
+        assert(received.planets[1].productionQueue.size()==std::size_t(withMine?2:1));
+        const auto cancelled=TurnProcessor{}.process(s,{{1,{CancelProductionOrder{id,0}}}});
+        assert(cancelled.planets[1].industry==s.planets[1].industry);
+        assert(cancelled.planets[1].productionQueue.size()==std::size_t(withMine?1:0));
+        if(withMine)assert(cancelled.planets[1].productionQueue[0].kind==ProductionKind::Mine);
+        if(withMine)for(const auto move: {ReorderProductionQueueOrder{id,0,1},ReorderProductionQueueOrder{id,1,0}}) {
+            const auto reordered=TurnProcessor{}.process(s,{{1,{move}}});
+            assert(reordered.planets[1].industry==s.planets[1].industry);
+            assert(reordered.planets[1].productionQueue[0].kind==ProductionKind::Mine);
+        }
+        s=TurnProcessor{}.process(s,{});
+    }
 }
 void delayed_factory_report_does_not_cancel_replacement(std::uint32_t quantity) {
     auto s=fixture();auto& p=s.planets[1];const auto id=p.id;
     s.stars[1].position={2000,2000};p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};
     p.productionQueue={{ProductionKind::Factory,4}};
+    detail::assign_production_queue_ids(s);
     set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
     const auto after=TurnProcessor{}.process(s,{{1,{QueueProductionBatchOrder{id,ProductionKind::Factory,quantity}}}});
     assert(after.planets[1].industry==1 && after.planets[1].productionQueue.size()==1);
@@ -346,9 +374,10 @@ void delayed_factory_report_does_not_cancel_replacement(std::uint32_t quantity) 
     const auto newCancelled=TurnProcessor{}.process(after,{{1,{mine,CancelProductionOrder{id,1}}}});
     assert(newCancelled.planets[1].industry==control.planets[1].industry);
     assert(newCancelled.planets[1].productionQueue==control.planets[1].productionQueue);
-    // A scan from before this year's production is not a final queue receipt.
+    // An untracked scan from before production cannot establish a legacy identity.
     auto early=after;set_survey_level(early,1,p.star,SurveyLevel::DeepSurvey,early.turn);
     auto& report=*std::find_if(early.players[0].surveyKnowledge.begin(),early.players[0].surveyKnowledge.end(),[&](const auto& k){return k.star==p.star;});
+    for(auto& item:report.planetSnapshot->habitat->queue)item.queueId=0;
     report.planetSnapshot->habitat->stationEvidenceTime=3*early.turn;
     report.planetSnapshot->surfaceMinerals->finalSurface=false;
     const auto earlyCancelled=TurnProcessor{}.process(early,{{1,{CancelProductionOrder{id,0}}}});
@@ -362,6 +391,7 @@ void delayed_factory_report_does_not_alias_completed_work() {
     auto s=fixture();auto& p=s.planets[1];const auto id=p.id;
     s.stars[1].position={2000,2000};p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};
     p.productionQueue={{ProductionKind::Factory,4},{ProductionKind::Factory,10}};
+    detail::assign_production_queue_ids(s);
     set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
     const auto after=TurnProcessor{}.process(s,{});
     assert(after.planets[1].industry==1 && after.planets[1].productionQueue.size()==1);
@@ -372,16 +402,15 @@ void delayed_factory_report_does_not_alias_completed_work() {
     const auto edited=TurnProcessor{}.process(after,{{1,{CancelProductionOrder{id,0}}}});
     assert(edited.planets[1].industry==control.planets[1].industry);
     assert(edited.planets[1].industry==2);
-    // A unique progress match also cannot prove that the old row survived.
+    // A durable ID proves continuity despite progress and an older report.
     auto one=s;one.planets[1].productionQueue={{ProductionKind::Factory,16}};
+    detail::assign_production_queue_ids(one);
     set_survey_level(one,1,one.planets[1].star,SurveyLevel::DeepSurvey,one.turn);
     const auto partial=TurnProcessor{}.process(one,{});
     assert(partial.planets[1].productionQueue[0].remainingCost==6);
     assert(make_player_view(partial,1).state.planets[1].productionQueue[0].remainingCost==16);
     const auto stopped=TurnProcessor{}.process(partial,{{1,{CancelProductionOrder{id,0}}}});
-    const auto progressed=TurnProcessor{}.process(partial,{});
-    assert(stopped.planets[1].industry==progressed.planets[1].industry);
-    assert(stopped.planets[1].productionQueue==progressed.planets[1].productionQueue);
+    assert(stopped.planets[1].industry==0 && stopped.planets[1].productionQueue.empty());
     auto confirmed=partial;set_survey_level(confirmed,1,p.star,SurveyLevel::DeepSurvey,confirmed.turn);
     const auto freshStopped=TurnProcessor{}.process(confirmed,{{1,{CancelProductionOrder{id,0}}}});
     assert(freshStopped.planets[1].industry==0 && freshStopped.planets[1].productionQueue.empty());
@@ -402,6 +431,7 @@ int main(int argc, char** argv) {
         else if (test == "shipyard-resume") restored_shipyard_resumes_same_turn(false);
         else if (test == "queue-targets") rejected_orders_preserve_queue_targets();
         else if (test == "template-origin") template_rows_keep_their_birth_order();
+        else if (test == "remote-rule") {remote_annual_rule_remains_editable(false);remote_annual_rule_remains_editable(true);}
         else if (test == "replacement-batch") delayed_factory_report_does_not_cancel_replacement(10);
         else if (test == "replacement-exact") delayed_factory_report_does_not_cancel_replacement(1);
         else if (test == "delayed-origin") delayed_factory_report_does_not_alias_completed_work();
@@ -417,4 +447,5 @@ int main(int argc, char** argv) {
     rejected_orders_preserve_queue_targets();
     template_rows_keep_their_birth_order();delayed_factory_report_does_not_alias_completed_work();
     delayed_factory_report_does_not_cancel_replacement(10);delayed_factory_report_does_not_cancel_replacement(1);
+    remote_annual_rule_remains_editable(false);remote_annual_rule_remains_editable(true);
 }
