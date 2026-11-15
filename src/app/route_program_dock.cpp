@@ -519,11 +519,14 @@ void attachRouteProgramDock(MainWindow& window)
             ? "Add enemy position"
             : fleetTarget ? "Add fleet target" : "Add waypoint");
         const auto currentAction = static_cast<FleetArrivalActionKind>(actionCombo->currentData().toInt());
-        if (friendlyFleetTarget) {
-            actionCombo->setCurrentIndex(
-                actionCombo->findData(static_cast<int>(FleetArrivalActionKind::MergeWithFleet)));
-        } else if (targetType == 2
-            || currentAction == FleetArrivalActionKind::MergeWithFleet) {
+        // Picking a destination must not opt into a destructive merge or
+        // replace an already chosen fuel transfer. Only discard actions that
+        // cannot apply to the new target type.
+        if ((friendlyFleetTarget && currentAction != FleetArrivalActionKind::None
+                && currentAction != FleetArrivalActionKind::MergeWithFleet
+                && currentAction != FleetArrivalActionKind::SupplyOutpost)
+            || targetType == 2
+            || (!friendlyFleetTarget && currentAction == FleetArrivalActionKind::MergeWithFleet)) {
             actionCombo->setCurrentIndex(
                 actionCombo->findData(static_cast<int>(FleetArrivalActionKind::None)));
         }

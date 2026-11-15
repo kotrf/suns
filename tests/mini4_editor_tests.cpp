@@ -3,7 +3,10 @@
 #include "save_game.hpp"
 #include "suns/production.hpp"
 #include "suns/communications.hpp"
+#include "suns/ship_refit.hpp"
 #include <QApplication>
+#include <QComboBox>
+#include <QDoubleSpinBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QGraphicsView>
@@ -14,6 +17,8 @@
 #include <QTimer>
 #include <QTreeWidget>
 #include <cassert>
+#include <algorithm>
+#include <cmath>
 using namespace suns;
 namespace suns {
 struct MainWindowTestAccess {
@@ -70,6 +75,78 @@ struct MainWindowTestAccess {
             .arg(unit.ironium*15,0,'f',1).arg(unit.boranium*15,0,'f',1).arg(unit.germanium*15,0,'f',1);
         assert(second->toolTip(1).contains(missing));
     }
+    static void fleetArrivalChoice(MainWindow& w) {
+        for (const auto action : {FleetArrivalActionKind::SupplyOutpost, FleetArrivalActionKind::None,
+                 FleetArrivalActionKind::MergeWithFleet}) {
+            load(w);
+            auto source=w.state_.fleets.front();
+            source.position={50,-50};source.destination.reset();source.arrivalAction.reset();
+            source.waypointQueue.clear();source.pendingCommands.clear();source.repeatOrders=false;
+            source.ships={{source.design,1}};source.fuel=fleet_fuel_capacity(w.state_,source);
+            auto target=source;target.id=2;target.name="Fuel recipient";target.position={60,-50};target.fuel=0;
+            for (auto* f : {&source,&target}) {f->telemetry={};f->telemetry=confirmed_fleet_telemetry(w.state_,*f);}
+            w.state_.fleets={source,target};w.state_.nextFleetId=3;w.state_.wormholeRules.spawnChancePerTurn=0;
+            w.rebuildScene();emit w.routeProgramContextChanged(true);
+            auto* actions=w.findChild<QComboBox*>("routeArrivalActionCombo");assert(actions);
+            actions->setCurrentIndex(actions->findData(int(action)));
+            const auto reserve=source.fuel/4;
+            w.findChild<QDoubleSpinBox*>("routeFuelReserveSpin")->setValue(reserve);
+            w.findChild<QPushButton*>("routeNewWaypointButton")->click();click(w,target.position);
+            assert(w.pendingOrders_.orders.size()==1);
+            const auto& order=std::get<MoveFleetOrder>(w.pendingOrders_.orders.front());
+            assert(order.fleet==source.id && order.targetFleet==target.id);
+            assert(order.arrivalAction.kind==action);
+            if (action==FleetArrivalActionKind::SupplyOutpost) assert(std::abs(order.arrivalAction.reserveFuel-reserve)<1e-6);
+            QTemporaryDir dir;QString error;TurnOrderFileData packet{1,w.state_.turn,1,w.pendingOrders_,w.pendingDescriptions_},decoded;
+            assert(write_turn_order_file(dir.filePath("arrival.sunsorders"),packet,error));
+            assert(read_turn_order_file(dir.filePath("arrival.sunsorders"),decoded,error));
+            const auto next=TurnProcessor{}.process(w.state_,{decoded.orders});
+            const auto find=[&](FleetId id){return std::find_if(next.fleets.begin(),next.fleets.end(),[&](const auto& f){return f.id==id;});};
+            const auto recipient=find(target.id);assert(recipient!=next.fleets.end());
+            if(action==FleetArrivalActionKind::MergeWithFleet) {
+                assert(find(source.id)==next.fleets.end() && fleet_ship_count(*recipient,target.design)==2);
+            } else {
+                const auto sender=find(source.id);assert(sender!=next.fleets.end());
+                assert(same_position(sender->position,recipient->position));
+                assert(fleet_ship_count(*sender,source.design)==1 && fleet_ship_count(*recipient,target.design)==1);
+                if(action==FleetArrivalActionKind::SupplyOutpost) {
+                    assert(recipient->fuel>0 && std::abs(sender->fuel-reserve)<1e-6);
+                } else assert(recipient->fuel==0);
+            }
+        }
+    }
+    static void paidRefitMinerals(MainWindow& w) {
+        load(w);w.state_.players[0].technology.levels.fill(26);w.state_.players[0].technology.researchActive=false;
+        auto from=w.state_.shipDesigns.front();from.id=w.state_.nextShipDesignId++;from.name="Refit source";
+        from.components={ShipComponentType::FusionDrive,ShipComponentType::LongRangeScanner};
+        from.placements=autoplace_ship_components(from.hull,from.components);assert(ship_design_valid(from));
+        auto to=from;to.id=w.state_.nextShipDesignId++;to.name="Refit target";
+        to.components.back()=ShipComponentType::PenetratingScanner;
+        to.placements=autoplace_ship_components(to.hull,to.components);assert(ship_design_valid(to));
+        w.state_.shipDesigns={from,to};auto& f=w.state_.fleets.front();f.design=from.id;f.ships={{from.id,1}};f.fuel=10;
+        f.destination.reset();f.pendingCommands.clear();f.telemetry={};f.telemetry=confirmed_fleet_telemetry(w.state_,f);
+        auto& p=w.state_.planets.front();p.population=1000000;p.industry=1000;p.mines=0;p.minerals={};p.productionQueue.clear();
+        assert(queue_ship_refit(w.state_,1,{p.id,f.id,from.id,to.id}));
+        w.state_=TurnProcessor{}.process(w.state_,{});
+        auto& waiting=w.state_.planets.front();assert(waiting.productionQueue.size()==1);
+        assert(waiting.productionQueue.front().remainingCost==0 && waiting.productionWaitingForMinerals);
+        const auto cost=production_item_mineral_cost(w.state_,waiting.productionQueue.front());
+        assert(cost.boranium>0 && cost.germanium>0);
+        set_survey_level(w.state_,1,waiting.star,SurveyLevel::DeepSurvey,w.state_.turn);
+        w.rebuildScene();w.refreshProductionQueue();
+        auto* row=w.productionQueueTree_->topLevelItem(0);assert(row && row->text(2)=="minerals");
+        assert(row->text(3)==QString::fromUtf8("—"));
+        const auto deficit=QString("Shortfall for this batch: I %1 / B %2 / G %3 kt")
+            .arg(std::max(0.0,cost.ironium-waiting.minerals.ironium),0,'f',1)
+            .arg(std::max(0.0,cost.boranium-waiting.minerals.boranium),0,'f',1)
+            .arg(std::max(0.0,cost.germanium-waiting.minerals.germanium),0,'f',1);
+        assert(row->toolTip(1).contains(deficit) && !row->toolTip(1).contains("are uncertain"));
+        waiting.minerals={std::max(0.0,cost.ironium),std::max(0.0,cost.boranium),std::max(0.0,cost.germanium)};
+        set_survey_level(w.state_,1,waiting.star,SurveyLevel::DeepSurvey,w.state_.turn);w.rebuildScene();w.refreshProductionQueue();
+        assert(w.productionQueueTree_->topLevelItem(0)->text(2)=="0");
+        const auto next=TurnProcessor{}.process(w.state_,{});
+        assert(next.planets.front().productionQueue.empty() && fleet_ship_count(next.fleets.front(),to.id)==1);
+    }
     static void radiation(MainWindow& w) {
         load(w);auto& design=w.state_.shipDesigns[1];
         for(auto& component:design.components)if(component==ShipComponentType::FusionDrive)component=ShipComponentType::RadiatingRamScoopDrive;
@@ -98,5 +175,10 @@ struct MainWindowTestAccess {
 int main(int argc,char** argv) {
     QApplication app(argc,argv);MainWindow w;w.installUiPolish();w.installFleetReadabilityPolish();w.installProductionQueue();w.installPlanetPolish();
     MainWindowTestAccess::load(w);attachRouteProgramDock(w);w.resize(1400,1000);w.show();QApplication::processEvents();
+    if(argc==2) {
+        if(std::string(argv[1])=="arrival") {MainWindowTestAccess::fleetArrivalChoice(w);return 0;}
+        if(std::string(argv[1])=="refit") {MainWindowTestAccess::paidRefitMinerals(w);return 0;}
+    }
     MainWindowTestAccess::navigation(w);MainWindowTestAccess::queueBudget(w);MainWindowTestAccess::radiation(w);MainWindowTestAccess::split(w);
+    MainWindowTestAccess::fleetArrivalChoice(w);MainWindowTestAccess::paidRefitMinerals(w);
 }

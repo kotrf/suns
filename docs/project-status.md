@@ -1,5 +1,21 @@
 # Project status and development handoff
 
+## PR300 first review — preserve arrival actions and paid-refit mineral status
+
+Review5912119102 on05649bf found P2 implicit merging when New waypoint targets
+a friendly fleet and P3 a missing mineral warning for paid Refit work. Both were
+reproduced with failing Qt regressions before the source changes. The destination
+selector preserves compatible actions/reserves, with Merge only when explicitly
+chosen. Refit's known signed bill is independent of its unavailable simple ETA;
+unknown prefixes and later rows do not receive invented future mineral recovery.
+Actual map-click/PBEM/host tests retain both FleetIds for None/Transfer fuel,
+transfer fuel with its reserve, and merge only with explicit Merge. Refit tests
+pay work in a real turn, check the current shortfall and complete after supplying
+minerals. Scalar cases cover preceding fixed/annual work, recovery and invalid
+quotes. Complete GCC 14.2 / Qt 6.12 Debug build; focused16/16 in13.52s and full140/140 CTest in137.30s passed. All185 local documentation targets in seven related documents were checked. Save128/orders55/race3 unchanged. PR300 remains open
+for repeat review; leave both discussions open. Head/tree/CI must be checked in
+GitHub. #56 open, #53/#63 frozen; work/ and all source/archive branches retained.
+
 ## Mini-4 / issue299 — 15 November2026
 
 Mini-3/#298 merged as main841c7bb with exact tested tree56f8940; review5910797560

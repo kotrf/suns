@@ -4,6 +4,7 @@
 #include "suns/stations.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/production.hpp"
+#include "suns/ship_refit.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -99,14 +100,25 @@ inline std::vector<SimpleProductionEstimate> simple_production_estimates(
             || item.kind == ProductionKind::OrbitalStation;
         const auto* design = item.kind == ProductionKind::ColonyShip
             ? find_ship_design(state, item.shipDesign ? item.shipDesign : kColonyShipDesignId) : nullptr;
-        const auto oneCost = production_item_mineral_cost(state, item);
+        const auto* refitSource = item.kind == ProductionKind::ShipRefit && item.refit
+            ? find_ship_design(state, item.refit->source) : nullptr;
+        const auto* refitTarget = item.kind == ProductionKind::ShipRefit && item.refit
+            ? find_ship_design(state, item.refit->target) : nullptr;
+        const auto refitQuote = refitSource && refitTarget ? ship_refit_quote(*refitSource, *refitTarget)
+            : std::optional<ShipRefitQuote>{};
+        const auto oneCost = refitQuote ? refitQuote->netMinerals : production_item_mineral_cost(state, item);
         const MineralCargo batchCost{oneCost.ironium * units, oneCost.boranium * units,
             oneCost.germanium * units};
-        const bool validCost = std::isfinite(batchCost.ironium) && batchCost.ironium >= 0
-            && std::isfinite(batchCost.boranium) && batchCost.boranium >= 0
-            && std::isfinite(batchCost.germanium) && batchCost.germanium >= 0;
+        const bool finiteCost = std::isfinite(batchCost.ironium)
+            && std::isfinite(batchCost.boranium) && std::isfinite(batchCost.germanium);
+        const bool validCost = finiteCost && batchCost.ironium >= 0
+            && batchCost.boranium >= 0 && batchCost.germanium >= 0;
         estimate.batchMinerals=batchCost;
-        estimate.mineralBudgetKnown=prefixKnown && fixed && !automatic && validCost;
+        // The first refit's net mineral bill is known even though its ship/
+        // service conditions prevent a simple ETA. Recovery can be negative;
+        // do not spend that future recovery or promise dates for later rows.
+        estimate.mineralBudgetKnown=prefixKnown && !automatic && finiteCost
+            && ((fixed && validCost) || refitQuote.has_value());
         if(estimate.mineralBudgetKnown) {
             estimate.mineralsBefore=availableMinerals;
             estimate.missingMinerals={std::max(0.0,batchCost.ironium-availableMinerals.ironium),

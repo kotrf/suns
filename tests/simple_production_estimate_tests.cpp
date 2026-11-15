@@ -47,6 +47,45 @@ void advanced_mine_batches_reserve_prior_minerals() {
     assert(!unknown[1].mineralBudgetKnown && !unknown[1].completionTurn);
 }
 
+void refit_budget_is_known_without_a_completion_date() {
+    auto state=make_demo_game();
+    auto from=state.shipDesigns.front();from.id=state.nextShipDesignId++;
+    from.components={ShipComponentType::FusionDrive,ShipComponentType::LongRangeScanner};
+    from.placements=autoplace_ship_components(from.hull,from.components);
+    auto to=from;to.id=state.nextShipDesignId++;
+    to.components.back()=ShipComponentType::PenetratingScanner;
+    to.placements=autoplace_ship_components(to.hull,to.components);
+    state.shipDesigns={from,to};
+    ProductionItem refit{ProductionKind::ShipRefit,0,to.id};refit.refit=ShipRefitJob{1,from.id,to.id};
+    const ProductionItem factory{ProductionKind::Factory,kFactoryCost};
+    const auto quote=ship_refit_quote(from,to);assert(quote);
+    const auto estimate=simple_production_estimates(state,state.planets.front(),{refit,factory},100,{},true);
+    assert(estimate[0].mineralBudgetKnown && estimate[0].status==SimpleProductionStatus::Nonlinear);
+    assert(estimate[0].missingMinerals.boranium==quote->netMinerals.boranium);
+    assert(estimate[0].missingMinerals.germanium==quote->netMinerals.germanium);
+    assert(!estimate[0].completionTurn && !estimate[1].mineralBudgetKnown && !estimate[1].completionTurn);
+    // Known earlier batches reserve their minerals before quoting the refit.
+    const auto cost=production_item_mineral_cost(state,factory);
+    const auto after=simple_production_estimates(state,state.planets.front(),{factory,refit},100,cost,true);
+    assert(after[1].mineralBudgetKnown && after[1].mineralsBefore.ironium==0
+        && after[1].mineralsBefore.boranium==0 && after[1].mineralsBefore.germanium==0);
+    auto annual=factory;annual.automation=ProductionAutomation::Annual;
+    const auto unknown=simple_production_estimates(state,state.planets.front(),{annual,refit},100,cost,true);
+    assert(!unknown[1].mineralBudgetKnown && !unknown[1].completionTurn);
+    // Dismantled components return minerals at completion. Signed net costs
+    // are valid, but no forecast may use the future recovery for later rows.
+    state.shipDesigns[1].components={ShipComponentType::FusionDrive};
+    state.shipDesigns[1].placements=autoplace_ship_components(to.hull,state.shipDesigns[1].components);
+    const auto recovery=simple_production_estimates(state,state.planets.front(),{refit,factory},100,{},true);
+    assert(recovery[0].mineralBudgetKnown && recovery[0].batchMinerals.germanium<0);
+    assert(recovery[0].missingMinerals.ironium==0 && recovery[0].missingMinerals.boranium==0
+        && recovery[0].missingMinerals.germanium==0);
+    assert(!recovery[1].mineralBudgetKnown && !recovery[1].completionTurn);
+    refit.refit->source=999999;
+    const auto invalid=simple_production_estimates(state,state.planets.front(),{refit},100,{},true);
+    assert(!invalid[0].mineralBudgetKnown && !invalid[0].completionTurn);
+}
+
 void annual_and_nonlinear_prefixes()
 {
     const auto state = make_demo_game();
@@ -372,6 +411,7 @@ int main(int argc, char** argv)
     if (argc == 2 && std::string(argv[1]) == "native") { native_surface_rows_preserve_fixed_estimates_and_row_indices(); return 0; }
     fixed_rate_and_priority();
     advanced_mine_batches_reserve_prior_minerals();
+    refit_budget_is_known_without_a_completion_date();
     annual_and_nonlinear_prefixes();
     mineral_and_production_limits();
     missing_yard_and_design();
