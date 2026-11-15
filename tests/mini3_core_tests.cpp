@@ -319,6 +319,45 @@ void template_rows_keep_their_birth_order() {
     assert(queue.size()==2 && queue[0].kind==ProductionKind::ColonyShip);
     assert(queue[1]==rule);
 }
+void delayed_factory_report_does_not_cancel_replacement(std::uint32_t quantity) {
+    auto s=fixture();auto& p=s.planets[1];const auto id=p.id;
+    s.stars[1].position={2000,2000};p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};
+    p.productionQueue={{ProductionKind::Factory,4}};
+    set_survey_level(s,1,p.star,SurveyLevel::DeepSurvey,s.turn);
+    const auto after=TurnProcessor{}.process(s,{{1,{QueueProductionBatchOrder{id,ProductionKind::Factory,quantity}}}});
+    assert(after.planets[1].industry==1 && after.planets[1].productionQueue.size()==1);
+    assert(after.planets[1].productionQueue[0].quantity==quantity && after.planets[1].productionQueue[0].remainingCost==4);
+    const auto received=make_player_view(after,1).state;
+    assert(received.planets[1].productionQueue==s.planets[1].productionQueue);
+    const auto control=TurnProcessor{}.process(after,{});
+    const auto cancelled=TurnProcessor{}.process(after,{{1,{CancelProductionOrder{id,0}}}});
+    assert(cancelled.planets[1].industry==control.planets[1].industry);
+    assert(cancelled.planets[1].productionQueue==control.planets[1].productionQueue);
+    assert(cancelled.planets[1].industry==2);
+    // Neither a stale source nor a stale destination may redirect a reorder.
+    const QueueProductionBatchOrder mine{id,ProductionKind::Mine,1};
+    const auto appended=TurnProcessor{}.process(after,{{1,{mine}}});
+    for(const auto move: {ReorderProductionQueueOrder{id,0,1},ReorderProductionQueueOrder{id,1,0}}) {
+        const auto moved=TurnProcessor{}.process(after,{{1,{mine,move}}});
+        assert(moved.planets[1].industry==appended.planets[1].industry);
+        assert(moved.planets[1].productionQueue==appended.planets[1].productionQueue);
+    }
+    // A row created by this submission still has a proven command origin.
+    const auto newCancelled=TurnProcessor{}.process(after,{{1,{mine,CancelProductionOrder{id,1}}}});
+    assert(newCancelled.planets[1].industry==control.planets[1].industry);
+    assert(newCancelled.planets[1].productionQueue==control.planets[1].productionQueue);
+    // A scan from before this year's production is not a final queue receipt.
+    auto early=after;set_survey_level(early,1,p.star,SurveyLevel::DeepSurvey,early.turn);
+    auto& report=*std::find_if(early.players[0].surveyKnowledge.begin(),early.players[0].surveyKnowledge.end(),[&](const auto& k){return k.star==p.star;});
+    report.planetSnapshot->habitat->stationEvidenceTime=3*early.turn;
+    report.planetSnapshot->surfaceMinerals->finalSurface=false;
+    const auto earlyCancelled=TurnProcessor{}.process(early,{{1,{CancelProductionOrder{id,0}}}});
+    assert(earlyCancelled.planets[1].industry==control.planets[1].industry);
+    assert(earlyCancelled.planets[1].productionQueue==control.planets[1].productionQueue);
+    auto fresh=after;set_survey_level(fresh,1,p.star,SurveyLevel::DeepSurvey,fresh.turn);
+    const auto freshCancelled=TurnProcessor{}.process(fresh,{{1,{CancelProductionOrder{id,0}}}});
+    assert(freshCancelled.planets[1].industry==1 && freshCancelled.planets[1].productionQueue.empty());
+}
 void delayed_factory_report_does_not_alias_completed_work() {
     auto s=fixture();auto& p=s.planets[1];const auto id=p.id;
     s.stars[1].position={2000,2000};p.owner=1;p.population=10000;p.industry=0;p.habitability=0;p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};
@@ -333,14 +372,19 @@ void delayed_factory_report_does_not_alias_completed_work() {
     const auto edited=TurnProcessor{}.process(after,{{1,{CancelProductionOrder{id,0}}}});
     assert(edited.planets[1].industry==control.planets[1].industry);
     assert(edited.planets[1].industry==2);
-    // A unique partially built row remains addressable despite a delayed cost.
+    // A unique progress match also cannot prove that the old row survived.
     auto one=s;one.planets[1].productionQueue={{ProductionKind::Factory,16}};
     set_survey_level(one,1,one.planets[1].star,SurveyLevel::DeepSurvey,one.turn);
     const auto partial=TurnProcessor{}.process(one,{});
     assert(partial.planets[1].productionQueue[0].remainingCost==6);
     assert(make_player_view(partial,1).state.planets[1].productionQueue[0].remainingCost==16);
     const auto stopped=TurnProcessor{}.process(partial,{{1,{CancelProductionOrder{id,0}}}});
-    assert(stopped.planets[1].industry==0 && stopped.planets[1].productionQueue.empty());
+    const auto progressed=TurnProcessor{}.process(partial,{});
+    assert(stopped.planets[1].industry==progressed.planets[1].industry);
+    assert(stopped.planets[1].productionQueue==progressed.planets[1].productionQueue);
+    auto confirmed=partial;set_survey_level(confirmed,1,p.star,SurveyLevel::DeepSurvey,confirmed.turn);
+    const auto freshStopped=TurnProcessor{}.process(confirmed,{{1,{CancelProductionOrder{id,0}}}});
+    assert(freshStopped.planets[1].industry==0 && freshStopped.planets[1].productionQueue.empty());
 }
 }
 int main(int argc, char** argv) {
@@ -358,6 +402,8 @@ int main(int argc, char** argv) {
         else if (test == "shipyard-resume") restored_shipyard_resumes_same_turn(false);
         else if (test == "queue-targets") rejected_orders_preserve_queue_targets();
         else if (test == "template-origin") template_rows_keep_their_birth_order();
+        else if (test == "replacement-batch") delayed_factory_report_does_not_cancel_replacement(10);
+        else if (test == "replacement-exact") delayed_factory_report_does_not_cancel_replacement(1);
         else if (test == "delayed-origin") delayed_factory_report_does_not_alias_completed_work();
         else assert(false);
         return 0;
@@ -370,4 +416,5 @@ int main(int argc, char** argv) {
     rejected_creation_has_no_named_dependents();restored_shipyard_resumes_same_turn(true);restored_shipyard_resumes_same_turn(false);
     rejected_orders_preserve_queue_targets();
     template_rows_keep_their_birth_order();delayed_factory_report_does_not_alias_completed_work();
+    delayed_factory_report_does_not_cancel_replacement(10);delayed_factory_report_does_not_cancel_replacement(1);
 }

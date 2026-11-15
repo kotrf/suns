@@ -173,3 +173,33 @@ its old two-row report remains in flight. Cancelling the completed first row is
 skipped; the second still completes, matching the control. A unique Factory:16
 advancing to6 remains cancellable from its delayed report. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 25.54s and full 139/139 CTest in 148.05s passed. All 183 local documentation targets in six related documents were checked. No file
 layout or balance changes; no extra ordinary UI trace pass or future-year forecast.
+
+
+## PR298 seventh review — an identical replacement is still a different order
+
+[Review5909590605](https://github.com/kotrf/suns/pull/298#pullrequestreview-5909590605)
+confirms both preceding fixes and reproduces a new P2 on0b0cdfc. A remote colony
+reports Factory:4, then accepts another Factory batch. The first row completes and
+six resources advance the new batch to4 before the next report arrives. A batch
+of10 passes the former unique-work fallback; a batch of1 even passes exact value
+matching. Both independent host regressions fail before this fix.
+
+Without persistent order IDs, neither row counts nor matching cost/quantity can
+prove continuity across production years. Original rows now bind only against a
+received final economic snapshot from the current planning year and an unchanged
+complete queue. Missing/older/pre-production evidence leaves their origins
+unbound, and Cancel/Reorder is skipped if its source or destination is unproven.
+This is deliberately conservative: a unique genuinely surviving partially built
+row also waits for a current final report. Adding production remains available,
+and rows inserted by this submission retain their explicit command origins and
+can still be edited/cancelled. No physical future state is exposed to the editor.
+
+Regressions run the two actual production years for batches10 and1, cancellation,
+reorders with either stale source or stale destination, successful cancellation
+of a newly inserted row and successful original-row cancellation after a current
+report. Pre-production evidence does not establish a final receipt. The previous
+unique-progress control now verifies conservative rejection, then successful
+cancellation after a fresh report. PBEM tests persist/reload both host and player
+turn, validate/export/reload the order packet and preserve the replacement batch
+when the stale Remove reaches the host. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 22.39s and full 139/139 CTest in 163.85s passed. All 183 local documentation targets in six related documents were checked. No new fixtures, file layout
+change, ordinary UI trace pass, polling or future-year forecast.

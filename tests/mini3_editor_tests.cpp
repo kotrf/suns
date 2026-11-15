@@ -78,6 +78,34 @@ struct MainWindowTestAccess {
         assert(removed!=hosted.shipDesigns.end() && removed->retired);
         dialog->close();
     }
+    static void staleQueuePacket() {
+        for(const auto quantity: {1u,10u}) {
+            auto state=make_demo_game();state.players[0].technology.researchAllocationPercent=0;state.players.push_back({2,"Host"});
+            const auto star=state.stars[1].id;state.stars[1].position={2000,2000};
+            auto& p=state.planets[1];const auto id=p.id;p.owner=1;p.population=10000;p.industry=0;p.habitability=0;
+            p.radar=PlanetaryRadarLevel::None;p.minerals={10000,10000,10000};p.productionQueue={{ProductionKind::Factory,4}};
+            set_survey_level(state,1,star,SurveyLevel::DeepSurvey,state.turn);
+            SaveGameData host;host.mode=SessionMode::Host;host.campaignId=1;host.turnToken=1;host.playerTokens={{1,1},{2,2}};host.pendingOrders={2,{}};
+            host.state=TurnProcessor{}.process(state,{{1,{QueueProductionBatchOrder{id,ProductionKind::Factory,quantity}}}});
+            const auto control=TurnProcessor{}.process(host.state,{});
+            QTemporaryDir dir;assert(dir.isValid());QString error;
+            // Persist both sides; the player's queue still describes the completed row.
+            assert(write_save_game_file(dir.filePath("host.suns"),host,error));
+            SaveGameData loaded;assert(read_save_game_file(dir.filePath("host.suns"),loaded,error));
+            assert(write_save_game_file(dir.filePath("player.sunsturn"),make_player_turn(host,1),error));
+            SaveGameData player;assert(read_save_game_file(dir.filePath("player.sunsturn"),player,error));
+            assert(player.state.planets[1].productionQueue.size()==1 && player.state.planets[1].productionQueue[0].quantity==1);
+            const PlayerOrders orders{1,{CancelProductionOrder{id,0}}};
+            assert(planned_production_state(player.state,orders).planets[1].productionQueue.empty());
+            TurnOrderFileData packet{player.campaignId,player.state.turn,player.turnToken,orders,{"Remove factory"}},decoded;
+            assert(write_turn_order_file(dir.filePath("cancel.sunsorders"),packet,error));
+            assert(read_turn_order_file(dir.filePath("cancel.sunsorders"),decoded,error));
+            assert(validate_turn_submission(loaded,decoded).isEmpty());
+            const auto next=TurnProcessor{}.process(loaded.state,{decoded.orders});
+            assert(next.planets[1].industry==2 && next.planets[1].industry==control.planets[1].industry);
+            assert(next.planets[1].productionQueue==control.planets[1].productionQueue);
+        }
+    }
     static void rejectedQueuePacket() {
         for(int mode=0;mode<3;++mode) {
             const bool replacement=mode==1,fromTemplate=mode==2;
@@ -161,6 +189,7 @@ int main(int argc,char** argv) {
     const auto refits=w.findChildren<QDialog*>("shipRefitDialog");assert(!refits.empty());
     assert(refits.back()->findChild<QComboBox*>("refitTargetDesign")->findText("Disposable")==-1);
     MainWindowTestAccess::rejectedQueuePacket();
+    MainWindowTestAccess::staleQueuePacket();
     QTemporaryDir dir;assert(dir.isValid());QString error;SaveGameData save;save.campaignId=1;save.turnToken=1;save.state=s;
     save.pendingOrders={1,{DeleteShipDesignOrder{extra.id},RefitShipOrder{1,s.fleets.front().id,s.shipDesigns[0].id,0,"Deferred target"}}};
     save.pendingDescriptions={"Delete design","Refit ship"};

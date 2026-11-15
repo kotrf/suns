@@ -1,5 +1,21 @@
 # Project status and development handoff
 
+## PR298 seventh review — stale rows require a current final receipt
+
+Review5909590605 confirms the previous fixes and finds a replacement order with
+the same row count; one-unit replacements can even have identical values. Both
+actual-host regressions fail on0b0cdfc before correction. Value/progress matching
+cannot establish identity across years without persistent IDs. Initial rows now
+bind only when the received economic snapshot is final for the planning year and
+the complete queue is unchanged. Otherwise Cancel/Reorder skips an unproven source
+or destination. Fresh same-submission insertions retain explicit origins; a fresh
+final report restores ordinary editing. Tests cover batches10/1, both reorder
+anchors, current and pre-production reports, unique-progress ambiguity, new-row
+cancellation and actual host/player save plus order-file PBEM reload. Complete GCC 14.2 / Qt 6.12 Debug build; final 22/22 focused tests in 22.39s and full 139/139 CTest in 163.85s passed. All 183 local documentation targets in six related documents were checked.
+Formats127/55/race3 unchanged; no new normal UI pass, simulation or polling. Current
+source/CI in PR298, discussions open for repeat review, no merge. #56 open;#53/#63
+frozen. Work/ and branches retained.
+
 ## PR298 sixth review — explicit template births and whole-group ambiguity
 
 Both P2 cases on ece3cf2 independently fail before correction. Applying a template
