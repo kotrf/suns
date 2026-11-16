@@ -6,9 +6,11 @@
 #include "suns/communications.hpp"
 #include "suns/production.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/equipment.hpp"
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_set>
 
 namespace suns::computer_detail {
 namespace {
@@ -29,6 +31,50 @@ double support_concentration(const Planet& p)
 {
     const auto c=p.observedConcentration.value_or(MineralCargo{25,25,25});
     return std::max(1.0,std::min({c.ironium,c.boranium,c.germanium}));
+}
+std::optional<OrbitalStationHullType> needed_housing(const Planet& p,const OrbitalStation& station)
+{
+    const auto capacity=native_orbital_capacity(station.hull);
+    if(p.nativeOrbit.population<capacity*4/5)return {};
+    for(const auto hull:{OrbitalStationHullType::NativeCitadel,OrbitalStationHullType::NativeBastion})
+        if(native_orbital_capacity(hull)>capacity)return hull;
+    return {};
+}
+std::optional<ShipComponentType> station_equipment(const GameState& s,PlayerId owner,ShipComponentKind kind)
+{
+    std::optional<ShipComponentType> best;double score=0;
+    for(const auto& tech:equipment_technologies()) {
+        if(tech.kind!=kind || !component_available_to_player(s,owner,tech.component))continue;
+        const auto spec=component_spec(tech.component);
+        // Stations cannot close the initial one-unit gap to an attacking fleet.
+        // A range-zero melee beam cannot supply their baseline defense.
+        const auto value=kind==ShipComponentKind::BeamWeapon
+            ? (spec.shieldOnly || !spec.weaponRange?0:spec.weaponPower*(1+0.2*spec.weaponRange)) : spec.shields;
+        if(value>score){score=value;best=tech.component;}
+    }
+    return best;
+}
+std::optional<StationConstruction> station_improvement(const GameState& s,const Planet& p)
+{
+    const auto* station=native_orbital_station(s,p);if(!station)return {};
+    const auto original=station_loadout(*station);auto fit=original;
+    if(const auto housing=needed_housing(p,*station);housing && station_hull_available(s,p.owner,*housing))
+        fit.hull=*housing;
+    // Preserve all purchased protection/services and fitted equipment. The first
+    // stationary defense fit adds at most two ordinary beams and one shield.
+    if(!station_has_weapons(*station)) {
+        if(const auto beam=station_equipment(s,p.owner,ShipComponentKind::BeamWeapon))for(int i=0;i<2;++i) {
+            auto candidate=fit;candidate.components.push_back(*beam);
+            if(station_loadout_valid(candidate))fit=std::move(candidate);
+        }
+        if(!station_shields(*station))if(const auto shield=station_equipment(s,p.owner,ShipComponentKind::Shield)) {
+            auto candidate=fit;candidate.components.push_back(*shield);
+            if(station_loadout_valid(candidate))fit=std::move(candidate);
+        }
+    }
+    StationConstruction work{fit,station->id};
+    if(fit==original || !station_construction_valid(s,p,work))return {};
+    return work;
 }
 }
 
@@ -65,6 +111,13 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
     if(technology_level(state,view.player,ResearchField::Energy)>=4)focus=ResearchField::Construction;
     if(technology_level(state,view.player,ResearchField::Construction)>=6)focus=ResearchField::Propulsion;
     if(technology_level(state,view.player,ResearchField::Propulsion)>=3)focus=ResearchField::Energy;
+    // Keep the original startup sequence. Once it is funded, a crowded hull
+    // gives Construction a concrete target instead of researching Energy forever.
+    if(technology_level(state,view.player,ResearchField::Energy)>=4
+        && technology_level(state,view.player,ResearchField::Construction)>=6
+        && technology_level(state,view.player,ResearchField::Propulsion)>=3)
+        for(const auto* p:colonies)if(const auto next=needed_housing(*p,*native_orbital_station(state,*p));
+            next && !station_hull_available(state,view.player,*next))focus=ResearchField::Construction;
     const std::uint8_t allocation=miners<2?0:20;
     if(player->technology.researchAllocationPercent!=allocation)plan.orders.orders.push_back(SetResearchAllocationOrder{allocation});
     if(!player->technology.researchActive || player->technology.focus!=focus)
@@ -153,6 +206,8 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             if(const auto* target=safe_target(fleet,true))mission(fleet,*target,{},ComputerFleetGoalKind::Survey);
         }
     }
+    std::unordered_set<FleetId> departing;
+    for(const auto& order:plan.orders.orders)if(const auto* move=std::get_if<MoveFleetOrder>(&order))departing.insert(move->fleet);
     const ShipDesign miner{state.nextShipDesignId,view.player,"Orbital Miner Pair",ShipHullType::MiniMiner,
         {ShipComponentType::QuickJump5,ShipComponentType::RoboMiniMiner,ShipComponentType::RoboMiniMiner}};
     const ShipDesign singleMiner{state.nextShipDesignId,view.player,"Orbital Miner",ShipHullType::MiniMiner,
@@ -220,7 +275,48 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
                 const auto dose=native_orbital_radiation_status(state,view.player,t.star,1000,native_orbital_founding_loadout());
                 return owner && !*owner && dose && !dose->annualLoss && !occupied(t.star,ComputerFleetGoalKind::Colonize);
             });
-            if(target && build(*p,founder)){++founders;continue;}
+            if(target) {
+                if(build(*p,founder))++founders;
+                continue; // Save for the first settler before discretionary refits.
+            }
+        }
+        if(shortage || pendingMiner || miners<2 || !scouts)continue;
+        if(const auto work=station_improvement(state,*p)) {
+            const auto quote=native_orbital_support_quote(state,*p);
+            if(quote.service!=HabitatService::Normal || !quote.output)continue;
+            const auto years=std::ceil(double(station_build_cost(work->loadout))
+                /std::max(1.0,double(quote.output)*(100-allocation)/100));
+            const auto* current=native_orbital_station(state,*p);
+            const auto bill=double((native_orbital_capacity(current->hull)+kNativeSupportPopulationPerUnit-1)
+                /kNativeSupportPopulationPerUnit);
+            const auto completionBill=double((native_orbital_capacity(work->loadout.hull)+kNativeSupportPopulationPerUnit-1)
+                /kNativeSupportPopulationPerUnit);
+            double producing=0;
+            // Telemetry can predate last year's dispatch. Retained assignments
+            // are HQ intent even when the received fleet still appears to mine here.
+            for(const auto& f:state.fleets)if(f.owner==view.player && f.task==FleetTask::RemoteMining
+                && !f.destination && f.pendingCommands.empty() && !departing.contains(f.id)
+                && std::none_of(goals.begin(),goals.end(),[&](const auto& g){return g.fleet==f.id && g.target!=p->star;})
+                && same_position(f.position,star->position))producing+=mining_rate(state,f);
+            const auto concentration=p->observedConcentration.value_or(MineralCargo{});
+            // The existing hull may fill during construction. Kits refill up
+            // to one old-hull bill/year, only until the finite reserve is full.
+            const auto remainingYears=std::max(0.0,years-1);
+            const auto missingKits=std::max(0.0,kNativeSupportReserveBills*bill-quote.reserveAfter);
+            const auto fillingYears=std::min(remainingYears,std::floor(missingKits/bill));
+            auto cost=station_mineral_cost(work->loadout);
+            const auto reserve=[&](double c) {
+                const auto deficit=[&](double n){return (bill-producing*c/100)*n+std::min(missingKits,bill*n);};
+                // Peak cumulative shortfall occurs at the horizon or either
+                // side of the kit-fill boundary. No simulated future turns.
+                return quote.mineralUnitsPaid+completionBill+std::max({0.0,deficit(remainingYears),
+                    deficit(fillingYears),deficit(std::min(remainingYears,fillingYears+1))});
+            };
+            cost.ironium+=reserve(concentration.ironium);cost.boranium+=reserve(concentration.boranium);
+            cost.germanium+=reserve(concentration.germanium);
+            if(!mineral_cargo_sufficient(p->minerals,cost))continue;
+            plan.orders.orders.push_back(QueueStationOrder{p->id,*work});
+            explain(reason,"Refit paid native station at colony "+std::to_string(p->id));
         }
     }
 }

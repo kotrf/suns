@@ -5,6 +5,7 @@
 #include "suns/native_orbital.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/stations.hpp"
+#include "native_orbital_defense_fixture.hpp"
 #include <QCoreApplication>
 #include <QFile>
 #include <QTemporaryDir>
@@ -196,6 +197,33 @@ void stale_remote_queue_does_not_duplicate_a_build()
     view.state.planets.front().nativeOrbit.servicedTurn=view.state.turn;
     assert(queueCount(plan_computer_turn(view))==1);
 }
+void station_policy_survives_host_reload_and_order_packets()
+{
+    auto state=test::native_orbital_defense_fixture();
+    Player hostPlayer{2,"Human host"};hostPlayer.race=race_preset(RacePreset::Terran);
+    state.players.push_back(hostPlayer);
+    const auto plan=plan_computer_turn(make_player_view(state,1));
+    const auto home=std::find_if(state.planets.begin(),state.planets.end(),[](const auto& p){return p.owner==1;})->id;
+    assert(test::native_station_order(plan,home));
+    QTemporaryDir dir;QString error;SaveGameData host;
+    host.state=state;host.mode=SessionMode::Host;host.campaignId=50;host.turnToken=17;
+    host.playerTokens={{2,17}};host.pendingOrders={2,{}};
+    const auto hostPath=dir.filePath("station-host.suns");
+    assert(write_save_game_file(hostPath,host,error));SaveGameData loaded;
+    assert(read_save_game_file(hostPath,loaded,error));
+    const auto replay=plan_computer_turn(make_player_view(loaded.state,1));
+    assert(replay.nextState==plan.nextState && packet(replay,state.turn)==packet(plan,state.turn));
+    const auto orderPath=dir.filePath("station.sunsorders");
+    const auto bytes=packet(plan,state.turn);QFile file(orderPath);assert(file.open(QIODevice::WriteOnly));
+    assert(file.write(bytes)==bytes.size());file.close();TurnOrderFileData decoded;
+    assert(read_turn_order_file(orderPath,decoded,error));
+    const auto actual=TurnProcessor{}.process(loaded.state,{decoded.orders});
+    const auto expected=TurnProcessor{}.process(state,{plan.orders});
+    const auto& a=*find_planet(actual,home);const auto& b=*find_planet(expected,home);
+    assert(a.productionQueue==b.productionQueue && a.nativeOrbit==b.nativeOrbit);
+    assert(station_loadout(*native_orbital_station(actual,a))==station_loadout(*native_orbital_station(expected,b)));
+    assert(a.minerals.ironium==b.minerals.ironium && a.minerals.boranium==b.minerals.boranium && a.minerals.germanium==b.minerals.germanium);
+}
 }
 int main(int argc,char** argv)
 {
@@ -203,6 +231,7 @@ int main(int argc,char** argv)
     paid_start_is_identical_for_both_controllers_and_race_import();
     human_replaces_a_miner_and_founds_an_orbit_through_pbem_orders();
     stale_remote_queue_does_not_duplicate_a_build();
+    station_policy_survives_host_reload_and_order_packets();
     sparse_bootstrap_preserves_paid_exploration();
     for(const auto seed:{17,42,123})actual_computer_campaign_survives_reload_and_supplies_its_second_colony(seed);
 }
