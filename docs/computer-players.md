@@ -17,7 +17,12 @@ queues wait for a fresh closing economic observation rather than duplicating a
 possibly undelivered build. Fleet goals survive save/reload and await ordinary
 acknowledgements. Travel uses the same loaded-fleet fuel/cloud budgeting as
 other controllers, with no direct host asset creation or privileged information.
-Military planning and automatic native station upgrades are later balance work.
+With mining, exploration and the first settler funded, the policy can buy a
+baseline armed station fit and larger native housing at 80% capacity. It preserves
+existing components/services and reserves support before paying the ordinary full
+refit bill. Crowded housing targets Construction after the original startup
+sequence. [Station policy and acceptance](asymmetric-empires.md#implementation-stage-9-paid-computer-station-defense-and-housing).
+Native combat-fleet planning and comparative military balance remain later work.
 
 ## Shared controller foundation
 

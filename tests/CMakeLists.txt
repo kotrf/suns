@@ -41,6 +41,9 @@ add_test(NAME suns_native_orbital_support_tests COMMAND suns_native_orbital_supp
 add_executable(suns_native_orbital_hulls_tests native_orbital_hulls_tests.cpp)
 target_link_libraries(suns_native_orbital_hulls_tests PRIVATE Suns::Core)
 add_test(NAME suns_native_orbital_hulls_tests COMMAND suns_native_orbital_hulls_tests)
+add_executable(suns_native_orbital_defense_tests native_orbital_defense_tests.cpp)
+target_link_libraries(suns_native_orbital_defense_tests PRIVATE Suns::Core)
+add_test(NAME suns_native_orbital_defense_tests COMMAND suns_native_orbital_defense_tests)
 
 add_executable(suns_route_regression_tests route_regression_tests.cpp)
 target_link_libraries(suns_route_regression_tests PRIVATE Suns::Core)
