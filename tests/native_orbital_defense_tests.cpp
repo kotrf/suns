@@ -152,6 +152,93 @@ void departing_miners_do_not_fund_a_station_project()
     }));
     assert(!test::native_station_order(plan,p.id));
 }
+void last_years_miner_assignment_survives_delayed_telemetry()
+{
+    auto state=test::native_orbital_defense_fixture(20'000);auto& p=test::native_defense_home(state);
+    const auto home=p.id;const auto homeStar=p.star;
+    state.players.front().technology.levels[std::size_t(ResearchField::Energy)]=0;
+    auto& miner=state.fleets.front();miner.ships.front().count=1;miner.telemetry={};
+    miner.telemetry=confirmed_fleet_telemetry(state,miner);const auto moved=miner.id;
+    const auto rate=ship_design_remote_mining_rate(*find_ship_design(state,miner.design));
+    auto second=miner;second.id=state.nextFleetId++;state.fleets.push_back(second);
+    const auto c=200.0/rate;p.observedConcentration=MineralCargo{c,c,c};p.radar=PlanetaryRadarLevel::None;
+    // No scanner bridges the departing miner's first subspace report to HQ.
+    for(auto& f:state.fleets)if(fleet_sensor_range(state,f)>0) {
+        f.electronics={EmissionMode::RadioSilence,100};f.telemetry={};f.telemetry=confirmed_fleet_telemetry(state,f);
+    }
+    auto& target=*std::find_if(state.planets.begin(),state.planets.end(),[](const auto& world){return !world.owner;});
+    target.owner=1;target.nativeOrbit.population=1000;target.minerals={10000,10000,10000};
+    target.nativeOrbit.service=HabitatService::Normal;target.nativeOrbit.servicedTurn=state.turn;
+    target.observedConcentration=p.observedConcentration;target.radar=PlanetaryRadarLevel::None;
+    assert(complete_station_construction(state,target,{StationLoadout{},0}));
+    target.nativeOrbit.station=find_orbital_station_at_planet(state,target.id)->id;
+    auto* star=const_cast<StarSystem*>(find_star(state,target.star));const auto at=find_star(state,homeStar)->position;
+    star->position={at.x+300,at.y};star->stellarClass=StarClass::Orange;star->variability={};
+    set_survey_level(state,1,target.star,SurveyLevel::DeepSurvey,state.turn);
+    p.nativeOrbit.servicedTurn=state.turn-1; // Do not start a project in the dispatch year.
+    set_survey_level(state,1,homeStar,SurveyLevel::DeepSurvey,state.turn);
+    const auto destination=star->position;state=resolve_controlled_campaign_turn(state,{}).state;
+    // Deliver the colony closing independently of the travelling fleet packet.
+    set_survey_level(state,1,homeStar,SurveyLevel::DeepSurvey,state.turn);
+    auto view=make_player_view(state,1);assert(state.turn==11);
+    const auto f=std::find_if(view.state.fleets.begin(),view.state.fleets.end(),[&](const auto& f){return f.id==moved;});
+    assert(f!=view.state.fleets.end() && f->telemetry.observedTurn==10 && f->task==FleetTask::RemoteMining);
+    assert(!f->destination && f->pendingCommands.empty());
+    assert(std::any_of(view.state.players.front().computer.fleetGoals.begin(),view.state.players.front().computer.fleetGoals.end(),
+        [&](const auto& g){return g.fleet==moved && g.kind==ComputerFleetGoalKind::Resupply && g.target!=homeStar;}));
+    auto& received=*std::find_if(view.state.planets.begin(),view.state.planets.end(),[&](const auto& p){return p.id==home;});
+    assert(received.nativeOrbit.servicedTurn==11);
+    const auto rich=plan_computer_turn(view);const auto* work=test::native_station_order(rich,home);assert(work);
+    const auto price=station_mineral_cost(work->construction.loadout);
+    const auto quote=native_orbital_support_quote(view.state,received);
+    const auto years=std::ceil(double(station_build_cost(work->construction.loadout))/(quote.output*0.8));assert(years>1);
+    const auto margin=quote.mineralUnitsPaid+4+2*(years-1)-0.5;
+    received.minerals={price.ironium+margin,price.boranium+margin,price.germanium+margin};
+    auto acknowledged=view;
+    auto& moving=*std::find_if(acknowledged.state.fleets.begin(),acknowledged.state.fleets.end(),[&](const auto& f){return f.id==moved;});
+    moving.destination=destination;moving.task=FleetTask::None;
+    assert(!test::native_station_order(plan_computer_turn(acknowledged),home));
+    assert(!test::native_station_order(plan_computer_turn(view),home));
+    received.minerals.ironium+=1;received.minerals.boranium+=1;received.minerals.germanium+=1;
+    assert(test::native_station_order(plan_computer_turn(view),home));
+}
+void station_budget_covers_finite_emergency_kit_replenishment()
+{
+    auto state=test::native_orbital_defense_fixture(500'000);auto& p=test::native_defense_home(state);const auto home=p.id;
+    state.players.front().technology.levels[std::size_t(ResearchField::Construction)]=14;
+    auto fit=station_loadout(*native_orbital_station(state,p));fit.hull=OrbitalStationHullType::NativeCitadel;
+    assert(complete_station_construction(state,p,{fit,p.nativeOrbit.station}));p.nativeOrbit.reserveUnits=0;
+    const auto& miner=state.fleets.front();const auto rate=ship_design_remote_mining_rate(*find_ship_design(state,miner.design))*fleet_ship_count(miner);
+    const auto c=2025.0/rate;p.observedConcentration=MineralCargo{c,c,c};
+    set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
+    const auto rich=plan_computer_turn(make_player_view(state,1));const auto* order=test::native_station_order(rich,home);assert(order);
+    assert(order->construction.loadout.hull==OrbitalStationHullType::NativeBastion);
+    const auto price=station_mineral_cost(order->construction.loadout);
+    const auto quote=native_orbital_support_quote(state,p);assert(quote.mineralUnitsPaid==40 && quote.reserveAfter==20);
+    p.minerals={price.ironium+120,price.boranium+120,price.germanium+120};
+    set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
+    const auto underfunded=plan_computer_turn(make_player_view(state,1));
+    const auto finish=[&](GameState s,const PlayerOrders& orders) {
+        for(unsigned year=0;year<10;++year) {
+            s=TurnProcessor{}.process(s,year?std::vector<PlayerOrders>{}:std::vector{orders});
+            const auto& colony=*find_planet(s,home);assert(colony.nativeOrbit.service==HabitatService::Normal && !colony.nativeOrbit.populationLost);
+            if(native_orbital_station(s,colony)->hull==OrbitalStationHullType::NativeBastion)return s;
+        }
+        assert(false);return s;
+    };
+    const auto unsafe=finish(state,rich.orders);
+    assert(find_planet(unsafe,home)->minerals.ironium<80); // Paid refit leaves less than one full Bastion bill.
+    assert(!test::native_station_order(underfunded,home));
+    p.minerals.ironium+=40;p.minerals.boranium+=40;p.minerals.germanium+=40;
+    set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
+    const auto funded=plan_computer_turn(make_player_view(state,1));assert(test::native_station_order(funded,home));
+    const auto safe=finish(state,funded.orders);const auto& colony=*find_planet(safe,home);
+    assert(colony.minerals.ironium>=80 && colony.minerals.boranium>=80 && colony.minerals.germanium>=80);
+    assert(colony.nativeOrbit.reserveUnits==60);
+    p.nativeOrbit.reserveUnits=60;p.minerals={price.ironium+100,price.boranium+100,price.germanium+100};
+    set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
+    assert(test::native_station_order(plan_computer_turn(make_player_view(state,1)),home)); // No perpetual kit charge.
+}
 }
 int main()
 {
@@ -162,5 +249,7 @@ int main()
     first_settler_savings_are_not_spent_on_defense();
     received_evidence_and_storage_order_are_deterministic();
     departing_miners_do_not_fund_a_station_project();
+    last_years_miner_assignment_survives_delayed_telemetry();
+    station_budget_covers_finite_emergency_kit_replenishment();
     std::cout<<"Native station policy passed\n";
 }

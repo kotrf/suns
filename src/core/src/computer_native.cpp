@@ -290,16 +290,26 @@ void plan_native_civilization(const PlayerView& view,ComputerTurnPlan& plan,std:
             const auto completionBill=double((native_orbital_capacity(work->loadout.hull)+kNativeSupportPopulationPerUnit-1)
                 /kNativeSupportPopulationPerUnit);
             double producing=0;
+            // Telemetry can predate last year's dispatch. Retained assignments
+            // are HQ intent even when the received fleet still appears to mine here.
             for(const auto& f:state.fleets)if(f.owner==view.player && f.task==FleetTask::RemoteMining
                 && !f.destination && f.pendingCommands.empty() && !departing.contains(f.id)
+                && std::none_of(goals.begin(),goals.end(),[&](const auto& g){return g.fleet==f.id && g.target!=p->star;})
                 && same_position(f.position,star->position))producing+=mining_rate(state,f);
             const auto concentration=p->observedConcentration.value_or(MineralCargo{});
-            // The existing hull may fill during construction. Hold one bill
-            // for the new hull plus the current-rate construction deficit; no future-year
-            // simulation or assumed arrival of assigned remote miners.
+            // The existing hull may fill during construction. Kits refill up
+            // to one old-hull bill/year, only until the finite reserve is full.
+            const auto remainingYears=std::max(0.0,years-1);
+            const auto missingKits=std::max(0.0,kNativeSupportReserveBills*bill-quote.reserveAfter);
+            const auto fillingYears=std::min(remainingYears,std::floor(missingKits/bill));
             auto cost=station_mineral_cost(work->loadout);
-            const auto reserve=[&](double c){return quote.mineralUnitsPaid+completionBill
-                +std::max(0.0,bill-producing*c/100)*std::max(0.0,years-1);};
+            const auto reserve=[&](double c) {
+                const auto deficit=[&](double n){return (bill-producing*c/100)*n+std::min(missingKits,bill*n);};
+                // Peak cumulative shortfall occurs at the horizon or either
+                // side of the kit-fill boundary. No simulated future turns.
+                return quote.mineralUnitsPaid+completionBill+std::max({0.0,deficit(remainingYears),
+                    deficit(fillingYears),deficit(std::min(remainingYears,fillingYears+1))});
+            };
             cost.ironium+=reserve(concentration.ironium);cost.boranium+=reserve(concentration.boranium);
             cost.germanium+=reserve(concentration.germanium);
             if(!mineral_cargo_sufficient(p->minerals,cost))continue;
