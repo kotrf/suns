@@ -1,6 +1,7 @@
 #include "native_orbital_defense_fixture.hpp"
 #include "suns/native_orbital_support.hpp"
 #include "suns/production.hpp"
+#include "suns/combat.hpp"
 #include <cmath>
 #include <iostream>
 using namespace suns;
@@ -239,6 +240,52 @@ void station_budget_covers_finite_emergency_kit_replenishment()
     set_survey_level(state,1,p.star,SurveyLevel::DeepSurvey,state.turn);
     assert(test::native_station_order(plan_computer_turn(make_player_view(state,1)),home)); // No perpetual kit charge.
 }
+void paid_station_weapons_can_engage_the_initial_attack_range()
+{
+    for(const std::uint8_t weapons:{0,7,9}) {
+        auto state=test::native_orbital_defense_fixture();const auto home=test::native_defense_home(state).id;
+        state.players.front().technology.levels[std::size_t(ResearchField::Weapons)]=weapons;
+        const auto plan=plan_computer_turn(make_player_view(state,1));const auto* order=test::native_station_order(plan,home);assert(order);
+        const auto expected=order->construction.loadout;const auto stationId=order->construction.refitStation;
+        const auto price=station_mineral_cost(expected);
+        auto control=state;auto plain=plan.orders;
+        std::erase_if(plain.orders,[](const auto& o){return std::holds_alternative<QueueStationOrder>(o);});
+        bool complete=false;
+        for(unsigned year=0;year<20 && !complete;++year) {
+            state=TurnProcessor{}.process(state,year?std::vector<PlayerOrders>{}:std::vector{plan.orders});
+            control=TurnProcessor{}.process(control,year?std::vector<PlayerOrders>{}:std::vector{plain});
+            const auto& colony=*find_planet(state,home);const auto* station=native_orbital_station(state,colony);
+            assert(station && station->id==stationId && colony.nativeOrbit.population);
+            complete=colony.productionQueue.empty() && station_loadout(*station)==expected;
+        }
+        assert(complete);
+        const auto& colony=*find_planet(state,home);const auto& other=*find_planet(control,home);
+        assert(std::abs(other.minerals.ironium-colony.minerals.ironium-price.ironium)<1e-6);
+        assert(std::abs(other.minerals.boranium-colony.minerals.boranium-price.boranium)<1e-6);
+        assert(std::abs(other.minerals.germanium-colony.minerals.germanium-price.germanium)<1e-6);
+        // Isolate the paid station: miners and scouts must not draw the enemy
+        // into melee or supply damage that hides an unusable station weapon.
+        state.fleets.clear();Player attacker{2,"Laser attacker"};attacker.race=race_preset(RacePreset::Terran);
+        attacker.technology.levels.fill(7);state.players.push_back(attacker);
+        ShipDesign design{state.nextShipDesignId++,2,"Laser destroyer",ShipHullType::Destroyer,
+            {ShipComponentType::QuickJump5,ShipComponentType::Laser}};
+        normalize_ship_design_placement(design);assert(ship_design_valid(design));state.shipDesigns.push_back(design);
+        Fleet enemy;enemy.id=state.nextFleetId++;enemy.owner=2;enemy.design=design.id;enemy.ships={{design.id,1}};
+        enemy.name="Laser attacker";enemy.position=find_star(state,colony.star)->position;enemy.fuel=fleet_fuel_capacity(state,enemy);
+        state.fleets.push_back(enemy);
+        const auto result=TurnProcessor{}.process_with_events(state,{});
+        const auto report=std::find_if(result.events.begin(),result.events.end(),[](const auto& e){
+            return e.kind==GameEventKind::SpaceBattle && e.recipient==1 && e.battle;
+        });
+        assert(report!=result.events.end());const auto& battle=*report->battle;
+        const auto unit=std::find_if(battle.units.begin(),battle.units.end(),[&](const auto& u){return u.station==stationId;});
+        assert(unit!=battle.units.end());const auto index=std::size_t(unit-battle.units.begin());
+        assert(std::any_of(battle.shots.begin(),battle.shots.end(),[&](const auto& shot){return shot.attacker==index && shot.armorDamage>0;}));
+        assert(battle.rounds<kSpaceBattleRoundLimit && unit->survivingShips==1);
+        assert(std::none_of(result.state.fleets.begin(),result.state.fleets.end(),[&](const auto& f){return f.id==enemy.id;}));
+        if(weapons==7)assert(std::count(expected.components.begin(),expected.components.end(),ShipComponentType::YakimoraLightPhaser)==2);
+    }
+}
 }
 int main()
 {
@@ -251,5 +298,6 @@ int main()
     departing_miners_do_not_fund_a_station_project();
     last_years_miner_assignment_survives_delayed_telemetry();
     station_budget_covers_finite_emergency_kit_replenishment();
+    paid_station_weapons_can_engage_the_initial_attack_range();
     std::cout<<"Native station policy passed\n";
 }

@@ -46,8 +46,10 @@ std::optional<ShipComponentType> station_equipment(const GameState& s,PlayerId o
     for(const auto& tech:equipment_technologies()) {
         if(tech.kind!=kind || !component_available_to_player(s,owner,tech.component))continue;
         const auto spec=component_spec(tech.component);
+        // Stations cannot close the initial one-unit gap to an attacking fleet.
+        // A range-zero melee beam cannot supply their baseline defense.
         const auto value=kind==ShipComponentKind::BeamWeapon
-            ? (spec.shieldOnly?0:spec.weaponPower*(1+0.2*spec.weaponRange)) : spec.shields;
+            ? (spec.shieldOnly || !spec.weaponRange?0:spec.weaponPower*(1+0.2*spec.weaponRange)) : spec.shields;
         if(value>score){score=value;best=tech.component;}
     }
     return best;
