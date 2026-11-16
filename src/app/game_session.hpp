@@ -89,6 +89,7 @@ private:
         mutable PlayerId receivedPlayerId{};
         mutable std::uint64_t fleetPlanningRevision{std::uint64_t(-1)};
         mutable std::optional<GameState> fleetPlanningState;
+        mutable std::vector<PlannedBaseCargoTransfer> fleetPlanningBaseTransfers;
     } data_;
     void resetExchangeIdentity();
     void rotateTurnToken();

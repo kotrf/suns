@@ -68,7 +68,7 @@ const GameState& GameSession::plannedState() const
             if (original != data_.state.fleets.end() && original->owner == data_.pendingOrders.player)
                 fleet.pendingCommands = original->pendingCommands; // Sent owner intent, never live physical manifests.
         }
-        data_.fleetPlanningState = projected_cargo_order_state(received, data_.pendingOrders);
+        data_.fleetPlanningState = projected_cargo_order_state(received,data_.pendingOrders,&data_.fleetPlanningBaseTransfers);
         for (auto& fleet : data_.fleetPlanningState->fleets) {
             if (fleet.owner != data_.pendingOrders.player || fleet_telemetry_age(*data_.fleetPlanningState, fleet) != 0
                 || !fleet_has_instant_link(*data_.fleetPlanningState, fleet)) continue;

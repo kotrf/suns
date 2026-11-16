@@ -107,16 +107,23 @@ void appended_ids_and_old_id_wire_layout()
 }
 namespace suns {
 struct MainWindowTestAccess {
-    static void transfer(MainWindow& w,const char* source,const char* destination,double amount,double maximum,bool accept)
+    static void transfer(MainWindow& w,const char* source,const char* destination,double amount,double maximum,bool accept,bool scheduled=false)
     {
         QTimer::singleShot(0,&w,[&] {
             auto* d=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(d);
-            const auto choose=[&](const char* object,const char* value){auto* c=d->findChild<QComboBox*>(object);const auto i=c->findText(value,Qt::MatchContains);assert(i>=0);c->setCurrentIndex(i);};
+            const auto choose=[&](const char* object,const char* value) {
+                auto* c=d->findChild<QComboBox*>(object);const auto i=c->findText(value,Qt::MatchContains);
+                if(i<0) {
+                    QStringList names;for(int n=0;n<c->count();++n)names<<c->itemText(n);
+                    qFatal("Missing Cargo endpoint %s in %s",value,qPrintable(names.join("; ")));
+                }
+                c->setCurrentIndex(i);
+            };
             choose("cargoSourceCombo",source);choose("cargoDestinationCombo",destination);
             auto* spin=d->findChild<QDoubleSpinBox*>("cargoMineralSpin0");assert(spin->maximum()==maximum);
             spin->setValue(amount);assert(spin->value()==std::min(amount,maximum));
             auto* buttons=d->findChild<QDialogButtonBox*>();assert(buttons->button(QDialogButtonBox::Ok)->isEnabled()==accept);
-            const auto base=QString(source).contains("base") || QString(destination).contains("base");
+            const auto base=scheduled || QString(source).contains("base") || QString(destination).contains("base");
             assert(d->findChild<QLabel*>("cargoSourceBeforeLabel")->text().contains(base?"scheduled base":"Available now"));
             buttons->button(accept?QDialogButtonBox::Ok:QDialogButtonBox::Cancel)->click();
         });
@@ -188,6 +195,31 @@ struct MainWindowTestAccess {
         const auto stopped=resolve(w);
         assert(!stopped.players.front().transportLines.front().spec.active && !test::cache_fleet(stopped,2).repeatOrders);
     }
+    static void merge_preserves_transfer_phase_after_reload(MainWindow& w)
+    {
+        w.state_=test::cargo_cache_with_base();auto& carrier=w.state_.fleets[1];carrier.minerals={200,0,0};
+        carrier.telemetry={};carrier.telemetry=confirmed_fleet_telemetry(w.state_,carrier);
+        w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.fleet=2;w.selection_.star.reset();w.rebuildScene();
+        transfer(w,"Mineral carrier","Forward cache",100,200,true);
+        QTimer::singleShot(0,&w,[&] {
+            auto* d=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(d && d->windowTitle()=="Merge fleets");
+            auto* source=d->findChild<QComboBox*>();const auto base=source->findData(3u);assert(base>=0);source->setCurrentIndex(base);
+            d->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        });
+        w.openMergeFleetsDialog();assert(w.pendingOrders_.orders.size()==2);
+        const auto& merge=std::get<MergeFleetsOrder>(w.pendingOrders_.orders.back());assert(merge.destination==2 && merge.source==3);
+        // The phase book is derived again from the original ordered intent;
+        // it is not persisted as physical state or recovered from final hulls.
+        auto save=host(w.state_);save.pendingOrders=w.pendingOrders_;save.pendingDescriptions=w.pendingDescriptions_;
+        QTemporaryDir dir;QString error;const auto path=dir.filePath("merge-with-cargo.suns");
+        assert(write_save_game_file(path,save,error) && w.loadGameFromPath(path));
+        w.selection_.fleet=2;w.selection_.star.reset();w.rebuildScene();
+        const auto mergedName=QString::fromStdString(test::cache_fleet(w.fleetPlanningState(),2).name).toUtf8();
+        transfer(w,"Forward cache",mergedName.constData(),200,100,true,true);
+        const auto actual=resolve(w);
+        assert(actual.fleets.size()==2 && test::cache_fleet(actual,1).minerals.ironium==0);
+        assert(test::cache_fleet(actual,2).minerals.ironium==300);
+    }
     static void cargo_exchange_and_received_panel(MainWindow& w)
     {
         w.state_=test::cargo_cache_fixture();w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();
@@ -235,5 +267,6 @@ int main(int argc,char** argv)
     MainWindow w;w.installUiPolish();w.installFleetReadabilityPolish();w.installOutposts();
     MainWindowTestAccess::cargo_exchange_and_received_panel(w);
     MainWindowTestAccess::cargo_respects_base_service_phase(w);
+    MainWindowTestAccess::merge_preserves_transfer_phase_after_reload(w);
     MainWindowTestAccess::logistics_excludes_caches(w);
 }

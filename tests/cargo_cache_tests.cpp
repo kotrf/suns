@@ -85,14 +85,15 @@ void base_delivery_cannot_fund_command_phase_cargo()
     const auto actual=TurnProcessor{}.process(s,{orders});
     assert(test::cache_fleet(actual,1).minerals.ironium==100 && test::cache_fleet(actual,2).minerals.ironium==0);
     assert(test::cache_fleet(actual,3).minerals.ironium==0);
-    const auto preview=projected_cargo_order_state(make_player_view(s,1).state,orders);
+    std::vector<PlannedBaseCargoTransfer> deferred;
+    const auto preview=projected_cargo_order_state(make_player_view(s,1).state,orders,&deferred);
     assert(test::cache_fleet(preview,2).minerals.ironium==0);
     assert(test::cache_fleet(preview,1).minerals.ironium==0 && test::cache_fleet(preview,3).minerals.ironium==100);
-    const auto service=projected_cargo_service_state(preview,orders);
+    const auto service=projected_cargo_service_state(preview,deferred);
     for(FleetId id:{1u,2u,3u})assert(test::cache_fleet(service,id).minerals.ironium==test::cache_fleet(actual,id).minerals.ironium);
     const PlayerOrders departing{1,{orders.orders.front(),MoveFleetOrder{3,{90,-50},3}}};
-    const auto command=projected_cargo_order_state(make_player_view(s,1).state,departing);
-    assert(test::cache_fleet(projected_cargo_service_state(command,departing),1).minerals.ironium==0);
+    const auto command=projected_cargo_order_state(make_player_view(s,1).state,departing,&deferred);
+    assert(test::cache_fleet(projected_cargo_service_state(command,deferred),1).minerals.ironium==0);
     assert(test::cache_fleet(TurnProcessor{}.process(s,{departing}),1).minerals.ironium==0);
 }
 void cargo_cache_rejects_logistics_at_admission_and_arrival()
@@ -123,6 +124,43 @@ void cargo_cache_rejects_logistics_at_admission_and_arrival()
     auto paused=line;++paused.revision;paused.active=false;assert(set_transport_line(s,1,{paused}));
     assert(!test::cache_fleet(s,2).destination && !test::cache_fleet(s,2).repeatOrders);
 }
+void merge_does_not_reclassify_an_earlier_immediate_transfer()
+{
+    for(bool crystal:{false,true}) {
+        auto s=test::cargo_cache_with_base();
+        s.fleets[1].minerals=crystal?MineralCargo{}:MineralCargo{200,0,0};
+        s.fleets[2].minerals=crystal?MineralCargo{}:MineralCargo{100,0,0};
+        if(crystal){s.fleets[1].xenocrystal=200;s.fleets[2].xenocrystal=100;}
+        for(auto& f:s.fleets){f.telemetry={};f.telemetry=confirmed_fleet_telemetry(s,f);}
+        const auto transfer=[&](FleetId source)->Order {
+            if(crystal)return TransferXenocrystalOrder{{0,source},{0,1},100};
+            return TransferCargoOrder{{0,source},{0,1},0,{100,0,0}};
+        };
+        const auto quantity=[&](const GameState& state,FleetId id) {
+            const auto& f=test::cache_fleet(state,id);return crystal?double(f.xenocrystal):f.minerals.ironium;
+        };
+        std::vector<PlannedBaseCargoTransfer> deferred;
+        for(int scenario:{1,0,2}) {
+            const PlayerOrders orders{1,scenario==1?std::vector<Order>{transfer(3),MergeFleetsOrder{2,3}}:
+                scenario==0?std::vector<Order>{transfer(2),MergeFleetsOrder{2,3}}:
+                    std::vector<Order>{MergeFleetsOrder{2,3},transfer(2)}};
+            const auto actual=TurnProcessor{}.process(s,{orders});
+            assert(actual.fleets.size()==2 && quantity(actual,1)==(scenario==1?0:100));
+            const auto command=projected_cargo_order_state(make_player_view(s,1).state,orders,&deferred);
+            assert(deferred.size()==(scenario==0?0:1));
+            if(!deferred.empty())assert(deferred.front().receiver==(scenario==1?3u:2u));
+            const auto service=projected_cargo_service_state(command,deferred);
+            assert(quantity(service,1)==quantity(actual,1) && quantity(service,2)==quantity(actual,2));
+            if(scenario==0 && !crystal) {
+                const auto excessive=projected_cargo_service_draft(service,1,{{{0,1},{0,2},0,{200,0,0}}});
+                assert(quantity(excessive,1)==100 && quantity(excessive,2)==200);
+                const auto available=projected_cargo_service_draft(service,1,{{{0,1},{0,2},0,{100,0,0}}});
+                assert(quantity(available,1)==0 && quantity(available,2)==300);
+            }
+        }
+    }
+}
+
 }
 int main()
 {
@@ -132,5 +170,6 @@ int main()
     researched_kit_has_no_mobile_storage_or_stock_gift();
     base_delivery_cannot_fund_command_phase_cargo();
     cargo_cache_rejects_logistics_at_admission_and_arrival();
+    merge_does_not_reclassify_an_earlier_immediate_transfer();
     std::cout<<"Cargo cache core passed\n";
 }

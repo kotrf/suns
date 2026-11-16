@@ -2614,16 +2614,41 @@ void record_created_design(const Order& order,ShipDesignId allocated,const GameS
     }
 }
 
+template<class Cargo>
+std::optional<PlannedBaseCargoTransfer> capture_base_transfer(const GameState& state,PlayerId player,
+    const Cargo& cargo,bool captureLocal=true)
+{
+    const auto* from=find_service_fleet(state,cargo.source.fleet);
+    const auto* to=find_service_fleet(state,cargo.destination.fleet);
+    const auto base=[&](const Fleet* f){return f && mobile_base_hulls(state,*f)>0;};
+    const auto* receiver=base(from)?from:base(to)?to:nullptr;
+    if(!receiver)return {};
+    const auto available=[&](FleetId id,const Fleet* f) {
+        return !id || (f && f->owner==player && f->telemetry.observedTurn==state.turn && fleet_has_instant_link(state,*f));
+    };
+    const bool fleetPair=cargo.source.fleet && cargo.destination.fleet && !cargo.source.planet && !cargo.destination.planet;
+    return PlannedBaseCargoTransfer{player,fleetPair?receiver->id:0,
+        captureLocal && available(cargo.source.fleet,from) && available(cargo.destination.fleet,to),cargo};
+}
+
 // UI/AI callers supply a PlayerView: command validation must not inspect host truth.
 GameState project_order_boundary(GameState projected, const PlayerOrders& pending,
     std::vector<PlannedSplitReference>* splits = nullptr,
-    const detail::PlanningOrderPreview& beforeOrder = {})
+    const detail::PlanningOrderPreview& beforeOrder = {},
+    std::vector<PlannedBaseCargoTransfer>* deferred = nullptr)
 {
+    if(deferred)deferred->clear();
     for (auto& p : projected.planets)
         p.xenocrystal = known_xenocrystal(projected, pending.player, p.id).value_or(XenocrystalObservation{}).site;
     std::vector<ColonyFreightDelivery> unusedFreight;
     std::set<FleetId> gated;
     CreatedDesigns created;
+    const auto defer=[&](const auto& cargo) {
+        auto record=capture_base_transfer(projected,pending.player,cargo,deferred!=nullptr);
+        if(!record)return false;
+        if(deferred)deferred->push_back(std::move(*record));
+        return true;
+    };
     for (std::size_t index = 0; index < pending.orders.size(); ++index) {
         auto admission=pending.orders[index];
         if(!bind_created_design(admission,projected,pending.player,created))continue;
@@ -2644,13 +2669,9 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
         } else if (const auto* sample = std::get_if<TransferScienceSampleOrder>(&order)) {
             (void)preview_science_sample_transfer(projected, pending.player, *sample);
         } else if (const auto* crystal = std::get_if<TransferXenocrystalOrder>(&order)) {
-            const auto involvesBase = [&](FleetId id) {
-                const auto* f = find_service_fleet(projected, id);
-                return f && mobile_base_hulls(projected, *f) > 0;
-            };
             // Base exchanges happen after movement and colony production.
             // They cannot finance this year's lab work or an earlier transfer.
-            if (!involvesBase(crystal->source.fleet) && !involvesBase(crystal->destination.fleet))
+            if (!defer(*crystal))
                 (void)preview_xenocrystal_transfer(projected, pending.player, *crystal, &pending);
         } else if (const auto* process = std::get_if<ProcessScienceSampleOrder>(&order)) {
             (void)process_science_sample(projected, pending.player, *process);
@@ -2664,10 +2685,9 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
             || std::holds_alternative<SetFleetMineralCargoOrder>(order)
             || std::holds_alternative<TransferCargoOrder>(order)) {
             if(const auto* cargo=std::get_if<TransferCargoOrder>(&order)) {
-                const auto base=[&](FleetId id){const auto* f=find_service_fleet(projected,id);return f && mobile_base_hulls(projected,*f)>0;};
                 // Host defers these exchanges until after movement. They
                 // cannot fund an ordinary command-phase withdrawal.
-                if(base(cargo->source.fleet) || base(cargo->destination.fleet))continue;
+                if(defer(*cargo))continue;
             }
             if (cargo_order_has_local_link(projected, pending.player, order))
                 apply_cargo_order(projected, pending.player, order, unusedFreight);
@@ -2715,34 +2735,44 @@ bool remap_fleet_references(Order& order, const std::map<FleetId, FleetId>& alia
 }
 } // namespace
 
-GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending)
+GameState projected_cargo_order_state(const GameState& current, const PlayerOrders& pending,
+    std::vector<PlannedBaseCargoTransfer>* deferred)
 {
-    return project_order_boundary(current, pending);
+    return project_order_boundary(current,pending,nullptr,{},deferred);
 }
 
-GameState projected_cargo_service_state(GameState projected,const PlayerOrders& pending)
+GameState projected_cargo_service_state(GameState projected,const std::vector<PlannedBaseCargoTransfer>& deferred)
 {
     std::vector<ColonyFreightDelivery> unusedFreight;
-    for(const auto& order:pending.orders) {
-        const auto* cargo=std::get_if<TransferCargoOrder>(&order);
-        const auto* crystal=std::get_if<TransferXenocrystalOrder>(&order);
-        if(!cargo && !crystal)continue;
-        const auto source=cargo?cargo->source:crystal->source;
-        const auto destination=cargo?cargo->destination:crystal->destination;
-        const auto* from=find_service_fleet(projected,source.fleet);
-        const auto* to=find_service_fleet(projected,destination.fleet);
-        const auto base=[&](const Fleet* f){return f && mobile_base_hulls(projected,*f)>0;};
-        if(!base(from) && !base(to))continue;
-        const auto available=[&](const Fleet* f) {
-            return !f || (f->telemetry.observedTurn==projected.turn && fleet_has_instant_link(projected,*f)
-                && !f->destination && !f->targetFleet && f->waypointQueue.empty() && !f->repeatOrders
-                && (!base(f) || mobile_base_service_error(projected,*f,projected.turn+1).empty()));
-        };
-        if(!available(from) || !available(to))continue;
-        if(crystal)(void)transfer_xenocrystals(projected,pending.player,*crystal);
-        else apply_cargo_order(projected,pending.player,order,unusedFreight);
+    for(const auto& transfer:deferred) {
+        if(!transfer.local)continue;
+        if(transfer.receiver) {
+            const auto* receiver=find_service_fleet(projected,transfer.receiver);
+            if(!receiver || receiver->owner!=transfer.owner || !mobile_base_dock(projected,*receiver))continue;
+        }
+        std::visit([&](const auto& cargo) {
+            const auto* from=find_service_fleet(projected,cargo.source.fleet);
+            const auto* to=find_service_fleet(projected,cargo.destination.fleet);
+            const auto base=[&](const Fleet* f){return f && mobile_base_hulls(projected,*f)>0;};
+            const auto available=[&](const Fleet* f) {
+                return !f || (f->telemetry.observedTurn==projected.turn && fleet_has_instant_link(projected,*f)
+                    && !f->destination && !f->targetFleet && f->waypointQueue.empty() && !f->repeatOrders
+                    && (!base(f) || mobile_base_service_error(projected,*f,projected.turn+1).empty()));
+            };
+            if(!available(from) || !available(to))return;
+            if constexpr(std::is_same_v<std::decay_t<decltype(cargo)>,TransferXenocrystalOrder>)
+                (void)transfer_xenocrystals(projected,transfer.owner,cargo,transfer.receiver!=0);
+            else apply_cargo_order(projected,transfer.owner,cargo,unusedFreight);
+        },transfer.order);
     }
     return projected;
+}
+
+GameState projected_cargo_service_draft(GameState projected,PlayerId player,const std::vector<TransferCargoOrder>& draft)
+{
+    std::vector<PlannedBaseCargoTransfer> deferred;
+    for(const auto& cargo:draft)if(auto transfer=capture_base_transfer(projected,player,cargo))deferred.push_back(std::move(*transfer));
+    return projected_cargo_service_state(std::move(projected),deferred);
 }
 
 GameState detail::project_order_boundary_state(GameState current, const PlayerOrders& pending,

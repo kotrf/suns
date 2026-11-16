@@ -174,6 +174,7 @@ void MainWindow::openCargoManifestDialog()
     // grow population, mine ore, run combat, and move ships. Repeated dialog
     // openings must not advance the world or alter a single colonist.
     GameState planned = fleetPlanningState();
+    const auto baseTransfers=session_->data_.fleetPlanningBaseTransfers;
 
     const auto foundStar = std::find_if(planned.stars.begin(), planned.stars.end(),
         [&](const auto& candidate) { return same_position(candidate.position, *position); });
@@ -394,8 +395,8 @@ void MainWindow::openCargoManifestDialog()
         auto destination = endpoints[static_cast<std::size_t>(destinationIndex)];
         const bool baseService=(source.fleet && mobile_base_hulls(planned,*source.fleet)>0)
             || (destination.fleet && mobile_base_hulls(planned,*destination.fleet)>0);
-        if(baseService && !baseServicePlan && !pendingOrders_.orders.empty())
-            baseServicePlan=projected_cargo_service_state(planned,pendingOrders_);
+        if(baseService && !baseServicePlan && !baseTransfers.empty())
+            baseServicePlan=projected_cargo_service_state(planned,baseTransfers);
         if(baseService && baseServicePlan) {
             const auto serviceEndpoint=[&](CargoEndpointView& e) {
                 if(e.fleet)e.fleet=find_service_fleet(*baseServicePlan,e.endpoint.fleet);
@@ -575,7 +576,7 @@ void MainWindow::openCargoManifestDialog()
             for (const auto& transfer : draftTransfers) orders.orders.push_back(transfer);
             if (draftFuel) orders.orders.push_back(*draftFuel);
             const auto validated=baseService
-                ? projected_cargo_service_state(baseServicePlan?*baseServicePlan:planned,orders)
+                ? projected_cargo_service_draft(baseServicePlan?*baseServicePlan:planned,pendingOrders_.player,draftTransfers)
                 : projected_cargo_order_state(planned,orders);
             const auto matches = [&](const CargoEndpointView& endpoint, std::uint64_t people, const MineralCargo& stock) {
                 CargoEndpointView actual = endpoint;
