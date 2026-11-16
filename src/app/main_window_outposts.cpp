@@ -28,10 +28,11 @@ void MainWindow::installOutposts()
     auto* dock=new QDockWidget("Deep-space infrastructure",this); dock->setObjectName("outpostsDock");
     auto* body=new QWidget(dock); auto* layout=new QVBoxLayout(body);
     auto* hint=new QLabel("Build a ship with one Fuel Depot Kit (Construction 4 / Energy 3) or Deep-space Relay Kit "
-        "(Construction 4 / Electronics 5), or Sensor Array Kit (Construction 6 / Electronics 6) in Ship Designer, then fly it to deep space and deploy. Deployment is permanent; "
+        "(Construction 4 / Electronics 5), Sensor Array Kit (Construction 6 / Electronics 6), or Cargo Cache Kit (Construction 6) in Ship Designer, then fly it to deep space and deploy. Deployment is permanent; "
         "one ship, no colonists, 5 ly from stars and 1 ly from other outposts. Upkeep: 1 mg/year. "
         "Depots dispense finite fuel; tankers replenish fuel at every kind. A powered relay adds 300 ly communications; "
         "a powered sensor array adds 250 ly ordinary / 75 ly penetrating scans only after deployment. "
+        "A cargo cache adds 2000 kt of material storage after deployment; use Cargo between co-located friendly ships and the cache. Caches cannot house colonists. "
         "Stocks and condition below are received telemetry; remote outcomes can change before arrival.",body);
     hint->setWordWrap(true); layout->addWidget(hint);
     auto* coordinates=new QFormLayout;
@@ -46,7 +47,7 @@ void MainWindow::installOutposts()
     auto* flyBuild=new QPushButton("Fly to coordinates and deploy",body); flyBuild->setObjectName("buildOutpostAtCoordinates");
     buildRow->addWidget(deploy); buildRow->addWidget(flyBuild); layout->addLayout(buildRow);
     auto* tree=new QTreeWidget(body); tree->setObjectName("outpostContacts"); tree->setRootIsDecorated(false);
-    tree->setHeaderLabels({"Installation","Kind","Position, ly","Fuel / capacity, mg","Damage","Telemetry","Service"});
+    tree->setHeaderLabels({"Installation","Kind","Position, ly","Fuel / capacity, mg","Damage","Telemetry","Service","Cargo / capacity, kt"});
     tree->header()->setSectionResizeMode(QHeaderView::ResizeToContents); layout->addWidget(tree);
     auto* reserve=new QDoubleSpinBox(body); reserve->setObjectName("outpostTankerReserve");
     reserve->setRange(0,1e12); reserve->setDecimals(2); reserve->setValue(100); reserve->setSuffix(" mg");
@@ -126,11 +127,16 @@ void MainWindow::refreshOutposts()
         row->setText(3,QString("%1 / %2").arg(f.fuel,0,'f',1).arg(fleet_fuel_capacity(state_,f),0,'f',1));
         row->setText(4,QString("%1%").arg(f.damagePercent,0,'f',0));
         row->setText(5,QString("Year %1; age %2").arg(qulonglong(f.telemetry.observedTurn)).arg(qulonglong(fleet_telemetry_age(state_,f))));
-        row->setText(6,!outpost_online(f)?"Offline at observation":f.outpost==OutpostKind::CommunicationsRelay
+        row->setText(6,f.outpost==OutpostKind::CargoCache
+            ? (outpost_online(f)?"Material storage":"Storage retained; operating power off")
+            :!outpost_online(f)?"Offline at observation":f.outpost==OutpostKind::CommunicationsRelay
             && !fleet_transmits(f,f.telemetry.observedTurn)?"Powered; radio silent at observation"
             :f.outpost==OutpostKind::SensorArray && !fleet_active_sensors(f,f.telemetry.observedTurn)?"Powered; active sensors off at observation"
             :f.outpost==OutpostKind::SensorArray?"Sensors: 250 / 75 ly at observation":"Powered at observation");
         for (int c=0;c<7;++c) row->setToolTip(c,"Last received snapshot. Fuel changes, destruction and network interruptions require a delivered report. Powered sites consume 1 mg per year; tanks can be replenished by a Supply outpost arrival order.");
+        row->setText(7,QString("%1 / %2").arg(fleet_cargo_used(state_,f),0,'f',1).arg(fleet_cargo_capacity(state_,f),0,'f',1));
+        row->setToolTip(7,QString("Last received cargo: I %1 / B %2 / G %3 kt.\nCargo caches accept material cargo, not colonists. Local cargo exchange remains possible without operating fuel.")
+            .arg(f.minerals.ironium,0,'f',1).arg(f.minerals.boranium,0,'f',1).arg(f.minerals.germanium,0,'f',1));
         if (f.id==selected) tree->setCurrentItem(row);
     }
 }

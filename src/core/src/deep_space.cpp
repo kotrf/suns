@@ -13,6 +13,7 @@ OutpostKind construction_kit_kind(ShipComponentType component)
     if (component == ShipComponentType::FuelDepotKit) return OutpostKind::FuelDepot;
     if (component == ShipComponentType::DeepSpaceRelayKit) return OutpostKind::CommunicationsRelay;
     if (component == ShipComponentType::SensorArrayKit) return OutpostKind::SensorArray;
+    if (component == ShipComponentType::CargoCacheKit) return OutpostKind::CargoCache;
     return OutpostKind::None;
 }
 OutpostKind fleet_construction_kit(const GameState& state, const Fleet& fleet)
@@ -38,6 +39,7 @@ std::string outpost_kind_name(OutpostKind kind)
     case OutpostKind::FuelDepot: return "Fuel depot";
     case OutpostKind::CommunicationsRelay: return "Communications relay";
     case OutpostKind::SensorArray: return "Sensor array";
+    case OutpostKind::CargoCache: return "Cargo cache";
     default: return "Mobile constructor";
     }
 }
@@ -47,6 +49,11 @@ std::string outpost_deployment_error(const GameState& state, const Fleet& fleet,
     if (fleet_construction_kit(state, fleet) == OutpostKind::None) return "Deploy one ship fitted with exactly one outpost construction kit; split mixed fleets first.";
     if (fleet_construction_kit(state, fleet) == OutpostKind::OrbitalShipyard) return "Use Orbital shipyards to select the destination planet and deploy.";
     if (fleet.damagePercent >= 100 || fleet.colonists) return "Deployment requires an operational hull with no colonists aboard.";
+    if(fleet_construction_kit(state,fleet)==OutpostKind::CargoCache) {
+        auto anchored=fleet;anchored.outpost=OutpostKind::CargoCache;
+        if(fleet_cargo_used(state,anchored)>fleet_cargo_capacity(state,anchored)+1e-6)
+            return "Cargo exceeds the deployed cache's storage capacity.";
+    }
     if (!std::isfinite(position.x) || !std::isfinite(position.y)) return "Deployment needs a finite position.";
     for (const auto& star : state.stars) if (distance_between(star.position, position) < kOutpostStellarClearanceLy)
         return "Deep-space outposts need at least 5 ly clearance from a star; use orbital stations at planets.";
@@ -54,7 +61,7 @@ std::string outpost_deployment_error(const GameState& state, const Fleet& fleet,
 }
 bool outpost_state_valid(const GameState& state, const Fleet& fleet)
 {
-    if (fleet.outpost > OutpostKind::SensorArray) return false;
+    if (fleet.outpost > kLastOutpostKind) return false;
     if (fleet.outpost == OutpostKind::OrbitalShipyard) {
         // Validate physical anchoring here; the trailing ORBI section validates
         // the independently dated construction/crew state after it has loaded.
@@ -71,7 +78,9 @@ bool outpost_state_valid(const GameState& state, const Fleet& fleet)
         && fleet_construction_kit(state, fleet) == fleet.outpost
         && !fleet.destination && !fleet.arrivalAction && !fleet.targetFleet && fleet.waypointQueue.empty()
         && fleet.routeTemplate.empty() && !fleet.repeatOrders && fleet.task == FleetTask::None
-        && std::isfinite(fleet.fuel) && fleet.fuel >= 0 && fleet.fuel <= fleet_fuel_capacity(state, fleet) + 1e-6;
+        && std::isfinite(fleet.fuel) && fleet.fuel >= 0 && fleet.fuel <= fleet_fuel_capacity(state, fleet) + 1e-6
+        && (fleet.outpost!=OutpostKind::CargoCache
+            || fleet_cargo_used(state,fleet)<=fleet_cargo_capacity(state,fleet)+1e-6);
 }
 std::vector<Fleet> known_outposts(const GameState& state, PlayerId owner)
 {

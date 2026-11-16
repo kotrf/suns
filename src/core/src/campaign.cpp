@@ -70,6 +70,8 @@ const std::vector<ResearchUnlock>& research_unlocks()
             unlock.extraLevels[std::size_t(depot ? ResearchField::Energy : ResearchField::Electronics)] = depot ? 3 : 5;
             entries.push_back(std::move(unlock));
         }
+        entries.push_back({ResearchField::Construction,6,"Cargo Cache Kit",
+            "Paid 100 kt constructor kit: permanently deploy 2000 kt additional material storage. No extra mobile hold, colonists or free stock. Exchange cargo with co-located friendly ships; upkeep 1 mg/year.",ShipComponentType::CargoCacheKit});
         {
             ResearchUnlock unlock{ResearchField::Construction,6,"Sensor Array Kit",
                 "Paid 100 kt constructor kit: permanently deploy 250 ly ordinary / 75 ly penetrating sensors. Upkeep 1 mg/year; no kit scanning field while mobile. Observations use normal communication delivery.",ShipComponentType::SensorArrayKit};

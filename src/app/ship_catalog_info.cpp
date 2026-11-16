@@ -91,6 +91,8 @@ QString componentCatalogDescription(ShipComponentType component)
         facts << "One paid kit per constructor. Fly to deep space, then deploy permanently (one ship, no colonists, 5 ly from stars, 1 ly from another outpost). Upkeep 1 mg/year; tanker deliveries replenish fuel. Depot stock is finite; the relay adds 300 ly only after deployment.";
     if (component == ShipComponentType::SensorArrayKit)
         facts << "One paid kit per constructor. Permanently deploy in deep space for 250 ly ordinary / 75 ly penetrating sensors; planetary penetration estimates habitability. Upkeep 1 mg/year; tankers replenish fuel. The kit supplies no scanning field in transit. Reports use normal communication delays.";
+    if (component == ShipComponentType::CargoCacheKit)
+        facts << "Permanently deploy one ship for 2000 kt additional material storage. No extra mobile hold, free stock or population. Exchange cargo with co-located friendly ships using Cargo; stored material remains available when operating fuel runs out. Upkeep 1 mg/year; tanker deliveries restore operating power.";
     if (spec.type == ShipComponentType::ExpeditionDock)
         facts << "Expedition Base only. Enables finite-stock refueling and cargo docking for separate friendly fleets; no external services in a year the base moves.";
     if (spec.type == ShipComponentType::ExpeditionWorkshop)

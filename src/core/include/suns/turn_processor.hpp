@@ -254,9 +254,26 @@ struct PlayerOrders {
     std::vector<Order> orders;
 };
 
+// Transient owner-intent metadata, captured when an order is admitted. Later
+// merge/split commands must not change its phase or retarget its receiving base.
+struct PlannedBaseCargoTransfer {
+    PlayerId owner{};
+    FleetId receiver{}; // Original base receiver; zero for a surface exchange.
+    bool local{};
+    std::variant<TransferCargoOrder,TransferXenocrystalOrder> order;
+};
+
 // Replay only valid queued local cargo orders, using the same rules as End
 // Turn, without advancing a year or changing the actual physical state.
-[[nodiscard]] GameState projected_cargo_order_state(const GameState&, const PlayerOrders&);
+[[nodiscard]] GameState projected_cargo_order_state(const GameState&, const PlayerOrders&,
+    std::vector<PlannedBaseCargoTransfer>* deferred = nullptr);
+// Start from the command-boundary projection and preview only co-located
+// mobile-base cargo service, in receipt order. No movement or annual work.
+[[nodiscard]] GameState projected_cargo_service_state(GameState commandBoundary,
+    const std::vector<PlannedBaseCargoTransfer>&);
+// Fresh Cargo draft only: no earlier structural commands may be reclassified.
+[[nodiscard]] GameState projected_cargo_service_draft(GameState serviceBoundary,PlayerId,
+    const std::vector<TransferCargoOrder>&);
 
 // Apply design creation only, without advancing the year or spending resources.
 [[nodiscard]] GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending);

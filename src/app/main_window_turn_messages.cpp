@@ -614,9 +614,10 @@ QString event_text(const GameState& state, const GameEvent& event)
             .arg(event.kind==GameEventKind::OutpostDeployed
                 ? (event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital constructor anchored permanently. Six supplied assembly years are required; use Independent orbital shipyards for workers, stocks and radiation protection.")
                     : event.quantity==int(OutpostKind::SensorArray) ? QString("Sensor array permanently deployed. Powered coverage: 250 ly ordinary / 75 ly penetrating. Upkeep: 1 mg/year; tankers replenish fuel. Scans reach headquarters through ordinary communications.")
+                    : event.quantity==int(OutpostKind::CargoCache) ? QString("Cargo cache permanently deployed: 2000 kt additional material storage, no population. Use Cargo between co-located friendly ships. No stock is created. Upkeep: 1 mg/year; stored material remains accessible without operating fuel.")
                     : kind + " permanently deployed. Upkeep: 1 mg/year. Depots dispense finite fuel; relays extend communications by 300 ly while powered.")
                 : event.kind==GameEventKind::OutpostFuelExhausted
-                ? QString("Operating fuel exhausted: depot/relay services are offline. Send a tanker with Supply outpost; the installation remains in place.")
+                ? QString("Operating fuel exhausted: fuel-dependent services are offline. Send a tanker with Supply outpost; the installation and its stored cargo remain in place.")
                 : event.quantity==int(OutpostKind::OrbitalShipyard) ? QString("Orbital deployment failed. The one-ship constructor must be idle at the selected planet, with no occupied station slot or foreign surface colony.")
                 : QString("Deployment failed physical validation. Check one ship with one kit, no colonists, hull condition, an idle final waypoint, 5 ly stellar clearance and 1 ly separation from other installations."));
     } else if (event.kind == GameEventKind::StargateTransit) {

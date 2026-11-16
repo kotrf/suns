@@ -130,6 +130,12 @@ statistics and deduplication are unchanged.
 
 ## Addressed mineral deliveries to stationary installations
 
+Cargo caches (#54) are manual Cargo endpoints. They are absent from the primary
+and additional recipient lists, and cannot accept line definitions, assignments
+or automatic unloading. Old unsupported programmes cannot deposit cargo; stopping
+or deleting their HQ line remains possible. Other installation recipients retain
+their existing rules.
+
 The destination selector also offers owned deployed depots, relays and independent
 orbital shipyards from received fleet telemetry. Source remains an owned colony
 or surveyed uncolonized mining site. Colony stations use their colony's existing

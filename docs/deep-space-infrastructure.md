@@ -3,7 +3,7 @@
 Mobile support ships are described in [mobile expedition bases](mobile-expedition-bases.md); they do not change the permanent anchoring below.
 
 First playable slice of [#54](https://github.com/kotrf/suns/issues/54): paid
-constructors become permanent fuel depots, communications relays and sensor arrays away from
+constructors become permanent fuel depots, communications relays, sensor arrays and cargo caches away from
 planets. Orbital stations remain a separate system. There is no remote placement
 or free teleportation of material.
 
@@ -18,8 +18,9 @@ production/mineral costs apply, including the kit:
 | Fuel Depot Kit | Construction 4, Energy 3 | 80 | 40 / 20 / 30 | 80 | +2500 mg finite reservoir; visiting fleets use Refuel |
 | Deep-space Relay Kit | Construction 4, Electronics 5 | 60 | 25 / 10 / 50 | 50 | 300 ly communications field while powered and transmitting |
 | Sensor Array Kit | Construction 6, Electronics 6 | 120 | 40 / 20 / 70 | 100 | 250 ly ordinary / 75 ly penetrating sensors while powered and active |
+| Cargo Cache Kit | Construction 6 | 100 | 50 / 20 / 30 | 100 | +2000 kt material storage after permanent deployment |
 
-The kit's reservoir is physical storage aboard the constructor too. Kits grant
+The Fuel Depot Kit's reservoir is physical storage aboard the constructor too. Kits grant
 no free fuel on deployment; the existing stock remains aboard. The relay kit
 adds no communications range while mobile. Ordinary scanner/Relay Array fittings
 continue to obey their existing rules.
@@ -48,6 +49,34 @@ damage and defenses. Anchoring is permanent: Stop never restores movement, and
 movement, split/merge, colonization, mining, stargates and wormholes cannot move
 or consume a deployed installation. Optional fitted weapons, armor, shields,
 scanners and field repair retain the ordinary physical rules.
+
+## Cargo caches (#54)
+
+A Cargo Cache Kit adds **2000 kt** to the fitted hull's ordinary cargo capacity
+only after deployment. The transported kit adds no mobile hold. Manufacture,
+travel and upkeep are paid normally; commissioning creates no minerals, fuel,
+colonists or other cargo. Population is prohibited both at deployment and in
+later transfers. Other material cargo shares the same finite physical hold.
+
+Use the ordinary **Transfer cargo** window between co-located owned fleets and
+the cache. Signed ordinary fleet exchanges can return an earlier planned
+transfer. Expedition Base cargo is exchanged after movement and cannot fund an
+ordinary withdrawal this turn. Cargo shows scheduled base exchanges separately;
+base-phase returns use that service order. Ownership,
+position, source stock and free capacity are checked again by the host; a mixed
+people/material order is rejected atomically. Storage and material exchange
+remain available at zero operating fuel: power loss does not erase stocks or
+shrink the hold. Existing communications and current-contact requirements still
+apply. A cache grants no refueling, relay or scanner field of its own.
+
+The infrastructure table shows received used/capacity and mineral stocks with
+the observation year. Hidden deliveries or losses cannot update it early. Cargo
+edits use the existing bounded current-order projection, without future-turn
+simulation or polling. This slice adds manual rendezvous/storage; automatic
+freight schedules and transport networks (#53) remain deferred. Logistics excludes
+cargo caches as primary and additional recipients; the host also rejects new
+assignments and automatic unloads, including old saved programmes. Existing
+unsupported lines can still be paused, released or deleted.
 
 ## Fuel, maintenance and routes
 
@@ -88,10 +117,13 @@ field. Enemy sites initially appear as ordinary uncertain fleet contacts; this
 slice does not disclose an enemy's installation kind, fittings or stock through
 the owner panel. Computer empires exclude anchored sites from mobile missions.
 
-Current save **v126**, orders **v54**, portable race **v3**. The Sensor Array Kit
-and anchored kind use appended IDs; old identities keep their exact values.
+Current save **v129**, orders **v56**, portable race **v3**. The Cargo Cache Kit
+and anchored kind append IDs after the sensor array; old identities retain their
+values and record layouts. Older packets reject the new component. Complete
+physical, received, in-flight and delayed-loss cache manifests are validated
+after all cargo extensions load. The sensor-array slice used save v123/orders v52.
 v123 extends accepted enum ranges without changing the v122 record layout.
-v52 transports the new blueprint component; older packets keep their versioned
+v52 transports the Sensor Array Kit; older packets keep their versioned
 component limits. Existing installations are never converted during migration.
 The first slice used save v82/orders v29. Its bounded OUTP extension records physical,
 received, in-flight and delayed-loss deployment flags without changing old fleet
@@ -102,7 +134,7 @@ reserves are rejected. Player exports omit host-only flags and stocks; order
 packets carry deployment and fuel-delivery intent, never authoritative sites.
 
 Further #54 stages remain open: construction projects beyond one paid kit,
-dedicated passive listening posts, cargo caches, separate fortified outpost types,
+dedicated passive listening posts, separate fortified outpost types,
 capture, maintenance/traffic statistics and richer infrastructure management.
 Deep-space shipyards, gates and mobile services belong to later work, including
 [#61](https://github.com/kotrf/suns/issues/61). Deferred transport networks #53
