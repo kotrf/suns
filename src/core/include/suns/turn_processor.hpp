@@ -257,6 +257,9 @@ struct PlayerOrders {
 // Replay only valid queued local cargo orders, using the same rules as End
 // Turn, without advancing a year or changing the actual physical state.
 [[nodiscard]] GameState projected_cargo_order_state(const GameState&, const PlayerOrders&);
+// Start from the command-boundary projection and preview only co-located
+// mobile-base cargo service, in receipt order. No movement or annual work.
+[[nodiscard]] GameState projected_cargo_service_state(GameState commandBoundary, const PlayerOrders&);
 
 // Apply design creation only, without advancing the year or spending resources.
 [[nodiscard]] GameState planned_ship_design_state(const GameState& state, const PlayerOrders& pending);

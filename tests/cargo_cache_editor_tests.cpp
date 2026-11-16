@@ -2,6 +2,7 @@
 #include "save_game.hpp"
 #include "cargo_cache_fixture.hpp"
 #include "suns/player_knowledge.hpp"
+#include "suns/transport_lines.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
@@ -9,6 +10,8 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFile>
+#include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
 #include <QSlider>
@@ -104,6 +107,87 @@ void appended_ids_and_old_id_wire_layout()
 }
 namespace suns {
 struct MainWindowTestAccess {
+    static void transfer(MainWindow& w,const char* source,const char* destination,double amount,double maximum,bool accept)
+    {
+        QTimer::singleShot(0,&w,[&] {
+            auto* d=qobject_cast<QDialog*>(QApplication::activeModalWidget());assert(d);
+            const auto choose=[&](const char* object,const char* value){auto* c=d->findChild<QComboBox*>(object);const auto i=c->findText(value,Qt::MatchContains);assert(i>=0);c->setCurrentIndex(i);};
+            choose("cargoSourceCombo",source);choose("cargoDestinationCombo",destination);
+            auto* spin=d->findChild<QDoubleSpinBox*>("cargoMineralSpin0");assert(spin->maximum()==maximum);
+            spin->setValue(amount);assert(spin->value()==std::min(amount,maximum));
+            auto* buttons=d->findChild<QDialogButtonBox*>();assert(buttons->button(QDialogButtonBox::Ok)->isEnabled()==accept);
+            const auto base=QString(source).contains("base") || QString(destination).contains("base");
+            assert(d->findChild<QLabel*>("cargoSourceBeforeLabel")->text().contains(base?"scheduled base":"Available now"));
+            buttons->button(accept?QDialogButtonBox::Ok:QDialogButtonBox::Cancel)->click();
+        });
+        w.openCargoManifestDialog();
+    }
+    static GameState resolve(MainWindow& w)
+    {
+        QTemporaryDir dir;QString error;const auto path=dir.filePath("cache-service.sunsorders");
+        TurnOrderFileData data{54,w.state_.turn,17,w.pendingOrders_,w.pendingDescriptions_},decoded;
+        assert(write_turn_order_file(path,data,error) && read_turn_order_file(path,decoded,error));
+        return TurnProcessor{}.process(w.state_,{decoded.orders});
+    }
+    static void cargo_respects_base_service_phase(MainWindow& w)
+    {
+        for(double current:{0.0,50.0}) {
+            w.state_=test::cargo_cache_with_base();auto& cache=w.state_.fleets.front();cache.minerals={current,0,0};
+            cache.telemetry={};cache.telemetry=confirmed_fleet_telemetry(w.state_,cache);
+            w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.fleet=2;w.selection_.star.reset();w.rebuildScene();
+            transfer(w,"Cache supply base","Forward cache",100,100,true);assert(w.pendingOrders_.orders.size()==1);
+            transfer(w,"Forward cache","Mineral carrier",100,current,current>0);
+            const auto actual=resolve(w);
+            assert(test::cache_fleet(actual,1).minerals.ironium==100 && test::cache_fleet(actual,2).minerals.ironium==current);
+            assert(test::cache_fleet(actual,3).minerals.ironium==0);
+            w.state_=actual;w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.rebuildScene();
+            transfer(w,"Forward cache","Mineral carrier",100,100,true);
+            const auto next=resolve(w);
+            assert(test::cache_fleet(next,1).minerals.ironium==0 && test::cache_fleet(next,2).minerals.ironium==current+100);
+        }
+        w.state_=test::cargo_cache_with_base();w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.selection_.fleet=2;w.rebuildScene();
+        transfer(w,"Cache supply base","Forward cache",100,100,true);
+        transfer(w,"Forward cache","Cache supply base",100,100,true);
+        const auto returned=resolve(w);
+        assert(test::cache_fleet(returned,1).minerals.ironium==0 && test::cache_fleet(returned,3).minerals.ironium==100);
+    }
+    static void logistics_excludes_caches(MainWindow& w)
+    {
+        w.state_=test::cargo_cache_fixture();auto& s=w.state_;
+        auto design=*find_ship_design(s,100);design.id=103;design.components.back()=ShipComponentType::FuelDepotKit;
+        design.placements.clear();normalize_ship_design_placement(design);s.shipDesigns.push_back(design);s.nextShipDesignId=104;
+        auto depot=s.fleets.front();depot.id=4;depot.design=103;depot.ships={{103,1}};depot.name="Ordinary depot";
+        depot.position={80,-50};depot.outpost=OutpostKind::FuelDepot;depot.telemetry={};depot.telemetry=confirmed_fleet_telemetry(s,depot);
+        s.fleets.push_back(depot);s.nextFleetId=5;
+        w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();w.rebuildScene();
+        if(!w.findChild<QComboBox*>("transportLineDestination"))w.installTransportLines();
+        auto* destination=w.findChild<QComboBox*>("transportLineDestination");auto* extra=w.findChild<QComboBox*>("transportLineExtraDestination");
+        const auto cache=QVariant::fromValue(-qlonglong(1)),fuel=QVariant::fromValue(-qlonglong(4));
+        assert(destination && extra && destination->findData(cache)<0 && extra->findData(cache)<0);
+        assert(destination->findData(fuel)>=0 && extra->findData(fuel)>=0);
+        destination->addItem("Cargo cache",cache);destination->setCurrentIndex(destination->count()-1);
+        w.findChild<QLineEdit*>("transportLineName")->setText("Unsupported cache route");
+        w.findChild<QPushButton*>("transportLineSave")->click();
+        assert(w.pendingOrders_.orders.empty() && w.findChild<QLabel*>("transportLineStatus")->text().contains("manual Cargo"));
+        TransportLineSpec line{1,1,"Forged cache line",s.planets.front().id,0,5,TransportCargo::Ironium,true};line.destinationFleet=1;
+        w.pendingOrders_={1,{SetTransportLineOrder{line},AssignTransportLineOrder{1,2}}};w.pendingDescriptions_={"Define","Assign"};
+        const auto rejected=resolve(w);assert(rejected.players.front().transportLines.empty());
+        w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();
+        TransportLine legacy{line,find_star(s,s.planets.front().star)->position,s.fleets.front().position,{{2,s.turn}},{}};
+        s.players.front().transportLines={legacy};s.players.front().lastTransportLineId=1;
+        const auto programme=transport_line_program(legacy);
+        assert(submit_fleet_route_command(s,1,2,programme.destination,programme.warp,programme.arrivalAction,
+            programme.queuedWaypoints,programme.repeatOrders));
+        auto& ship=s.fleets[1];ship.telemetry={};ship.telemetry=confirmed_fleet_telemetry(s,ship);
+        w.rebuildScene();w.routeProgramContextChanged(true);
+        auto* lines=w.findChild<QComboBox*>("transportLineSelection");const auto selected=lines->findData(1u);assert(selected>=0);lines->setCurrentIndex(selected);
+        auto* assign=w.findChild<QPushButton*>("transportLineAssign");assert(!assign->isEnabled());assign->click();assert(w.pendingOrders_.orders.empty());
+        auto* pause=w.findChild<QPushButton*>("transportLinePause");assert(pause->isEnabled());pause->click();
+        assert(w.pendingOrders_.orders.size()==1 && !std::get<SetTransportLineOrder>(w.pendingOrders_.orders.front()).value.active);
+        pause->click();assert(w.pendingOrders_.orders.size()==1); // Unsupported resume does not emit a command.
+        const auto stopped=resolve(w);
+        assert(!stopped.players.front().transportLines.front().spec.active && !test::cache_fleet(stopped,2).repeatOrders);
+    }
     static void cargo_exchange_and_received_panel(MainWindow& w)
     {
         w.state_=test::cargo_cache_fixture();w.pendingOrders_={1,{}};w.pendingDescriptions_.clear();
@@ -150,4 +234,6 @@ int main(int argc,char** argv)
     frozen_capacity_and_material_snapshots_survive_round_trip();complete_dated_material_manifest_validation();appended_ids_and_old_id_wire_layout();
     MainWindow w;w.installUiPolish();w.installFleetReadabilityPolish();w.installOutposts();
     MainWindowTestAccess::cargo_exchange_and_received_panel(w);
+    MainWindowTestAccess::cargo_respects_base_service_phase(w);
+    MainWindowTestAccess::logistics_excludes_caches(w);
 }

@@ -33,4 +33,17 @@ inline const Fleet& cache_fleet(const GameState& state,FleetId id)
     const auto i=std::find_if(state.fleets.begin(),state.fleets.end(),[&](const auto& f){return f.id==id;});
     assert(i!=state.fleets.end());return *i;
 }
+inline GameState cargo_cache_with_base()
+{
+    auto s=cargo_cache_fixture();s.fleets[1].minerals={};s.fleets[1].colonists=0;
+    s.shipDesigns.push_back({102,1,"Cache supply base",ShipHullType::ExpeditionBase,
+        {ShipComponentType::QuickJump5,ShipComponentType::QuickJump5,ShipComponentType::QuickJump5,
+         ShipComponentType::QuickJump5,ShipComponentType::ExpeditionDock}});
+    normalize_ship_design_placement(s.shipDesigns.back());assert(ship_design_valid(s.shipDesigns.back()));s.nextShipDesignId=103;
+    Fleet f;f.id=3;f.owner=1;f.name="Cache supply base";f.design=102;f.ships={{102,1}};
+    f.position=s.fleets.front().position;f.fuel=fleet_fuel_capacity(s,f);f.minerals={100,0,0};
+    s.fleets.push_back(f);s.nextFleetId=4;
+    for(auto& fleet:s.fleets){fleet.telemetry={};fleet.telemetry=confirmed_fleet_telemetry(s,fleet);}
+    return s;
+}
 }

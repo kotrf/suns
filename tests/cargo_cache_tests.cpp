@@ -1,5 +1,6 @@
 #include "cargo_cache_fixture.hpp"
 #include "suns/production.hpp"
+#include "suns/transport_lines.hpp"
 #include <cmath>
 #include <iostream>
 using namespace suns;
@@ -76,6 +77,52 @@ void researched_kit_has_no_mobile_storage_or_stock_gift()
     assert(mineral_cargo_mass(denied.fleets.front().minerals)==0);
     s.fleets.front().colonists=1;assert(!outpost_deployment_error(s,s.fleets.front(),s.fleets.front().position).empty());
 }
+void base_delivery_cannot_fund_command_phase_cargo()
+{
+    const auto s=test::cargo_cache_with_base();
+    const PlayerOrders orders{1,{TransferCargoOrder{{0,3},{0,1},0,{100,0,0}},
+        TransferCargoOrder{{0,1},{0,2},0,{100,0,0}}}};
+    const auto actual=TurnProcessor{}.process(s,{orders});
+    assert(test::cache_fleet(actual,1).minerals.ironium==100 && test::cache_fleet(actual,2).minerals.ironium==0);
+    assert(test::cache_fleet(actual,3).minerals.ironium==0);
+    const auto preview=projected_cargo_order_state(make_player_view(s,1).state,orders);
+    assert(test::cache_fleet(preview,2).minerals.ironium==0);
+    assert(test::cache_fleet(preview,1).minerals.ironium==0 && test::cache_fleet(preview,3).minerals.ironium==100);
+    const auto service=projected_cargo_service_state(preview,orders);
+    for(FleetId id:{1u,2u,3u})assert(test::cache_fleet(service,id).minerals.ironium==test::cache_fleet(actual,id).minerals.ironium);
+    const PlayerOrders departing{1,{orders.orders.front(),MoveFleetOrder{3,{90,-50},3}}};
+    const auto command=projected_cargo_order_state(make_player_view(s,1).state,departing);
+    assert(test::cache_fleet(projected_cargo_service_state(command,departing),1).minerals.ironium==0);
+    assert(test::cache_fleet(TurnProcessor{}.process(s,{departing}),1).minerals.ironium==0);
+}
+void cargo_cache_rejects_logistics_at_admission_and_arrival()
+{
+    auto s=test::cargo_cache_fixture();auto& carrier=s.fleets[1];
+    const auto home=s.planets.front().id;const auto at=find_star(s,s.planets.front().star)->position;
+    carrier.position=at;carrier.minerals={};carrier.colonists=0;carrier.telemetry={};carrier.telemetry=confirmed_fleet_telemetry(s,carrier);
+    for(auto& p:s.planets){p.industry=0;p.mines=0;p.productionQueue.clear();}
+    s.planets.front().minerals={500,0,0};set_survey_level(s,1,s.planets.front().star,SurveyLevel::DeepSurvey,s.turn);
+    TransportLineSpec line{1,1,"Cache logistics",home,0,5,TransportCargo::Ironium,true};line.destinationFleet=1;
+    assert(!transport_line_error(make_player_view(s,1),line).empty());
+    assert(!set_transport_line(s,1,{line}));
+    auto extra=line;extra.destinationFleet=0;extra.destination=s.planets.back().id;extra.deliveries={{0,1,0}};
+    s.planets.back().owner=1;s.planets.back().population=1000;
+    set_survey_level(s,1,s.planets.back().star,SurveyLevel::DeepSurvey,s.turn);
+    assert(!transport_line_error(make_player_view(s,1),extra).empty() && !set_transport_line(s,1,{extra}));
+    TransportLine saved{line,at,s.fleets.front().position,{},{}};
+    s.players.front().transportLines={saved};s.players.front().lastTransportLineId=1;
+    assert(!assign_transport_line(s,1,{1,2}));
+    const auto programme=transport_line_program(saved);
+    const MoveFleetOrder oldProgramme{2,programme.destination,programme.warp,programme.arrivalAction,
+        programme.queuedWaypoints,programme.repeatOrders};
+    for(unsigned year=0;year<10;++year) {
+        s=TurnProcessor{}.process(s,year?std::vector<PlayerOrders>{}:std::vector<PlayerOrders>{{1,{oldProgramme}}});
+        assert(test::cache_fleet(s,1).minerals.ironium==0);
+    }
+    s.players.front().transportLines.front().assignments={{2,s.turn}};
+    auto paused=line;++paused.revision;paused.active=false;assert(set_transport_line(s,1,{paused}));
+    assert(!test::cache_fleet(s,2).destination && !test::cache_fleet(s,2).repeatOrders);
+}
 }
 int main()
 {
@@ -83,5 +130,7 @@ int main()
     material_exchange_capacity_and_rejection_are_atomic();
     cache_cannot_be_unanchored_or_become_housing();
     researched_kit_has_no_mobile_storage_or_stock_gift();
+    base_delivery_cannot_fund_command_phase_cargo();
+    cargo_cache_rejects_logistics_at_admission_and_arrival();
     std::cout<<"Cargo cache core passed\n";
 }

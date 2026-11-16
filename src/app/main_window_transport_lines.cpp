@@ -116,7 +116,7 @@ void MainWindow::installTransportLines() {
         fill(source,[&]{for(const auto& planet:view.state.planets)if((planet.owner==view.player || (!planet.owner && survey_level(view.state,view.player,planet.star)>=SurveyLevel::GeologicalSurvey)))source->addItem(QString::fromStdString(planet.name),planet.id);});
         fill(destination,[&]{
             for(const auto& planet:view.state.planets)if(planet.owner==view.player)destination->addItem(QString::fromStdString(planet.name),planet.id);
-            for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost!=OutpostKind::None)
+            for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost!=OutpostKind::None && f.outpost!=OutpostKind::CargoCache)
                 destination->addItem(QString("%1 #%2 — %3").arg(QString::fromStdString(outpost_kind_name(f.outpost))).arg(f.id)
                     .arg(QString::fromStdString(f.name)),QVariant::fromValue(-qlonglong(f.id)));
         });
@@ -127,7 +127,9 @@ void MainWindow::installTransportLines() {
         fill(fleets,[&]{for(const auto& f:view.state.fleets)if(f.owner==view.player && f.outpost==OutpostKind::None && fleet_cargo_capacity(view.state,f)>0)fleets->addItem(QString("#%1 %2").arg(f.id).arg(QString::fromStdString(f.name)),f.id);
             if(line)for(const auto& a:line->assignments)if(fleets->findData(a.fleet)<0)fleets->addItem(QString("Roster #%1 — no received contact").arg(a.fleet),a.fleet);
         });
-        roster->clear();pause->setEnabled(bool(line));remove->setEnabled(bool(line));assign->setEnabled(bool(line)&&fleets->count());release->setEnabled(bool(line)&&fleets->count());
+        roster->clear();pause->setEnabled(bool(line));remove->setEnabled(bool(line));
+        assign->setEnabled(line && fleets->count() && transport_line_error(view,line->spec).empty());
+        release->setEnabled(bool(line)&&fleets->count());
         metrics->clear();receipts->clear();
         if(!line){status->setText("New owner-local line. Definitions and roster changes below include local draft intent; fleet status always uses received telemetry.");return;}
         name->setText(QString::fromStdString(line->spec.name));warp->setValue(line->spec.warp);cargo->setCurrentIndex(int(line->spec.cargo));
@@ -137,7 +139,12 @@ void MainWindow::installTransportLines() {
         endpoint(source,line->spec.source);
         if(line->spec.destinationFleet) {
             const auto key=QVariant::fromValue(-qlonglong(line->spec.destinationFleet));auto i=destination->findData(key);
-            if(i<0){destination->addItem(QString("Installation #%1 (no received contact)").arg(line->spec.destinationFleet),key);i=destination->count()-1;}
+            if(i<0){
+                const auto* known=find_service_fleet(view.state,line->spec.destinationFleet);
+                destination->addItem(QString(known && known->outpost==OutpostKind::CargoCache
+                    ? "Cargo cache #%1 — manual Cargo only" : "Installation #%1 (no received contact)").arg(line->spec.destinationFleet),key);
+                i=destination->count()-1;
+            }
             destination->setCurrentIndex(i);
         } else endpoint(destination,line->spec.destination);
         status->setText(QString("HQ definition v%1: %2. Roster is received + local intent, not acknowledgement.\n%3\n"
@@ -225,7 +232,13 @@ void MainWindow::installTransportLines() {
         const auto error=transport_line_error(received(),d);if(!error.empty()){status->setText(QString::fromStdString(error));return;}
         send(SetTransportLineOrder{d},"Define transport line "+QString::fromStdString(d.name));lines->setCurrentIndex(lines->findData(d.id));
     });
-    connect(pause,&QPushButton::clicked,this,[=]{if(auto l=selected();l && l->spec.revision<std::numeric_limits<std::uint64_t>::max()) {auto d=l->spec;++d.revision;d.active=!d.active;send(SetTransportLineOrder{d},"Pause / resume transport line");}});
+    connect(pause,&QPushButton::clicked,this,[=]{if(auto l=selected();l && l->spec.revision<std::numeric_limits<std::uint64_t>::max()) {
+        auto d=l->spec;++d.revision;d.active=!d.active;
+        if(d.active)if(const auto error=transport_line_error(received(),d);!error.empty()) {
+            status->setText(QString::fromStdString(error));return;
+        }
+        send(SetTransportLineOrder{d},"Pause / resume transport line");
+    }});
     connect(remove,&QPushButton::clicked,this,[=]{if(auto l=selected();l && l->spec.revision<std::numeric_limits<std::uint64_t>::max()){auto d=l->spec;++d.revision;send(SetTransportLineOrder{d,true},"Delete transport line and send Stop");}});
     connect(assign,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt()},"Assign transport to line");});
     connect(release,&QPushButton::clicked,this,[=]{if(const auto l=selected())send(AssignTransportLineOrder{l->spec.id,fleets->currentData().toUInt(),true},"Release transport and send Stop");});

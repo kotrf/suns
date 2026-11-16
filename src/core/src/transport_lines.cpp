@@ -13,6 +13,10 @@ Player* owner(GameState& s, PlayerId id) {
     const auto p=std::find_if(s.players.begin(),s.players.end(),[&](const auto& p){return p.id==id;});
     return p==s.players.end()?nullptr:&*p;
 }
+bool cache_receiver(const GameState& s,const TransportLineSpec& d) {
+    const auto cache=[&](FleetId id){const auto* f=find_service_fleet(s,id);return f && f->outpost==OutpostKind::CargoCache;};
+    return cache(d.destinationFleet) || std::any_of(d.deliveries.begin(),d.deliveries.end(),[&](const auto& stop){return cache(stop.fleet);});
+}
 void dispatch(GameState& s, PlayerId player, const TransportLine& line, FleetId fleet) {
     const auto p=transport_line_program(line);
     // Failure on a physically absent fleet is not acknowledgement at HQ.
@@ -31,6 +35,7 @@ bool transport_line_spec_valid(const TransportLineSpec& d) {
 }
 std::string transport_line_error(const PlayerView& view,const TransportLineSpec& d) {
     if(!transport_line_spec_valid(d))return "Name, distinct endpoints, mineral and Warp 1–10 are required";
+    if(cache_receiver(view.state,d))return "Cargo caches accept manual Cargo exchange only; automatic deliveries are unavailable";
     const auto* from=find_planet(view.state,d.source);const auto* to=find_planet(view.state,d.destination);
     const auto* installation=d.destinationFleet?find_service_fleet(view.state,d.destinationFleet):nullptr;
     if(!from || (!to && !installation))return "Both endpoints need received surveys or installation telemetry";
@@ -180,6 +185,7 @@ bool assign_transport_line(GameState& s,PlayerId id,const AssignTransportLineOrd
     if(member!=it->assignments.end())return false; // Replayed assignment does not send another command.
     if(it->assignments.size()>=kMaximumLineAssignments)return false;
     const auto view=make_player_view(s,id);const auto* f=find_service_fleet(view.state,order.fleet);
+    if(cache_receiver(view.state,it->spec))return false;
     if(!f || f->owner!=id || f->outpost!=OutpostKind::None || fleet_cargo_capacity(view.state,*f)<=0)return false;
     release_transport_assignment(s,id,order.fleet);
     it->assignments.push_back({order.fleet,s.turn});

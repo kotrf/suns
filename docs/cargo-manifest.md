@@ -69,7 +69,7 @@ before evacuating people. The editor tries that feasible order; it cannot promis
 a later transfer that the resulting network will reject. This stays a bounded
 current-order check, without simulating an elapsed year.
 
-Accepted local transfers immediately update the current-turn plan in cargo,
+Accepted ordinary dockside transfers immediately update the current-turn plan in cargo,
 System Status/Minerals, colony output and the empire summary. Received population
 remains available in detailed information; the compact Population line marks a
 changed value as after cargo. Reopening includes accepted transfers, and Cancel
@@ -88,7 +88,11 @@ adds 2000 kt to its ordinary hold; the paid kit grants no extra hold in flight.
 Use the same Cargo window and ordinary exact transfer orders between co-located
 owned fleets. Minerals and other material cargo share that finite capacity;
 colonist controls are disabled and the host rejects population transfers
-atomically. Returning materials works in the same turn's plan. Empty operating
+atomically. Ordinary fleet exchanges can return materials in the same turn's
+plan. Expedition Base exchanges are scheduled after movement: their incoming
+stock is unavailable to ordinary Cargo until the next planning turn. Cargo shows
+base exchanges separately and permits their own ordered returns during that
+service phase; actual docking is checked again by the host. Empty operating
 tanks do not remove storage or prevent material exchange, subject to ordinary
 current-contact/communications requirements. No stock is created on deployment,
 and no automatic freight network or new arrival policy is added.

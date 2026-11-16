@@ -385,12 +385,24 @@ void MainWindow::openCargoManifestDialog()
 
     std::vector<TransferCargoOrder> draftTransfers;
     std::optional<TransferFleetFuelOrder> draftFuel;
+    std::optional<GameState> baseServicePlan;
     const auto refresh = [&] {
         if (sourceCombo->currentIndex() < 0 || destinationCombo->currentIndex() < 0) return;
         const auto sourceIndex = sourceCombo->currentData().toInt();
         const auto destinationIndex = destinationCombo->currentData().toInt();
-        const auto& source = endpoints[static_cast<std::size_t>(sourceIndex)];
-        const auto& destination = endpoints[static_cast<std::size_t>(destinationIndex)];
+        auto source = endpoints[static_cast<std::size_t>(sourceIndex)];
+        auto destination = endpoints[static_cast<std::size_t>(destinationIndex)];
+        const bool baseService=(source.fleet && mobile_base_hulls(planned,*source.fleet)>0)
+            || (destination.fleet && mobile_base_hulls(planned,*destination.fleet)>0);
+        if(baseService && !baseServicePlan && !pendingOrders_.orders.empty())
+            baseServicePlan=projected_cargo_service_state(planned,pendingOrders_);
+        if(baseService && baseServicePlan) {
+            const auto serviceEndpoint=[&](CargoEndpointView& e) {
+                if(e.fleet)e.fleet=find_service_fleet(*baseServicePlan,e.endpoint.fleet);
+                else e.planet=find_planet(*baseServicePlan,e.endpoint.planet);
+            };
+            serviceEndpoint(source);serviceEndpoint(destination);
+        }
         const bool invasion = destination.planet && destination.planet->owner != 0
             && destination.planet->owner != pendingOrders_.player;
         const bool residentOnly = (source.endpoint.orbital && !source.nativeOrbit)
@@ -512,8 +524,9 @@ void MainWindow::openCargoManifestDialog()
             receivedMinerals[index]->setEnabled(!invasion && !residentOnly);
             receivedMinerals[index]->setToolTip("Destination stock after this transfer; drag left to return minerals.");
         }
-        sourceBefore->setText(QString("<b>Current source (including queued orders):</b> %1").arg(cargoValues(sourcePeople, sourceStock)));
-        destinationBefore->setText(QString("<b>Current destination (including queued orders):</b> %1").arg(cargoValues(destinationPeople, destinationStock)));
+        const auto when=baseService?"After scheduled base exchanges":"Available now";
+        sourceBefore->setText(QString("<b>Source — %1:</b> %2").arg(when,cargoValues(sourcePeople, sourceStock)));
+        destinationBefore->setText(QString("<b>Destination — %1:</b> %2").arg(when,cargoValues(destinationPeople, destinationStock)));
         sourceAfter->setText(QString("<b>Source after this transfer:</b> %1 — %2").arg(source.name).arg(cargoValues(sourceAfterPeople, sourceAfterStock)));
         if (source.fleet) {
             sourceBefore->setText(sourceBefore->text() + QString(" • fuel %1 mg").arg(source.fleet->fuel, 0, 'f', 2));
@@ -561,7 +574,9 @@ void MainWindow::openCargoManifestDialog()
             PlayerOrders orders{pendingOrders_.player, {}};
             for (const auto& transfer : draftTransfers) orders.orders.push_back(transfer);
             if (draftFuel) orders.orders.push_back(*draftFuel);
-            const auto validated = projected_cargo_order_state(planned, orders);
+            const auto validated=baseService
+                ? projected_cargo_service_state(baseServicePlan?*baseServicePlan:planned,orders)
+                : projected_cargo_order_state(planned,orders);
             const auto matches = [&](const CargoEndpointView& endpoint, std::uint64_t people, const MineralCargo& stock) {
                 CargoEndpointView actual = endpoint;
                 actual.planet = nullptr; actual.fleet = nullptr;
@@ -596,7 +611,9 @@ void MainWindow::openCargoManifestDialog()
         else if (!hasCargo) validation->setText("Choose cargo or fuel to transfer.");
         else if (!capacityValid || !validProjection) validation->setText("This transfer cannot be completed with the current stocks, capacity and services.");
         else if (invasion) validation->setText("This order starts ground combat against the colony.");
-        else validation->setText("Transfer is valid. Both manifests will update in your current-turn plan.");
+        else validation->setText(baseService
+            ? "Base exchange is scheduled after movement. Delivered cargo becomes available for ordinary Cargo next turn."
+            : "Transfer is valid. Both manifests will update in your current-turn plan.");
     };
 
     const auto configureSource = [&] {

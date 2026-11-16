@@ -59,7 +59,10 @@ colonists or other cargo. Population is prohibited both at deployment and in
 later transfers. Other material cargo shares the same finite physical hold.
 
 Use the ordinary **Transfer cargo** window between co-located owned fleets and
-the cache. Its signed amounts can return an earlier planned delivery. Ownership,
+the cache. Signed ordinary fleet exchanges can return an earlier planned
+transfer. Expedition Base cargo is exchanged after movement and cannot fund an
+ordinary withdrawal this turn. Cargo shows scheduled base exchanges separately;
+base-phase returns use that service order. Ownership,
 position, source stock and free capacity are checked again by the host; a mixed
 people/material order is rejected atomically. Storage and material exchange
 remain available at zero operating fuel: power loss does not erase stocks or
@@ -70,7 +73,10 @@ The infrastructure table shows received used/capacity and mineral stocks with
 the observation year. Hidden deliveries or losses cannot update it early. Cargo
 edits use the existing bounded current-order projection, without future-turn
 simulation or polling. This slice adds manual rendezvous/storage; automatic
-freight schedules and transport networks (#53) remain deferred.
+freight schedules and transport networks (#53) remain deferred. Logistics excludes
+cargo caches as primary and additional recipients; the host also rejects new
+assignments and automatic unloads, including old saved programmes. Existing
+unsupported lines can still be paused, released or deleted.
 
 ## Fuel, maintenance and routes
 
