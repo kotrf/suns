@@ -18,7 +18,7 @@ using OrbitalStationId = std::uint32_t;
 using WormholeEndpointId = std::uint32_t;
 using UnknownObjectId = std::uint32_t;
 
-enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant, DriftingDerelict };
+enum class UnknownObjectKind : std::uint8_t { AncientProbe, CompactRemnant, DriftingDerelict, RoguePlanetoid };
 enum class ObjectKnowledgeLevel : std::uint8_t { Detected, Classified, Studied };
 
 inline constexpr std::uint32_t kColonyShipCost = 12;

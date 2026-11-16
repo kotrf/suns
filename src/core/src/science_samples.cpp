@@ -18,10 +18,11 @@ bool science_colony_populated(const GameState& state,const Planet& p)
 double science_sample_mass(std::span<const ScienceSample> samples)
 { return samples.size() * kScienceSampleMass; }
 const char* science_sample_name(UnknownObjectKind kind)
-{ return kind==UnknownObjectKind::DriftingDerelict ? "Architectural core"
+{ return kind==UnknownObjectKind::RoguePlanetoid ? "Prebiotic ice"
+    :kind==UnknownObjectKind::DriftingDerelict ? "Architectural core"
     :kind == UnknownObjectKind::AncientProbe ? "Ancient archive" : "Compact-matter specimen"; }
 std::uint32_t science_sample_research_points(UnknownObjectKind kind)
-{ return kind==UnknownObjectKind::DriftingDerelict ? 80U : kind == UnknownObjectKind::AncientProbe ? 64U : 96U; }
+{ return unknown_object_is_moving(kind) ? 80U : kind == UnknownObjectKind::AncientProbe ? 64U : 96U; }
 bool sample_observation_received(const GameState& state, PlayerId owner, UnknownObjectId source)
 {
     const auto* x = known_unknown_object(state, owner, source);
@@ -157,7 +158,7 @@ void prepare_science_sample_recovery(GameState& state,std::uint64_t turn)
         const auto range=std::min(20.0,strategic_sensor_range(state,fleet,turn)*0.5);
         const UnknownObject* target=nullptr;double nearest=range;
         for(const auto& object:state.unknownObjects) {
-            if(!fleet.recoveryTarget || object.id!=fleet.recoveryTarget || object.kind!=UnknownObjectKind::DriftingDerelict
+            if(!fleet.recoveryTarget || object.id!=fleet.recoveryTarget || !unknown_object_is_moving(object.kind)
                 || !sample_observation_received(state,fleet.owner,object.id))continue;
             const auto distance=distance_between(fleet.position,object.position);
             if(distance>range*medium_active_path_factor(state,fleet.position,object.position)+1e-6)continue;

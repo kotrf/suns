@@ -1,8 +1,8 @@
 # Unknown objects and scientific expeditions
 
-This implements persistent landmarks and a rare moving derelict for #55, using
-the field-science chain of #59. Ancient probes and compact remnants are stationary;
-drifting derelicts follow physical inertial courses. All are separate from
+This implements persistent landmarks and rare moving derelicts/rogue planetoids
+for #55, using the field-science chain of #59. Ancient probes and compact remnants
+are stationary; the moving bodies follow physical inertial courses. All are separate from
 wormholes and planetary artifact sites, rather than pop-up rewards.
 
 ## Generation and knowledge
@@ -21,6 +21,22 @@ The hulk starts with the same30/60 ly clearance and moves1.5 ly/year horizontall
 and0.5 ly/year vertically, with seed-derived signs. It can drift beyond the star
 field in ordinary unbounded space. Motion runs once per actual turn, including
 after study or specimen recovery; older campaigns gain no retroactive hulk.
+
+Fresh galaxies with at least 96 stars may also append one **Rogue planetoid**,
+on one in seven seeds when bounded placement succeeds. Its independent stream
+preserves all older static objects and derelicts, including their IDs and courses.
+The same 30/60 ly clearances apply. This cold free-floating minor body drifts
+0.5 ly/year horizontally and 0.25 ly/year vertically, with seeded signs. Existing
+campaigns receive no retroactive body. It uses the ordinary expedition journal,
+active scanning, dated course and fuel-paid rendezvous rules.
+
+A delivered study gives 32 Biology RP once per empire. One globally finite 5 kt
+**Prebiotic ice** specimen can be recovered and physically returned: destructive
+analysis yields 80 Biology RP after delivery, or retention supplies +4 Biology
+RP/year under the existing populated-colony, received-study and active-focus
+conditions. Native stations additionally require Normal support. Lost or consumed
+specimens never regenerate; the planetoid continues moving after recovery.
+These rewards and rarity are prototype balance.
 
 Active fleet scanners and built colony radars can detect objects within their
 ordinary, interference-adjusted sensor range. Orbit-only scanners have a 1 ly local
@@ -81,7 +97,7 @@ A stationary fleet running Field research with active scanners studies an object
 within 20 ly, further limited by its effective sensor range (1 ly for an orbit-only
 scanner). It collects a finite objective once per empire: an Ancient probe gives
 24 Electronics RP; a Compact remnant gives32 Energy RP; a drifting derelict gives
-32 Construction RP. This extends the existing
+32 Construction RP; a Rogue planetoid gives32 Biology RP. This extends the existing
 field-science ledger with a distinct stable-object key. Repeating work, sending a
 second fleet or replaying a delivered study packet cannot farm additional points.
 The body stays in the world. Data does not improve headquarters research until its
@@ -124,12 +140,14 @@ not required. That completion slice used save v93 / orders v37; the
 [completion audit](audits/2026-10-22-field-science-completion.md) records #59's
 coverage, corrections and review status.
 
-#55 remains open for further transient/rogue objects, hazards, unusual resources and
+#55 remains open for transient phenomena, further rogue varieties, hazards, unusual resources and
 richer discovery outcomes. The drifting hulk adds one globally finite architectural
 core: analyze for80 Construction RP or retain its+4 Construction RP/year capability
 after physical delivery. The received object journal acts as its learned reference;
-it never exposes the current stock or hidden course. Current save126/orders54/race3
-tag only the new kind with velocity fields, preserving old static record layouts
-and genuine migrations. Current wreck novelty and other
+it never exposes the current stock or hidden course. Current save130/orders56/race3 add the planetoid kind to physical, observed and
+specimen records. Both moving kinds carry their existing velocity payload shape;
+older static/derelict layouts and IDs remain unchanged. Version129 rejects the
+new kind; older campaigns load without generating planetoids. Recovery orders
+already carry source IDs and need no new payload. Current wreck novelty and other
 finite science objectives are unchanged. Further artifact varieties and
 observation-gated technology families can extend this path.

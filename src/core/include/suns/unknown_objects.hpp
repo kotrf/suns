@@ -1,6 +1,8 @@
 #pragma once
 #include "suns/game_state.hpp"
 namespace suns {
+[[nodiscard]] constexpr bool unknown_object_is_moving(UnknownObjectKind kind) noexcept
+{ return kind==UnknownObjectKind::DriftingDerelict || kind==UnknownObjectKind::RoguePlanetoid; }
 [[nodiscard]] const char* unknown_object_name(UnknownObjectKind);
 [[nodiscard]] const char* object_knowledge_name(ObjectKnowledgeLevel);
 [[nodiscard]] ResearchField unknown_object_research_field(UnknownObjectKind);
@@ -13,7 +15,7 @@ namespace suns {
 // Planning uses fitted range; actual work additionally accounts for local jamming.
 [[nodiscard]] double object_study_radius(const GameState&,const Fleet&);
 [[nodiscard]] const ObjectObservation* known_unknown_object(const GameState&,PlayerId,UnknownObjectId);
-void generate_unknown_objects(GameState&,bool includeDrifting=true);
+void generate_unknown_objects(GameState&,bool includeMoving=true);
 void advance_unknown_objects(GameState&);
 void observe_unknown_objects(GameState&,std::uint64_t);
 void research_unknown_objects(GameState&,Fleet&,std::uint64_t);

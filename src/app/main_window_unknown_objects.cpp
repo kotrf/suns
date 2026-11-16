@@ -31,12 +31,15 @@ QString description(const ObjectObservation& x,std::uint64_t turn)
     if(x.kind) text+=QString("\nStudy objective: %1 research points in %2, once per empire, after data delivery.")
         .arg(unknown_object_research_points(*x.kind)).arg(QString::fromStdString(research_field_name(unknown_object_research_field(*x.kind))));
     else text+="\nApproach with active scanners to classify; no contents or scientific value identified yet.";
-    if(x.kind==UnknownObjectKind::DriftingDerelict) {
+    if(x.kind && unknown_object_is_moving(*x.kind)) {
         text+=x.velocity ? QString("\nReported course: %1, %2 ly/year. Routes use an approximate intercept from this dated course.")
             .arg(x.velocity->x,0,'f',2).arg(x.velocity->y,0,'f',2)
             : "\nLatest fix is coarse; approach to obtain a fresh course.";
         if(x.level==ObjectKnowledgeLevel::Studied)
-            text+="\nOne physical 5 kt architectural core exists galaxy-wide. Recover with active scanners and free hold; a ship can close the final locally detected distance using normal movement and fuel. Deliver to a populated colony: analyze for 80 Construction points or retain for +4 Construction research/year. Availability is confirmed at the site.";
+            text+=QString("\nOne physical 5 kt %1 exists galaxy-wide. Recover with active scanners and free hold; a ship can close the final locally detected distance using normal movement and fuel. Deliver to a populated colony: analyze for %2 %3 points or retain for +4 %3 research/year. Availability is confirmed at the site.")
+                .arg(QString::fromLatin1(science_sample_name(*x.kind)).toLower())
+                .arg(science_sample_research_points(*x.kind))
+                .arg(QString::fromStdString(research_field_name(unknown_object_research_field(*x.kind))));
     }
     return text;
 }
