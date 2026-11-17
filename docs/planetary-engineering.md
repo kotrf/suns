@@ -234,7 +234,7 @@ only when received evidence predicts at least five habitability points gained.
 It explicitly targets its race's temperature midpoint and sends the normal paid
 construction order; hidden host stocks/environment do not authorize the choice.
 
-**Current formats: save v126 / orders v54 / portable race v3.** Append-only kind values
+The Climate stabilizer slice introduced **save v126 / orders v54 / portable race v3**. Append-only kind values
 preserve earlier IDs. Only Climate stabilizer records/orders add a target byte;
 older kinds keep their previous layout and default target 50. Old headers reject
 new kinds; malformed targets and unrelated target payloads reject. Existing real
@@ -243,3 +243,51 @@ legacy fixtures still exercise migration; no new binary fixtures are introduced.
 Ocean/atmosphere projects, system engineering and the irreversible radical path
 remain open in #56. The latter still needs the separate gameplay discussion about
 evacuation, capture, cost and commitment required by the accepted design.
+
+
+## Atmospheric regulator (#56)
+
+A surface atmosphere can be tuned toward a chosen normalized radiation index
+**0–100**, raising or lowering the current surface value by at most **10 points**.
+Output 0 switches the effect off; target 0 is a valid low-radiation setting.
+For example, raw radiation 40, target 48 and correction 10 gives 48; target 80
+with that correction gives 50. This uses the existing surface-radiation axis.
+Temperature, gravity, natural geology and the ordinary terraformed baseline
+remain intact. Orbital Civilization uses its separate fitted orbital protection.
+
+Prototype requirements are **Energy22, Construction22 and Biology20**. The recipe
+is **6000 work, at most80/year (at least75years), I/B/G600/300/600 kt**. A populated
+surface colony and an operational friendly Starbase/Fortress shipyard support
+construction and operation. Normal production priority, research and delivered
+materials determine actual progress. It competes for the same single engineering
+slot; fixed magnetospheres remain cheaper choices for reducing radiation.
+
+Loss of support or the current owner's operating technology suspends the effect,
+exposing the ordinary baseline. Pause, capture and shortages retain all paid work,
+builder, dates and the physical radiation target. Restoring support resumes that
+setting; capture never silently retargets a world to the new race's preference.
+Set output explicitly changes correction and target during or after construction.
+Dismantling removes the effect and returns no resources. These costs and levels
+are prototype balance; radical irreversible transformation remains a separate
+future design discussion.
+
+Ordinary radiation terraforming shares the controller plateau rule described
+above: every intermediate point is paid, a useful exit must be reachable under
+the existing natural/technology limits, and tied or unreachable exits consume
+no work. Temperature and gravity improvements remain independent. The received
+engineering window shows current and supported-completion radiation/Hab, with
+one scalar correction and no future-year simulation or polling.
+
+Computer empires use received stocks, support and racial ranges, require at least
+five habitability points gained, fund the full recipe and send normal orders.
+A fully funded radiation-raising project is an option for a high-radiation race;
+an equally useful cheaper fixed shield keeps priority for lowering radiation.
+
+Current formats are **save131 / orders57 / portable race3**. Kind IDs append;
+temperature and radiation targets have separate defaults and validation. Only
+Atmospheric regulator records/orders carry a radiation-target byte. Existing
+Climate records retain their temperature byte and other types retain their old
+layouts. Physical, received, in-flight, draft and host-inbox values remain
+separate; hidden reconfiguration does not rewrite received UI/player exports.
+Older headers reject the new kind. #56 remains open for ocean/ice and system
+projects, with the radical path requiring its separate gameplay discussion.

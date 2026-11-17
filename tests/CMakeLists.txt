@@ -536,6 +536,17 @@ add_executable(suns_rogue_planetoid_tests rogue_planetoid_tests.cpp)
 target_link_libraries(suns_rogue_planetoid_tests PRIVATE Suns::Core)
 add_test(NAME suns_rogue_planetoid_tests COMMAND suns_rogue_planetoid_tests)
 
+add_executable(suns_atmospheric_regulator_tests atmospheric_regulator_tests.cpp)
+target_link_libraries(suns_atmospheric_regulator_tests PRIVATE Suns::Core)
+add_test(NAME suns_atmospheric_regulator_tests COMMAND suns_atmospheric_regulator_tests)
+
+if(TARGET suns_app_ui)
+    add_executable(suns_atmospheric_regulator_editor_tests atmospheric_regulator_editor_tests.cpp)
+    target_link_libraries(suns_atmospheric_regulator_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_atmospheric_regulator_editor_tests COMMAND suns_atmospheric_regulator_editor_tests)
+    set_tests_properties(suns_atmospheric_regulator_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
 if(TARGET suns_app_ui)
     add_executable(suns_rogue_planetoid_editor_tests rogue_planetoid_editor_tests.cpp)
     target_link_libraries(suns_rogue_planetoid_editor_tests PRIVATE suns_app_ui)

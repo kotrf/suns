@@ -107,7 +107,7 @@ return. It waits for cargo telemetry, returns to a reachable colony, unloads and
 analyzes. A confirmed empty recovery retires; hidden depletion does not affect
 planning. No direct research grant or privileged host-state access is added.
 
-Current formats are **save v130 / orders v56 / race v3**. Moving-object physical
+Current formats are **save v131 / orders v57 / race v3**. Moving-object physical
 and observation records carry dated velocity payloads; static records retain
 their old layout. The planetoid/sample kind is admitted from v130 using the
 existing finite SAMP ledger. Older layouts and sample identities remain intact.

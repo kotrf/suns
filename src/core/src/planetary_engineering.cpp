@@ -9,22 +9,22 @@
 #include <cmath>
 
 namespace suns {
-bool engineering_kind(ProductionKind kind) { return kind==ProductionKind::ClimateStabilizer || kind==ProductionKind::OrbitalHabitat || kind==ProductionKind::OrbitalMirrors || kind==ProductionKind::OrbitalShades
+bool engineering_kind(ProductionKind kind) { return kind==ProductionKind::AtmosphericRegulator || kind==ProductionKind::ClimateStabilizer || kind==ProductionKind::OrbitalHabitat || kind==ProductionKind::OrbitalMirrors || kind==ProductionKind::OrbitalShades
     || kind==ProductionKind::ArtificialMagnetosphere || kind==ProductionKind::AdaptiveMagnetosphere; }
 ProductionKind engineering_production_kind(PlanetaryEngineeringKind kind)
-{ return kind==PlanetaryEngineeringKind::ClimateStabilizer?ProductionKind::ClimateStabilizer:kind==PlanetaryEngineeringKind::OrbitalHabitat?ProductionKind::OrbitalHabitat:kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?ProductionKind::ArtificialMagnetosphere
+{ return kind==PlanetaryEngineeringKind::AtmosphericRegulator?ProductionKind::AtmosphericRegulator:kind==PlanetaryEngineeringKind::ClimateStabilizer?ProductionKind::ClimateStabilizer:kind==PlanetaryEngineeringKind::OrbitalHabitat?ProductionKind::OrbitalHabitat:kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?ProductionKind::ArtificialMagnetosphere
     :kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?ProductionKind::AdaptiveMagnetosphere
     :kind==PlanetaryEngineeringKind::OrbitalShades?ProductionKind::OrbitalShades:ProductionKind::OrbitalMirrors; }
 PlanetaryEngineeringKind engineering_project_kind(ProductionKind kind)
-{ return kind==ProductionKind::ClimateStabilizer?PlanetaryEngineeringKind::ClimateStabilizer:kind==ProductionKind::OrbitalHabitat?PlanetaryEngineeringKind::OrbitalHabitat:kind==ProductionKind::ArtificialMagnetosphere?PlanetaryEngineeringKind::ArtificialMagnetosphere
+{ return kind==ProductionKind::AtmosphericRegulator?PlanetaryEngineeringKind::AtmosphericRegulator:kind==ProductionKind::ClimateStabilizer?PlanetaryEngineeringKind::ClimateStabilizer:kind==ProductionKind::OrbitalHabitat?PlanetaryEngineeringKind::OrbitalHabitat:kind==ProductionKind::ArtificialMagnetosphere?PlanetaryEngineeringKind::ArtificialMagnetosphere
     :kind==ProductionKind::AdaptiveMagnetosphere?PlanetaryEngineeringKind::AdaptiveMagnetosphere
     :kind==ProductionKind::OrbitalMirrors?PlanetaryEngineeringKind::OrbitalMirrors:kind==ProductionKind::OrbitalShades?PlanetaryEngineeringKind::OrbitalShades:PlanetaryEngineeringKind::None; }
 std::string engineering_name(PlanetaryEngineeringKind kind)
-{ return kind==PlanetaryEngineeringKind::ClimateStabilizer?"Climate stabilizer":kind==PlanetaryEngineeringKind::OrbitalHabitat?"Orbital habitat":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"Artificial magnetosphere"
+{ return kind==PlanetaryEngineeringKind::AtmosphericRegulator?"Atmospheric regulator":kind==PlanetaryEngineeringKind::ClimateStabilizer?"Climate stabilizer":kind==PlanetaryEngineeringKind::OrbitalHabitat?"Orbital habitat":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"Artificial magnetosphere"
     :kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"Adaptive magnetosphere"
     :kind==PlanetaryEngineeringKind::OrbitalMirrors?"Orbital mirrors":kind==PlanetaryEngineeringKind::OrbitalShades?"Orbital shades":"No engineering project"; }
 std::uint32_t engineering_work(PlanetaryEngineeringKind kind)
-{ return (kind==PlanetaryEngineeringKind::ClimateStabilizer || kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere || kind==PlanetaryEngineeringKind::OrbitalHabitat)?4800:kEngineeringWork; }
+{ return kind==PlanetaryEngineeringKind::AtmosphericRegulator?6000:(kind==PlanetaryEngineeringKind::ClimateStabilizer || kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere || kind==PlanetaryEngineeringKind::OrbitalHabitat)?4800:kEngineeringWork; }
 std::uint8_t engineering_max_strength(PlanetaryEngineeringKind kind)
 { return kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?20:kEngineeringStrength; }
 bool compact_study_received(const GameState& state,PlayerId player)
@@ -37,6 +37,10 @@ bool compact_study_received(const GameState& state,PlayerId player)
 bool planetary_engineering_available(const GameState& state,PlayerId player,PlanetaryEngineeringKind kind)
 {
     const auto* p=find_player(state,player);
+    if(kind==PlanetaryEngineeringKind::AtmosphericRegulator) return p && p->race.environmentBased && p->race.primaryTrait!=PrimaryRaceTrait::HabitatCivilization
+        && technology_level(state,player,ResearchField::Energy)>=22
+        && technology_level(state,player,ResearchField::Construction)>=22
+        && technology_level(state,player,ResearchField::Biology)>=20;
     if(kind==PlanetaryEngineeringKind::ClimateStabilizer) return p && p->race.environmentBased && p->race.primaryTrait!=PrimaryRaceTrait::HabitatCivilization
         && technology_level(state,player,ResearchField::Energy)>=20
         && technology_level(state,player,ResearchField::Construction)>=20
@@ -52,7 +56,7 @@ bool planetary_engineering_available(const GameState& state,PlayerId player,Plan
         && (kind!=PlanetaryEngineeringKind::AdaptiveMagnetosphere || compact_study_received(state,player));
 }
 bool engineering_operation_available(const GameState& state,const Planet& p)
-{ return (p.engineering.kind!=PlanetaryEngineeringKind::ClimateStabilizer && p.engineering.kind!=PlanetaryEngineeringKind::AdaptiveMagnetosphere && p.engineering.kind!=PlanetaryEngineeringKind::OrbitalHabitat) || planetary_engineering_available(state,p.owner,p.engineering.kind); }
+{ return (p.engineering.kind!=PlanetaryEngineeringKind::AtmosphericRegulator && p.engineering.kind!=PlanetaryEngineeringKind::ClimateStabilizer && p.engineering.kind!=PlanetaryEngineeringKind::AdaptiveMagnetosphere && p.engineering.kind!=PlanetaryEngineeringKind::OrbitalHabitat) || planetary_engineering_available(state,p.owner,p.engineering.kind); }
 bool engineering_station_available(const GameState& state,const Planet& planet)
 {
     if(state.mediumObserver && planet.owner==state.mediumObserver) {
@@ -66,10 +70,16 @@ bool engineering_station_available(const GameState& state,const Planet& planet)
             && s.damagePercent<100 && std::find(s.modules.begin(),s.modules.end(),OrbitalStationModule::Shipyard)!=s.modules.end();
     });
 }
+bool engineering_targets_valid(PlanetaryEngineeringKind kind,std::uint8_t temperature,std::uint8_t radiation)
+{
+    return kind<=PlanetaryEngineeringKind::AtmosphericRegulator && temperature<=100 && radiation<=100
+        && (kind==PlanetaryEngineeringKind::ClimateStabilizer || temperature==50)
+        && (kind==PlanetaryEngineeringKind::AtmosphericRegulator || radiation==50);
+}
 bool engineering_state_valid(const PlanetaryEngineering& e)
 {
-    if (e.targetTemperature>100 || (e.kind!=PlanetaryEngineeringKind::ClimateStabilizer && e.targetTemperature!=50)
-        || (e.kind==PlanetaryEngineeringKind::OrbitalHabitat && e.strength!=kEngineeringStrength) || e.kind>PlanetaryEngineeringKind::ClimateStabilizer || e.work>engineering_work(e.kind) || e.strength>engineering_max_strength(e.kind)
+    if (!engineering_targets_valid(e.kind,e.targetTemperature,e.targetRadiation)
+        || (e.kind==PlanetaryEngineeringKind::OrbitalHabitat && e.strength!=kEngineeringStrength) || e.work>engineering_work(e.kind) || e.strength>engineering_max_strength(e.kind)
         || !std::isfinite(e.invested.ironium) || !std::isfinite(e.invested.boranium) || !std::isfinite(e.invested.germanium)
         || e.invested.ironium<0 || e.invested.boranium<0 || e.invested.germanium<0
         || e.invested.ironium>engineering_work(e.kind)*0.1+1e-6 || e.invested.boranium>engineering_work(e.kind)*0.05+1e-6 || e.invested.germanium>engineering_work(e.kind)*0.1+1e-6) return false;
@@ -91,6 +101,10 @@ PlanetEnvironment engineered_environment(const Planet& planet)
             const int correction=std::clamp(int(e.targetTemperature)-int(environment.temperature),-int(e.strength),int(e.strength));
             environment.temperature=std::uint8_t(int(environment.temperature)+correction);
         }
+        if(e.kind==PlanetaryEngineeringKind::AtmosphericRegulator) {
+            const int correction=std::clamp(int(e.targetRadiation)-int(environment.radiation),-int(e.strength),int(e.strength));
+            environment.radiation=std::uint8_t(int(environment.radiation)+correction);
+        }
         if(e.kind==PlanetaryEngineeringKind::ArtificialMagnetosphere || e.kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere)
             environment.radiation=std::uint8_t(std::max(0,int(environment.radiation)-int(e.strength)));
     }
@@ -103,6 +117,8 @@ EngineeringBlock engineering_block(const GameState& state,const Planet& planet)
     const auto& e=planet.engineering;
     if(e.kind==PlanetaryEngineeringKind::None) return EngineeringBlock::NoProject;
     if(!planet.owner || !total_colony_population(planet)) return EngineeringBlock::NoColony;
+    if(e.kind==PlanetaryEngineeringKind::AtmosphericRegulator && !engineering_operation_available(state,planet))
+        return EngineeringBlock::AtmosphericTechnology;
     if(e.kind==PlanetaryEngineeringKind::ClimateStabilizer && !engineering_operation_available(state,planet))
         return EngineeringBlock::ClimateTechnology;
     if(e.kind==PlanetaryEngineeringKind::OrbitalHabitat) {
@@ -129,6 +145,7 @@ EngineeringBlock engineering_block(const GameState& state,const Planet& planet)
 std::string engineering_block_name(EngineeringBlock block)
 {
     switch(block) {
+    case EngineeringBlock::AtmosphericTechnology: return "Atmospheric regulator requires a race with surface colonies, Energy 22, Construction 22 and Biology 20";
     case EngineeringBlock::ClimateTechnology: return "Climate stabilizer requires a race with surface colonies, Energy 20, Construction 20 and Biology 18";
     case EngineeringBlock::HabitatTechnology: return "Orbital habitat requires Construction 18, Energy 16 and Biology 14";
     case EngineeringBlock::HabitatReserve: return "Emergency reserve: no orbital growth or output";
@@ -149,18 +166,18 @@ std::string engineering_block_name(EngineeringBlock block)
 bool apply_planetary_engineering_order(const GameState& state,Planet& p,const SetPlanetaryEngineeringOrder& order)
 {
     if(p.id!=order.colony || !p.owner || order.strength>engineering_max_strength(order.action==EngineeringAction::SetOutput?p.engineering.kind:order.kind) || order.action>EngineeringAction::SetOutput
-        || order.kind>PlanetaryEngineeringKind::ClimateStabilizer || order.targetTemperature>100
-        || (order.kind!=PlanetaryEngineeringKind::ClimateStabilizer && order.targetTemperature!=50)) return false;
+        || !engineering_targets_valid(order.kind,order.targetTemperature,order.targetRadiation)) return false;
     auto& e=p.engineering;
-    if(e.kind!=PlanetaryEngineeringKind::None && (e.kind==PlanetaryEngineeringKind::ClimateStabilizer || order.kind==PlanetaryEngineeringKind::ClimateStabilizer)
+    if(e.kind!=PlanetaryEngineeringKind::None && (e.kind==PlanetaryEngineeringKind::ClimateStabilizer || order.kind==PlanetaryEngineeringKind::ClimateStabilizer
+        || e.kind==PlanetaryEngineeringKind::AtmosphericRegulator || order.kind==PlanetaryEngineeringKind::AtmosphericRegulator)
         && e.kind!=order.kind) return false;
     const auto pause=[&] { std::erase_if(p.productionQueue,[](const auto& item){return engineering_kind(item.kind);}); };
     if(order.action==EngineeringAction::Dismantle) { if(p.habitat.population || e.kind==PlanetaryEngineeringKind::None)return false; pause(); e={}; p.habitat={}; p.observedHabitability.reset(); return true; }
     if(order.action==EngineeringAction::Pause) { if(e.kind==PlanetaryEngineeringKind::None)return false; pause(); return true; }
-    if(order.action==EngineeringAction::SetOutput) { if(e.kind==PlanetaryEngineeringKind::OrbitalHabitat || e.kind==PlanetaryEngineeringKind::None)return false; e.strength=order.strength; e.targetTemperature=order.targetTemperature; e.operational=e.work==engineering_work(e.kind) && e.strength>0 && p.population>0 && engineering_station_available(state,p) && engineering_operation_available(state,p); p.observedHabitability.reset(); return true; }
+    if(order.action==EngineeringAction::SetOutput) { if(e.kind==PlanetaryEngineeringKind::OrbitalHabitat || e.kind==PlanetaryEngineeringKind::None)return false; e.strength=order.strength; e.targetTemperature=order.targetTemperature; e.targetRadiation=order.targetRadiation; e.operational=e.work==engineering_work(e.kind) && e.strength>0 && p.population>0 && engineering_station_available(state,p) && engineering_operation_available(state,p); p.observedHabitability.reset(); return true; }
     if((order.kind==PlanetaryEngineeringKind::OrbitalHabitat && e.kind==PlanetaryEngineeringKind::None && !p.population) || order.kind==PlanetaryEngineeringKind::None || !planetary_engineering_available(state,p.owner,order.kind)
         || (e.kind!=PlanetaryEngineeringKind::None && e.kind!=order.kind) || e.work==engineering_work(e.kind) || engineering_scheduled(p)) return false;
-    if(e.kind==PlanetaryEngineeringKind::None) { e.kind=order.kind; e.builder=p.owner; e.startedTurn=state.turn; e.strength=e.kind==PlanetaryEngineeringKind::OrbitalHabitat?kEngineeringStrength:order.strength; e.targetTemperature=order.targetTemperature; }
+    if(e.kind==PlanetaryEngineeringKind::None) { e.kind=order.kind; e.builder=p.owner; e.startedTurn=state.turn; e.strength=e.kind==PlanetaryEngineeringKind::OrbitalHabitat?kEngineeringStrength:order.strength; e.targetTemperature=order.targetTemperature; e.targetRadiation=order.targetRadiation; }
     p.productionQueue.push_back({engineering_production_kind(e.kind),engineering_work(e.kind)-e.work}); return true;
 }
 std::uint32_t advance_planetary_engineering(const GameState& state,Planet& p,std::uint32_t available,bool supported,std::uint32_t annualRemaining)

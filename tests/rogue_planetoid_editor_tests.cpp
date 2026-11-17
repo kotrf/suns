@@ -56,7 +56,10 @@ void version130_ranges_keep_old_layouts_and_reject_invalid_new_motion()
 {
     QTemporaryDir dir;QString error;SaveGameData loaded;const auto path=dir.filePath("version.suns");
     auto h=host();assert(write_save_game_file(path,h,error));auto current=bytes(path);
-    { QDataStream in(current);quint32 magic{},version{};in>>magic>>version;assert(version==130); }
+    { QDataStream in(current);quint32 magic{},version{};in>>magic>>version;assert(version==131); }
+    auto prior=current;
+    { QDataStream patch(&prior,QIODevice::ReadWrite);assert(patch.device()->seek(4));patch<<quint32{130}; }
+    raw(path,prior);assert(read_save_game_file(path,loaded,error) && loaded.state.unknownObjects.front().kind==UnknownObjectKind::RoguePlanetoid);
     { QDataStream old(&current,QIODevice::ReadWrite);assert(old.device()->seek(4));old<<quint32{129}; }
     raw(path,current);assert(!read_save_game_file(path,loaded,error)); // New kind is outside v129's range.
     // Synthetic v129 record layout: the old drifting/static fields are unchanged.

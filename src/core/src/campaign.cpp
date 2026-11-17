@@ -111,6 +111,12 @@ const std::vector<ResearchUnlock>& research_unlocks()
             climate.extraLevels[std::size_t(ResearchField::Energy)]=20;
             climate.extraLevels[std::size_t(ResearchField::Biology)]=18;
             entries.push_back(std::move(climate));
+            ResearchUnlock atmosphere{ResearchField::Construction,22,"Atmospheric regulator",
+                "Choose surface radiation from 0 to 100; a supported atmosphere raises or lowers the index by at most 10 points (0 output = off). 6000 work, at most 80/year, I/B/G 600/300/600. One engineering slot, populated surface colony and friendly Starbase/Fortress shipyard; Energy 22 and Biology 20. Natural axes and ordinary terraforming remain separate.",{}};
+            atmosphere.planetaryEngineering=true;atmosphere.surfaceEngineering=true;
+            atmosphere.extraLevels[std::size_t(ResearchField::Energy)]=22;
+            atmosphere.extraLevels[std::size_t(ResearchField::Biology)]=20;
+            entries.push_back(std::move(atmosphere));
             ResearchUnlock habitat{ResearchField::Construction,18,"Orbital habitat",
                 "One engineering slot; 2 million orbital residents. 4800 work, 80/year, I/B/G 480/240/480; friendly Starbase/Fortress shipyard. Biology 14 and Energy 16. Occupied upkeep: 2 work and I/B/G 1/1/1 yearly; three paid emergency years, then 10% yearly losses. Physical colonist transport required.",{}};
             habitat.planetaryEngineering=true;

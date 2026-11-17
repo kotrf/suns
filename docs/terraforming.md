@@ -25,7 +25,9 @@ out-of-range distance and distance from racial optima. This lets work continue
 when several hostile axes temporarily leave the same negative habitability.
 
 An active [Climate stabilizer](planetary-engineering.md#climate-stabilizer-56)
-can hold the effective temperature constant over several raw-axis points. Ordinary
+or [Atmospheric regulator](planetary-engineering.md#atmospheric-regulator-56)
+can hold its effective temperature or surface-radiation axis constant over
+several ordinary raw-axis points. Ordinary
 terraforming may cross that plateau if its first improving exit is reachable
 within the same technology and natural-baseline limits and its full score is
 strictly better than the current one. For a racial range30–71, effective50 and51
