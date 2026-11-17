@@ -65,3 +65,11 @@ remain future work.
 
 Sources: original [Stars! Player's Guide](https://www.bestoldgames.net/download/games/stars/stars-win-manual.pdf),
 sections 6-14–6-20 and 7-9–7-10, and [Technical Reference Guide](https://www.bestoldgames.net/download/games/stars/stars-win-guide.pdf).
+
+## Irreversible planetary transformation
+
+[Radical transformation](radical-transformation.md) is a separate late-game
+commitment. Ordinary surface terraforming pauses during its sheltered transition.
+Completion establishes the initiating racial target as a permanent environment
+and new natural baseline; ordinary limits then apply around that baseline.
+Removing the project machinery never restores the former planet.

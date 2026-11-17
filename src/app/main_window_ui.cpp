@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/campaign.hpp"
 #include "suns/native_orbital.hpp"
@@ -865,10 +866,12 @@ void MainWindow::installUiPolish()
                     label->setText(maximum > current
                         ? QString("Hab %1% → %2% with terraforming").arg(current).arg(maximum)
                         : QString("Hab %1%").arg(current));
+                    if(surface_sheltered(*environmentPlanet))label->setText(QString("Last reported surface transformation: %1 / %2 supported years. Residents sheltered; surface economy and growth suspended.")
+                        .arg(environmentPlanet->engineering.transformation.years).arg(kTransformationYears));
                     if(environmentPlanet->engineering.kind!=PlanetaryEngineeringKind::None) label->setText(label->text()
                         + QString(" • %1: %2%, %3").arg(QString::fromStdString(engineering_name(environmentPlanet->engineering.kind)))
                             .arg(environmentPlanet->engineering.work*100/engineering_work(environmentPlanet->engineering.kind))
-                            .arg(environmentPlanet->engineering.operational?"operating":"inactive / under construction"));
+                            .arg(environmentPlanet->engineering.kind==PlanetaryEngineeringKind::RadicalTransformation && environmentPlanet->engineering.transformation.phase==TransformationPhase::Complete?"permanent result":environmentPlanet->engineering.kind==PlanetaryEngineeringKind::WormholeExperiment && environmentPlanet->engineering.experiment.openedTurn?"spent experiment":environmentPlanet->engineering.operational?"operating":"inactive / under construction"));
                     label->setToolTip(QString("Current technology: T ±%1 / G ±%2 / R ±%3 from natural values.\nEach change costs %4 production. Potential assumes current technology and stellar conditions.")
                         .arg(limits.temperature).arg(limits.gravity).arg(limits.radiation).arg(kTerraformingCost));
                     const auto natural = environmentPlanet->naturalEnvironment.value_or(environmentPlanet->environment);

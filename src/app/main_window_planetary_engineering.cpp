@@ -2,6 +2,7 @@
 #include "main_window.hpp"
 #include "suns/campaign.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/production.hpp"
 #include <QComboBox>
 #include <QDockWidget>
@@ -40,6 +41,8 @@ void MainWindow::installPlanetaryEngineering()
     project->addItem("Orbital habitat (2 million residents)",int(PlanetaryEngineeringKind::OrbitalHabitat));
     project->addItem("Climate stabilizer (target temperature)",int(PlanetaryEngineeringKind::ClimateStabilizer));
     project->addItem("Atmospheric regulator (target radiation)",int(PlanetaryEngineeringKind::AtmosphericRegulator));
+    project->addItem("Radical planetary transformation",int(PlanetaryEngineeringKind::RadicalTransformation));
+    project->addItem("Artificial wormhole experiment",int(PlanetaryEngineeringKind::WormholeExperiment));
     layout->addWidget(project);
     auto* output=new QSpinBox(body); output->setObjectName("engineeringOutput"); output->setRange(0,kEngineeringStrength); output->setValue(kEngineeringStrength);
     auto* form=new QFormLayout;
@@ -55,6 +58,8 @@ void MainWindow::installPlanetaryEngineering()
     const auto button=[&](const char* title,const char* name) { auto* b=new QPushButton(title,body); b->setObjectName(name); row->addWidget(b); return b; };
     auto* start=button("Start / resume","engineeringStart"); auto* pause=button("Pause construction","engineeringPause");
     auto* apply=button("Set output","engineeringApply"); layout->addLayout(row);
+    auto* commit=new QPushButton("Commit irreversible transformation…",body);commit->setObjectName("engineeringCommit");layout->addWidget(commit);
+    auto* activate=new QPushButton("Activate unknown-exit experiment…",body);activate->setObjectName("engineeringExperiment");layout->addWidget(activate);
     auto* dismantle=new QPushButton("Dismantle project (no refund)",body); dismantle->setObjectName("engineeringDismantle"); layout->addWidget(dismantle);
     auto* settlers=new QSpinBox(body); settlers->setObjectName("habitatResettlementCount"); settlers->setRange(1,int(kOrbitalPopulationCapacity)); settlers->setSingleStep(1000); settlers->setValue(200000);
     form->addRow("Residents to move",settlers);
@@ -68,6 +73,7 @@ void MainWindow::installPlanetaryEngineering()
     addDockWidget(Qt::RightDockWidgetArea,dock); dock->hide(); menuBar()->addAction(dock->toggleViewAction());
     const auto knownWorld=[this] { return find_player(state_,pendingOrders_.player)
         ? planned_production_state(make_player_view(state_,pendingOrders_.player).state,pendingOrders_):GameState{}; };
+    const QString generalNote=note->text();
     const auto update=[=,this] {
         const auto known=knownWorld(); const auto* p=find_planet(known,planets->currentData().toUInt());
         const bool owned=p && p->owner==pendingOrders_.player;
@@ -75,7 +81,17 @@ void MainWindow::installPlanetaryEngineering()
         const auto kind=existing?p->engineering.kind:PlanetaryEngineeringKind(project->currentData().toInt());
         const bool climate=kind==PlanetaryEngineeringKind::ClimateStabilizer;
         const bool atmospheric=kind==PlanetaryEngineeringKind::AtmosphericRegulator;
+        const bool radical=kind==PlanetaryEngineeringKind::RadicalTransformation,experiment=kind==PlanetaryEngineeringKind::WormholeExperiment;
+        const bool mega=radical || experiment;
+        commit->setVisible(radical);activate->setVisible(experiment);
+        output->setVisible(!mega);outputLabel->setVisible(!mega);
+        settlers->setVisible(!mega);if(auto* label=form->labelForField(settlers))label->setVisible(!mega);
+        toOrbit->setVisible(!mega);toSurface->setVisible(!mega);
+        note->setText(radical?QString("Preparation retains paid work when paused. After commitment the fixed target and partial changes survive capture and support loss; cancellation is unavailable until completion. Use Cargo to move sheltered residents. Completed planetary changes remain after equipment removal.")
+            :experiment?QString("Pausing generator construction retains paid work. An opened rift exists independently until collapse; removing the spent equipment does not close it. Use the anomaly journal for dated contacts and explicit entry."):generalNote);
         hint->setText(climate?"Climate stabilizer: Energy 20, Construction 20 and Biology 18. Choose a surface temperature from 0 to 100 and a maximum correction from 0 to 10 (0 = off). 4800 work at at most 80/year means at least 60 years; I/B/G 480/240/480 kt paid during construction. Construction and operation require a populated colony and a friendly Starbase/Fortress shipyard. The current owner must retain the operating technology. One engineering slot per planet; captured settings stay as built.":atmospheric?"Atmospheric regulator: Energy 22, Construction 22 and Biology 20. Choose surface radiation from 0 to 100 and a maximum correction from 0 to 10 (0 = off). 6000 work at most 80/year means at least 75 years; I/B/G 600/300/600 kt paid during construction. Construction and operation require a populated surface colony and a friendly Starbase/Fortress shipyard. One engineering slot per planet; the current owner needs the operating technology.":generalHint);
+        if(radical)hint->setText("Radical transformation: Energy26/Construction26/Biology24, surface race. Preparation: 9600 work at 80/year (at least 120 years), I/B/G960/480/960 kt. Explicit commitment starts 30 supported transition years. Residents may stay in prepaid shelters without surface mining, production, research or growth; move them elsewhere to work. One engineering slot.");
+        if(experiment)hint->setText("Artificial wormhole experiment: Energy26/Construction24/Electronics26. Generator: 8000 work at 80/year (at least100 years), I/B/G800/400/800 kt. Explicit activation opens one transient40-year rift with an initially unknown exit. Ordinary drift, fleet-loss risk, exploration and delayed reports apply.");
         target->setVisible(climate);targetLabel->setVisible(climate);target->setEnabled(owned && climate);
         targetRadiation->setVisible(atmospheric);radiationLabel->setVisible(atmospheric);targetRadiation->setEnabled(owned && atmospheric);
         outputLabel->setText((climate || atmospheric)?"Maximum correction (0 = off)":"Axis adjustment (0 = off)");
@@ -83,10 +99,20 @@ void MainWindow::installPlanetaryEngineering()
         { const QSignalBlocker block(output); output->setMaximum(engineering_max_strength(kind)); }
         const bool complete=existing && p->engineering.work==total;
         progress->setMaximum(int(total));
-        project->setEnabled(owned && !existing); output->setEnabled(owned && kind!=PlanetaryEngineeringKind::OrbitalHabitat);
+        project->setEnabled(owned && !existing); output->setEnabled(owned && !mega && kind!=PlanetaryEngineeringKind::OrbitalHabitat);
         start->setEnabled(owned && !complete && !engineering_scheduled(*p) && planetary_engineering_available(known,p->owner,kind));
         pause->setEnabled(owned && existing && !complete && engineering_scheduled(*p));
-        apply->setEnabled(owned && existing && kind!=PlanetaryEngineeringKind::OrbitalHabitat); dismantle->setEnabled(owned && existing && !p->habitat.population);
+        const bool transition=p && surface_sheltered(*p);
+        const bool supported=owned && engineering_operation_available(known,*p) && engineering_station_available(known,*p);
+        if(transition) {
+            start->setEnabled(supported && p->engineering.transformation.paused);
+            pause->setEnabled(owned && !p->engineering.transformation.paused);
+            progress->setMaximum(kTransformationYears);progress->setValue(p->engineering.transformation.years);
+        }
+        apply->setEnabled(owned && existing && !mega && kind!=PlanetaryEngineeringKind::OrbitalHabitat);
+        dismantle->setEnabled(owned && existing && !p->habitat.population && !transition);
+        commit->setEnabled(supported && radical && complete && p->engineering.transformation.phase==TransformationPhase::Preparation);
+        activate->setEnabled(supported && experiment && complete && !p->engineering.experiment.activationTurn && total_colony_population(*p));
         const auto canResettle=[&](bool toOrbital) {
             if(!owned || !habitat_completed(*p)) return false;
             const PlayerOrders order{pendingOrders_.player,{TransferCargoOrder{{p->id,0,!toOrbital},{p->id,0,toOrbital},std::uint64_t(settlers->value()),{}}}};
@@ -95,7 +121,7 @@ void MainWindow::installPlanetaryEngineering()
         };
         toOrbit->setEnabled(canResettle(true)); toSurface->setEnabled(canResettle(false));
         settlers->setEnabled(owned && kind==PlanetaryEngineeringKind::OrbitalHabitat);
-        progress->setValue(p?int(p->engineering.work):0);
+        if(!transition)progress->setValue(p?int(p->engineering.work):0);
         if(!p) { status->setText("Select a known planet. Orbital survey is required for foreign project details."); effect->clear(); return; }
         if(!owned && survey_level(known,pendingOrders_.player,p->star)<SurveyLevel::OrbitalSurvey) {
             status->setText("No received orbital evidence of this planet's engineering projects.");
@@ -116,7 +142,7 @@ void MainWindow::installPlanetaryEngineering()
             text+=QString("\nPaid: I %1 / B %2 / G %3 kt. Stocks: I %4 / B %5 / G %6 kt.")
                 .arg(e.invested.ironium,0,'f',1).arg(e.invested.boranium,0,'f',1).arg(e.invested.germanium,0,'f',1)
                 .arg(p->minerals.ironium,0,'f',1).arg(p->minerals.boranium,0,'f',1).arg(p->minerals.germanium,0,'f',1);
-            if(!planetary_engineering_available(known,p->owner,kind) && !complete) text+=atmospheric?"\nRequires a race with surface colonies, Energy 22, Construction 22 and Biology 20.":climate?"\nRequires a race with surface colonies, Energy 20, Construction 20 and Biology 18.":kind==PlanetaryEngineeringKind::OrbitalHabitat?"\nRequires Construction 18, Energy 16 and Biology 14.":kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"\nRequires Energy 18, Construction 18 and delivered completed Compact remnant field research.":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"\nRequires Energy 16 and Construction 16.":"\nRequires Energy 14 and Construction 14.";
+            if(!planetary_engineering_available(known,p->owner,kind) && !complete) text+=radical?"\nRequires a surface race, Energy26, Construction26 and Biology24.":experiment?"\nRequires Energy26, Construction24 and Electronics26.":atmospheric?"\nRequires a race with surface colonies, Energy 22, Construction 22 and Biology 20.":climate?"\nRequires a race with surface colonies, Energy 20, Construction 20 and Biology 18.":kind==PlanetaryEngineeringKind::OrbitalHabitat?"\nRequires Construction 18, Energy 16 and Biology 14.":kind==PlanetaryEngineeringKind::AdaptiveMagnetosphere?"\nRequires Energy 18, Construction 18 and delivered completed Compact remnant field research.":kind==PlanetaryEngineeringKind::ArtificialMagnetosphere?"\nRequires Energy 16 and Construction 16.":"\nRequires Energy 14 and Construction 14.";
             if(existing && !complete && engineering_scheduled(*p))
                 text+="\nScheduled in production queue. Progress is resolved each turn from output, queue priority and supplies.";
         } else {
@@ -146,12 +172,32 @@ void MainWindow::installPlanetaryEngineering()
                 .arg(qulonglong(p->habitat.population)).arg(qulonglong(kOrbitalPopulationCapacity)).arg(qlonglong(projected_orbital_growth(known,*p,firstTurnMining)))
                 .arg(QString::fromStdString(habitat_service_name(p->habitat.service))).arg(p->habitat.reserveYears).arg(qulonglong(p->habitat.populationLost));
         }
+        if(radical && existing && e.transformation.phase!=TransformationPhase::Preparation) {
+            const auto& t=e.transformation;
+            text+=QString("\nIrreversible transition: %1 / %2 supported years. Initiating empire: %3. Target T/G/R: %4/%5/%6. %7")
+                .arg(t.years).arg(kTransformationYears).arg(t.initiator).arg(t.target.temperature).arg(t.target.gravity).arg(t.target.radiation)
+                .arg(t.phase==TransformationPhase::Complete?"Permanent result; ordinary economy can resume.":"No rollback. Sheltered residents produce no resources and do not grow.");
+            if(owned)text+=QString("\nShelter capacity paid at commitment: %1; residents now: %2. Evacuation and return use ordinary Cargo.").arg(qulonglong(t.shelterCapacity)).arg(qulonglong(p->population));
+        }
+        if(experiment && existing && e.experiment.activationTurn)
+            text+=e.experiment.openedTurn?QString("\nExperiment opened in year %1. Entrance contact ID %2; exit must be explored. This generator is spent.").arg(qulonglong(e.experiment.openedTurn)).arg(e.experiment.entrance):"\nActivation requested; waiting for host execution with working support.";
         status->setText(text);
         if(!owned && survey_level(known,pendingOrders_.player,p->star)<SurveyLevel::OrbitalSurvey) {
             effect->setText("Environmental axes and engineering details require an orbital survey."); return;
         }
         if(kind==PlanetaryEngineeringKind::OrbitalHabitat) {
             effect->setText("Orbital housing leaves surface Hab and geology unchanged. Five-percent base orbital growth slows with crowding. Population contributes ordinary colony output only while supported and paid. Station loss spends finite reserves, then kills 10% per year. Cargo and route policies can evacuate all residents even without the station; local surface/orbit shuttles require support. Estimates use received evidence, not future arrivals."); return;
+        }
+        if(radical) {
+            const auto* owner=find_player(known,pendingOrders_.player);
+            const auto destination=e.transformation.phase!=TransformationPhase::Preparation?e.transformation.target:owner?transformation_target(owner->race):PlanetEnvironment{};
+            effect->setText(QString("Permanent target T/G/R: %1/%2/%3. Preparation can be cancelled without refund. Commit is the point of no return: surface habitation and economy close for30 supported years. Original racial target survives capture. Missing support pauses physical changes without rollback. A paid, supplied independent orbital base can restore transition support after station loss. The final planet and new natural baseline persist after equipment removal. Geology, stored materials and buildings are retained.")
+                .arg(destination.temperature).arg(destination.gravity).arg(destination.radiation));
+            if(!owned && e.transformation.phase==TransformationPhase::Preparation)effect->setText("Foreign preparation observed. Its target will be fixed only at commitment; private housing and supplies are not disclosed.");
+            return;
+        }
+        if(experiment) {
+            effect->setText("A finished generator waits for explicit activation. One experiment opens an ordinary transient wormhole near this planet and a randomly located unknown exit for40 years. Both mouths can drift and collapse; the whole fleet can be lost in transit. Scanners and delayed emergence reports reveal actual contacts and links. No remote anchor, known destination, free fleet transfer or future-route simulation. Removing the spent generator does not close the rift.");return;
         }
         auto projected=*p; projected.observedHabitability.reset();
         projected.engineering.kind=existing?e.kind:PlanetaryEngineeringKind(project->currentData().toInt());
@@ -201,7 +247,7 @@ void MainWindow::installPlanetaryEngineering()
         if(!p || p->owner!=pendingOrders_.player) return;
         const auto kind=p->engineering.kind!=PlanetaryEngineeringKind::None?p->engineering.kind:PlanetaryEngineeringKind(project->currentData().toInt());
         appendPendingOrder(SetPlanetaryEngineeringOrder{p->id,kind,action,std::uint8_t(output->value()),kind==PlanetaryEngineeringKind::ClimateStabilizer?std::uint8_t(target->value()):std::uint8_t{50},kind==PlanetaryEngineeringKind::AtmosphericRegulator?std::uint8_t(targetRadiation->value()):std::uint8_t{50}},
-            QString("%1: %2").arg(QString::fromStdString(p->name),action==EngineeringAction::StartOrResume?"start / resume engineering project":action==EngineeringAction::Pause?"pause engineering construction":action==EngineeringAction::SetOutput?"set engineering output":"dismantle engineering project"));
+            QString("%1: %2").arg(QString::fromStdString(p->name),action==EngineeringAction::StartOrResume?"start / resume engineering project":action==EngineeringAction::Pause?"pause engineering construction":action==EngineeringAction::SetOutput?"set engineering output":action==EngineeringAction::CommitTransformation?"commit irreversible transformation":action==EngineeringAction::ActivateExperiment?"activate unknown-exit wormhole experiment":"dismantle engineering project"));
         rebuildScene();
     };
     const auto resettle=[=,this](bool orbital) {
@@ -220,8 +266,18 @@ void MainWindow::installPlanetaryEngineering()
     connect(start,&QPushButton::clicked,this,[issue]{issue(EngineeringAction::StartOrResume);});
     connect(pause,&QPushButton::clicked,this,[issue]{issue(EngineeringAction::Pause);});
     connect(apply,&QPushButton::clicked,this,[issue]{issue(EngineeringAction::SetOutput);});
+    connect(commit,&QPushButton::clicked,this,[=,this] {
+        if(QMessageBox::question(this,"Point of no return","Commit permanent planetary transformation? Residents enter shelters: no surface production, mining, research or growth. You may transport them elsewhere. The transition needs30 supported years; support loss pauses it without rollback. Cancellation and retargeting are unavailable after commitment.")!=QMessageBox::Yes)return;
+        issue(EngineeringAction::CommitTransformation);
+    });
+    connect(activate,&QPushButton::clicked,this,[=,this] {
+        if(QMessageBox::question(this,"Unknown-exit wormhole experiment","Activate this one-shot generator? The exit is unknown, mouths drift and a whole entering fleet can be lost. Discovery and transit reports arrive through ordinary communications.")!=QMessageBox::Yes)return;
+        issue(EngineeringAction::ActivateExperiment);
+    });
     connect(dismantle,&QPushButton::clicked,this,[=,this] {
-        if(QMessageBox::question(this,"Dismantle engineering project","Remove all construction progress and its environmental effect? Paid production and minerals will not be refunded.")!=QMessageBox::Yes)return;
+        const auto known=knownWorld();const auto* p=find_planet(known,planets->currentData().toUInt());
+        const auto warning=p && megaproject_kind(p->engineering.kind)?"Remove the equipment without refund? A completed permanent transformation or a wormhole already opened remains in the world.":"Remove all construction progress and its environmental effect? Paid production and minerals will not be refunded.";
+        if(QMessageBox::question(this,"Dismantle engineering project",warning)!=QMessageBox::Yes)return;
         issue(EngineeringAction::Dismantle);
     });
     connect(this,&MainWindow::routeProgramContextChanged,this,refresh); refresh();

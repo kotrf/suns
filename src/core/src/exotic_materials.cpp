@@ -3,6 +3,7 @@
 #include "suns/communications.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/player_knowledge.hpp"
 #include "suns/science_samples.hpp"
 #include "suns/unknown_objects.hpp"
@@ -132,7 +133,7 @@ void observe_xenocrystal_surface(GameState& s, PlayerId owner, PlanetId id, Flee
 std::uint32_t colony_xenocrystal_mining_rate(const GameState& s, const Planet& p)
 {
     const auto known = known_xenocrystal(s, p.owner, p.id);
-    if (!p.owner || !p.population || !exotic_mining_available(s, p.owner)
+    if (!p.owner || !p.population || surface_sheltered(p) || !exotic_mining_available(s, p.owner)
         || !known || !known->depositSurveyed || !known->site.original) return 0;
     return std::min(kXenocrystalPerPlanetYear, colony_workforce(s, p).operatingMines / 25);
 }
@@ -149,6 +150,7 @@ std::uint32_t received_operating_mines(const GameState& s, const XenocrystalObse
 std::string known_colony_xenocrystal_block(const GameState& s, PlayerId owner, const Planet& p)
 {
     if (p.owner != owner) return "Own colony required";
+    if(surface_sheltered(p))return "Residents sheltered: surface extraction suspended";
     const auto known = known_xenocrystal(s, owner, p.id);
     if (!known || !known->depositSurveyed) return "Awaiting delivered DeepSurvey";
     if (!known->site.original) return "No surveyed deposit";
@@ -257,12 +259,13 @@ bool resonance_technology_available(const GameState& s, PlayerId owner)
 bool resonance_scheduled(const Planet& p)
 { return std::any_of(p.productionQueue.begin(), p.productionQueue.end(), [](const auto& i) { return i.kind == ProductionKind::ResonanceLaboratory; }); }
 bool resonance_operational(const GameState& s, const Planet& p)
-{ return p.resonanceLab.started && p.resonanceLab.work == kResonanceWork && p.resonanceLab.active
+{ return !surface_sheltered(p) && p.resonanceLab.started && p.resonanceLab.work == kResonanceWork && p.resonanceLab.active
     && p.owner && p.population && resonance_technology_available(s, p.owner) && engineering_station_available(s, p); }
 std::string resonance_block(const GameState& s, const Planet& p)
 {
     const auto& lab = p.resonanceLab;
     if (!lab.started) return "No project";
+    if(surface_sheltered(p))return "Residents sheltered: surface research suspended";
     if (!p.owner || !p.population) return "Populated colony required";
     if (!lab.active || (lab.work < kResonanceWork && !resonance_scheduled(p))) return "Paused";
     if (!resonance_technology_available(s, p.owner)) return "Requires Energy 16, Electronics 16 and Construction 14";

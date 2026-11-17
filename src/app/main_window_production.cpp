@@ -65,6 +65,8 @@ QString productionItemName(const GameState& state, const ProductionItem& item)
     case ProductionKind::OrbitalHabitat: name="Orbital habitat"; break;
     case ProductionKind::ClimateStabilizer: name="Climate stabilizer"; break;
     case ProductionKind::AtmosphericRegulator: name="Atmospheric regulator"; break;
+    case ProductionKind::RadicalTransformation: name="Radical transformation preparation"; break;
+    case ProductionKind::WormholeExperiment: name="Wormhole experiment generator"; break;
     case ProductionKind::AdaptiveMagnetosphere: name = "Adaptive magnetosphere"; break;
     case ProductionKind::ResonanceLaboratory: name = "Resonance laboratory"; break;
     case ProductionKind::Terraforming: name = "Terraforming"; break;

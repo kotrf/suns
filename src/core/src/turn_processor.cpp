@@ -11,6 +11,7 @@
 #include "suns/intergalactic_visitors.hpp"
 #include "suns/turn_processor.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/mobile_base.hpp"
 #include "suns/orbital_bases.hpp"
 #include "suns/deep_space.hpp"
@@ -555,6 +556,10 @@ bool invade_colony(
         planet.radar = PlanetaryRadarLevel::None;
         planet.homeworld = false;
         planet.population = survivors;
+        if(surface_sheltered(planet) && planet.population>planet.engineering.transformation.shelterCapacity) {
+            const auto excess=planet.population-planet.engineering.transformation.shelterCapacity;
+            planet.population-=excess;fleet.colonists+=excess;
+        }
         planet.habitat.population=0; planet.habitat.service=HabitatService::Empty; planet.habitat.productionPaid=0;
         planet.productionQueue.clear();
         // A settlement default is not a conquest program. Captured worlds
@@ -683,10 +688,12 @@ bool transfer_cargo(GameState& state, PlayerId player, const TransferCargoOrder&
             return false;
         }
         const auto available = endpoint_colonists(*source);
-        const bool retainLastSurface=source->planet && !source->orbital && !source->planet->habitat.population && !destination->orbital;
+        const bool retainLastSurface=source->planet && !source->orbital && !source->planet->habitat.population && !surface_sheltered(*source->planet) && !destination->orbital;
         if (retainLastSurface ? order.colonists >= available : order.colonists > available) return false;
         const auto destinationPopulation = endpoint_colonists(*destination);
         if (order.colonists > std::numeric_limits<std::uint64_t>::max() - destinationPopulation) return false;
+        if(destination->planet && !destination->orbital && !native_orbital_race(state,player)
+            && !surface_shelter_accepts(*destination->planet,destinationPopulation+order.colonists))return false;
         if (source->fleet && destination->planet
             && hostile_station_blocks_landing(state, *source->fleet, *destination->planet)) return false;
     }
@@ -787,6 +794,7 @@ bool establish_colony(GameState& state, Fleet& fleet, Planet& planet,
     if (fleet.xenocrystal > kMaximumXenocrystal - planet.xenocrystal.surface) return false;
     if (!fleet_at_planet(state, fleet, planet)) return false;
     if (hostile_station_blocks_landing(state, fleet, planet)) return false;
+    if(!native && surface_sheltered(planet) && !surface_shelter_accepts(planet,fleet.colonists))return false;
     if (native && (planet.population || planet.habitat.population || planet.nativeOrbit.station
         || planet.nativeOrbit.population || planet.engineering.kind != PlanetaryEngineeringKind::None
         || find_orbital_station_at_planet(state, planet.id) || orbital_base_at(state, planet.id)
@@ -962,7 +970,7 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
             }
             if(orbital && !habitat_completed(*colony)) return false;
             auto& population=orbital?colony->habitat.population:colony->population;
-            const auto reserve=orbital?action.reservePopulation:std::max<std::uint64_t>(1,action.reservePopulation);
+            const auto reserve=(orbital || surface_sheltered(*colony))?action.reservePopulation:std::max<std::uint64_t>(1,action.reservePopulation);
             if(population<=reserve) return false;
             const auto available=population-reserve;
             const auto capacityColonists = static_cast<std::uint64_t>(
@@ -1071,9 +1079,11 @@ bool execute_arrival_action(GameState& state, Fleet& fleet,
             auto* colony = friendly_colony_at_fleet(state, fleet);
             if (colony) {
                 if (fleet.colonists > 0 && hostile_station_blocks_landing(state, fleet, *colony)) return false;
-                record_freight_delivery(freight, *colony, {}, fleet.colonists);
-                colony->population += fleet.colonists;
-                fleet.colonists = 0;
+                const auto capacity=surface_sheltered(*colony)?colony->engineering.transformation.shelterCapacity:std::numeric_limits<std::uint64_t>::max();
+                const auto unloaded=std::min(fleet.colonists,capacity-std::min(capacity,colony->population));
+                record_freight_delivery(freight, *colony, {}, unloaded);
+                colony->population += unloaded;
+                fleet.colonists -= unloaded;
             } else {
                 const auto enemy = std::find_if(
                     state.planets.begin(), state.planets.end(), [&](const Planet& planet) {
@@ -2424,10 +2434,12 @@ void apply_cargo_order(GameState& next, PlayerId player, const Order& order,
 
                         if (concreteOrder.colonists > fleet->colonists) {
                             const auto load = concreteOrder.colonists - fleet->colonists;
-                            if (planet->population < load || (planet->population==load && !planet->habitat.population)) return;
+                            if (planet->population < load || (planet->population==load && !planet->habitat.population && !surface_sheltered(*planet))) return;
                             planet->population -= load;
                         } else {
                             const auto delivered = fleet->colonists - concreteOrder.colonists;
+                            if(delivered>std::numeric_limits<std::uint64_t>::max()-planet->population
+                                || !surface_shelter_accepts(*planet,planet->population+delivered))return;
                             planet->population += delivered;
                             record_freight_delivery(freight, *planet, {}, delivered);
                         }
@@ -2673,6 +2685,13 @@ GameState project_order_boundary(GameState projected, const PlayerOrders& pendin
             // They cannot finance this year's lab work or an earlier transfer.
             if (!defer(*crystal))
                 (void)preview_xenocrystal_transfer(projected, pending.player, *crystal, &pending);
+        } else if (const auto* engineering = std::get_if<SetPlanetaryEngineeringOrder>(&order)) {
+            // Production's boundary hook already applies this order. Cargo-only
+            // planning needs the same cheap state edit before later transfers.
+            if(!beforeOrder) {
+                const auto p=std::find_if(projected.planets.begin(),projected.planets.end(),[&](const auto& p){return p.id==engineering->colony && p.owner==pending.player;});
+                if(p!=projected.planets.end())(void)apply_planetary_engineering_order(projected,*p,*engineering);
+            }
         } else if (const auto* process = std::get_if<ProcessScienceSampleOrder>(&order)) {
             (void)process_science_sample(projected, pending.player, *process);
         } else if (const auto* fuel = std::get_if<TransferFleetFuelOrder>(&order)) {
@@ -3251,6 +3270,7 @@ TurnResult TurnProcessor::process_with_events(
     }
     refresh_planetary_engineering(next);
     grow_colonies(next);
+    if(advance_megaprojects(next))observe_current_wormholes(next,next.turn+1);
     refresh_planetary_engineering(next);
     detail::assign_production_queue_ids(next);
     publish_planetary_engineering_reports(next,current);
@@ -3365,7 +3385,10 @@ TurnResult TurnProcessor::process_with_events(
                 ? HistoryMilestoneKind::GroundDefenseLost : HistoryMilestoneKind::ColonyLost;
             break;
         case GameEventKind::EngineeringProgress:
-            kind=event.quantity==0?HistoryMilestoneKind::EngineeringStarted:event.quantity==100?HistoryMilestoneKind::EngineeringCompleted:HistoryMilestoneKind::EngineeringProgress; break;
+            kind=event.quantity==0?HistoryMilestoneKind::EngineeringStarted
+                :((event.quantity==100 && event.productionKind!=ProductionKind::RadicalTransformation)
+                    || (event.productionKind==ProductionKind::RadicalTransformation && event.quantity==kTransformationProgressBase+100))
+                    ?HistoryMilestoneKind::EngineeringCompleted:HistoryMilestoneKind::EngineeringProgress; break;
         case GameEventKind::EngineeringPaused: kind=HistoryMilestoneKind::EngineeringPaused; break;
         case GameEventKind::EngineeringResumed: kind=HistoryMilestoneKind::EngineeringResumed; break;
         case GameEventKind::EngineeringCaptured: kind=HistoryMilestoneKind::EngineeringCaptured; break;

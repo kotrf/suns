@@ -223,6 +223,32 @@ void advance_wormholes(GameState& state)
     state.wormholes.push_back(hole);
 }
 
+WormholeEndpointId open_experimental_wormhole(GameState& state,PlayerId owner,Position origin,std::uint64_t experimentSeed,std::uint64_t lifetime)
+{
+    if(!lifetime || state.nextWormholeEndpointId==0
+        || state.nextWormholeEndpointId>std::numeric_limits<WormholeEndpointId>::max()-2)return 0;
+    const auto turn=state.turn+1;
+    const auto n=mix(state.galaxySeed)^mix(experimentSeed)^mix(turn);
+    Wormhole hole;hole.createdTurn=turn;hole.collapseTurn=turn+lifetime;
+    hole.stability=0.65+unit(n^0x41ULL)*0.2;
+    hole.endpoints[0].id=state.nextWormholeEndpointId++;
+    hole.endpoints[1].id=state.nextWormholeEndpointId++;
+    hole.endpoints[0].position=origin;
+    auto exit=random_position(state.wormholeRules,n^0x42ULL);
+    const double separation=std::hypot(state.wormholeRules.width,state.wormholeRules.height)*0.35;
+    for(unsigned attempt=0;attempt<16 && distance_between(origin,exit)<separation;++attempt)
+        exit=random_position(state.wormholeRules,n^mix(attempt+1));
+    if(distance_between(origin,exit)<separation)exit={origin.x>0?-state.wormholeRules.width*.45:state.wormholeRules.width*.45,
+        origin.y>0?-state.wormholeRules.height*.45:state.wormholeRules.height*.45};
+    hole.endpoints[1].position=exit;
+    state.wormholes.push_back(hole);
+    // The generator measures its own entrance, including at a native orbital
+    // colony with no surface residents. Only the local mouth is reported.
+    queue(state,owner,WormholeReportKind::Observation,
+        {hole.endpoints[0].id,origin,turn,stability_band(hole.stability)},0,origin,turn);
+    return hole.endpoints[0].id;
+}
+
 void resolve_wormhole_approaches(GameState& state)
 {
     for (auto& fleet : state.fleets) {

@@ -1,5 +1,10 @@
 # Orbital environmental engineering
 
+The active #56 follow-ups are [radical irreversible transformation](radical-transformation.md)
+and [unknown-exit artificial wormhole experiments](artificial-wormholes.md), with
+the shelter, interruption and unknown-exit choices agreed on17 November2026.
+All other unfinished ocean/ice and system-engineering directions are frozen.
+
 The first planetary-engineering slice of #56 adds **orbital mirrors** and
 **orbital shades**. They respectively raise or lower effective temperature by
 an owner-selected **0–10 normalized axis points**, clamped to 0–100. Output zero
@@ -289,11 +294,11 @@ five habitability points gained, fund the full recipe and send normal orders.
 A fully funded radiation-raising project is an option for a high-radiation race;
 an equally useful cheaper fixed shield keeps priority for lowering radiation.
 
-Current formats are **save131 / orders57 / portable race3**. Kind IDs append;
+Current formats are **save132 / orders58 / portable race3**. Kind IDs append;
 temperature and radiation targets have separate defaults and validation. Only
 Atmospheric regulator records/orders carry a radiation-target byte. Existing
 Climate records retain their temperature byte and other types retain their old
 layouts. Physical, received, in-flight, draft and host-inbox values remain
 separate; hidden reconfiguration does not rewrite received UI/player exports.
-Older headers reject the new kind. #56 remains open for ocean/ice and system
-projects, with the radical path requiring its separate gameplay discussion.
+Older headers reject the new kind. The selected radical and experimental
+follow-ups are described above; remaining ocean/ice and system directions are frozen.

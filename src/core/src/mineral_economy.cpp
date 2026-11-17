@@ -7,6 +7,7 @@
 #include "suns/native_orbital.hpp"
 #include "suns/equipment.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -169,7 +170,7 @@ MineralCargo planet_mineral_concentration(const GameState& state, const Planet& 
 
 MineralCargo projected_mineral_mining(const GameState& state, const Planet& planet)
 {
-    if (planet.owner == 0 || planet.population == 0 || native_orbital_race(state, planet.owner)) return {};
+    if (planet.owner == 0 || planet.population == 0 || surface_sheltered(planet) || native_orbital_race(state, planet.owner)) return {};
     const auto concentration = planet_mineral_concentration(state, planet);
 
     // Population supplies a small baseline extraction workforce. Dedicated

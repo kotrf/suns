@@ -1,4 +1,5 @@
 #include "suns/terraforming.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/planetary_engineering.hpp"
 #include "suns/campaign.hpp"
 
@@ -30,7 +31,7 @@ std::optional<PlanetEnvironment> next_terraforming_environment(
     const GameState& state, PlayerId player, const Planet& planet)
 {
     const auto* empire = find_player(state, player);
-    if (!empire || !empire->race.environmentBased) return std::nullopt;
+    if (!empire || !empire->race.environmentBased || surface_sheltered(planet)) return std::nullopt;
     const auto limits = terraforming_limits(state, player);
     const auto natural = planet.naturalEnvironment.value_or(planet.environment);
     const std::array<int, 3> original{natural.temperature, natural.gravity, natural.radiation};

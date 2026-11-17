@@ -144,7 +144,7 @@ coverage, corrections and review status.
 richer discovery outcomes. The drifting hulk adds one globally finite architectural
 core: analyze for80 Construction RP or retain its+4 Construction RP/year capability
 after physical delivery. The received object journal acts as its learned reference;
-it never exposes the current stock or hidden course. Current formats are save131/orders57/race3. Save130 added the planetoid kind to physical, observed and
+it never exposes the current stock or hidden course. Current formats are save132/orders58/race3. Save130 added the planetoid kind to physical, observed and
 specimen records. Both moving kinds carry their existing velocity payload shape;
 older static/derelict layouts and IDs remain unchanged. Version129 rejects the
 new kind; older campaigns load without generating planetoids. Recovery orders
