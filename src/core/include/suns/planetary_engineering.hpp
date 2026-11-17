@@ -17,6 +17,7 @@ inline constexpr MineralCargo kEngineeringMineralsPerWork{0.1,0.05,0.1};
 [[nodiscard]] bool engineering_operation_available(const GameState&,const Planet&);
 [[nodiscard]] bool engineering_station_available(const GameState&,const Planet&);
 [[nodiscard]] bool engineering_state_valid(const PlanetaryEngineering&);
+[[nodiscard]] bool engineering_targets_valid(PlanetaryEngineeringKind,std::uint8_t temperature,std::uint8_t radiation);
 [[nodiscard]] PlanetaryEngineering engineering_observation(const Planet&);
 [[nodiscard]] PlanetEnvironment engineered_environment(const Planet&);
 [[nodiscard]] bool engineering_scheduled(const Planet&);
