@@ -840,13 +840,14 @@ void MainWindow::installUiPolish()
                         .arg(static_cast<int>(habitable.maximum))
                         .arg(inside ? "inside" : "outside"));
             };
-            setEnvironmentBar(planetTemperatureBar_, engineered_environment(*environmentPlanet).temperature,
+            const auto effectiveEnvironment = engineered_environment(*environmentPlanet);
+            setEnvironmentBar(planetTemperatureBar_, effectiveEnvironment.temperature,
                 race.habitableTemperature,
                 "Temperature (50 is temperate)");
-            setEnvironmentBar(planetGravityBar_, environmentPlanet->environment.gravity,
+            setEnvironmentBar(planetGravityBar_, effectiveEnvironment.gravity,
                 race.habitableGravity,
                 "Gravity (50 is Earth-like)");
-            setEnvironmentBar(planetRadiationBar_, environmentPlanet->environment.radiation,
+            setEnvironmentBar(planetRadiationBar_, effectiveEnvironment.radiation,
                 race.habitableRadiation,
                 "Radiation (higher is more severe)");
             if (auto* label = findChild<QLabel*>("planetTerraformingPotential")) {
@@ -873,7 +874,8 @@ void MainWindow::installUiPolish()
                     const auto natural = environmentPlanet->naturalEnvironment.value_or(environmentPlanet->environment);
                     const std::array<QProgressBar*, 3> bars{planetTemperatureBar_, planetGravityBar_, planetRadiationBar_};
                     const std::array<int, 3> original{natural.temperature, natural.gravity, natural.radiation};
-                    const std::array<int, 3> target{engineered_environment(potential).temperature, potential.environment.gravity, potential.environment.radiation};
+                    const auto effectivePotential = engineered_environment(potential);
+                    const std::array<int, 3> target{effectivePotential.temperature, effectivePotential.gravity, effectivePotential.radiation};
                     for (std::size_t axis = 0; axis < bars.size(); ++axis)
                         if (bars[axis]) bars[axis]->setToolTip(bars[axis]->toolTip()
                             + QString("\nNatural value: %1 / 100\nPotential value: %2 / 100").arg(original[axis]).arg(target[axis]));

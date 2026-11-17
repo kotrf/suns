@@ -278,6 +278,12 @@ no work. Temperature and gravity improvements remain independent. The received
 engineering window shows current and supported-completion radiation/Hab, with
 one scalar correction and no future-year simulation or polling.
 
+System Details also shows received effective surface radiation, including
+raising/lowering controllers and fixed shields. Its tooltip retains the natural
+value separately and applies supported engineering to the terraforming potential.
+Hidden reconfiguration or support loss waits for a fresh report before changing
+the displayed current or potential values.
+
 Computer empires use received stocks, support and racial ranges, require at least
 five habitability points gained, fund the full recipe and send normal orders.
 A fully funded radiation-raising project is an option for a high-radiation race;

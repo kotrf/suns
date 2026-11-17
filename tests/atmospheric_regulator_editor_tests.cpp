@@ -7,6 +7,7 @@
 #include <QDockWidget>
 #include <QFile>
 #include <QLabel>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
@@ -117,6 +118,54 @@ struct MainWindowTestAccess {
         foreign.planets.front().owner=2;foreign.orbitalStations.front().owner=2;load(w,foreign);
         assert(target->value()==48 && !target->isEnabled() && !start->isEnabled());
     }
+    static void system_details_radiation_matches_received_engineering_and_terraforming()
+    {
+        MainWindow w;w.installUiPolish();w.installPlanetaryEngineering();
+        auto s=test::atmospheric_fixture();s.players.front().race.habitableRadiation={50,70};
+        test::finish_atmosphere(s,70);load(w,s);QApplication::processEvents();
+        auto* radiation=w.findChild<QProgressBar*>("planetRadiationBar");
+        auto* potential=w.findChild<QLabel*>("planetTerraformingPotential");
+        auto* effect=w.findChild<QLabel*>("engineeringEffect");
+        assert(radiation && potential && effect);
+        assert(radiation->value()==50);
+        assert(radiation->toolTip().contains("Radiation (higher is more severe): 50 / 100"));
+        assert(radiation->toolTip().contains("50–70 (inside)"));
+        assert(radiation->toolTip().contains("Natural value: 40 / 100"));
+        assert(radiation->toolTip().contains("Potential value: 60 / 100"));
+        assert(potential->text().contains("Hab 83% → 100%"));
+        assert(effect->text().contains("Radiation now: 50 / 100"));
+        const auto tooltip=radiation->toolTip(),hab=potential->text();
+        auto& hidden=w.state_.planets.front();hidden.environment.radiation=85;
+        hidden.engineering.targetRadiation=0;w.state_.orbitalStations.clear();refresh_planetary_engineering(w.state_);
+        w.rebuildScene();QApplication::processEvents();
+        assert(radiation->value()==50 && radiation->toolTip()==tooltip && potential->text()==hab);
+        ++w.state_.turn;set_survey_level(w.state_,1,1,SurveyLevel::DeepSurvey,w.state_.turn);
+        w.rebuildScene();QApplication::processEvents();
+        assert(radiation->value()==85 && radiation->toolTip().contains("50–70 (outside)"));
+        assert(radiation->toolTip().contains("Natural value: 40 / 100"));
+        assert(radiation->toolTip().contains("Potential value: 60 / 100"));
+        assert(effect->text().contains("Radiation now: 85 / 100"));
+        // A target of zero lowers radiation; ordinary terraforming remains visible separately.
+        auto lower=s;assert(apply_planetary_engineering_order(lower,lower.planets.front(),test::atmospheric_order(1,A::SetOutput,10,0)));
+        load(w,lower);QApplication::processEvents();
+        assert(radiation->value()==30 && radiation->toolTip().contains("Potential value: 45 / 100"));
+        // Fixed shields use the same surface axis, while inactive/absent projects expose the baseline.
+        auto shield=s;auto& e=shield.planets.front().engineering;
+        e.kind=E::ArtificialMagnetosphere;e.work=engineering_work(e.kind);e.invested={240,120,240};e.targetRadiation=50;
+        load(w,shield);QApplication::processEvents();
+        assert(radiation->value()==30 && radiation->toolTip().contains("Potential value: 45 / 100"));
+        auto off=s;assert(apply_planetary_engineering_order(off,off.planets.front(),test::atmospheric_order(1,A::SetOutput,0,70)));
+        load(w,off);QApplication::processEvents();
+        assert(radiation->value()==40 && radiation->toolTip().contains("Potential value: 55 / 100"));
+        auto ordinary=s;ordinary.planets.front().engineering={};ordinary.planets.front().environment.radiation=45;
+        load(w,ordinary);QApplication::processEvents();
+        assert(radiation->value()==45 && radiation->toolTip().contains("Natural value: 40 / 100"));
+        assert(radiation->toolTip().contains("Potential value: 55 / 100"));
+        auto foreign=s;auto other=foreign.players.front();other.id=2;other.name="Other";foreign.players.push_back(other);
+        foreign.planets.front().owner=2;foreign.orbitalStations.front().owner=2;
+        load(w,foreign);QApplication::processEvents();
+        assert(radiation->value()==50 && radiation->toolTip().contains("Potential value: 60 / 100"));
+    }
 };
 }
 int main(int argc,char** argv)
@@ -126,4 +175,5 @@ int main(int argc,char** argv)
     targets_remain_separate_in_physical_received_inflight_draft_and_inbox_records();
     versioned_kinds_and_unrelated_target_bytes_are_strict();
     MainWindow w;w.installPlanetaryEngineering();MainWindowTestAccess::controls_author_radiation_and_keep_hidden_changes_frozen(w);
+    MainWindowTestAccess::system_details_radiation_matches_received_engineering_and_terraforming();
 }
