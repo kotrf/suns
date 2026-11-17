@@ -7,7 +7,7 @@ void writeUnknownObjects(QDataStream& stream,const GameState& state)
     writeVector(s,state.unknownObjects,[](QDataStream& out,const UnknownObject& x) {
         if(!unknown_object_valid(x)) {out.setStatus(QDataStream::WriteFailed);return;}
         out << quint32(x.id); writePosition(out,x.position); out << quint8(x.kind);
-        if(x.kind==UnknownObjectKind::DriftingDerelict)writePosition(out,x.velocity);
+        if(unknown_object_is_moving(x.kind))writePosition(out,x.velocity);
     });
     s << quint32(state.players.size());
     for(const auto& p:state.players) {
@@ -30,9 +30,8 @@ void readUnknownObjects(QDataStream& stream,GameState& state)
     if(!state.nextUnknownObjectId || state.nextUnknownObjectId>0x7fffffffU
         || !readVector(s,state.unknownObjects,[](QDataStream& in,UnknownObject& x) {
             quint8 kind{}; in >> x.id; readPosition(in,x.position); in >> kind; x.kind=UnknownObjectKind(kind);
-            const auto newest=gReadSaveFormatVersion>=124?UnknownObjectKind::DriftingDerelict:UnknownObjectKind::CompactRemnant;
-            if(kind>quint8(newest)) {markCorrupt(in);return;}
-            if(x.kind==UnknownObjectKind::DriftingDerelict)readPosition(in,x.velocity);
+            if(kind>newestUnknownObjectKind()) {markCorrupt(in);return;}
+            if(unknown_object_is_moving(x.kind))readPosition(in,x.velocity);
             if(!unknown_object_valid(x))markCorrupt(in);
         }) || state.unknownObjects.size()>1000) { markCorrupt(stream); return; }
     for(std::size_t n=0;n<state.unknownObjects.size();++n) {

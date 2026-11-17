@@ -71,12 +71,12 @@ void readAftermathObservation(QDataStream& s,PlanetAftermathObservation& x)
 }
 void writeObjectObservation(QDataStream& s,const ObjectObservation& x)
 {
-    if((x.velocity || x.kind==UnknownObjectKind::DriftingDerelict) && !object_observation_valid(x)) {s.setStatus(QDataStream::WriteFailed);return;}
+    if((x.velocity || (x.kind && unknown_object_is_moving(*x.kind))) && !object_observation_valid(x)) {s.setStatus(QDataStream::WriteFailed);return;}
     s << quint32(x.id); writePosition(s,x.position);
     s << x.uncertainty << quint8(x.level) << quint8(x.kind.has_value());
     if(x.kind) s << quint8(*x.kind);
     s << quint64(x.observedTurn) << quint64(x.receivedTurn);
-    if(x.kind==UnknownObjectKind::DriftingDerelict) {
+    if(x.kind && unknown_object_is_moving(*x.kind)) {
         s << quint8(x.velocity.has_value());if(x.velocity)writePosition(s,*x.velocity);
     }
 }
@@ -88,10 +88,10 @@ void readObjectObservation(QDataStream& s,ObjectObservation& x)
     if(present>1) { markCorrupt(s); return; }
     if(present) {
         s >> kind; x.kind=UnknownObjectKind(kind);
-        if(kind>quint8(gReadSaveFormatVersion>=124?UnknownObjectKind::DriftingDerelict:UnknownObjectKind::CompactRemnant)) {markCorrupt(s);return;}
+        if(kind>newestUnknownObjectKind()) {markCorrupt(s);return;}
     }
     s >> observed >> received; x.level=ObjectKnowledgeLevel(level); x.observedTurn=observed; x.receivedTurn=received;
-    if(x.kind==UnknownObjectKind::DriftingDerelict) {
+    if(x.kind && unknown_object_is_moving(*x.kind)) {
         quint8 course{};s >> course;if(course>1) {markCorrupt(s);return;}
         if(course) {Position velocity;readPosition(s,velocity);x.velocity=velocity;}
     }

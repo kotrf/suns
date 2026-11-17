@@ -25,7 +25,9 @@ GameState fixture()
 void generation_is_rare_stable_and_separate_from_player_knowledge()
 {
     GalaxyConfig config{721,120,1100,800,25}; const auto a=generate_game(config),b=generate_game(config);
-    assert(a.unknownObjects.size()==2 && a.nextUnknownObjectId==3);
+    assert(a.unknownObjects.size()==3 && a.nextUnknownObjectId==4);
+    assert(a.unknownObjects[0].kind<=UnknownObjectKind::CompactRemnant && a.unknownObjects[1].kind<=UnknownObjectKind::CompactRemnant);
+    assert(a.unknownObjects.back().kind==UnknownObjectKind::RoguePlanetoid); // Seed721 is eligible for the new body.
     for(std::size_t n=0;n<a.unknownObjects.size();++n) {
         const auto& x=a.unknownObjects[n]; assert(x.id==b.unknownObjects[n].id && x.kind==b.unknownObjects[n].kind);
         assert(x.position==b.unknownObjects[n].position);

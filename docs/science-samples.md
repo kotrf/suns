@@ -6,7 +6,7 @@ unchanged. Samples add something an expedition must actually bring home.
 
 ## Player workflow and prerequisites
 
-Study an Ancient probe, Compact remnant or drifting derelict with active scanners and **Field
+Study an Ancient probe, Compact remnant, drifting derelict or Rogue planetoid with active scanners and **Field
 research**, then wait for the completed study to reach headquarters. Select a
 cargo-capable scanner fleet and **Fly and recover specimen** in **Unknown objects /
 expeditions**, or use the corresponding arrival task in the route editor.
@@ -44,6 +44,7 @@ transfer in **Science samples / artifacts**. At a populated owned colony choose:
 | Ancient archive | 64 Electronics RP once | +4 RP/year with Electronics as the active focus |
 | Compact-matter specimen | 96 Energy RP once | +4 RP/year with Energy as the active focus |
 | Architectural core (drifting derelict) | 80 Construction RP once | +4 RP/year with Construction as the active focus |
+| Prebiotic ice (Rogue planetoid) | 80 Biology RP once | +4 RP/year with Biology as the active focus |
 
 Orbital Civilization receives, transfers and researches these physical assets at
 its surviving inhabited station, without surface population. Its retained
@@ -106,9 +107,11 @@ return. It waits for cargo telemetry, returns to a reachable colony, unloads and
 analyzes. A confirmed empty recovery retires; hidden depletion does not affect
 planning. No direct research grant or privileged host-state access is added.
 
-Current formats are **save v126 / orders v54 / race v3**. Drifting-kind physical
-and observation records carry a dated velocity payload; static records retain
-their old layout. The new sample kind uses the existing finite SAMP ledger.
+Current formats are **save v130 / orders v56 / race v3**. Moving-object physical
+and observation records carry dated velocity payloads; static records retain
+their old layout. The planetoid/sample kind is admitted from v130 using the
+existing finite SAMP ledger. Older layouts and sample identities remain intact.
+Recovery and sample-transfer orders still use source IDs, without new payloads.
 The completion slice used v93/v37 (main after #227 was v92/v37).
 The original sample slice, save **v86**, appended a bounded SAMP extension after v85, storing depletion,
 physical manifests and each confirmed/in-flight/loss/wormhole contact separately.

@@ -41,7 +41,7 @@ namespace suns {
 namespace {
 
 constexpr quint32 kSaveMagic = 0x53554E53u; // "SUNS"
-constexpr quint32 kSaveFormatVersion = 129;
+constexpr quint32 kSaveFormatVersion = 130;
 constexpr quint32 kProductionExtensionMagic = 0x50524F44u; // PROD
 constexpr quint32 kOldestSupportedSaveFormatVersion = 12;
 constexpr quint32 kTurnOrderMagic = 0x534F5244u; // "SORD"
@@ -49,6 +49,12 @@ constexpr quint32 kTurnOrderFormatVersion = 56;
 constexpr quint32 kOldestSupportedTurnOrderFormatVersion = 1;
 constexpr quint32 kMaxCollectionItems = 100000;
 quint32 gReadSaveFormatVersion = kSaveFormatVersion;
+
+quint8 newestUnknownObjectKind()
+{
+    return quint8(gReadSaveFormatVersion>=130 ? UnknownObjectKind::RoguePlanetoid
+        :gReadSaveFormatVersion>=124 ? UnknownObjectKind::DriftingDerelict : UnknownObjectKind::CompactRemnant);
+}
 
 quint8 newestShipComponent()
 {

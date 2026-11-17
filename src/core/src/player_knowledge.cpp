@@ -697,8 +697,8 @@ std::vector<GameEvent> deliver_due_player_reports(GameState& state)
                 if(report.kind==PlayerReportKind::ScientificData && current!=player.objectKnowledge.end()
                     && current->level==ObjectKnowledgeLevel::Studied) continue;
                 const bool upgraded=current==player.objectKnowledge.end() || object->level>current->level;
-                const bool moving=object->kind==UnknownObjectKind::DriftingDerelict
-                    || (current!=player.objectKnowledge.end() && current->kind==UnknownObjectKind::DriftingDerelict);
+                const bool moving=(object->kind && unknown_object_is_moving(*object->kind))
+                    || (current!=player.objectKnowledge.end() && current->kind && unknown_object_is_moving(*current->kind));
                 if(moving && current!=player.objectKnowledge.end()) {
                     // Classification accumulates; a moving position has its own
                     // chronology. Late study must not rewind a newer fix, and a
