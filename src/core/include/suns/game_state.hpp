@@ -534,6 +534,8 @@ enum class ProductionKind {
     ClimateStabilizer,
     ShipRefit,
     AtmosphericRegulator,
+    RadicalTransformation,
+    WormholeExperiment,
 };
 
 enum class ProductionAutomation : std::uint8_t { None, Annual, MinTerraform, MaxTerraform };
@@ -576,6 +578,7 @@ struct PlanetEnvironment {
     std::uint8_t temperature{50};
     std::uint8_t gravity{50};
     std::uint8_t radiation{15};
+    bool operator==(const PlanetEnvironment&) const = default;
 };
 
 struct PrecursorArtifactSite {
@@ -661,9 +664,24 @@ struct PlanetAftermathObservation {
     bool operator==(const PlanetAftermathObservation&) const = default;
 };
 
-enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere, OrbitalHabitat, ClimateStabilizer, AtmosphericRegulator };
-enum class EngineeringAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetOutput };
-enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy, HabitatTechnology, HabitatReserve, HabitatFailure, ClimateTechnology, AtmosphericTechnology };
+enum class PlanetaryEngineeringKind : std::uint8_t { None, OrbitalMirrors, OrbitalShades, ArtificialMagnetosphere, AdaptiveMagnetosphere, OrbitalHabitat, ClimateStabilizer, AtmosphericRegulator, RadicalTransformation, WormholeExperiment };
+enum class EngineeringAction : std::uint8_t { StartOrResume, Pause, Dismantle, SetOutput, CommitTransformation, ActivateExperiment };
+enum class EngineeringBlock : std::uint8_t { None, NoProject, Paused, NoColony, MissingStation, Technology, Minerals, MagneticTechnology, AdaptiveTechnology, CompactStudy, HabitatTechnology, HabitatReserve, HabitatFailure, ClimateTechnology, AtmosphericTechnology, MegaprojectTechnology, AwaitingCommitment, Transforming, TransformationComplete, ExperimentReady, ExperimentPending, ExperimentSpent };
+enum class TransformationPhase : std::uint8_t { Preparation, Transition, Complete };
+struct PlanetaryTransformation {
+    TransformationPhase phase{TransformationPhase::Preparation};
+    PlanetEnvironment original, natural, target;
+    PlayerId initiator{};
+    std::uint8_t years{};
+    std::uint64_t committedTurn{}, advancedTurn{}, shelterCapacity{};
+    bool paused{};
+    bool operator==(const PlanetaryTransformation&) const = default;
+};
+struct EngineeringExperiment {
+    std::uint64_t activationTurn{}, openedTurn{};
+    WormholeEndpointId entrance{};
+    bool operator==(const EngineeringExperiment&) const = default;
+};
 struct PlanetaryEngineering {
     PlanetaryEngineeringKind kind{PlanetaryEngineeringKind::None};
     std::uint32_t work{};
@@ -674,6 +692,8 @@ struct PlanetaryEngineering {
     std::uint64_t startedTurn{}, completedTurn{};
     std::uint8_t targetTemperature{50}; // Climate stabilizer only; inherited physical setpoint.
     std::uint8_t targetRadiation{50}; // Atmospheric regulator only; surface, separate from orbital radiation.
+    PlanetaryTransformation transformation;
+    EngineeringExperiment experiment;
 };
 
 // Whole 1 kt units. Deposit and surface cache are physical and independent.
@@ -2107,6 +2127,8 @@ void refresh_sensor_intel(GameState& state);
     case ProductionKind::OrbitalHabitat: return 4800;
     case ProductionKind::ClimateStabilizer: return 4800;
     case ProductionKind::AtmosphericRegulator: return 6000;
+    case ProductionKind::RadicalTransformation: return 9600;
+    case ProductionKind::WormholeExperiment: return 8000;
     case ProductionKind::ResonanceLaboratory: return 600;
     }
     return kColonyShipCost;

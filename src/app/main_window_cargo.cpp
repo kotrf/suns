@@ -1,5 +1,6 @@
 #include "suns/orbital_habitats.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "main_window.hpp"
 #include "suns/communications.hpp"
 #include "suns/campaign.hpp"
@@ -442,9 +443,17 @@ void MainWindow::openCargoManifestDialog()
             auto people = endpointColonists(from);
             if (from.planet) {
                 if (from.planet->owner != pendingOrders_.player) return std::uint64_t{0};
-                if (!from.endpoint.orbital && !from.planet->habitat.population && !to.endpoint.orbital && people) --people;
+                if (!from.endpoint.orbital && !from.planet->habitat.population && !surface_sheltered(*from.planet) && !to.endpoint.orbital && people) --people;
             }
             if (to.planet && !to.planet->owner) return std::uint64_t{0};
+            // Shelter space limits friendly unloading. For an invasion, the host
+            // uses it to place survivors after combat.
+            if (to.planet && to.planet->owner == pendingOrders_.player
+                && !to.endpoint.orbital && surface_sheltered(*to.planet)) {
+                const auto capacity = to.planet->engineering.transformation.shelterCapacity;
+                const auto residents = endpointColonists(to);
+                people = std::min(people, capacity - std::min(capacity, residents));
+            }
             if (to.endpoint.orbital) {
                 const auto residents = endpointColonists(to);
                 people = std::min(people, to.housingCapacity > residents ? to.housingCapacity-residents : 0);

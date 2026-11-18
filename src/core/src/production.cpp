@@ -6,6 +6,7 @@
 #include "suns/orbital_bases.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/terraforming.hpp"
 #include "suns/stations.hpp"
@@ -219,7 +220,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     result.engineeringSupport=engineeringSupport ? *engineeringSupport : engineering_station_available(state,planet);
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
         && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
-        && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
+        && planet.owner && (total_colony_population(planet) || surface_sheltered(planet)) && result.engineeringSupport && engineering_operation_available(state,planet)
+        && (!surface_sheltered(planet) || !planet.engineering.transformation.paused);
     if (planet.owner == 0) return result;
     const auto* player = find_player(state, planet.owner);
     const bool native = native_orbital_race(state, planet.owner);
@@ -415,7 +417,8 @@ ColonyProductionResolution resolve_colony_production(const GameState& state, Pla
     if (researchActive) result.researchPoints += available;
     planet.engineering.operational=planet.engineering.kind!=PlanetaryEngineeringKind::None
         && planet.engineering.work==engineering_work(planet.engineering.kind) && planet.engineering.strength>0
-        && planet.owner && total_colony_population(planet) && result.engineeringSupport && engineering_operation_available(state,planet);
+        && planet.owner && (total_colony_population(planet) || surface_sheltered(planet)) && result.engineeringSupport && engineering_operation_available(state,planet)
+        && (!surface_sheltered(planet) || !planet.engineering.transformation.paused);
     result.queueOrigins = std::move(origins);
     return result;
 }

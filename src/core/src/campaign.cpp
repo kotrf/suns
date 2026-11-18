@@ -2,6 +2,7 @@
 #include "suns/player_knowledge.hpp"
 #include "suns/exotic_materials.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/planetary_recovery.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/stations.hpp"
@@ -117,6 +118,16 @@ const std::vector<ResearchUnlock>& research_unlocks()
             atmosphere.extraLevels[std::size_t(ResearchField::Energy)]=22;
             atmosphere.extraLevels[std::size_t(ResearchField::Biology)]=20;
             entries.push_back(std::move(atmosphere));
+            ResearchUnlock radical{ResearchField::Construction,26,"Radical planetary transformation",
+                "9600 paid work at 80/year, then explicit irreversible commitment and 30 supported transition years. Residents can remain in shelters without surface mining, production, research or growth. E26/B24; surface race, friendly Starbase/Fortress shipyard. Captured projects retain their initiating racial target.",{}};
+            radical.planetaryEngineering=true;radical.surfaceEngineering=true;
+            radical.extraLevels[std::size_t(ResearchField::Energy)]=26;radical.extraLevels[std::size_t(ResearchField::Biology)]=24;
+            entries.push_back(std::move(radical));
+            ResearchUnlock experiment{ResearchField::Energy,26,"Artificial wormhole experiment",
+                "8000 paid work at 80/year, then explicit activation creates a transient 40-year wormhole with an unknown exit. Ordinary detection, whole-fleet transit risk and delayed emergence reports apply. Construction24/Electronics26; friendly Starbase/Fortress shipyard. One experiment per completed generator.",{}};
+            experiment.planetaryEngineering=true;
+            experiment.extraLevels[std::size_t(ResearchField::Construction)]=24;experiment.extraLevels[std::size_t(ResearchField::Electronics)]=26;
+            entries.push_back(std::move(experiment));
             ResearchUnlock habitat{ResearchField::Construction,18,"Orbital habitat",
                 "One engineering slot; 2 million orbital residents. 4800 work, 80/year, I/B/G 480/240/480; friendly Starbase/Fortress shipyard. Biology 14 and Energy 16. Occupied upkeep: 2 work and I/B/G 1/1/1 yearly; three paid emergency years, then 10% yearly losses. Physical colonist transport required.",{}};
             habitat.planetaryEngineering=true;
@@ -366,6 +377,7 @@ std::int32_t player_planet_habitability(
 {
     if (native_orbital_race(state, player)) return native_orbital_habitability(state, player, planet);
     if (planet.observedHabitability) return *planet.observedHabitability;
+    if (surface_sheltered(planet)) return -100;
     const auto* empire = find_player(state, player);
     const auto baseline = empire && empire->race.environmentBased
         ? race_habitability(empire->race, engineered_environment(planet),

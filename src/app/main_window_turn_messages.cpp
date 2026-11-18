@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "visitor_offer_text.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/unknown_objects.hpp"
 #include "suns/interstellar_medium.hpp"
@@ -165,7 +166,16 @@ QString event_subject(const GameState& state, const GameEvent& event)
     }
     case GameEventKind::SystemSurveyed: subject = QString("Survey report: %1").arg(starName); break;
     case GameEventKind::FleetArrived: subject = QString("%1 arrived at %2").arg(fleetName, starName); break;
-    case GameEventKind::EngineeringProgress: subject=QString("%1: engineering project %2").arg(event_planet_name(state,event),event.quantity==0?"started":event.quantity==100?"completed":QString("%1% milestone").arg(event.quantity)); break;
+    case GameEventKind::EngineeringProgress: {
+        QString stage=event.quantity==0?"started":event.quantity==100?"completed":QString("%1% milestone").arg(event.quantity);
+        if(event.productionKind==ProductionKind::RadicalTransformation) {
+            if(event.quantity==100)stage="preparation ready";
+            if(event.quantity==kTransformationProgressBase)stage="irreversible transition committed";
+            if(event.quantity>kTransformationProgressBase)stage=event.quantity==kTransformationProgressBase+100?"permanent transformation complete":QString("transition %1%").arg(event.quantity-kTransformationProgressBase);
+        }
+        if(event.productionKind==ProductionKind::WormholeExperiment && event.quantity==kExperimentOpenedProgress)stage="unknown-exit wormhole opened";
+        subject=QString("%1: engineering project %2").arg(event_planet_name(state,event),stage);break;
+    }
     case GameEventKind::EngineeringPaused: subject=QString("%1: engineering project interrupted").arg(event_planet_name(state,event)); break;
     case GameEventKind::EngineeringResumed: subject=QString("%1: engineering project resumed").arg(event_planet_name(state,event)); break;
     case GameEventKind::EngineeringCaptured: subject=QString("%1: engineering project captured").arg(event_planet_name(state,event)); break;
@@ -594,6 +604,17 @@ QString event_text(const GameState& state, const GameEvent& event)
             if(event.kind==GameEventKind::EngineeringProgress && event.quantity==100) detail="Construction complete: empty habitat for 2 million residents with three emergency reserve years. Transport or resettle real colonists.";
             if(event.kind==GameEventKind::EngineeringPaused || event.kind==GameEventKind::EngineeringResumed)
                 detail+=QString(" Emergency reserve reported: %1 years; orbital residents lost in this annual status report: %2. Ordinary delayed observations provide the population manifest.").arg(event.technologyLevel).arg(qulonglong(event.deliveredColonists));
+        }
+        if(event.productionKind==ProductionKind::RadicalTransformation) {
+            if(event.kind==GameEventKind::EngineeringProgress && event.quantity==100)detail="Preparation complete. Explicit commitment is required; preparation can still be cancelled without a refund.";
+            if(event.kind==GameEventKind::EngineeringProgress && event.quantity>=kTransformationProgressBase)
+                detail=event.quantity==kTransformationProgressBase?"Point of no return passed. Residents are sheltered; surface mining, production, research and growth stop. Transport residents elsewhere to keep them productive.":event.quantity==kTransformationProgressBase+100?"Permanent transformation complete. The planet now has the initiating race's target axes and a new stable natural baseline.":QString("Irreversible transition %1% complete. Loss of support pauses progress without rolling back physical changes.").arg(event.quantity-kTransformationProgressBase);
+            if(event.kind==GameEventKind::EngineeringDismantled)detail="Equipment removed without refund. Any completed permanent transformation remains on the planet.";
+        }
+        if(event.productionKind==ProductionKind::WormholeExperiment) {
+            if(event.kind==GameEventKind::EngineeringProgress && event.quantity==100)detail="Generator construction complete; explicit experiment activation is required.";
+            if(event.kind==GameEventKind::EngineeringProgress && event.quantity==kExperimentOpenedProgress)detail="An experimental transient wormhole opened. Its exit is unknown until explored and reported. Ordinary drift, fleet-loss risk and delayed observations apply; the generator is spent.";
+            if(event.kind==GameEventKind::EngineeringDismantled)detail="Generator removed without refund. A wormhole already opened continues independently until collapse.";
         }
         text=QString("Year %1 • %2 at %3.\n%4").arg(qulonglong(event.observedTurn)).arg(project,event_planet_name(state,event),detail);
     } else if (event.kind == GameEventKind::OrbitalBaseStatus) {

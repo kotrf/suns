@@ -2,6 +2,7 @@
 #include "suns/exotic_materials.hpp"
 #include "suns/game_state.hpp"
 #include "suns/planetary_engineering.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/orbital_habitats.hpp"
 #include "suns/native_orbital.hpp"
 #include "suns/native_orbital_support.hpp"
@@ -1591,6 +1592,7 @@ std::optional<PlanetSurveySnapshot> capture_planet_survey(
     if (!planet || level < SurveyLevel::BasicScan) return std::nullopt;
     if (level >= SurveyLevel::OrbitalSurvey) {
         PlanetSurveySnapshot result{planet->habitability, planet->environment, planet->naturalEnvironment,engineering_observation(*planet)};
+        if(planet->owner!=player)result.engineering.transformation.shelterCapacity=0;
         if (!planet->owner || planet->owner == player)
             result.surfaceMinerals = SurfaceMineralObservation{planet->minerals, observedTurn, observedTurn <= state.turn};
         if (planet->owner == player) {
@@ -1787,6 +1789,7 @@ void refresh_sensor_intel(GameState& state)
 
 std::uint64_t population_capacity(const Planet& planet)
 {
+    if(surface_sheltered(planet))return planet.engineering.transformation.shelterCapacity;
     return static_cast<std::uint64_t>(std::clamp(planet.habitability, 5, 100)) * kPopulationPerHabitability;
 }
 
@@ -1815,6 +1818,7 @@ std::int32_t current_planet_habitability(
 std::uint64_t population_capacity(
     const GameState& state, const Planet& planet, std::uint64_t turn)
 {
+    if(surface_sheltered(planet) && !native_orbital_race(state,planet.owner))return planet.engineering.transformation.shelterCapacity;
     return static_cast<std::uint64_t>(std::clamp(current_planet_habitability(state, planet, turn), 5, 100))
         * kPopulationPerHabitability;
 }
@@ -1825,7 +1829,7 @@ namespace {
 std::int64_t surface_population_growth(const Planet& planet, int habitability,
     std::uint64_t capacity, std::uint8_t growthRate)
 {
-    if (!planet.owner || !planet.population) return 0;
+    if (!planet.owner || !planet.population || surface_sheltered(planet)) return 0;
     habitability = std::clamp(habitability, -100, 100);
     const auto population = planet.population;
     // Divide first: even UINT64_MAX populations in old files stay safe.
@@ -1875,7 +1879,7 @@ std::int64_t projected_population_growth(
 
 ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet)
 {
-    if (!planet.owner) return {};
+    if (!planet.owner || surface_sheltered(planet)) return {};
     const auto* player = find_player(state, planet.owner);
     const auto limit = [&](std::uint8_t rate) {
         const auto bounded = std::clamp(rate, kMinWorkforceRate, kMaxWorkforceRate);
@@ -1895,6 +1899,7 @@ ColonyWorkforce colony_workforce(const GameState& state, const Planet& planet)
 std::uint32_t colony_output(const GameState& state, const Planet& planet)
 {
     if (native_orbital_race(state, planet.owner)) return native_orbital_output(state, planet);
+    if (surface_sheltered(planet)) return 0;
     if (planet.owner == 0 || (planet.engineering.kind==PlanetaryEngineeringKind::OrbitalHabitat && !total_colony_population(planet))) return 0;
     const auto orbital=habitat_completed(planet) && planet.engineering.operational
         && planet.habitat.service==HabitatService::Normal?planet.habitat.population:0;

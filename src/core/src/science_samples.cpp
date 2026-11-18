@@ -1,4 +1,5 @@
 #include "suns/science_samples.hpp"
+#include "suns/megaprojects.hpp"
 #include "suns/communications.hpp"
 #include "suns/reconnaissance.hpp"
 #include "suns/player_knowledge.hpp"
@@ -42,7 +43,7 @@ UnknownObjectId science_recovery_target(const GameState& state,PlayerId owner,Po
 std::uint32_t retained_sample_research(const GameState& state, const Planet& colony)
 {
     const auto* owner = find_player(state, colony.owner);
-    if (!owner || !science_colony_populated(state,colony) || !owner->technology.researchActive
+    if ((!native_orbital_race(state,colony.owner) && surface_sheltered(colony)) || !owner || !science_colony_populated(state,colony) || !owner->technology.researchActive
         || owner->technology.researchAllocationPercent == 0) return 0;
     if(native_orbital_race(state,colony.owner) && !native_orbital_output(state,colony))return 0;
     std::uint32_t result = 0;
@@ -126,7 +127,8 @@ bool process_science_sample(GameState& state, PlayerId owner, const ProcessScien
     const auto player=std::find_if(state.players.begin(),state.players.end(),[&](const auto& p){return p.id==owner;});
     if(player==state.players.end()) return false;
     const auto colony = std::find_if(state.planets.begin(), state.planets.end(),
-        [&](const auto& p) { return p.id == order.colony && p.owner == owner && science_colony_populated(state,p); });
+        [&](const auto& p) { return p.id == order.colony && p.owner == owner && science_colony_populated(state,p)
+            && (native_orbital_race(state,owner) || !surface_sheltered(p)); });
     if (colony == state.planets.end()) return false;
     const auto sample = std::find_if(colony->scienceSamples.begin(), colony->scienceSamples.end(),
         [&](const auto& s) { return s.source == order.sample; });

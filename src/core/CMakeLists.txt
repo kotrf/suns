@@ -38,6 +38,7 @@ add_library(suns_core
     src/native_orbital_support.cpp
     src/native_orbital_start.cpp
     src/planetary_engineering.cpp
+    src/megaprojects.cpp
     src/propulsion.cpp
     src/scanners.cpp
     src/radiation.cpp

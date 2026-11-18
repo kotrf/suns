@@ -540,11 +540,22 @@ add_executable(suns_atmospheric_regulator_tests atmospheric_regulator_tests.cpp)
 target_link_libraries(suns_atmospheric_regulator_tests PRIVATE Suns::Core)
 add_test(NAME suns_atmospheric_regulator_tests COMMAND suns_atmospheric_regulator_tests)
 
+add_executable(suns_megaproject_tests megaproject_tests.cpp)
+target_link_libraries(suns_megaproject_tests PRIVATE Suns::Core)
+add_test(NAME suns_megaproject_tests COMMAND suns_megaproject_tests)
+
 if(TARGET suns_app_ui)
     add_executable(suns_atmospheric_regulator_editor_tests atmospheric_regulator_editor_tests.cpp)
     target_link_libraries(suns_atmospheric_regulator_editor_tests PRIVATE suns_app_ui)
     add_test(NAME suns_atmospheric_regulator_editor_tests COMMAND suns_atmospheric_regulator_editor_tests)
     set_tests_properties(suns_atmospheric_regulator_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+endif()
+
+if(TARGET suns_app_ui)
+    add_executable(suns_megaproject_editor_tests megaproject_editor_tests.cpp)
+    target_link_libraries(suns_megaproject_editor_tests PRIVATE suns_app_ui)
+    add_test(NAME suns_megaproject_editor_tests COMMAND suns_megaproject_editor_tests)
+    set_tests_properties(suns_megaproject_editor_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
 endif()
 
 if(TARGET suns_app_ui)

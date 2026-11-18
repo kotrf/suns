@@ -3,6 +3,8 @@
 #include "suns/game_event.hpp"
 
 namespace suns {
+// A paid experiment creates an ordinary transient pair; the exit is not disclosed.
+[[nodiscard]] WormholeEndpointId open_experimental_wormhole(GameState&,PlayerId,Position,std::uint64_t experimentSeed,std::uint64_t lifetime);
 
 [[nodiscard]] const WormholeKnowledge* known_wormhole(const GameState&, PlayerId, WormholeEndpointId);
 [[nodiscard]] bool fleet_has_anomaly_detector(const GameState&, const Fleet&);
