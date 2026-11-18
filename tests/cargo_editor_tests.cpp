@@ -14,12 +14,15 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTextDocument>
 #include <QTimer>
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -193,9 +196,11 @@ static void cargo_summary_stays_in_place(bool capture)
         auto* spin = dialog->findChild<QSpinBox*>("cargoColonistSpin");
         const auto* destinationSlider = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
         auto* manifest = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
+        const auto* manifestScroll = dialog->findChild<QScrollArea*>("cargoDestinationManifestScroll");
         const auto* summary = dialog->findChild<QLabel*>("cargoCapacityLabel");
         const auto* buttons = dialog->findChild<QDialogButtonBox*>();
-        assert(slider && spin && destinationSlider && manifest && summary && buttons);
+        assert(slider && spin && destinationSlider && manifest && manifestScroll && summary && buttons);
+        const auto openingSize = dialog->size();
         dialog->resize(920, 630);
         const auto geometry = [&](const QWidget* widget) {
             return QRect(widget->mapTo(dialog, QPoint{}), widget->size());
@@ -247,20 +252,42 @@ static void cargo_summary_stays_in_place(bool capture)
             --wrapWidth;
         }
         assert(wrapWidth >= minimumWidth);
-        manifest->setFixedWidth(wrapWidth);
-        QApplication::processEvents();
-        const auto wrappedLayout = layout();
-        const int wrappedHeight = manifest->height();
-        slider->setSliderPosition(9);
-        QApplication::processEvents();
-        assert(manifest->height() < wrappedHeight);
-        assert(layout() == wrappedLayout);
-        checkMass(9);
         slider->setSliderDown(false);
-        spin->setValue(10);
-        QApplication::processEvents();
-        assert(manifest->height() == wrappedHeight && layout() == wrappedLayout);
-        checkMass(10);
+
+        for (const auto size : {QSize(920, 630), QSize(920, 440), QSize(920, 409), openingSize}) {
+            dialog->resize(size);
+            manifest->setContentsMargins(0, 0, 0, 0);
+            spin->setValue(9);
+            QApplication::processEvents();
+            manifest->setContentsMargins(0, 0, std::max(0, manifest->width() - wrapWidth), 0);
+            QApplication::processEvents();
+            const auto shortLayout = layout();
+            const int shortHeight = manifest->height();
+            checkMass(9);
+            spin->setValue(10);
+            QApplication::processEvents();
+            assert(manifest->height() > shortHeight);
+            assert(manifest->height() >= manifest->heightForWidth(manifest->width()));
+            assert(layout() == shortLayout);
+            checkMass(10);
+            if (size.height() == 409) {
+                auto* scrollbar = manifestScroll->verticalScrollBar();
+                assert(scrollbar->maximum() > 0);
+                if (capture) assert(dialog->grab().save("/tmp/suns-cargo-layout-compact.png"));
+                scrollbar->setValue(scrollbar->maximum());
+                const auto* viewport = manifestScroll->viewport();
+                assert(manifest->mapTo(viewport, QPoint(0, manifest->height())).y() <= viewport->height());
+                assert(layout() == shortLayout);
+                scrollbar->setValue(0);
+            }
+            slider->setSliderDown(true);
+            slider->setSliderPosition(9);
+            slider->setSliderDown(false);
+            QApplication::processEvents();
+            assert(layout() == shortLayout);
+            assert(manifest->height() >= manifest->heightForWidth(manifest->width()));
+            checkMass(9);
+        }
         dialog->reject();
     });
     window.openCargoManifestDialog();

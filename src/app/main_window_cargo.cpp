@@ -18,6 +18,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -365,13 +366,29 @@ void MainWindow::openCargoManifestDialog()
     sourceAfter->setObjectName("cargoSourceAfterLabel");
     destinationAfter->setObjectName("cargoDestinationAfterLabel");
     capacitySummary->setObjectName("cargoCapacityLabel");
-    sourceLayout->addWidget(sourceBefore);
-    sourceLayout->addWidget(sourceAfter);
+
+    const auto addManifest = [](QVBoxLayout* column, QLabel* before, QLabel* after, const char* name) {
+        auto* scroll = new QScrollArea(column->parentWidget());
+        scroll->setObjectName(name);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidgetResizable(true);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+        scroll->setMinimumHeight(2 * scroll->fontMetrics().lineSpacing());
+
+        auto* contents = new QWidget;
+        auto* manifestLayout = new QVBoxLayout(contents);
+        manifestLayout->setContentsMargins(0, 0, 0, 0);
+        manifestLayout->setSizeConstraint(QLayout::SetMinimumSize);
+        manifestLayout->addWidget(before);
+        manifestLayout->addWidget(after);
+        manifestLayout->addStretch();
+        scroll->setWidget(contents);
+        column->addWidget(scroll, 1);
+    };
+    addManifest(sourceLayout, sourceBefore, sourceAfter, "cargoSourceManifestScroll");
     destinationLayout->addWidget(capacitySummary);
-    destinationLayout->addWidget(destinationBefore);
-    destinationLayout->addWidget(destinationAfter);
-    sourceLayout->addStretch();
-    destinationLayout->addStretch();
+    addManifest(destinationLayout, destinationBefore, destinationAfter, "cargoDestinationManifestScroll");
     layout->addWidget(validation);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
