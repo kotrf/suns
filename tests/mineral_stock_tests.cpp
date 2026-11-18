@@ -143,7 +143,23 @@ static void mining_estimate_and_shared_scale()
     if (const auto preview = qEnvironmentVariable("SUNS_MINERAL_PREVIEW"); !preview.isEmpty()) assert(panel.grab().save(preview));
     MineralDisplayData stockOnly; stockOnly.stock = MineralCargo{0, 2, 3}; stockOnly.observedTurn = s.turn;
     panel.setMinerals(stockOnly, s.turn); assert(iron->isEnabled() && iron->toolTip().contains("Concentration: unknown"));
-    panel.setMinerals({}, s.turn); assert(!iron->isEnabled()); assert(!panel.grab().isNull());
+    assert(age->text().contains("current report") && iron->toolTip().contains("Surface stock: 0.0 kt"));
+
+    MineralDisplayData concentrationOnly;
+    concentrationOnly.concentration = MineralCargo{0, 50, 100};
+    panel.resize(220, 150);
+    panel.setMinerals(concentrationOnly, s.turn);
+    QApplication::processEvents();
+    const auto* germanium = panel.findChild<MineralReserveBar*>("germaniumConcentration");
+    assert(age->isVisible() && age->text() == "Surface stock unknown");
+    assert(iron->isEnabled() && iron->value() == 0 && iron->toolTip().contains("Surface stock: unknown"));
+    assert(boron->isEnabled() && boron->value() == 50);
+    assert(germanium && germanium->isEnabled() && germanium->value() == 100);
+    assert(!panel.grab().isNull());
+    if (const auto preview = qEnvironmentVariable("SUNS_UNKNOWN_STOCK_PREVIEW"); !preview.isEmpty())
+        assert(panel.grab().save(preview));
+    panel.setMinerals({}, s.turn);
+    assert(!iron->isEnabled() && age->text() == "Surface stock unknown");
 }
 static QByteArray bytes(const QString& path) { QFile f(path); assert(f.open(QIODevice::ReadOnly)); return f.readAll(); }
 static void put(const QString& path, const QByteArray& data) { QFile f(path); assert(f.open(QIODevice::WriteOnly)); assert(f.write(data) == data.size()); }

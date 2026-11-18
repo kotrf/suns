@@ -370,6 +370,8 @@ void MainWindow::openCargoManifestDialog()
     destinationLayout->addWidget(destinationBefore);
     destinationLayout->addWidget(destinationAfter);
     destinationLayout->addWidget(capacitySummary);
+    sourceLayout->addStretch();
+    destinationLayout->addStretch();
     layout->addWidget(validation);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
@@ -561,7 +563,7 @@ void MainWindow::openCargoManifestDialog()
         const auto addedMass = double(colonists) / kColonistsPerCargoUnit + mass(minerals);
         bool capacityValid = sourceRoom + addedMass >= -kEpsilon && destinationRoom - addedMass >= -kEpsilon;
         if (destination.fleet) {
-            capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2 kt • gross mass %3 kt")
+            capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2&nbsp;kt<br><b>Gross mass:</b> %3&nbsp;kt")
                 .arg(fleet_cargo_used(planned, *destination.fleet) + addedMass, 0, 'f', 2)
                 .arg(fleet_cargo_capacity(planned, *destination.fleet), 0, 'f', 2)
                 .arg(fleet_gross_mass(planned, *destination.fleet) + addedMass, 0, 'f', 2));

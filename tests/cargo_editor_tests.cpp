@@ -17,8 +17,10 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QStatusBar>
-#include <QTimer>
 #include <QTemporaryDir>
+#include <QTextDocument>
+#include <QTimer>
+#include <array>
 #include <cassert>
 #include <cmath>
 
@@ -72,18 +74,18 @@ struct MainWindowTestAccess {
         w.selection_.fleet = 1;
         w.rebuildScene();
     }
-    static void installFullTransport(MainWindow& w)
+    static void installFullTransport(MainWindow& w, std::uint32_t shipCount = 5)
     {
         install(w);
-        w.state_.shipDesigns.push_back({3, 1, "Five light transports",
+        w.state_.shipDesigns.push_back({3, 1, "Light transport group",
             ShipHullType::LightTransport, {ShipComponentType::FusionDrive}});
         auto& fleet = w.state_.fleets.front();
         fleet.design = 3;
-        fleet.ships = {{3, 5}};
+        fleet.ships = {{3, shipCount}};
         fleet.minerals = {};
         fleet.colonists = 0;
         w.state_.fleets.resize(1);
-        assert(fleet_cargo_capacity(w.state_, fleet) == 25);
+        assert(fleet_cargo_capacity(w.state_, fleet) == 5.0 * shipCount);
         fleet.telemetry = {};
         fleet.telemetry = confirmed_fleet_telemetry(w.state_, fleet);
         w.rebuildScene();
@@ -173,6 +175,65 @@ struct MainWindowTestAccess {
         w.rebuildScene();
     }
 };
+}
+
+static void cargo_summary_stays_in_place(bool capture)
+{
+    suns::MainWindow window;
+    suns::attachRouteProgramDock(window);
+    window.installUiPolish();
+    suns::MainWindowTestAccess::installFullTransport(window, 50);
+    const auto& state = suns::MainWindowTestAccess::state(window);
+    const auto emptyMass = suns::fleet_gross_mass(state, state.fleets.front());
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* slider = dialog->findChild<QSlider*>("cargoColonistSlider");
+        auto* spin = dialog->findChild<QSpinBox*>("cargoColonistSpin");
+        const auto* destinationSlider = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        const auto* summary = dialog->findChild<QLabel*>("cargoCapacityLabel");
+        const auto* buttons = dialog->findChild<QDialogButtonBox*>();
+        assert(slider && spin && destinationSlider && summary && buttons);
+        dialog->resize(920, 630);
+        const auto geometry = [&](const QWidget* widget) {
+            return QRect(widget->mapTo(dialog, QPoint{}), widget->size());
+        };
+        const auto layout = [&] {
+            return std::array{dialog->rect(), geometry(slider), geometry(spin), geometry(destinationSlider),
+                geometry(summary), geometry(buttons)};
+        };
+        const auto checkMass = [&](int people) {
+            const double mass = double(people) / suns::kColonistsPerCargoUnit;
+            QTextDocument document;
+            document.setHtml(summary->text());
+            assert(document.toPlainText() == QString("Destination hold: %1 / 250.00 kt\nGross mass: %2 kt")
+                .arg(mass, 0, 'f', 2).arg(emptyMass + mass, 0, 'f', 2));
+            assert(summary->text().count("&nbsp;kt") == 2);
+            assert(destinationSlider->value() == people);
+        };
+        slider->setSliderDown(true);
+        slider->setSliderPosition(18'727);
+        QApplication::processEvents();
+        const auto initialLayout = layout();
+        checkMass(18'727);
+        if (capture) assert(dialog->grab().save("/tmp/suns-cargo-layout-18727.png"));
+        for (int people : {18'728, 19'090, 19'091, 19'092}) {
+            slider->setSliderPosition(people);
+            QApplication::processEvents();
+            assert(layout() == initialLayout);
+            checkMass(people);
+        }
+        slider->setSliderDown(false);
+        spin->setValue(19'091);
+        QApplication::processEvents();
+        assert(layout() == initialLayout);
+        assert(slider->value() == 19'091);
+        checkMass(19'091);
+        if (capture) assert(dialog->grab().save("/tmp/suns-cargo-layout-19091.png"));
+        dialog->reject();
+    });
+    window.openCargoManifestDialog();
+    assert(suns::MainWindowTestAccess::orders(window).orders.empty());
 }
 
 int main(int argc, char** argv)
@@ -387,6 +448,8 @@ int main(int argc, char** argv)
     const auto& resolved = suns::MainWindowTestAccess::state(window);
     assert(resolved.planets.front().population == expected);
     assert(resolved.fleets.front().colonists == 200);
+
+    cargo_summary_stays_in_place(app.arguments().contains("--capture"));
 
     // Full-hold scenario: exactly 2500 colonists must remain visibly aboard
     // when the transfer dialog opens for the second time, without growing

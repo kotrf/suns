@@ -12,7 +12,10 @@ namespace suns {
 namespace {
 constexpr std::array<double, 8> scales{10, 50, 100, 500, 1000, 5000, 10000, 50000};
 std::array<double, 3> components(const MineralCargo& c) { return {c.ironium, c.boranium, c.germanium}; }
-QString exact(std::optional<double> value) { return value ? QString::number(*value, 'f', 1) : QString("unknown"); }
+QString exact(std::optional<double> value, const QString& unit)
+{
+    return value ? QString::number(*value, 'f', 1) + unit : QString("unknown");
+}
 }
 MineralDisplayData mineral_display_data(const GameState& received, const GameState& planned, PlayerId player, PlanetId id)
 {
@@ -66,14 +69,17 @@ void MineralReserveBar::setMineral(std::optional<double> stock, std::optional<do
     setValue(concentration ? qRound(*concentration) : 0);
     setEnabled(stock.has_value() || concentration.has_value());
     setFormat(name_ + (concentration ? QString(" %1%").arg(*concentration, 0, 'f', 0) : " — unknown"));
-    setToolTip(QString("%1\nSurface stock: %2 kt\nCurrent-year mining before cargo: %3 kt (estimate from received conditions)\nConcentration: %4%\n%5\nLight: surface stock. Dark continuation: mining per turn. Diamond: concentration (independent 0–100% scale).\nClick or press Space to change the shared stock scale.")
-        .arg(name_, exact(stock), exact(mining), exact(concentration), age));
+    setToolTip(QString("%1\nSurface stock: %2\nCurrent-year mining before cargo: %3 (estimate from received conditions)\nConcentration: %4\n%5\nLight: surface stock. Dark continuation: mining per turn. Diamond: concentration (independent 0–100% scale).\nClick or press Space to change the shared stock scale.")
+        .arg(name_, exact(stock, " kt"), exact(mining, " kt"), exact(concentration, "%"), age));
     setAccessibleName(name_); setAccessibleDescription(toolTip()); update();
 }
 void MineralReserveBar::paintEvent(QPaintEvent*)
 {
     QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
-    const QRectF plot(76, 4, std::max(1, width() - 82), height() - 8);
+    const auto metrics = fontMetrics();
+    const int nameWidth = std::max(76, metrics.horizontalAdvance("Germanium") + 6);
+    const int overflowWidth = metrics.horizontalAdvance('>') + 4;
+    const QRectF plot(nameWidth, 4, std::max(1, width() - nameWidth - overflowWidth), height() - 8);
     p.setPen(QColor("#31485a")); p.setBrush(QColor("#0a131d")); p.drawRoundedRect(plot, 2, 2);
     const auto fraction = [&](double v) { return std::clamp(v / scale_, 0.0, 1.0); };
     if (stock_) {
@@ -86,19 +92,20 @@ void MineralReserveBar::paintEvent(QPaintEvent*)
             p.drawRect(QRectF(plot.left() + plot.width() * start, plot.top(), plot.width() * (end - start), plot.height()));
         }
         if (*stock_ > scale_) {
-            p.setPen(QColor("#ffffff")); p.drawText(plot.adjusted(0, -2, -2, 2), Qt::AlignRight | Qt::AlignVCenter, "> ");
+            p.setPen(QColor("#ffffff"));
+            p.drawText(QRectF(plot.right() + 2, 0, overflowWidth - 2, height()), Qt::AlignCenter, ">");
         }
-    } else {
-        p.setPen(QColor("#8395a8")); p.drawText(plot, Qt::AlignCenter, "stock unknown");
     }
     if (concentration_) {
-        const double x = plot.left() + plot.width() * std::clamp(*concentration_ / 100.0, 0.0, 1.0);
+        const double inset = std::min(5.0, plot.width() / 2.0);
+        const double position = std::clamp(*concentration_ / 100.0, 0.0, 1.0);
+        const double x = plot.left() + inset + (plot.width() - 2.0 * inset) * position;
         const double y = plot.center().y();
         p.setPen(QPen(QColor("#091019"), 2)); p.setBrush(QColor("#ffffff"));
         p.drawPolygon(QPolygonF{{x, y - 5}, {x + 4, y}, {x, y + 5}, {x - 4, y}});
     }
     p.setPen(isEnabled() ? color_ : QColor("#8395a8"));
-    p.drawText(QRect(0, 0, 73, height()), Qt::AlignLeft | Qt::AlignVCenter, name_);
+    p.drawText(QRect(0, 0, nameWidth - 3, height()), Qt::AlignLeft | Qt::AlignVCenter, name_);
     if (hasFocus()) { p.setPen(QPen(QColor("#94cce7"), 1, Qt::DotLine)); p.setBrush(Qt::NoBrush); p.drawRect(rect().adjusted(0, 0, -1, -1)); }
 }
 void MineralReserveBar::mousePressEvent(QMouseEvent* e)
@@ -133,7 +140,7 @@ void MineralStockPanel::refresh()
     const auto age = data_.observedTurn ? turn_ - std::min(turn_, *data_.observedTurn) : 0;
     const auto ageText = !data_.observedTurn ? QString("Surface stock: no received report") : age == 0 ? QString("Surface stock: current report")
         : QString("Surface stock: %1 year%2 old (year %3)").arg(qulonglong(age)).arg(age == 1 ? "" : "s").arg(qulonglong(*data_.observedTurn));
-    ageLabel_->setText(ageText);
+    ageLabel_->setText(data_.stock ? ageText : QString("Surface stock unknown"));
     const auto stock = components(data_.stock.value_or(MineralCargo{}));
     const auto mining = components(data_.mining.value_or(MineralCargo{}));
     const auto conc = components(data_.concentration.value_or(MineralCargo{}));
