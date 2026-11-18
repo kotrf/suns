@@ -18,6 +18,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -365,11 +366,29 @@ void MainWindow::openCargoManifestDialog()
     sourceAfter->setObjectName("cargoSourceAfterLabel");
     destinationAfter->setObjectName("cargoDestinationAfterLabel");
     capacitySummary->setObjectName("cargoCapacityLabel");
-    sourceLayout->addWidget(sourceBefore);
-    sourceLayout->addWidget(sourceAfter);
-    destinationLayout->addWidget(destinationBefore);
-    destinationLayout->addWidget(destinationAfter);
+
+    const auto addManifest = [](QVBoxLayout* column, QLabel* before, QLabel* after, const char* name) {
+        auto* scroll = new QScrollArea(column->parentWidget());
+        scroll->setObjectName(name);
+        scroll->setFrameShape(QFrame::NoFrame);
+        scroll->setWidgetResizable(true);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        scroll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+        scroll->setMinimumHeight(2 * scroll->fontMetrics().lineSpacing());
+
+        auto* contents = new QWidget;
+        auto* manifestLayout = new QVBoxLayout(contents);
+        manifestLayout->setContentsMargins(0, 0, 0, 0);
+        manifestLayout->setSizeConstraint(QLayout::SetMinimumSize);
+        manifestLayout->addWidget(before);
+        manifestLayout->addWidget(after);
+        manifestLayout->addStretch();
+        scroll->setWidget(contents);
+        column->addWidget(scroll, 1);
+    };
+    addManifest(sourceLayout, sourceBefore, sourceAfter, "cargoSourceManifestScroll");
     destinationLayout->addWidget(capacitySummary);
+    addManifest(destinationLayout, destinationBefore, destinationAfter, "cargoDestinationManifestScroll");
     layout->addWidget(validation);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
@@ -561,7 +580,7 @@ void MainWindow::openCargoManifestDialog()
         const auto addedMass = double(colonists) / kColonistsPerCargoUnit + mass(minerals);
         bool capacityValid = sourceRoom + addedMass >= -kEpsilon && destinationRoom - addedMass >= -kEpsilon;
         if (destination.fleet) {
-            capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2 kt • gross mass %3 kt")
+            capacitySummary->setText(QString("<b>Destination hold:</b> %1 / %2&nbsp;kt<br><b>Gross mass:</b> %3&nbsp;kt")
                 .arg(fleet_cargo_used(planned, *destination.fleet) + addedMass, 0, 'f', 2)
                 .arg(fleet_cargo_capacity(planned, *destination.fleet), 0, 'f', 2)
                 .arg(fleet_gross_mass(planned, *destination.fleet) + addedMass, 0, 'f', 2));
