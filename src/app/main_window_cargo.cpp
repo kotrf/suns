@@ -446,10 +446,13 @@ void MainWindow::openCargoManifestDialog()
                 if (!from.endpoint.orbital && !from.planet->habitat.population && !surface_sheltered(*from.planet) && !to.endpoint.orbital && people) --people;
             }
             if (to.planet && !to.planet->owner) return std::uint64_t{0};
-            if(to.planet && !to.endpoint.orbital && surface_sheltered(*to.planet)) {
-                const auto capacity=to.planet->engineering.transformation.shelterCapacity;
-                const auto residents=endpointColonists(to);
-                people=std::min(people,capacity-std::min(capacity,residents));
+            // Shelter space limits friendly unloading. For an invasion, the host
+            // uses it to place survivors after combat.
+            if (to.planet && to.planet->owner == pendingOrders_.player
+                && !to.endpoint.orbital && surface_sheltered(*to.planet)) {
+                const auto capacity = to.planet->engineering.transformation.shelterCapacity;
+                const auto residents = endpointColonists(to);
+                people = std::min(people, capacity - std::min(capacity, residents));
             }
             if (to.endpoint.orbital) {
                 const auto residents = endpointColonists(to);

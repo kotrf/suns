@@ -1,15 +1,19 @@
 #include "main_window.hpp"
 #include "save_game.hpp"
 #include "megaproject_fixture.hpp"
+#include "suns/communications.hpp"
 #include <QApplication>
 #include <QComboBox>
 #include <QDataStream>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QFile>
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
+#include <QSpinBox>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <algorithm>
@@ -104,6 +108,102 @@ void answer_confirmation(QMessageBox::StandardButton answer)
 }
 namespace suns {
 struct MainWindowTestAccess {
+    static void cargo_distinguishes_invasion_from_peaceful_shelter_unloading()
+    {
+        auto transition = test::megaproject_fixture();
+        test::prepare_megaproject(transition, E::RadicalTransformation);
+        transition.planets.front().population = 1'000;
+        transition = TurnProcessor{}.process(transition,
+            {{1, {test::mega_order(1, E::RadicalTransformation, A::CommitTransformation)}}});
+        transition.planets.front().population = 600;
+        transition.orbitalStations.clear();
+
+        QTemporaryDir dir;
+        assert(dir.isValid());
+        QString error;
+        for (const PlayerId player : {1, 2}) {
+            auto state = transition;
+            const bool invasion = player == 2;
+            if (invasion) {
+                state.players.push_back({2, "Attacker"});
+                state.planets[1].owner = player;
+                state.planets[1].homeworld = true;
+                state.planets[1].population = 25'000;
+                state.planets[1].radar = PlanetaryRadarLevel::Full;
+                state.stars[1].position = {10, 0};
+            }
+            const auto design = state.nextShipDesignId++;
+            state.shipDesigns.push_back({design, player, "Transport", ShipHullType::LargeFreighter,
+                {ShipComponentType::QuickJump5, ShipComponentType::QuickJump5}});
+            Fleet transport;
+            transport.id = state.nextFleetId++;
+            transport.owner = player;
+            transport.name = "Transport";
+            transport.design = design;
+            transport.ships = {{design, 1}};
+            transport.position = state.stars.front().position;
+            transport.colonists = 100'000;
+            assert(fleet_cargo_used(state, transport) <= fleet_cargo_capacity(state, transport));
+            assert(fleet_has_instant_link(state, transport));
+            transport.telemetry = confirmed_fleet_telemetry(state, transport);
+            state.fleets.push_back(transport);
+            set_survey_level(state, player, 1, SurveyLevel::OrbitalSurvey, state.turn);
+
+            auto envelope = host(state);
+            if (invasion) envelope.playerTokens[2] = 19;
+            auto packet = make_player_turn(envelope, player);
+            packet.selectedStar = 1;
+            packet.selectedFleet = transport.id;
+            const auto turnPath = dir.filePath("cargo.sunsturn");
+            assert(write_save_game_file(turnPath, packet, error));
+            MainWindow window;
+            window.installUiPolish();
+            assert(window.loadGameFromPath(turnPath));
+            const auto& received = window.state_.planets.front();
+            assert(surface_sheltered(received));
+            assert(received.engineering.transformation.shelterCapacity == (invasion ? 0 : 1'000));
+            const int expected = invasion ? 100'000 : 400;
+
+            QTimer::singleShot(0, [&] {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                assert(dialog);
+                auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+                auto* destination = dialog->findChild<QComboBox*>("cargoDestinationCombo");
+                auto* people = dialog->findChild<QSpinBox*>("cargoColonistSpin");
+                auto* buttons = dialog->findChild<QDialogButtonBox*>();
+                assert(source && destination && people && buttons);
+                source->setCurrentIndex(source->findData(1)); // The transport is the second endpoint.
+                destination->setCurrentIndex(destination->findData(0));
+                assert(people->maximum() == expected);
+                people->setValue(expected);
+                auto* accept = buttons->button(QDialogButtonBox::Ok);
+                assert(accept->text() == (invasion ? "Queue invasion" : "Apply transfer"));
+                assert(accept->isEnabled());
+                accept->click();
+            });
+            assert(window.selectedFleetCargoLocation());
+            window.openCargoManifestDialog();
+            assert(window.pendingOrders_.orders.size() == 1);
+            const auto& transfer = std::get<TransferCargoOrder>(window.pendingOrders_.orders.front());
+            assert(transfer.source.fleet == transport.id && transfer.destination.planet == 1);
+            assert(transfer.colonists == std::uint64_t(expected));
+
+            const auto ordersPath = dir.filePath("cargo.sunsorders");
+            TurnOrderFileData decoded;
+            assert(write_turn_order_file(ordersPath,
+                {envelope.campaignId, state.turn, envelope.playerTokens.at(player),
+                    window.pendingOrders_, window.pendingDescriptions_}, error));
+            assert(read_turn_order_file(ordersPath, decoded, error));
+            const auto resolved = TurnProcessor{}.process(state, {decoded.orders});
+            assert(resolved.planets.front().owner == player);
+            assert(resolved.planets.front().population == 1'000);
+            assert(resolved.fleets.size() == 1);
+            const auto aboard = resolved.fleets.front().colonists;
+            if (invasion) assert(aboard > 0 && aboard <= 99'000);
+            else assert(aboard == 99'600);
+        }
+    }
+
     static void capture(MainWindow& w,const QString& suffix={})
     {
         const auto path=qEnvironmentVariable("SUNS_MEGAPROJECT_SCREENSHOT");if(path.isEmpty())return;
@@ -158,5 +258,6 @@ int main(int argc,char** argv)
     QSettings::setDefaultFormat(QSettings::IniFormat);QSettings::setPath(QSettings::IniFormat,QSettings::UserScope,settings.path());
     physical_received_inflight_and_private_shelters_remain_separate();
     versioned_orders_and_paused_completed_experiments_roundtrip();
+    MainWindowTestAccess::cargo_distinguishes_invasion_from_peaceful_shelter_unloading();
     MainWindow w;w.installUiPolish();w.installPlanetaryEngineering();MainWindowTestAccess::explicit_ui_orders_pass_through_pbem_and_hidden_updates_wait_for_reports(w);
 }
