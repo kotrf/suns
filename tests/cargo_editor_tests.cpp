@@ -11,6 +11,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QEventLoop>
 #include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
@@ -22,10 +23,11 @@
 #include <QTemporaryDir>
 #include <QTextDocument>
 #include <QTimer>
-#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <string>
+#include <utility>
 
 namespace suns {
 struct MainWindowTestAccess {
@@ -77,13 +79,14 @@ struct MainWindowTestAccess {
         w.selection_.fleet = 1;
         w.rebuildScene();
     }
-    static void installFullTransport(MainWindow& w, std::uint32_t shipCount = 5)
+    static void installFullTransport(MainWindow& w, std::uint32_t shipCount = 5,
+        std::string fleetName = "Heavy General Purpose Transport Alpha")
     {
         install(w);
         w.state_.shipDesigns.push_back({3, 1, "Light transport group",
             ShipHullType::LightTransport, {ShipComponentType::FusionDrive}});
         auto& fleet = w.state_.fleets.front();
-        fleet.name = "Heavy General Purpose Transport Alpha";
+        fleet.name = std::move(fleetName);
         fleet.design = 3;
         fleet.ships = {{3, shipCount}};
         fleet.minerals = {};
@@ -238,48 +241,19 @@ static void cargo_summary_stays_in_place(bool capture)
         checkMass(19'091);
         if (capture) assert(dialog->grab().save("/tmp/suns-cargo-layout-19091.png"));
 
-        // Find a wrapping threshold for the actual text with the current font and DPI.
-        slider->setSliderDown(true);
-        slider->setSliderPosition(9);
-        QLabel shortManifest(manifest->text());
-        shortManifest.setFont(manifest->font());
-        shortManifest.setWordWrap(true);
-        slider->setSliderPosition(10);
-        const int minimumWidth = manifest->minimumSizeHint().width();
-        int wrapWidth = manifest->width();
-        while (wrapWidth >= minimumWidth
-            && manifest->heightForWidth(wrapWidth) <= shortManifest.heightForWidth(wrapWidth)) {
-            --wrapWidth;
-        }
-        assert(wrapWidth >= minimumWidth);
-        slider->setSliderDown(false);
-
-        for (const auto size : {QSize(920, 630), QSize(920, 440), QSize(920, 409), openingSize}) {
+        const QSize compactSize(920, 409);
+        for (const auto size : {QSize(920, 630), QSize(920, 440), compactSize, openingSize}) {
             dialog->resize(size);
-            manifest->setContentsMargins(0, 0, 0, 0);
             spin->setValue(9);
             QApplication::processEvents();
-            manifest->setContentsMargins(0, 0, std::max(0, manifest->width() - wrapWidth), 0);
-            QApplication::processEvents();
             const auto shortLayout = layout();
-            const int shortHeight = manifest->height();
             checkMass(9);
             spin->setValue(10);
             QApplication::processEvents();
-            assert(manifest->height() > shortHeight);
             assert(manifest->height() >= manifest->heightForWidth(manifest->width()));
             assert(layout() == shortLayout);
             checkMass(10);
-            if (size.height() == 409) {
-                auto* scrollbar = manifestScroll->verticalScrollBar();
-                assert(scrollbar->maximum() > 0);
-                if (capture) assert(dialog->grab().save("/tmp/suns-cargo-layout-compact.png"));
-                scrollbar->setValue(scrollbar->maximum());
-                const auto* viewport = manifestScroll->viewport();
-                assert(manifest->mapTo(viewport, QPoint(0, manifest->height())).y() <= viewport->height());
-                assert(layout() == shortLayout);
-                scrollbar->setValue(0);
-            }
+            if (capture && size == compactSize) assert(dialog->grab().save("/tmp/suns-cargo-layout-compact.png"));
             slider->setSliderDown(true);
             slider->setSliderPosition(9);
             slider->setSliderDown(false);
@@ -288,6 +262,61 @@ static void cargo_summary_stays_in_place(bool capture)
             assert(manifest->height() >= manifest->heightForWidth(manifest->width()));
             checkMass(9);
         }
+
+        // Make the manifest taller than its viewport with any font or DPI.
+        dialog->resize(compactSize);
+        QApplication::processEvents();
+        const auto compactLayout = layout();
+        const auto* viewport = manifestScroll->viewport();
+        const int copies = viewport->height() / manifest->fontMetrics().lineSpacing() + 1;
+        manifest->setText((manifest->text() + "<br>").repeated(copies));
+        QApplication::processEvents(QEventLoop::AllEvents, 100);
+        auto* scrollbar = manifestScroll->verticalScrollBar();
+        assert(scrollbar->isVisible() && scrollbar->maximum() > 0);
+        scrollbar->setValue(scrollbar->maximum());
+        assert(viewport->rect().contains(manifest->mapTo(viewport, manifest->rect().bottomRight())));
+        assert(layout() == compactLayout);
+        dialog->reject();
+    });
+    window.openCargoManifestDialog();
+    assert(suns::MainWindowTestAccess::orders(window).orders.empty());
+}
+
+static void cargo_manifest_overflow_can_be_scrolled()
+{
+    suns::MainWindow window;
+    suns::attachRouteProgramDock(window);
+    window.installUiPolish();
+    const std::string fleetName(80, 'W');
+    suns::MainWindowTestAccess::installFullTransport(window, 50, fleetName);
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        assert(dialog);
+        auto* spin = dialog->findChild<QSpinBox*>("cargoColonistSpin");
+        auto* source = dialog->findChild<QComboBox*>("cargoSourceCombo");
+        assert(spin && source);
+        dialog->resize(920, 630);
+        spin->setValue(19'091);
+
+        const auto checkManifest = [&](const char* paneName, const char* labelName) {
+            QApplication::processEvents(QEventLoop::AllEvents, 100);
+            auto* scroll = dialog->findChild<QScrollArea*>(paneName);
+            auto* manifest = dialog->findChild<QLabel*>(labelName);
+            assert(scroll && manifest && manifest->text().contains(QString::fromStdString(fleetName)));
+            assert(manifest->text().contains("fuel "));
+            auto* horizontal = scroll->horizontalScrollBar();
+            assert(horizontal->maximum() > 0);
+            assert(horizontal->isVisible());
+            const auto* viewport = scroll->viewport();
+            horizontal->setValue(horizontal->maximum());
+            assert(viewport->rect().contains(manifest->mapTo(viewport, manifest->rect().bottomRight())));
+        };
+
+        checkManifest("cargoDestinationManifestScroll", "cargoDestinationAfterLabel");
+        const auto fleetRow = source->findData(1);
+        assert(fleetRow >= 0);
+        source->setCurrentIndex(fleetRow);
+        checkManifest("cargoSourceManifestScroll", "cargoSourceAfterLabel");
         dialog->reject();
     });
     window.openCargoManifestDialog();
@@ -508,6 +537,7 @@ int main(int argc, char** argv)
     assert(resolved.fleets.front().colonists == 200);
 
     cargo_summary_stays_in_place(app.arguments().contains("--capture"));
+    cargo_manifest_overflow_can_be_scrolled();
 
     // Full-hold scenario: exactly 2500 colonists must remain visibly aboard
     // when the transfer dialog opens for the second time, without growing

@@ -372,7 +372,7 @@ void MainWindow::openCargoManifestDialog()
         scroll->setObjectName(name);
         scroll->setFrameShape(QFrame::NoFrame);
         scroll->setWidgetResizable(true);
-        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
         scroll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
         scroll->setMinimumHeight(2 * scroll->fontMetrics().lineSpacing());
 
