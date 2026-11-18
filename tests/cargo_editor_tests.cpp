@@ -80,6 +80,7 @@ struct MainWindowTestAccess {
         w.state_.shipDesigns.push_back({3, 1, "Light transport group",
             ShipHullType::LightTransport, {ShipComponentType::FusionDrive}});
         auto& fleet = w.state_.fleets.front();
+        fleet.name = "Heavy General Purpose Transport Alpha";
         fleet.design = 3;
         fleet.ships = {{3, shipCount}};
         fleet.minerals = {};
@@ -191,9 +192,10 @@ static void cargo_summary_stays_in_place(bool capture)
         auto* slider = dialog->findChild<QSlider*>("cargoColonistSlider");
         auto* spin = dialog->findChild<QSpinBox*>("cargoColonistSpin");
         const auto* destinationSlider = dialog->findChild<QSlider*>("cargoDestinationColonistSlider");
+        auto* manifest = dialog->findChild<QLabel*>("cargoDestinationAfterLabel");
         const auto* summary = dialog->findChild<QLabel*>("cargoCapacityLabel");
         const auto* buttons = dialog->findChild<QDialogButtonBox*>();
-        assert(slider && spin && destinationSlider && summary && buttons);
+        assert(slider && spin && destinationSlider && manifest && summary && buttons);
         dialog->resize(920, 630);
         const auto geometry = [&](const QWidget* widget) {
             return QRect(widget->mapTo(dialog, QPoint{}), widget->size());
@@ -230,6 +232,35 @@ static void cargo_summary_stays_in_place(bool capture)
         assert(slider->value() == 19'091);
         checkMass(19'091);
         if (capture) assert(dialog->grab().save("/tmp/suns-cargo-layout-19091.png"));
+
+        // Find a wrapping threshold for the actual text with the current font and DPI.
+        slider->setSliderDown(true);
+        slider->setSliderPosition(9);
+        QLabel shortManifest(manifest->text());
+        shortManifest.setFont(manifest->font());
+        shortManifest.setWordWrap(true);
+        slider->setSliderPosition(10);
+        const int minimumWidth = manifest->minimumSizeHint().width();
+        int wrapWidth = manifest->width();
+        while (wrapWidth >= minimumWidth
+            && manifest->heightForWidth(wrapWidth) <= shortManifest.heightForWidth(wrapWidth)) {
+            --wrapWidth;
+        }
+        assert(wrapWidth >= minimumWidth);
+        manifest->setFixedWidth(wrapWidth);
+        QApplication::processEvents();
+        const auto wrappedLayout = layout();
+        const int wrappedHeight = manifest->height();
+        slider->setSliderPosition(9);
+        QApplication::processEvents();
+        assert(manifest->height() < wrappedHeight);
+        assert(layout() == wrappedLayout);
+        checkMass(9);
+        slider->setSliderDown(false);
+        spin->setValue(10);
+        QApplication::processEvents();
+        assert(manifest->height() == wrappedHeight && layout() == wrappedLayout);
+        checkMass(10);
         dialog->reject();
     });
     window.openCargoManifestDialog();

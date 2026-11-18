@@ -367,9 +367,9 @@ void MainWindow::openCargoManifestDialog()
     capacitySummary->setObjectName("cargoCapacityLabel");
     sourceLayout->addWidget(sourceBefore);
     sourceLayout->addWidget(sourceAfter);
+    destinationLayout->addWidget(capacitySummary);
     destinationLayout->addWidget(destinationBefore);
     destinationLayout->addWidget(destinationAfter);
-    destinationLayout->addWidget(capacitySummary);
     sourceLayout->addStretch();
     destinationLayout->addStretch();
     layout->addWidget(validation);
